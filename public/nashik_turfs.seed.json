@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Big Bounce Turf",
+    "address": "Govind Nagar Link Road, Govind Nagar, 422009",
+    "rating": 4.4,
+    "totalReviews": 456,
+    "pricePerHourMin": 600,
+    "pricePerHourMax": null,
+    "amenities": ["Artificial Turf","Flood lights","Parking","Washroom"],
+    "sports": ["Box Cricket","Football","Cricket","Yoga"],
+    "hours": { "mon":"06:00 AM","tue":"06:00 AM","wed":"06:00 AM","thu":"06:00 AM","fri":"06:00 AM","sat":"06:00 AM","sun":"06:00 AM","notes":"Closes 11:00 PM daily" },
+    "contacts": { "phone": "", "email": "", "website": "", "facebook": "", "instagram": "", "gmap": "" },
+    "reviews": { "positive": "Spacious, well-maintained, quality pitch, friendly staff", "negative": "Needs better bats / green shade" },
+    "source_ids": "[1,2,4,5]"
+  },
+  {
+    "name": "Kridabhumi The Multisports Turf",
+    "address": "Tigraniya Road, Dwarka, 422011",
+    "rating": 4.5,
+    "totalReviews": 145,
+    "pricePerHourMin": 600,
+    "pricePerHourMax": null,
+    "amenities": ["Artificial Turf","Drinking Water","First Aid","Parking","Washroom"],
+    "sports": ["Box Football","Cricket","Tennis","Basketball","Yoga"],
+    "hours": { "mon":"06:00 AM","tue":"06:00 AM","wed":"06:00 AM","thu":"06:00 AM","fri":"06:00 AM","sat":"06:00 AM","sun":"06:00 AM","notes":"Closes 11:30 PM daily" },
+    "contacts": { "phone": "", "email": "", "website": "https://www.kridabhumi.com", "facebook": "", "instagram": "", "gmap": "" },
+    "reviews": { "positive": "High-quality equipment, spacious, coaching camp", "negative": "" },
+    "source_ids": "[10,11]"
+  },
+  {
+    "name": "Greenfield The Multisports Turf",
+    "address": "Near K.K. Wagh Engineering, Gangotri Vihar, 422003",
+    "rating": 4.6,
+    "totalReviews": 143,
+    "pricePerHourMin": 600,
+    "pricePerHourMax": 800,
+    "amenities": ["Drinking Water","Parking","Washroom"],
+    "sports": ["Football","Cricket","Yoga"],
+    "hours": { "mon":"06:00 AM","tue":"06:00 AM","wed":"06:00 AM","thu":"06:00 AM","fri":"06:00 AM","sat":"06:00 AM","sun":"06:00 AM","notes":"Closes 11:00 PM daily" },
+    "contacts": { "phone": "", "email": "", "website": "", "facebook": "", "instagram": "", "gmap": "" },
+    "reviews": { "positive": "One of the best multi sports turf in Nashik", "negative": "" },
+    "source_ids": "[1,12]"
+  }
+]
