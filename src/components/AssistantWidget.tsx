@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -7,10 +7,9 @@ import { parseSmartQuery } from "../lib/smartTime";
 type Msg = { role: "user" | "assistant"; text: string; time: number; };
 
 export function AssistantWidget({
-  onSmartSearch, onBookNow, onRecommend,
+  onSmartSearch, onRecommend,
 }: {
   onSmartSearch: (q: ReturnType<typeof parseSmartQuery>) => string[];
-  onBookNow: (turfName?: string) => void;
   onRecommend: () => string;
 }) {
   const [open, setOpen] = useState(false);
@@ -46,7 +45,7 @@ export function AssistantWidget({
       reply("You can split equally across players at checkout. UPI/Razorpay coming soon in MVP.");
       return;
     }
-    reply("Try: “Which grounds are available tonight near Govind Nagar?” or tap a chip below.");
+    reply("Try: Which grounds are available tonight near Govind Nagar? or tap a chip below.");
   }
 
   function reply(text: string) {
@@ -66,10 +65,15 @@ export function AssistantWidget({
         </button>
       )}
       {open && (
-        <div className="fixed bottom-5 right-5 z-50 w-[340px] sm:w-[380px] bg-white border rounded-2xl shadow-2xl overflow-hidden">
+        <div 
+          className="fixed bottom-5 right-5 z-50 w-[340px] sm:w-[380px] bg-white border rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in-0 zoom-in-95 duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="assistant-title"
+        >
           <div className="px-3 h-11 flex items-center justify-between border-b">
-            <div className="font-medium">Turfer Assistant</div>
-            <Button variant="ghost" onClick={()=>setOpen(false)}><X className="w-5 h-5"/></Button>
+            <h3 id="assistant-title" className="font-medium">Turfer Assistant</h3>
+            <Button variant="ghost" onClick={()=>setOpen(false)} aria-label="Close assistant"><X className="w-5 h-5"/></Button>
           </div>
           <div className="p-3 h-[380px] overflow-y-auto space-y-2">
             {msgs.map((m, i) => (
@@ -88,13 +92,13 @@ export function AssistantWidget({
             </div>
             <div className="flex gap-2">
               <input
-                className="flex-1 h-10 px-3 rounded-md border focus:ring-2 focus:ring-emerald-600 outline-none"
+                className="flex-1 h-10 px-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
                 placeholder="Ask to search, book, or split payments…"
                 value={input}
                 onChange={(e)=>setInput(e.target.value)}
                 onKeyDown={(e)=> e.key==='Enter' && (send(input), setInput(""))}
+                aria-label="Chat message input"
               />
-              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={()=>{ send(input); setInput(""); }}>Send</Button>
             </div>
           </div>
         </div>

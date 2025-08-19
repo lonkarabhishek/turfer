@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { X, Calendar, MapPin, Star, Sun } from "lucide-react";
 import { parseSmartQuery } from "../lib/smartTime";
 import { Button } from "./ui/button";
@@ -47,21 +47,27 @@ export function SmartBookingModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full sm:w-[760px] rounded-2xl shadow-2xl overflow-hidden">
+    <div 
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="smart-booking-title"
+    >
+      <div className="bg-white w-full sm:w-[760px] rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:fade-in-0 sm:zoom-in-95 duration-200">
         <div className="p-4 border-b flex items-center justify-between">
-          <div className="font-semibold">Smart Booking</div>
-          <Button variant="ghost" onClick={onClose}><X className="w-5 h-5"/></Button>
+          <h2 id="smart-booking-title" className="font-semibold text-lg">Smart Booking</h2>
+          <Button variant="ghost" onClick={onClose} aria-label="Close modal"><X className="w-5 h-5"/></Button>
         </div>
 
         <div className="p-4 space-y-3">
           <div className="flex gap-2">
             <input
-              className="flex-1 h-11 px-3 rounded-md border focus:ring-2 focus:ring-emerald-600 outline-none"
+              className="flex-1 h-11 px-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
               placeholder={hint[0]}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e)=> e.key==='Enter' && doSearch()}
+              aria-label="Smart booking query"
             />
             <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={doSearch}>Search</Button>
           </div>
