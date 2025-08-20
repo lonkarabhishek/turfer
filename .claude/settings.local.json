@@ -4,7 +4,11 @@
       "mcp__ide__getDiagnostics",
       "Bash(npm run dev:*)",
       "Bash(npm run build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(move:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "Bash(npm run lint)"
     ],
     "deny": [],
     "ask": []

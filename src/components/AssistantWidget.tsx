@@ -57,7 +57,7 @@ export function AssistantWidget({
     <>
       {!open && (
         <button
-          className="fixed bottom-5 right-5 z-50 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white w-14 h-14 shadow-xl flex items-center justify-center"
+          className="fixed bottom-5 right-5 z-50 rounded-full bg-primary-600 hover:bg-primary-700 text-white w-14 h-14 shadow-xl flex items-center justify-center"
           onClick={() => setOpen(true)}
           aria-label="Open chat"
         >
@@ -77,7 +77,7 @@ export function AssistantWidget({
           </div>
           <div className="p-3 h-[380px] overflow-y-auto space-y-2">
             {msgs.map((m, i) => (
-              <div key={i} className={`max-w-[85%] ${m.role==="user" ? "ml-auto text-white bg-emerald-600" : "bg-gray-100 text-gray-800"} px-3 py-2 rounded-2xl`}>
+              <div key={i} className={`max-w-[85%] ${m.role==="user" ? "ml-auto text-white bg-primary-600" : "bg-gray-100 text-gray-800"} px-3 py-2 rounded-2xl`}>
                 {m.text.split("\n").map((line, idx) => <div key={idx}>{line}</div>)}
               </div>
             ))}
@@ -92,7 +92,7 @@ export function AssistantWidget({
             </div>
             <div className="flex gap-2">
               <input
-                className="flex-1 h-10 px-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
+                className="flex-1 h-10 px-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                 placeholder="Ask to search, book, or split payments…"
                 value={input}
                 onChange={(e)=>setInput(e.target.value)}
