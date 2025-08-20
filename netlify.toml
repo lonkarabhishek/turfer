@@ -8,7 +8,7 @@
   status = 200
 
 [context.production.environment]
-  VITE_API_BASE_URL = "https://your-backend-domain.com/api"
+  VITE_API_BASE_URL = "https://turfer-production.up.railway.app/api"
 
 [context.deploy-preview.environment]
-  VITE_API_BASE_URL = "https://your-backend-domain.com/api"
+  VITE_API_BASE_URL = "https://turfer-production.up.railway.app/api"
