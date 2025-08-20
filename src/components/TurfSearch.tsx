@@ -11,7 +11,7 @@ interface TurfSearchProps {
   currentCity?: string;
 }
 
-export function TurfSearch({ user, currentCity = 'your city' }: TurfSearchProps) {
+export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
   const [query, setQuery] = useState('');
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);

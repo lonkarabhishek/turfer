@@ -1,12 +1,10 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Star, Building2, Check, X, Plus, Users } from "lucide-react";
-import { ResponsiveContainer, AreaChart, CartesianGrid, BarChart, Bar, XAxis, YAxis, Tooltip, Area, Line } from "recharts";
+import { motion } from "framer-motion";
+import { Star, Plus, Users } from "lucide-react";
+import { ResponsiveContainer, AreaChart, CartesianGrid, BarChart, Bar, XAxis, YAxis, Tooltip, Area } from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
-import { Input } from "./components/ui/input";
-import { Label } from "./components/ui/label";
 
 import { SmartBookingModal } from "./components/SmartBookingModal";
 import { AssistantWidget } from "./components/AssistantWidget";
@@ -19,7 +17,6 @@ import { SimpleAuth } from "./components/SimpleAuth";
 
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
-import { analytics, track } from "./lib/analytics";
 
 // Sample game data - will be replaced with API calls
 const SAMPLE_GAMES: GameData[] = [
