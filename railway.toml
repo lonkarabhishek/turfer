@@ -1,0 +1,20 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "cd backend && npm start"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "backend"
+
+[services.source]
+repo = "lonkarabhishek/turfer"
+rootDirectory = "/backend"
+
+[services.variables]
+NODE_ENV = "production"
+PORT = "3001"
