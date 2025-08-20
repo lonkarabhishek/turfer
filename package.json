@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "cd backend && npm install && npm run build",
     "start": "cd backend && npm start",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:frontend": "tsc -b && vite build"
   },
   "dependencies": {
     "framer-motion": "^12.23.12",
