@@ -6,6 +6,6 @@
     }
   ],
   "env": {
-    "VITE_API_BASE_URL": "@vite_api_base_url"
+    "VITE_API_BASE_URL": "https://turfer-production.up.railway.app/api"
   }
 }
