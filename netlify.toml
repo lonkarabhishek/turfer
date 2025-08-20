@@ -1,0 +1,14 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[context.production.environment]
+  VITE_API_BASE_URL = "https://your-backend-domain.com/api"
+
+[context.deploy-preview.environment]
+  VITE_API_BASE_URL = "https://your-backend-domain.com/api"
