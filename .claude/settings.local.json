@@ -17,7 +17,10 @@
       "Bash(curl:*)",
       "Bash(npx ts-node:*)",
       "Bash(taskkill:*)",
-      "Bash(cmd //c:*)"
+      "Bash(cmd //c:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:turfer-production.up.railway.app)"
     ],
     "deny": [],
     "ask": []
