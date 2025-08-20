@@ -1,13 +1,21 @@
-import { Home, Search, Plus, MessageCircle, User } from 'lucide-react';
+import { Home, Search, Plus, MessageCircle, User, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { type User as UserType } from '../lib/api';
 
 interface MobileNavProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  user?: UserType | null;
 }
 
-export function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
-  const tabs = [
+export function MobileNav({ activeTab, setActiveTab, user }: MobileNavProps) {
+  const tabs = user?.role === 'owner' ? [
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'create', label: 'Create Game', icon: Plus },
+    { id: 'messages', label: 'Messages', icon: MessageCircle },
+    { id: 'profile', label: 'Profile', icon: User },
+  ] : [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'explore', label: 'Explore', icon: Search },
     { id: 'create', label: 'Create Game', icon: Plus },
