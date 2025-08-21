@@ -1,6 +1,0 @@
-[build]
-builder = "nixpacks"
-
-[deploy]
-startCommand = "cd backend && npm install && npm run build && npm start"
-healthcheckPath = "/health"

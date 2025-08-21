@@ -20,9 +20,16 @@
       "Bash(cmd //c:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "WebFetch(domain:turfer-production.up.railway.app)"
+      "WebFetch(domain:turfer-production.up.railway.app)",
+      "Bash(NODE_ENV=production DATABASE_URL=./test.sqlite npm start)",
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\Users\\lonka\\turfer-backend"
+    ]
   }
 }
