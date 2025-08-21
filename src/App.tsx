@@ -14,6 +14,8 @@ import { TurfSearch } from "./components/TurfSearch";
 import { GameCard, type GameData } from "./components/GameCard";
 import { CreateGameFlow } from "./components/CreateGameFlow";
 import { SimpleAuth } from "./components/SimpleAuth";
+import { UserProfile } from "./components/UserProfile";
+import { TurfDetailPage } from "./components/TurfDetailPage";
 
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
@@ -202,7 +204,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
   );
 }
 
-function UserSurface({ user, currentCity = 'your city' }: { user: any, currentCity?: string }) {
+function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: any, currentCity?: string, onTurfClick?: (turfId: string) => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>(SAMPLE_GAMES);
@@ -259,7 +261,11 @@ function UserSurface({ user, currentCity = 'your city' }: { user: any, currentCi
         </div>
 
         {activeSection === 'turfs' ? (
-          <TurfSearch user={user} currentCity={currentCity} />
+          <TurfSearch 
+            user={user} 
+            currentCity={currentCity} 
+            onTurfClick={onTurfClick}
+          />
         ) : (
           <GamesYouCanJoin games={games} user={user} />
         )}
@@ -395,6 +401,8 @@ export default function App() {
   const [currentCity] = useState('your city');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
 
   // Auto-set dashboard tab for owners
   useEffect(() => {
@@ -407,6 +415,8 @@ export default function App() {
   const handleProfileClick = () => {
     if (!user) {
       setShowLogin(true);
+    } else {
+      setShowProfile(true);
     }
   };
 
@@ -469,7 +479,7 @@ export default function App() {
           </Card>
         </div>
       ) : (
-        <UserSurface user={user} currentCity={currentCity} />
+        <UserSurface user={user} currentCity={currentCity} onTurfClick={setSelectedTurfId} />
       )}
       
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
@@ -499,6 +509,28 @@ export default function App() {
         onClose={() => setShowLogin(false)}
         onSuccess={refreshAuth}
       />
+
+      <UserProfile
+        open={showProfile}
+        onClose={() => setShowProfile(false)}
+        onCreateGame={() => {
+          setShowProfile(false);
+          setShowCreateGame(true);
+        }}
+      />
+
+      {selectedTurfId && (
+        <TurfDetailPage
+          turfId={selectedTurfId}
+          open={true}
+          onClose={() => setSelectedTurfId(null)}
+          onCreateGame={() => {
+            setSelectedTurfId(null);
+            setShowCreateGame(true);
+            // Pre-select the turf in create game flow
+          }}
+        />
+      )}
     </div>
   );
 }

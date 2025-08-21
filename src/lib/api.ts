@@ -241,4 +241,30 @@ export const gamesAPI = {
   async getJoinedGames(): Promise<ApiResponse<any[]>> {
     return apiRequest('/games/joined');
   },
+
+  async getUserGames(userId: string): Promise<ApiResponse<any[]>> {
+    return apiRequest(`/games/user/${userId}`);
+  },
+};
+
+// Bookings API functions
+export const bookingsAPI = {
+  async createBooking(bookingData: {
+    turfId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    totalPlayers: number;
+    totalAmount: number;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    return apiRequest('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(bookingData),
+    });
+  },
+
+  async getMyBookings(): Promise<ApiResponse<any[]>> {
+    return apiRequest('/bookings/my-bookings');
+  },
 };

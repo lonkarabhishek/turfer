@@ -9,6 +9,7 @@ import { turfsAPI, type Turf, type User } from '../lib/api';
 interface TurfSearchProps {
   user: User | null;
   currentCity?: string;
+  onTurfClick?: (turfId: string) => void;
 }
 
 // Calculate distance between two coordinates using Haversine formula
@@ -24,7 +25,7 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
-export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
+export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearchProps) {
   const [query, setQuery] = useState('');
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +115,7 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
   };
 
   const displayTurfs = useMemo(() => {
-    return turfs.map(turf => ({
+    const transformedTurfs = turfs.map(turf => ({
       id: turf.id,
       name: turf.name,
       address: turf.address,
@@ -138,7 +139,19 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
       isPopular: turf.rating >= 4.5,
       hasLights: turf.amenities.some(a => a.toLowerCase().includes('light')),
     }));
-  }, [turfs]);
+
+    // Sort by distance when user location is available
+    if (userLocation) {
+      return transformedTurfs.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+    }
+
+    // Otherwise sort by rating and popularity
+    return transformedTurfs.sort((a, b) => {
+      if (a.isPopular && !b.isPopular) return -1;
+      if (!a.isPopular && b.isPopular) return 1;
+      return (b.rating || 0) - (a.rating || 0);
+    });
+  }, [turfs, userLocation]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -292,7 +305,12 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
         ) : (
           <div className="space-y-4">
             {displayTurfs.map((turf) => (
-              <TurfCard key={turf.id} turf={turf} variant="default" />
+              <TurfCard 
+                key={turf.id} 
+                turf={turf} 
+                variant="default" 
+                onClick={() => onTurfClick?.(turf.id)}
+              />
             ))}
           </div>
         )}

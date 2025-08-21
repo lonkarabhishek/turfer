@@ -24,7 +24,9 @@
       "Bash(NODE_ENV=production DATABASE_URL=./test.sqlite npm start)",
       "Bash(git init:*)",
       "Bash(git branch:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm start)"
     ],
     "deny": [],
     "ask": [],

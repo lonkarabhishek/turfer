@@ -31,9 +31,10 @@ interface TurfCardProps {
   turf: TurfData;
   onBook?: (turf: TurfData) => void;
   variant?: 'default' | 'compact';
+  onClick?: () => void;
 }
 
-export function TurfCard({ turf, onBook, variant = 'default' }: TurfCardProps) {
+export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCardProps) {
   const handleBookClick = () => {
     analytics.bookingAttempted(turf.id, turf.nextAvailable || 'TBD', 10);
     
@@ -69,6 +70,7 @@ export function TurfCard({ turf, onBook, variant = 'default' }: TurfCardProps) {
 
   const handleCardClick = () => {
     analytics.cardViewed('turf', turf.id, turf.name);
+    onClick?.();
   };
 
   const getAmenityIcon = (amenity: string) => {

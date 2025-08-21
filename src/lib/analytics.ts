@@ -6,6 +6,8 @@ export type AnalyticsEvent =
   | 'card_viewed'
   | 'whatsapp_cta_clicked'
   | 'create_game_started'
+  | 'create_game_success'
+  | 'create_game_failed'
   | 'join_game_confirmed'
   | 'smart_search_used'
   | 'location_requested'

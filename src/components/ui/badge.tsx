@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 
-type BadgeVariant = 'secondary' | 'outline' | 'success' | 'warning' | 'destructive';
+type BadgeVariant = 'default' | 'secondary' | 'outline' | 'success' | 'warning' | 'destructive';
 
 interface BadgeProps {
   children?: ReactNode;
@@ -11,6 +11,7 @@ interface BadgeProps {
 
 export function Badge({ children, variant = 'secondary', className = '', onClick }: BadgeProps) {
   const styles: Record<BadgeVariant, string> = {
+    default: 'bg-primary-600 text-white',
     secondary: 'bg-gray-100 text-gray-800',
     outline: 'border border-gray-300 text-gray-700 bg-transparent',
     success: 'bg-emerald-100 text-emerald-800',
