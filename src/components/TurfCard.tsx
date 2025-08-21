@@ -90,15 +90,33 @@ export function TurfCard({ turf, onBook, variant = 'default' }: TurfCardProps) {
       >
         {/* Image */}
         <div className={`relative w-full overflow-hidden ${variant === 'compact' ? 'aspect-[16/10]' : 'aspect-[16/9]'}`}>
-          <img
-            src={turf.images[0] || "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=1200&auto=format&fit=crop"}
-            alt={`${turf.name} turf facility`}
-            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-            loading="lazy"
-            onError={(e) => {
-              e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'%3E%3Crect width='400' height='225' fill='%23e5e7eb'/%3E%3Ctext x='200' y='112.5' text-anchor='middle' dy='.3em' fill='%236b7280' font-family='system-ui' font-size='16'%3ETurf Image%3C/text%3E%3C/svg%3E";
-            }}
-          />
+{turf.images && turf.images.length > 0 && turf.images[0] ? (
+            <img
+              src={turf.images[0]}
+              alt={`${turf.name} turf facility`}
+              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+              loading="lazy"
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.style.display = 'none';
+                target.parentElement!.innerHTML = `
+                  <div class="w-full h-full bg-gradient-to-br from-green-400 via-green-500 to-green-600 flex items-center justify-center">
+                    <div class="text-center text-white">
+                      <div class="text-4xl mb-2">🏟️</div>
+                      <div class="text-sm font-medium">${turf.name}</div>
+                    </div>
+                  </div>
+                `;
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-green-400 via-green-500 to-green-600 flex items-center justify-center">
+              <div className="text-center text-white">
+                <div className="text-4xl mb-2">🏟️</div>
+                <div className="text-sm font-medium">{turf.name}</div>
+              </div>
+            </div>
+          )}
           
           {/* Overlay badges */}
           <div className="absolute top-3 left-3 flex flex-col gap-1">

@@ -11,12 +11,26 @@ interface TurfSearchProps {
   currentCity?: string;
 }
 
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
   const [query, setQuery] = useState('');
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   
   // Search filters
   const [filters, setFilters] = useState({
@@ -69,12 +83,14 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
+          // Store user location for distance calculations
+          setUserLocation({ lat, lng });
+          
           try {
-            const response = await turfsAPI.getNearby(
-              position.coords.latitude,
-              position.coords.longitude,
-              10
-            );
+            const response = await turfsAPI.getNearby(lat, lng, 10);
             
             if (response.success && response.data) {
               setTurfs(response.data);
@@ -83,6 +99,8 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
             }
           } catch (err) {
             console.error('Error loading nearby turfs:', err);
+            // If nearby API fails, just reload all turfs with distance
+            loadTurfs();
           }
         },
         (error) => {
@@ -113,7 +131,9 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
       slots: ['06 AM - 07 AM', '07 AM - 08 AM', '08 PM - 09 PM', '09 PM - 10 PM'], // Mock slots for now
       contacts: turf.contactInfo,
       coords: turf.coordinates,
-      distanceKm: Math.random() * 5, // Mock distance
+      distanceKm: turf.coordinates && userLocation 
+        ? calculateDistance(userLocation.lat, userLocation.lng, turf.coordinates.lat, turf.coordinates.lng) 
+        : Math.random() * 5, // Fallback to mock distance
       nextAvailable: '06 AM - 07 AM',
       isPopular: turf.rating >= 4.5,
       hasLights: turf.amenities.some(a => a.toLowerCase().includes('light')),
@@ -270,14 +290,10 @@ export function TurfSearch({ currentCity = 'your city' }: TurfSearchProps) {
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto pb-4">
-            <div className="flex gap-4 w-max sm:w-full sm:grid sm:grid-cols-2 lg:grid-cols-3">
-              {displayTurfs.map((turf) => (
-                <div key={turf.id} className="w-80 sm:w-full flex-shrink-0">
-                  <TurfCard turf={turf} variant="compact" />
-                </div>
-              ))}
-            </div>
+          <div className="space-y-4">
+            {displayTurfs.map((turf) => (
+              <TurfCard key={turf.id} turf={turf} variant="default" />
+            ))}
           </div>
         )}
 

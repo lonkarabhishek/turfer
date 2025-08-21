@@ -102,37 +102,102 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
 }
 
 function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
+  const [userGames, setUserGames] = useState<GameData[]>([]);
+  const [loadingUserGames, setLoadingUserGames] = useState(false);
+
+  // Load user's joined games when user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadUserGames();
+    } else {
+      setUserGames([]);
+    }
+  }, [user]);
+
+  const loadUserGames = async () => {
+    setLoadingUserGames(true);
+    try {
+      const response = await gamesAPI.getJoinedGames();
+      if (response.success && response.data) {
+        setUserGames(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading user games:', error);
+    } finally {
+      setLoadingUserGames(false);
+    }
+  };
+
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex items-center justify-between mb-4">
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+      {/* User's Upcoming Games */}
+      {user && (
         <div>
-          <h3 className="text-xl font-semibold text-gray-900">Games you can join now</h3>
-          <p className="text-sm text-gray-600">Live games looking for players</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-primary-600" />
-          <span className="text-sm text-primary-600 font-medium">Community</span>
-        </div>
-      </div>
-      
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {games.slice(0, 6).map((game) => (
-          <GameCard key={game.id} game={game} />
-        ))}
-      </div>
-      
-      {games.length === 0 && (
-        <div className="text-center py-12">
-          <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">No active games right now</p>
-          {user && (
-            <Button className="mt-4 bg-primary-600 hover:bg-primary-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Create the first game
-            </Button>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900">Your upcoming games</h3>
+              <p className="text-sm text-gray-600">Games you're playing in</p>
+            </div>
+          </div>
+          
+          {loadingUserGames ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-white rounded-xl p-4 animate-pulse">
+                  <div className="h-20 bg-gray-200 rounded mb-2" />
+                  <div className="h-4 bg-gray-200 rounded mb-1" />
+                  <div className="h-4 bg-gray-200 rounded w-3/4" />
+                </div>
+              ))}
+            </div>
+          ) : userGames.length > 0 ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {userGames.slice(0, 3).map((game) => (
+                <GameCard key={game.id} game={game} showStatus={true} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+              <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-gray-500">No upcoming games yet</p>
+              <p className="text-sm text-gray-400">Join a game below to get started</p>
+            </div>
           )}
         </div>
       )}
+
+      {/* Available Games to Join */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900">Games you can join now</h3>
+            <p className="text-sm text-gray-600">Live games looking for players</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary-600" />
+            <span className="text-sm text-primary-600 font-medium">Community</span>
+          </div>
+        </div>
+        
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {games.slice(0, 6).map((game) => (
+            <GameCard key={game.id} game={game} />
+          ))}
+        </div>
+        
+        {games.length === 0 && (
+          <div className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No active games right now</p>
+            {user && (
+              <Button className="mt-4 bg-primary-600 hover:bg-primary-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Create the first game
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

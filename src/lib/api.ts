@@ -233,4 +233,12 @@ export const gamesAPI = {
       body: JSON.stringify(gameData),
     });
   },
+
+  async getMyGames(): Promise<ApiResponse<any[]>> {
+    return apiRequest('/games/my-games');
+  },
+
+  async getJoinedGames(): Promise<ApiResponse<any[]>> {
+    return apiRequest('/games/joined');
+  },
 };
