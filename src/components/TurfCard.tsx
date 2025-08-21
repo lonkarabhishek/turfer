@@ -97,16 +97,8 @@ export function TurfCard({ turf, onBook, variant = 'default' }: TurfCardProps) {
               className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
               loading="lazy"
               onError={(e) => {
-                const target = e.currentTarget;
-                target.style.display = 'none';
-                target.parentElement!.innerHTML = `
-                  <div class="w-full h-full bg-gradient-to-br from-green-400 via-green-500 to-green-600 flex items-center justify-center">
-                    <div class="text-center text-white">
-                      <div class="text-4xl mb-2">🏟️</div>
-                      <div class="text-sm font-medium">${turf.name}</div>
-                    </div>
-                  </div>
-                `;
+                // Simple error handling without DOM manipulation
+                e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'%3E%3Crect width='400' height='225' fill='%234ade80'/%3E%3Ctext x='200' y='100' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='32'%3E🏟️%3C/text%3E%3Ctext x='200' y='140' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='14'%3E" + encodeURIComponent(turf.name) + "%3C/text%3E%3C/svg%3E";
               }}
             />
           ) : (

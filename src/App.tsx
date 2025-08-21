@@ -153,7 +153,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
           ) : userGames.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {userGames.slice(0, 3).map((game) => (
-                <GameCard key={game.id} game={game} showStatus={true} />
+                <GameCard key={game.id} game={game} />
               ))}
             </div>
           ) : (
