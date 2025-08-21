@@ -61,6 +61,24 @@ router.get('/my-games', authenticateToken, async (req: AuthRequest, res: Respons
   }
 });
 
+// Get games by user ID (for profile view)
+router.get('/user/:userId', optionalAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const games = await gameModel.findByHostId(req.params.userId);
+
+    res.json({
+      success: true,
+      data: games
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('Get user games error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    } as ApiResponse);
+  }
+});
+
 // Get game by ID
 router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {

@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, MapPin, Users, Trophy, Target, Plus } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, Trophy, Target, Plus, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { useAuth } from '../hooks/useAuth';
 import { gamesAPI } from '../lib/api';
 
 interface GameStats {
@@ -34,13 +33,12 @@ interface UserGame {
 }
 
 interface UserProfileProps {
-  open: boolean;
-  onClose: () => void;
+  user: any;
+  onBack: () => void;
   onCreateGame?: () => void;
 }
 
-export function UserProfile({ open, onClose, onCreateGame }: UserProfileProps) {
-  const { user } = useAuth();
+export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<GameStats | null>(null);
   const [upcomingGames, setUpcomingGames] = useState<UserGame[]>([]);
@@ -93,12 +91,11 @@ export function UserProfile({ open, onClose, onCreateGame }: UserProfileProps) {
   }, [user]);
 
   useEffect(() => {
-    if (open && user) {
+    if (user) {
       loadUserProfile();
     }
-  }, [open, user, loadUserProfile]);
+  }, [user, loadUserProfile]);
 
-  if (!open) return null;
 
   const filteredUpcomingGames = upcomingGames.filter(game => {
     if (filter === 'hosted') return game.isHost;
@@ -139,35 +136,44 @@ export function UserProfile({ open, onClose, onCreateGame }: UserProfileProps) {
   };
 
   return (
-    <motion.div 
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
+    <div className="min-h-screen bg-gray-50">
       <motion.div 
-        className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white shadow-sm"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary-600 to-primary-700 p-6 text-white">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">{user?.name}'s Profile</h2>
-              <p className="text-primary-200 mt-1">{user?.email}</p>
-              {user?.phone && (
-                <p className="text-primary-200 text-sm">{user.phone}</p>
-              )}
+        <div className="bg-gradient-to-br from-primary-600 via-primary-500 to-emerald-500 p-6 text-white relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-600/20 to-transparent" />
+          <div className="relative flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold">{user?.name}</h2>
+                <p className="text-primary-200 mt-1">{user?.email}</p>
+                {user?.phone && (
+                  <p className="text-primary-200 text-sm">{user.phone}</p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge className="bg-white/20 text-white hover:bg-white/30">
+                    {user?.role === 'owner' ? 'Turf Owner' : 'Player'}
+                  </Badge>
+                  <Badge className="bg-white/20 text-white hover:bg-white/30">
+                    Member since {new Date(user?.createdAt || new Date()).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                  </Badge>
+                </div>
+              </div>
             </div>
-            <Button variant="ghost" onClick={onClose} className="text-white hover:bg-primary-800">
-              ×
+            <Button variant="ghost" onClick={onBack} className="text-white hover:bg-white/20 backdrop-blur-sm">
+              <ArrowLeft className="w-5 h-5" />
             </Button>
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+        <div className="p-6 space-y-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -176,37 +182,69 @@ export function UserProfile({ open, onClose, onCreateGame }: UserProfileProps) {
             <div className="p-6 space-y-6">
               {/* Game Statistics */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <Trophy className="w-8 h-8 text-primary-600 mx-auto mb-2" />
-                    <div className="text-2xl font-bold">{stats?.totalGamesPlayed || 0}</div>
-                    <div className="text-sm text-gray-600">Games Played</div>
-                  </CardContent>
-                </Card>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                >
+                  <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-primary-500">
+                    <CardContent className="p-4 text-center">
+                      <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Trophy className="w-6 h-6 text-primary-600" />
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats?.totalGamesPlayed || 0}</div>
+                      <div className="text-sm text-gray-600">Games Played</div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
                 
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <Target className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                    <div className="text-2xl font-bold">{stats?.totalGamesHosted || 0}</div>
-                    <div className="text-sm text-gray-600">Games Hosted</div>
-                  </CardContent>
-                </Card>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                >
+                  <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-emerald-500">
+                    <CardContent className="p-4 text-center">
+                      <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Target className="w-6 h-6 text-emerald-600" />
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats?.totalGamesHosted || 0}</div>
+                      <div className="text-sm text-gray-600">Games Hosted</div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
                 
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                    <div className="text-2xl font-bold">{stats?.totalGamesJoined || 0}</div>
-                    <div className="text-sm text-gray-600">Games Joined</div>
-                  </CardContent>
-                </Card>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                >
+                  <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500">
+                    <CardContent className="p-4 text-center">
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Users className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats?.totalGamesJoined || 0}</div>
+                      <div className="text-sm text-gray-600">Games Joined</div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
                 
-                <Card>
-                  <CardContent className="p-4 text-center">
-                    <Calendar className="w-8 h-8 text-orange-600 mx-auto mb-2" />
-                    <div className="text-2xl font-bold">{stats?.upcomingGames || 0}</div>
-                    <div className="text-sm text-gray-600">Upcoming</div>
-                  </CardContent>
-                </Card>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.4 }}
+                >
+                  <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-orange-500">
+                    <CardContent className="p-4 text-center">
+                      <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Calendar className="w-6 h-6 text-orange-600" />
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats?.upcomingGames || 0}</div>
+                      <div className="text-sm text-gray-600">Upcoming</div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               </div>
 
               {/* Next Game Highlight */}
@@ -387,6 +425,6 @@ export function UserProfile({ open, onClose, onCreateGame }: UserProfileProps) {
           )}
         </div>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }

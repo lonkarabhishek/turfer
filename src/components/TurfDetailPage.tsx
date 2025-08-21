@@ -14,9 +14,8 @@ import type { TurfData } from './TurfCard';
 
 interface TurfDetailPageProps {
   turfId: string;
-  open: boolean;
-  onClose: () => void;
-  onCreateGame?: (turfId: string) => void;
+  onBack: () => void;
+  onCreateGame?: () => void;
 }
 
 interface TimeSlot {
@@ -47,7 +46,7 @@ const timeSlots = [
   '20:00-21:00', '21:00-22:00'
 ];
 
-export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDetailPageProps) {
+export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageProps) {
   const { isAuthenticated } = useAuth();
   const [turf, setTurf] = useState<TurfData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,19 +58,19 @@ export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDeta
 
   useEffect(() => {
     const loadData = async () => {
-      if (open && turfId) {
+      if (turfId) {
         await loadTurfDetails();
         await loadAvailability();
       }
     };
     loadData();
-  }, [open, turfId]);
+  }, [turfId]);
 
   useEffect(() => {
-    if (open) {
+    if (turfId) {
       loadAvailability();
     }
-  }, [open, selectedDate]);
+  }, [selectedDate]);
 
   const loadTurfDetails = async () => {
     setLoading(true);
@@ -204,24 +203,17 @@ export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDeta
     }
   };
 
-  if (!open) return null;
-
   return (
-    <motion.div 
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
+    <div className="min-h-screen bg-gray-50">
       <motion.div 
-        className="bg-white w-full max-w-6xl max-h-[95vh] rounded-2xl shadow-2xl overflow-hidden"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white shadow-sm"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
       >
         {/* Header */}
         <div className="bg-primary-600 text-white p-4 flex items-center gap-4">
-          <Button variant="ghost" onClick={onClose} className="text-white hover:bg-primary-700">
+          <Button variant="ghost" onClick={onBack} className="text-white hover:bg-primary-700">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
@@ -240,8 +232,7 @@ export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDeta
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
         ) : (
-          <div className="overflow-y-auto max-h-[calc(95vh-80px)]">
-            <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6">
               {/* Turf Info */}
               {turf && (
                 <>
@@ -350,7 +341,7 @@ export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDeta
                       {/* Action Buttons */}
                       <div className="space-y-2">
                         <Button 
-                          onClick={() => onCreateGame?.(turfId)}
+                          onClick={() => onCreateGame?.()}
                           className="w-full bg-primary-600 hover:bg-primary-700"
                         >
                           <Plus className="w-4 h-4 mr-2" />
@@ -467,8 +458,7 @@ export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDeta
                 </>
               )}
             </div>
-          </div>
-        )}
+          )}
 
         {/* Booking Confirmation Modal */}
         {bookingStep === 'confirm' && (
@@ -511,6 +501,6 @@ export function TurfDetailPage({ turfId, open, onClose, onCreateGame }: TurfDeta
           </div>
         )}
       </motion.div>
-    </motion.div>
+    </div>
   );
 }

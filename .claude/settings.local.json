@@ -26,7 +26,12 @@
       "Bash(git branch:*)",
       "Bash(git remote add:*)",
       "Bash(npm run typecheck:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "WebFetch(domain:turfer-backend-production.up.railway.app)",
+      "WebSearch",
+      "WebFetch(domain:turfer.vercel.app)",
+      "WebFetch(domain:tapturf.in)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": [],

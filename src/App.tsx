@@ -398,10 +398,10 @@ function OwnerDashboard() {
 export default function App() {
   const { user, loading, refreshAuth } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile'>('home');
   const [currentCity] = useState('your city');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
 
   // Auto-set dashboard tab for owners
@@ -416,8 +416,20 @@ export default function App() {
     if (!user) {
       setShowLogin(true);
     } else {
-      setShowProfile(true);
+      setCurrentPage('profile');
+      setActiveTab('profile');
     }
+  };
+
+  const handleTurfClick = (turfId: string) => {
+    setSelectedTurfId(turfId);
+    setCurrentPage('turf-detail');
+  };
+
+  const handleBackToHome = () => {
+    setCurrentPage('home');
+    setSelectedTurfId(null);
+    setActiveTab('home');
   };
 
   // Determine which interface to show based on user role
@@ -444,7 +456,25 @@ export default function App() {
         onCreateGame={() => setShowCreateGame(true)}
       />
       
-      {showOwnerDashboard ? (
+      {currentPage === 'turf-detail' && selectedTurfId ? (
+        <TurfDetailPage
+          turfId={selectedTurfId}
+          onBack={handleBackToHome}
+          onCreateGame={() => {
+            handleBackToHome();
+            setShowCreateGame(true);
+          }}
+        />
+      ) : currentPage === 'profile' && user ? (
+        <UserProfile
+          user={user}
+          onBack={handleBackToHome}
+          onCreateGame={() => {
+            handleBackToHome();
+            setShowCreateGame(true);
+          }}
+        />
+      ) : showOwnerDashboard ? (
         <OwnerDashboard />
       ) : activeTab === "create" ? (
         <div className="max-w-xl mx-auto mt-8 px-4">
@@ -479,7 +509,7 @@ export default function App() {
           </Card>
         </div>
       ) : (
-        <UserSurface user={user} currentCity={currentCity} onTurfClick={setSelectedTurfId} />
+        <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} />
       )}
       
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
@@ -510,27 +540,6 @@ export default function App() {
         onSuccess={refreshAuth}
       />
 
-      <UserProfile
-        open={showProfile}
-        onClose={() => setShowProfile(false)}
-        onCreateGame={() => {
-          setShowProfile(false);
-          setShowCreateGame(true);
-        }}
-      />
-
-      {selectedTurfId && (
-        <TurfDetailPage
-          turfId={selectedTurfId}
-          open={true}
-          onClose={() => setSelectedTurfId(null)}
-          onCreateGame={() => {
-            setSelectedTurfId(null);
-            setShowCreateGame(true);
-            // Pre-select the turf in create game flow
-          }}
-        />
-      )}
     </div>
   );
 }
