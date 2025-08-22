@@ -11,7 +11,7 @@
 
 ## Live Admin Panel
 
-🌐 **URL:** Will be available once deployed to GitHub Pages
+🌐 **URL:** https://lonkarabhishek.github.io/turfer/
 
 ## Features
 
@@ -70,6 +70,12 @@
 | Development | SQLite (local) | http://localhost:3001/api |
 | Staging | SQLite (local) | http://localhost:3001/api |
 | Production | PostgreSQL (Railway) | https://turfer-backend-production.up.railway.app/api |
+
+## Domain Information
+
+- **Main App:** https://tapturf.in
+- **Admin Panel:** https://lonkarabhishek.github.io/turfer/
+- **Backend API:** https://turfer-backend-production.up.railway.app/api
 
 ---
 
