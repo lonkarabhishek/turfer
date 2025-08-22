@@ -22,4 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Environment files
+.env
+.env.*
+
+# Local admin (keep private)
+local-admin.html
+
 # Trigger deployment rollback

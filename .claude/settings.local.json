@@ -31,7 +31,17 @@
       "WebSearch",
       "WebFetch(domain:turfer.vercel.app)",
       "WebFetch(domain:tapturf.in)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(git clean:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run migrate:dev:*)",
+      "Bash(NODE_ENV=staging npm run dev:staging)",
+      "Bash(set NODE_ENV=staging)",
+      "Bash(npm run migrate:staging:*)",
+      "Bash(start local-admin.html)",
+      "Bash(gh repo create:*)",
+      "Bash(git revert:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": [],
