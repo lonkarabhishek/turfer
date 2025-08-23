@@ -132,11 +132,23 @@ export function GameCard({ game, onJoin }: GameCardProps) {
             </div>
 
             <div className="flex items-center text-sm text-gray-600 gap-2">
-              <MapPin className="w-4 h-4" />
-              <div>
-                <div className="font-medium">{game.turfName}</div>
-                <div className="text-xs text-gray-500">{game.turfAddress}</div>
-              </div>
+              <button
+                className="flex items-center gap-2 hover:text-primary-600 transition-colors group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Create Google Maps URL with the address
+                  const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
+                  window.open(mapsUrl, '_blank');
+                  analytics.linkClicked('google_maps', 'game_card', game.id);
+                }}
+                title="Open in Google Maps"
+              >
+                <MapPin className="w-4 h-4 group-hover:text-primary-600" />
+                <div>
+                  <div className="font-medium group-hover:underline">{game.turfName}</div>
+                  <div className="text-xs text-gray-500 group-hover:text-primary-600">{game.turfAddress}</div>
+                </div>
+              </button>
               {typeof game.distanceKm === 'number' && (
                 <div className="ml-auto text-xs text-gray-500">
                   {game.distanceKm.toFixed(1)}km away

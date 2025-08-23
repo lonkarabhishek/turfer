@@ -50,7 +50,26 @@ export class GameModel extends BaseModel {
     const sql = 'SELECT * FROM games WHERE host_id = ? ORDER BY created_at DESC';
     const rows = await this.db.all(sql, [hostId]);
     
-    return rows.map(this.mapRowToGame);
+    return rows.map(row => this.mapRowToGame(row));
+  }
+
+  async findJoinedGames(userId: string): Promise<GameType[]> {
+    const sql = `
+      SELECT g.*, 
+             t.name as turf_name, 
+             t.address as turf_address,
+             u.name as host_name,
+             u.phone as host_phone
+      FROM games g
+      JOIN turfs t ON g.turf_id = t.id
+      JOIN users u ON g.host_id = u.id
+      WHERE g.confirmed_players LIKE '%"' || ? || '"%'
+      AND g.status IN ('open', 'full')
+      ORDER BY g.date ASC, g.start_time ASC
+    `;
+    
+    const rows = await this.db.all(sql, [userId]);
+    return rows.map(row => this.mapRowToGame(row));
   }
 
   async findAvailableGames(filters: {
@@ -61,9 +80,16 @@ export class GameModel extends BaseModel {
     limit?: number;
   } = {}): Promise<GameType[]> {
     let sql = `
-      SELECT g.*, t.lat, t.lng, t.name as turf_name, t.address as turf_address
+      SELECT g.*, 
+             t.name as turf_name, 
+             t.address as turf_address,
+             t.lat, 
+             t.lng,
+             u.name as host_name,
+             u.phone as host_phone
       FROM games g
       JOIN turfs t ON g.turf_id = t.id
+      JOIN users u ON g.host_id = u.id
       WHERE g.status = 'open' 
       AND g.is_private = 0
       AND g.current_players < g.max_players
@@ -113,7 +139,7 @@ export class GameModel extends BaseModel {
     }
 
     const rows = await this.db.all(sql, params);
-    return rows.map(this.mapRowToGame);
+    return rows.map(row => this.mapRowToGame(row));
   }
 
   async joinGame(gameId: string, userId: string): Promise<{ success: boolean; message: string }> {
@@ -265,7 +291,7 @@ export class GameModel extends BaseModel {
   }
 
   private mapRowToGame(row: any): GameType {
-    return {
+    const game = {
       id: row.id,
       hostId: row.host_id,
       turfId: row.turf_id,
@@ -287,5 +313,21 @@ export class GameModel extends BaseModel {
       createdAt: this.parseDateTime(row.created_at),
       updatedAt: this.parseDateTime(row.updated_at)
     };
+
+    // Add additional fields from joins if present
+    if (row.turf_name) {
+      (game as any).turf_name = row.turf_name;
+    }
+    if (row.turf_address) {
+      (game as any).turf_address = row.turf_address;
+    }
+    if (row.host_name) {
+      (game as any).host_name = row.host_name;
+    }
+    if (row.host_phone) {
+      (game as any).host_phone = row.host_phone;
+    }
+
+    return game;
   }
 }

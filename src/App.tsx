@@ -20,6 +20,28 @@ import { TurfDetailPage } from "./components/TurfDetailPage";
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
 
+// Helper functions for data transformation
+const formatDate = (dateStr: string) => {
+  const today = new Date();
+  const gameDate = new Date(dateStr);
+  const diffDays = Math.ceil((gameDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays < 7) return gameDate.toLocaleDateString('en-US', { weekday: 'long' });
+  return gameDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const capitalizeSkillLevel = (level: string): GameData['skillLevel'] => {
+  const levelMap: { [key: string]: GameData['skillLevel'] } = {
+    'beginner': 'Beginner',
+    'intermediate': 'Intermediate', 
+    'advanced': 'Advanced',
+    'all': 'All levels'
+  };
+  return levelMap[level.toLowerCase()] || 'All levels';
+};
+
 // Sample game data - will be replaced with API calls
 const SAMPLE_GAMES: GameData[] = [
   {
@@ -121,7 +143,26 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
     try {
       const response = await gamesAPI.getJoinedGames();
       if (response.success && response.data) {
-        setUserGames(response.data);
+        // Transform joined games to match GameData interface
+        const transformedUserGames = response.data.map((game: any) => ({
+          id: game.id,
+          hostName: game.host_name || "Unknown Host",
+          hostAvatar: "",
+          turfName: game.turf_name || "Unknown Turf",
+          turfAddress: game.turf_address || "Unknown Address",
+          date: formatDate(game.date),
+          timeSlot: `${game.startTime}-${game.endTime}`,
+          format: game.format,
+          skillLevel: capitalizeSkillLevel(game.skillLevel),
+          currentPlayers: game.currentPlayers,
+          maxPlayers: game.maxPlayers,
+          costPerPerson: game.costPerPerson,
+          notes: game.notes,
+          hostPhone: game.host_phone || "9999999999",
+          distanceKm: undefined,
+          isUrgent: false
+        }));
+        setUserGames(transformedUserGames);
       }
     } catch (error) {
       console.error('Error loading user games:', error);
@@ -221,7 +262,25 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: a
       const response = await gamesAPI.getAvailable({ limit: 20 });
       if (response.success && response.data) {
         // Transform API games to match GameData interface
-        setGames(response.data);
+        const transformedGames = response.data.map((game: any) => ({
+          id: game.id,
+          hostName: game.host_name || "Unknown Host",
+          hostAvatar: "",
+          turfName: game.turf_name || "Unknown Turf",
+          turfAddress: game.turf_address || "Unknown Address",
+          date: formatDate(game.date),
+          timeSlot: `${game.startTime}-${game.endTime}`,
+          format: game.format,
+          skillLevel: capitalizeSkillLevel(game.skillLevel),
+          currentPlayers: game.currentPlayers,
+          maxPlayers: game.maxPlayers,
+          costPerPerson: game.costPerPerson,
+          notes: game.notes,
+          hostPhone: game.host_phone || "9999999999",
+          distanceKm: undefined, // Will be calculated if location is available
+          isUrgent: false // Can be calculated based on date/time
+        }));
+        setGames(transformedGames);
       }
     } catch (error) {
       console.error('Error loading games:', error);

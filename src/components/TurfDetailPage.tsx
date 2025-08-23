@@ -219,10 +219,20 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
           <div>
             <h2 className="text-xl font-bold">{turf?.name || 'Loading...'}</h2>
             {turf && (
-              <p className="text-primary-200 flex items-center gap-1">
-                <MapPin className="w-4 h-4" />
-                {turf.address}
-              </p>
+              <button
+                className="text-primary-200 flex items-center gap-1 hover:text-white transition-colors group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (turf?.address) {
+                    const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(turf.address)}`;
+                    window.open(mapsUrl, '_blank');
+                  }
+                }}
+                title="Open in Google Maps"
+              >
+                <MapPin className="w-4 h-4 group-hover:text-white" />
+                <span className="group-hover:underline">{turf.address}</span>
+              </button>
             )}
           </div>
         </div>

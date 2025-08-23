@@ -44,6 +44,7 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
   const [upcomingGames, setUpcomingGames] = useState<UserGame[]>([]);
   const [pastGames, setPastGames] = useState<UserGame[]>([]);
   const [filter, setFilter] = useState<'all' | 'hosted' | 'joined'>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
   const loadUserProfile = useCallback(async () => {
     if (!user) return;
@@ -51,12 +52,48 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
     setLoading(true);
     try {
       // Get user's hosted games
-      const hostedGamesResponse = await gamesAPI.getUserGames(user.id);
-      const hostedGames = hostedGamesResponse.success ? (hostedGamesResponse.data || []) : [];
+      const hostedGamesResponse = await gamesAPI.getMyGames();
+      const hostedGamesData = hostedGamesResponse.success ? (hostedGamesResponse.data || []) : [];
 
-      // Get user's joined games - this would need a new API endpoint
-      // For now, we'll simulate this data
-      const joinedGames: UserGame[] = [];
+      // Get user's joined games
+      const joinedGamesResponse = await gamesAPI.getJoinedGames();
+      const joinedGamesData = joinedGamesResponse.success ? (joinedGamesResponse.data || []) : [];
+
+      // Transform hosted games
+      const hostedGames: UserGame[] = hostedGamesData.map((game: any) => ({
+        id: game.id,
+        sport: game.sport,
+        format: game.format,
+        date: game.date,
+        startTime: game.startTime,
+        endTime: game.endTime,
+        turfName: game.turf_name || 'Unknown Turf',
+        turfAddress: game.turf_address || 'Unknown Address',
+        currentPlayers: game.currentPlayers,
+        maxPlayers: game.maxPlayers,
+        costPerPerson: game.costPerPerson,
+        status: game.status,
+        isHost: true,
+        hostName: user.name
+      }));
+
+      // Transform joined games
+      const joinedGames: UserGame[] = joinedGamesData.map((game: any) => ({
+        id: game.id,
+        sport: game.sport,
+        format: game.format,
+        date: game.date,
+        startTime: game.startTime,
+        endTime: game.endTime,
+        turfName: game.turf_name || 'Unknown Turf',
+        turfAddress: game.turf_address || 'Unknown Address',
+        currentPlayers: game.currentPlayers,
+        maxPlayers: game.maxPlayers,
+        costPerPerson: game.costPerPerson,
+        status: game.status,
+        isHost: false,
+        hostName: game.host_name || 'Unknown Host'
+      }));
 
       const allGames = [...hostedGames, ...joinedGames];
       const now = new Date();
@@ -133,6 +170,125 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
     }
 
     return `${dateStr} • ${startTime}-${endTime}`;
+  };
+
+  const renderCalendarView = () => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    // Get first day of the month and number of days
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const firstDayWeekday = firstDayOfMonth.getDay();
+    const daysInMonth = lastDayOfMonth.getDate();
+    
+    // Generate calendar grid
+    const weeks = [];
+    let currentWeek = [];
+    
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < firstDayWeekday; i++) {
+      currentWeek.push(null);
+    }
+    
+    // Add all days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      currentWeek.push(day);
+      
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek);
+        currentWeek = [];
+      }
+    }
+    
+    // Add remaining days to complete the last week
+    while (currentWeek.length < 7) {
+      currentWeek.push(null);
+    }
+    if (currentWeek.some(day => day !== null)) {
+      weeks.push(currentWeek);
+    }
+    
+    // Get games for the current month
+    const monthlyGames = filteredUpcomingGames.filter(game => {
+      const gameDate = new Date(game.date);
+      return gameDate.getMonth() === currentMonth && gameDate.getFullYear() === currentYear;
+    });
+    
+    // Group games by date
+    const gamesByDate: { [key: string]: UserGame[] } = {};
+    monthlyGames.forEach(game => {
+      const gameDate = new Date(game.date);
+      const dateKey = gameDate.getDate().toString();
+      if (!gamesByDate[dateKey]) {
+        gamesByDate[dateKey] = [];
+      }
+      gamesByDate[dateKey].push(game);
+    });
+    
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    return (
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center justify-center">
+            {monthNames[currentMonth]} {currentYear}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="grid grid-cols-7 border-b">
+            {dayNames.map(day => (
+              <div key={day} className="p-3 text-center font-medium text-gray-600 bg-gray-50 border-r last:border-r-0">
+                {day}
+              </div>
+            ))}
+          </div>
+          
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="grid grid-cols-7 border-b last:border-b-0">
+              {week.map((day, dayIndex) => (
+                <div 
+                  key={dayIndex} 
+                  className="p-2 border-r last:border-r-0 min-h-[100px] bg-white"
+                >
+                  {day && (
+                    <>
+                      <div className={`text-sm font-medium mb-2 ${
+                        day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear()
+                          ? 'text-primary-600' 
+                          : 'text-gray-900'
+                      }`}>
+                        {day}
+                      </div>
+                      
+                      {gamesByDate[day.toString()]?.map((game, gameIndex) => (
+                        <div
+                          key={gameIndex}
+                          className={`text-xs p-1 mb-1 rounded-sm truncate ${
+                            game.isHost 
+                              ? 'bg-primary-100 text-primary-700' 
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
+                          title={`${game.format} at ${game.turfName} (${game.startTime})`}
+                        >
+                          {game.startTime} {game.format}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -262,10 +418,28 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
                         <div className="font-semibold text-primary-900">
                           {getNextGame()?.format}
                         </div>
-                        <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                          <MapPin className="w-3 h-3" />
-                          {getNextGame()?.turfName}
-                        </div>
+                        <button
+                          className="text-sm text-gray-600 flex items-center gap-1 mt-1 hover:text-primary-600 transition-colors group"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const nextGame = getNextGame();
+                            if (nextGame?.turfAddress) {
+                              const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(nextGame.turfAddress)}`;
+                              window.open(mapsUrl, '_blank');
+                            }
+                          }}
+                          title="Open in Google Maps"
+                        >
+                          <MapPin className="w-3 h-3 group-hover:text-primary-600" />
+                          <div className="text-left">
+                            <div className="group-hover:underline">{getNextGame()?.turfName}</div>
+                            {getNextGame()?.turfAddress && (
+                              <div className="text-xs text-gray-500 group-hover:text-primary-600">
+                                {getNextGame()?.turfAddress}
+                              </div>
+                            )}
+                          </div>
+                        </button>
                         <div className="text-sm text-gray-600 mt-1">
                           {getNextGame() && formatGameTime(
                             getNextGame()!.date, 
@@ -293,111 +467,169 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
                 </Card>
               )}
 
-              {/* Games Filter */}
+              {/* Games Filter & View Toggle */}
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Your Games</h3>
                 <div className="flex gap-2">
-                  <Button
-                    variant={filter === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('all')}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={filter === 'hosted' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('hosted')}
-                  >
-                    Hosted
-                  </Button>
-                  <Button
-                    variant={filter === 'joined' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('joined')}
-                  >
-                    Joined
-                  </Button>
+                  <div className="flex gap-1 border rounded-md p-1">
+                    <Button
+                      variant={viewMode === 'list' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('list')}
+                      className="h-8 px-3"
+                    >
+                      List
+                    </Button>
+                    <Button
+                      variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('calendar')}
+                      className="h-8 px-3"
+                    >
+                      <Calendar className="w-4 h-4 mr-1" />
+                      Calendar
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={filter === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilter('all')}
+                    >
+                      All
+                    </Button>
+                    <Button
+                      variant={filter === 'hosted' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilter('hosted')}
+                    >
+                      Hosted
+                    </Button>
+                    <Button
+                      variant={filter === 'joined' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilter('joined')}
+                    >
+                      Joined
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              {/* Upcoming Games */}
-              {filteredUpcomingGames.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">Upcoming Games</h4>
-                  <div className="space-y-3">
-                    {filteredUpcomingGames.map((game) => (
-                      <Card key={game.id} className="hover:shadow-md transition-shadow">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="font-medium">{game.format}</div>
-                              <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                                <MapPin className="w-3 h-3" />
-                                {game.turfName}
+              {/* Calendar/List View */}
+              {viewMode === 'calendar' ? (
+                renderCalendarView()
+              ) : (
+                <>
+                  {/* Upcoming Games */}
+                  {filteredUpcomingGames.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Upcoming Games</h4>
+                      <div className="space-y-3">
+                        {filteredUpcomingGames.map((game) => (
+                          <Card key={game.id} className="hover:shadow-md transition-shadow">
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="font-medium">{game.format}</div>
+                                  <button
+                                    className="text-sm text-gray-600 flex items-center gap-1 mt-1 hover:text-primary-600 transition-colors group"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (game.turfAddress) {
+                                        const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
+                                        window.open(mapsUrl, '_blank');
+                                      }
+                                    }}
+                                    title="Open in Google Maps"
+                                  >
+                                    <MapPin className="w-3 h-3 group-hover:text-primary-600" />
+                                    <div className="text-left">
+                                      <div className="group-hover:underline">{game.turfName}</div>
+                                      <div className="text-xs text-gray-500 group-hover:text-primary-600">
+                                        {game.turfAddress}
+                                      </div>
+                                    </div>
+                                  </button>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    {formatGameTime(game.date, game.startTime, game.endTime)}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant={game.isHost ? 'default' : 'secondary'}>
+                                      {game.isHost ? 'Hosting' : 'Playing'}
+                                    </Badge>
+                                    <Badge variant={game.status === 'open' ? 'outline' : 'secondary'}>
+                                      {game.status}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-semibold">₹{game.costPerPerson}</div>
+                                  <div className="text-xs text-gray-500">per person</div>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    {game.currentPlayers}/{game.maxPlayers} players
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                {formatGameTime(game.date, game.startTime, game.endTime)}
-                              </div>
-                              <div className="flex items-center gap-2 mt-2">
-                                <Badge variant={game.isHost ? 'default' : 'secondary'}>
-                                  {game.isHost ? 'Hosting' : 'Playing'}
-                                </Badge>
-                                <Badge variant={game.status === 'open' ? 'outline' : 'secondary'}>
-                                  {game.status}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">₹{game.costPerPerson}</div>
-                              <div className="text-xs text-gray-500">per person</div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                {game.currentPlayers}/{game.maxPlayers} players
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-              {/* Past Games */}
-              {filteredPastGames.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">Recent Games (Past Month)</h4>
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {filteredPastGames.map((game) => (
-                      <Card key={game.id} className="opacity-75">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="font-medium">{game.format}</div>
-                              <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                                <MapPin className="w-3 h-3" />
-                                {game.turfName}
+                  {/* Past Games */}
+                  {filteredPastGames.length > 0 && viewMode === 'list' && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Recent Games (Past Month)</h4>
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {filteredPastGames.map((game) => (
+                          <Card key={game.id} className="opacity-75">
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="font-medium">{game.format}</div>
+                                  <button
+                                    className="text-sm text-gray-600 flex items-center gap-1 mt-1 hover:text-primary-600 transition-colors group"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (game.turfAddress) {
+                                        const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
+                                        window.open(mapsUrl, '_blank');
+                                      }
+                                    }}
+                                    title="Open in Google Maps"
+                                  >
+                                    <MapPin className="w-3 h-3 group-hover:text-primary-600" />
+                                    <div className="text-left">
+                                      <div className="group-hover:underline">{game.turfName}</div>
+                                      <div className="text-xs text-gray-500 group-hover:text-primary-600">
+                                        {game.turfAddress}
+                                      </div>
+                                    </div>
+                                  </button>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    {formatGameTime(game.date, game.startTime, game.endTime)}
+                                  </div>
+                                  <Badge 
+                                    variant={game.isHost ? 'default' : 'secondary'}
+                                    className="mt-2"
+                                  >
+                                    {game.isHost ? 'Hosted' : 'Played'}
+                                  </Badge>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-semibold">₹{game.costPerPerson}</div>
+                                  <div className="text-xs text-gray-500">per person</div>
+                                </div>
                               </div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                {formatGameTime(game.date, game.startTime, game.endTime)}
-                              </div>
-                              <Badge 
-                                variant={game.isHost ? 'default' : 'secondary'}
-                                className="mt-2"
-                              >
-                                {game.isHost ? 'Hosted' : 'Played'}
-                              </Badge>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">₹{game.costPerPerson}</div>
-                              <div className="text-xs text-gray-500">per person</div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Empty State */}

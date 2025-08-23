@@ -150,10 +150,20 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
               <h3 className="font-semibold text-lg text-gray-900 truncate">
                 {turf.name}
               </h3>
-              <div className="flex items-center text-sm text-gray-600 gap-1 mt-1">
-                <MapPin className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{turf.address}</span>
-              </div>
+              <button
+                className="flex items-center text-sm text-gray-600 gap-1 mt-1 hover:text-primary-600 transition-colors group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Create Google Maps URL with the address
+                  const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(turf.address)}`;
+                  window.open(mapsUrl, '_blank');
+                  analytics.linkClicked('google_maps', 'turf_card', turf.id);
+                }}
+                title="Open in Google Maps"
+              >
+                <MapPin className="w-4 h-4 flex-shrink-0 group-hover:text-primary-600" />
+                <span className="truncate group-hover:underline">{turf.address}</span>
+              </button>
               {typeof turf.distanceKm === 'number' && (
                 <div className="text-xs text-gray-500 mt-1">
                   {turf.distanceKm.toFixed(1)} km away
