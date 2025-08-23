@@ -36,9 +36,12 @@ export abstract class BaseModel {
       let paramIndex = 1;
       const convertedSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
       
-      // Also convert BOOLEAN values for PostgreSQL
+      // Convert SQLite-specific syntax to PostgreSQL
       return { 
-        sql: convertedSql.replace(/= 0/g, '= FALSE').replace(/= 1/g, '= TRUE'), 
+        sql: convertedSql
+          .replace(/= 0/g, '= FALSE')
+          .replace(/= 1/g, '= TRUE')
+          .replace(/\|\|/g, 'CONCAT'), // Fix string concatenation
         params 
       };
     }

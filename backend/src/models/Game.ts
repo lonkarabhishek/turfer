@@ -63,7 +63,7 @@ export class GameModel extends BaseModel {
       FROM games g
       JOIN turfs t ON g.turf_id = t.id
       JOIN users u ON g.host_id = u.id
-      WHERE g.confirmed_players LIKE '%"' || ? || '"%'
+      WHERE g.confirmed_players::text LIKE '%"' || ? || '"%'
       AND g.status IN ('open', 'full')
       ORDER BY g.date ASC, g.start_time ASC
     `;
@@ -92,11 +92,11 @@ export class GameModel extends BaseModel {
       JOIN turfs t ON g.turf_id = t.id
       JOIN users u ON g.host_id = u.id
       WHERE g.status = 'open' 
-      AND g.is_private = 0
+      AND g.is_private = ?
       AND g.current_players < g.max_players
     `;
     
-    const params: any[] = [];
+    const params: any[] = [false]; // is_private = false for public games
 
     if (filters.sport) {
       sql += ' AND g.sport = ?';
