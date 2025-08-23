@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm start",
-    "healthcheckPath": "/api/health"
+    "startCommand": "node init-production.js && npm start",
+    "healthcheckPath": "/health"
   }
 }
