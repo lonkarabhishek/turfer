@@ -7,7 +7,7 @@
     "dev": "cross-env NODE_ENV=development nodemon src/server.ts",
     "dev:staging": "cross-env NODE_ENV=staging nodemon src/server.ts",
     "build": "tsc && node copy-assets.js",
-    "start": "cross-env NODE_ENV=development node dist/server.js",
+    "start": "cross-env NODE_ENV=production node dist/server.js",
     "start:staging": "cross-env NODE_ENV=staging node dist/server.js",
     "start:prod": "cross-env NODE_ENV=production node dist/server.js",
     "migrate": "cross-env NODE_ENV=development ts-node src/scripts/migrate.ts development",
