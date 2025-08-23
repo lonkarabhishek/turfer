@@ -40,21 +40,21 @@ export class GameModel extends BaseModel {
   }
 
   async findById(id: string): Promise<GameType | null> {
-    const sql = 'SELECT * FROM games WHERE id = ?';
-    const row = await this.db.get(sql, [id]);
+    const { sql, params } = this.convertQueryParams('SELECT * FROM games WHERE id = ?', [id]);
+    const row = await this.db.get(sql, params);
     
     return row ? this.mapRowToGame(row) : null;
   }
 
   async findByHostId(hostId: string): Promise<GameType[]> {
-    const sql = 'SELECT * FROM games WHERE host_id = ? ORDER BY created_at DESC';
-    const rows = await this.db.all(sql, [hostId]);
+    const { sql, params } = this.convertQueryParams('SELECT * FROM games WHERE host_id = ? ORDER BY created_at DESC', [hostId]);
+    const rows = await this.db.all(sql, params);
     
     return rows.map(row => this.mapRowToGame(row));
   }
 
   async findJoinedGames(userId: string): Promise<GameType[]> {
-    const sql = `
+    const rawSql = `
       SELECT g.*, 
              t.name as turf_name, 
              t.address as turf_address,
@@ -68,7 +68,8 @@ export class GameModel extends BaseModel {
       ORDER BY g.date ASC, g.start_time ASC
     `;
     
-    const rows = await this.db.all(sql, [userId]);
+    const { sql, params } = this.convertQueryParams(rawSql, [userId]);
+    const rows = await this.db.all(sql, params);
     return rows.map(row => this.mapRowToGame(row));
   }
 
@@ -138,7 +139,8 @@ export class GameModel extends BaseModel {
       params.push(filters.limit);
     }
 
-    const rows = await this.db.all(sql, params);
+    const { sql: finalSql, params: finalParams } = this.convertQueryParams(sql, params);
+    const rows = await this.db.all(finalSql, finalParams);
     return rows.map(row => this.mapRowToGame(row));
   }
 

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 export abstract class BaseModel {
   protected db = DatabaseConnection.getInstance();
+  private dbConnection = DatabaseConnection.getInstance();
 
   protected generateId(): string {
     return uuidv4();
@@ -27,6 +28,21 @@ export abstract class BaseModel {
 
   protected parseDateTime(dateString: string): Date {
     return new Date(dateString);
+  }
+
+  protected convertQueryParams(sql: string, params: any[] = []): { sql: string; params: any[] } {
+    if (this.dbConnection.getDatabaseType() === 'postgresql') {
+      // Convert ? placeholders to $1, $2, $3 for PostgreSQL
+      let paramIndex = 1;
+      const convertedSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
+      
+      // Also convert BOOLEAN values for PostgreSQL
+      return { 
+        sql: convertedSql.replace(/= 0/g, '= FALSE').replace(/= 1/g, '= TRUE'), 
+        params 
+      };
+    }
+    return { sql, params };
   }
 
   protected buildWhereClause(conditions: Record<string, any>): { where: string; params: any[] } {
