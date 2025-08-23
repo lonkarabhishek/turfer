@@ -17,7 +17,89 @@ async function initializeProductionDB() {
     await client.query(schemaSQL);
     console.log('✅ Database schema initialized');
 
-    // Check if we need to seed games data
+    // Check if we need to seed sample data
+    const usersResult = await client.query('SELECT COUNT(*) FROM users');
+    const usersCount = parseInt(usersResult.rows[0].count);
+    
+    if (usersCount === 0) {
+      console.log('No users found, creating sample users...');
+      
+      // Create sample users
+      await client.query(`
+        INSERT INTO users (id, email, password, name, phone, role, is_verified)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, ['user-1', 'user@example.com', 'hashed_password', 'John Doe', '9876543210', 'user', true]);
+      
+      console.log('✅ Created sample users');
+    }
+    
+    const turfsResult = await client.query('SELECT COUNT(*) FROM turfs');
+    const turfsCount = parseInt(turfsResult.rows[0].count);
+    
+    if (turfsCount === 0) {
+      console.log('No turfs found, creating sample turfs...');
+      
+      // Create sample turfs
+      const sampleTurfs = [
+        {
+          id: 'turf-1',
+          owner_id: 'user-1',
+          name: 'Elite Sports Arena',
+          address: 'Koramangala, Bangalore',
+          lat: 12.9352,
+          lng: 77.6245,
+          description: 'Premium football turf with floodlights',
+          sports: '["Football", "Cricket"]',
+          amenities: '["Parking", "Changing Room", "Water", "First Aid"]',
+          images: '[]',
+          price_per_hour: 1200,
+          price_per_hour_weekend: 1500,
+          operating_hours: '{"start": "06:00", "end": "23:00"}',
+          contact_info: '{"phone": "9876543210", "whatsapp": "9876543210"}',
+          rating: 4.5,
+          total_reviews: 25,
+          is_active: true
+        },
+        {
+          id: 'turf-2', 
+          owner_id: 'user-1',
+          name: 'Champions Ground',
+          address: 'Indiranagar, Bangalore',
+          lat: 12.9719,
+          lng: 77.6412,
+          description: 'Multi-sport facility with AC changing rooms',
+          sports: '["Football", "Cricket", "Badminton"]',
+          amenities: '["Parking", "AC Changing Room", "Water", "Snacks"]',
+          images: '[]',
+          price_per_hour: 1000,
+          price_per_hour_weekend: 1300,
+          operating_hours: '{"start": "05:30", "end": "23:30"}',
+          contact_info: '{"phone": "9876543211", "whatsapp": "9876543211"}',
+          rating: 4.2,
+          total_reviews: 18,
+          is_active: true
+        }
+      ];
+      
+      for (const turf of sampleTurfs) {
+        await client.query(`
+          INSERT INTO turfs (
+            id, owner_id, name, address, lat, lng, description, 
+            sports, amenities, images, price_per_hour, price_per_hour_weekend,
+            operating_hours, contact_info, rating, total_reviews, is_active
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        `, [
+          turf.id, turf.owner_id, turf.name, turf.address, turf.lat, turf.lng,
+          turf.description, turf.sports, turf.amenities, turf.images,
+          turf.price_per_hour, turf.price_per_hour_weekend, turf.operating_hours,
+          turf.contact_info, turf.rating, turf.total_reviews, turf.is_active
+        ]);
+      }
+      
+      console.log(`✅ Created ${sampleTurfs.length} sample turfs`);
+    }
+    
     const gamesResult = await client.query('SELECT COUNT(*) FROM games');
     const gamesCount = parseInt(gamesResult.rows[0].count);
     
