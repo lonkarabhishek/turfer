@@ -157,7 +157,7 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
                   // Create Google Maps URL with the address
                   const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(turf.address)}`;
                   window.open(mapsUrl, '_blank');
-                  analytics.linkClicked('google_maps', 'turf_card', turf.id);
+                  track('whatsapp_cta_clicked', { action: 'google_maps', context: 'turf_card', turf_id: turf.id });
                 }}
                 title="Open in Google Maps"
               >

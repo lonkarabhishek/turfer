@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
-import { analytics } from '../lib/analytics';
+import { analytics, track } from '../lib/analytics';
 
 export interface GameData {
   id: string;
@@ -139,7 +139,7 @@ export function GameCard({ game, onJoin }: GameCardProps) {
                   // Create Google Maps URL with the address
                   const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
                   window.open(mapsUrl, '_blank');
-                  analytics.linkClicked('google_maps', 'game_card', game.id);
+                  track('whatsapp_cta_clicked', { action: 'google_maps', context: 'game_card', game_id: game.id });
                 }}
                 title="Open in Google Maps"
               >
