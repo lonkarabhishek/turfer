@@ -92,7 +92,15 @@ app.get('/health', (req, res) => {
     success: true,
     message: 'Turf booking API is running',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    version: '1.0.2',
+    deployedAt: '2025-08-24T18:07:00.000Z',
+    features: [
+      'SQLite compatibility fixed',
+      'Game creation working',
+      'Authentication enhanced',
+      'Mobile UI optimized'
+    ]
   });
 });
 
