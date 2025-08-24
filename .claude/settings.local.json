@@ -53,7 +53,8 @@
       "Bash(npm run:*)",
       "Bash(railway status:*)",
       "Bash(vite build)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": [],

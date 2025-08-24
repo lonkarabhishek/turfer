@@ -1,5 +1,10 @@
 // API configuration and client
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD ? 'https://turfer-backend-production.up.railway.app/api' : 'http://localhost:3001/api');
+
+console.log('🔗 API Base URL:', API_BASE_URL);
+console.log('🌍 Environment:', import.meta.env.MODE);
+console.log('🏗️ Production?', import.meta.env.PROD);
 
 // Types for API responses
 export interface ApiResponse<T = any> {
@@ -120,10 +125,11 @@ async function apiRequest<T = any>(
   };
 
   try {
+    console.log('🚀 Making API request to:', url);
     const response = await fetch(url, config);
     
     if (!response.ok) {
-      console.error('HTTP error:', response.status, response.statusText);
+      console.error('❌ HTTP error:', response.status, response.statusText, 'URL:', url);
       return {
         success: false,
         error: `Server error: ${response.status} ${response.statusText}`,
@@ -131,9 +137,10 @@ async function apiRequest<T = any>(
     }
     
     const data = await response.json();
+    console.log('✅ API response successful:', url);
     return data;
   } catch (error) {
-    console.error('API request failed:', error);
+    console.error('💥 API request failed:', error, 'URL:', url);
     return {
       success: false,
       error: 'Network error. Please check your connection.',
