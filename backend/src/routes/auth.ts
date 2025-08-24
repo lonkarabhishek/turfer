@@ -28,7 +28,7 @@ router.post('/register', validate(userRegistrationSchema), async (req: Request, 
       password,
       phone,
       role: role || 'user',
-      isVerified: false
+      isVerified: true
     });
 
     // Generate JWT token
