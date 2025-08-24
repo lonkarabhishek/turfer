@@ -125,10 +125,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🚀 TapTurf Server running on http://localhost:${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔧 API endpoints available at http://localhost:${PORT}/api`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
+  console.log(`✅ Production deployment ready - ${new Date().toISOString()}`);
 });
 
 // Graceful shutdown
