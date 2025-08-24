@@ -431,6 +431,9 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
 
                 <div>
                   <Label>Select Venue *</Label>
+                  {validation.turf && (
+                    <div className="text-red-500 text-sm mb-2">{validation.turf}</div>
+                  )}
                   {selectedTurf ? (
                     <div className="border border-primary-300 bg-primary-50 rounded-lg p-3 flex items-start justify-between">
                       <div>
@@ -458,7 +461,10 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
                     <Button 
                       variant="outline" 
                       className="w-full h-auto p-4 text-left justify-start"
-                      onClick={() => setShowTurfSearch(true)}
+                      onClick={() => {
+                        setShowTurfSearch(true);
+                        setValidation(prev => ({ ...prev, turf: '' }));
+                      }}
                     >
                       <Search className="w-4 h-4 mr-2" />
                       <div>
@@ -505,6 +511,7 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
                                     setSelectedTurf(turf);
                                     setShowTurfSearch(false);
                                     setSearchTerm('');
+                                    setValidation(prev => ({ ...prev, turf: '' }));
                                   }}
                                   className="w-full p-4 text-left hover:bg-gray-50 border-b transition-colors"
                                 >
@@ -567,7 +574,7 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
                   <Button 
                     onClick={handleNext} 
                     className="flex-1 bg-primary-600 hover:bg-primary-700"
-                    disabled={!formData.date || !formData.timeSlot || !selectedTurf}
+                    disabled={!formData.date || !formData.timeSlot || !selectedTurf || validation.turf}
                   >
                     Continue
                   </Button>

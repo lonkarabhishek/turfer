@@ -75,26 +75,26 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-lg p-4 text-center">
-          <Calendar className="w-6 h-6 text-primary-600 mx-auto mb-2" />
-          <div className="text-2xl font-bold text-gray-900">{bookings.length}</div>
-          <div className="text-sm text-gray-600">Total Bookings</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-white border rounded-lg p-3 md:p-4 text-center">
+          <Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary-600 mx-auto mb-2" />
+          <div className="text-lg md:text-2xl font-bold text-gray-900">{bookings.length}</div>
+          <div className="text-xs md:text-sm text-gray-600">Bookings</div>
         </div>
-        <div className="bg-white border rounded-lg p-4 text-center">
-          <Gamepad2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
-          <div className="text-2xl font-bold text-gray-900">{games.length + joinedGames.length}</div>
-          <div className="text-sm text-gray-600">Games Played</div>
+        <div className="bg-white border rounded-lg p-3 md:p-4 text-center">
+          <Gamepad2 className="w-5 h-5 md:w-6 md:h-6 text-green-600 mx-auto mb-2" />
+          <div className="text-lg md:text-2xl font-bold text-gray-900">{games.length + joinedGames.length}</div>
+          <div className="text-xs md:text-sm text-gray-600">Games</div>
         </div>
-        <div className="bg-white border rounded-lg p-4 text-center">
-          <Heart className="w-6 h-6 text-red-600 mx-auto mb-2" />
-          <div className="text-2xl font-bold text-gray-900">{favorites.length}</div>
-          <div className="text-sm text-gray-600">Favorite Turfs</div>
+        <div className="bg-white border rounded-lg p-3 md:p-4 text-center">
+          <Heart className="w-5 h-5 md:w-6 md:h-6 text-red-600 mx-auto mb-2" />
+          <div className="text-lg md:text-2xl font-bold text-gray-900">{favorites.length}</div>
+          <div className="text-xs md:text-sm text-gray-600">Favorites</div>
         </div>
-        <div className="bg-white border rounded-lg p-4 text-center">
-          <Trophy className="w-6 h-6 text-yellow-600 mx-auto mb-2" />
-          <div className="text-2xl font-bold text-gray-900">4.8</div>
-          <div className="text-sm text-gray-600">Player Rating</div>
+        <div className="bg-white border rounded-lg p-3 md:p-4 text-center">
+          <Trophy className="w-5 h-5 md:w-6 md:h-6 text-yellow-600 mx-auto mb-2" />
+          <div className="text-lg md:text-2xl font-bold text-gray-900">4.8</div>
+          <div className="text-xs md:text-sm text-gray-600">Rating</div>
         </div>
       </div>
 
@@ -139,29 +139,29 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
         <Button 
-          className="h-24 flex-col space-y-2 bg-primary-600 hover:bg-primary-700"
+          className="h-16 md:h-24 flex-col space-y-1 md:space-y-2 bg-primary-600 hover:bg-primary-700"
           onClick={() => onNavigate('search')}
         >
-          <Plus className="w-6 h-6" />
-          <span>Book a Turf</span>
+          <Plus className="w-5 h-5 md:w-6 md:h-6" />
+          <span className="text-sm md:text-base">Book a Turf</span>
         </Button>
         <Button 
           variant="outline" 
-          className="h-24 flex-col space-y-2"
+          className="h-16 md:h-24 flex-col space-y-1 md:space-y-2"
           onClick={() => onNavigate('games')}
         >
-          <Users className="w-6 h-6" />
-          <span>Find Games</span>
+          <Users className="w-5 h-5 md:w-6 md:h-6" />
+          <span className="text-sm md:text-base">Find Games</span>
         </Button>
         <Button 
           variant="outline" 
-          className="h-24 flex-col space-y-2"
+          className="h-16 md:h-24 flex-col space-y-1 md:space-y-2"
           onClick={() => setActiveSection('wallet')}
         >
-          <Wallet className="w-6 h-6" />
-          <span>Add Money</span>
+          <Wallet className="w-5 h-5 md:w-6 md:h-6" />
+          <span className="text-sm md:text-base">Add Money</span>
         </Button>
       </div>
     </div>
@@ -375,9 +375,59 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-white border-r border-gray-200 min-h-screen">
+      <div className="flex flex-col md:flex-row">
+        {/* Mobile Header */}
+        <div className="md:hidden bg-white border-b border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center mr-3">
+                <User className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <div className="font-semibold text-sm">{user?.name}</div>
+                <div className="text-xs text-gray-600 capitalize">{user?.role} Account</div>
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                authManager.clearAuth();
+                onNavigate('home');
+              }}
+            >
+              Sign Out
+            </Button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation */}
+        <div className="md:hidden bg-white border-b border-gray-200 p-4">
+          <div className="flex space-x-2 overflow-x-auto">
+            {sidebarItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id as DashboardSection)}
+                className={`flex-shrink-0 flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                  activeSection === item.id
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <item.icon className="w-4 h-4 mr-2" />
+                <span className="whitespace-nowrap">{item.label}</span>
+                {item.count !== undefined && (
+                  <Badge variant="secondary" className="text-xs ml-2">
+                    {item.count}
+                  </Badge>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Desktop Sidebar */}
+        <div className="hidden md:block w-64 bg-white border-r border-gray-200 min-h-screen">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center">
               <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mr-3">
@@ -429,7 +479,7 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-4 md:p-8">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div>

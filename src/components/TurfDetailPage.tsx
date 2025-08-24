@@ -224,7 +224,7 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
                 onClick={(e) => {
                   e.stopPropagation();
                   if (turf?.address) {
-                    const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(turf.address)}`;
+                    const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
                     window.open(mapsUrl, '_blank');
                   }
                 }}

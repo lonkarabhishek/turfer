@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
 
 import { SmartBookingModal } from "./components/SmartBookingModal";
-import { AssistantWidget } from "./components/AssistantWidget";
 import { TopNav } from "./components/TopNav";
 import { MobileNav } from "./components/MobileNav";
 import { TurfSearch } from "./components/TurfSearch";
@@ -341,10 +340,6 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: a
         searchTurfs={() => []} 
       />
       
-      <AssistantWidget
-        onSmartSearch={() => []}
-        onRecommend={() => "Please search for turfs to get recommendations."}
-      />
     </div>
   );
 }

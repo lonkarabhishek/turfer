@@ -136,8 +136,8 @@ export function GameCard({ game, onJoin }: GameCardProps) {
                 className="flex items-center gap-2 hover:text-primary-600 transition-colors group"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Create Google Maps URL with the address
-                  const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
+                  // Create Google Maps directions URL
+                  const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(game.turfAddress)}`;
                   window.open(mapsUrl, '_blank');
                   track('whatsapp_cta_clicked', { action: 'google_maps', context: 'game_card', game_id: game.id });
                 }}

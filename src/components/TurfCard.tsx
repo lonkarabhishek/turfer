@@ -41,7 +41,8 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
   const [showWhatsAppFallback, setShowWhatsAppFallback] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
 
-  const handleBookClick = () => {
+  const handleBookClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     analytics.bookingAttempted(turf.id, turf.nextAvailable || 'TBD', 10);
     
     // Show booking modal for modern in-app booking
@@ -152,8 +153,10 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
                 className="flex items-center text-sm text-gray-600 gap-1 mt-1 hover:text-primary-600 transition-colors group"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Create Google Maps URL with the address
-                  const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(turf.address)}`;
+                  // Create Google Maps URL with coordinates if available, otherwise use address
+                  const mapsUrl = turf.coords 
+                    ? `https://maps.google.com/maps?q=${turf.coords.lat},${turf.coords.lng}&z=15`
+                    : `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
                   window.open(mapsUrl, '_blank');
                   track('whatsapp_cta_clicked', { action: 'google_maps', context: 'turf_card', turf_id: turf.id });
                 }}
@@ -201,19 +204,26 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
             </div>
           )}
 
-          {/* Popular slots */}
-          {turf.slots.length > 0 && (
+          {/* Next available slots */}
+          {turf.nextAvailable && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-gray-700 flex items-center gap-1">
-                <Users className="w-3 h-3" />
-                Popular times:
+                <Clock className="w-3 h-3" />
+                Next available:
               </div>
               <div className="flex flex-wrap gap-1">
-                {turf.slots.slice(0, 3).map((slot) => (
+                <Badge 
+                  variant="outline" 
+                  className="text-xs rounded-full border-green-200 text-green-700 bg-green-50"
+                >
+                  {turf.nextAvailable}
+                </Badge>
+                {/* Show 2 more upcoming slots if available */}
+                {turf.slots && turf.slots.length > 0 && turf.slots.slice(0, 2).map((slot, idx) => (
                   <Badge 
-                    key={slot}
+                    key={idx}
                     variant="outline" 
-                    className="text-xs rounded-full border-primary-200 text-primary-700 bg-primary-50"
+                    className="text-xs rounded-full border-blue-200 text-blue-700 bg-blue-50"
                   >
                     {slot}
                   </Badge>
@@ -247,10 +257,7 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
               <Button
                 size="sm"
                 className="bg-primary-600 hover:bg-primary-700 text-white"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleBookClick();
-                }}
+                onClick={handleBookClick}
               >
                 <Calendar className="w-4 h-4 mr-2 sm:mr-1" />
                 <span className="hidden sm:inline">Book</span> Now

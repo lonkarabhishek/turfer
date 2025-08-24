@@ -164,15 +164,24 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
       coords: turf.coordinates,
       distanceKm: turf.coordinates && userLocation 
         ? calculateDistance(userLocation.lat, userLocation.lng, turf.coordinates.lat, turf.coordinates.lng) 
-        : Math.random() * 5, // Fallback to mock distance
+        : null, // No distance if no coordinates or user location
       nextAvailable: '06 AM - 07 AM',
       isPopular: turf.rating >= 4.5,
       hasLights: turf.amenities.some(a => a.toLowerCase().includes('light')),
     }));
 
-    // Sort by distance when user location is available
+    // Sort by distance when user location is available and turfs have distance calculated
     if (userLocation) {
-      return transformedTurfs.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+      return transformedTurfs.sort((a, b) => {
+        // Put turfs with known distance first, sorted by distance
+        if (a.distanceKm !== null && b.distanceKm !== null) {
+          return a.distanceKm - b.distanceKm;
+        }
+        if (a.distanceKm !== null && b.distanceKm === null) return -1;
+        if (a.distanceKm === null && b.distanceKm !== null) return 1;
+        // If both have no distance, sort by rating
+        return (b.rating || 0) - (a.rating || 0);
+      });
     }
 
     // Otherwise sort by rating and popularity

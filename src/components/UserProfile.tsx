@@ -424,7 +424,7 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
                             e.stopPropagation();
                             const nextGame = getNextGame();
                             if (nextGame?.turfAddress) {
-                              const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(nextGame.turfAddress)}`;
+                              const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(nextGame.turfAddress)}`;
                               window.open(mapsUrl, '_blank');
                             }
                           }}
@@ -537,7 +537,7 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (game.turfAddress) {
-                                        const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
+                                        const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(game.turfAddress)}`;
                                         window.open(mapsUrl, '_blank');
                                       }
                                     }}
@@ -594,7 +594,7 @@ export function UserProfile({ user, onBack, onCreateGame }: UserProfileProps) {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (game.turfAddress) {
-                                        const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(game.turfAddress)}`;
+                                        const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(game.turfAddress)}`;
                                         window.open(mapsUrl, '_blank');
                                       }
                                     }}
