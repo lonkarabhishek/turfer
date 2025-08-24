@@ -63,7 +63,7 @@ export class GameModel extends BaseModel {
       FROM games g
       JOIN turfs t ON g.turf_id = t.id
       JOIN users u ON g.host_id = u.id
-      WHERE g.confirmed_players::text LIKE '%"' || ? || '"%'
+      WHERE g.confirmed_players LIKE '%"' || ? || '"%'
       AND g.status IN ('open', 'full')
       ORDER BY g.date ASC, g.start_time ASC
     `;
