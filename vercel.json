@@ -9,5 +9,16 @@
   ],
   "env": {
     "VITE_API_BASE_URL": "https://turfer-backend-production.up.railway.app/api"
-  }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
+  ]
 }
