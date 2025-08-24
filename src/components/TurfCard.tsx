@@ -35,9 +35,10 @@ interface TurfCardProps {
   onBook?: (turf: TurfData) => void;
   variant?: 'default' | 'compact';
   onClick?: () => void;
+  user?: any;
 }
 
-export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCardProps) {
+export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: TurfCardProps) {
   const [showWhatsAppFallback, setShowWhatsAppFallback] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
 
@@ -242,26 +243,34 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
             </div>
             
             <div className="flex items-center gap-2">
-              {turf.contacts?.phone && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCallClick}
-                  className="hidden sm:flex"
-                >
-                  <Phone className="w-4 h-4 mr-1" />
-                  Call
-                </Button>
+              {user ? (
+                <>
+                  {turf.contacts?.phone && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCallClick}
+                      className="hidden sm:flex"
+                    >
+                      <Phone className="w-4 h-4 mr-1" />
+                      Call
+                    </Button>
+                  )}
+                  
+                  <Button
+                    size="sm"
+                    className="bg-primary-600 hover:bg-primary-700 text-white"
+                    onClick={handleBookClick}
+                  >
+                    <Calendar className="w-4 h-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">Book</span> Now
+                  </Button>
+                </>
+              ) : (
+                <div className="text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border">
+                  Sign in to book this turf
+                </div>
               )}
-              
-              <Button
-                size="sm"
-                className="bg-primary-600 hover:bg-primary-700 text-white"
-                onClick={handleBookClick}
-              >
-                <Calendar className="w-4 h-4 mr-2 sm:mr-1" />
-                <span className="hidden sm:inline">Book</span> Now
-              </Button>
             </div>
           </div>
         </CardContent>

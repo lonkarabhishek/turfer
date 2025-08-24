@@ -199,7 +199,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
           ) : userGames.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {userGames.slice(0, 3).map((game) => (
-                <GameCard key={game.id} game={game} />
+                <GameCard key={game.id} game={game} user={user} />
               ))}
             </div>
           ) : (
@@ -227,7 +227,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
         
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {games.slice(0, 6).map((game) => (
-            <GameCard key={game.id} game={game} />
+            <GameCard key={game.id} game={game} user={user} />
           ))}
         </div>
         
@@ -253,12 +253,12 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: a
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>(SAMPLE_GAMES);
 
-  // Load games when user is authenticated
+  // Load games when games section is active (regardless of authentication)
   useEffect(() => {
-    if (user && activeSection === 'games') {
+    if (activeSection === 'games') {
       loadGames();
     }
-  }, [user, activeSection]);
+  }, [activeSection]);
 
   const loadGames = async () => {
     try {
@@ -506,7 +506,7 @@ export default function App() {
       <footer className="border-t mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-sm text-gray-500 flex flex-col sm:flex-row gap-2 sm:gap-6 justify-between">
           <div>© {new Date().getFullYear()} TapTurf • Made for turf lovers</div>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <button 
               className="hover:text-gray-700" 
               onClick={() => handleLegalPageClick('privacy')}
@@ -525,6 +525,14 @@ export default function App() {
             >
               Support
             </button>
+            {!user && (
+              <button 
+                className="hover:text-gray-700 font-medium text-primary-600 hover:text-primary-700" 
+                onClick={() => setShowLogin(true)}
+              >
+                Turf Owner Sign In
+              </button>
+            )}
           </div>
         </div>
       </footer>

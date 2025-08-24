@@ -41,10 +41,10 @@ export function CitySelector({ currentCity, onCityChange }: CitySelectorProps) {
       <Button
         variant="outline"
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1 md:gap-2 max-w-xs text-xs md:text-sm px-2 md:px-3 py-1 md:py-2 h-8 md:h-10"
+        className="flex items-center gap-1 md:gap-2 max-w-xs text-sm px-3 py-2 h-9 md:h-10 border-gray-300"
       >
         <MapPin className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
-        <span className="truncate max-w-[60px] md:max-w-none">{currentCityInfo?.name || currentCity}</span>
+        <span className="truncate max-w-[80px] md:max-w-none">{currentCityInfo?.name || currentCity}</span>
         <ChevronDown className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
       </Button>
 

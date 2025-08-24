@@ -47,32 +47,44 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
   ];
 
   const calculateAmount = () => {
-    if (!bookingData.startTime || !bookingData.endTime) return 0;
-    
-    const start = parseInt(bookingData.startTime.split(':')[0]);
-    const end = parseInt(bookingData.endTime.split(':')[0]);
-    const duration = end - start;
-    
-    if (duration <= 0) return 0;
-    
-    const amount = duration * pricePerHour;
-    setBookingData(prev => ({ ...prev, totalAmount: amount }));
-    return amount;
+    try {
+      if (!bookingData.startTime || !bookingData.endTime) return 0;
+      
+      const start = parseInt(bookingData.startTime.split(':')[0]);
+      const end = parseInt(bookingData.endTime.split(':')[0]);
+      
+      if (isNaN(start) || isNaN(end)) return 0;
+      
+      const duration = end - start;
+      
+      if (duration <= 0) return 0;
+      
+      const amount = duration * pricePerHour;
+      setBookingData(prev => ({ ...prev, totalAmount: amount }));
+      return amount;
+    } catch (error) {
+      console.error('Error calculating amount:', error);
+      return 0;
+    }
   };
 
   const handleTimeChange = (type: 'start' | 'end', time: string) => {
-    setBookingData(prev => ({
-      ...prev,
-      [type === 'start' ? 'startTime' : 'endTime']: time
-    }));
-    
-    // Auto-calculate end time if start time is selected
-    if (type === 'start' && !bookingData.endTime) {
+    if (type === 'start') {
+      // Auto-calculate end time if start time is selected and no end time exists
       const startHour = parseInt(time.split(':')[0]);
       const endHour = Math.min(startHour + 1, 22);
+      
       setBookingData(prev => ({
         ...prev,
-        endTime: `${endHour.toString().padStart(2, '0')}:00`
+        startTime: time,
+        endTime: !prev.endTime || prev.endTime <= time 
+          ? `${endHour.toString().padStart(2, '0')}:00`
+          : prev.endTime
+      }));
+    } else {
+      setBookingData(prev => ({
+        ...prev,
+        endTime: time
       }));
     }
   };

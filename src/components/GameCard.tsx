@@ -28,9 +28,10 @@ export interface GameData {
 interface GameCardProps {
   game: GameData;
   onJoin?: (game: GameData) => void;
+  user?: any;
 }
 
-export function GameCard({ game, onJoin }: GameCardProps) {
+export function GameCard({ game, onJoin, user }: GameCardProps) {
   const spotsLeft = game.maxPlayers - game.currentPlayers;
   const isAlmostFull = spotsLeft <= 2;
   const isUrgent = game.isUrgent || spotsLeft === 1;
@@ -197,17 +198,23 @@ export function GameCard({ game, onJoin }: GameCardProps) {
             </div>
           )}
 
-          {/* Join button */}
-          <Button
-            className="w-full bg-primary-600 hover:bg-primary-700 text-white"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleJoinClick();
-            }}
-          >
-            <MessageCircle className="w-4 h-4 mr-2" />
-            Join via WhatsApp
-          </Button>
+          {/* Join button - only show when user is authenticated */}
+          {user ? (
+            <Button
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleJoinClick();
+              }}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Join via WhatsApp
+            </Button>
+          ) : (
+            <div className="w-full p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500 border border-gray-200">
+              Sign in to join this game
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

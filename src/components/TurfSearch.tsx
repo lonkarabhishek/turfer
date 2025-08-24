@@ -27,7 +27,7 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
-export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearchProps) {
+export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: TurfSearchProps) {
   const [query, setQuery] = useState('');
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
@@ -449,6 +449,7 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
                 turf={turf} 
                 variant="default" 
                 onClick={() => onTurfClick?.(turf.id)}
+                user={user}
               />
             ))}
           </div>
