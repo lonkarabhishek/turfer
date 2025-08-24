@@ -1,0 +1,8 @@
+# Railway deployment ignore file
+node_modules
+*.log
+.env*
+*.sqlite
+.git
+src/
+!dist/
