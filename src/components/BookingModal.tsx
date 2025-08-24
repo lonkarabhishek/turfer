@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  X, Calendar, Clock, Users, MapPin, CreditCard, 
-  CheckCircle, AlertCircle, Star, Plus, Minus
+  X, Clock, MapPin, CreditCard, 
+  CheckCircle, AlertCircle, Plus, Minus
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -36,7 +36,7 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
 
   const user = authManager.getUser();
   const pricePerHour = turf?.pricePerHour || 500;
-  const { success, error: showError } = useToast();
+  const { success } = useToast();
 
   if (!open) return null;
 

@@ -11,14 +11,13 @@ interface EmailVerificationProps {
 }
 
 export function EmailVerification({ email, onClose, onVerified }: EmailVerificationProps) {
-  const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (countdown > 0) {
       interval = setInterval(() => {
         setCountdown(prev => prev - 1);
@@ -47,27 +46,6 @@ export function EmailVerification({ email, onClose, onVerified }: EmailVerificat
     }
   };
 
-  const handleVerify = async (code: string) => {
-    setLoading(true);
-    setError('');
-    
-    try {
-      const response = await authAPI.verifyEmail(email, code);
-      if (response.success) {
-        setSuccess(true);
-        setTimeout(() => {
-          onVerified();
-          onClose();
-        }, 1500);
-      } else {
-        setError(response.error || 'Invalid verification code');
-      }
-    } catch (err) {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (success) {
     return (

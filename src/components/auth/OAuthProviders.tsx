@@ -3,6 +3,17 @@ import { Button } from '../ui/button';
 import { authAPI, authManager } from '../../lib/api';
 import { useToast } from '../ui/toast';
 
+// Type declarations for external libraries
+declare global {
+  interface Window {
+    AppleID?: {
+      auth: {
+        signIn: () => Promise<any>;
+      };
+    };
+  }
+}
+
 interface OAuthProvidersProps {
   onSuccess: () => void;
   onError: (error: string) => void;
@@ -18,7 +29,7 @@ const APPLE_REDIRECT_URI = `${window.location.origin}/auth/apple/callback`;
 
 export function OAuthProviders({ onSuccess, onError }: OAuthProvidersProps) {
   const [loading, setLoading] = useState<string | null>(null);
-  const { success, error: showError } = useToast();
+  const { success } = useToast();
 
   const handleGoogleOAuth = async () => {
     if (!GOOGLE_CLIENT_ID) {
@@ -101,7 +112,7 @@ export function OAuthProviders({ onSuccess, onError }: OAuthProvidersProps) {
     try {
       // Apple Sign-In with JavaScript SDK
       if (typeof window.AppleID !== 'undefined') {
-        const response = await window.AppleID.auth.signIn();
+        await window.AppleID?.auth.signIn();
         
         // Send Apple ID token to backend for verification
         const authResponse = await authAPI.oauth('apple');

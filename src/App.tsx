@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Star, Plus, Users } from "lucide-react";
-import { ResponsiveContainer, AreaChart, CartesianGrid, BarChart, Bar, XAxis, YAxis, Tooltip, Area } from "recharts";
+import { Plus, Users } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
@@ -16,7 +15,6 @@ import { CreateGameFlow } from "./components/CreateGameFlow";
 import { SimpleAuth } from "./components/SimpleAuth";
 import { UserProfile } from "./components/UserProfile";
 import { TurfDetailPage } from "./components/TurfDetailPage";
-import { CitySelector } from "./components/CitySelector";
 import { LegalPages } from "./components/LegalPages";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UserDashboard } from "./components/UserDashboard";
@@ -408,13 +406,6 @@ export default function App() {
     setCurrentPage('legal');
   };
 
-  const handleLogout = () => {
-    logout();
-    // Clear user-specific data
-    setActiveTab('home');
-    setCurrentPage('home');
-    setSelectedTurfId(null);
-  };
 
   // Determine which interface to show based on user role
   const showOwnerDashboard = user?.role === 'owner' && (activeTab === "owner" || activeTab === "dashboard");

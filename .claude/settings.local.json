@@ -50,7 +50,10 @@
       "Bash(railway --version)",
       "Bash(railway login:*)",
       "Bash(railway run:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(railway status:*)",
+      "Bash(vite build)",
+      "Bash(npx vite:*)"
     ],
     "deny": [],
     "ask": [],
