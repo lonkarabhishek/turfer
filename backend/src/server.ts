@@ -57,7 +57,10 @@ app.use(cors({
       'http://localhost:5175',
       'http://localhost:8080',
       'http://127.0.0.1:8080',
-      'https://turfer-3kczypujz-abhisheks-projects-dabd8858.vercel.app'
+      'https://turfer-3kczypujz-abhisheks-projects-dabd8858.vercel.app',
+      'https://tapturf.in',
+      'https://www.tapturf.in',
+      'https://turfer.vercel.app'
     ];
     
     // Allow any Vercel deployment domain
@@ -93,7 +96,7 @@ app.get('/health', (req, res) => {
     message: 'Turf booking API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    version: '1.0.2',
+    version: '1.0.3',
     deployedAt: '2025-08-24T18:07:00.000Z',
     features: [
       'SQLite compatibility fixed',

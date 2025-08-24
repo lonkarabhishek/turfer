@@ -1,6 +1,6 @@
 {
   "name": "turf-booking-backend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Backend API for turf booking application",
   "main": "dist/server.js",
   "scripts": {
