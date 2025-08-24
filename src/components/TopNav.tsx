@@ -1,6 +1,7 @@
 import { ChevronDown, User, LogOut, Building2, Plus } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+import { CitySelector } from './CitySelector';
 import { motion } from 'framer-motion';
 import { authManager, type User as UserType } from '../lib/api';
 import { useState } from 'react';
@@ -11,6 +12,7 @@ interface TopNavProps {
   onAuthChange: () => void;
   onProfileClick?: () => void;
   onCreateGame?: () => void;
+  onCityChange?: (city: string) => void;
 }
 
 export function TopNav({ 
@@ -18,7 +20,8 @@ export function TopNav({
   user,
   onAuthChange,
   onProfileClick,
-  onCreateGame
+  onCreateGame,
+  onCityChange
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -28,12 +31,6 @@ export function TopNav({
     onAuthChange();
   };
 
-  const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai'];
-
-  const handleCityClick = () => {
-    const cityList = cities.join(', ');
-    alert(`Coming soon to: ${cityList}! Currently in beta.`);
-  };
 
   return (
     <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100">
@@ -54,18 +51,12 @@ export function TopNav({
           </motion.div>
           
           {/* City Picker */}
-          <motion.button
-            onClick={handleCityClick}
-            className="hidden sm:flex items-center gap-1 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-full px-3 py-1.5 transition-colors ml-4"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <span className="font-semibold text-primary-700 text-sm">{currentCity}</span>
-            <ChevronDown className="w-4 h-4 text-primary-600" />
-            <Badge className="bg-primary-600 text-white text-xs ml-1">
-              Beta
-            </Badge>
-          </motion.button>
+          <div className="hidden sm:block ml-4">
+            <CitySelector 
+              currentCity={currentCity} 
+              onCityChange={(city) => onCityChange?.(city)} 
+            />
+          </div>
         </div>
 
         {/* Right Side - Auth & Actions */}
@@ -122,6 +113,27 @@ export function TopNav({
                         )}
                       </div>
                     </div>
+                    
+                    {/* Dashboard Link */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onProfileClick?.();
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      {user.role === 'owner' ? (
+                        <>
+                          <Building2 className="w-4 h-4" />
+                          Owner Dashboard
+                        </>
+                      ) : (
+                        <>
+                          <User className="w-4 h-4" />
+                          My Dashboard
+                        </>
+                      )}
+                    </button>
                     
                     {/* Mobile Create Game */}
                     <div className="sm:hidden">

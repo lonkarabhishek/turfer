@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Star, Clock, Users, Phone, MessageCircle, Wifi, Car, Coffee } from 'lucide-react';
+import { MapPin, Star, Clock, Users, Phone, MessageCircle, Wifi, Car, Coffee, Calendar } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { buildWhatsAppLink, generateBookingMessage } from '../lib/whatsapp';
+import { WhatsAppFallback } from './WhatsAppFallback';
+import { BookingModal } from './BookingModal';
+import { generateBookingMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
 
 export interface TurfData {
@@ -35,29 +38,24 @@ interface TurfCardProps {
 }
 
 export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCardProps) {
+  const [showWhatsAppFallback, setShowWhatsAppFallback] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+
   const handleBookClick = () => {
     analytics.bookingAttempted(turf.id, turf.nextAvailable || 'TBD', 10);
     
-    if (turf.contacts?.phone) {
-      const message = generateBookingMessage({
-        turfName: turf.name,
-        address: turf.address,
-        date: 'Today', // Would be dynamic in real app
-        slot: turf.nextAvailable || 'Next available',
-        players: 10, // Would be from form
-        notes: 'Found via Turfer app'
-      });
-
-      const whatsappUrl = buildWhatsAppLink({
-        phone: turf.contacts.phone,
-        text: message
-      });
-
-      analytics.whatsappClicked('booking', 'turf_card');
-      window.open(whatsappUrl, '_blank');
-    }
+    // Show booking modal for modern in-app booking
+    setShowBookingModal(true);
     
     onBook?.(turf);
+  };
+
+  const handleWhatsAppFallback = () => {
+    // Fallback to WhatsApp for backup
+    if (turf.contacts?.phone) {
+      setShowWhatsAppFallback(true);
+      analytics.whatsappClicked('booking', 'turf_card');
+    }
   };
 
   const handleCallClick = (e: React.MouseEvent) => {
@@ -173,7 +171,7 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
             
             <div className="flex items-center gap-1 ml-3">
               <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-              <span className="font-medium text-sm">{turf.rating.toFixed(1)}</span>
+              <span className="font-medium text-sm">{Number(turf.rating).toFixed(1)}</span>
               <span className="text-xs text-gray-500">({turf.totalReviews})</span>
             </div>
           </div>
@@ -254,13 +252,43 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick }: TurfCar
                   handleBookClick();
                 }}
               >
-                <MessageCircle className="w-4 h-4 mr-2 sm:mr-1" />
-                <span className="hidden sm:inline">Book via</span> WhatsApp
+                <Calendar className="w-4 h-4 mr-2 sm:mr-1" />
+                <span className="hidden sm:inline">Book</span> Now
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Booking Modal */}
+      <BookingModal
+        open={showBookingModal}
+        onClose={() => setShowBookingModal(false)}
+        turf={turf}
+        onBookingSuccess={(booking) => {
+          console.log('Booking successful:', booking);
+          setShowBookingModal(false);
+          // Could add success toast here
+        }}
+      />
+
+      {/* WhatsApp Fallback Modal */}
+      {showWhatsAppFallback && turf.contacts?.phone && (
+        <WhatsAppFallback
+          isOpen={showWhatsAppFallback}
+          onClose={() => setShowWhatsAppFallback(false)}
+          phone={turf.contacts.phone}
+          message={generateBookingMessage({
+            turfName: turf.name,
+            address: turf.address,
+            date: 'Today',
+            slot: turf.nextAvailable || 'Next available',
+            players: 10,
+            notes: 'Found via TapTurf app'
+          })}
+          context="turf_booking"
+        />
+      )}
     </motion.div>
   );
 }

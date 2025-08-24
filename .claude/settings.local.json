@@ -41,12 +41,22 @@
       "Bash(start local-admin.html)",
       "Bash(gh repo create:*)",
       "Bash(git revert:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(start index.html)",
+      "Bash(python:*)",
+      "Bash(npx http-server:*)",
+      "Bash(mv:*)",
+      "Bash(start http://localhost:5173)",
+      "Bash(railway --version)",
+      "Bash(railway login:*)",
+      "Bash(railway run:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
-      "C:\\Users\\lonka\\turfer-backend"
+      "C:\\Users\\lonka\\turfer-backend",
+      "C:\\Users\\lonka"
     ]
   }
 }

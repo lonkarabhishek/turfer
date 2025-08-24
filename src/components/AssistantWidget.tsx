@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X } from "lucide-react";
+import { MessageCircle, X, Minimize2, Move } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { parseSmartQuery } from "../lib/smartTime";
@@ -13,11 +13,15 @@ export function AssistantWidget({
   onRecommend: () => string;
 }) {
   const [open, setOpen] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>(() => {
     try { return JSON.parse(localStorage.getItem("turfer_chat") || "[]"); } catch { return []; }
   });
+  const [position, setPosition] = useState({ x: 20, y: 20 });
+  const [isDragging, setIsDragging] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
 
   useEffect(() => {
     localStorage.setItem("turfer_chat", JSON.stringify(msgs));
@@ -30,6 +34,28 @@ export function AssistantWidget({
     setMsgs((m) => [...m, userMsg]);
 
     const s = text.toLowerCase();
+    
+    // FAQ responses
+    if (/how.*book|booking.*work|how.*reserve/.test(s)) {
+      reply("To book a turf:\n1. Search for turfs in your area\n2. Click 'Book via WhatsApp' on any turf card\n3. Choose your preferred contact option\n4. Confirm your booking with the turf owner");
+      return;
+    }
+    if (/join.*game|how.*join/.test(s)) {
+      reply("To join a game:\n1. Go to the 'Join Games' section\n2. Browse available games\n3. Click on a game to see details\n4. Contact the host via WhatsApp to join");
+      return;
+    }
+    if (/cancel.*booking|how.*cancel/.test(s)) {
+      reply("To cancel a booking:\n• Contact the turf owner directly via phone or WhatsApp\n• Cancellation policies vary by facility\n• It's best to cancel at least 2-4 hours in advance");
+      return;
+    }
+    if (/location.*not.*work|gps.*problem|near me.*not/.test(s)) {
+      reply("If location isn't working:\n1. Enable location services in your browser\n2. Click 'Allow' when prompted for location access\n3. You can also search manually by entering your area name");
+      return;
+    }
+    if (/price|cost|how much/.test(s)) {
+      reply("Turf prices vary by location and facilities:\n• Basic turfs: ₹400-800/hour\n• Premium turfs: ₹800-1500/hour\n• Weekend rates are typically 20-30% higher\n• Game costs are split among players");
+      return;
+    }
     if (/recommend|best value/.test(s)) {
       const answer = onRecommend();
       reply(answer);
@@ -45,7 +71,11 @@ export function AssistantWidget({
       reply("You can split equally across players at checkout. UPI/Razorpay coming soon in MVP.");
       return;
     }
-    reply("Try: Which grounds are available tonight near Govind Nagar? or tap a chip below.");
+    if (/help|support|contact/.test(s)) {
+      reply("Need help? You can:\n• Use this chat for quick questions\n• Check the Support page in the footer\n• Email us at support@tapturf.in\n• WhatsApp us at +91 99999-99999");
+      return;
+    }
+    reply("I can help with:\n• Booking turfs and joining games\n• Finding the best prices\n• Troubleshooting issues\n\nTry asking 'How do I book a turf?' or use the quick options below.");
   }
 
   function reply(text: string) {

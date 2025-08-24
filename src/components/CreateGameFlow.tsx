@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import { DatePicker } from './ui/date-picker';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
 import { gamesAPI, turfsAPI } from '../lib/api';
@@ -84,6 +85,14 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
     costPerPerson: 0,
     notes: ''
   });
+  const [validation, setValidation] = useState({
+    format: '',
+    date: '',
+    timeSlot: '',
+    maxPlayers: '',
+    costPerPerson: '',
+    turf: ''
+  });
   const [createdGame, setCreatedGame] = useState<any>(null);
 
   // Reset form when dialog opens
@@ -103,6 +112,14 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
         maxPlayers: 0,
         costPerPerson: 0,
         notes: ''
+      });
+      setValidation({
+        format: '',
+        date: '',
+        timeSlot: '',
+        maxPlayers: '',
+        costPerPerson: '',
+        turf: ''
       });
     }
   }, [open]);
@@ -139,6 +156,63 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
     return () => clearTimeout(debounceTimer);
   }, [searchTerm]);
 
+  // Validation functions
+  const validateStep = (stepNum: number) => {
+    const errors = { ...validation };
+    let isValid = true;
+
+    if (stepNum >= 1) {
+      if (!formData.format) {
+        errors.format = 'Please select a game format';
+        isValid = false;
+      } else {
+        errors.format = '';
+      }
+    }
+
+    if (stepNum >= 2) {
+      if (!selectedTurf) {
+        errors.turf = 'Please select a venue';
+        isValid = false;
+      } else {
+        errors.turf = '';
+      }
+
+      if (!formData.date) {
+        errors.date = 'Please select a date';
+        isValid = false;
+      } else {
+        errors.date = '';
+      }
+
+      if (!formData.timeSlot) {
+        errors.timeSlot = 'Please select a time slot';
+        isValid = false;
+      } else {
+        errors.timeSlot = '';
+      }
+    }
+
+    if (stepNum >= 3) {
+      if (!formData.maxPlayers || formData.maxPlayers < 2 || formData.maxPlayers > 50) {
+        errors.maxPlayers = 'Max players must be between 2 and 50';
+        isValid = false;
+      } else {
+        errors.maxPlayers = '';
+      }
+
+      if (formData.costPerPerson < 0 || formData.costPerPerson > 10000) {
+        errors.costPerPerson = 'Cost per person must be between ₹0 and ₹10,000';
+        isValid = false;
+      } else {
+        errors.costPerPerson = '';
+      }
+    }
+
+    setValidation(errors);
+    return isValid;
+  };
+
   if (!open) return null;
 
   // Check if user is authenticated
@@ -167,8 +241,10 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
   };
 
   const handleNext = () => {
-    if (step < 3) {
-      setStep(step + 1);
+    if (validateStep(step)) {
+      if (step < 4) { // Now we have 4 steps (including confirmation)
+        setStep(step + 1);
+      }
     }
   };
 

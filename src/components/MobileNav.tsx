@@ -6,9 +6,11 @@ interface MobileNavProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   user?: UserType | null;
+  onProfileClick?: () => void;
+  onCreateGame?: () => void;
 }
 
-export function MobileNav({ activeTab, setActiveTab, user }: MobileNavProps) {
+export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCreateGame }: MobileNavProps) {
   const tabs = user?.role === 'owner' ? [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -24,13 +26,17 @@ export function MobileNav({ activeTab, setActiveTab, user }: MobileNavProps) {
   ];
 
   const handleTabClick = (tabId: string) => {
-    if (tabId === 'messages') {
-      // Open WhatsApp or show message that WhatsApp integration is coming
-      alert('WhatsApp integration - you\'ll get notified here when someone wants to play!');
+    if (tabId === 'create') {
+      onCreateGame?.();
       return;
     }
     if (tabId === 'profile') {
-      alert('Profile & settings coming soon!');
+      onProfileClick?.();
+      return;
+    }
+    if (tabId === 'messages') {
+      // TODO: Implement messaging system
+      alert('Messaging feature coming soon - stay tuned!');
       return;
     }
     setActiveTab(tabId);

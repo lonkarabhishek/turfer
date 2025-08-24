@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, LocateFixed, Filter } from 'lucide-react';
+import { Search, LocateFixed, Filter, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Chip } from './ui/chip';
+import { Spinner } from './ui/spinner';
 import { TurfCard } from './TurfCard';
 import { turfsAPI, type Turf, type User } from '../lib/api';
 
@@ -32,6 +34,8 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
   const [error, setError] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
   
   // Search filters
   const [filters, setFilters] = useState({
@@ -81,37 +85,63 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
   };
 
   const handleLocate = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          
-          // Store user location for distance calculations
-          setUserLocation({ lat, lng });
-          
-          try {
-            const response = await turfsAPI.getNearby(lat, lng, 10);
-            
-            if (response.success && response.data) {
-              setTurfs(response.data);
-              setQuery('');
-              setFilters({ sport: '', priceMin: '', priceMax: '', rating: '' });
-            }
-          } catch (err) {
-            console.error('Error loading nearby turfs:', err);
-            // If nearby API fails, just reload all turfs with distance
-            loadTurfs();
-          }
-        },
-        (error) => {
-          alert('Unable to get your location. Please enable location services.');
-          console.error('Geolocation error:', error);
-        }
-      );
-    } else {
-      alert('Geolocation is not supported by this browser.');
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser.');
+      return;
     }
+
+    setLocationLoading(true);
+    setLocationError('');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // Store user location for distance calculations
+        setUserLocation({ lat, lng });
+        
+        try {
+          const response = await turfsAPI.getNearby(lat, lng, 10);
+          
+          if (response.success && response.data) {
+            setTurfs(response.data);
+            setQuery('');
+            setFilters({ sport: '', priceMin: '', priceMax: '', rating: '' });
+          }
+        } catch (err) {
+          console.error('Error loading nearby turfs:', err);
+          // If nearby API fails, just reload all turfs with distance
+          loadTurfs();
+        } finally {
+          setLocationLoading(false);
+        }
+      },
+      (error) => {
+        setLocationLoading(false);
+        let errorMessage = 'Unable to get your location.';
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please enable location services for this site.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable. Please try again.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Please try again.';
+            break;
+        }
+        
+        setLocationError(errorMessage);
+        console.error('Geolocation error:', error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5 minutes
+      }
+    );
   };
 
   const displayTurfs = useMemo(() => {
@@ -153,6 +183,44 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
     });
   }, [turfs, userLocation]);
 
+  // Get active filters for chips
+  const activeFilters = useMemo(() => {
+    const active = [];
+    if (filters.sport) active.push({ key: 'sport', label: `Sport: ${filters.sport}`, value: filters.sport });
+    if (filters.priceMin) active.push({ key: 'priceMin', label: `Min: ₹${filters.priceMin}`, value: filters.priceMin });
+    if (filters.priceMax) active.push({ key: 'priceMax', label: `Max: ₹${filters.priceMax}`, value: filters.priceMax });
+    if (filters.rating) active.push({ key: 'rating', label: `Rating: ${filters.rating}+`, value: filters.rating });
+    return active;
+  }, [filters]);
+
+  const clearFilter = (key: string) => {
+    setFilters(prev => ({ ...prev, [key]: '' }));
+  };
+
+  const clearAllFilters = () => {
+    setFilters({ sport: '', priceMin: '', priceMax: '', rating: '' });
+  };
+
+  // Validate price inputs
+  const handlePriceChange = (type: 'priceMin' | 'priceMax', value: string) => {
+    // Only allow positive integers
+    if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0)) {
+      setFilters(prev => {
+        const newFilters = { ...prev, [type]: value };
+        
+        // Validate min <= max
+        if (type === 'priceMin' && newFilters.priceMax && parseInt(value) > parseInt(newFilters.priceMax)) {
+          return prev; // Don't update if min > max
+        }
+        if (type === 'priceMax' && newFilters.priceMin && parseInt(value) < parseInt(newFilters.priceMin)) {
+          return prev; // Don't update if max < min
+        }
+        
+        return newFilters;
+      });
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Search Bar */}
@@ -182,22 +250,45 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
           
           {/* Mobile action buttons */}
           <div className="flex items-center gap-2 sm:hidden">
-            <Button variant="outline" size="sm" onClick={handleLocate} className="flex-1">
-              <LocateFixed className="w-4 h-4 mr-1"/>Near me
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleLocate} 
+              disabled={locationLoading}
+              className="flex-1"
+            >
+              {locationLoading ? <Spinner size="sm" className="mr-1" /> : <LocateFixed className="w-4 h-4 mr-1"/>}
+              Near me
             </Button>
             <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="flex-1">
               <Filter className="w-4 h-4 mr-1"/>Filters
+              {activeFilters.length > 0 && (
+                <span className="ml-1 bg-primary-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {activeFilters.length}
+                </span>
+              )}
             </Button>
           </div>
           
           {/* Desktop action buttons */}
           <div className="hidden sm:flex items-center justify-between mt-3">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleLocate}>
-                <LocateFixed className="w-4 h-4 mr-2"/>Near me
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleLocate}
+                disabled={locationLoading}
+              >
+                {locationLoading ? <Spinner size="sm" className="mr-2" /> : <LocateFixed className="w-4 h-4 mr-2"/>}
+                Near me
               </Button>
               <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)}>
                 <Filter className="w-4 h-4 mr-2"/>Filters
+                {activeFilters.length > 0 && (
+                  <span className="ml-1 bg-primary-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFilters.length}
+                  </span>
+                )}
               </Button>
             </div>
           </div>
@@ -229,8 +320,9 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
                 <input
                   type="number"
                   value={filters.priceMin}
-                  onChange={(e) => setFilters(prev => ({ ...prev, priceMin: e.target.value }))}
-                  placeholder="₹500"
+                  onChange={(e) => handlePriceChange('priceMin', e.target.value)}
+                  placeholder="Min ₹/hr"
+                  min="0"
                   className="w-full text-sm border rounded-md p-2"
                 />
               </div>
@@ -240,8 +332,9 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
                 <input
                   type="number"
                   value={filters.priceMax}
-                  onChange={(e) => setFilters(prev => ({ ...prev, priceMax: e.target.value }))}
-                  placeholder="₹1000"
+                  onChange={(e) => handlePriceChange('priceMax', e.target.value)}
+                  placeholder="Max ₹/hr"
+                  min="0"
                   className="w-full text-sm border rounded-md p-2"
                 />
               </div>
@@ -262,7 +355,43 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
             </motion.div>
           )}
         </motion.div>
+        
+        {/* Location Error */}
+        {locationError && (
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-amber-800 text-sm">{locationError}</p>
+          </div>
+        )}
       </div>
+
+      {/* Active Filters */}
+      {activeFilters.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-900">Active Filters</h4>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearAllFilters}
+              className="text-xs"
+            >
+              Clear All
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {activeFilters.map((filter) => (
+              <Chip
+                key={filter.key}
+                variant="primary"
+                size="sm"
+                onRemove={() => clearFilter(filter.key)}
+              >
+                {filter.label}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Results */}
       <div>
@@ -272,7 +401,8 @@ export function TurfSearch({ currentCity = 'your city', onTurfClick }: TurfSearc
               {query ? `Search results for "${query}"` : `Turfs in ${currentCity}`}
             </h3>
             <p className="text-sm text-gray-600">
-              {loading ? 'Searching...' : `${turfs.length} turfs found`}
+              {loading ? 'Searching...' : `${displayTurfs.length} ${displayTurfs.length === 1 ? 'turf' : 'turfs'} found`}
+              {activeFilters.length > 0 && !loading && ` with filters applied`}
             </p>
           </div>
         </div>

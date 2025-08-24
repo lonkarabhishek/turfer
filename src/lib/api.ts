@@ -166,6 +166,51 @@ export const authAPI = {
   async getProfile(): Promise<ApiResponse<User>> {
     return apiRequest('/auth/me');
   },
+
+  // OAuth authentication
+  async oauth(provider: 'google' | 'apple'): Promise<ApiResponse<LoginResponse>> {
+    // In a real implementation, this would handle OAuth flow
+    return apiRequest(`/auth/oauth/${provider}`, {
+      method: 'POST',
+    });
+  },
+
+  // Email verification
+  async verifyEmail(email: string, code: string): Promise<ApiResponse<{ verified: boolean }>> {
+    return apiRequest('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+  },
+
+  async resendVerification(email: string): Promise<ApiResponse<{ sent: boolean }>> {
+    return apiRequest('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  // Password reset
+  async requestPasswordReset(email: string): Promise<ApiResponse<{ sent: boolean }>> {
+    return apiRequest('/auth/request-password-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async verifyResetCode(email: string, code: string): Promise<ApiResponse<{ valid: boolean }>> {
+    return apiRequest('/auth/verify-reset-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+  },
+
+  async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<{ reset: boolean }>> {
+    return apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, newPassword }),
+    });
+  },
 };
 
 // Turfs API functions

@@ -16,6 +16,12 @@ import { CreateGameFlow } from "./components/CreateGameFlow";
 import { SimpleAuth } from "./components/SimpleAuth";
 import { UserProfile } from "./components/UserProfile";
 import { TurfDetailPage } from "./components/TurfDetailPage";
+import { CitySelector } from "./components/CitySelector";
+import { LegalPages } from "./components/LegalPages";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { UserDashboard } from "./components/UserDashboard";
+import { OwnerDashboard } from "./components/OwnerDashboard";
+import { ToastContainer } from "./components/ui/toast";
 
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
@@ -345,123 +351,16 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: a
   );
 }
 
-function OwnerDashboard() {
-  const MOCK_BOOKINGS_SERIES = [
-    { month: "Feb", bookings: 22, occupancy: 48 },
-    { month: "Mar", bookings: 35, occupancy: 60 },
-    { month: "Apr", bookings: 32, occupancy: 58 },
-    { month: "May", bookings: 44, occupancy: 66 },
-    { month: "Jun", bookings: 57, occupancy: 72 },
-    { month: "Jul", bookings: 62, occupancy: 74 },
-  ];
-  
-  const revenue = MOCK_BOOKINGS_SERIES.reduce((a, c) => a + c.bookings * 1300, 0);
-  const occupancy = MOCK_BOOKINGS_SERIES[MOCK_BOOKINGS_SERIES.length - 1].occupancy;
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Owner Dashboard</h2>
-          <p className="text-gray-500">Track performance and manage your turfs</p>
-        </div>
-        <Button className="bg-primary-600 hover:bg-primary-700">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Turf
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Total Revenue</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₹{revenue.toLocaleString()}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Avg. Rating</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold flex items-center gap-2">
-            <Star className="w-5 h-5 fill-amber-500 text-amber-500" />
-            4.6
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Occupancy</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {occupancy}%
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Active Turfs</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">3</CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Bookings & Occupancy</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={MOCK_BOOKINGS_SERIES}>
-                <defs>
-                  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00A699" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#00A699" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Area type="monotone" dataKey="bookings" stroke="#00A699" fill="url(#g1)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Slots</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[
-                {slot: "6-7 AM", count: 48},
-                {slot: "7-8 AM", count: 53},
-                {slot: "8-9 PM", count: 72},
-                {slot: "9-10 PM", count: 66}
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="slot" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#00A699" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
-  const { user, loading, refreshAuth } = useAuth();
+  const { user, loading, refreshAuth, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile'>('home');
-  const [currentCity] = useState('your city');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard'>('home');
+  const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
+  const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
 
   // Auto-set dashboard tab for owners
   useEffect(() => {
@@ -470,13 +369,14 @@ export default function App() {
     }
   }, [user]);
 
-  // Show login modal when user clicks profile but not authenticated
+  // Show login modal or navigate to appropriate dashboard
   const handleProfileClick = () => {
     if (!user) {
       setShowLogin(true);
     } else {
-      setCurrentPage('profile');
-      setActiveTab('profile');
+      // Navigate to dashboard for both users and owners
+      setCurrentPage('dashboard');
+      setActiveTab('dashboard');
     }
   };
 
@@ -489,6 +389,31 @@ export default function App() {
     setCurrentPage('home');
     setSelectedTurfId(null);
     setActiveTab('home');
+  };
+
+  const handleNavigate = (section: string) => {
+    if (section === 'home') {
+      handleBackToHome();
+    } else if (section === 'search') {
+      handleBackToHome();
+      setActiveTab('home');
+    } else if (section === 'games') {
+      handleBackToHome();
+      setActiveTab('home');
+    }
+  };
+
+  const handleLegalPageClick = (type: 'privacy' | 'terms' | 'support') => {
+    setLegalPageType(type);
+    setCurrentPage('legal');
+  };
+
+  const handleLogout = () => {
+    logout();
+    // Clear user-specific data
+    setActiveTab('home');
+    setCurrentPage('home');
+    setSelectedTurfId(null);
   };
 
   // Determine which interface to show based on user role
@@ -506,13 +431,15 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <TopNav 
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gray-50">
+        <TopNav 
         currentCity={currentCity}
         user={user}
         onAuthChange={refreshAuth}
         onProfileClick={handleProfileClick}
         onCreateGame={() => setShowCreateGame(true)}
+        onCityChange={setCurrentCity}
       />
       
       {currentPage === 'turf-detail' && selectedTurfId ? (
@@ -524,6 +451,12 @@ export default function App() {
             setShowCreateGame(true);
           }}
         />
+      ) : currentPage === 'dashboard' && user ? (
+        user.role === 'owner' ? (
+          <OwnerDashboard onNavigate={handleNavigate} />
+        ) : (
+          <UserDashboard onNavigate={handleNavigate} />
+        )
       ) : currentPage === 'profile' && user ? (
         <UserProfile
           user={user}
@@ -534,7 +467,7 @@ export default function App() {
           }}
         />
       ) : showOwnerDashboard ? (
-        <OwnerDashboard />
+        <OwnerDashboard onNavigate={handleNavigate} />
       ) : activeTab === "create" ? (
         <div className="max-w-xl mx-auto mt-8 px-4">
           <Card>
@@ -567,19 +500,45 @@ export default function App() {
             </CardContent>
           </Card>
         </div>
+      ) : currentPage === 'legal' ? (
+        <LegalPages
+          type={legalPageType}
+          onBack={handleBackToHome}
+        />
       ) : (
         <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} />
       )}
       
-      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
+      <MobileNav 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        user={user} 
+        onProfileClick={handleProfileClick}
+        onCreateGame={() => setShowCreateGame(true)}
+      />
       
       <footer className="border-t mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-sm text-gray-500 flex flex-col sm:flex-row gap-2 sm:gap-6 justify-between">
           <div>© {new Date().getFullYear()} TapTurf • Made for turf lovers</div>
           <div className="flex gap-4">
-            <a className="hover:text-gray-700" href="#">Privacy</a>
-            <a className="hover:text-gray-700" href="#">Terms</a>
-            <a className="hover:text-gray-700" href="#">Support</a>
+            <button 
+              className="hover:text-gray-700" 
+              onClick={() => handleLegalPageClick('privacy')}
+            >
+              Privacy
+            </button>
+            <button 
+              className="hover:text-gray-700" 
+              onClick={() => handleLegalPageClick('terms')}
+            >
+              Terms
+            </button>
+            <button 
+              className="hover:text-gray-700" 
+              onClick={() => handleLegalPageClick('support')}
+            >
+              Support
+            </button>
           </div>
         </div>
       </footer>
@@ -599,6 +558,10 @@ export default function App() {
         onSuccess={refreshAuth}
       />
 
-    </div>
+      </div>
+      
+      {/* Global Toast Container */}
+      <ToastContainer />
+    </ErrorBoundary>
   );
 }
