@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build:frontend",
+  "buildCommand": "vite build",
+  "ignoreCommand": "exit 0",
   "rewrites": [
     {
       "source": "/(.*)",
