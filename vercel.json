@@ -1,6 +1,6 @@
 {
-  "buildCommand": "vite build",
-  "ignoreCommand": "exit 0",
+  "buildCommand": "npx vite build",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/(.*)",
