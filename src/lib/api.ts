@@ -126,18 +126,36 @@ async function apiRequest<T = any>(
 
   try {
     console.log('🚀 Making API request to:', url);
+    console.log('📦 Request config:', { method: config.method || 'GET', headers: config.headers });
+    if (config.body) console.log('📋 Request body:', config.body);
+    
     const response = await fetch(url, config);
+    
+    console.log('📡 Response status:', response.status, response.statusText);
+    console.log('📧 Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       console.error('❌ HTTP error:', response.status, response.statusText, 'URL:', url);
-      return {
-        success: false,
-        error: `Server error: ${response.status} ${response.statusText}`,
-      };
+      
+      // Try to get error details from response
+      try {
+        const errorData = await response.json();
+        console.error('❌ Error details:', errorData);
+        return {
+          success: false,
+          error: errorData.error || `Server error: ${response.status} ${response.statusText}`,
+        };
+      } catch {
+        return {
+          success: false,
+          error: `Server error: ${response.status} ${response.statusText}`,
+        };
+      }
     }
     
     const data = await response.json();
     console.log('✅ API response successful:', url);
+    console.log('📄 Response data:', data);
     return data;
   } catch (error) {
     console.error('💥 API request failed:', error, 'URL:', url);
