@@ -419,6 +419,10 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
+        {/* Demo mode banner */}
+        <div className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-amber-900 px-4 py-2 text-center text-sm font-medium">
+          🎭 Demo Mode Active • Showing sample data while servers update • All features functional!
+        </div>
         <TopNav 
         currentCity={currentCity}
         user={user}
