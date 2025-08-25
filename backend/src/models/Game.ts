@@ -332,4 +332,174 @@ export class GameModel extends BaseModel {
 
     return game;
   }
+
+  // Game request methods
+  async createJoinRequest(gameId: string, userId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // Check if request already exists
+      const game = await this.findById(gameId);
+      if (!game) {
+        return { success: false, message: 'Game not found' };
+      }
+
+      const joinRequests = game.joinRequests || [];
+      if (joinRequests.find((req: any) => req.userId === userId)) {
+        return { success: false, message: 'Request already sent' };
+      }
+
+      // Check if user is already a confirmed player
+      const confirmedPlayers = game.confirmedPlayers || [];
+      if (confirmedPlayers.includes(userId)) {
+        return { success: false, message: 'Already joined this game' };
+      }
+
+      // Add the request
+      joinRequests.push({
+        userId,
+        requestedAt: new Date().toISOString(),
+        status: 'pending'
+      });
+
+      await this.db.run(
+        'UPDATE games SET join_requests = ? WHERE id = ?',
+        [JSON.stringify(joinRequests), gameId]
+      );
+
+      return { success: true, message: 'Join request sent successfully' };
+    } catch (error) {
+      console.error('Create join request error:', error);
+      return { success: false, message: 'Failed to send join request' };
+    }
+  }
+
+  async getJoinRequests(gameId: string): Promise<any[]> {
+    const game = await this.findById(gameId);
+    if (!game) return [];
+
+    const joinRequests = game.joinRequests || [];
+    
+    // Fetch user details for each request
+    const requestsWithUserData = await Promise.all(
+      joinRequests.map(async (request: any) => {
+        const userSql = 'SELECT id, name, email FROM users WHERE id = ?';
+        const user = await this.db.get(userSql, [request.userId]);
+        
+        return {
+          ...request,
+          playerName: user?.name || 'Unknown User',
+          playerEmail: user?.email,
+          gameId,
+          gameFormat: game.format,
+          turfName: (game as any).turf_name,
+          gameDate: game.date,
+          startTime: game.startTime,
+          endTime: game.endTime
+        };
+      })
+    );
+
+    return requestsWithUserData;
+  }
+
+  async getUserJoinRequests(userId: string): Promise<any[]> {
+    const sql = `
+      SELECT g.*, t.name as turf_name, t.address as turf_address 
+      FROM games g 
+      LEFT JOIN turfs t ON g.turf_id = t.id 
+      WHERE JSON_EXTRACT(g.join_requests, '$[*].userId') LIKE '%' || ? || '%'
+      ORDER BY g.created_at DESC
+    `;
+    
+    const rows = await this.db.all(sql, [userId]);
+    
+    return rows.map(row => {
+      const game = this.mapRowToGame(row);
+      const joinRequests = game.joinRequests || [];
+      const userRequest = joinRequests.find((req: any) => req.userId === userId);
+      
+      return {
+        gameId: game.id,
+        gameFormat: game.format,
+        turfName: row.turf_name,
+        gameDate: game.date,
+        startTime: game.startTime,
+        endTime: game.endTime,
+        status: userRequest?.status || 'pending',
+        requestedAt: userRequest?.requestedAt
+      };
+    });
+  }
+
+  async acceptJoinRequest(gameId: string, hostId: string, requestUserId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const game = await this.findById(gameId);
+      if (!game || game.hostId !== hostId) {
+        return { success: false, message: 'Game not found or unauthorized' };
+      }
+
+      const joinRequests = game.joinRequests || [];
+      const requestIndex = joinRequests.findIndex((req: any) => req.userId === requestUserId);
+      
+      if (requestIndex === -1) {
+        return { success: false, message: 'Join request not found' };
+      }
+
+      // Check if game is full
+      if (game.currentPlayers >= game.maxPlayers) {
+        return { success: false, message: 'Game is already full' };
+      }
+
+      // Update request status
+      joinRequests[requestIndex].status = 'accepted';
+      joinRequests[requestIndex].acceptedAt = new Date().toISOString();
+
+      // Add user to confirmed players
+      const confirmedPlayers = game.confirmedPlayers || [];
+      if (!confirmedPlayers.includes(requestUserId)) {
+        confirmedPlayers.push(requestUserId);
+      }
+
+      // Update game
+      await this.db.run(`
+        UPDATE games 
+        SET join_requests = ?, confirmed_players = ?, current_players = current_players + 1 
+        WHERE id = ?
+      `, [JSON.stringify(joinRequests), JSON.stringify(confirmedPlayers), gameId]);
+
+      return { success: true, message: 'Request accepted successfully' };
+    } catch (error) {
+      console.error('Accept join request error:', error);
+      return { success: false, message: 'Failed to accept request' };
+    }
+  }
+
+  async rejectJoinRequest(gameId: string, hostId: string, requestUserId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const game = await this.findById(gameId);
+      if (!game || game.hostId !== hostId) {
+        return { success: false, message: 'Game not found or unauthorized' };
+      }
+
+      const joinRequests = game.joinRequests || [];
+      const requestIndex = joinRequests.findIndex((req: any) => req.userId === requestUserId);
+      
+      if (requestIndex === -1) {
+        return { success: false, message: 'Join request not found' };
+      }
+
+      // Update request status
+      joinRequests[requestIndex].status = 'rejected';
+      joinRequests[requestIndex].rejectedAt = new Date().toISOString();
+
+      await this.db.run(
+        'UPDATE games SET join_requests = ? WHERE id = ?',
+        [JSON.stringify(joinRequests), gameId]
+      );
+
+      return { success: true, message: 'Request rejected successfully' };
+    } catch (error) {
+      console.error('Reject join request error:', error);
+      return { success: false, message: 'Failed to reject request' };
+    }
+  }
 }

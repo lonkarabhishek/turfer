@@ -363,4 +363,150 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
   }
 });
 
+// Request to join a game
+router.post('/:id/request', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const gameId = req.params.id;
+    const userId = req.user!.id;
+
+    // Check if game exists and is joinable
+    const game = await gameModel.findById(gameId);
+    if (!game) {
+      return res.status(404).json({
+        success: false,
+        error: 'Game not found'
+      } as ApiResponse);
+    }
+
+    if (game.hostId === userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot request to join your own game'
+      } as ApiResponse);
+    }
+
+    // For now, we'll store the request in a simple way
+    // In a real implementation, you'd have a game_requests table
+    const result = await gameModel.createJoinRequest(gameId, userId);
+
+    res.json({
+      success: true,
+      data: result,
+      message: 'Join request sent successfully'
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('Request to join error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    } as ApiResponse);
+  }
+});
+
+// Get requests for a specific game (host only)
+router.get('/:id/requests', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const gameId = req.params.id;
+    const userId = req.user!.id;
+
+    // Verify user is the host of this game
+    const game = await gameModel.findById(gameId);
+    if (!game || game.hostId !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only game host can view requests'
+      } as ApiResponse);
+    }
+
+    const requests = await gameModel.getJoinRequests(gameId);
+
+    res.json({
+      success: true,
+      data: requests
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('Get game requests error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    } as ApiResponse);
+  }
+});
+
+// Get user's join requests
+router.get('/my-requests', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const requests = await gameModel.getUserJoinRequests(req.user!.id);
+
+    res.json({
+      success: true,
+      data: requests
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('Get my requests error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    } as ApiResponse);
+  }
+});
+
+// Accept a join request
+router.post('/:id/requests/:userId/accept', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const gameId = req.params.id;
+    const requestUserId = req.params.userId;
+    const hostId = req.user!.id;
+
+    const result = await gameModel.acceptJoinRequest(gameId, hostId, requestUserId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.message
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      message: 'Request accepted successfully'
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('Accept request error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    } as ApiResponse);
+  }
+});
+
+// Reject a join request
+router.post('/:id/requests/:userId/reject', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const gameId = req.params.id;
+    const requestUserId = req.params.userId;
+    const hostId = req.user!.id;
+
+    const result = await gameModel.rejectJoinRequest(gameId, hostId, requestUserId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.message
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      message: 'Request rejected successfully'
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('Reject request error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    } as ApiResponse);
+  }
+});
+
 export default router;
