@@ -77,7 +77,7 @@ export interface Game {
   description?: string;
   notes?: string;
   isPrivate: boolean;
-  joinRequests: string[]; // user IDs
+  joinRequests: any[]; // flexible array for backward compatibility
   confirmedPlayers: string[]; // user IDs
   status: 'open' | 'full' | 'in_progress' | 'completed' | 'cancelled';
   createdAt: Date;
