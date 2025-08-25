@@ -85,7 +85,7 @@ export function GameCard({ game, onJoin, user }: GameCardProps) {
         error(response.error || 'Failed to send join request');
       }
     } catch (err) {
-      error('Network error. Please try again.');
+      error('Join request feature temporarily unavailable. Please use WhatsApp to contact the host directly.');
     } finally {
       setRequestLoading(false);
     }

@@ -54,7 +54,8 @@
       "Bash(railway status:*)",
       "Bash(vite build)",
       "Bash(npx vite:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": [],
