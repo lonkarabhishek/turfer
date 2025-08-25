@@ -1,4 +1,4 @@
-// WhatsApp integration utilities for Turfer
+// WhatsApp integration utilities for TapTurf
 
 export function buildWhatsAppLink({ 
   phone, 
@@ -36,7 +36,7 @@ Details:
 👥 Players: ${players}
 ${notes ? `📝 Notes: ${notes}` : ''}
 
-Found via Turfer - https://turfer.app
+Found via TapTurf - https://tapturf.in
 
 Please confirm availability and total cost. Thanks!`;
 }
@@ -72,7 +72,7 @@ Host: ${hostName}
 💰 ₹${costPerPerson}/person
 🎯 Skill level: ${skillLevel}
 
-Organized via Turfer - https://turfer.app
+Organized via TapTurf - https://tapturf.in
 
 Reply with "IN" to confirm your spot!`;
 }
@@ -86,17 +86,17 @@ export function generateVenueInquiryMessage({
 }): string {
   return `Hello${ownerName ? ` ${ownerName}` : ''}! 👋
 
-I'm interested in listing ${venueName} on Turfer to reach more players and fill empty slots.
+I'm interested in listing ${venueName} on TapTurf to reach more players and fill empty slots.
 
-Turfer helps venues:
+TapTurf helps venues:
 🎯 Fill off-peak hours with our community
 📈 Increase bookings through smart matching
 💬 Handle inquiries via WhatsApp (no new apps!)
 
 Could we schedule a quick 5-minute call to discuss?
 
-From: Turfer Partnership Team
-https://turfer.app/venues`;
+From: TapTurf Partnership Team
+https://tapturf.in/venues`;
 }
 
 // Analytics helper for WhatsApp CTA clicks

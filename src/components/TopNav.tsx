@@ -13,6 +13,7 @@ interface TopNavProps {
   onProfileClick?: () => void;
   onCreateGame?: () => void;
   onCityChange?: (city: string) => void;
+  onHomeClick?: () => void;
 }
 
 export function TopNav({ 
@@ -21,7 +22,8 @@ export function TopNav({
   onAuthChange,
   onProfileClick,
   onCreateGame,
-  onCityChange
+  onCityChange,
+  onHomeClick
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -38,8 +40,9 @@ export function TopNav({
         {/* Logo and Branding */}
         <div className="flex items-center gap-3">
           <motion.div 
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 cursor-pointer"
             whileHover={{ scale: 1.02 }}
+            onClick={onHomeClick}
           >
             <div className="w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-lg">T</span>

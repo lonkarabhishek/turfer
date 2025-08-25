@@ -426,6 +426,7 @@ export default function App() {
         onProfileClick={handleProfileClick}
         onCreateGame={() => setShowCreateGame(true)}
         onCityChange={setCurrentCity}
+        onHomeClick={handleBackToHome}
       />
       
       {currentPage === 'turf-detail' && selectedTurfId ? (

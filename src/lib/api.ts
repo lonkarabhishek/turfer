@@ -315,6 +315,33 @@ export const gamesAPI = {
   async getUserGames(userId: string): Promise<ApiResponse<any[]>> {
     return apiRequest(`/games/user/${userId}`);
   },
+
+  // Game request system
+  async requestToJoin(gameId: string): Promise<ApiResponse<any>> {
+    return apiRequest(`/games/${gameId}/request`, {
+      method: 'POST',
+    });
+  },
+
+  async getGameRequests(gameId: string): Promise<ApiResponse<any[]>> {
+    return apiRequest(`/games/${gameId}/requests`);
+  },
+
+  async getMyRequests(): Promise<ApiResponse<any[]>> {
+    return apiRequest('/games/my-requests');
+  },
+
+  async acceptRequest(gameId: string, userId: string): Promise<ApiResponse<any>> {
+    return apiRequest(`/games/${gameId}/requests/${userId}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  async rejectRequest(gameId: string, userId: string): Promise<ApiResponse<any>> {
+    return apiRequest(`/games/${gameId}/requests/${userId}/reject`, {
+      method: 'POST',
+    });
+  },
 };
 
 // Bookings API functions

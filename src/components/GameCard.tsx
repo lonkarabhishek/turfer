@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Users, Clock, Trophy, MessageCircle } from 'lucide-react';
+import { MapPin, Users, Clock, Trophy, MessageCircle, UserPlus } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
+import { gamesAPI } from '../lib/api';
+import { useToast } from './ui/toast';
 
 export interface GameData {
   id: string;
@@ -32,6 +35,8 @@ interface GameCardProps {
 }
 
 export function GameCard({ game, onJoin, user }: GameCardProps) {
+  const [requestLoading, setRequestLoading] = useState(false);
+  const { success, error } = useToast();
   const spotsLeft = game.maxPlayers - game.currentPlayers;
   const isAlmostFull = spotsLeft <= 2;
   const isUrgent = game.isUrgent || spotsLeft === 1;
@@ -62,6 +67,28 @@ export function GameCard({ game, onJoin, user }: GameCardProps) {
 
   const handleCardClick = () => {
     analytics.cardViewed('game', game.id, `${game.format} at ${game.turfName}`);
+  };
+
+  const handleRequestToJoin = async () => {
+    if (!user) {
+      error('Please sign in to request to join games');
+      return;
+    }
+
+    setRequestLoading(true);
+    try {
+      const response = await gamesAPI.requestToJoin(game.id);
+      if (response.success) {
+        success('Join request sent! The host will review your request.');
+        analytics.gameRequestSent(game.id);
+      } else {
+        error(response.error || 'Failed to send join request');
+      }
+    } catch (err) {
+      error('Network error. Please try again.');
+    } finally {
+      setRequestLoading(false);
+    }
   };
 
   const getSkillLevelColor = (level: string) => {
@@ -198,18 +225,36 @@ export function GameCard({ game, onJoin, user }: GameCardProps) {
             </div>
           )}
 
-          {/* Join button - only show when user is authenticated */}
+          {/* Action buttons - only show when user is authenticated */}
           {user ? (
-            <Button
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleJoinClick();
-              }}
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Join via WhatsApp
-            </Button>
+            <div className="space-y-2">
+              <Button
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRequestToJoin();
+                }}
+                disabled={requestLoading}
+              >
+                {requestLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                ) : (
+                  <UserPlus className="w-4 h-4 mr-2" />
+                )}
+                {requestLoading ? 'Sending...' : 'Request to Join'}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleJoinClick();
+                }}
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Chat on WhatsApp
+              </Button>
+            </div>
           ) : (
             <div className="w-full p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500 border border-gray-200">
               Sign in to join this game
