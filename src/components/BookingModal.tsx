@@ -197,7 +197,7 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
                 <option 
                   key={time} 
                   value={time}
-                  disabled={bookingData.startTime && time <= bookingData.startTime}
+                  disabled={!!(bookingData.startTime && time <= bookingData.startTime)}
                 >
                   {time}
                 </option>

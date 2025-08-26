@@ -574,7 +574,7 @@ export function CreateGameFlow({ open, onClose, onGameCreated }: CreateGameFlowP
                   <Button 
                     onClick={handleNext} 
                     className="flex-1 bg-primary-600 hover:bg-primary-700"
-                    disabled={!formData.date || !formData.timeSlot || !selectedTurf || validation.turf}
+                    disabled={!formData.date || !formData.timeSlot || !selectedTurf || !!validation.turf}
                   >
                     Continue
                   </Button>
