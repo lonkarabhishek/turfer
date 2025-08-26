@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
-import { UserModel } from '../../lib/models/UserSupabase';
+import { UserModel } from '../../lib/models/UserSupabase.js';
 
 const userModel = new UserModel();
 
