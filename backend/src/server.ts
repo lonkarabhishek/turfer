@@ -20,8 +20,15 @@ config();
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
-// Initialize database
-DatabaseConnection.getInstance();
+// Initialize database with error handling
+try {
+  console.log('Starting database initialization...');
+  DatabaseConnection.getInstance();
+  console.log('Database connection established successfully');
+} catch (error) {
+  console.error('Failed to initialize database:', error);
+  process.exit(1);
+}
 
 // Rate limiting
 const rateLimiter = new RateLimiterMemory({
@@ -134,13 +141,18 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server with error handling
+const server = app.listen(PORT, () => {
   console.log(`🚀 TapTurf Server running on http://localhost:${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔧 API endpoints available at http://localhost:${PORT}/api`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
   console.log(`✅ Production deployment ready - ${new Date().toISOString()}`);
+});
+
+server.on('error', (error: any) => {
+  console.error('Server startup error:', error);
+  process.exit(1);
 });
 
 // Graceful shutdown

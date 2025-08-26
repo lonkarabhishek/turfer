@@ -155,21 +155,33 @@ class DatabaseConnection {
 
   private async initializeDatabase() {
     try {
+      console.log(`Initializing database (${this.dbType})...`);
+      
       // Enable foreign keys for SQLite
       if (this.dbType === 'sqlite') {
         await (this.db as SQLiteDatabase).enableForeignKeys();
+        console.log('Foreign keys enabled for SQLite');
       }
       
       // Get schema based on database type
       const schema = this.getSchema();
+      console.log('Schema loaded, executing statements...');
       
       // Split by semicolons and execute each statement
       const statements = schema.split(';').filter(stmt => stmt.trim());
+      console.log(`Executing ${statements.length} schema statements...`);
       
-      for (const statement of statements) {
-        const trimmed = statement.trim();
+      for (let i = 0; i < statements.length; i++) {
+        const trimmed = statements[i].trim();
         if (trimmed) {
-          await this.db.run(trimmed);
+          try {
+            await this.db.run(trimmed);
+            console.log(`Statement ${i + 1}/${statements.length} executed successfully`);
+          } catch (statementError: any) {
+            console.error(`Error executing statement ${i + 1}:`, statementError.message);
+            console.error('Statement:', trimmed);
+            throw statementError;
+          }
         }
       }
       

@@ -1,6 +1,6 @@
 // API configuration and client
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (import.meta.env.PROD ? 'https://turfer-backend-production.up.railway.app/api' : 'http://localhost:3001/api');
+  (import.meta.env.PROD ? '/api' : 'http://localhost:3002/api');
 
 console.log('🔗 API Base URL:', API_BASE_URL);
 console.log('🌍 Environment:', import.meta.env.MODE);
@@ -106,6 +106,102 @@ class AuthManager {
 }
 
 export const authManager = new AuthManager();
+
+// Offline response handler for demo mode
+function getOfflineResponse(endpoint: string): ApiResponse {
+  console.log('🎭 Returning offline data for:', endpoint);
+  
+  // Turfs endpoint
+  if (endpoint.includes('/turfs')) {
+    return {
+      success: true,
+      data: {
+        turfs: [
+          {
+            id: 'turf_1',
+            name: 'Big Bounce Turf',
+            address: 'Govind Nagar Link Road, Govind Nagar, Nashik',
+            rating: 4.5,
+            totalReviews: 128,
+            priceDisplay: '₹400-600/hr',
+            pricePerHour: 500,
+            amenities: ['Parking', 'Washroom', 'Water', 'Lighting'],
+            images: ['/api/placeholder/400/300'],
+            slots: ['06:00', '07:00', '18:00', '19:00', '20:00'],
+            contacts: { phone: '9876543210', whatsapp: '9876543210' },
+            coords: { lat: 19.9975, lng: 73.7898 },
+            nextAvailable: '6:00 PM Today',
+            isPopular: true,
+            hasLights: true
+          },
+          {
+            id: 'turf_2', 
+            name: 'Greenfield The Multisports Turf',
+            address: 'Near K.K. Wagh Engineering, Gangotri Vihar, Nashik',
+            rating: 4.2,
+            totalReviews: 89,
+            priceDisplay: '₹350-550/hr',
+            pricePerHour: 450,
+            amenities: ['Parking', 'Washroom', 'Cafeteria', 'First Aid'],
+            images: ['/api/placeholder/400/300'],
+            slots: ['07:00', '08:00', '17:00', '18:00', '19:00'],
+            contacts: { phone: '9876543211', whatsapp: '9876543211' },
+            coords: { lat: 19.9915, lng: 73.7747 },
+            nextAvailable: '7:00 PM Today',
+            hasLights: true
+          },
+          {
+            id: 'turf_3',
+            name: 'Kridabhumi The Multisports Turf', 
+            address: 'Tigraniya Road, Dwarka, Nashik',
+            rating: 4.7,
+            totalReviews: 156,
+            priceDisplay: '₹500-800/hr',
+            pricePerHour: 650,
+            amenities: ['Premium Facility', 'Parking', 'Washroom', 'AC Lounge', 'Lighting'],
+            images: ['/api/placeholder/400/300'],
+            slots: ['06:00', '07:00', '08:00', '18:00', '19:00', '20:00'],
+            contacts: { phone: '9876543212', whatsapp: '9876543212' },
+            coords: { lat: 20.0042, lng: 73.7749 },
+            nextAvailable: '8:00 PM Today',
+            isPopular: true,
+            hasLights: true
+          }
+        ]
+      }
+    };
+  }
+  
+  // Games endpoints
+  if (endpoint.includes('/games')) {
+    return {
+      success: true,
+      data: []
+    };
+  }
+  
+  // Bookings endpoints  
+  if (endpoint.includes('/bookings')) {
+    return {
+      success: true,
+      data: []
+    };
+  }
+  
+  // Auth endpoints
+  if (endpoint.includes('/auth')) {
+    return {
+      success: false,
+      error: 'Authentication temporarily unavailable in demo mode'
+    };
+  }
+  
+  // Default response
+  return {
+    success: false,
+    error: 'Feature temporarily unavailable in demo mode'
+  };
+}
 
 // API client with auth headers
 async function apiRequest<T = any>(
