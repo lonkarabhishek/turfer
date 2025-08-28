@@ -94,10 +94,35 @@ module.exports = async (req, res) => {
     const total = count || 0;
     const totalPages = Math.ceil(total / parseInt(limit));
 
+    // Transform turfs data to match frontend expectations
+    const transformedTurfs = (turfs || []).map(turf => ({
+      id: turf.id,
+      ownerId: turf.owner_id,
+      name: turf.name,
+      address: turf.address,
+      coordinates: turf.lat && turf.lng ? {
+        lat: turf.lat,
+        lng: turf.lng
+      } : null,
+      description: turf.description,
+      sports: turf.sports,
+      amenities: turf.amenities,
+      images: turf.images,
+      pricePerHour: turf.price_per_hour,
+      pricePerHourWeekend: turf.price_per_hour_weekend,
+      operatingHours: turf.operating_hours,
+      contactInfo: turf.contact_info,
+      rating: turf.rating,
+      totalReviews: turf.total_reviews,
+      isActive: turf.is_active,
+      createdAt: turf.created_at,
+      updatedAt: turf.updated_at
+    }));
+
     res.status(200).json({
       success: true,
       data: {
-        turfs: turfs || [],
+        turfs: transformedTurfs,
         total,
         page: parseInt(page),
         limit: parseInt(limit),
