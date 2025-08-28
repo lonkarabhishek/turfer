@@ -66,7 +66,7 @@ module.exports = async (req, res) => {
     const userData = {
       name,
       email: email.toLowerCase(),
-      password_hash: passwordHash,
+      password: passwordHash,
       phone: phone || null,
       role,
       is_verified: false,
