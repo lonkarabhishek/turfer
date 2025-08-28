@@ -65,12 +65,20 @@ export interface SearchTurfsResponse {
 class AuthManager {
   private token: string | null = null;
   private user: User | null = null;
+  private initialized = false;
 
   constructor() {
-    // Load from localStorage on init
-    this.token = localStorage.getItem('auth_token');
-    const userStr = localStorage.getItem('auth_user');
-    this.user = userStr ? JSON.parse(userStr) : null;
+    this.initFromStorage();
+  }
+
+  private initFromStorage() {
+    if (typeof window !== 'undefined' && !this.initialized) {
+      // Load from localStorage on init
+      this.token = localStorage.getItem('auth_token');
+      const userStr = localStorage.getItem('auth_user');
+      this.user = userStr ? JSON.parse(userStr) : null;
+      this.initialized = true;
+    }
   }
 
   setAuth(token: string, user: User) {
@@ -88,14 +96,17 @@ class AuthManager {
   }
 
   getToken() {
+    this.initFromStorage();
     return this.token;
   }
 
   getUser() {
+    this.initFromStorage();
     return this.user;
   }
 
   isAuthenticated() {
+    this.initFromStorage();
     return !!this.token && !!this.user;
   }
 
