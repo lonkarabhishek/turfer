@@ -66,12 +66,12 @@ module.exports = async (req, res) => {
     const userData = {
       name,
       email: email.toLowerCase(),
-      passwordHash,
+      password_hash: passwordHash,
       phone: phone || null,
       role,
-      isVerified: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      is_verified: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
     const { data: newUser, error: insertError } = await supabase
@@ -106,9 +106,9 @@ module.exports = async (req, res) => {
       name: newUser.name,
       phone: newUser.phone,
       role: newUser.role,
-      isVerified: newUser.isVerified,
-      createdAt: newUser.createdAt,
-      updatedAt: newUser.updatedAt
+      isVerified: newUser.is_verified,
+      createdAt: newUser.created_at,
+      updatedAt: newUser.updated_at
     };
 
     res.status(201).json({

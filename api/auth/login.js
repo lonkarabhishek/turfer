@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
     const user = users[0];
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({
         success: false,
@@ -87,9 +87,9 @@ module.exports = async (req, res) => {
       name: user.name,
       phone: user.phone,
       role: user.role,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      isVerified: user.is_verified,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at
     };
 
     res.status(200).json({
