@@ -1,0 +1,243 @@
+[
+    {
+        "name": "Kridabhumi – The Multisports Turf",
+        "address": "Behind Maruti Wafers, Tigraniya Road, Dwarka, Nashik, Maharashtra 422011",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+919028960311",
+            "email": "info@kridabhumi.com"
+        },
+        "booking": ["https://kridabhumi.com/"],
+        "rates": "Weekdays: ₹600/hr (6am-6pm), ₹800/hr (6pm-12am); Weekends: ₹750/hr (6am-6pm), ₹900/hr (6pm-12am)",
+        "amenities": ["Flood Lights", "Parking", "Washrooms", "Changing Rooms", "Drinking Water", "First Aid"],
+        "operating_hours": "Monday-Sunday 6:00 AM – 12:00 AM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Kridabhumi-Cricket-Turf-In-Nashik.png"],
+        "social": {
+            "facebook": "https://www.facebook.com/KridabhumiTheMultisportsTurf/",
+            "instagram": "https://www.instagram.com/kridabhumi/"
+        }
+    },
+    {
+        "name": "Big Bounce Turf",
+        "address": "New Tidke Colony Rd, Radha Vasudev Batavia Nagar, Govind Nagar, Nashik, Maharashtra 422008",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+917030630600",
+            "email": null
+        },
+        "booking": ["https://playo.co/venues/govind-nagar-nashik/big-bounce-turf-govind-nagar-nashik"],
+        "rates": "₹800–₹1,100 per hour (varying by time slot)",
+        "amenities": ["Synthetic Turf Pitch", "Flood Lights", "Parking", "Equipment Rental", "Café"],
+        "operating_hours": "Daily 6:00 AM – 11:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Big-Bounce-Turf.png"],
+        "social": {
+            "instagram": "https://www.instagram.com/bigbounce_nashik/"
+        }
+    },
+    {
+        "name": "Chatrapati Shivaji Maharaj Cricket Turf",
+        "address": "80/7/66, Dattanagar, Naikwadipura, Nashik, Maharashtra 422003",
+        "sports": ["Cricket"],
+        "contact": {
+            "phone": "+919689756686",
+            "email": null
+        },
+        "booking": [],
+        "rates": "₹1,000–₹1,600 per hour (includes equipment rental)",
+        "amenities": ["Professional Pitch", "Flood Lights", "Digital Scoreboard", "Equipment Included"],
+        "operating_hours": "Daily 6:00 AM – 11:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Chatrapati-Shivaji-Maharaj-Cricket-Turf.png"],
+        "social": {}
+    },
+    {
+        "name": "Inside Edge Turf",
+        "address": "Near Devkinandan Apartment, Mahadev Colony, Makhmalabad Rd, Panchavati, Nashik, Maharashtra 422003",
+        "sports": ["Cricket"],
+        "contact": {
+            "phone": "+919175951741",
+            "email": null
+        },
+        "booking": [],
+        "rates": null,
+        "amenities": ["Natural & Synthetic Pitches", "Parking", "Drinking Water", "Washrooms"],
+        "operating_hours": "Daily 6:00 AM – 10:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Inside-Edge-Turf.png"],
+        "social": {}
+    },
+    {
+        "name": "Aarambh Turf Box Cricket",
+        "address": "Plot No. 2, Pipeline Road, Kale Mala, Next to Grape City Arcade, Nashik, Maharashtra 422013",
+        "sports": ["Cricket", "Football", "Basketball"],
+        "contact": {
+            "phone": "+919823055488",
+            "email": null
+        },
+        "booking": [],
+        "rates": "Starting at ₹700 per hour",
+        "amenities": ["Indoor Turf", "Protective Netting", "Equipment Available"],
+        "operating_hours": "Daily 5:00 AM – 11:30 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Aarambh-Turf-Box-Cricket.png"],
+        "social": {
+            "instagram": "https://www.instagram.com/aarambhturf/"
+        }
+    },
+    {
+        "name": "Hattrick MultiSports Turf",
+        "address": "Gangapur Rd, Opp. Munimji Outsourcings, Shivaji Nagar, Nashik, Maharashtra 422002",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+919146003500",
+            "email": null
+        },
+        "booking": ["https://playo.co/venues/shivaji-nagar-nashik/hattrick-multisports-turf-shivaji-nagar-nashik"],
+        "rates": null,
+        "amenities": ["Flood Lights", "Equipment Rental", "Multi-sport Facility"],
+        "operating_hours": "Daily 6:00 AM – 10:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Hattrick-MultiSports-Turf.png"],
+        "social": {}
+    },
+    {
+        "name": "The Home Ground Turf",
+        "address": "Opp. Hotel Bar O Bar, Near West Wind Meadows, Asaram Bapu Bridge, Nashik, Maharashtra 422003",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+917709177753",
+            "email": null
+        },
+        "booking": ["https://www.khelomore.com/sports-venues/nashik/the-home-ground-sports-turf/"],
+        "rates": "₹700 onwards per hour",
+        "amenities": ["Accessible Location", "Consistent Turf Maintenance"],
+        "operating_hours": "Daily 6:00 AM – 10:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/The-Home-Ground-Turf.png"],
+        "social": {}
+    },
+    {
+        "name": "Chak De Turf (Chakde Sports Club)",
+        "address": "Pakhal Rd, near Nasardi Bridge, Royal Colony, Rehnuma Nagar, Nashik, Maharashtra 422011",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+918602820282",
+            "email": null
+        },
+        "booking": ["https://playo.co/venues/rehnuma-nagar-nashik/chak-de-multisports-turf-rehnuma-nagar-nashik"],
+        "rates": "₹600 onwards per hour",
+        "amenities": ["Flood Lights", "Parking", "Seating Area", "Warm-up Area", "Washrooms", "Extra time if overtime"],
+        "operating_hours": "Daily 6:00 AM – 11:30 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Chak-De-Turf.png"],
+        "social": {}
+    },
+    {
+        "name": "Champion’s Turf",
+        "address": "Amrutdham Rd, Engineer Colony, Shiv Krupa Nagar, Nashik, Maharashtra 422207",
+        "sports": ["Cricket", "Football", "Volleyball"],
+        "contact": {
+            "phone": null,
+            "email": null
+        },
+        "booking": [],
+        "rates": null,
+        "amenities": ["24-hour Weekend Availability", "Yoga Classes", "LGBT+ Friendly"],
+        "operating_hours": "Weekdays 6:00 AM – 11:00 PM (24x7 on weekends)",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Champions-Turf.png"],
+        "social": {}
+    },
+    {
+        "name": "Galaxy Sports Club",
+        "address": "Shivanjali Farm, behind Nandanawan Lawns, Savarkar Nagar, Nashik, Maharashtra 422005",
+        "sports": ["Cricket", "Football"],
+        "contact": {
+            "phone": "+919615061515",
+            "email": null
+        },
+        "booking": ["https://www.khelomore.com/sports-venues/nashik/galaxy-sports-turf/"],
+        "rates": null,
+        "amenities": ["Wheelchair Accessible", "WiFi", "High-Standard Turf Maintenance"],
+        "operating_hours": "Daily 6:00 AM – 10:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Galaxy-Sports-Club.png"],
+        "social": {}
+    },
+    {
+        "name": "Vishwas Garden Lawns Turf",
+        "address": "Atharv Colony, Savarkar Nagar, Nashik, Maharashtra 422013",
+        "sports": ["Cricket"],
+        "contact": {
+            "phone": "+919422245455",
+            "email": null
+        },
+        "booking": [],
+        "rates": null,
+        "amenities": ["Spacious Lawn", "Flood Lights", "Event Friendly"],
+        "operating_hours": "Open until 10:00 PM",
+        "photos": ["https://nashikcity.in/wp-content/uploads/2025/04/Vishwas-Garden-Lawns-Turf.jpg"],
+        "social": {}
+    },
+    {
+        "name": "Players Field Sports Turf",
+        "address": "Pujya Sri Sri Ravishankar Marg, Kalpataru Nagar, Nashik, Maharashtra 422011",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+919022314448",
+            "email": null
+        },
+        "booking": ["https://www.khelomore.com/sports-venues/nashik/players-field-sports-turf/"],
+        "rates": "₹600 onwards per hour",
+        "amenities": ["Separate Washrooms (M/F)", "Large Artificial Turf"],
+        "operating_hours": "Daily 6:00 AM – 11:59 PM",
+        "photos": [],
+        "social": {
+            "facebook": "https://www.facebook.com/PlayersField",
+            "instagram": "https://www.instagram.com/players.field/"
+        }
+    },
+    {
+        "name": "Box Park Turf",
+        "address": "Ichhamani Farm, Riverfront Cruiseway, Near Westwind Meadows, off Gangapur Rd, Nashik, Maharashtra 422003",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+918115578115",
+            "email": null
+        },
+        "booking": ["https://www.khelomore.com/sports-venues/nashik/box-park-turf/"],
+        "rates": "₹400 onwards per hour (Happy Hours offers available)",
+        "amenities": ["Flood Lights", "Multiple Locations", "Equipment Available"],
+        "operating_hours": "Daily 6:00 AM – 11:00 PM",
+        "photos": [],
+        "social": {
+            "facebook": "https://www.facebook.com/boxparkturf",
+            "instagram": "https://www.instagram.com/box_park_turf/"
+        }
+    },
+    {
+        "name": "Kage Multisports Turf",
+        "address": "Besides Jay Malhar Hotel, Pathardi-Vadner Dumala Rd, Opp. Samaroh Green Garden, Pathardi Phata, Nashik, Maharashtra 422010",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": "+919021238172",
+            "email": "maestrosports2019@gmail.com"
+        },
+        "booking": ["https://playo.co/venues/pathardi-phata-nashik/kage-multisports-turf-pathardi-phata-nashik"],
+        "rates": "₹700 onwards per hour",
+        "amenities": ["Flood Lights", "Parking", "Washrooms", "Seating Area", "Warm-up Area", "First Aid", "Changing Room"],
+        "operating_hours": "Open 24×7",
+        "photos": [],
+        "social": {
+            "facebook": "https://www.facebook.com/kagemultisportsturf",
+            "instagram": "https://www.instagram.com/kage_multisports_turf/"
+        }
+    },
+    {
+        "name": "Greenfield The Multisport Turf",
+        "address": "Near K.K. Wagh Engineering College, Gangotri Vihar, Nashik, Maharashtra 422003",
+        "sports": ["Football", "Cricket"],
+        "contact": {
+            "phone": null,
+            "email": null
+        },
+        "booking": ["https://www.khelomore.com/sports-venues/nashik/greenfield-multisport-turf/"],
+        "rates": "₹325 onwards per hour",
+        "amenities": ["Flood Lights", "Parking", "Wheelchair Accessible"],
+        "operating_hours": "Daily 6:00 AM – 11:00 PM",
+        "photos": [],
+        "social": {}
+    }
+]
