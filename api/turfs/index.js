@@ -34,11 +34,11 @@ module.exports = async (req, res) => {
       limit = 20
     } = req.query;
 
-    // Build Supabase query
+    // Build Supabase query  
     let supabaseQuery = supabase
       .from('turfs')
       .select('*')
-      .eq('isActive', true);
+      .eq('is_active', true);
 
     // Apply filters
     if (query) {
@@ -52,11 +52,11 @@ module.exports = async (req, res) => {
     }
 
     if (priceMin) {
-      supabaseQuery = supabaseQuery.gte('pricePerHour', parseFloat(priceMin));
+      supabaseQuery = supabaseQuery.gte('price_per_hour', parseFloat(priceMin));
     }
 
     if (priceMax) {
-      supabaseQuery = supabaseQuery.lte('pricePerHour', parseFloat(priceMax));
+      supabaseQuery = supabaseQuery.lte('price_per_hour', parseFloat(priceMax));
     }
 
     if (rating) {
@@ -67,7 +67,7 @@ module.exports = async (req, res) => {
     const { count, error: countError } = await supabase
       .from('turfs')
       .select('*', { count: 'exact', head: true })
-      .eq('isActive', true);
+      .eq('is_active', true);
 
     if (countError) {
       console.error('Count error:', countError);
