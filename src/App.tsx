@@ -130,7 +130,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   );
 }
 
-function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user: User | null, onGameClick: (gameId: string) => void }) {
+function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user: User | null, onGameClick?: (gameId: string) => void }) {
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [loadingUserGames, setLoadingUserGames] = useState(false);
 

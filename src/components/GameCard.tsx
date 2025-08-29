@@ -68,7 +68,11 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
 
   const handleCardClick = () => {
     analytics.cardViewed('game', game.id, `${game.format} at ${game.turfName}`);
-    onGameClick?.(game.id);
+    if (onGameClick) {
+      onGameClick(game.id);
+    } else {
+      console.warn('GameCard: onGameClick prop not provided for game:', game.id);
+    }
   };
 
   const handleRequestToJoin = async () => {
