@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dist/server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "dist/server.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "DATABASE_TYPE": "sqlite",
+    "DATABASE_URL": "./database.sqlite",
+    "JWT_SECRET": "your-super-secret-jwt-key",
+    "CORS_ORIGIN": "https://turfer.vercel.app"
+  }
+}
