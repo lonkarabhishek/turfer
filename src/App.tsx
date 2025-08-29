@@ -18,6 +18,7 @@ import { LegalPages } from "./components/LegalPages";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UserDashboard } from "./components/UserDashboard";
 import { OwnerDashboard } from "./components/OwnerDashboard";
+import { GameDetailPage } from "./components/GameDetailPage";
 import { ToastContainer } from "./components/ui/toast";
 
 import { useAuth } from "./hooks/useAuth";
@@ -200,7 +201,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: User | null
           ) : userGames.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {userGames.slice(0, 3).map((game) => (
-                <GameCard key={game.id} game={game} user={user} />
+                <GameCard key={game.id} game={game} user={user} onGameClick={handleGameClick} />
               ))}
             </div>
           ) : (
@@ -228,7 +229,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: User | null
         
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {games.slice(0, 6).map((game) => (
-            <GameCard key={game.id} game={game} user={user} />
+            <GameCard key={game.id} game={game} user={user} onGameClick={handleGameClick} />
           ))}
         </div>
         
@@ -349,11 +350,12 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: U
 export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
 
   // Auto-set dashboard tab for owners
@@ -362,6 +364,25 @@ export default function App() {
       setActiveTab('dashboard');
     }
   }, [user]);
+
+  // Handle URL-based routing for game pages
+  useEffect(() => {
+    const path = window.location.pathname;
+    const gameMatch = path.match(/^\/game\/([a-zA-Z0-9-]+)$/);
+    
+    if (gameMatch) {
+      const gameId = gameMatch[1];
+      setSelectedGameId(gameId);
+      setCurrentPage('game-detail');
+    }
+  }, []);
+
+  // Update URL when navigating to game pages
+  const handleGameClick = (gameId: string) => {
+    setSelectedGameId(gameId);
+    setCurrentPage('game-detail');
+    window.history.pushState({}, '', `/game/${gameId}`);
+  };
 
   // Show login modal or navigate to appropriate dashboard
   const handleProfileClick = () => {
@@ -382,7 +403,9 @@ export default function App() {
   const handleBackToHome = () => {
     setCurrentPage('home');
     setSelectedTurfId(null);
+    setSelectedGameId(null);
     setActiveTab('home');
+    window.history.pushState({}, '', '/');
   };
 
   const handleNavigate = (section: string) => {
@@ -442,6 +465,11 @@ export default function App() {
             handleBackToHome();
             setShowCreateGame(true);
           }}
+        />
+      ) : currentPage === 'game-detail' && selectedGameId ? (
+        <GameDetailPage
+          gameId={selectedGameId}
+          onBack={handleBackToHome}
         />
       ) : currentPage === 'dashboard' && user ? (
         user.role === 'owner' ? (

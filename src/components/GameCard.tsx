@@ -31,10 +31,11 @@ export interface GameData {
 interface GameCardProps {
   game: GameData;
   onJoin?: (game: GameData) => void;
+  onGameClick?: (gameId: string) => void;
   user?: any;
 }
 
-export function GameCard({ game, onJoin, user }: GameCardProps) {
+export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const [requestLoading, setRequestLoading] = useState(false);
   const { success, error } = useToast();
   const spotsLeft = game.maxPlayers - game.currentPlayers;
@@ -67,6 +68,7 @@ export function GameCard({ game, onJoin, user }: GameCardProps) {
 
   const handleCardClick = () => {
     analytics.cardViewed('game', game.id, `${game.format} at ${game.turfName}`);
+    onGameClick?.(game.id);
   };
 
   const handleRequestToJoin = async () => {

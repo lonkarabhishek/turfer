@@ -19,6 +19,7 @@ type DashboardSection = 'overview' | 'bookings' | 'games' | 'requests' | 'favori
 
 export function UserDashboard({ onNavigate }: UserDashboardProps) {
   const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
+  const [activeGamesTab, setActiveGamesTab] = useState<'created' | 'joined'>('created');
   const [user] = useState(authManager.getUser());
   const [bookings, setBookings] = useState<any[]>([]);
   const [games, setGames] = useState<any[]>([]);
@@ -52,10 +53,22 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
     }
   };
 
+  // Helper function to check if a game is completed
+  const isGameCompleted = (game: any) => {
+    const gameDateTime = new Date(`${game.date}T${game.endTime || '23:59'}`);
+    return new Date() > gameDateTime;
+  };
+
+  // Filter games by completion status
+  const upcomingGames = games.filter(game => !isGameCompleted(game));
+  const completedGames = games.filter(game => isGameCompleted(game));
+  const upcomingJoinedGames = joinedGames.filter(game => !isGameCompleted(game));
+  const completedJoinedGames = joinedGames.filter(game => isGameCompleted(game));
+
   const sidebarItems = [
     { id: 'overview', icon: BarChart3, label: 'Overview', count: undefined },
     { id: 'bookings', icon: Calendar, label: 'My Bookings', count: bookings.length },
-    { id: 'games', icon: Gamepad2, label: 'My Games', count: games.length },
+    { id: 'games', icon: Gamepad2, label: 'My Games', count: upcomingGames.length + upcomingJoinedGames.length },
     { id: 'requests', icon: Users, label: 'Game Requests', count: gameRequests.length },
     { id: 'favorites', icon: Heart, label: 'Favorites', count: favorites.length },
     { id: 'wallet', icon: Wallet, label: 'Wallet & Payments', count: undefined },
@@ -87,8 +100,8 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
         </div>
         <div className="bg-white border rounded-lg p-3 md:p-4 text-center">
           <Gamepad2 className="w-5 h-5 md:w-6 md:h-6 text-green-600 mx-auto mb-2" />
-          <div className="text-lg md:text-2xl font-bold text-gray-900">{games.length + joinedGames.length}</div>
-          <div className="text-xs md:text-sm text-gray-600">Games</div>
+          <div className="text-lg md:text-2xl font-bold text-gray-900">{upcomingGames.length + upcomingJoinedGames.length}</div>
+          <div className="text-xs md:text-sm text-gray-600">Upcoming Games</div>
         </div>
         <div className="bg-white border rounded-lg p-3 md:p-4 text-center">
           <Heart className="w-5 h-5 md:w-6 md:h-6 text-red-600 mx-auto mb-2" />
@@ -292,95 +305,345 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
       <div className="border-b border-gray-200">
         <nav className="flex space-x-8">
           <button className="border-b-2 border-primary-500 text-primary-600 py-2 px-1 text-sm font-medium">
-            Games I Created ({games.length})
+            Games I Created ({upcomingGames.length})
           </button>
           <button className="border-b-2 border-transparent text-gray-500 hover:text-gray-700 py-2 px-1 text-sm font-medium">
-            Games I Joined ({joinedGames.length})
+            Games I Joined ({upcomingJoinedGames.length})
           </button>
         </nav>
       </div>
 
-      {/* Games List */}
+      {/* Games Content based on active tab */}
       <div className="space-y-4">
-        {games.map((game, idx) => (
-          <div key={idx} className="bg-white border rounded-lg p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-lg">{game.sport || game.format} Game</h3>
-                <div className="flex items-center text-gray-600 mt-1">
-                  <MapPin className="w-4 h-4 mr-1" />
-                  <span className="text-sm">{game.turfName || game.venue}</span>
+        {activeGamesTab === 'created' ? (
+          <>
+            {/* Created Games Tab */}
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-green-600" />
+              Upcoming Games ({upcomingGames.length})
+            </h3>
+            {upcomingGames.map((game, idx) => (
+              <div key={idx} className="bg-white border rounded-lg p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-lg">{game.sport || game.format} Game</h3>
+                    <div className="flex items-center text-gray-600 mt-1">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      <span className="text-sm">{game.turfName || game.venue}</span>
+                    </div>
+                  </div>
+                  <Badge variant={game.status === 'confirmed' ? 'default' : game.status === 'cancelled' ? 'destructive' : 'secondary'}>
+                    {game.status || 'pending'}
+                  </Badge>
                 </div>
-              </div>
-              <Badge variant={game.status === 'confirmed' ? 'default' : game.status === 'cancelled' ? 'destructive' : 'secondary'}>
-                {game.status || 'pending'}
-              </Badge>
-            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div className="flex items-center">
-                <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                <div>
-                  <div className="text-sm text-gray-600">Date</div>
-                  <div className="font-medium">{new Date(game.date).toLocaleDateString()}</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="flex items-center">
+                    <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Date</div>
+                      <div className="font-medium">{new Date(game.date).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Time</div>
+                      <div className="font-medium">{game.startTime} - {game.endTime}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <Users className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Players</div>
+                      <div className="font-medium">{game.currentPlayers || 0}/{game.maxPlayers}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Cost</div>
+                      <div className="font-medium">₹{game.costPerPerson}/person</div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center">
-                <Clock className="w-4 h-4 text-gray-400 mr-2" />
-                <div>
-                  <div className="text-sm text-gray-600">Time</div>
-                  <div className="font-medium">{game.startTime} - {game.endTime}</div>
-                </div>
-              </div>
-              <div className="flex items-center">
-                <Users className="w-4 h-4 text-gray-400 mr-2" />
-                <div>
-                  <div className="text-sm text-gray-600">Players</div>
-                  <div className="font-medium">{game.currentPlayers || 0}/{game.maxPlayers}</div>
-                </div>
-              </div>
-              <div className="flex items-center">
-                <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
-                <div>
-                  <div className="text-sm text-gray-600">Cost</div>
-                  <div className="font-medium">₹{game.costPerPerson}/person</div>
-                </div>
-              </div>
-            </div>
 
-            {game.notes && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm text-gray-600">Note: {game.notes}</span>
+                {game.notes && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Note: {game.notes}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                  <div className="flex items-center space-x-4">
+                    <Button variant="outline" size="sm">Manage Players</Button>
+                    <Button variant="outline" size="sm">Share Game</Button>
+                    {game.status === 'confirmed' && new Date(game.date) > new Date() && (
+                      <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
+                        Cancel Game
+                      </Button>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Created on {new Date(game.createdAt || Date.now()).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {upcomingGames.length === 0 && (
+              <div className="text-center py-8 bg-white border rounded-lg">
+                <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No upcoming games</h3>
+                <p className="text-gray-600 mb-4">Create your first game and invite players</p>
+                <Button onClick={() => onNavigate('search')}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Game
+                </Button>
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-              <div className="flex items-center space-x-4">
-                <Button variant="outline" size="sm">Manage Players</Button>
-                <Button variant="outline" size="sm">Share Game</Button>
-                {game.status === 'confirmed' && new Date(game.date) > new Date() && (
-                  <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
-                    Cancel Game
-                  </Button>
-                )}
-              </div>
-              <div className="text-sm text-gray-500">
-                Created on {new Date(game.createdAt || Date.now()).toLocaleDateString()}
-              </div>
-            </div>
-          </div>
-        ))}
+            {/* Completed Created Games */}
+            {completedGames.length > 0 && (
+              <>
+                <div className="border-t border-gray-200 mt-8 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <Trophy className="w-5 h-5 text-gray-500" />
+                    Completed Games ({completedGames.length})
+                  </h3>
+                </div>
+                {completedGames.map((game, idx) => (
+                  <div key={`completed-${idx}`} className="bg-white border rounded-lg p-6 opacity-75">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-lg">{game.sport || game.format} Game</h3>
+                        <div className="flex items-center text-gray-600 mt-1">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          <span className="text-sm">{game.turfName || game.venue}</span>
+                        </div>
+                      </div>
+                      <Badge className="bg-gray-100 text-gray-600 border-gray-200">
+                        Completed
+                      </Badge>
+                    </div>
 
-        {games.length === 0 && (
-          <div className="text-center py-12 bg-white border rounded-lg">
-            <Gamepad2 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No games created yet</h3>
-            <p className="text-gray-600 mb-4">Create your first game and invite players</p>
-            <Button onClick={() => onNavigate('search')}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Game
-            </Button>
-          </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Date</div>
+                          <div className="font-medium">{new Date(game.date).toLocaleDateString()}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Time</div>
+                          <div className="font-medium">{game.startTime} - {game.endTime}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Players</div>
+                          <div className="font-medium">{game.currentPlayers || 0}/{game.maxPlayers}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Cost</div>
+                          <div className="font-medium">₹{game.costPerPerson}/person</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {game.notes && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm text-gray-600">Note: {game.notes}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                      <div className="flex items-center space-x-4">
+                        <Button variant="outline" size="sm" className="text-gray-500">
+                          View Details
+                        </Button>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Completed on {new Date(game.date).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Joined Games Tab */}
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-green-600" />
+              Upcoming Games I Joined ({upcomingJoinedGames.length})
+            </h3>
+            {upcomingJoinedGames.map((game, idx) => (
+              <div key={`joined-${idx}`} className="bg-white border rounded-lg p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-lg">{game.sport || game.format} Game</h3>
+                    <div className="flex items-center text-gray-600 mt-1">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      <span className="text-sm">{game.turfName || game.venue}</span>
+                    </div>
+                    <div className="flex items-center text-gray-600 mt-1">
+                      <User className="w-4 h-4 mr-1" />
+                      <span className="text-sm">Hosted by {game.hostName}</span>
+                    </div>
+                  </div>
+                  <Badge variant={game.status === 'confirmed' ? 'default' : game.status === 'cancelled' ? 'destructive' : 'secondary'}>
+                    {game.status || 'joined'}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="flex items-center">
+                    <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Date</div>
+                      <div className="font-medium">{new Date(game.date).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Time</div>
+                      <div className="font-medium">{game.startTime} - {game.endTime}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <Users className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Players</div>
+                      <div className="font-medium">{game.currentPlayers || 0}/{game.maxPlayers}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm text-gray-600">Cost</div>
+                      <div className="font-medium">₹{game.costPerPerson}/person</div>
+                    </div>
+                  </div>
+                </div>
+
+                {game.notes && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Note: {game.notes}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                  <div className="flex items-center space-x-4">
+                    <Button variant="outline" size="sm">View Game</Button>
+                    <Button variant="outline" size="sm">Contact Host</Button>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Joined on {new Date(game.joinedAt || Date.now()).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {upcomingJoinedGames.length === 0 && (
+              <div className="text-center py-8 bg-white border rounded-lg">
+                <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No joined games</h3>
+                <p className="text-gray-600 mb-4">Find and join games in your area</p>
+                <Button onClick={() => onNavigate('search')}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Find Games
+                </Button>
+              </div>
+            )}
+
+            {/* Completed Joined Games */}
+            {completedJoinedGames.length > 0 && (
+              <>
+                <div className="border-t border-gray-200 mt-8 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                    <Trophy className="w-5 h-5 text-gray-500" />
+                    Completed Games I Played ({completedJoinedGames.length})
+                  </h3>
+                </div>
+                {completedJoinedGames.map((game, idx) => (
+                  <div key={`completed-joined-${idx}`} className="bg-white border rounded-lg p-6 opacity-75">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-lg">{game.sport || game.format} Game</h3>
+                        <div className="flex items-center text-gray-600 mt-1">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          <span className="text-sm">{game.turfName || game.venue}</span>
+                        </div>
+                        <div className="flex items-center text-gray-600 mt-1">
+                          <User className="w-4 h-4 mr-1" />
+                          <span className="text-sm">Hosted by {game.hostName}</span>
+                        </div>
+                      </div>
+                      <Badge className="bg-gray-100 text-gray-600 border-gray-200">
+                        Completed
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Date</div>
+                          <div className="font-medium">{new Date(game.date).toLocaleDateString()}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Time</div>
+                          <div className="font-medium">{game.startTime} - {game.endTime}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Players</div>
+                          <div className="font-medium">{game.currentPlayers || 0}/{game.maxPlayers}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="text-sm text-gray-600">Cost</div>
+                          <div className="font-medium">₹{game.costPerPerson}/person</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {game.notes && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm text-gray-600">Note: {game.notes}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                      <div className="flex items-center space-x-4">
+                        <Button variant="outline" size="sm" className="text-gray-500">
+                          View Details
+                        </Button>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Played on {new Date(game.date).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
         )}
       </div>
     </div>

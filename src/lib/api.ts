@@ -300,6 +300,10 @@ export const gamesAPI = {
     return apiRequest(endpoint);
   },
 
+  async getGameById(gameId: string): Promise<ApiResponse<unknown>> {
+    return apiRequest(`/games/${gameId}`);
+  },
+
   async joinGame(gameId: string): Promise<ApiResponse<unknown>> {
     return apiRequest(`/games/${gameId}/join`, {
       method: 'POST',
