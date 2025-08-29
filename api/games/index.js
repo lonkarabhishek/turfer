@@ -99,50 +99,103 @@ module.exports = async (req, res) => {
 
       const token = authHeader.substring(7);
       
-      // For now, we'll decode the JWT to get user info (in production, verify the token properly)
+      // Decode the JWT to get user info and validate
       let userId;
       try {
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-        userId = payload.id;
+        console.log('JWT payload:', payload); // Debug log
+        
+        // Try different possible user ID fields
+        userId = payload.id || payload.user_id || payload.sub;
+        
+        if (!userId) {
+          console.error('No user ID found in token payload:', payload);
+          return res.status(401).json({
+            success: false,
+            error: 'Invalid token: no user ID found'
+          });
+        }
+        
+        console.log('Extracted user ID:', userId);
       } catch (e) {
+        console.error('JWT decode error:', e);
         return res.status(401).json({
           success: false,
-          error: 'Invalid token'
+          error: 'Invalid token format'
         });
+      }
+
+      // Verify the user exists in Supabase
+      const { data: userProfile, error: userError } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .eq('id', userId)
+        .single();
+        
+      if (userError || !userProfile) {
+        console.error('User not found in profiles table:', userId, userError);
+        // Try to create a basic profile for the user
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            name: 'Anonymous User',
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+          
+        if (createError) {
+          console.error('Failed to create user profile:', createError);
+          return res.status(400).json({
+            success: false,
+            error: 'User profile not found and could not be created'
+          });
+        }
+        console.log('Created new user profile:', newProfile);
       }
 
       const gameData = req.body;
       
+      // Log the data being inserted for debugging
+      const insertData = {
+        host_id: userId,
+        turf_id: gameData.turfId,
+        date: gameData.date,
+        start_time: gameData.startTime,
+        end_time: gameData.endTime,
+        sport: gameData.sport,
+        format: gameData.format,
+        skill_level: gameData.skillLevel,
+        max_players: gameData.maxPlayers,
+        current_players: 1,
+        cost_per_person: gameData.costPerPerson,
+        description: gameData.description,
+        notes: gameData.notes,
+        is_private: gameData.isPrivate || false,
+        status: 'open'
+      };
+      
+      console.log('Attempting to insert game data:', insertData);
+      
       // Create game in Supabase
       const { data: newGame, error } = await supabase
         .from('games')
-        .insert({
-          host_id: userId,
-          turf_id: gameData.turfId,
-          date: gameData.date,
-          start_time: gameData.startTime,
-          end_time: gameData.endTime,
-          sport: gameData.sport,
-          format: gameData.format,
-          skill_level: gameData.skillLevel,
-          max_players: gameData.maxPlayers,
-          current_players: 1,
-          cost_per_person: gameData.costPerPerson,
-          description: gameData.description,
-          notes: gameData.notes,
-          is_private: gameData.isPrivate || false,
-          status: 'open'
-        })
+        .insert(insertData)
         .select()
         .single();
 
       if (error) {
         console.error('Supabase game creation error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
         return res.status(500).json({
           success: false,
-          error: 'Failed to create game: ' + error.message
+          error: 'Failed to create game: ' + (error.message || error.details || 'Unknown error'),
+          details: error.details || error.hint || null
         });
       }
+      
+      console.log('Game created successfully:', newGame);
 
       // Transform to frontend format
       const transformedGame = {
