@@ -6,7 +6,7 @@ console.log('🌍 Environment:', import.meta.env.MODE);
 console.log('🏗️ Production?', import.meta.env.PROD);
 
 // Types for API responses
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -44,8 +44,8 @@ export interface Turf {
   images: string[];
   pricePerHour: number;
   pricePerHourWeekend?: number;
-  operatingHours: Record<string, any>;
-  contactInfo: Record<string, any>;
+  operatingHours: Record<string, unknown>;
+  contactInfo: Record<string, unknown>;
   rating: number;
   totalReviews: number;
   isActive: boolean;
@@ -119,7 +119,7 @@ export const authManager = new AuthManager();
 
 
 // API client with auth headers
-async function apiRequest<T = any>(
+async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
@@ -288,7 +288,7 @@ export const gamesAPI = {
     lng?: number;
     radius?: number;
     limit?: number;
-  } = {}): Promise<ApiResponse<any[]>> {
+  } = {}): Promise<ApiResponse<unknown[]>> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -300,20 +300,20 @@ export const gamesAPI = {
     return apiRequest(endpoint);
   },
 
-  async joinGame(gameId: string): Promise<ApiResponse<any>> {
+  async joinGame(gameId: string): Promise<ApiResponse<unknown>> {
     return apiRequest(`/games/${gameId}/join`, {
       method: 'POST',
     });
   },
 
-  async createGame(gameData: any): Promise<ApiResponse<any>> {
+  async createGame(gameData: Record<string, unknown>): Promise<ApiResponse<unknown>> {
     return apiRequest('/games', {
       method: 'POST',
       body: JSON.stringify(gameData),
     });
   },
 
-  async getMyGames(): Promise<ApiResponse<any[]>> {
+  async getMyGames(): Promise<ApiResponse<unknown[]>> {
     return apiRequest('/games/my-games');
   },
 

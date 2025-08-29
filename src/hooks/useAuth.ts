@@ -20,7 +20,7 @@ export function useAuth() {
             authManager.clearAuth();
             setUser(null);
           }
-        } catch (error) {
+        } catch {
           // Token is invalid, clear auth
           authManager.clearAuth();
           setUser(null);

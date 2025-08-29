@@ -17,7 +17,7 @@ export interface PaymentRequest {
   description: string;
   customerEmail?: string;
   customerPhone?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PaymentResponse {
@@ -25,7 +25,7 @@ export interface PaymentResponse {
   paymentId?: string;
   error?: string;
   gateway: 'razorpay' | 'stripe';
-  data?: any;
+  data?: unknown;
 }
 
 // Payment configuration
@@ -93,7 +93,7 @@ class RazorpayPayments {
               });
             }
           },
-          handler: (response: any) => {
+          handler: (response: unknown) => {
             resolve({
               success: true,
               paymentId: response.razorpay_payment_id,
@@ -104,7 +104,7 @@ class RazorpayPayments {
         };
 
         const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', (response: any) => {
+        rzp.on('payment.failed', (response: unknown) => {
           resolve({
             success: false,
             error: response.error.description || 'Payment failed',
@@ -115,7 +115,7 @@ class RazorpayPayments {
 
         rzp.open();
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.message || 'Payment initialization failed',
@@ -127,7 +127,7 @@ class RazorpayPayments {
 
 // Stripe Integration
 class StripePayments {
-  private stripe: any = null;
+  private stripe: unknown = null;
   private isLoaded = false;
 
   async loadScript(): Promise<boolean> {
@@ -182,7 +182,7 @@ class StripePayments {
         gateway: 'stripe',
         data: result.paymentIntent
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.message || 'Payment failed',
@@ -191,7 +191,7 @@ class StripePayments {
     }
   }
 
-  private async createPaymentIntent(request: PaymentRequest) {
+  private async createPaymentIntent(_request: PaymentRequest) {
     // This would be an API call to your backend to create a Stripe PaymentIntent
     // For now, returning a mock response
     return {
@@ -248,7 +248,7 @@ export class PaymentManager {
             gateway: selectedGateway
           };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.message || 'Payment processing failed',
@@ -284,8 +284,8 @@ export const paymentManager = new PaymentManager();
 // Type declarations for external libraries
 declare global {
   interface Window {
-    Razorpay: any;
-    Stripe: any;
+    Razorpay: unknown;
+    Stripe: unknown;
   }
 }
 

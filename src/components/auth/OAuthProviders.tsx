@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import { authAPI, authManager } from '../../lib/api';
-import { useToast } from '../ui/toast';
+import { useToast } from '../../lib/toastManager';
 
 // Type declarations for external libraries
 declare global {

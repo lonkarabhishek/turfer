@@ -9,7 +9,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { bookingsAPI, authManager } from '../lib/api';
 import { paymentManager, type PaymentRequest } from '../lib/payments';
-import { useToast } from './ui/toast';
+import { useToast } from '../lib/toastManager';
 
 interface BookingModalProps {
   open: boolean;

@@ -128,7 +128,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   );
 }
 
-function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
+function GamesYouCanJoin({ games, user }: { games: GameData[], user: unknown }) {
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [loadingUserGames, setLoadingUserGames] = useState(false);
 
@@ -248,7 +248,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: any }) {
   );
 }
 
-function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: any, currentCity?: string, onTurfClick?: (turfId: string) => void }) {
+function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: unknown, currentCity?: string, onTurfClick?: (turfId: string) => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>(SAMPLE_GAMES);

@@ -42,7 +42,7 @@ export function PasswordReset({ open, onClose }: PasswordResetProps) {
       } else {
         setError(response.error || 'Failed to send reset email');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -67,7 +67,7 @@ export function PasswordReset({ open, onClose }: PasswordResetProps) {
       } else {
         setError(response.error || 'Invalid or expired code');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -99,7 +99,7 @@ export function PasswordReset({ open, onClose }: PasswordResetProps) {
       } else {
         setError(response.error || 'Failed to reset password');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

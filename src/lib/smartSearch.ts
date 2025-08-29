@@ -28,7 +28,7 @@ const patterns = {
     { regex: /\b(tomorrow|tmrw)\b/i, value: 'tomorrow' },
     { regex: /\b(this weekend|weekend)\b/i, value: 'weekend' },
     { regex: /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i, value: 'weekday' },
-    { regex: /\b(\d{1,2})[\/\-](\d{1,2})\b/, value: 'specific_date' }
+    { regex: /\b(\d{1,2})[/\-](\d{1,2})\b/, value: 'specific_date' }
   ],
   
   // Time patterns

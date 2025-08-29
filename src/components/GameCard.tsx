@@ -7,7 +7,7 @@ import { Badge } from './ui/badge';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
 import { gamesAPI } from '../lib/api';
-import { useToast } from './ui/toast';
+import { useToast } from '../lib/toastManager';
 
 export interface GameData {
   id: string;
