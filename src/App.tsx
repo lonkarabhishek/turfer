@@ -130,7 +130,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   );
 }
 
-function GamesYouCanJoin({ games, user }: { games: GameData[], user: User | null }) {
+function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user: User | null, onGameClick: (gameId: string) => void }) {
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [loadingUserGames, setLoadingUserGames] = useState(false);
 
@@ -201,7 +201,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: User | null
           ) : userGames.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {userGames.slice(0, 3).map((game) => (
-                <GameCard key={game.id} game={game} user={user} onGameClick={handleGameClick} />
+                <GameCard key={game.id} game={game} user={user} onGameClick={onGameClick} />
               ))}
             </div>
           ) : (
@@ -229,7 +229,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: User | null
         
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {games.slice(0, 6).map((game) => (
-            <GameCard key={game.id} game={game} user={user} onGameClick={handleGameClick} />
+            <GameCard key={game.id} game={game} user={user} onGameClick={onGameClick} />
           ))}
         </div>
         
@@ -331,7 +331,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: U
             onTurfClick={onTurfClick}
           />
         ) : (
-          <GamesYouCanJoin games={games} user={user} />
+          <GamesYouCanJoin games={games} user={user} onGameClick={handleGameClick} />
         )}
       </div>
 
