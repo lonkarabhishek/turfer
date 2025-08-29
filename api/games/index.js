@@ -104,16 +104,26 @@ module.exports = async (req, res) => {
       let userId;
       try {
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-        console.log('JWT payload:', payload); // Debug log
+        console.log('Full JWT payload:', JSON.stringify(payload, null, 2)); // Detailed debug log
         
-        // Try different possible user ID fields
-        userId = payload.id || payload.user_id || payload.sub;
+        // Try all possible user ID fields - prioritize userId (your app's format)
+        userId = payload.userId ||  // Your app uses this field
+                 payload.id || 
+                 payload.user_id || 
+                 payload.sub || 
+                 payload.uid || 
+                 payload.user?.id ||
+                 payload.data?.user?.id;
         
         if (!userId) {
-          console.error('No user ID found in token payload:', payload);
+          console.error('No user ID found in token payload. Available fields:', Object.keys(payload));
           return res.status(401).json({
             success: false,
-            error: 'Invalid token: no user ID found'
+            error: 'Invalid token: no user ID found',
+            debug: {
+              availableFields: Object.keys(payload),
+              payload: payload // Temporary debug info
+            }
           });
         }
         
@@ -122,7 +132,7 @@ module.exports = async (req, res) => {
         console.error('JWT decode error:', e);
         return res.status(401).json({
           success: false,
-          error: 'Invalid token format'
+          error: 'Invalid token format: ' + e.message
         });
       }
 
