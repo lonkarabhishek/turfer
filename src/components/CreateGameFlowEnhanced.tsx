@@ -41,22 +41,6 @@ interface CreateGameData {
 
 const gameFormats = [
   { 
-    id: '7v7', 
-    label: '7v7 Football', 
-    players: 14, 
-    icon: '⚽',
-    color: 'bg-emerald-100 border-emerald-200 text-emerald-800',
-    description: 'Full field football'
-  },
-  { 
-    id: '5v5', 
-    label: '5v5 Football', 
-    players: 10, 
-    icon: '⚽',
-    color: 'bg-emerald-100 border-emerald-200 text-emerald-800',
-    description: 'Small sided games'
-  },
-  { 
     id: 'cricket', 
     label: 'Cricket', 
     players: 16, 
@@ -71,6 +55,22 @@ const gameFormats = [
     icon: '🏏',
     color: 'bg-orange-100 border-orange-200 text-orange-800',
     description: 'Indoor cricket'
+  },
+  { 
+    id: '7v7', 
+    label: '7v7 Football', 
+    players: 14, 
+    icon: '⚽',
+    color: 'bg-emerald-100 border-emerald-200 text-emerald-800',
+    description: 'Full field football'
+  },
+  { 
+    id: '5v5', 
+    label: '5v5 Football', 
+    players: 10, 
+    icon: '⚽',
+    color: 'bg-emerald-100 border-emerald-200 text-emerald-800',
+    description: 'Small sided games'
   },
   { 
     id: 'tennis', 
@@ -369,9 +369,13 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
       console.log('🎉 Setting created game data:', displayGameData);
       track('create_game_success', { format: selectedFormat.label, turf_id: selectedTurf.id });
 
-      onGameCreated?.(displayGameData);
       console.log('🚀 Moving to step 4...');
+      console.log('🎯 Before setStep(4), current step:', step);
       setStep(4);
+      console.log('✅ setStep(4) called, should be step 4 now');
+      
+      // Call onGameCreated AFTER setting step 4, so modal doesn't close immediately
+      // onGameCreated?.(displayGameData);
 
     } catch (error: any) {
       console.error('Create game error:', error);
@@ -797,9 +801,10 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
             )}
 
             {/* Step 4: Success with GameSuccessPage */}
-            {step === 4 && (() => {
-              console.log('📍 Step 4 check:', { 
-                step, 
+            {(() => {
+              console.log('📍 Step 4 render check:', { 
+                currentStep: step, 
+                isStep4: step === 4,
                 createdGame: !!createdGame, 
                 selectedTurf: !!selectedTurf, 
                 user: !!user,
@@ -807,7 +812,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
                 selectedTurfData: selectedTurf,
                 userData: user
               });
-              return true; // Always show step 4 for debugging
+              return step === 4;
             })() && (
               <div className="relative -m-6">
                 <GameSuccessPage 
