@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { authManager, authAPI, type User } from '../lib/api';
 
+export type { User };
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(authManager.getUser());
   const [loading, setLoading] = useState(false);

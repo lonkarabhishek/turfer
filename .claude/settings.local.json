@@ -73,7 +73,13 @@
       "Bash(start http://localhost:5174)",
       "Bash(pkill:*)",
       "WebFetch(domain:www.tapturf.in)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(PORT=3002 npm start)",
+      "Bash(PORT=3001 npm start)",
+      "Bash(VITE_API_BASE_URL=http://localhost:3001/api npm run dev)",
+      "Bash(VITE_API_BASE_URL=http://localhost:3001/api npm run dev -- --port 3000)",
+      "Read(/var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_YL32Pj/**)",
+      "Bash(open http://localhost:3000)"
     ],
     "deny": [],
     "ask": [],

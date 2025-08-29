@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
-import { Toast, toastManager } from '../../lib/toastManager';
+import type { Toast } from '../../lib/toastManager';
+import { toastManager } from '../../lib/toastManager';
 
 interface ToastProps extends Toast {
   onClose: (id: string) => void;

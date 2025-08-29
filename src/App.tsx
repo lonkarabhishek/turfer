@@ -22,6 +22,7 @@ import { ToastContainer } from "./components/ui/toast";
 
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
+import type { User } from "./hooks/useAuth";
 
 // Helper functions for data transformation
 const formatDate = (dateStr: string) => {
@@ -128,7 +129,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   );
 }
 
-function GamesYouCanJoin({ games, user }: { games: GameData[], user: unknown }) {
+function GamesYouCanJoin({ games, user }: { games: GameData[], user: User | null }) {
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [loadingUserGames, setLoadingUserGames] = useState(false);
 
@@ -248,7 +249,7 @@ function GamesYouCanJoin({ games, user }: { games: GameData[], user: unknown }) 
   );
 }
 
-function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: unknown, currentCity?: string, onTurfClick?: (turfId: string) => void }) {
+function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: User | null, currentCity?: string, onTurfClick?: (turfId: string) => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>(SAMPLE_GAMES);
