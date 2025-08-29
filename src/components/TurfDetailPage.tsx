@@ -98,19 +98,20 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
       // Generate 7 days of availability starting from selected date
       const dates = [];
       for (let i = 0; i < 7; i++) {
-        const date = new Date(selectedDate);
+        const date = new Date(selectedDate.getTime()); // Create a new Date object to avoid mutation
         date.setDate(selectedDate.getDate() + i);
         dates.push(date.toISOString().split('T')[0]);
       }
 
       // For demo purposes, generate mock availability
       // In a real app, this would come from the backend
+      const defaultPrice = turf?.pricePerHour || 100; // Use default price if turf not loaded yet
       const mockAvailability: TurfAvailability[] = dates.map(date => ({
         date,
         slots: timeSlots.map(time => ({
           time,
           available: Math.random() > 0.3, // 70% availability
-          price: turf?.pricePerHour || 100,
+          price: defaultPrice,
           bookedBy: Math.random() > 0.7 ? 'Another User' : undefined
         }))
       }));
@@ -118,11 +119,13 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
       setAvailability(mockAvailability);
     } catch (error) {
       console.error('Error loading availability:', error);
+      // Set empty availability to prevent crashes
+      setAvailability([]);
     }
   };
 
   const handleDateChange = (direction: 'prev' | 'next') => {
-    const newDate = new Date(selectedDate);
+    const newDate = new Date(selectedDate.getTime()); // Create new Date object to avoid mutation
     if (direction === 'prev') {
       newDate.setDate(selectedDate.getDate() - 7);
     } else {
@@ -185,21 +188,34 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    if (!dateStr) return '';
+    
+    try {
+      const date = new Date(dateStr);
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return dateStr; // Return original string if date is invalid
+      }
+      
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
 
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-IN', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
+      if (date.toDateString() === today.toDateString()) {
+        return 'Today';
+      } else if (date.toDateString() === tomorrow.toDateString()) {
+        return 'Tomorrow';
+      } else {
+        return date.toLocaleDateString('en-IN', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric' 
+        });
+      }
+    } catch (error) {
+      console.error('Error formatting date:', dateStr, error);
+      return dateStr; // Return original string on error
     }
   };
 
@@ -384,7 +400,7 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
                             <ChevronLeft className="w-4 h-4" />
                           </Button>
                           <span className="text-sm font-medium">
-                            {formatDate(availability[0]?.date)} - {formatDate(availability[6]?.date)}
+                            {availability.length >= 7 ? `${formatDate(availability[0]?.date)} - ${formatDate(availability[6]?.date)}` : 'Loading dates...'}
                           </span>
                           <Button 
                             variant="outline" 
