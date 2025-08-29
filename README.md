@@ -1,6 +1,8 @@
-# TapTurf - Production-Ready Turf Booking Platform
+# 🏟️ TapTurf - Modern Turf Booking Platform
 
-TapTurf is a modern, full-featured web application that connects sports enthusiasts with turf facilities, enabling seamless booking experiences for players and comprehensive management tools for turf owners.
+**Live at: [tapturf.in](https://tapturf.in)**
+
+A complete turf booking and game management platform built for sports enthusiasts and turf owners.
 
 ## 🚀 Features
 
@@ -30,20 +32,20 @@ TapTurf is a modern, full-featured web application that connects sports enthusia
 - **⚡ Performance**: Optimized loading, caching, and smooth animations
 - **🔒 Security**: Input validation, XSS protection, and secure API communication
 
-## 🏗️ Architecture
+## 🛠️ Tech Stack
 
-### Frontend Stack
-- **React 19** with TypeScript for type-safe development
-- **Tailwind CSS** for responsive, utility-first styling
-- **Framer Motion** for smooth animations and transitions
-- **Lucide React** for consistent, modern icons
-- **Recharts** for data visualization and analytics
+- **Frontend**: React + TypeScript + Vite
+- **Styling**: Tailwind CSS + Framer Motion
+- **Backend**: Vercel Serverless Functions
+- **Database**: Supabase (PostgreSQL)
+- **Deployment**: Vercel
+- **Domain**: tapturf.in
 
 ## 🔧 Development Setup
 
 ### Prerequisites
 - Node.js 18+ and npm
-- Backend API server (separate repository)
+- Supabase account and project
 
 ### Installation
 
@@ -61,9 +63,9 @@ TapTurf is a modern, full-featured web application that connects sports enthusia
    
    Configure these environment variables:
    ```env
-   VITE_API_BASE_URL=http://localhost:3001/api
-   VITE_GOOGLE_CLIENT_ID=your_google_client_id
-   VITE_RAZORPAY_KEY=your_razorpay_key
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   JWT_SECRET=your_jwt_secret
    ```
 
 3. **Start development server:**
@@ -86,27 +88,24 @@ TapTurf is a modern, full-featured web application that connects sports enthusia
 npm run build:frontend
 ```
 
-### Backend Setup
-The frontend expects a backend API running at the configured `VITE_API_BASE_URL`. Key endpoints include:
+### API Routes
+The app uses Vercel serverless functions located in `/api` directory:
 
-- `POST /auth/login` - User authentication
-- `POST /auth/register` - User registration
-- `GET /turfs` - Search turfs
-- `POST /bookings` - Create bookings
-- `GET /games` - Fetch games
-- `POST /games` - Create games
+- `POST /api/auth/login` - User authentication
+- `POST /api/auth/register` - User registration  
+- `GET /api/turfs` - Search turfs
+- `POST /api/bookings` - Create bookings
+- `GET /api/games` - Fetch games
+- `POST /api/games` - Create games
 
 ### Deployment Options
 
-#### Vercel (Recommended)
+#### Vercel
 1. Connect your GitHub repository to Vercel
 2. Configure environment variables in Vercel dashboard
 3. Deploy automatically on push to main branch
 
-#### Netlify
-1. Build the project: `npm run build:frontend`
-2. Deploy the `dist` folder to Netlify
-3. Configure environment variables in Netlify settings
+The app automatically deploys to [tapturf.in](https://tapturf.in) on push to main branch.
 
 ## 🔐 Security Considerations
 

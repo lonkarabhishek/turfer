@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:check": "tsc -b && vite build",
-    "start": "cd backend && npm start",
+    "start": "vite preview",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:frontend": "tsc -b && vite build"

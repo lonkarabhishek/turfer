@@ -358,6 +358,13 @@ export default function App() {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
 
+  // Update URL when navigating to game pages
+  const handleGameClick = (gameId: string) => {
+    setSelectedGameId(gameId);
+    setCurrentPage('game-detail');
+    window.history.pushState({}, '', `/game/${gameId}`);
+  };
+
   // Auto-set dashboard tab for owners
   useEffect(() => {
     if (user?.role === 'owner' && activeTab === 'home') {
@@ -376,13 +383,6 @@ export default function App() {
       setCurrentPage('game-detail');
     }
   }, []);
-
-  // Update URL when navigating to game pages
-  const handleGameClick = (gameId: string) => {
-    setSelectedGameId(gameId);
-    setCurrentPage('game-detail');
-    window.history.pushState({}, '', `/game/${gameId}`);
-  };
 
   // Show login modal or navigate to appropriate dashboard
   const handleProfileClick = () => {
