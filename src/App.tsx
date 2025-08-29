@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Plus, Users } from "lucide-react";
 
@@ -331,7 +331,11 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: U
             onTurfClick={onTurfClick}
           />
         ) : (
-          <GamesYouCanJoin games={games} user={user} onGameClick={handleGameClick} />
+          <GamesYouCanJoin 
+            games={games} 
+            user={user} 
+            onGameClick={handleGameClick} 
+          />
         )}
       </div>
 
@@ -359,11 +363,11 @@ export default function App() {
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
 
   // Update URL when navigating to game pages
-  const handleGameClick = (gameId: string) => {
+  const handleGameClick = useCallback((gameId: string) => {
     setSelectedGameId(gameId);
     setCurrentPage('game-detail');
     window.history.pushState({}, '', `/game/${gameId}`);
-  };
+  }, []);
 
   // Auto-set dashboard tab for owners
   useEffect(() => {
