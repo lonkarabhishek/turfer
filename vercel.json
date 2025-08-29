@@ -1,6 +1,12 @@
 {
-  "buildCommand": "npm run build",
+  "version": 2,
+  "buildCommand": "npm run build", 
   "outputDirectory": "dist",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api|assets).*)",
