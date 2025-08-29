@@ -1,8 +1,9 @@
 const { createClient } = require('@supabase/supabase-js');
 
+// Use service key for server-side operations to bypass RLS
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hwfsbpzercuoshodmnuf.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo'
+  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo'
 );
 
 module.exports = async (req, res) => {
@@ -27,7 +28,7 @@ module.exports = async (req, res) => {
             name,
             address
           ),
-          profiles:host_id (
+          users:host_id (
             id,
             name,
             phone
@@ -70,8 +71,8 @@ module.exports = async (req, res) => {
         // Add turf and host info
         turf_name: game.turfs?.name || 'Unknown Turf',
         turf_address: game.turfs?.address || 'Unknown Address',
-        host_name: game.profiles?.name || 'Unknown Host',
-        host_phone: game.profiles?.phone || '0000000000'
+        host_name: game.users?.name || 'Unknown Host',
+        host_phone: game.users?.phone || '0000000000'
       }));
 
       res.status(200).json({
@@ -125,35 +126,22 @@ module.exports = async (req, res) => {
         });
       }
 
-      // Verify the user exists in Supabase
+      // Verify the user exists in Supabase users table
       const { data: userProfile, error: userError } = await supabase
-        .from('profiles')
-        .select('id, name')
+        .from('users')
+        .select('id, name, email')
         .eq('id', userId)
         .single();
         
       if (userError || !userProfile) {
-        console.error('User not found in profiles table:', userId, userError);
-        // Try to create a basic profile for the user
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            name: 'Anonymous User',
-            created_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-          
-        if (createError) {
-          console.error('Failed to create user profile:', createError);
-          return res.status(400).json({
-            success: false,
-            error: 'User profile not found and could not be created'
-          });
-        }
-        console.log('Created new user profile:', newProfile);
+        console.error('User not found in users table:', userId, userError);
+        return res.status(400).json({
+          success: false,
+          error: 'User not found in database. Please ensure you are properly registered.'
+        });
       }
+      
+      console.log('User found:', userProfile.name);
 
       const gameData = req.body;
       
