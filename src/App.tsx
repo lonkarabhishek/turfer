@@ -147,30 +147,34 @@ function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user
     setLoadingUserGames(true);
     try {
       const response = await gamesAPI.getJoinedGames();
-      if (response.success && response.data) {
+      if (response.success && response.data && Array.isArray(response.data)) {
         // Transform joined games to match GameData interface
         const transformedUserGames = response.data.map((game: any) => ({
-          id: game.id,
+          id: game.id || 'unknown',
           hostName: game.host_name || "Unknown Host",
           hostAvatar: "",
           turfName: game.turf_name || "Unknown Turf",
           turfAddress: game.turf_address || "Unknown Address",
-          date: formatDate(game.date),
-          timeSlot: `${game.startTime}-${game.endTime}`,
-          format: game.format,
-          skillLevel: capitalizeSkillLevel(game.skillLevel),
-          currentPlayers: game.currentPlayers,
-          maxPlayers: game.maxPlayers,
-          costPerPerson: game.costPerPerson,
-          notes: game.notes,
+          date: game.date ? formatDate(game.date) : 'TBD',
+          timeSlot: `${game.startTime || 'TBD'}-${game.endTime || 'TBD'}`,
+          format: game.format || 'Game',
+          skillLevel: game.skillLevel ? capitalizeSkillLevel(game.skillLevel) : 'All levels',
+          currentPlayers: game.currentPlayers || 0,
+          maxPlayers: game.maxPlayers || 10,
+          costPerPerson: game.costPerPerson || 0,
+          notes: game.notes || '',
           hostPhone: game.host_phone || "9999999999",
           distanceKm: undefined,
           isUrgent: false
         }));
         setUserGames(transformedUserGames);
+      } else {
+        console.warn('getJoinedGames returned invalid data:', response);
+        setUserGames([]);
       }
     } catch (error) {
       console.error('Error loading user games:', error);
+      setUserGames([]);
     } finally {
       setLoadingUserGames(false);
     }

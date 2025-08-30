@@ -67,11 +67,17 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   };
 
   const handleCardClick = () => {
-    analytics.cardViewed('game', game.id, `${game.format} at ${game.turfName}`);
-    if (onGameClick) {
-      onGameClick(game.id);
-    } else {
-      console.warn('GameCard: onGameClick prop not provided for game:', game.id);
+    try {
+      analytics.cardViewed('game', game.id, `${game.format} at ${game.turfName}`);
+      if (onGameClick && typeof onGameClick === 'function') {
+        onGameClick(game.id);
+      } else {
+        console.warn('GameCard: onGameClick prop not provided or not a function for game:', game.id);
+        // Fallback: just log the click
+        console.log('Game card clicked:', game.id);
+      }
+    } catch (error) {
+      console.error('Error in handleCardClick:', error);
     }
   };
 
