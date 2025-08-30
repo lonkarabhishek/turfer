@@ -17,57 +17,52 @@ export function useAuth() {
 
   // Check if user is authenticated on mount and listen for auth changes
   useEffect(() => {
-    // Get initial session with timeout
+    // Get initial session
     const getInitialSession = async () => {
-      const timeoutId = setTimeout(() => {
-        console.warn('Auth initialization timed out, continuing with no user');
-        setLoading(false);
-      }, 5000); // 5 second timeout
-
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
           console.warn('Session error:', sessionError);
-          clearTimeout(timeoutId);
           setLoading(false);
           return;
         }
         
         if (session?.user) {
+          // Use Supabase Auth user directly, with optional profile enhancement
+          const baseUser: AppUser = {
+            ...session.user,
+            name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+            phone: session.user.user_metadata?.phone || '',
+            role: session.user.user_metadata?.role || 'user',
+            profile_image_url: session.user.user_metadata?.profile_image_url || '',
+            isVerified: session.user.email_confirmed_at ? true : false
+          };
+          
+          // Try to get enhanced profile from users table (optional)
           try {
-            // Get user profile from your users table with timeout
-            const profilePromise = supabase
+            const { data: profile } = await supabase
               .from('users')
               .select('*')
               .eq('id', session.user.id)
               .single();
-
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
-            );
-
-            const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
             
-            if (error || !profile) {
-              console.warn('Profile fetch failed, using basic user data:', error);
-              setUser(session.user as AppUser);
-            } else {
+            if (profile) {
               setUser({
-                ...session.user,
+                ...baseUser,
                 ...profile
               });
+            } else {
+              setUser(baseUser);
             }
           } catch (profileError) {
-            console.warn('Profile fetch failed:', profileError);
-            setUser(session.user as AppUser);
+            // Users table doesn't exist or RLS blocking access, use base user
+            console.log('Using Supabase Auth user only (users table not accessible)');
+            setUser(baseUser);
           }
         }
-        
-        clearTimeout(timeoutId);
       } catch (error) {
         console.error('Session fetch error:', error);
-        clearTimeout(timeoutId);
       } finally {
         setLoading(false);
       }
@@ -78,20 +73,35 @@ export function useAuth() {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        // Get user profile from your users table
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        // Use Supabase Auth user directly, with optional profile enhancement
+        const baseUser: AppUser = {
+          ...session.user,
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+          phone: session.user.user_metadata?.phone || '',
+          role: session.user.user_metadata?.role || 'user',
+          profile_image_url: session.user.user_metadata?.profile_image_url || '',
+          isVerified: session.user.email_confirmed_at ? true : false
+        };
         
-        if (profile) {
-          setUser({
-            ...session.user,
-            ...profile
-          });
-        } else {
-          setUser(session.user as AppUser);
+        // Try to get enhanced profile from users table (optional)
+        try {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profile) {
+            setUser({
+              ...baseUser,
+              ...profile
+            });
+          } else {
+            setUser(baseUser);
+          }
+        } catch (profileError) {
+          // Users table doesn't exist or RLS blocking access, use base user
+          setUser(baseUser);
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -106,19 +116,35 @@ export function useAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session?.user) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+      // Use Supabase Auth user directly, with optional profile enhancement
+      const baseUser: AppUser = {
+        ...session.user,
+        name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+        phone: session.user.user_metadata?.phone || '',
+        role: session.user.user_metadata?.role || 'user',
+        profile_image_url: session.user.user_metadata?.profile_image_url || '',
+        isVerified: session.user.email_confirmed_at ? true : false
+      };
       
-      if (profile) {
-        setUser({
-          ...session.user,
-          ...profile
-        });
-      } else {
-        setUser(session.user as AppUser);
+      // Try to get enhanced profile from users table (optional)
+      try {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setUser({
+            ...baseUser,
+            ...profile
+          });
+        } else {
+          setUser(baseUser);
+        }
+      } catch (profileError) {
+        // Users table doesn't exist or RLS blocking access, use base user
+        setUser(baseUser);
       }
     } else {
       setUser(null);
