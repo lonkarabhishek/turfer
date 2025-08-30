@@ -178,7 +178,7 @@ export const gameHelpers = {
         .from('games')
         .insert([
           {
-            creator_id: user.id,
+            host_id: user.id,
             turf_id: gameData.turfId,
             title: `${gameData.format} at ${gameData.date}`,
             description: gameData.description || `${gameData.format} game`,
@@ -205,7 +205,7 @@ export const gameHelpers = {
           console.log('Games table not found, simulating game creation');
           const mockGame = {
             id: `mock-${Date.now()}`,
-            creator_id: user.id,
+            host_id: user.id,
             turf_id: gameData.turfId,
             title: `${gameData.format} at ${gameData.date}`,
             description: gameData.description || `${gameData.format} game`,
@@ -260,13 +260,13 @@ export const gameHelpers = {
             name,
             address
           ),
-          users:creator_id (
+          users:host_id (
             id,
             name,
             phone
           )
         `)
-        .eq('creator_id', userId)
+        .eq('host_id', userId)
         .order('date', { ascending: true });
 
       if (error) {
@@ -297,7 +297,7 @@ export const gameHelpers = {
             address,
             price_per_hour
           ),
-          users:creator_id (
+          users:host_id (
             id,
             name,
             phone
