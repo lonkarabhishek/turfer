@@ -32,16 +32,21 @@ export function TopNav({
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string>('');
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string>(user?.profile_image_url || '');
 
   useEffect(() => {
     if (user) {
-      // Load user profile photo
-      userHelpers.getProfile(user.id).then(result => {
-        if (result.data?.profile_image_url) {
-          setProfilePhotoUrl(result.data.profile_image_url);
-        }
-      });
+      // Use the profile photo from user if available, otherwise fetch it
+      if (user.profile_image_url) {
+        setProfilePhotoUrl(user.profile_image_url);
+      } else {
+        // Load user profile photo from database
+        userHelpers.getProfile(user.id).then(result => {
+          if (result.data?.profile_image_url) {
+            setProfilePhotoUrl(result.data.profile_image_url);
+          }
+        });
+      }
     } else {
       setProfilePhotoUrl('');
     }

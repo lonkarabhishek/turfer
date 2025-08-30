@@ -143,6 +143,36 @@ export const gameHelpers = {
         throw new Error('User not authenticated');
       }
 
+      // Ensure user exists in our users table
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+
+      if (!existingUser) {
+        // Create user in our users table if they don't exist
+        const { error: userError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: user.id,
+              name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+              email: user.email,
+              passwordHash: '', // Not needed for Supabase Auth users
+              phone: user.user_metadata?.phone || null,
+              role: 'user',
+              isVerified: user.email_confirmed_at ? true : false,
+              profile_image_url: null
+            }
+          ]);
+        
+        if (userError && !userError.message.includes('duplicate key')) {
+          console.error('Error creating user:', userError);
+          // Continue anyway, might be RLS issue
+        }
+      }
+
       // Create the game
       const { data, error } = await supabase
         .from('games')
