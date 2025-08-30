@@ -7,10 +7,27 @@ export function buildWhatsAppLink({
   phone: string; 
   text: string; 
 }): string {
+  // Add null/undefined checks
+  if (!phone || !text) {
+    console.error('buildWhatsAppLink: phone and text are required');
+    return '#';
+  }
+  
   const cleanPhone = phone.replace(/\D/g, ''); // Remove non-digits
   const formattedPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
   const encodedText = encodeURIComponent(text);
   return `https://wa.me/${formattedPhone}?text=${encodedText}`;
+}
+
+// General WhatsApp share (no specific contact)
+export function buildWhatsAppShareLink(text: string): string {
+  if (!text) {
+    console.error('buildWhatsAppShareLink: text is required');
+    return '#';
+  }
+  
+  const encodedText = encodeURIComponent(text);
+  return `https://wa.me/?text=${encodedText}`;
 }
 
 export function generateBookingMessage({

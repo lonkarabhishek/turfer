@@ -45,6 +45,12 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const handleJoinClick = () => {
     analytics.gameJoined(game.id, spotsLeft);
     
+    // Check if hostPhone is available
+    if (!game.hostPhone) {
+      error('Host contact information is not available');
+      return;
+    }
+    
     const message = generateGameInviteMessage({
       hostName: game.hostName,
       turfName: game.turfName,

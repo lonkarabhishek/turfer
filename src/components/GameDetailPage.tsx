@@ -8,7 +8,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { gamesAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
-import { buildWhatsAppLink } from '../lib/whatsapp';
+import { buildWhatsAppShareLink } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
 
 interface GameDetailPageProps {
@@ -125,7 +125,7 @@ ${window.location.href}
 Hosted by ${game.hostName}
 #TapTurf #${game.format.replace(/\\s+/g, '')}`;
 
-    const whatsappUrl = buildWhatsAppLink({ text: message });
+    const whatsappUrl = buildWhatsAppShareLink(message);
     window.open(whatsappUrl, '_blank');
     track('whatsapp_share_game', { game_id: gameId });
   };
