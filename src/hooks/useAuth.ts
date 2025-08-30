@@ -19,26 +19,40 @@ export function useAuth() {
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        // Get user profile from your users table
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (profile) {
-          setUser({
-            ...session.user,
-            ...profile
-          });
-        } else {
-          setUser(session.user as AppUser);
+        if (session?.user) {
+          try {
+            // Get user profile from your users table
+            const { data: profile, error } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (error) {
+              console.warn('Profile fetch error:', error);
+              // Use basic user data if profile fetch fails
+              setUser(session.user as AppUser);
+            } else if (profile) {
+              setUser({
+                ...session.user,
+                ...profile
+              });
+            } else {
+              setUser(session.user as AppUser);
+            }
+          } catch (profileError) {
+            console.warn('Profile fetch failed:', profileError);
+            setUser(session.user as AppUser);
+          }
         }
+      } catch (error) {
+        console.error('Session fetch error:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     getInitialSession();

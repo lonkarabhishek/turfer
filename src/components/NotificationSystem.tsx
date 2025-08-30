@@ -66,72 +66,9 @@ export function NotificationSystem({
     
     setLoading(true);
     try {
-      // Mock notifications for now - replace with actual Supabase call
-      const mockNotifications: Notification[] = [
-        {
-          id: '1',
-          userId: user.id,
-          type: 'game_request',
-          title: 'New Game Request',
-          message: 'Rahul Sharma wants to join your Football Match',
-          metadata: {
-            gameId: 'game-1',
-            requestId: 'req-1',
-            turfName: 'Green Field Arena',
-            date: '2024-01-20',
-            time: '18:00'
-          },
-          read: false,
-          createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString() // 10 minutes ago
-        },
-        {
-          id: '2',
-          userId: user.id,
-          type: 'game_accepted',
-          title: 'Request Accepted! 🎉',
-          message: 'Your request to join Cricket Practice has been accepted',
-          metadata: {
-            gameId: 'game-2',
-            turfName: 'Sports Complex',
-            date: '2024-01-21',
-            time: '16:00'
-          },
-          read: false,
-          createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString() // 30 minutes ago
-        },
-        {
-          id: '3',
-          userId: user.id,
-          type: 'game_reminder',
-          title: 'Game Reminder',
-          message: 'Your game starts in 2 hours at Green Field Arena',
-          metadata: {
-            gameId: 'game-1',
-            turfName: 'Green Field Arena',
-            date: '2024-01-20',
-            time: '18:00'
-          },
-          read: true,
-          createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 hours ago
-        },
-        {
-          id: '4',
-          userId: user.id,
-          type: 'booking_confirmation',
-          title: 'Booking Confirmed',
-          message: 'Your turf booking at Premium Sports Club has been confirmed',
-          metadata: {
-            bookingId: 'booking-1',
-            turfName: 'Premium Sports Club',
-            date: '2024-01-22',
-            time: '19:00'
-          },
-          read: true,
-          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() // 1 day ago
-        }
-      ];
-      
-      setNotifications(mockNotifications);
+      // For now, start with empty notifications
+      // In the future, this would load from a notifications table
+      setNotifications([]);
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {

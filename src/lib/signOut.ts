@@ -1,16 +1,24 @@
-import { authManager } from './api';
+import { supabase } from './supabase';
 
-export const performSignOut = (onAuthChange?: () => void) => {
-  authManager.clearAuth();
-  if (onAuthChange) {
-    onAuthChange();
-  }
-  
-  // Redirect to home page
-  if (window.location.pathname !== '/') {
-    window.location.href = '/';
-  } else {
-    // Force refresh to update UI state
+export const performSignOut = async (onAuthChange?: () => void) => {
+  try {
+    // Sign out with Supabase Auth
+    await supabase.auth.signOut();
+    
+    if (onAuthChange) {
+      onAuthChange();
+    }
+    
+    // Redirect to home page
+    if (window.location.pathname !== '/') {
+      window.location.href = '/';
+    } else {
+      // Force refresh to update UI state
+      window.location.reload();
+    }
+  } catch (error) {
+    console.error('Error signing out:', error);
+    // Force refresh even if there's an error
     window.location.reload();
   }
 };
