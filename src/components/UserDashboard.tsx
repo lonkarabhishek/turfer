@@ -958,16 +958,6 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
                 <div className="text-xs text-gray-600 capitalize">{user?.role} Account</div>
               </div>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                authManager.clearAuth();
-                onNavigate('home');
-              }}
-            >
-              Sign Out
-            </Button>
           </div>
         </div>
 
@@ -1034,18 +1024,6 @@ export function UserDashboard({ onNavigate }: UserDashboardProps) {
             ))}
           </nav>
 
-          <div className="absolute bottom-4 left-4 right-4">
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={() => {
-                authManager.clearAuth();
-                onNavigate('home');
-              }}
-            >
-              Sign Out
-            </Button>
-          </div>
         </div>
 
         {/* Main Content */}

@@ -47,58 +47,7 @@ const capitalizeSkillLevel = (level: string): GameData['skillLevel'] => {
   return levelMap[level.toLowerCase()] || 'All levels';
 };
 
-// Sample game data - will be replaced with API calls
-const SAMPLE_GAMES: GameData[] = [
-  {
-    id: "game_1",
-    hostName: "Rahul Sharma",
-    hostAvatar: "",
-    turfName: "Big Bounce Turf",
-    turfAddress: "Govind Nagar Link Road, Govind Nagar",
-    date: "Today",
-    timeSlot: "07:00-08:00 PM",
-    format: "7v7 Football",
-    skillLevel: "Intermediate",
-    currentPlayers: 12,
-    maxPlayers: 14,
-    costPerPerson: 100,
-    notes: "Need 2 more players. Bring your own water bottles!",
-    hostPhone: "9876543210",
-    distanceKm: 1.2,
-    isUrgent: true
-  },
-  {
-    id: "game_2",
-    hostName: "Priya Patel",
-    turfName: "Greenfield The Multisports Turf",
-    turfAddress: "Near K.K. Wagh Engineering, Gangotri Vihar",
-    date: "Tomorrow",
-    timeSlot: "06:00-07:00 AM",
-    format: "Cricket",
-    skillLevel: "All levels",
-    currentPlayers: 8,
-    maxPlayers: 16,
-    costPerPerson: 75,
-    hostPhone: "9876543212",
-    distanceKm: 2.8
-  },
-  {
-    id: "game_3",
-    hostName: "Amit Kumar",
-    turfName: "Kridabhumi The Multisports Turf",
-    turfAddress: "Tigraniya Road, Dwarka",
-    date: "Sunday",
-    timeSlot: "08:00-09:00 PM",
-    format: "5v5 Football",
-    skillLevel: "Advanced",
-    currentPlayers: 8,
-    maxPlayers: 10,
-    costPerPerson: 120,
-    notes: "Competitive level. Looking for skilled players only.",
-    hostPhone: "9876543211",
-    distanceKm: 3.5
-  }
-];
+// Games will be loaded from API
 
 function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   return (
@@ -234,7 +183,7 @@ function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user
 function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick }: { user: User | null, currentCity?: string, onTurfClick?: (turfId: string) => void, onGameClick?: (gameId: string) => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
-  const [games, setGames] = useState<GameData[]>(SAMPLE_GAMES);
+  const [games, setGames] = useState<GameData[]>([]);
 
   // Load games when games section is active (regardless of authentication)
   useEffect(() => {
@@ -270,7 +219,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
       }
     } catch (error) {
       console.error('Error loading games:', error);
-      // Keep sample games on error
+      setGames([]);
     }
   };
 

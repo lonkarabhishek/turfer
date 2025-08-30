@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { CitySelector } from './CitySelector';
 import { motion } from 'framer-motion';
 import { authManager, type User as UserType } from '../lib/api';
+import { signOutWithConfirmation } from '../lib/signOut';
 import { useState } from 'react';
 
 interface TopNavProps {
@@ -28,9 +29,8 @@ export function TopNav({
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleLogout = () => {
-    authManager.clearAuth();
     setShowUserMenu(false);
-    onAuthChange();
+    signOutWithConfirmation(onAuthChange);
   };
 
 

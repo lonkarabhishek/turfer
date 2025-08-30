@@ -351,16 +351,6 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                 <div className="text-xs text-gray-600">Turf Owner</div>
               </div>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                authManager.clearAuth();
-                onNavigate?.('home');
-              }}
-            >
-              Sign Out
-            </Button>
           </div>
         </div>
 
@@ -427,18 +417,6 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
             ))}
           </nav>
 
-          <div className="absolute bottom-4 left-4 right-4">
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={() => {
-                authManager.clearAuth();
-                onNavigate?.('home');
-              }}
-            >
-              Sign Out
-            </Button>
-          </div>
         </div>
 
         {/* Main Content */}

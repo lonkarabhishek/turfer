@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { User, Building2, LogOut, Settings } from 'lucide-react';
 import { Button } from './ui/button';
 import { LoginModal } from './LoginModal';
-import { authManager, type User as UserType } from '../lib/api';
+import { type User as UserType } from '../lib/api';
+import { signOutWithConfirmation } from '../lib/signOut';
 
 interface AuthButtonsProps {
   user: UserType | null;
@@ -15,9 +16,8 @@ export function AuthButtons({ user, onAuthChange }: AuthButtonsProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleLogout = () => {
-    authManager.clearAuth();
     setShowUserMenu(false);
-    onAuthChange();
+    signOutWithConfirmation(onAuthChange);
   };
 
   const handleLoginSuccess = () => {
