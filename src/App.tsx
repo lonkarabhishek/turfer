@@ -231,7 +231,7 @@ function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user
   );
 }
 
-function UserSurface({ user, currentCity = 'your city', onTurfClick }: { user: User | null, currentCity?: string, onTurfClick?: (turfId: string) => void }) {
+function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick }: { user: User | null, currentCity?: string, onTurfClick?: (turfId: string) => void, onGameClick?: (gameId: string) => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>(SAMPLE_GAMES);
@@ -511,7 +511,7 @@ export default function App() {
           onBack={handleBackToHome}
         />
       ) : (
-        <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} />
+        <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} onGameClick={handleGameClick} />
       )}
       
       <MobileNav 
