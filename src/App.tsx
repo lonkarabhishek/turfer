@@ -19,11 +19,12 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UserDashboardEnhanced } from "./components/UserDashboardEnhanced";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { GameDetailPage } from "./components/GameDetailPage";
+import { WelcomePage } from "./components/WelcomePage";
 import { ToastContainer } from "./components/ui/toast";
 
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
-import type { User } from "./hooks/useAuth";
+import type { AppUser } from "./hooks/useAuth";
 import TapTurfLogo from "./assets/TapTurf_Logo.png";
 
 // Helper functions for data transformation
@@ -102,7 +103,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   );
 }
 
-function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user: User | null, onGameClick?: (gameId: string) => void }) {
+function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: GameData[], user: AppUser | null, onGameClick?: (gameId: string) => void, onCreateGame?: () => void }) {
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [loadingUserGames, setLoadingUserGames] = useState(false);
 
@@ -191,7 +192,10 @@ function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500">No active games right now</p>
             {user && (
-              <Button className="mt-4 bg-primary-600 hover:bg-primary-700">
+              <Button 
+                onClick={onCreateGame}
+                className="mt-4 bg-primary-600 hover:bg-primary-700"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Create the first game
               </Button>
@@ -203,7 +207,7 @@ function GamesYouCanJoin({ games, user, onGameClick }: { games: GameData[], user
   );
 }
 
-function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick }: { user: User | null, currentCity?: string, onTurfClick?: (turfId: string) => void, onGameClick?: (gameId: string) => void }) {
+function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick, onCreateGame }: { user: AppUser | null, currentCity?: string, onTurfClick?: (turfId: string) => void, onGameClick?: (gameId: string) => void, onCreateGame?: () => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>([]);
@@ -223,7 +227,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
         const transformedGames = response.data.map((game: any) => ({
           id: game.id,
           hostName: game.host_name || "Unknown Host",
-          hostAvatar: "",
+          hostAvatar: game.host_profile_image_url || game.host_avatar || "",
           turfName: game.turf_name || "Unknown Turf",
           turfAddress: game.turf_address || "Unknown Address",
           date: formatDate(game.date),
@@ -287,7 +291,8 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
           <GamesYouCanJoin 
             games={games} 
             user={user} 
-            onGameClick={onGameClick} 
+            onGameClick={onGameClick}
+            onCreateGame={onCreateGame}
           />
         )}
       </div>
@@ -311,6 +316,7 @@ export default function App() {
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
@@ -328,6 +334,22 @@ export default function App() {
       setActiveTab('dashboard');
     }
   }, [user]);
+
+  // Handle welcome flow for new signups
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasWelcomeParam = urlParams.has('welcome');
+    const currentPath = window.location.pathname;
+    
+    // Show welcome page if user just signed up and was redirected to /welcome
+    if (currentPath === '/welcome' || hasWelcomeParam) {
+      if (user && !loading) {
+        setShowWelcome(true);
+        // Clean up URL without refreshing page
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  }, [user, loading]);
 
   // Handle URL-based routing for game pages
   useEffect(() => {
@@ -479,7 +501,7 @@ export default function App() {
           onBack={handleBackToHome}
         />
       ) : (
-        <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} onGameClick={handleGameClick} />
+        <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} onGameClick={handleGameClick} onCreateGame={() => setShowCreateGame(true)} />
       )}
       
       <MobileNav 
@@ -536,8 +558,27 @@ export default function App() {
       <SupabaseAuth
         open={showLogin}
         onClose={() => setShowLogin(false)}
-        onSuccess={refreshAuth}
+        onSuccess={() => {
+          refreshAuth();
+          // Check if this was a signup that should show welcome
+          setTimeout(() => {
+            if (window.location.pathname === '/welcome' || window.location.search.includes('welcome')) {
+              setShowWelcome(true);
+            }
+          }, 500);
+        }}
       />
+
+      {showWelcome && (
+        <WelcomePage
+          onComplete={() => {
+            setShowWelcome(false);
+            // Optionally refresh auth to get latest user data
+            refreshAuth();
+          }}
+          userName={user?.name || user?.email?.split('@')[0]}
+        />
+      )}
 
       </div>
       

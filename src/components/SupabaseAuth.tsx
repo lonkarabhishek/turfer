@@ -62,6 +62,7 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
           email: formData.email,
           password: formData.password,
           options: {
+            emailRedirectTo: `${window.location.origin}/welcome`,
             data: {
               name: formData.name,
               phone: formData.phone,
@@ -73,13 +74,23 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
         if (error) throw error;
 
         if (data.user) {
-          // If user is created, also create profile in users table
-          if (!data.user.email_confirmed_at) {
-            setMessage('Please check your email for verification link!');
+          // Show success message regardless of email confirmation status
+          if (data.user.identities && data.user.identities.length === 0) {
+            setError('This email is already registered. Please try signing in instead.');
           } else {
-            await createUserProfile(data.user);
-            onSuccess();
-            onClose();
+            setMessage(
+              data.user.email_confirmed_at 
+                ? 'Account created successfully! Redirecting...'
+                : 'Welcome to TapTurf! Please check your email to verify your account and complete signup.'
+            );
+            
+            // If email is already confirmed (rare case), proceed
+            if (data.user.email_confirmed_at) {
+              setTimeout(() => {
+                onSuccess();
+                onClose();
+              }, 2000);
+            }
           }
         }
       }

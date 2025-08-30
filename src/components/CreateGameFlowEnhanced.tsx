@@ -350,6 +350,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
       const displayGameData: GameData = {
         id: gameResponse.id,
         hostName: user.name,
+        hostAvatar: user.profile_image_url || "",
         hostPhone: user.phone || '9999999999',
         turfName: selectedTurf.name,
         turfAddress: selectedTurf.address,
@@ -420,7 +421,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
         <motion.div 
-          className="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden"
+          className="bg-white w-full max-w-2xl max-h-[95vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 50, opacity: 0 }}
@@ -459,7 +460,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
             </div>
           </div>
 
-          <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
+          <div className="flex-1 overflow-y-auto">
             {/* Step 1: Choose Format - Enhanced */}
             {step === 1 && (
               <motion.div 
@@ -644,9 +645,9 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
                     <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className="bg-white rounded-2xl w-full max-w-lg max-h-[80vh] overflow-hidden shadow-2xl"
+                      className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl flex flex-col"
                     >
-                      <div className="p-6 border-b">
+                      <div className="p-6 border-b flex-shrink-0">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-xl font-semibold">Find Your Venue</h3>
                           <Button 
@@ -669,7 +670,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
                         </div>
                       </div>
                       
-                      <div className="max-h-96 overflow-y-auto">
+                      <div className="flex-1 overflow-y-auto">
                         {availableTurfs.length > 0 ? (
                           availableTurfs.map((turf) => (
                             <button
@@ -825,7 +826,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
                     timeSlot: timeSlots.find(s => s.value === formData.timeSlot)?.label || formData.timeSlot || '18:00 - 19:00',
                     maxPlayers: selectedFormat?.players || createdGame?.maxPlayers || 10,
                     costPerPerson: createdGame?.costPerPerson || formData.costPerPerson || 100,
-                    hostName: user?.name || user?.firstName || 'Host',
+                    hostName: user?.name || 'Host',
                     hostPhone: user?.phone || '',
                     notes: formData.notes
                   }}
@@ -835,9 +836,9 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
             )}
           </div>
 
-          {/* Enhanced Navigation - Fixed Layout */}
+          {/* Enhanced Navigation - Fixed at bottom */}
           {step < 4 && (
-            <div className="border-t bg-gray-50 p-4 sticky bottom-0">
+            <div className="border-t bg-gray-50 p-4 flex-shrink-0">
               <div className="flex justify-between items-center">
                 <Button 
                   variant="outline" 
@@ -870,6 +871,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
                 ) : (
                   <Button 
                     onClick={handleNext}
+                    disabled={step === 2 && !isStepComplete(2)}
                     className="bg-primary-600 hover:bg-primary-700 flex items-center gap-2"
                   >
                     Continue

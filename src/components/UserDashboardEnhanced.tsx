@@ -51,7 +51,7 @@ const tabs = [
 ];
 
 export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboardEnhancedProps) {
-  const { user } = useAuth();
+  const { user, refreshAuth } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
   const [userGames, setUserGames] = useState<GameData[]>([]);
@@ -118,8 +118,10 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
     }
   };
 
-  const handlePhotoUpdated = (newPhotoUrl: string) => {
+  const handlePhotoUpdated = async (newPhotoUrl: string) => {
     setProfilePhotoUrl(newPhotoUrl);
+    // Refresh auth to update user profile in all components
+    await refreshAuth();
   };
 
   const isGameCompleted = (game: GameData) => {

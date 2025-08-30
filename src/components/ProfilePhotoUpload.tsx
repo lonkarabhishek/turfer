@@ -96,7 +96,23 @@ export function ProfilePhotoUpload({
         .eq('id', user.id);
 
       if (updateError) {
-        throw updateError;
+        console.warn('Users table update failed (may not exist):', updateError);
+        // Don't throw - continue to update auth metadata
+      }
+
+      // Also update Supabase Auth user metadata for immediate availability
+      try {
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: {
+            profile_image_url: publicUrl
+          }
+        });
+        
+        if (metadataError) {
+          console.warn('Auth metadata update failed:', metadataError);
+        }
+      } catch (metaErr) {
+        console.warn('Auth metadata update error:', metaErr);
       }
 
       // Success!
