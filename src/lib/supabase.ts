@@ -180,19 +180,17 @@ export const gameHelpers = {
           {
             host_id: user.id,
             turf_id: gameData.turfId,
-            title: `${gameData.format} at ${gameData.date}`,
             description: gameData.description || `${gameData.format} game`,
             sport: gameData.sport,
+            format: gameData.format,
             skill_level: gameData.skillLevel,
             max_players: gameData.maxPlayers,
             current_players: 1,
             date: gameData.date,
             start_time: gameData.startTime,
             end_time: gameData.endTime,
-            price_per_player: gameData.costPerPerson,
-            game_type: 'casual',
-            status: 'open',
-            is_active: true
+            cost_per_person: gameData.costPerPerson,
+            status: 'open'
           }
         ])
         .select()
@@ -207,19 +205,17 @@ export const gameHelpers = {
             id: `mock-${Date.now()}`,
             host_id: user.id,
             turf_id: gameData.turfId,
-            title: `${gameData.format} at ${gameData.date}`,
             description: gameData.description || `${gameData.format} game`,
             sport: gameData.sport,
+            format: gameData.format,
             skill_level: gameData.skillLevel,
             max_players: gameData.maxPlayers,
             current_players: 1,
             date: gameData.date,
             start_time: gameData.startTime,
             end_time: gameData.endTime,
-            price_per_player: gameData.costPerPerson,
-            game_type: 'casual',
+            cost_per_person: gameData.costPerPerson,
             status: 'open',
-            is_active: true,
             created_at: new Date().toISOString()
           };
           return { data: mockGame, error: null };
@@ -303,8 +299,7 @@ export const gameHelpers = {
             phone
           )
         `)
-        .eq('status', 'open')
-        .eq('is_active', true);
+        .eq('status', 'open');
 
       if (params.sport) {
         query = query.eq('sport', params.sport);
