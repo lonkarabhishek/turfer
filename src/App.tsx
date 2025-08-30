@@ -24,6 +24,7 @@ import { ToastContainer } from "./components/ui/toast";
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
 import type { User } from "./hooks/useAuth";
+import TapTurfLogo from "./assets/TapTurf_Logo.png";
 
 // Helper functions for data transformation
 const formatDate = (dateStr: string) => {
@@ -56,6 +57,28 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
       
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
         <div className="text-center text-white space-y-4">
+          {/* Logo */}
+          <motion.div
+            className="flex justify-center mb-6"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+          >
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shadow-2xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20">
+              <img 
+                src={TapTurfLogo} 
+                alt="TapTurf Logo" 
+                className="w-full h-full object-contain p-2"
+                onError={(e) => {
+                  // Fallback to text logo if image fails to load
+                  e.currentTarget.style.display = 'none';
+                  const parent = e.currentTarget.parentElement!;
+                  parent.innerHTML = '<div class="w-full h-full flex items-center justify-center"><span class="text-white font-bold text-2xl sm:text-3xl">T</span></div>';
+                }}
+              />
+            </div>
+          </motion.div>
+
           <motion.h1 
             className="text-3xl sm:text-5xl font-bold tracking-tight"
             initial={{ opacity: 0, y: 20 }}

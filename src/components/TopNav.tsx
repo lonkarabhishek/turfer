@@ -9,6 +9,7 @@ import { performSignOut } from '../lib/signOut';
 import { SignOutModal } from './SignOutModal';
 import { NotificationSystem } from './NotificationSystem';
 import { userHelpers } from '../lib/supabase';
+import TapTurfLogo from '../assets/TapTurf_Logo.png';
 
 interface TopNavProps {
   currentCity?: string;
@@ -67,8 +68,17 @@ export function TopNav({
             whileHover={{ scale: 1.02 }}
             onClick={onHomeClick}
           >
-            <div className="w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-lg">T</span>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden">
+              <img 
+                src={TapTurfLogo} 
+                alt="TapTurf Logo" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  // Fallback to gradient background with "T" if logo fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.parentElement!.innerHTML = '<div class="w-10 h-10 bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-xl flex items-center justify-center"><span class="text-white font-bold text-lg">T</span></div>';
+                }}
+              />
             </div>
             <div>
               <h1 className="font-bold text-xl text-gray-900">TapTurf</h1>
