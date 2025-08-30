@@ -17,6 +17,13 @@ export function useAuth() {
 
   // Check if user is authenticated on mount and listen for auth changes
   useEffect(() => {
+    // Emergency timeout to prevent infinite loading
+    const emergencyTimeout = setTimeout(() => {
+      console.warn('Emergency timeout: forcing loading to false');
+      setLoading(false);
+      setUser(null);
+    }, 3000); // 3 second emergency timeout
+
     // Get initial session
     const getInitialSession = async () => {
       try {
@@ -60,10 +67,14 @@ export function useAuth() {
             console.log('Using Supabase Auth user only (users table not accessible)');
             setUser(baseUser);
           }
+        } else {
+          // No session/user found, set user to null
+          setUser(null);
         }
       } catch (error) {
         console.error('Session fetch error:', error);
       } finally {
+        clearTimeout(emergencyTimeout);
         setLoading(false);
       }
     };
@@ -108,8 +119,11 @@ export function useAuth() {
       }
     });
 
-    // Cleanup subscription
-    return () => subscription.unsubscribe();
+    // Cleanup subscription and timeout
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(emergencyTimeout);
+    };
   }, []);
 
   const refreshAuth = async () => {
