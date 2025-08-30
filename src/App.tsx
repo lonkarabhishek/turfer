@@ -62,7 +62,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            Play tonight in {currentCity}.
+            Play Now in {currentCity}
           </motion.h1>
           
           <motion.p 
@@ -71,7 +71,7 @@ function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
           >
-            Find a turf or find a team in 10 seconds — no app needed.
+            Find a Turf. Find a team. Play in seconds.
           </motion.p>
         </div>
       </div>
@@ -377,10 +377,6 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        {/* Demo mode banner */}
-        <div className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-amber-900 px-4 py-2 text-center text-sm font-medium">
-          🎭 Demo Mode Active • Showing sample data while servers update • All features functional!
-        </div>
         <TopNav 
         currentCity={currentCity}
         user={user}

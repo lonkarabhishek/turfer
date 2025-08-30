@@ -4,7 +4,8 @@ import { Button } from './ui/button';
 import { CitySelector } from './CitySelector';
 import { motion } from 'framer-motion';
 import { authManager, type User as UserType } from '../lib/api';
-import { signOutWithConfirmation } from '../lib/signOut';
+import { performSignOut } from '../lib/signOut';
+import { SignOutModal } from './SignOutModal';
 import { useState } from 'react';
 
 interface TopNavProps {
@@ -27,10 +28,16 @@ export function TopNav({
   onHomeClick
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
     setShowUserMenu(false);
-    signOutWithConfirmation(onAuthChange);
+    setShowSignOutModal(true);
+  };
+
+  const handleConfirmSignOut = () => {
+    setShowSignOutModal(false);
+    performSignOut(onAuthChange);
   };
 
 
@@ -154,7 +161,7 @@ export function TopNav({
                     
                     <div className="border-t border-gray-200 pt-2 mt-2">
                       <button
-                        onClick={handleLogout}
+                        onClick={handleLogoutClick}
                         className="w-full px-4 py-3 text-left hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium rounded-lg mx-2 transition-colors"
                       >
                         <LogOut className="w-4 h-4" />
@@ -176,6 +183,14 @@ export function TopNav({
           )}
         </div>
       </div>
+
+      {/* Sign Out Modal */}
+      <SignOutModal
+        isOpen={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+        onConfirm={handleConfirmSignOut}
+        userName={user?.name}
+      />
     </div>
   );
 }

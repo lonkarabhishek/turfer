@@ -3,7 +3,8 @@ import { User, Building2, LogOut, Settings } from 'lucide-react';
 import { Button } from './ui/button';
 import { LoginModal } from './LoginModal';
 import { type User as UserType } from '../lib/api';
-import { signOutWithConfirmation } from '../lib/signOut';
+import { performSignOut } from '../lib/signOut';
+import { SignOutModal } from './SignOutModal';
 
 interface AuthButtonsProps {
   user: UserType | null;
@@ -14,10 +15,16 @@ export function AuthButtons({ user, onAuthChange }: AuthButtonsProps) {
   const [showUserLogin, setShowUserLogin] = useState(false);
   const [showOwnerLogin, setShowOwnerLogin] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
     setShowUserMenu(false);
-    signOutWithConfirmation(onAuthChange);
+    setShowSignOutModal(true);
+  };
+
+  const handleConfirmSignOut = () => {
+    setShowSignOutModal(false);
+    performSignOut(onAuthChange);
   };
 
   const handleLoginSuccess = () => {
@@ -68,7 +75,7 @@ export function AuthButtons({ user, onAuthChange }: AuthButtonsProps) {
               
               <button
                 className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2 text-red-600"
-                onClick={handleLogout}
+                onClick={handleLogoutClick}
               >
                 <LogOut className="w-4 h-4" />
                 Sign Out
@@ -115,6 +122,14 @@ export function AuthButtons({ user, onAuthChange }: AuthButtonsProps) {
         onSuccess={handleLoginSuccess}
         userType="owner"
         initialMode="login"
+      />
+
+      {/* Sign Out Modal */}
+      <SignOutModal
+        isOpen={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+        onConfirm={handleConfirmSignOut}
+        userName={user?.name}
       />
     </>
   );

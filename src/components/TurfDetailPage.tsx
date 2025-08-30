@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Star, Clock, Users, Wifi, Car, WashingMachine, 
   Coffee, Shield, Phone, ArrowLeft, ChevronLeft, 
-  ChevronRight, Plus
+  ChevronRight, Plus, Heart, Share2, Calendar, 
+  CheckCircle, X, PlayCircle, Image as ImageIcon
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -30,13 +31,13 @@ interface TurfAvailability {
   slots: TimeSlot[];
 }
 
-const amenityIcons: Record<string, React.ComponentType<any>> = {
-  'parking': Car,
-  'wifi': Wifi,
-  'washroom': WashingMachine,
-  'canteen': Coffee,
-  'security': Shield,
-  'changing_room': Users
+const amenityIcons: Record<string, { icon: React.ComponentType<any>, label: string }> = {
+  'parking': { icon: Car, label: 'Parking' },
+  'wifi': { icon: Wifi, label: 'Free WiFi' },
+  'washroom': { icon: WashingMachine, label: 'Washroom' },
+  'canteen': { icon: Coffee, label: 'Canteen' },
+  'security': { icon: Shield, label: '24/7 Security' },
+  'changing_room': { icon: Users, label: 'Changing Room' }
 };
 
 const timeSlots = [
@@ -50,483 +51,459 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
   const { isAuthenticated } = useAuth();
   const [turf, setTurf] = useState<TurfData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [availability, setAvailability] = useState<TurfAvailability[]>([]);
+  const [isLiked, setIsLiked] = useState(false);
+  const [showImageGallery, setShowImageGallery] = useState(false);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
-  const [bookingStep, setBookingStep] = useState<'select' | 'confirm' | 'success'>('select');
-  const [bookingLoading, setBookingLoading] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-      if (turfId) {
-        await loadTurfDetails();
-        await loadAvailability();
-      }
-    };
-    loadData();
+    loadTurf();
+    loadAvailability();
   }, [turfId]);
 
-  useEffect(() => {
-    if (turfId) {
-      loadAvailability();
-    }
-  }, [selectedDate]);
-
-  const loadTurfDetails = async () => {
-    setLoading(true);
+  const loadTurf = async () => {
     try {
       const response = await turfsAPI.getById(turfId);
       if (response.success && response.data) {
-        const turf = response.data;
-        const transformedTurf = {
-          ...turf,
-          priceDisplay: `₹${turf.pricePerHour}/hr`,
-          slots: [],
-          contacts: turf.contactInfo
-        };
-        setTurf(transformedTurf);
+        setTurf(response.data as TurfData);
       }
     } catch (error) {
-      console.error('Error loading turf details:', error);
+      console.error('Error loading turf:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const loadAvailability = async () => {
-    try {
-      // Generate 7 days of availability starting from selected date
-      const dates = [];
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(selectedDate.getTime()); // Create a new Date object to avoid mutation
-        date.setDate(selectedDate.getDate() + i);
-        dates.push(date.toISOString().split('T')[0]);
-      }
-
-      // For demo purposes, generate mock availability
-      // In a real app, this would come from the backend
-      const defaultPrice = turf?.pricePerHour || 100; // Use default price if turf not loaded yet
-      const mockAvailability: TurfAvailability[] = dates.map(date => ({
-        date,
+    // Mock availability data - replace with actual API call
+    const mockAvailability = [
+      {
+        date: new Date().toISOString().split('T')[0],
         slots: timeSlots.map(time => ({
           time,
-          available: Math.random() > 0.3, // 70% availability
-          price: defaultPrice,
-          bookedBy: Math.random() > 0.7 ? 'Another User' : undefined
+          available: Math.random() > 0.3,
+          price: 100 + Math.floor(Math.random() * 50)
         }))
-      }));
-
-      setAvailability(mockAvailability);
-    } catch (error) {
-      console.error('Error loading availability:', error);
-      // Set empty availability to prevent crashes
-      setAvailability([]);
-    }
-  };
-
-  const handleDateChange = (direction: 'prev' | 'next') => {
-    const newDate = new Date(selectedDate.getTime()); // Create new Date object to avoid mutation
-    if (direction === 'prev') {
-      newDate.setDate(selectedDate.getDate() - 7);
-    } else {
-      newDate.setDate(selectedDate.getDate() + 7);
-    }
-    setSelectedDate(newDate);
-  };
-
-  const handleSlotToggle = (date: string, timeSlot: string) => {
-    const slotKey = `${date}-${timeSlot}`;
-    setSelectedSlots(prev => 
-      prev.includes(slotKey) 
-        ? prev.filter(s => s !== slotKey)
-        : [...prev, slotKey]
-    );
-  };
-
-  const handleBooking = async () => {
-    if (!isAuthenticated() || selectedSlots.length === 0) return;
-
-    setBookingLoading(true);
-    try {
-      // Group slots by date
-      const slotsByDate = selectedSlots.reduce((acc, slotKey) => {
-        const [date, time] = slotKey.split('-');
-        if (!acc[date]) acc[date] = [];
-        acc[date].push(time);
-        return acc;
-      }, {} as Record<string, string[]>);
-
-      // Create bookings for each date
-      for (const [date, slots] of Object.entries(slotsByDate)) {
-        for (const timeSlot of slots) {
-          const [startTime, endTime] = timeSlot.split('-');
-          
-          await bookingsAPI.createBooking({
-            turfId,
-            date,
-            startTime,
-            endTime,
-            totalPlayers: 1,
-            totalAmount: turf?.pricePerHour || 100,
-            notes: `Booked via turf detail page`
-          });
-        }
       }
+    ];
+    setAvailability(mockAvailability);
+  };
 
-      setBookingStep('success');
-      setSelectedSlots([]);
-      loadAvailability(); // Refresh availability
+  const handleBookSlot = async (slot: TimeSlot) => {
+    if (!isAuthenticated) {
+      alert('Please sign in to book slots');
+      return;
+    }
+    
+    setBooking(true);
+    try {
+      // Implement booking logic
+      console.log('Booking slot:', slot);
     } catch (error) {
       console.error('Booking error:', error);
     } finally {
-      setBookingLoading(false);
+      setBooking(false);
     }
   };
 
-  const getTotalCost = () => {
-    return selectedSlots.length * (turf?.pricePerHour || 100);
-  };
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    
-    try {
-      const date = new Date(dateStr);
-      
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        return dateStr; // Return original string if date is invalid
-      }
-      
-      const today = new Date();
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-
-      if (date.toDateString() === today.toDateString()) {
-        return 'Today';
-      } else if (date.toDateString() === tomorrow.toDateString()) {
-        return 'Tomorrow';
-      } else {
-        return date.toLocaleDateString('en-IN', { 
-          weekday: 'short', 
-          month: 'short', 
-          day: 'numeric' 
-        });
-      }
-    } catch (error) {
-      console.error('Error formatting date:', dateStr, error);
-      return dateStr; // Return original string on error
+  const nextImage = () => {
+    if (turf?.images.length) {
+      setCurrentImageIndex((prev) => (prev + 1) % turf.images.length);
     }
   };
+
+  const prevImage = () => {
+    if (turf?.images.length) {
+      setCurrentImageIndex((prev) => (prev - 1 + turf.images.length) % turf.images.length);
+    }
+  };
+
+  const validImages = turf?.images?.filter(img => img && img.trim() !== '') || [];
+  const hasMultipleImages = validImages.length > 1;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!turf) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center space-y-4">
+          <div className="text-6xl">🏟️</div>
+          <div className="text-xl font-semibold text-gray-900">Turf not found</div>
+          <Button onClick={onBack} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Go Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <motion.div 
-        className="bg-white shadow-sm"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        {/* Header */}
-        <div className="bg-primary-600 text-white p-4 flex items-center gap-4">
-          <Button variant="ghost" onClick={onBack} className="text-white hover:bg-primary-700">
-            <ArrowLeft className="w-5 h-5" />
+      {/* Header with back button */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Button 
+            onClick={onBack}
+            variant="ghost"
+            size="sm"
+            className="rounded-full hover:bg-gray-100"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back
           </Button>
-          <div>
-            <h2 className="text-xl font-bold">{turf?.name || 'Loading...'}</h2>
-            {turf && (
-              <button
-                className="text-primary-200 flex items-center gap-1 hover:text-white transition-colors group"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (turf?.address) {
-                    const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
-                    window.open(mapsUrl, '_blank');
-                  }
-                }}
-                title="Open in Google Maps"
-              >
-                <MapPin className="w-4 h-4 group-hover:text-white" />
-                <span className="group-hover:underline">{turf.address}</span>
-              </button>
-            )}
+          
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsLiked(!isLiked)}
+              className="rounded-full hover:bg-gray-100"
+            >
+              <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+            </Button>
+            <Button variant="ghost" size="sm" className="rounded-full hover:bg-gray-100">
+              <Share2 className="w-5 h-5 text-gray-600" />
+            </Button>
           </div>
         </div>
+      </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-          </div>
-        ) : (
-          <div className="p-6 space-y-6">
-              {/* Turf Info */}
-              {turf && (
-                <>
-                  <div className="grid md:grid-cols-3 gap-6">
-                    <div className="md:col-span-2 space-y-4">
-                      {/* Image Gallery */}
-                      {turf.images && turf.images.length > 0 && (
-                        <div className="grid grid-cols-2 gap-2 rounded-lg overflow-hidden">
-                          {turf.images.slice(0, 4).map((image, index) => (
-                            <img
-                              key={index}
-                              src={image}
-                              alt={`${turf.name} ${index + 1}`}
-                              className="w-full h-32 object-cover"
-                            />
-                          ))}
-                        </div>
-                      )}
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        {/* Hero Image Gallery */}
+        <div className="relative mb-8">
+          <motion.div
+            className="relative aspect-[21/9] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-emerald-400 to-emerald-600"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            {validImages.length > 0 ? (
+              <>
+                <img
+                  src={validImages[currentImageIndex]}
+                  alt={`${turf.name} - Image ${currentImageIndex + 1}`}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='343' viewBox='0 0 800 343'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%2310b981;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23059669;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='800' height='343' fill='url(%23grad)'/%3E%3Ctext x='400' y='150' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='64' opacity='0.8'%3E🏟️%3C/text%3E%3Ctext x='400' y='220' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='24' font-weight='500'%3E${encodeURIComponent(turf.name)}%3C/text%3E%3C/svg%3E`;
+                  }}
+                />
 
-                      {/* Description */}
-                      {(turf as any).description && (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>About this venue</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-gray-600">{(turf as any).description}</p>
-                          </CardContent>
-                        </Card>
-                      )}
+                {/* Navigation */}
+                {hasMultipleImages && (
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                    >
+                      <ChevronLeft className="w-6 h-6 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={nextImage}
+                      className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                    >
+                      <ChevronRight className="w-6 h-6 text-gray-700" />
+                    </button>
+                  </>
+                )}
 
-                      {/* Sports */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Available Sports</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex flex-wrap gap-2">
-                            {((turf as any).sports || []).map((sport: string) => (
-                              <Badge key={sport} variant="secondary">
-                                {sport}
-                              </Badge>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
+                {/* Gallery button */}
+                {validImages.length > 1 && (
+                  <button
+                    onClick={() => setShowImageGallery(true)}
+                    className="absolute bottom-6 right-6 bg-white/90 hover:bg-white rounded-full px-4 py-2 shadow-lg transition-all duration-200 flex items-center gap-2"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    <span className="text-sm font-medium">View all {validImages.length} photos</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center text-white">
+                  <div className="text-8xl mb-4 opacity-80">🏟️</div>
+                  <div className="text-3xl font-bold">{turf.name}</div>
+                  <div className="text-xl opacity-80 mt-2">Sports Facility</div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </div>
 
-                      {/* Amenities */}
-                      {turf.amenities && turf.amenities.length > 0 && (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Amenities</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              {turf.amenities.map((amenity) => {
-                                const IconComponent = amenityIcons[amenity] || Shield;
-                                return (
-                                  <div key={amenity} className="flex items-center gap-2">
-                                    <IconComponent className="w-4 h-4 text-primary-600" />
-                                    <span className="text-sm capitalize">
-                                      {amenity.replace('_', ' ')}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="space-y-4"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-4xl font-bold text-gray-900 mb-2">{turf.name}</h1>
+                  <button
+                    className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors group"
+                    onClick={() => {
+                      const mapsUrl = turf.coords 
+                        ? `https://maps.google.com/maps?q=${turf.coords.lat},${turf.coords.lng}&z=15`
+                        : `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
+                      window.open(mapsUrl, '_blank');
+                    }}
+                  >
+                    <MapPin className="w-5 h-5 group-hover:text-emerald-600" />
+                    <span className="text-lg group-hover:underline">{turf.address}</span>
+                  </button>
+                </div>
 
-                    {/* Sidebar */}
-                    <div className="space-y-4">
-                      {/* Quick Info */}
-                      <Card>
-                        <CardContent className="p-4 space-y-3">
-                          <div className="flex items-center gap-2">
-                            <Star className="w-4 h-4 text-yellow-500" />
-                            <span className="font-medium">{turf.rating || 'New'}</span>
-                            {turf.totalReviews && (
-                              <span className="text-gray-500">({turf.totalReviews} reviews)</span>
-                            )}
-                          </div>
-                          
-                          <div className="text-2xl font-bold text-primary-600">
-                            {turf.priceDisplay}
-                          </div>
+                <div className="flex items-center gap-2">
+                  <Star className="w-6 h-6 fill-yellow-400 text-yellow-400" />
+                  <span className="text-2xl font-bold">{Number(turf.rating).toFixed(1)}</span>
+                  <span className="text-gray-500">({turf.totalReviews} reviews)</span>
+                </div>
+              </div>
 
-                          {turf.contacts?.phone && (
-                            <div className="flex items-center gap-2 text-sm">
-                              <Phone className="w-4 h-4" />
-                              <span>{turf.contacts.phone}</span>
+              {/* Quick Stats */}
+              <div className="flex flex-wrap gap-4">
+                {turf.isPopular && (
+                  <Badge className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-4 py-2 rounded-full text-sm">
+                    ⭐ Popular Choice
+                  </Badge>
+                )}
+                {turf.hasLights && (
+                  <Badge className="bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-4 py-2 rounded-full text-sm">
+                    💡 Night Play Available
+                  </Badge>
+                )}
+                {turf.distanceKm && (
+                  <Badge variant="outline" className="px-4 py-2 rounded-full text-sm border-gray-300">
+                    📍 {turf.distanceKm.toFixed(1)}km away
+                  </Badge>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Amenities */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <Card className="border-0 shadow-lg rounded-3xl">
+                <CardHeader>
+                  <CardTitle className="text-2xl">Amenities</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {turf.amenities.map((amenity) => {
+                      const amenityData = amenityIcons[amenity.toLowerCase().replace(/\s+/g, '_')];
+                      const IconComponent = amenityData?.icon;
+                      
+                      return (
+                        <div key={amenity} className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors">
+                          {IconComponent ? (
+                            <IconComponent className="w-6 h-6 text-emerald-600" />
+                          ) : (
+                            <div className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center text-white text-xs">
+                              ✓
                             </div>
                           )}
+                          <span className="font-medium text-gray-900">
+                            {amenityData?.label || amenity}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
-                          <div className="flex items-center gap-2 text-sm">
-                            <Clock className="w-4 h-4" />
-                            <span>
-                              {(turf as any).operatingHours?.open || '6:00 AM'} - {(turf as any).operatingHours?.close || '10:00 PM'}
-                            </span>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Action Buttons */}
-                      <div className="space-y-2">
-                        <Button 
-                          onClick={() => onCreateGame?.()}
-                          className="w-full bg-primary-600 hover:bg-primary-700"
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Create Game Here
-                        </Button>
-                        
-                        <Button 
-                          variant="outline" 
-                          className="w-full"
-                          onClick={() => setBookingStep('confirm')}
-                          disabled={selectedSlots.length === 0}
-                        >
-                          Book Directly ({selectedSlots.length} slots)
-                        </Button>
+            {/* Time Slots */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              <Card className="border-0 shadow-lg rounded-3xl">
+                <CardHeader>
+                  <CardTitle className="text-2xl flex items-center gap-2">
+                    <Calendar className="w-6 h-6" />
+                    Available Slots
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {availability.map((day) => (
+                    <div key={day.date} className="space-y-4">
+                      <h4 className="font-semibold text-lg">Today</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {day.slots.map((slot) => (
+                          <button
+                            key={slot.time}
+                            onClick={() => slot.available && handleBookSlot(slot)}
+                            disabled={!slot.available || booking}
+                            className={`p-4 rounded-xl text-sm font-medium transition-all duration-200 ${
+                              slot.available
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:scale-105 shadow-sm'
+                                : 'bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200'
+                            }`}
+                          >
+                            <div>{slot.time}</div>
+                            <div className="text-xs mt-1">
+                              {slot.available ? `₹${slot.price}` : 'Booked'}
+                            </div>
+                          </button>
+                        ))}
                       </div>
                     </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-1">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="sticky top-24"
+            >
+              <Card className="border-0 shadow-xl rounded-3xl overflow-hidden">
+                <CardContent className="p-8 space-y-6">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-900 mb-2">
+                      {turf.priceDisplay}
+                    </div>
+                    <div className="text-gray-600">All inclusive pricing</div>
                   </div>
 
-                  {/* Availability Calendar */}
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle>Availability</CardTitle>
-                        <div className="flex items-center gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleDateChange('prev')}
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </Button>
-                          <span className="text-sm font-medium">
-                            {availability.length >= 7 ? `${formatDate(availability[0]?.date)} - ${formatDate(availability[6]?.date)}` : 'Loading dates...'}
-                          </span>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleDateChange('next')}
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="overflow-x-auto">
-                        <div className="grid grid-cols-8 gap-2 min-w-[800px]">
-                          {/* Header */}
-                          <div className="font-medium text-sm text-gray-600 py-2">Time</div>
-                          {availability.map((day) => (
-                            <div key={day.date} className="font-medium text-sm text-gray-600 py-2 text-center">
-                              {formatDate(day.date)}
-                            </div>
-                          ))}
+                  <div className="space-y-3">
+                    <Button 
+                      className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-full py-6 text-lg font-semibold shadow-lg hover:shadow-emerald-200 transition-all duration-200"
+                      onClick={() => {
+                        // Handle quick booking
+                      }}
+                    >
+                      <Calendar className="w-5 h-5 mr-2" />
+                      Book Now
+                    </Button>
 
-                          {/* Time slots */}
-                          {timeSlots.map((time) => (
-                            <React.Fragment key={time}>
-                              <div className="text-sm py-1 px-2 border-r">{time}</div>
-                              {availability.map((day) => {
-                                const slot = day.slots.find(s => s.time === time);
-                                const slotKey = `${day.date}-${time}`;
-                                const isSelected = selectedSlots.includes(slotKey);
-                                
-                                return (
-                                  <button
-                                    key={`${day.date}-${time}`}
-                                    onClick={() => slot?.available && handleSlotToggle(day.date, time)}
-                                    disabled={!slot?.available}
-                                    className={`
-                                      text-xs p-1 rounded transition-colors
-                                      ${!slot?.available 
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                        : isSelected
-                                          ? 'bg-primary-600 text-white'
-                                          : 'bg-green-100 text-green-800 hover:bg-green-200'
-                                      }
-                                    `}
-                                  >
-                                    {slot?.available ? (
-                                      isSelected ? '✓' : '₹' + slot.price
-                                    ) : (
-                                      slot?.bookedBy ? 'Booked' : 'N/A'
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      </div>
+                    {turf.contacts?.phone && (
+                      <Button 
+                        variant="outline"
+                        className="w-full rounded-full py-6 text-lg font-medium border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50"
+                        onClick={() => window.open(`tel:${turf.contacts?.phone}`, '_blank')}
+                      >
+                        <Phone className="w-5 h-5 mr-2" />
+                        Call Owner
+                      </Button>
+                    )}
 
-                      {selectedSlots.length > 0 && (
-                        <div className="mt-4 p-4 bg-primary-50 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="font-medium">Selected {selectedSlots.length} slots</div>
-                              <div className="text-sm text-gray-600">
-                                Total: ₹{getTotalCost()}
-                              </div>
-                            </div>
-                            <Button
-                              onClick={() => setSelectedSlots([])}
-                              variant="outline"
-                              size="sm"
-                            >
-                              Clear
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                    {onCreateGame && isAuthenticated && (
+                      <Button 
+                        variant="outline"
+                        className="w-full rounded-full py-6 text-lg font-medium border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50"
+                        onClick={onCreateGame}
+                      >
+                        <PlayCircle className="w-5 h-5 mr-2" />
+                        Create Game
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="pt-6 border-t border-gray-200 space-y-3 text-center text-sm text-gray-600">
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span>Instant booking confirmation</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span>Cancel up to 2 hours before</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
+      {/* Image Gallery Modal */}
+      <AnimatePresence>
+        {showImageGallery && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+            onClick={() => setShowImageGallery(false)}
+          >
+            <div className="relative max-w-4xl w-full">
+              <button
+                onClick={() => setShowImageGallery(false)}
+                className="absolute -top-12 right-0 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              
+              <motion.img
+                key={currentImageIndex}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                src={validImages[currentImageIndex]}
+                alt={`${turf.name} - Image ${currentImageIndex + 1}`}
+                className="w-full h-auto rounded-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+
+              {hasMultipleImages && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                    {validImages.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentImageIndex(index);
+                        }}
+                        className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                          index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </>
               )}
             </div>
-          )}
-
-        {/* Booking Confirmation Modal */}
-        {bookingStep === 'confirm' && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <Card className="w-96">
-              <CardHeader>
-                <CardTitle>Confirm Booking</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="font-medium">{selectedSlots.length} time slots</div>
-                  <div className="text-sm text-gray-600">at {turf?.name}</div>
-                </div>
-                
-                <div className="border-t pt-4">
-                  <div className="flex justify-between font-medium">
-                    <span>Total Amount:</span>
-                    <span>₹{getTotalCost()}</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setBookingStep('select')}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={handleBooking}
-                    disabled={bookingLoading}
-                    className="flex-1"
-                  >
-                    {bookingLoading ? 'Booking...' : 'Confirm Booking'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
