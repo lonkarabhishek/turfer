@@ -17,39 +17,57 @@ export function useAuth() {
 
   // Check if user is authenticated on mount and listen for auth changes
   useEffect(() => {
-    // Get initial session
+    // Get initial session with timeout
     const getInitialSession = async () => {
+      const timeoutId = setTimeout(() => {
+        console.warn('Auth initialization timed out, continuing with no user');
+        setLoading(false);
+      }, 5000); // 5 second timeout
+
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.warn('Session error:', sessionError);
+          clearTimeout(timeoutId);
+          setLoading(false);
+          return;
+        }
         
         if (session?.user) {
           try {
-            // Get user profile from your users table
-            const { data: profile, error } = await supabase
+            // Get user profile from your users table with timeout
+            const profilePromise = supabase
               .from('users')
               .select('*')
               .eq('id', session.user.id)
               .single();
+
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile fetch timeout')), 3000)
+            );
+
+            const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
             
-            if (error) {
-              console.warn('Profile fetch error:', error);
-              // Use basic user data if profile fetch fails
+            if (error || !profile) {
+              console.warn('Profile fetch failed, using basic user data:', error);
               setUser(session.user as AppUser);
-            } else if (profile) {
+            } else {
               setUser({
                 ...session.user,
                 ...profile
               });
-            } else {
-              setUser(session.user as AppUser);
             }
           } catch (profileError) {
             console.warn('Profile fetch failed:', profileError);
             setUser(session.user as AppUser);
           }
         }
+        
+        clearTimeout(timeoutId);
       } catch (error) {
         console.error('Session fetch error:', error);
+        clearTimeout(timeoutId);
       } finally {
         setLoading(false);
       }

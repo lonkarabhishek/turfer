@@ -118,3 +118,236 @@ export const userHelpers = {
     }
   }
 };
+
+// Game helpers
+export const gameHelpers = {
+  // Create a new game
+  async createGame(gameData: {
+    turfId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    sport: string;
+    format: string;
+    skillLevel: 'beginner' | 'intermediate' | 'advanced' | 'all';
+    maxPlayers: number;
+    costPerPerson: number;
+    description?: string;
+    notes?: string;
+    isPrivate?: boolean;
+  }) {
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Create the game
+      const { data, error } = await supabase
+        .from('games')
+        .insert([
+          {
+            creatorId: user.id,
+            turfId: gameData.turfId,
+            title: `${gameData.format} at ${gameData.date}`,
+            description: gameData.description || `${gameData.format} game`,
+            sport: gameData.sport,
+            skillLevel: gameData.skillLevel,
+            maxPlayers: gameData.maxPlayers,
+            currentPlayers: 1,
+            date: gameData.date,
+            startTime: gameData.startTime,
+            endTime: gameData.endTime,
+            pricePerPlayer: gameData.costPerPerson,
+            gameType: 'casual',
+            status: 'open',
+            isActive: true
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      // Add creator as first participant
+      await supabase
+        .from('game_participants')
+        .insert([
+          {
+            gameId: data.id,
+            userId: user.id
+          }
+        ]);
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get games for a user
+  async getUserGames(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('games')
+        .select(`
+          *,
+          turfs:turfId (
+            id,
+            name,
+            address
+          ),
+          users:creatorId (
+            id,
+            name,
+            phone
+          )
+        `)
+        .eq('creatorId', userId)
+        .order('date', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get available games
+  async getAvailableGames(params: {
+    sport?: string;
+    skillLevel?: string;
+    date?: string;
+    limit?: number;
+  } = {}) {
+    try {
+      let query = supabase
+        .from('games')
+        .select(`
+          *,
+          turfs:turfId (
+            id,
+            name,
+            address,
+            pricePerHour
+          ),
+          users:creatorId (
+            id,
+            name,
+            phone
+          )
+        `)
+        .eq('status', 'open')
+        .eq('isActive', true);
+
+      if (params.sport) {
+        query = query.eq('sport', params.sport);
+      }
+
+      if (params.skillLevel && params.skillLevel !== 'all') {
+        query = query.eq('skillLevel', params.skillLevel);
+      }
+
+      if (params.date) {
+        query = query.eq('date', params.date);
+      }
+
+      if (params.limit) {
+        query = query.limit(params.limit);
+      }
+
+      query = query.order('date', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  }
+};
+
+// Turf helpers
+export const turfHelpers = {
+  // Search turfs
+  async searchTurfs(params: {
+    query?: string;
+    sport?: string;
+    priceMin?: number;
+    priceMax?: number;
+    rating?: number;
+    limit?: number;
+  } = {}) {
+    try {
+      let query = supabase
+        .from('turfs')
+        .select('*')
+        .eq('isActive', true);
+
+      if (params.query) {
+        query = query.or(`name.ilike.%${params.query}%,address.ilike.%${params.query}%`);
+      }
+
+      if (params.sport) {
+        query = query.contains('sports', [params.sport]);
+      }
+
+      if (params.priceMin) {
+        query = query.gte('pricePerHour', params.priceMin);
+      }
+
+      if (params.priceMax) {
+        query = query.lte('pricePerHour', params.priceMax);
+      }
+
+      if (params.rating) {
+        query = query.gte('rating', params.rating);
+      }
+
+      if (params.limit) {
+        query = query.limit(params.limit);
+      }
+
+      query = query.order('rating', { ascending: false });
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get turf by ID
+  async getTurfById(id: string) {
+    try {
+      const { data, error } = await supabase
+        .from('turfs')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  }
+};

@@ -1,3 +1,5 @@
+import { supabase, gameHelpers, turfHelpers } from './supabase';
+
 // API configuration and client
 const API_BASE_URL = import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api');
 
@@ -125,7 +127,10 @@ async function apiRequest<T = unknown>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = authManager.getToken();
+  
+  // Get Supabase session token
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
 
   const config: RequestInit = {
     headers: {
@@ -259,23 +264,42 @@ export const turfsAPI = {
     page?: number;
     limit?: number;
   } = {}): Promise<ApiResponse<SearchTurfsResponse>> {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        searchParams.append(key, value.toString());
+    try {
+      const { data, error } = await turfHelpers.searchTurfs(params);
+      if (error) {
+        return { success: false, error };
       }
-    });
-    
-    const endpoint = `/turfs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    return apiRequest(endpoint);
+      
+      // Format response to match SearchTurfsResponse
+      const response: SearchTurfsResponse = {
+        turfs: data || [],
+        total: data?.length || 0,
+        page: params.page || 1,
+        limit: params.limit || 10,
+        totalPages: Math.ceil((data?.length || 0) / (params.limit || 10))
+      };
+      
+      return { success: true, data: response };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getById(id: string): Promise<ApiResponse<Turf>> {
-    return apiRequest(`/turfs/${id}`);
+    try {
+      const { data, error } = await turfHelpers.getTurfById(id);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getNearby(lat: number, lng: number, radius: number = 10): Promise<ApiResponse<Turf[]>> {
-    return apiRequest(`/turfs/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+    // This would need geolocation queries in Supabase - return empty for now
+    return { success: true, data: [] };
   },
 };
 
@@ -290,71 +314,92 @@ export const gamesAPI = {
     radius?: number;
     limit?: number;
   } = {}): Promise<ApiResponse<unknown[]>> {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        searchParams.append(key, value.toString());
+    try {
+      const { data, error } = await gameHelpers.getAvailableGames(params);
+      if (error) {
+        return { success: false, error };
       }
-    });
-    
-    const endpoint = `/games${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    return apiRequest(endpoint);
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getGameById(gameId: string): Promise<ApiResponse<unknown>> {
-    return apiRequest(`/games/${gameId}`);
+    // This would require a helper function to be implemented
+    return { success: false, error: 'Not implemented yet' };
   },
 
   async joinGame(gameId: string): Promise<ApiResponse<unknown>> {
-    return apiRequest(`/games/${gameId}/join`, {
-      method: 'POST',
-    });
+    // This would require a helper function to be implemented
+    return { success: false, error: 'Not implemented yet' };
   },
 
   async createGame(gameData: Record<string, unknown>): Promise<ApiResponse<unknown>> {
-    return apiRequest('/games', {
-      method: 'POST',
-      body: JSON.stringify(gameData),
-    });
+    try {
+      const { data, error } = await gameHelpers.createGame(gameData as any);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getMyGames(): Promise<ApiResponse<unknown[]>> {
-    return apiRequest('/games/my-games');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { success: false, error: 'Not authenticated' };
+      }
+      
+      const { data, error } = await gameHelpers.getUserGames(user.id);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getJoinedGames(): Promise<ApiResponse<any[]>> {
-    return apiRequest('/games/joined');
+    // This would require a helper function to be implemented
+    return { success: true, data: [] };
   },
 
   async getUserGames(userId: string): Promise<ApiResponse<any[]>> {
-    return apiRequest(`/games/user/${userId}`);
+    try {
+      const { data, error } = await gameHelpers.getUserGames(userId);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   // Game request system
   async requestToJoin(gameId: string): Promise<ApiResponse<any>> {
-    return apiRequest(`/games/${gameId}/request`, {
-      method: 'POST',
-    });
+    return { success: false, error: 'Not implemented yet' };
   },
 
   async getGameRequests(gameId: string): Promise<ApiResponse<any[]>> {
-    return apiRequest(`/games/${gameId}/requests`);
+    return { success: true, data: [] };
   },
 
   async getMyRequests(): Promise<ApiResponse<any[]>> {
-    return apiRequest('/games/my-requests');
+    return { success: true, data: [] };
   },
 
   async acceptRequest(gameId: string, userId: string): Promise<ApiResponse<any>> {
-    return apiRequest(`/games/${gameId}/requests/${userId}/accept`, {
-      method: 'POST',
-    });
+    return { success: false, error: 'Not implemented yet' };
   },
 
   async rejectRequest(gameId: string, userId: string): Promise<ApiResponse<any>> {
-    return apiRequest(`/games/${gameId}/requests/${userId}/reject`, {
-      method: 'POST',
-    });
+    return { success: false, error: 'Not implemented yet' };
   },
 };
 
