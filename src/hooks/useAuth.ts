@@ -24,19 +24,30 @@ export function useAuth() {
       setUser(null);
     }, 3000); // 3 second emergency timeout
 
-    // Get initial session
+    // Get initial session with fast execution
     const getInitialSession = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // Add a quick timeout for the session fetch itself
+        const sessionPromise = supabase.auth.getSession();
+        const quickTimeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session fetch timeout')), 2000)
+        );
+
+        const { data: { session }, error: sessionError } = await Promise.race([
+          sessionPromise, 
+          quickTimeout
+        ]) as any;
         
         if (sessionError) {
           console.warn('Session error:', sessionError);
+          setUser(null);
+          clearTimeout(emergencyTimeout);
           setLoading(false);
           return;
         }
         
         if (session?.user) {
-          // Use Supabase Auth user directly, with optional profile enhancement
+          // Use Supabase Auth user directly - no database calls
           const baseUser: AppUser = {
             ...session.user,
             name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
@@ -46,33 +57,32 @@ export function useAuth() {
             isVerified: session.user.email_confirmed_at ? true : false
           };
           
-          // Try to get enhanced profile from users table (optional)
-          try {
-            const { data: profile } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            
-            if (profile) {
-              setUser({
-                ...baseUser,
-                ...profile
-              });
-            } else {
-              setUser(baseUser);
+          setUser(baseUser);
+          
+          // Optional: Try to enhance profile in background (non-blocking)
+          setTimeout(async () => {
+            try {
+              const { data: profile } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+              
+              if (profile) {
+                setUser(prevUser => prevUser ? { ...prevUser, ...profile } : prevUser);
+              }
+            } catch (profileError) {
+              // Silently fail - user already has base auth data
+              console.log('Background profile enhancement failed (expected)');
             }
-          } catch (profileError) {
-            // Users table doesn't exist or RLS blocking access, use base user
-            console.log('Using Supabase Auth user only (users table not accessible)');
-            setUser(baseUser);
-          }
+          }, 100);
         } else {
           // No session/user found, set user to null
           setUser(null);
         }
       } catch (error) {
         console.error('Session fetch error:', error);
+        setUser(null);
       } finally {
         clearTimeout(emergencyTimeout);
         setLoading(false);
@@ -81,10 +91,10 @@ export function useAuth() {
 
     getInitialSession();
     
-    // Listen for auth state changes
+    // Listen for auth state changes (fast, no blocking calls)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        // Use Supabase Auth user directly, with optional profile enhancement
+        // Use Supabase Auth user directly - immediate response
         const baseUser: AppUser = {
           ...session.user,
           name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
@@ -94,26 +104,25 @@ export function useAuth() {
           isVerified: session.user.email_confirmed_at ? true : false
         };
         
-        // Try to get enhanced profile from users table (optional)
-        try {
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (profile) {
-            setUser({
-              ...baseUser,
-              ...profile
-            });
-          } else {
-            setUser(baseUser);
+        setUser(baseUser);
+        
+        // Optional: Try to enhance profile in background (non-blocking)
+        setTimeout(async () => {
+          try {
+            const { data: profile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (profile) {
+              setUser(prevUser => prevUser ? { ...prevUser, ...profile } : prevUser);
+            }
+          } catch (profileError) {
+            // Silently fail - user already has base auth data
+            console.log('Background profile enhancement failed (expected)');
           }
-        } catch (profileError) {
-          // Users table doesn't exist or RLS blocking access, use base user
-          setUser(baseUser);
-        }
+        }, 100);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
       }
