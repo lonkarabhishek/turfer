@@ -1,51 +1,105 @@
 import { useState, useEffect } from 'react';
-import { authManager, authAPI, type User } from '../lib/api';
+import { supabase } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
-export type { User };
+// Extended user type with your app-specific fields
+export interface AppUser extends User {
+  name?: string;
+  phone?: string;
+  role?: 'user' | 'owner' | 'admin';
+  profile_image_url?: string;
+  isVerified?: boolean;
+}
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(authManager.getUser());
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Check if user is authenticated on mount and refresh token if needed
+  // Check if user is authenticated on mount and listen for auth changes
   useEffect(() => {
-    const initAuth = async () => {
-      if (authManager.isAuthenticated()) {
-        setLoading(true);
-        try {
-          // Verify token is still valid by getting profile
-          const response = await authAPI.getProfile();
-          if (response.success && response.data) {
-            setUser(response.data);
-          } else {
-            // Token is invalid, clear auth
-            authManager.clearAuth();
-            setUser(null);
-          }
-        } catch {
-          // Token is invalid, clear auth
-          authManager.clearAuth();
-          setUser(null);
-        } finally {
-          setLoading(false);
+    // Get initial session
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Get user profile from your users table
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setUser({
+            ...session.user,
+            ...profile
+          });
+        } else {
+          setUser(session.user as AppUser);
         }
       }
+      setLoading(false);
     };
 
-    initAuth();
+    getInitialSession();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // Get user profile from your users table
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setUser({
+            ...session.user,
+            ...profile
+          });
+        } else {
+          setUser(session.user as AppUser);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    // Cleanup subscription
+    return () => subscription.unsubscribe();
   }, []);
 
-  const refreshAuth = () => {
-    setUser(authManager.getUser());
+  const refreshAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session?.user) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profile) {
+        setUser({
+          ...session.user,
+          ...profile
+        });
+      } else {
+        setUser(session.user as AppUser);
+      }
+    } else {
+      setUser(null);
+    }
   };
 
-  const logout = () => {
-    authManager.clearAuth();
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
   };
 
-  const isAuthenticated = () => authManager.isAuthenticated();
-  const isOwner = () => authManager.isOwner();
+  const isAuthenticated = () => !!user;
+  const isOwner = () => user?.role === 'owner';
 
   return {
     user,

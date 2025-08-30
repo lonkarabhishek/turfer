@@ -11,7 +11,7 @@ import { MobileNav } from "./components/MobileNav";
 import { TurfSearch } from "./components/TurfSearch";
 import { GameCard, type GameData } from "./components/GameCard";
 import { CreateGameFlow } from "./components/CreateGameFlow";
-import { SimpleAuth } from "./components/SimpleAuth";
+import { SupabaseAuth } from "./components/SupabaseAuth";
 import { UserProfile } from "./components/UserProfile";
 import { TurfDetailPage } from "./components/TurfDetailPage";
 import { LegalPages } from "./components/LegalPages";
@@ -533,7 +533,7 @@ export default function App() {
         }}
       />
 
-      <SimpleAuth
+      <SupabaseAuth
         open={showLogin}
         onClose={() => setShowLogin(false)}
         onSuccess={refreshAuth}
