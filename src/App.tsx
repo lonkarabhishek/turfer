@@ -315,7 +315,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
           <GamesYouCanJoin 
             games={games} 
             user={user} 
-            onGameClick={handleGameClick} 
+            onGameClick={onGameClick} 
           />
         )}
       </div>
