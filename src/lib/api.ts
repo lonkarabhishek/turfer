@@ -20,6 +20,7 @@ export interface User {
   phone?: string;
   role: 'user' | 'owner' | 'admin';
   isVerified: boolean;
+  profile_image_url?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -51,7 +51,7 @@ export function CitySelector({ currentCity, onCityChange }: CitySelectorProps) {
       <Modal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        title="Select City"
+        title="Choose your city"
         size="md"
       >
         <div className="space-y-6">
@@ -63,17 +63,17 @@ export function CitySelector({ currentCity, onCityChange }: CitySelectorProps) {
                 <button
                   key={city.id}
                   onClick={() => handleCitySelect(city.id, city.name)}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
                     currentCityInfo?.id === city.id
-                      ? 'bg-primary-50 border border-primary-200'
-                      : 'hover:bg-gray-50 border border-transparent'
+                      ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 border border-emerald-200 shadow-sm'
+                      : 'hover:bg-gray-50 border border-transparent hover:shadow-sm hover:scale-[1.01]'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-gray-400" />
+                    <MapPin className={`w-4 h-4 ${currentCityInfo?.id === city.id ? 'text-emerald-600' : 'text-gray-400'}`} />
                     <div>
-                      <div className="font-medium text-gray-900">{city.name}</div>
-                      <div className="text-sm text-gray-500">{city.state}</div>
+                      <div className={`font-medium ${currentCityInfo?.id === city.id ? 'text-emerald-900' : 'text-gray-900'}`}>{city.name}</div>
+                      <div className={`text-sm ${currentCityInfo?.id === city.id ? 'text-emerald-600' : 'text-gray-500'}`}>{city.state}</div>
                     </div>
                   </div>
                 </button>
@@ -88,7 +88,7 @@ export function CitySelector({ currentCity, onCityChange }: CitySelectorProps) {
               {COMING_SOON_CITIES.map((city, index) => (
                 <div
                   key={index}
-                  className="w-full text-left px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed"
+                  className="w-full text-left px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed"
                 >
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-gray-400" />

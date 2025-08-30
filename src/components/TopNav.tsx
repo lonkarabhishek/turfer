@@ -1,4 +1,5 @@
 import { ChevronDown, User, LogOut, Building2, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { CitySelector } from './CitySelector';
@@ -6,7 +7,8 @@ import { motion } from 'framer-motion';
 import { authManager, type User as UserType } from '../lib/api';
 import { performSignOut } from '../lib/signOut';
 import { SignOutModal } from './SignOutModal';
-import { useState } from 'react';
+import { NotificationSystem } from './NotificationSystem';
+import { userHelpers } from '../lib/supabase';
 
 interface TopNavProps {
   currentCity?: string;
@@ -29,6 +31,20 @@ export function TopNav({
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (user) {
+      // Load user profile photo
+      userHelpers.getProfile(user.id).then(result => {
+        if (result.data?.profile_image_url) {
+          setProfilePhotoUrl(result.data.profile_image_url);
+        }
+      });
+    } else {
+      setProfilePhotoUrl('');
+    }
+  }, [user]);
 
   const handleLogoutClick = () => {
     setShowUserMenu(false);
@@ -82,6 +98,16 @@ export function TopNav({
             </Button>
           )}
 
+          {/* Notifications */}
+          {user && (
+            <NotificationSystem 
+              onNotificationClick={(notification) => {
+                console.log('Notification clicked:', notification);
+                // Handle notification clicks - could navigate to relevant page
+              }}
+            />
+          )}
+
           {/* User Menu or Login Button */}
           {user ? (
             <div className="relative">
@@ -90,7 +116,14 @@ export function TopNav({
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-2"
               >
-                {user.role === 'owner' ? (
+                {profilePhotoUrl ? (
+                  <img
+                    src={profilePhotoUrl}
+                    alt="Profile"
+                    className="w-6 h-6 rounded-full object-cover"
+                    onError={() => setProfilePhotoUrl('')}
+                  />
+                ) : user.role === 'owner' ? (
                   <Building2 className="w-4 h-4" />
                 ) : (
                   <User className="w-4 h-4" />
@@ -107,8 +140,26 @@ export function TopNav({
                   />
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-xl border z-20 py-2">
                     <div className="px-4 py-3 border-b">
-                      <p className="font-medium text-gray-900">{user.name}</p>
-                      <p className="text-sm text-gray-500">{user.email}</p>
+                      <div className="flex items-center gap-3 mb-2">
+                        {profilePhotoUrl ? (
+                          <img
+                            src={profilePhotoUrl}
+                            alt="Profile"
+                            className="w-10 h-10 rounded-full object-cover"
+                            onError={() => setProfilePhotoUrl('')}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <span className="text-emerald-600 font-semibold">
+                              {user.name?.charAt(0).toUpperCase() || 'U'}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium text-gray-900">{user.name}</p>
+                          <p className="text-sm text-gray-500">{user.email}</p>
+                        </div>
+                      </div>
                       <div className="mt-1 flex items-center gap-2">
                         {user.role === 'owner' ? (
                           <Badge className="bg-blue-100 text-blue-700 text-xs">

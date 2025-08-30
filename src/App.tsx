@@ -16,7 +16,7 @@ import { UserProfile } from "./components/UserProfile";
 import { TurfDetailPage } from "./components/TurfDetailPage";
 import { LegalPages } from "./components/LegalPages";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { UserDashboard } from "./components/UserDashboard";
+import { UserDashboardEnhanced } from "./components/UserDashboardEnhanced";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { GameDetailPage } from "./components/GameDetailPage";
 import { ToastContainer } from "./components/ui/toast";
@@ -284,7 +284,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -405,7 +405,7 @@ export default function App() {
         user.role === 'owner' ? (
           <OwnerDashboard onNavigate={handleNavigate} />
         ) : (
-          <UserDashboard onNavigate={handleNavigate} />
+          <UserDashboardEnhanced onNavigate={handleNavigate} onCreateGame={() => setCurrentPage('create-game')} />
         )
       ) : currentPage === 'profile' && user ? (
         <UserProfile
