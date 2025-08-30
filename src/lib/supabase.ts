@@ -148,21 +148,21 @@ export const gameHelpers = {
         .from('games')
         .insert([
           {
-            creatorId: user.id,
-            turfId: gameData.turfId,
+            creator_id: user.id,
+            turf_id: gameData.turfId,
             title: `${gameData.format} at ${gameData.date}`,
             description: gameData.description || `${gameData.format} game`,
             sport: gameData.sport,
-            skillLevel: gameData.skillLevel,
-            maxPlayers: gameData.maxPlayers,
-            currentPlayers: 1,
+            skill_level: gameData.skillLevel,
+            max_players: gameData.maxPlayers,
+            current_players: 1,
             date: gameData.date,
-            startTime: gameData.startTime,
-            endTime: gameData.endTime,
-            pricePerPlayer: gameData.costPerPerson,
-            gameType: 'casual',
+            start_time: gameData.startTime,
+            end_time: gameData.endTime,
+            price_per_player: gameData.costPerPerson,
+            game_type: 'casual',
             status: 'open',
-            isActive: true
+            is_active: true
           }
         ])
         .select()
@@ -177,8 +177,8 @@ export const gameHelpers = {
         .from('game_participants')
         .insert([
           {
-            gameId: data.id,
-            userId: user.id
+            game_id: data.id,
+            user_id: user.id
           }
         ]);
 
@@ -195,18 +195,18 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs:turfId (
+          turfs:turf_id (
             id,
             name,
             address
           ),
-          users:creatorId (
+          users:creator_id (
             id,
             name,
             phone
           )
         `)
-        .eq('creatorId', userId)
+        .eq('creator_id', userId)
         .order('date', { ascending: true });
 
       if (error) {
@@ -231,27 +231,27 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs:turfId (
+          turfs:turf_id (
             id,
             name,
             address,
-            pricePerHour
+            price_per_hour
           ),
-          users:creatorId (
+          users:creator_id (
             id,
             name,
             phone
           )
         `)
         .eq('status', 'open')
-        .eq('isActive', true);
+        .eq('is_active', true);
 
       if (params.sport) {
         query = query.eq('sport', params.sport);
       }
 
       if (params.skillLevel && params.skillLevel !== 'all') {
-        query = query.eq('skillLevel', params.skillLevel);
+        query = query.eq('skill_level', params.skillLevel);
       }
 
       if (params.date) {
@@ -292,7 +292,7 @@ export const turfHelpers = {
       let query = supabase
         .from('turfs')
         .select('*')
-        .eq('isActive', true);
+        .eq('is_active', true);
 
       if (params.query) {
         query = query.or(`name.ilike.%${params.query}%,address.ilike.%${params.query}%`);
@@ -303,11 +303,11 @@ export const turfHelpers = {
       }
 
       if (params.priceMin) {
-        query = query.gte('pricePerHour', params.priceMin);
+        query = query.gte('price_per_hour', params.priceMin);
       }
 
       if (params.priceMax) {
-        query = query.lte('pricePerHour', params.priceMax);
+        query = query.lte('price_per_hour', params.priceMax);
       }
 
       if (params.rating) {

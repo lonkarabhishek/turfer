@@ -283,14 +283,14 @@ export function NotificationSystem({
           {isOpen && (
             <>
               <div
-                className="fixed inset-0 z-40"
+                className="fixed inset-0 z-[90]"
                 onClick={() => setIsOpen(false)}
               />
               <motion.div
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                className="absolute right-0 top-full mt-2 w-96 bg-white rounded-lg shadow-xl border z-50 max-h-96 overflow-hidden"
+                className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm sm:max-w-none bg-white rounded-lg shadow-xl border z-[100] max-h-96 overflow-hidden"
               >
                 <div className="p-4 border-b border-gray-100">
                   <div className="flex items-center justify-between">
