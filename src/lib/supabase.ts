@@ -262,7 +262,10 @@ export const gameHelpers = {
             start_time: gameData.startTime,
             end_time: gameData.endTime,
             price_per_player: gameData.costPerPerson,
-            status: 'open'
+            status: 'open',
+            host_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+            host_phone: user.user_metadata?.phone || user.phone || '9999999999',
+            host_profile_image_url: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || ''
           }
         ])
         .select()
@@ -330,6 +333,9 @@ export const gameHelpers = {
               end_time: gameData.endTime,
               price_per_player: gameData.costPerPerson,
               status: 'open',
+              host_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+              host_phone: user.user_metadata?.phone || user.phone || '9999999999',
+              host_profile_image_url: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || '',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
               // Add nested relations for compatibility
@@ -395,7 +401,15 @@ export const gameHelpers = {
     try {
       const { data, error } = await supabase
         .from('games')
-        .select('*')
+        .select(`
+          *,
+          turfs!turf_id (
+            id,
+            name,
+            address,
+            price_per_hour
+          )
+        `)
         .eq('creator_id', userId)
         .order('date', { ascending: true });
 
@@ -419,7 +433,15 @@ export const gameHelpers = {
     try {
       let query = supabase
         .from('games')
-        .select('*')
+        .select(`
+          *,
+          turfs!turf_id (
+            id,
+            name,
+            address,
+            price_per_hour
+          )
+        `)
         .eq('status', 'open');
 
       if (params.sport) {
@@ -556,7 +578,15 @@ export const gameHelpers = {
       // First try to get from database
       const { data: dbGame, error: dbError } = await supabase
         .from('games')
-        .select('*')
+        .select(`
+          *,
+          turfs!turf_id (
+            id,
+            name,
+            address,
+            price_per_hour
+          )
+        `)
         .eq('id', gameId)
         .single();
 
