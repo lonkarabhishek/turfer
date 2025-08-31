@@ -228,24 +228,36 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
       const response = await gamesAPI.getAvailable({ limit: 20 });
       if (response.success && response.data) {
         // Transform API games to match GameData interface
-        const transformedGames = response.data.map((game: any) => ({
-          id: game.id,
-          hostName: game.host_name || "Unknown Host",
-          hostAvatar: game.host_profile_image_url || game.host_avatar || "",
-          turfName: game.turf_name || "Unknown Turf",
-          turfAddress: game.turf_address || "Unknown Address",
-          date: formatDate(game.date),
-          timeSlot: `${game.startTime}-${game.endTime}`,
-          format: game.format,
-          skillLevel: capitalizeSkillLevel(game.skillLevel),
-          currentPlayers: game.currentPlayers,
-          maxPlayers: game.maxPlayers,
-          costPerPerson: game.costPerPerson,
-          notes: game.notes,
-          hostPhone: game.host_phone || "9999999999",
-          distanceKm: undefined, // Will be calculated if location is available
-          isUrgent: false // Can be calculated based on date/time
-        }));
+        const transformedGames = response.data.map((game: any) => {
+          // Handle both database structure (game.users.name) and flat structure (game.host_name)
+          const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
+          const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
+          const turfName = game.turfs?.name || game.turf_name || game.turfName || "Unknown Turf";
+          const turfAddress = game.turfs?.address || game.turf_address || game.turfAddress || "Unknown Address";
+          
+          // Handle time slots - could be start_time/end_time or startTime/endTime
+          const startTime = game.start_time || game.startTime || "00:00";
+          const endTime = game.end_time || game.endTime || "00:00";
+          
+          return {
+            id: game.id,
+            hostName: hostName,
+            hostAvatar: game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
+            turfName: turfName,
+            turfAddress: turfAddress,
+            date: formatDate(game.date),
+            timeSlot: `${startTime}-${endTime}`,
+            format: game.format || "Game",
+            skillLevel: capitalizeSkillLevel(game.skill_level || game.skillLevel),
+            currentPlayers: game.current_players || game.currentPlayers || 1,
+            maxPlayers: game.max_players || game.maxPlayers || 2,
+            costPerPerson: game.cost_per_person || game.costPerPerson || 0,
+            notes: game.notes,
+            hostPhone: hostPhone,
+            distanceKm: undefined, // Will be calculated if location is available
+            isUrgent: false // Can be calculated based on date/time
+          };
+        });
         setGames(transformedGames);
       }
     } catch (error) {
@@ -556,6 +568,10 @@ export default function App() {
         onGameCreated={(game) => {
           console.log('Game created:', game);
           setShowCreateGame(false);
+          // Refresh the games list to show the newly created game
+          if (activeSection === 'games') {
+            loadGames();
+          }
         }}
       />
 

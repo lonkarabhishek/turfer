@@ -376,7 +376,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
       console.log('✅ setStep(4) called, should be step 4 now');
       
       // Call onGameCreated AFTER setting step 4, so modal doesn't close immediately
-      // onGameCreated?.(displayGameData);
+      onGameCreated?.(displayGameData);
 
     } catch (error: any) {
       console.error('Create game error:', error);
