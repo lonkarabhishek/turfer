@@ -145,30 +145,49 @@ export const gameHelpers = {
 
       // CRITICAL: Ensure user exists in users table to satisfy foreign key constraint
       try {
-        // Use UPSERT to ensure user exists (INSERT if doesn't exist, ignore if exists)
-        const { error: upsertError } = await supabase
+        // First, check if user already exists
+        const { data: existingUser, error: checkError } = await supabase
           .from('users')
-          .upsert([
-            {
-              id: user.id,
-              name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-              email: user.email,
-              password: '', // Required by schema, but not used for Supabase Auth users
-              phone: user.user_metadata?.phone || null,
-              role: 'user',
-              is_verified: user.email_confirmed_at ? true : false
-            }
-          ], { 
-            onConflict: 'id',
-            ignoreDuplicates: false 
-          });
+          .select('id')
+          .eq('id', user.id)
+          .single();
 
-        if (upsertError) {
-          console.error('Failed to ensure user exists in database:', upsertError);
-          throw new Error(`Cannot create user in database: ${upsertError.message}. Game creation will fail.`);
+        if (checkError && checkError.code !== 'PGRST116') {
+          // PGRST116 is "not found" error, which is expected for new users
+          console.error('Error checking if user exists:', checkError);
+          throw new Error(`Cannot verify user existence: ${checkError.message}`);
         }
-        
-        console.log('✅ User successfully ensured in database for game creation');
+
+        if (!existingUser) {
+          // User doesn't exist, try to create them
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert([
+              {
+                id: user.id,
+                name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+                email: user.email,
+                password: '', // Required by schema, but not used for Supabase Auth users
+                phone: user.user_metadata?.phone || null,
+                role: 'user',
+                is_verified: user.email_confirmed_at ? true : false
+              }
+            ]);
+
+          if (insertError) {
+            // If it's a unique constraint violation on email, that's okay - user might exist with different ID
+            if (insertError.code === '23505' && insertError.message.includes('users_email_key')) {
+              console.log('User already exists with this email, proceeding with game creation');
+            } else {
+              console.error('Failed to create user in database:', insertError);
+              throw new Error(`Cannot create user: ${insertError.message}`);
+            }
+          } else {
+            console.log('✅ New user successfully created in database');
+          }
+        } else {
+          console.log('✅ User already exists in database, proceeding');
+        }
       } catch (userError: any) {
         console.error('Critical error: Cannot ensure user exists in database:', userError);
         throw new Error(`Database setup error: ${userError.message}. Please contact support.`);
@@ -274,7 +293,9 @@ export const gameHelpers = {
             start_time: gameData.startTime,
             end_time: gameData.endTime,
             cost_per_person: gameData.costPerPerson,
-            status: 'open'
+            status: 'open',
+            is_private: gameData.isPrivate || false,
+            notes: gameData.notes || null
           }
         ])
         .select()
@@ -403,12 +424,32 @@ export const gameHelpers = {
       const { data, error } = await query;
 
       if (error) {
+        console.error('Error fetching available games:', error);
+        
+        // If it's a RLS/permission error, try a simpler query
+        if (error.message.includes('RLS') || error.message.includes('permission')) {
+          console.log('RLS error detected, trying simpler query...');
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('games')
+            .select('*')
+            .eq('status', 'open')
+            .or('is_private.is.null,is_private.eq.false')
+            .order('date', { ascending: true });
+          
+          if (simpleError) {
+            console.log('Simple query also failed, returning empty array');
+            return { data: [], error: null };
+          }
+          return { data: simpleData, error: null };
+        }
+        
         throw error;
       }
 
       return { data, error: null };
     } catch (error: any) {
-      return { data: null, error: error.message };
+      console.error('Failed to fetch available games:', error);
+      return { data: [], error: error.message };
     }
   }
 };

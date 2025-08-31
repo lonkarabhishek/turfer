@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
+import { buildWhatsAppShareLink, generateGameInviteMessage } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
 
 interface GameSuccessPageProps {
@@ -69,9 +69,7 @@ Hosted by ${game.hostName}
 
   const handleWhatsAppShare = () => {
     const message = generateMessage();
-    const whatsappUrl = buildWhatsAppLink({
-      text: message
-    });
+    const whatsappUrl = buildWhatsAppShareLink(message);
     window.open(whatsappUrl, '_blank');
     track('whatsapp_cta_clicked', { game_id: game.id });
   };
