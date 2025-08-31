@@ -67,11 +67,12 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
   const loadUserData = async () => {
     setLoading(true);
     try {
-      // Load user profile to get latest photo URL
-      const profileResult = await userHelpers.getProfile(user!.id);
-      if (profileResult.data) {
-        setProfilePhotoUrl(profileResult.data.profile_image_url || '');
-      }
+      // Use profile photo from Supabase Auth user instead of database query
+      const profilePhotoUrl = user!.profile_image_url || 
+                              user!.user_metadata?.profile_image_url || 
+                              user!.user_metadata?.avatar_url || 
+                              '';
+      setProfilePhotoUrl(profilePhotoUrl);
 
       // Load games and bookings (mock data for now)
       setUserGames([

@@ -37,16 +37,12 @@ export function TopNav({
   useEffect(() => {
     if (user) {
       // Use the profile photo from user if available, otherwise fetch it
-      if (user.profile_image_url) {
-        setProfilePhotoUrl(user.profile_image_url);
-      } else {
-        // Load user profile photo from database
-        userHelpers.getProfile(user.id).then(result => {
-          if (result.data?.profile_image_url) {
-            setProfilePhotoUrl(result.data.profile_image_url);
-          }
-        });
-      }
+      // Use profile photo from Supabase Auth user_metadata instead of database query
+      const profilePhotoUrl = user.profile_image_url || 
+                              user.user_metadata?.profile_image_url || 
+                              user.user_metadata?.avatar_url || 
+                              '';
+      setProfilePhotoUrl(profilePhotoUrl);
     } else {
       setProfilePhotoUrl('');
     }
