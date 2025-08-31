@@ -326,8 +326,15 @@ export const gamesAPI = {
   },
 
   async getGameById(gameId: string): Promise<ApiResponse<unknown>> {
-    // This would require a helper function to be implemented
-    return { success: false, error: 'Not implemented yet' };
+    try {
+      const { data, error } = await gameHelpers.getGameById(gameId);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async joinGame(gameId: string): Promise<ApiResponse<unknown>> {

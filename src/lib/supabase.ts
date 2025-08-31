@@ -283,6 +283,25 @@ export const gameHelpers = {
             // Create a frontend-only game that still provides full functionality
             console.log('Creating frontend game due to database user constraints...');
             
+            // Get turf information for the game
+            let turfInfo = null;
+            try {
+              const { data: turf } = await supabase
+                .from('turfs')
+                .select('id, name, address, price_per_hour')
+                .eq('id', gameData.turfId)
+                .single();
+              turfInfo = turf;
+            } catch (turfError) {
+              console.warn('Could not fetch turf details, using fallback');
+              turfInfo = {
+                id: gameData.turfId,
+                name: gameData.turfId === '1' ? 'Elite Sports Arena' : 'Victory Ground',
+                address: gameData.turfId === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
+                price_per_hour: gameData.turfId === '1' ? 800 : 600
+              };
+            }
+            
             const frontendGameData = {
               id: `game-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               host_id: user.id,
@@ -302,11 +321,11 @@ export const gameHelpers = {
               notes: gameData.notes || null,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
-              // Add host info from current user
-              host: {
+              // Add nested relations for compatibility
+              turfs: turfInfo,
+              users: {
                 id: user.id,
                 name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-                email: user.email,
                 phone: user.user_metadata?.phone || null
               }
             };
@@ -497,8 +516,31 @@ export const gameHelpers = {
     try {
       const frontendGames = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
       
+      // Ensure compatibility with database structure
+      const compatibleGames = frontendGames.map((game: any) => {
+        // If game doesn't have nested relations, add them for compatibility
+        if (!game.turfs && game.turf_id) {
+          game.turfs = {
+            id: game.turf_id,
+            name: game.turf_id === '1' ? 'Elite Sports Arena' : 'Victory Ground',
+            address: game.turf_id === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
+            price_per_hour: game.turf_id === '1' ? 800 : 600
+          };
+        }
+        
+        if (!game.users && game.host_id) {
+          game.users = {
+            id: game.host_id,
+            name: 'User',
+            phone: null
+          };
+        }
+        
+        return game;
+      });
+      
       // Filter based on params
-      let filteredGames = frontendGames.filter((game: any) => {
+      let filteredGames = compatibleGames.filter((game: any) => {
         if (game.status !== 'open') return false;
         if (params.sport && game.sport !== params.sport) return false;
         if (params.skillLevel && params.skillLevel !== 'all' && game.skill_level !== params.skillLevel) return false;
@@ -519,6 +561,84 @@ export const gameHelpers = {
     } catch (error) {
       console.error('Error loading frontend games:', error);
       return [];
+    }
+  },
+
+  // Get a specific game by ID
+  async getGameById(gameId: string) {
+    try {
+      // First try to get from database
+      const { data: dbGame, error: dbError } = await supabase
+        .from('games')
+        .select(`
+          *,
+          turfs:turf_id (
+            id,
+            name,
+            address,
+            price_per_hour
+          ),
+          users:host_id (
+            id,
+            name,
+            phone
+          )
+        `)
+        .eq('id', gameId)
+        .single();
+
+      if (!dbError && dbGame) {
+        console.log('Found game in database:', dbGame);
+        return { data: dbGame, error: null };
+      }
+
+      // If not found in database, check localStorage
+      console.log('Game not found in database, checking localStorage...');
+      const frontendGames = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
+      const frontendGame = frontendGames.find((game: any) => game.id === gameId);
+
+      if (frontendGame) {
+        // Ensure compatibility with database structure
+        if (!frontendGame.turfs && frontendGame.turf_id) {
+          frontendGame.turfs = {
+            id: frontendGame.turf_id,
+            name: frontendGame.turf_id === '1' ? 'Elite Sports Arena' : 'Victory Ground',
+            address: frontendGame.turf_id === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
+            price_per_hour: frontendGame.turf_id === '1' ? 800 : 600
+          };
+        }
+        
+        if (!frontendGame.users && frontendGame.host_id) {
+          frontendGame.users = {
+            id: frontendGame.host_id,
+            name: 'User',
+            phone: null
+          };
+        }
+        
+        console.log('Found game in localStorage:', frontendGame);
+        return { data: frontendGame, error: null };
+      }
+
+      // Game not found anywhere
+      return { data: null, error: 'Game not found' };
+
+    } catch (error: any) {
+      console.error('Error fetching game by ID:', error);
+      
+      // Fallback to localStorage only
+      try {
+        const frontendGames = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
+        const frontendGame = frontendGames.find((game: any) => game.id === gameId);
+        
+        if (frontendGame) {
+          return { data: frontendGame, error: null };
+        }
+        
+        return { data: null, error: 'Game not found' };
+      } catch (localError) {
+        return { data: null, error: error.message };
+      }
     }
   }
 };
