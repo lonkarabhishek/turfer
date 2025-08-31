@@ -123,9 +123,46 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
   const loadUserGames = async () => {
     setLoadingUserGames(true);
     try {
-      // Temporarily disabled to prevent crashes - TODO: fix API endpoint
-      console.log('loadUserGames: Temporarily returning empty array');
-      setUserGames([]);
+      if (!user?.id) {
+        setUserGames([]);
+        return;
+      }
+
+      // Get user's created games from Supabase
+      const response = await gamesAPI.getUserGames(user.id);
+      if (response.success && response.data) {
+        const transformedGames = response.data.map((gameData: any) => {
+          const hostName = gameData.users?.name || gameData.host_name || gameData.hostName || user.name || "Unknown Host";
+          const hostPhone = gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999";
+          const turfName = gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf";
+          const turfAddress = gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address";
+          
+          const startTime = gameData.start_time || gameData.startTime || "00:00";
+          const endTime = gameData.end_time || gameData.endTime || "00:00";
+          
+          return {
+            id: gameData.id,
+            hostName: hostName,
+            hostAvatar: gameData.host_profile_image_url || gameData.host_avatar || gameData.hostAvatar || "",
+            turfName: turfName,
+            turfAddress: turfAddress,
+            date: formatDate(gameData.date),
+            timeSlot: `${startTime}-${endTime}`,
+            format: gameData.sport || "Game",
+            skillLevel: capitalizeSkillLevel(gameData.skill_level || gameData.skillLevel),
+            currentPlayers: gameData.current_players || gameData.currentPlayers || 1,
+            maxPlayers: gameData.max_players || gameData.maxPlayers || 2,
+            costPerPerson: gameData.price_per_player || gameData.costPerPerson || 0,
+            notes: gameData.notes,
+            hostPhone: hostPhone,
+            distanceKm: undefined,
+            isUrgent: false
+          };
+        });
+        setUserGames(transformedGames);
+      } else {
+        setUserGames([]);
+      }
     } catch (error) {
       console.error('Error loading user games:', error);
       setUserGames([]);
@@ -565,11 +602,51 @@ export default function App() {
       <CreateGameFlow 
         open={showCreateGame} 
         onClose={() => setShowCreateGame(false)}
-        onGameCreated={(game) => {
+        onGameCreated={async (game) => {
           console.log('Game created:', game);
-          setShowCreateGame(false);
+          // Don't close immediately - let user see success page first
+          // setShowCreateGame(false);
           // Always refresh the games list to show the newly created game
-          loadGames();
+          try {
+            const response = await gamesAPI.getAvailable({ limit: 20 });
+            if (response.success && response.data) {
+              // Transform API games to match GameData interface
+              const transformedGames = response.data.map((gameData: any) => {
+                // Handle both database structure (game.users.name) and flat structure (game.host_name)
+                const hostName = gameData.users?.name || gameData.host_name || gameData.hostName || "Unknown Host";
+                const hostPhone = gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999";
+                const turfName = gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf";
+                const turfAddress = gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address";
+                
+                // Handle time slots - could be start_time/end_time or startTime/endTime
+                const startTime = gameData.start_time || gameData.startTime || "00:00";
+                const endTime = gameData.end_time || gameData.endTime || "00:00";
+                
+                return {
+                  id: gameData.id,
+                  hostName: hostName,
+                  hostAvatar: gameData.host_profile_image_url || gameData.host_avatar || gameData.hostAvatar || "",
+                  turfName: turfName,
+                  turfAddress: turfAddress,
+                  date: formatDate(gameData.date),
+                  timeSlot: `${startTime}-${endTime}`,
+                  format: gameData.format || "Game",
+                  skillLevel: capitalizeSkillLevel(gameData.skill_level || gameData.skillLevel),
+                  currentPlayers: gameData.current_players || gameData.currentPlayers || 1,
+                  maxPlayers: gameData.max_players || gameData.maxPlayers || 2,
+                  costPerPerson: gameData.cost_per_person || gameData.costPerPerson || 0,
+                  notes: gameData.notes,
+                  hostPhone: hostPhone,
+                  distanceKm: undefined,
+                  isUrgent: false
+                };
+              });
+              // Call loadGames to refresh the state properly
+              await loadGames();
+            }
+          } catch (error) {
+            console.error('Error refreshing games after creation:', error);
+          }
         }}
       />
 

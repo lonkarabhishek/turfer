@@ -177,8 +177,8 @@ export const gameHelpers = {
                 description: 'Premium sports facility with excellent amenities',
                 sports: ['Football', 'Cricket'],
                 amenities: ['Parking', 'Changing Rooms', 'Flood Lights'],
-                price_per_hour: 800,
-                price_per_hour_weekend: 1000,
+                pricePerHour: 800,
+                pricePerHourWeekend: 1000,
                 operating_hours: {
                   "monday": {"open": "06:00", "close": "22:00"},
                   "tuesday": {"open": "06:00", "close": "22:00"},
@@ -199,8 +199,8 @@ export const gameHelpers = {
                 description: 'Community sports ground with basic facilities',
                 sports: ['Football', 'Cricket'],
                 amenities: ['Parking', 'Rest Area'],
-                price_per_hour: 600,
-                price_per_hour_weekend: 800,
+                pricePerHour: 600,
+                pricePerHourWeekend: 800,
                 operating_hours: {
                   "monday": {"open": "06:00", "close": "21:00"},
                   "tuesday": {"open": "06:00", "close": "21:00"},
@@ -230,26 +230,39 @@ export const gameHelpers = {
 
       console.log('✅ Turf verified, proceeding with game creation...');
 
+      // First try to create the games table if it doesn't exist
+      console.log('🔧 Ensuring games table exists with correct schema...');
+      try {
+        // Create games table using raw SQL
+        const { error: createError } = await supabase.rpc('create_games_table_if_not_exists');
+        
+        if (createError) {
+          console.log('⚠️ Could not create table via RPC, trying direct approach...');
+          // If RPC fails, let's try a simple approach using the known schema from our file
+          // but with snake_case column names that match PostgreSQL conventions
+        }
+      } catch (err) {
+        console.log('Table creation approach failed, continuing with insert...');
+      }
+
       // Create the game
       const { data, error } = await supabase
         .from('games')
         .insert([
           {
-            host_id: user.id,
+            creator_id: user.id,
             turf_id: gameData.turfId,
-            description: gameData.description || `${gameData.format} game`,
+            title: gameData.title || `${gameData.sport} Game`,
+            description: gameData.description || `${gameData.sport} game`,
             sport: gameData.sport,
-            format: gameData.format,
             skill_level: gameData.skillLevel,
             max_players: gameData.maxPlayers,
             current_players: 1,
             date: gameData.date,
             start_time: gameData.startTime,
             end_time: gameData.endTime,
-            cost_per_person: gameData.costPerPerson,
-            status: 'open',
-            is_private: gameData.isPrivate || false,
-            notes: gameData.notes || null
+            price_per_player: gameData.costPerPerson,
+            status: 'open'
           }
         ])
         .select()
@@ -267,10 +280,10 @@ export const gameHelpers = {
         
         // Try to provide better error messages and potential solutions
         if (error.message.includes('violates foreign key constraint')) {
-          if (error.message.includes('host_id')) {
-            console.log('Foreign key constraint on host_id, attempting to create user...');
+          if (error.message.includes('creatorId')) {
+            console.log('Foreign key constraint on creatorId, attempting to create user...');
             
-            // Foreign key constraint on host_id - need to handle user creation differently
+            // Foreign key constraint on creatorId - need to handle user creation differently
             console.log('🔄 FK constraint detected. User does not exist in database.');
             console.log('Current user details:', {
               id: user.id,
@@ -288,7 +301,7 @@ export const gameHelpers = {
             try {
               const { data: turf } = await supabase
                 .from('turfs')
-                .select('id, name, address, price_per_hour')
+                .select('id, name, address, pricePerHour')
                 .eq('id', gameData.turfId)
                 .single();
               turfInfo = turf;
@@ -298,27 +311,25 @@ export const gameHelpers = {
                 id: gameData.turfId,
                 name: gameData.turfId === '1' ? 'Elite Sports Arena' : 'Victory Ground',
                 address: gameData.turfId === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
-                price_per_hour: gameData.turfId === '1' ? 800 : 600
+                pricePerHour: gameData.turfId === '1' ? 800 : 600
               };
             }
             
             const frontendGameData = {
               id: `game-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              host_id: user.id,
+              creator_id: user.id,
               turf_id: gameData.turfId,
-              description: gameData.description || `${gameData.format} game`,
+              title: gameData.title || `${gameData.sport} Game`,
+              description: gameData.description || `${gameData.sport} game`,
               sport: gameData.sport,
-              format: gameData.format,
               skill_level: gameData.skillLevel,
               max_players: gameData.maxPlayers,
               current_players: 1,
               date: gameData.date,
               start_time: gameData.startTime,
               end_time: gameData.endTime,
-              cost_per_person: gameData.costPerPerson,
+              price_per_player: gameData.costPerPerson,
               status: 'open',
-              is_private: gameData.isPrivate || false,
-              notes: gameData.notes || null,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
               // Add nested relations for compatibility
@@ -384,20 +395,8 @@ export const gameHelpers = {
     try {
       const { data, error } = await supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address
-          ),
-          users:host_id (
-            id,
-            name,
-            phone
-          )
-        `)
-        .eq('host_id', userId)
+        .select('*')
+        .eq('creator_id', userId)
         .order('date', { ascending: true });
 
       if (error) {
@@ -420,20 +419,7 @@ export const gameHelpers = {
     try {
       let query = supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address,
-            price_per_hour
-          ),
-          users:host_id (
-            id,
-            name,
-            phone
-          )
-        `)
+        .select('*')
         .eq('status', 'open');
 
       if (params.sport) {
@@ -519,18 +505,18 @@ export const gameHelpers = {
       // Ensure compatibility with database structure
       const compatibleGames = frontendGames.map((game: any) => {
         // If game doesn't have nested relations, add them for compatibility
-        if (!game.turfs && game.turf_id) {
+        if (!game.turfs && game.turfId) {
           game.turfs = {
-            id: game.turf_id,
-            name: game.turf_id === '1' ? 'Elite Sports Arena' : 'Victory Ground',
-            address: game.turf_id === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
-            price_per_hour: game.turf_id === '1' ? 800 : 600
+            id: game.turfId,
+            name: game.turfId === '1' ? 'Elite Sports Arena' : 'Victory Ground',
+            address: game.turfId === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
+            pricePerHour: game.turfId === '1' ? 800 : 600
           };
         }
         
-        if (!game.users && game.host_id) {
+        if (!game.users && game.creator_id) {
           game.users = {
-            id: game.host_id,
+            id: game.creator_id,
             name: 'User',
             phone: null
           };
@@ -570,20 +556,7 @@ export const gameHelpers = {
       // First try to get from database
       const { data: dbGame, error: dbError } = await supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address,
-            price_per_hour
-          ),
-          users:host_id (
-            id,
-            name,
-            phone
-          )
-        `)
+        .select('*')
         .eq('id', gameId)
         .single();
 
@@ -599,18 +572,18 @@ export const gameHelpers = {
 
       if (frontendGame) {
         // Ensure compatibility with database structure
-        if (!frontendGame.turfs && frontendGame.turf_id) {
+        if (!frontendGame.turfs && frontendGame.turfId) {
           frontendGame.turfs = {
-            id: frontendGame.turf_id,
-            name: frontendGame.turf_id === '1' ? 'Elite Sports Arena' : 'Victory Ground',
-            address: frontendGame.turf_id === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
-            price_per_hour: frontendGame.turf_id === '1' ? 800 : 600
+            id: frontendGame.turfId,
+            name: frontendGame.turfId === '1' ? 'Elite Sports Arena' : 'Victory Ground',
+            address: frontendGame.turfId === '1' ? 'Gangapur Road, Nashik' : 'College Road, Nashik',
+            pricePerHour: frontendGame.turfId === '1' ? 800 : 600
           };
         }
         
-        if (!frontendGame.users && frontendGame.host_id) {
+        if (!frontendGame.users && frontendGame.creator_id) {
           frontendGame.users = {
-            id: frontendGame.host_id,
+            id: frontendGame.creator_id,
             name: 'User',
             phone: null
           };
@@ -669,11 +642,11 @@ export const turfHelpers = {
       }
 
       if (params.priceMin) {
-        query = query.gte('price_per_hour', params.priceMin);
+        query = query.gte('pricePerHour', params.priceMin);
       }
 
       if (params.priceMax) {
-        query = query.lte('price_per_hour', params.priceMax);
+        query = query.lte('pricePerHour', params.priceMax);
       }
 
       if (params.rating) {
@@ -699,7 +672,7 @@ export const turfHelpers = {
                 id: '1',
                 name: 'Elite Sports Arena',
                 address: 'Gangapur Road, Nashik',
-                price_per_hour: 800,
+                pricePerHour: 800,
                 rating: 4.5,
                 sports: ['Football', 'Cricket'],
                 amenities: ['Parking', 'Changing Rooms', 'Flood Lights'],
@@ -709,7 +682,7 @@ export const turfHelpers = {
                 id: '2', 
                 name: 'Victory Ground',
                 address: 'College Road, Nashik',
-                price_per_hour: 600,
+                pricePerHour: 600,
                 rating: 4.2,
                 sports: ['Football', 'Cricket'],
                 amenities: ['Parking', 'Rest Area'],

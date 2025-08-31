@@ -31,6 +31,7 @@ interface GameDetails {
   costPerPerson: number;
   notes?: string;
   status: 'upcoming' | 'live' | 'completed';
+  endTime?: string; // Added this field
   players?: Array<{
     id: string;
     name: string;
@@ -56,16 +57,37 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
       const response = await gamesAPI.getGameById(gameId);
       if (response.success && response.data) {
         const gameData = response.data;
+        console.log('Raw game data:', gameData);
+        
+        // Transform the data to match expected interface
+        const transformedGame = {
+          id: gameData.id,
+          hostName: gameData.users?.name || gameData.host_name || gameData.hostName || "Unknown Host",
+          hostPhone: gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999", 
+          turfName: gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf",
+          turfAddress: gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address",
+          date: gameData.date,
+          timeSlot: `${gameData.start_time || gameData.startTime || '00:00'} - ${gameData.end_time || gameData.endTime || '00:00'}`,
+          format: gameData.sport || gameData.format || "Game",
+          skillLevel: gameData.skill_level || gameData.skillLevel || 'beginner',
+          currentPlayers: gameData.current_players || gameData.currentPlayers || 1,
+          maxPlayers: gameData.max_players || gameData.maxPlayers || 10,
+          costPerPerson: gameData.price_per_player || gameData.costPerPerson || 0,
+          notes: gameData.notes || gameData.description || '',
+          players: gameData.players || []
+        };
+        
+        console.log('Transformed game data:', transformedGame);
         
         // Check if game is completed (past the end time)
-        const gameDateTime = new Date(`${gameData.date}T${gameData.endTime || '23:59'}`);
+        const endTime = gameData.end_time || gameData.endTime || '23:59';
+        const gameDateTime = new Date(`${gameData.date}T${endTime}`);
         const now = new Date();
         const status = now > gameDateTime ? 'completed' : 'upcoming';
         
         setGame({
-          ...gameData,
-          status,
-          players: gameData.players || []
+          ...transformedGame,
+          status
         });
         
         // Check if user has already joined
