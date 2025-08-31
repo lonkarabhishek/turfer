@@ -222,7 +222,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
         : null, // No distance if no coordinates or user location
       nextAvailable: '06 AM - 07 AM',
       isPopular: turf.rating >= 4.5,
-      hasLights: turf.amenities.some(a => a.toLowerCase().includes('light')),
+      hasLights: turf.amenities?.some(a => a && typeof a === 'string' && a.toLowerCase().includes('light')) || false,
     }));
 
     // Sort by distance when user location is available and turfs have distance calculated

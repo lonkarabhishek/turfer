@@ -92,6 +92,8 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: T
   };
 
   const getAmenityIcon = (amenity: string) => {
+    if (!amenity || typeof amenity !== 'string') return null;
+    
     const lower = amenity.toLowerCase();
     if (lower.includes('parking')) return <Car className="w-3 h-3" />;
     if (lower.includes('wifi')) return <Wifi className="w-3 h-3" />;

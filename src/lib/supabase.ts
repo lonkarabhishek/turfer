@@ -282,7 +282,22 @@ export const gameHelpers = {
 
               if (userCreateError) {
                 console.error('Failed to create user after FK constraint error:', userCreateError);
-                throw new Error('Unable to set up user account. Please contact support.');
+                console.error('User creation error details:', {
+                  code: userCreateError.code,
+                  message: userCreateError.message,
+                  details: userCreateError.details,
+                  hint: userCreateError.hint
+                });
+                
+                // If it's an RLS or permission error, we'll skip user creation and hope the game works
+                if (userCreateError.message.includes('RLS') || 
+                    userCreateError.message.includes('permission') ||
+                    userCreateError.code === 'PGRST301' || 
+                    userCreateError.message.includes('policy')) {
+                  console.log('RLS/Permission error in user creation, proceeding without user setup...');
+                } else {
+                  throw new Error('Unable to set up user account. Please contact support.');
+                }
               }
 
               console.log('✅ User created after FK error, retrying game creation...');

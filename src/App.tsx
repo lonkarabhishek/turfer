@@ -39,7 +39,11 @@ const formatDate = (dateStr: string) => {
   return gameDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const capitalizeSkillLevel = (level: string): GameData['skillLevel'] => {
+const capitalizeSkillLevel = (level: string | null | undefined): GameData['skillLevel'] => {
+  if (!level || typeof level !== 'string') {
+    return 'All levels';
+  }
+  
   const levelMap: { [key: string]: GameData['skillLevel'] } = {
     'beginner': 'Beginner',
     'intermediate': 'Intermediate', 

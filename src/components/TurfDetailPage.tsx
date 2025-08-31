@@ -305,7 +305,7 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {turf.amenities.map((amenity) => {
+                    {turf.amenities?.filter(amenity => amenity && typeof amenity === 'string').map((amenity) => {
                       const amenityData = amenityIcons[amenity.toLowerCase().replace(/\s+/g, '_')];
                       const IconComponent = amenityData?.icon;
                       
