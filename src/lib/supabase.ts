@@ -144,54 +144,8 @@ export const gameHelpers = {
       }
 
       // CRITICAL: Ensure user exists in users table to satisfy foreign key constraint
-      try {
-        // First, check if user already exists
-        const { data: existingUser, error: checkError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', user.id)
-          .single();
-
-        if (checkError && checkError.code !== 'PGRST116') {
-          // PGRST116 is "not found" error, which is expected for new users
-          console.error('Error checking if user exists:', checkError);
-          throw new Error(`Cannot verify user existence: ${checkError.message}`);
-        }
-
-        if (!existingUser) {
-          // User doesn't exist, try to create them
-          const { error: insertError } = await supabase
-            .from('users')
-            .insert([
-              {
-                id: user.id,
-                name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-                email: user.email,
-                password: '', // Required by schema, but not used for Supabase Auth users
-                phone: user.user_metadata?.phone || null,
-                role: 'user',
-                is_verified: user.email_confirmed_at ? true : false
-              }
-            ]);
-
-          if (insertError) {
-            // If it's a unique constraint violation on email, that's okay - user might exist with different ID
-            if (insertError.code === '23505' && insertError.message.includes('users_email_key')) {
-              console.log('User already exists with this email, proceeding with game creation');
-            } else {
-              console.error('Failed to create user in database:', insertError);
-              throw new Error(`Cannot create user: ${insertError.message}`);
-            }
-          } else {
-            console.log('✅ New user successfully created in database');
-          }
-        } else {
-          console.log('✅ User already exists in database, proceeding');
-        }
-      } catch (userError: any) {
-        console.error('Critical error: Cannot ensure user exists in database:', userError);
-        throw new Error(`Database setup error: ${userError.message}. Please contact support.`);
-      }
+      // Due to RLS policies, we'll attempt user creation and let the game creation fail if user doesn't exist
+      console.log('Ensuring user exists for game creation...', { userId: user.id, email: user.email });
 
       // Verify turf exists before creating game, or create default ones if needed
       let { data: turfExists } = await supabase
@@ -308,7 +262,81 @@ export const gameHelpers = {
         // Try to provide better error messages and potential solutions
         if (error.message.includes('violates foreign key constraint')) {
           if (error.message.includes('host_id')) {
-            throw new Error('User account not properly set up in database. Please contact support or try signing in again.');
+            console.log('Foreign key constraint on host_id, attempting to create user...');
+            
+            // Try to create the user now since the constraint failed
+            try {
+              const { error: userCreateError } = await supabase
+                .from('users')
+                .insert([
+                  {
+                    id: user.id,
+                    name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+                    email: user.email,
+                    password: '', // Required by schema
+                    phone: user.user_metadata?.phone || null,
+                    role: 'user',
+                    is_verified: user.email_confirmed_at ? true : false
+                  }
+                ]);
+
+              if (userCreateError) {
+                console.error('Failed to create user after FK constraint error:', userCreateError);
+                throw new Error('Unable to set up user account. Please contact support.');
+              }
+
+              console.log('✅ User created after FK error, retrying game creation...');
+              
+              // Retry game creation
+              const { data: retryData, error: retryError } = await supabase
+                .from('games')
+                .insert([
+                  {
+                    host_id: user.id,
+                    turf_id: gameData.turfId,
+                    description: gameData.description || `${gameData.format} game`,
+                    sport: gameData.sport,
+                    format: gameData.format,
+                    skill_level: gameData.skillLevel,
+                    max_players: gameData.maxPlayers,
+                    current_players: 1,
+                    date: gameData.date,
+                    start_time: gameData.startTime,
+                    end_time: gameData.endTime,
+                    cost_per_person: gameData.costPerPerson,
+                    status: 'open',
+                    is_private: gameData.isPrivate || false,
+                    notes: gameData.notes || null
+                  }
+                ])
+                .select()
+                .single();
+
+              if (retryError) {
+                throw new Error(`Game creation failed after user setup: ${retryError.message}`);
+              }
+
+              console.log('🎉 Game successfully created after user setup retry:', retryData);
+              
+              // Continue with the rest of the function
+              try {
+                await supabase
+                  .from('game_participants')
+                  .insert([
+                    {
+                      game_id: retryData.id,
+                      user_id: user.id
+                    }
+                  ]);
+              } catch (participantError) {
+                console.warn('Could not add participant (table may not exist):', participantError);
+              }
+
+              return { data: retryData, error: null };
+
+            } catch (retryError: any) {
+              throw new Error(`User account setup failed: ${retryError.message}. Please contact support.`);
+            }
           } else if (error.message.includes('turf_id')) {
             throw new Error('Selected venue is not available. Please choose a different venue.');
           } else {
