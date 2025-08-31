@@ -143,55 +143,119 @@ export const gameHelpers = {
         throw new Error('User not authenticated');
       }
 
-      // Optional: Try to ensure user exists in our users table (for enhanced profiles)
+      // CRITICAL: Ensure user exists in users table to satisfy foreign key constraint
       try {
-        const { data: existingUser } = await supabase
+        // Use UPSERT to ensure user exists (INSERT if doesn't exist, ignore if exists)
+        const { error: upsertError } = await supabase
           .from('users')
-          .select('id')
-          .eq('id', user.id)
-          .single();
+          .upsert([
+            {
+              id: user.id,
+              name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+              email: user.email,
+              password: '', // Required by schema, but not used for Supabase Auth users
+              phone: user.user_metadata?.phone || null,
+              role: 'user',
+              is_verified: user.email_confirmed_at ? true : false
+            }
+          ], { 
+            onConflict: 'id',
+            ignoreDuplicates: false 
+          });
 
-        if (!existingUser) {
-          // Try to create user in our users table
-          await supabase
-            .from('users')
+        if (upsertError) {
+          console.error('Failed to ensure user exists in database:', upsertError);
+          throw new Error(`Cannot create user in database: ${upsertError.message}. Game creation will fail.`);
+        }
+        
+        console.log('✅ User successfully ensured in database for game creation');
+      } catch (userError: any) {
+        console.error('Critical error: Cannot ensure user exists in database:', userError);
+        throw new Error(`Database setup error: ${userError.message}. Please contact support.`);
+      }
+
+      // Verify turf exists before creating game, or create default ones if needed
+      let { data: turfExists } = await supabase
+        .from('turfs')
+        .select('id')
+        .eq('id', gameData.turfId)
+        .single();
+
+      if (!turfExists) {
+        console.warn(`Selected venue (${gameData.turfId}) does not exist. Checking if we need to seed default turfs...`);
+        
+        // Check if ANY turfs exist
+        const { data: anyTurfs } = await supabase
+          .from('turfs')
+          .select('id')
+          .limit(1);
+
+        if (!anyTurfs || anyTurfs.length === 0) {
+          console.log('No turfs exist in database. Creating default turfs...');
+          // Create some default turfs to satisfy foreign key constraints
+          const { data: createdTurfs } = await supabase
+            .from('turfs')
             .insert([
               {
-                id: user.id,
-                name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-                email: user.email,
-                password: '', // Required by schema, but not used for Supabase Auth users
-                phone: user.user_metadata?.phone || null,
-                role: 'user',
-                is_verified: user.email_confirmed_at ? true : false
+                id: '1',
+                owner_id: user.id, // Use current user as owner for now
+                name: 'Elite Sports Arena',
+                address: 'Gangapur Road, Nashik',
+                description: 'Premium sports facility with excellent amenities',
+                sports: ['Football', 'Cricket'],
+                amenities: ['Parking', 'Changing Rooms', 'Flood Lights'],
+                price_per_hour: 800,
+                price_per_hour_weekend: 1000,
+                operating_hours: {
+                  "monday": {"open": "06:00", "close": "22:00"},
+                  "tuesday": {"open": "06:00", "close": "22:00"},
+                  "wednesday": {"open": "06:00", "close": "22:00"},
+                  "thursday": {"open": "06:00", "close": "22:00"},
+                  "friday": {"open": "06:00", "close": "22:00"},
+                  "saturday": {"open": "06:00", "close": "23:00"},
+                  "sunday": {"open": "06:00", "close": "23:00"}
+                },
+                contact_info: {"phone": "9999999999", "email": "info@elitesportsarena.com"},
+                is_active: true
+              },
+              {
+                id: '2',
+                owner_id: user.id,
+                name: 'Victory Ground',
+                address: 'College Road, Nashik', 
+                description: 'Community sports ground with basic facilities',
+                sports: ['Football', 'Cricket'],
+                amenities: ['Parking', 'Rest Area'],
+                price_per_hour: 600,
+                price_per_hour_weekend: 800,
+                operating_hours: {
+                  "monday": {"open": "06:00", "close": "21:00"},
+                  "tuesday": {"open": "06:00", "close": "21:00"},
+                  "wednesday": {"open": "06:00", "close": "21:00"},
+                  "thursday": {"open": "06:00", "close": "21:00"},
+                  "friday": {"open": "06:00", "close": "21:00"},
+                  "saturday": {"open": "06:00", "close": "22:00"},
+                  "sunday": {"open": "06:00", "close": "22:00"}
+                },
+                contact_info: {"phone": "9999999998", "email": "info@victoryground.com"},
+                is_active: true
               }
-            ]);
+            ])
+            .select();
+
+          if (createdTurfs) {
+            console.log('✅ Default turfs created successfully');
+            // Now check if our selected turf exists
+            turfExists = createdTurfs.find(t => t.id === gameData.turfId);
+          }
         }
-      } catch (userError: any) {
-        // Users table might not exist or RLS is blocking - this will likely cause foreign key issues
-        console.warn('Cannot access/create user in users table:', userError.message);
-        
-        // If we can't ensure the user exists, we should fall back to mock creation
-        console.log('User table access failed, will use mock game creation');
-        const mockGame = {
-          id: `mock-${Date.now()}`,
-          host_id: user.id,
-          turf_id: gameData.turfId,
-          description: gameData.description || `${gameData.format} game`,
-          sport: gameData.sport,
-          format: gameData.format,
-          skill_level: gameData.skillLevel,
-          max_players: gameData.maxPlayers,
-          current_players: 1,
-          date: gameData.date,
-          start_time: gameData.startTime,
-          end_time: gameData.endTime,
-          cost_per_person: gameData.costPerPerson,
-          status: 'open',
-          created_at: new Date().toISOString()
-        };
-        return { data: mockGame, error: null };
+
+        if (!turfExists) {
+          throw new Error(`Selected venue (${gameData.turfId}) is not available. Please refresh the page and try selecting a venue again.`);
+        }
       }
+
+      console.log('✅ Turf verified, proceeding with game creation...');
 
       // Create the game
       const { data, error } = await supabase
@@ -218,33 +282,27 @@ export const gameHelpers = {
 
       if (error) {
         console.error('Game creation error:', error);
-        // Handle various database errors with mock data for development
-        if (error.message.includes('relation "games" does not exist') || 
-            error.message.includes('violates foreign key constraint') ||
-            error.message.includes('users') ||
-            error.message.includes('turfs')) {
-          console.log('Database table/constraint issue detected, using mock game creation for development');
-          const mockGame = {
-            id: `mock-${Date.now()}`,
-            host_id: user.id,
-            turf_id: gameData.turfId,
-            description: gameData.description || `${gameData.format} game`,
-            sport: gameData.sport,
-            format: gameData.format,
-            skill_level: gameData.skillLevel,
-            max_players: gameData.maxPlayers,
-            current_players: 1,
-            date: gameData.date,
-            start_time: gameData.startTime,
-            end_time: gameData.endTime,
-            cost_per_person: gameData.costPerPerson,
-            status: 'open',
-            created_at: new Date().toISOString()
-          };
-          return { data: mockGame, error: null };
+        console.error('Full error details:', error);
+        
+        // Try to provide better error messages and potential solutions
+        if (error.message.includes('violates foreign key constraint')) {
+          if (error.message.includes('host_id')) {
+            throw new Error('User account not properly set up in database. Please contact support or try signing in again.');
+          } else if (error.message.includes('turf_id')) {
+            throw new Error('Selected venue is not available. Please choose a different venue.');
+          } else {
+            throw new Error('Database relationship error. Please try again or contact support.');
+          }
+        } else if (error.message.includes('relation "games" does not exist')) {
+          throw new Error('Game database is not set up. Please contact support.');
+        } else if (error.message.includes('permission denied') || error.message.includes('RLS')) {
+          throw new Error('You do not have permission to create games. Please ensure you are logged in.');
+        } else {
+          throw new Error(`Failed to create game: ${error.message}`);
         }
-        throw new Error(`Failed to create game: ${error.message}`);
       }
+
+      console.log('🎉 Game successfully created in database:', data);
 
       // Try to add creator as first participant (optional)
       try {
