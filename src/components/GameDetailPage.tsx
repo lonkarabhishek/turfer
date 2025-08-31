@@ -139,7 +139,7 @@ ${game.format} at ${game.turfName}
 ⏰ ${game.timeSlot}
 📍 ${game.turfAddress}
 👥 ${game.maxPlayers - game.currentPlayers} spots available
-💰 ₹${game.costPerPerson}/person
+💰 ₹{game.costPerPerson}/person
 
 Ready to play? Join now!
 ${window.location.href}

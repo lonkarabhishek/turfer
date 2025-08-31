@@ -6,6 +6,22 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
+
+// Utility function to show time ago
+const timeAgo = (createdAt: string): string => {
+  const now = new Date();
+  const gameCreated = new Date(createdAt);
+  const diffInMs = now.getTime() - gameCreated.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInMinutes < 1) return 'just now';
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  return gameCreated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 import { gamesAPI } from '../lib/api';
 import { useToast } from '../lib/toastManager';
 
@@ -26,6 +42,7 @@ export interface GameData {
   hostPhone: string;
   distanceKm?: number;
   isUrgent?: boolean; // Game starting soon
+  createdAt?: string; // When the game was created
 }
 
 interface GameCardProps {
@@ -149,7 +166,9 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
               </div>
               <div>
                 <div className="font-medium text-sm">{game.hostName}</div>
-                <div className="text-xs text-gray-500">Host</div>
+                <div className="text-xs text-gray-500">
+                  Host {game.createdAt ? `• ${timeAgo(game.createdAt)}` : ''}
+                </div>
               </div>
             </div>
             

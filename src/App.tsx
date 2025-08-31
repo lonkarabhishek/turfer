@@ -39,6 +39,21 @@ const formatDate = (dateStr: string) => {
   return gameDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const timeAgo = (createdAt: string): string => {
+  const now = new Date();
+  const gameCreated = new Date(createdAt);
+  const diffInMs = now.getTime() - gameCreated.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInMinutes < 1) return 'just now';
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  return gameCreated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 const capitalizeSkillLevel = (level: string | null | undefined): GameData['skillLevel'] => {
   if (!level || typeof level !== 'string') {
     return 'All levels';
@@ -262,8 +277,11 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 
   const loadGames = async () => {
     try {
+      console.log('🔄 Loading games...');
       const response = await gamesAPI.getAvailable({ limit: 20 });
+      console.log('📊 Games API response:', response);
       if (response.success && response.data) {
+        console.log('✅ Found games:', response.data.length);
         // Transform API games to match GameData interface
         const transformedGames = response.data.map((game: any) => {
           // Handle both database structure (game.users.name) and flat structure (game.host_name)
@@ -292,10 +310,15 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
             notes: game.notes,
             hostPhone: hostPhone,
             distanceKm: undefined, // Will be calculated if location is available
-            isUrgent: false // Can be calculated based on date/time
+            isUrgent: false, // Can be calculated based on date/time
+            createdAt: game.created_at || game.createdAt || new Date().toISOString()
           };
         });
+        console.log('🎮 Transformed games:', transformedGames);
         setGames(transformedGames);
+      } else {
+        console.log('❌ No games found or API error:', response);
+        setGames([]);
       }
     } catch (error) {
       console.error('Error loading games:', error);

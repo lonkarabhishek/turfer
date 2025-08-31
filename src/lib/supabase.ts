@@ -433,15 +433,7 @@ export const gameHelpers = {
     try {
       let query = supabase
         .from('games')
-        .select(`
-          *,
-          turfs!turf_id (
-            id,
-            name,
-            address,
-            price_per_hour
-          )
-        `)
+        .select('*')
         .eq('status', 'open');
 
       if (params.sport) {
@@ -463,6 +455,8 @@ export const gameHelpers = {
       query = query.order('date', { ascending: true });
 
       const { data, error } = await query;
+      
+      console.log('🎯 Raw games query result:', { data, error, count: data?.length });
 
       if (error) {
         console.error('Error fetching available games:', error);
