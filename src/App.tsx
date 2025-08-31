@@ -568,10 +568,8 @@ export default function App() {
         onGameCreated={(game) => {
           console.log('Game created:', game);
           setShowCreateGame(false);
-          // Refresh the games list to show the newly created game
-          if (activeSection === 'games') {
-            loadGames();
-          }
+          // Always refresh the games list to show the newly created game
+          loadGames();
         }}
       />
 
