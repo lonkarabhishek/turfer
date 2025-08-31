@@ -59,23 +59,7 @@ export function useAuth() {
           
           setUser(baseUser);
           
-          // Optional: Try to enhance profile in background (non-blocking)
-          setTimeout(async () => {
-            try {
-              const { data: profile } = await supabase
-                .from('users')
-                .select('*')
-                .eq('id', session.user.id)
-                .single();
-              
-              if (profile) {
-                setUser(prevUser => prevUser ? { ...prevUser, ...profile } : prevUser);
-              }
-            } catch (profileError) {
-              // Silently fail - user already has base auth data
-              console.log('Background profile enhancement failed (expected)');
-            }
-          }, 100);
+          // Skip background profile enhancement to avoid RLS issues
         } else {
           // No session/user found, set user to null
           setUser(null);
@@ -106,23 +90,7 @@ export function useAuth() {
         
         setUser(baseUser);
         
-        // Optional: Try to enhance profile in background (non-blocking)
-        setTimeout(async () => {
-          try {
-            const { data: profile } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            
-            if (profile) {
-              setUser(prevUser => prevUser ? { ...prevUser, ...profile } : prevUser);
-            }
-          } catch (profileError) {
-            // Silently fail - user already has base auth data
-            console.log('Background profile enhancement failed (expected)');
-          }
-        }, 100);
+        // Skip background profile enhancement to avoid RLS issues
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
       }
@@ -149,26 +117,8 @@ export function useAuth() {
         isVerified: session.user.email_confirmed_at ? true : false
       };
       
-      // Try to get enhanced profile from users table (optional)
-      try {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile) {
-          setUser({
-            ...baseUser,
-            ...profile
-          });
-        } else {
-          setUser(baseUser);
-        }
-      } catch (profileError) {
-        // Users table doesn't exist or RLS blocking access, use base user
-        setUser(baseUser);
-      }
+      // Use only Supabase Auth data to avoid RLS policy issues
+      setUser(baseUser);
     } else {
       setUser(null);
     }
