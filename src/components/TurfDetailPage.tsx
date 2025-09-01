@@ -178,9 +178,9 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Hero Image Gallery */}
-        <div className="relative mb-8">
+        <div className="relative mb-6 sm:mb-8">
           <motion.div
             className="relative aspect-[21/9] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-emerald-400 to-emerald-600"
             initial={{ opacity: 0, y: 20 }}
@@ -239,9 +239,9 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
           </motion.div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-2 space-y-6 lg:space-y-8">
             {/* Header */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -249,11 +249,11 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
               transition={{ duration: 0.6, delay: 0.1 }}
               className="space-y-4"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h1 className="text-4xl font-bold text-gray-900 mb-2">{turf.name}</h1>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 break-words">{turf.name}</h1>
                   <button
-                    className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors group"
+                    className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors group w-full sm:w-auto"
                     onClick={() => {
                       const mapsUrl = turf.coords 
                         ? `https://maps.google.com/maps?q=${turf.coords.lat},${turf.coords.lng}&z=15`
@@ -261,15 +261,15 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
                       window.open(mapsUrl, '_blank');
                     }}
                   >
-                    <MapPin className="w-5 h-5 group-hover:text-emerald-600" />
-                    <span className="text-lg group-hover:underline">{turf.address}</span>
+                    <MapPin className="w-5 h-5 group-hover:text-emerald-600 flex-shrink-0" />
+                    <span className="text-base sm:text-lg group-hover:underline break-words">{turf.address}</span>
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Star className="w-6 h-6 fill-yellow-400 text-yellow-400" />
-                  <span className="text-2xl font-bold">{Number(turf.rating).toFixed(1)}</span>
-                  <span className="text-gray-500">({turf.totalReviews} reviews)</span>
+                <div className="flex items-center gap-2 justify-center sm:justify-end flex-shrink-0">
+                  <Star className="w-5 h-5 sm:w-6 sm:h-6 fill-yellow-400 text-yellow-400" />
+                  <span className="text-xl sm:text-2xl font-bold">{Number(turf.rating).toFixed(1)}</span>
+                  <span className="text-gray-500 text-sm sm:text-base">({turf.totalReviews} reviews)</span>
                 </div>
               </div>
 

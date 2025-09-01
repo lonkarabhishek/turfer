@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, MapPin } from 'lucide-react';
+import { ChevronDown, MapPin, Locate } from 'lucide-react';
 import { Button } from './ui/button';
 import { Modal } from './ui/modal';
 
@@ -26,10 +26,63 @@ interface CitySelectorProps {
 
 export function CitySelector({ currentCity, onCityChange }: CitySelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
   const handleCitySelect = (cityId: string, cityName: string) => {
     onCityChange(cityName);
     setIsOpen(false);
+  };
+
+  const handleDetectLocation = async () => {
+    setIsDetectingLocation(true);
+    try {
+      if (!navigator.geolocation) {
+        throw new Error('Geolocation is not supported by this browser');
+      }
+
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
+        });
+      });
+
+      // Use reverse geocoding to get city name
+      const { latitude, longitude } = position.coords;
+      
+      // For now, let's detect if user is in one of our supported cities
+      // In a real app, you'd use a reverse geocoding API
+      const response = await fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const detectedCity = data.city || data.locality || data.principalSubdivision;
+        
+        // Check if detected city matches our available cities
+        const matchedCity = AVAILABLE_CITIES.find(city => 
+          city.name.toLowerCase().includes(detectedCity.toLowerCase()) ||
+          detectedCity.toLowerCase().includes(city.name.toLowerCase())
+        );
+        
+        if (matchedCity) {
+          handleCitySelect(matchedCity.id, matchedCity.name);
+        } else {
+          // If not in our supported cities, show the detected city anyway
+          onCityChange(detectedCity);
+          setIsOpen(false);
+        }
+      } else {
+        throw new Error('Could not determine your location');
+      }
+    } catch (error) {
+      console.error('Location detection failed:', error);
+      alert('Could not detect your location. Please select your city manually.');
+    } finally {
+      setIsDetectingLocation(false);
+    }
   };
 
   const currentCityInfo = AVAILABLE_CITIES.find(city => 
@@ -55,6 +108,18 @@ export function CitySelector({ currentCity, onCityChange }: CitySelectorProps) {
         size="md"
       >
         <div className="space-y-6">
+          {/* Auto Location Detection */}
+          <div className="border-b border-gray-200 pb-6">
+            <Button
+              onClick={handleDetectLocation}
+              disabled={isDetectingLocation}
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+            >
+              <Locate className={`w-4 h-4 mr-2 ${isDetectingLocation ? 'animate-spin' : ''}`} />
+              {isDetectingLocation ? 'Detecting...' : 'Use Current Location'}
+            </Button>
+          </div>
+
           {/* Available Cities */}
           <div>
             <h4 className="text-sm font-medium text-gray-900 mb-3">Available Cities</h4>

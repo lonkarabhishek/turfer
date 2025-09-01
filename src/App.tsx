@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, ArrowLeft } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
@@ -137,14 +137,14 @@ function HeroSection({
             onClick={onFindGames}
             className="w-full sm:w-auto px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
           >
-            🏃‍♂️ Find Games to Join
+            Find Games to Join
           </button>
           
           <button 
             onClick={onBookTurf}
             className="w-full sm:w-auto px-8 py-4 bg-white text-gray-900 font-semibold border-2 border-gray-200 rounded-xl hover:border-primary-300 hover:bg-primary-50 transition-all duration-200 hover:scale-105 active:scale-95"
           >
-            🏟️ Book a Turf
+            Book a Turf
           </button>
         </motion.div>
 
@@ -391,8 +391,8 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
     <div className="pb-20 sm:pb-0">
       <HeroSection 
         currentCity={currentCity} 
-        onFindGames={() => setActiveSection('games')}
-        onBookTurf={() => setActiveSection('turfs')}
+        onFindGames={() => setCurrentPage('games')}
+        onBookTurf={() => setCurrentPage('turfs')}
       />
       
       <div className="pt-12">
@@ -641,6 +641,44 @@ export default function App() {
           type={legalPageType}
           onBack={handleBackToHome}
         />
+      ) : currentPage === 'games' ? (
+        <div className="min-h-screen">
+          <div className="bg-white shadow-sm border-b px-4 py-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleBackToHome}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-gray-900">Find Games to Join</h1>
+              </div>
+            </div>
+          </div>
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <GamesYouCanJoin games={games} user={user} onGameClick={handleGameClick} onCreateGame={() => setShowCreateGame(true)} />
+          </div>
+        </div>
+      ) : currentPage === 'turfs' ? (
+        <div className="min-h-screen">
+          <div className="bg-white shadow-sm border-b px-4 py-4">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleBackToHome}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-gray-900">Book a Turf</h1>
+              </div>
+            </div>
+          </div>
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <TurfSearch user={user} onTurfClick={handleTurfClick} />
+          </div>
+        </div>
       ) : (
         <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} onGameClick={handleGameClick} onCreateGame={() => setShowCreateGame(true)} />
       )}

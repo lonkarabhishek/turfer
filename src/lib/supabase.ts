@@ -693,6 +693,8 @@ export const turfHelpers = {
 
       const { data, error } = await query;
 
+      console.log('🏟️ Turf search result:', { data, error, dataLength: data?.length });
+
       if (error) {
         console.error('Turf search error:', error);
         // If turfs table doesn't exist, return mock data for development
