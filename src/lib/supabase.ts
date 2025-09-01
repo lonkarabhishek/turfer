@@ -431,6 +431,14 @@ export const gameHelpers = {
     limit?: number;
   } = {}) {
     try {
+      // First, let's see if ANY games exist at all
+      const { data: dbGames, error: dbError } = await supabase
+        .from('games')
+        .select('*')
+        .limit(10);
+      
+      console.log('🔍 ALL games in database:', { dbGames, dbError, count: dbGames?.length });
+      
       let query = supabase
         .from('games')
         .select('*')

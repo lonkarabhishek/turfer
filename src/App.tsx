@@ -72,52 +72,124 @@ const capitalizeSkillLevel = (level: string | null | undefined): GameData['skill
 
 function HeroSection({ currentCity = 'your city' }: { currentCity?: string }) {
   return (
-    <div className="relative bg-gradient-to-br from-primary-600 via-primary-500 to-primary-400 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-r from-primary-600/20 to-transparent" />
+    <div className="relative min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 overflow-hidden">
+      {/* Animated Background */}
+      <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-600/20 via-transparent to-transparent" />
+        <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse" />
+        <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse" style={{animationDelay: '2s'}} />
+        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse" style={{animationDelay: '4s'}} />
+      </div>
       
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <div className="text-center text-white space-y-4">
-          {/* Logo */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 flex flex-col items-center justify-center min-h-screen">
+        <div className="text-center text-white space-y-8 max-w-4xl">
+          
+          {/* Logo with Glow Effect */}
           <motion.div
-            className="flex justify-center mb-6"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
+            className="flex justify-center mb-8"
+            initial={{ opacity: 0, scale: 0.5, rotate: -180 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            transition={{ duration: 1.2, type: "spring", bounce: 0.4 }}
           >
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shadow-2xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20">
-              <img 
-                src={TapTurfLogo} 
-                alt="TapTurf Logo" 
-                className="w-full h-full object-contain p-2"
-                onError={(e) => {
-                  // Fallback to text logo if image fails to load
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement!;
-                  parent.innerHTML = '<div class="w-full h-full flex items-center justify-center"><span class="text-white font-bold text-2xl sm:text-3xl">T</span></div>';
-                }}
-              />
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-pink-500 to-purple-600 rounded-3xl blur-md animate-pulse" />
+              <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 overflow-hidden shadow-2xl">
+                <img 
+                  src={TapTurfLogo} 
+                  alt="TapTurf" 
+                  className="w-full h-full object-contain p-3"
+                />
+              </div>
             </div>
           </motion.div>
 
-          <motion.h1 
-            className="text-3xl sm:text-5xl font-bold tracking-tight"
-            initial={{ opacity: 0, y: 20 }}
+          {/* Hero Text with Gradient */}
+          <motion.div 
+            className="space-y-6"
+            initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 1, delay: 0.3 }}
           >
-            Play Now in {currentCity}
-          </motion.h1>
-          
-          <motion.p 
-            className="text-lg sm:text-xl text-white/90 max-w-2xl mx-auto"
-            initial={{ opacity: 0, y: 20 }}
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-black leading-tight">
+              <span className="block bg-gradient-to-r from-yellow-300 via-pink-300 to-purple-300 bg-clip-text text-transparent">
+                PLAY
+              </span>
+              <span className="block bg-gradient-to-r from-blue-300 via-green-300 to-teal-300 bg-clip-text text-transparent">
+                ANYWHERE
+              </span>
+              <span className="block bg-gradient-to-r from-orange-300 via-red-300 to-pink-300 bg-clip-text text-transparent">
+                ANYTIME
+              </span>
+            </h1>
+            
+            <motion.p 
+              className="text-xl sm:text-2xl font-semibold text-gray-200 max-w-3xl mx-auto leading-relaxed"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1, delay: 0.6 }}
+            >
+              🔥 Find your squad, book a turf, and dominate the game in <span className="text-yellow-400 font-bold">{currentCity}</span> 
+              <br />
+              ⚡ From pickup games to tournaments - we've got your back! 
+            </motion.p>
+          </motion.div>
+
+          {/* Action Buttons */}
+          <motion.div
+            className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8"
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
+            transition={{ duration: 1, delay: 0.9 }}
           >
-            Find a Turf. Find a team. Play in seconds.
-          </motion.p>
+            <button className="group relative px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full font-bold text-lg text-white shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 hover:scale-105 active:scale-95">
+              <span className="relative z-10">🚀 Start Playing Now</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 to-pink-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm" />
+            </button>
+            
+            <button className="px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full font-semibold text-lg text-white hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              🎮 Browse Games
+            </button>
+          </motion.div>
+
+          {/* Stats/Features */}
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-12 max-w-4xl mx-auto"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, delay: 1.2 }}
+          >
+            <div className="text-center p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
+              <div className="text-3xl font-bold text-yellow-400">1000+</div>
+              <div className="text-gray-300">Active Players</div>
+            </div>
+            <div className="text-center p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
+              <div className="text-3xl font-bold text-green-400">50+</div>
+              <div className="text-gray-300">Premium Turfs</div>
+            </div>
+            <div className="text-center p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
+              <div className="text-3xl font-bold text-blue-400">24/7</div>
+              <div className="text-gray-300">Book & Play</div>
+            </div>
+          </motion.div>
         </div>
       </div>
+
+      {/* Floating Elements */}
+      <motion.div 
+        className="absolute top-20 left-10 w-4 h-4 bg-yellow-400 rounded-full"
+        animate={{ y: [-10, 10, -10] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div 
+        className="absolute top-40 right-20 w-6 h-6 bg-pink-400 rounded-full"
+        animate={{ y: [10, -15, 10] }}
+        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+      />
+      <motion.div 
+        className="absolute bottom-32 left-1/4 w-3 h-3 bg-purple-400 rounded-full"
+        animate={{ y: [-5, 15, -5] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+      />
     </div>
   );
 }
@@ -270,7 +342,9 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 
   // Load games when games section is active (regardless of authentication)
   useEffect(() => {
+    console.log('🎮 activeSection changed to:', activeSection);
     if (activeSection === 'games') {
+      console.log('🎯 Triggering loadGames...');
       loadGames();
     }
   }, [activeSection]);
