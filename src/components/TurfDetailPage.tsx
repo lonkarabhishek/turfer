@@ -9,9 +9,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { turfsAPI, bookingsAPI } from '../lib/api';
+import { turfsAPI, bookingsAPI, gamesAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import type { TurfData } from './TurfCard';
+import { GameCard, type GameData } from './GameCard';
 
 interface TurfDetailPageProps {
   turfId: string;
@@ -58,11 +59,20 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
   const [showImageGallery, setShowImageGallery] = useState(false);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [booking, setBooking] = useState(false);
+  const [turfGames, setTurfGames] = useState<GameData[]>([]);
+  const [loadingGames, setLoadingGames] = useState(false);
 
   useEffect(() => {
     loadTurf();
     loadAvailability();
   }, [turfId]);
+
+  // Load games after turf is loaded
+  useEffect(() => {
+    if (turf?.name) {
+      loadTurfGames();
+    }
+  }, [turf?.name]);
 
   const loadTurf = async () => {
     try {
@@ -90,6 +100,58 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
       }
     ];
     setAvailability(mockAvailability);
+  };
+
+  const loadTurfGames = async () => {
+    setLoadingGames(true);
+    try {
+      // Get all available games and filter by turf
+      const response = await gamesAPI.getAvailable({ limit: 50 });
+      if (response.success && response.data) {
+        // Filter games that are at this specific turf
+        const turfGames = response.data.filter((game: any) => {
+          const gameTurfName = game.turfs?.name || game.turf_name || game.turfName || '';
+          return gameTurfName.toLowerCase() === turf?.name.toLowerCase();
+        }).map((game: any) => {
+          // Transform to GameData format
+          const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
+          const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
+          const turfName = game.turfs?.name || game.turf_name || game.turfName || "Unknown Turf";
+          const turfAddress = game.turfs?.address || game.turf_address || game.turfAddress || "Unknown Address";
+          
+          const startTime = game.start_time || game.startTime || "00:00";
+          const endTime = game.end_time || game.endTime || "00:00";
+          
+          return {
+            id: game.id,
+            hostName: hostName,
+            hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
+            turfName: turfName,
+            turfAddress: turfAddress,
+            date: game.date,
+            timeSlot: `${startTime}-${endTime}`,
+            format: game.sport || game.format || "Game",
+            skillLevel: game.skill_level || game.skillLevel || 'All levels',
+            currentPlayers: game.current_players || game.currentPlayers || 1,
+            maxPlayers: game.max_players || game.maxPlayers || 2,
+            costPerPerson: game.price_per_player || game.cost_per_person || game.costPerPerson || 0,
+            notes: game.notes,
+            hostPhone: hostPhone,
+            distanceKm: undefined,
+            isUrgent: false,
+            createdAt: game.created_at || game.createdAt || new Date().toISOString()
+          };
+        });
+        setTurfGames(turfGames);
+      } else {
+        setTurfGames([]);
+      }
+    } catch (error) {
+      console.error('Error loading turf games:', error);
+      setTurfGames([]);
+    } finally {
+      setLoadingGames(false);
+    }
   };
 
   const handleBookSlot = async (slot: TimeSlot) => {
@@ -439,6 +501,61 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
           </div>
         </div>
       </div>
+
+      {/* Open Games at this Turf */}
+      {turfGames.length > 0 && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 mt-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+          >
+            <Card className="border-0 shadow-xl rounded-3xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                      <Users className="w-6 h-6 text-blue-600" />
+                      Open Games at {turf.name}
+                    </CardTitle>
+                    <p className="text-gray-600 mt-1">Join these games happening at this venue</p>
+                  </div>
+                  <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                    {turfGames.length} game{turfGames.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingGames ? (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="bg-white rounded-xl p-4 animate-pulse">
+                        <div className="h-20 bg-gray-200 rounded mb-2" />
+                        <div className="h-4 bg-gray-200 rounded mb-1" />
+                        <div className="h-4 bg-gray-200 rounded w-3/4" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {turfGames.map((game) => (
+                      <GameCard 
+                        key={game.id} 
+                        game={game} 
+                        user={user} 
+                        onGameClick={(gameId) => {
+                          // Handle game click - could navigate to game detail or show modal
+                          console.log('Game clicked:', gameId);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      )}
 
       {/* Image Gallery Modal */}
       <AnimatePresence>

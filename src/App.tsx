@@ -197,6 +197,8 @@ function HeroSection({
 function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: GameData[], user: AppUser | null, onGameClick?: (gameId: string) => void, onCreateGame?: () => void }) {
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [loadingUserGames, setLoadingUserGames] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<string>('');
+  const [sportFilter, setSportFilter] = useState<string>('');
 
   // Load user's joined games when user is authenticated
   useEffect(() => {
@@ -258,6 +260,27 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
     }
   };
 
+  // Filter games based on location and sport
+  const filteredGames = games.filter((game) => {
+    const matchesLocation = locationFilter === '' || 
+      game.turfAddress.toLowerCase().includes(locationFilter.toLowerCase()) ||
+      game.turfName.toLowerCase().includes(locationFilter.toLowerCase());
+    
+    const matchesSport = sportFilter === '' || 
+      game.format.toLowerCase().includes(sportFilter.toLowerCase());
+    
+    return matchesLocation && matchesSport;
+  });
+
+  // Get unique locations and sports for filter options
+  const uniqueLocations = Array.from(new Set(games.map(game => {
+    // Extract area name from address (e.g., "Nashik Road" from full address)
+    const addressParts = game.turfAddress.split(',');
+    return addressParts[0]?.trim() || game.turfAddress;
+  }))).filter(Boolean).sort();
+
+  const uniqueSports = Array.from(new Set(games.map(game => game.format))).filter(Boolean).sort();
+
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
       {/* User's Upcoming Games */}
@@ -308,12 +331,78 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
             <span className="text-sm text-primary-600 font-medium">Community</span>
           </div>
         </div>
+
+        {/* Filters */}
+        {games.length > 0 && (
+          <div className="flex flex-wrap gap-3 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">All areas</option>
+                {uniqueLocations.map((location) => (
+                  <option key={location} value={location}>{location}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
+              <select
+                value={sportFilter}
+                onChange={(e) => setSportFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">All sports</option>
+                {uniqueSports.map((sport) => (
+                  <option key={sport} value={sport}>{sport}</option>
+                ))}
+              </select>
+            </div>
+
+            {(locationFilter || sportFilter) && (
+              <div className="flex items-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setLocationFilter('');
+                    setSportFilter('');
+                  }}
+                  className="px-4 py-2 h-10"
+                >
+                  Clear filters
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {games.slice(0, 6).map((game) => (
+          {filteredGames.slice(0, 6).map((game) => (
             <GameCard key={game.id} game={game} user={user} onGameClick={onGameClick} />
           ))}
         </div>
+
+        {filteredGames.length === 0 && games.length > 0 && (
+          <div className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No games match your filters</p>
+            <Button 
+              onClick={() => {
+                setLocationFilter('');
+                setSportFilter('');
+              }}
+              variant="outline"
+              className="mt-4"
+            >
+              Clear filters
+            </Button>
+          </div>
+        )}
         
         {games.length === 0 && (
           <div className="text-center py-12">

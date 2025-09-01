@@ -79,23 +79,13 @@ export function generateGameInviteMessage({
   costPerPerson: number;
   skillLevel?: string;
 }): string {
-  const spotsLeft = maxPlayers - currentPlayers;
-  return `🏟️ Hey! Want to join our ${format} game?
+  return `Hey ${hostName}! 👋
 
-🎯 *Game Details:*
-📅 Date: ${date}
-⏰ Time: ${slot}
-📍 Venue: ${turfName}
-👥 Players: ${spotsLeft} spots available (${currentPlayers}/${maxPlayers} confirmed)
-💰 Cost: ₹${costPerPerson}/person
-🏆 Skill Level: ${skillLevel}
+I'm interested in the ${format} game you hosted at ${turfName} on ${date} (${slot}). Can I join as well?
 
-Host: ${hostName}
+I found your game on TapTurf and would love to play!
 
-*Ready to play?* Just reply "YES" and I'll send you the location details!
-
-Found this game on TapTurf 🏃‍♂️
-https://tapturf.in`;
+Thanks! 🏃‍♂️`;
 }
 
 export function generateVenueInquiryMessage({
