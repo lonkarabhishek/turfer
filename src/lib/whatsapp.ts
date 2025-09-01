@@ -80,18 +80,22 @@ export function generateGameInviteMessage({
   skillLevel?: string;
 }): string {
   const spotsLeft = maxPlayers - currentPlayers;
-  return `🏟️ Join our ${format} game!
+  return `🏟️ Hey! Want to join our ${format} game?
+
+🎯 *Game Details:*
+📅 Date: ${date}
+⏰ Time: ${slot}
+📍 Venue: ${turfName}
+👥 Players: ${spotsLeft} spots available (${currentPlayers}/${maxPlayers} confirmed)
+💰 Cost: ₹${costPerPerson}/person
+🏆 Skill Level: ${skillLevel}
 
 Host: ${hostName}
-📍 ${turfName}
-📅 ${date} • ⏰ ${slot}
-👥 ${spotsLeft} spots left (${currentPlayers}/${maxPlayers})
-💰 ₹${costPerPerson}/person
-🎯 Skill level: ${skillLevel}
 
-Organized via TapTurf - https://tapturf.in
+*Ready to play?* Just reply "YES" and I'll send you the location details!
 
-Reply with "IN" to confirm your spot!`;
+Found this game on TapTurf 🏃‍♂️
+https://tapturf.in`;
 }
 
 export function generateVenueInquiryMessage({
