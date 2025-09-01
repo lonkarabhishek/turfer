@@ -439,6 +439,14 @@ export const gameHelpers = {
       
       console.log('🔍 ALL games in database:', { dbGames, dbError, count: dbGames?.length });
       
+      // Also check games without status filter
+      const { data: rawGames, error: rawError } = await supabase
+        .from('games')
+        .select('*, users!creator_id(name, phone), turfs!turf_id(name, address)')
+        .limit(5);
+      
+      console.log('🔍 ALL games with joins (no filters):', { rawGames, rawError, count: rawGames?.length });
+      
       let query = supabase
         .from('games')
         .select(`
@@ -456,7 +464,7 @@ export const gameHelpers = {
             price_per_hour
           )
         `)
-        .eq('status', 'open');
+        .in('status', ['open', 'upcoming', 'active']);
 
       if (params.sport) {
         query = query.eq('sport', params.sport);
@@ -503,7 +511,7 @@ export const gameHelpers = {
                 price_per_hour
               )
             `)
-            .eq('status', 'open')
+            .in('status', ['open', 'upcoming', 'active'])
             .or('is_private.is.null,is_private.eq.false')
             .order('date', { ascending: true });
           
