@@ -271,6 +271,16 @@ export const gameHelpers = {
         .select()
         .single();
 
+      console.log('🎯 Game creation attempt - data being inserted:', {
+        creator_id: user.id,
+        turf_id: gameData.turfId,
+        title: gameData.title || `${gameData.sport} Game`,
+        sport: gameData.sport,
+        skill_level: gameData.skillLevel,
+        max_players: gameData.maxPlayers,
+        status: 'open'
+      });
+
       if (error) {
         console.error('Game creation error:', error);
         console.error('Full error details:', {
@@ -390,6 +400,13 @@ export const gameHelpers = {
         // Continue anyway - game was created successfully
       }
 
+      console.log('✅ Game created successfully in database:', { 
+        gameId: data.id, 
+        creator_id: data.creator_id,
+        sport: data.sport,
+        status: data.status,
+        host_name: data.host_name
+      });
       return { data, error: null };
     } catch (error: any) {
       return { data: null, error: error.message };
@@ -446,6 +463,22 @@ export const gameHelpers = {
         .limit(5);
       
       console.log('🔍 ALL games with joins (no filters):', { rawGames, rawError, count: rawGames?.length });
+      
+      // Let's also try a super simple query without any JOINs
+      const { data: simpleGames, error: simpleError } = await supabase
+        .from('games')
+        .select('id, sport, date, status, creator_id, host_name')
+        .limit(10);
+      
+      console.log('🔍 SIMPLE games query (no joins):', { simpleGames, simpleError, count: simpleGames?.length });
+      
+      // Check current user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      console.log('🔍 Current user context:', { 
+        userId: currentUser?.id, 
+        email: currentUser?.email,
+        isAuthenticated: !!currentUser 
+      });
       
       let query = supabase
         .from('games')
@@ -536,6 +569,11 @@ export const gameHelpers = {
 
       // Merge database games with frontend games
       const frontendGames = this.getFrontendGames(params);
+      console.log('🔄 Merging games:', { 
+        databaseGames: data?.length || 0, 
+        frontendGames: frontendGames.length,
+        totalGames: (data?.length || 0) + frontendGames.length
+      });
       const allGames = [...(data || []), ...frontendGames];
       
       return { data: allGames, error: null };
