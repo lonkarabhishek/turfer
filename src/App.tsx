@@ -73,11 +73,15 @@ const capitalizeSkillLevel = (level: string | null | undefined): GameData['skill
 function HeroSection({ 
   currentCity = 'your city',
   onFindGames,
-  onBookTurf 
+  onBookTurf,
+  onSignIn,
+  user
 }: { 
   currentCity?: string;
   onFindGames?: () => void;
   onBookTurf?: () => void;
+  onSignIn?: () => void;
+  user?: AppUser | null;
 }) {
   return (
     <div className="relative min-h-screen bg-white overflow-hidden">
@@ -134,18 +138,27 @@ function HeroSection({
           transition={{ duration: 0.8, delay: 0.4 }}
         >
           <button 
-            onClick={onFindGames}
-            className="w-full sm:w-auto px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
-          >
-            Find Games to Join
-          </button>
-          
-          <button 
             onClick={onBookTurf}
-            className="w-full sm:w-auto px-8 py-4 bg-white text-gray-900 font-semibold border-2 border-gray-200 rounded-xl hover:border-primary-300 hover:bg-primary-50 transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-full sm:w-auto px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
           >
             Book a Turf
           </button>
+          
+          <button 
+            onClick={onFindGames}
+            className="w-full sm:w-auto px-8 py-4 bg-white text-gray-900 font-semibold border-2 border-gray-200 rounded-xl hover:border-primary-300 hover:bg-primary-50 transition-all duration-200 hover:scale-105 active:scale-95"
+          >
+            Find Games to Join
+          </button>
+
+          {!user && (
+            <button 
+              onClick={onSignIn}
+              className="w-full sm:w-auto px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-all duration-200 text-sm"
+            >
+              Sign In / Sign Up
+            </button>
+          )}
         </motion.div>
 
         {/* Sports Categories */}
@@ -217,12 +230,12 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
           return {
             id: gameData.id,
             hostName: hostName,
-            hostAvatar: gameData.host_profile_image_url || gameData.host_avatar || gameData.hostAvatar || "",
+            hostAvatar: gameData.users?.profile_image_url || gameData.host_profile_image_url || gameData.host_avatar || gameData.hostAvatar || "",
             turfName: turfName,
             turfAddress: turfAddress,
             date: formatDate(gameData.date),
             timeSlot: `${startTime}-${endTime}`,
-            format: gameData.sport || "Game",
+            format: gameData.sport || gameData.format || "Game",
             skillLevel: capitalizeSkillLevel(gameData.skill_level || gameData.skillLevel),
             currentPlayers: gameData.current_players || gameData.currentPlayers || 1,
             maxPlayers: gameData.max_players || gameData.maxPlayers || 2,
@@ -358,16 +371,16 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
           return {
             id: game.id,
             hostName: hostName,
-            hostAvatar: game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
+            hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
             turfName: turfName,
             turfAddress: turfAddress,
             date: formatDate(game.date),
             timeSlot: `${startTime}-${endTime}`,
-            format: game.format || "Game",
+            format: game.sport || game.format || "Game",
             skillLevel: capitalizeSkillLevel(game.skill_level || game.skillLevel),
             currentPlayers: game.current_players || game.currentPlayers || 1,
             maxPlayers: game.max_players || game.maxPlayers || 2,
-            costPerPerson: game.cost_per_person || game.costPerPerson || 0,
+            costPerPerson: game.price_per_player || game.cost_per_person || game.costPerPerson || 0,
             notes: game.notes,
             hostPhone: hostPhone,
             distanceKm: undefined, // Will be calculated if location is available
@@ -393,6 +406,8 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
         currentCity={currentCity} 
         onFindGames={() => setCurrentPage('games')}
         onBookTurf={() => setCurrentPage('turfs')}
+        onSignIn={() => setShowLogin(true)}
+        user={user}
       />
       
       <div className="pt-12">

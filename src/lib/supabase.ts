@@ -441,7 +441,21 @@ export const gameHelpers = {
       
       let query = supabase
         .from('games')
-        .select('*')
+        .select(`
+          *,
+          users!creator_id (
+            id,
+            name,
+            phone,
+            profile_image_url
+          ),
+          turfs!turf_id (
+            id,
+            name,
+            address,
+            price_per_hour
+          )
+        `)
         .eq('status', 'open');
 
       if (params.sport) {
@@ -474,7 +488,21 @@ export const gameHelpers = {
           console.log('RLS error detected, trying simpler query...');
           const { data: simpleData, error: simpleError } = await supabase
             .from('games')
-            .select('*')
+            .select(`
+              *,
+              users!creator_id (
+                id,
+                name,
+                phone,
+                profile_image_url
+              ),
+              turfs!turf_id (
+                id,
+                name,
+                address,
+                price_per_hour
+              )
+            `)
             .eq('status', 'open')
             .or('is_private.is.null,is_private.eq.false')
             .order('date', { ascending: true });
