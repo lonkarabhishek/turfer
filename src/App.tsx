@@ -468,7 +468,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -476,6 +476,67 @@ export default function App() {
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
+  const [games, setGames] = useState<GameData[]>([]);
+  const [turfs, setTurfs] = useState<any[]>([]);
+
+  // Load games for the games page
+  const loadGames = async () => {
+    try {
+      console.log('🔄 Loading games...');
+      const response = await gamesAPI.getAvailable({ limit: 20 });
+      console.log('📊 Games API response:', response);
+      if (response.success && response.data) {
+        console.log('✅ Found games:', response.data.length);
+        // Transform API games to match GameData interface
+        const transformedGames = response.data.map((game: any) => {
+          // Handle both database structure (game.users.name) and flat structure (game.host_name)
+          const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
+          const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
+          const turfName = game.turfs?.name || game.turf_name || game.turfName || "Unknown Turf";
+          const turfAddress = game.turfs?.address || game.turf_address || game.turfAddress || "Unknown Address";
+          
+          // Handle time slots - could be start_time/end_time or startTime/endTime
+          const startTime = game.start_time || game.startTime || "00:00";
+          const endTime = game.end_time || game.endTime || "00:00";
+          
+          return {
+            id: game.id,
+            hostName: hostName,
+            hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
+            turfName: turfName,
+            turfAddress: turfAddress,
+            date: formatDate(game.date),
+            timeSlot: `${startTime}-${endTime}`,
+            format: game.sport || game.format || "Game",
+            skillLevel: capitalizeSkillLevel(game.skill_level || game.skillLevel),
+            currentPlayers: game.current_players || game.currentPlayers || 1,
+            maxPlayers: game.max_players || game.maxPlayers || 2,
+            costPerPerson: game.price_per_player || game.cost_per_person || game.costPerPerson || 0,
+            notes: game.notes,
+            hostPhone: hostPhone,
+            distanceKm: undefined, // Will be calculated if location is available
+            isUrgent: false, // Can be calculated based on date/time
+            createdAt: game.created_at || game.createdAt || new Date().toISOString()
+          };
+        });
+        console.log('🎮 Transformed games:', transformedGames);
+        setGames(transformedGames);
+      } else {
+        console.log('❌ No games found or API error:', response);
+        setGames([]);
+      }
+    } catch (error) {
+      console.error('Error loading games:', error);
+      setGames([]);
+    }
+  };
+
+  // Load games when navigating to games page
+  useEffect(() => {
+    if (currentPage === 'games') {
+      loadGames();
+    }
+  }, [currentPage]);
 
   // Update URL when navigating to game pages
   const handleGameClick = useCallback((gameId: string) => {
