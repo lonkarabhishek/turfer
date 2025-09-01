@@ -456,13 +456,13 @@ export const gameHelpers = {
       
       console.log('🔍 ALL games in database:', { dbGames, dbError, count: dbGames?.length });
       
-      // Also check games without status filter
+      // Also check games without status filter (no JOINs)
       const { data: rawGames, error: rawError } = await supabase
         .from('games')
-        .select('*, users!creator_id(name, phone), turfs!turf_id(name, address)')
+        .select('*')
         .limit(5);
       
-      console.log('🔍 ALL games with joins (no filters):', { rawGames, rawError, count: rawGames?.length });
+      console.log('🔍 ALL games without filters (no JOINs):', { rawGames, rawError, count: rawGames?.length });
       
       // Let's also try a super simple query without any JOINs
       const { data: simpleGames, error: simpleError } = await supabase
@@ -480,23 +480,10 @@ export const gameHelpers = {
         isAuthenticated: !!currentUser 
       });
       
+      // Use simple query without JOINs since foreign keys aren't set up properly
       let query = supabase
         .from('games')
-        .select(`
-          *,
-          users!creator_id (
-            id,
-            name,
-            phone,
-            profile_image_url
-          ),
-          turfs!turf_id (
-            id,
-            name,
-            address,
-            price_per_hour
-          )
-        `)
+        .select('*')
         .in('status', ['open', 'upcoming', 'active']);
 
       if (params.sport) {
@@ -529,21 +516,7 @@ export const gameHelpers = {
           console.log('RLS error detected, trying simpler query...');
           const { data: simpleData, error: simpleError } = await supabase
             .from('games')
-            .select(`
-              *,
-              users!creator_id (
-                id,
-                name,
-                phone,
-                profile_image_url
-              ),
-              turfs!turf_id (
-                id,
-                name,
-                address,
-                price_per_hour
-              )
-            `)
+            .select('*')
             .in('status', ['open', 'upcoming', 'active'])
             .or('is_private.is.null,is_private.eq.false')
             .order('date', { ascending: true });
