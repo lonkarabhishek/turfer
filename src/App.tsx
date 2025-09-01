@@ -335,7 +335,7 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
   );
 }
 
-function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick, onCreateGame }: { user: AppUser | null, currentCity?: string, onTurfClick?: (turfId: string) => void, onGameClick?: (gameId: string) => void, onCreateGame?: () => void }) {
+function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick, onCreateGame, onNavigateToGames, onNavigateToTurfs, onSignIn }: { user: AppUser | null, currentCity?: string, onTurfClick?: (turfId: string) => void, onGameClick?: (gameId: string) => void, onCreateGame?: () => void, onNavigateToGames?: () => void, onNavigateToTurfs?: () => void, onSignIn?: () => void }) {
   const [smartOpen, setSmartOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'turfs' | 'games'>('turfs');
   const [games, setGames] = useState<GameData[]>([]);
@@ -404,9 +404,9 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
     <div className="pb-20 sm:pb-0">
       <HeroSection 
         currentCity={currentCity} 
-        onFindGames={() => setCurrentPage('games')}
-        onBookTurf={() => setCurrentPage('turfs')}
-        onSignIn={() => setShowLogin(true)}
+        onFindGames={onNavigateToGames}
+        onBookTurf={onNavigateToTurfs}
+        onSignIn={onSignIn}
         user={user}
       />
       
@@ -756,7 +756,16 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <UserSurface user={user} currentCity={currentCity} onTurfClick={handleTurfClick} onGameClick={handleGameClick} onCreateGame={() => setShowCreateGame(true)} />
+        <UserSurface 
+          user={user} 
+          currentCity={currentCity} 
+          onTurfClick={handleTurfClick} 
+          onGameClick={handleGameClick} 
+          onCreateGame={() => setShowCreateGame(true)}
+          onNavigateToGames={() => setCurrentPage('games')}
+          onNavigateToTurfs={() => setCurrentPage('turfs')}
+          onSignIn={() => setShowLogin(true)}
+        />
       )}
       
       <MobileNav 
