@@ -93,7 +93,11 @@ export const analytics = {
     track('assistant_opened'),
 
   recommendationRequested: (context: 'assistant' | 'button') => 
-    track('recommendation_requested', { context })
+    track('recommendation_requested', { context }),
+
+  // Game request system
+  gameRequestSent: (gameId: string) => 
+    track('game_request_sent', { game_id: gameId })
 };
 
 declare global {

@@ -166,6 +166,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
     date: '',
     timeSlot: '',
     skillLevel: 'all' as 'beginner' | 'intermediate' | 'advanced' | 'all',
+    maxPlayers: 10, // Default value, will be updated when format is selected
     costPerPerson: 0,
     notes: ''
   });
@@ -269,6 +270,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
 
   const handleFormatSelect = (format: any) => {
     setSelectedFormat(format);
+    // Update maxPlayers to the format's default, but allow customization later
+    setFormData(prev => ({ ...prev, maxPlayers: format.players }));
     track('card_viewed', { type: 'game', id: format.id, name: format.label });
     setStep(2);
   };
@@ -326,7 +329,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
         sport: formatToSport[selectedFormat.label as keyof typeof formatToSport] || 'football',
         format: selectedFormat.label,
         skillLevel: formData.skillLevel,
-        maxPlayers: selectedFormat.players,
+        maxPlayers: formData.maxPlayers,
         costPerPerson: formData.costPerPerson,
         description: `${selectedFormat.label} game at ${selectedTurf.name}`,
         notes: formData.notes || undefined,
@@ -360,7 +363,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
         skillLevel: formData.skillLevel === 'all' ? 'All levels' : 
                    formData.skillLevel.charAt(0).toUpperCase() + formData.skillLevel.slice(1) as any,
         currentPlayers: 1,
-        maxPlayers: selectedFormat.players,
+        maxPlayers: formData.maxPlayers,
         costPerPerson: formData.costPerPerson,
         notes: formData.notes,
         distanceKm: 0
@@ -749,9 +752,37 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Players:</span>
-                      <span className="font-medium">Up to {selectedFormat?.players}</span>
+                      <span className="font-medium">Up to {formData.maxPlayers}</span>
                     </div>
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="maxPlayers" className="flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4" />
+                    Maximum Players
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="maxPlayers"
+                      type="number"
+                      min="2"
+                      max="22"
+                      placeholder="e.g., 10"
+                      value={formData.maxPlayers || ''}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        maxPlayers: parseInt(e.target.value) || 2
+                      }))}
+                      className="h-12 text-lg"
+                    />
+                    <div className="text-sm text-gray-500">
+                      (Suggested: {selectedFormat?.players})
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Include yourself as one player. Others will join your game.
+                  </p>
                 </div>
 
                 <div>

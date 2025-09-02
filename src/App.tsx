@@ -26,47 +26,8 @@ import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
 import type { AppUser } from "./hooks/useAuth";
 import TapTurfLogo from "./assets/TapTurf_Logo.png";
+import { transformGamesData, filterGamesByLocation, getUniqueLocations, getUniqueSports } from "./lib/gameTransformers";
 
-// Helper functions for data transformation
-const formatDate = (dateStr: string) => {
-  const today = new Date();
-  const gameDate = new Date(dateStr);
-  const diffDays = Math.ceil((gameDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Tomorrow";
-  if (diffDays < 7) return gameDate.toLocaleDateString('en-US', { weekday: 'long' });
-  return gameDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
-const timeAgo = (createdAt: string): string => {
-  const now = new Date();
-  const gameCreated = new Date(createdAt);
-  const diffInMs = now.getTime() - gameCreated.getTime();
-  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
-  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
-  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-
-  if (diffInMinutes < 1) return 'just now';
-  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-  if (diffInHours < 24) return `${diffInHours}h ago`;
-  if (diffInDays < 7) return `${diffInDays}d ago`;
-  return gameCreated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
-const capitalizeSkillLevel = (level: string | null | undefined): GameData['skillLevel'] => {
-  if (!level || typeof level !== 'string') {
-    return 'All levels';
-  }
-  
-  const levelMap: { [key: string]: GameData['skillLevel'] } = {
-    'beginner': 'Beginner',
-    'intermediate': 'Intermediate', 
-    'advanced': 'Advanced',
-    'all': 'All levels'
-  };
-  return levelMap[level.toLowerCase()] || 'All levels';
-};
 
 // Games will be loaded from API
 
@@ -220,34 +181,7 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
       // Get user's created games from Supabase
       const response = await gamesAPI.getUserGames(user.id);
       if (response.success && response.data) {
-        const transformedGames = response.data.map((gameData: any) => {
-          const hostName = gameData.users?.name || gameData.host_name || gameData.hostName || user.name || "Unknown Host";
-          const hostPhone = gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999";
-          const turfName = gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf";
-          const turfAddress = gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address";
-          
-          const startTime = gameData.start_time || gameData.startTime || "00:00";
-          const endTime = gameData.end_time || gameData.endTime || "00:00";
-          
-          return {
-            id: gameData.id,
-            hostName: hostName,
-            hostAvatar: gameData.users?.profile_image_url || gameData.host_profile_image_url || gameData.host_avatar || gameData.hostAvatar || "",
-            turfName: turfName,
-            turfAddress: turfAddress,
-            date: formatDate(gameData.date),
-            timeSlot: `${startTime}-${endTime}`,
-            format: gameData.sport || gameData.format || "Game",
-            skillLevel: capitalizeSkillLevel(gameData.skill_level || gameData.skillLevel),
-            currentPlayers: gameData.current_players || gameData.currentPlayers || 1,
-            maxPlayers: gameData.max_players || gameData.maxPlayers || 2,
-            costPerPerson: gameData.price_per_player || gameData.costPerPerson || 0,
-            notes: gameData.notes,
-            hostPhone: hostPhone,
-            distanceKm: undefined,
-            isUrgent: false
-          };
-        });
+        const transformedGames = await transformGamesData(response.data);
         setUserGames(transformedGames);
       } else {
         setUserGames([]);
@@ -261,25 +195,14 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
   };
 
   // Filter games based on location and sport
-  const filteredGames = games.filter((game) => {
-    const matchesLocation = locationFilter === '' || 
-      game.turfAddress.toLowerCase().includes(locationFilter.toLowerCase()) ||
-      game.turfName.toLowerCase().includes(locationFilter.toLowerCase());
-    
-    const matchesSport = sportFilter === '' || 
-      game.format.toLowerCase().includes(sportFilter.toLowerCase());
-    
-    return matchesLocation && matchesSport;
-  });
+  const locationFiltered = locationFilter ? filterGamesByLocation(games, locationFilter) : games;
+  const filteredGames = sportFilter 
+    ? locationFiltered.filter(game => game.format.toLowerCase().includes(sportFilter.toLowerCase()))
+    : locationFiltered;
 
   // Get unique locations and sports for filter options
-  const uniqueLocations = Array.from(new Set(games.map(game => {
-    // Extract area name from address (e.g., "Nashik Road" from full address)
-    const addressParts = game.turfAddress.split(',');
-    return addressParts[0]?.trim() || game.turfAddress;
-  }))).filter(Boolean).sort();
-
-  const uniqueSports = Array.from(new Set(games.map(game => game.format))).filter(Boolean).sort();
+  const uniqueLocations = getUniqueLocations(games);
+  const uniqueSports = getUniqueSports(games);
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
@@ -445,38 +368,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
       console.log('📊 Games API response:', response);
       if (response.success && response.data) {
         console.log('✅ Found games:', response.data.length);
-        // Transform API games to match GameData interface
-        const transformedGames = response.data.map((game: any) => {
-          // Handle both database structure (game.users.name) and flat structure (game.host_name)
-          const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
-          const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
-          const turfName = game.turfs?.name || game.turf_name || game.turfName || "Unknown Turf";
-          const turfAddress = game.turfs?.address || game.turf_address || game.turfAddress || "Unknown Address";
-          
-          // Handle time slots - could be start_time/end_time or startTime/endTime
-          const startTime = game.start_time || game.startTime || "00:00";
-          const endTime = game.end_time || game.endTime || "00:00";
-          
-          return {
-            id: game.id,
-            hostName: hostName,
-            hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
-            turfName: turfName,
-            turfAddress: turfAddress,
-            date: formatDate(game.date),
-            timeSlot: `${startTime}-${endTime}`,
-            format: game.sport || game.format || "Game",
-            skillLevel: capitalizeSkillLevel(game.skill_level || game.skillLevel),
-            currentPlayers: game.current_players || game.currentPlayers || 1,
-            maxPlayers: game.max_players || game.maxPlayers || 2,
-            costPerPerson: game.price_per_player || game.cost_per_person || game.costPerPerson || 0,
-            notes: game.notes,
-            hostPhone: hostPhone,
-            distanceKm: undefined, // Will be calculated if location is available
-            isUrgent: false, // Can be calculated based on date/time
-            createdAt: game.created_at || game.createdAt || new Date().toISOString()
-          };
-        });
+        const transformedGames = await transformGamesData(response.data);
         console.log('🎮 Transformed games:', transformedGames);
         setGames(transformedGames);
       } else {
@@ -576,38 +468,7 @@ export default function App() {
       console.log('📊 Games API response:', response);
       if (response.success && response.data) {
         console.log('✅ Found games:', response.data.length);
-        // Transform API games to match GameData interface
-        const transformedGames = response.data.map((game: any) => {
-          // Handle both database structure (game.users.name) and flat structure (game.host_name)
-          const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
-          const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
-          const turfName = game.turfs?.name || game.turf_name || game.turfName || "Unknown Turf";
-          const turfAddress = game.turfs?.address || game.turf_address || game.turfAddress || "Unknown Address";
-          
-          // Handle time slots - could be start_time/end_time or startTime/endTime
-          const startTime = game.start_time || game.startTime || "00:00";
-          const endTime = game.end_time || game.endTime || "00:00";
-          
-          return {
-            id: game.id,
-            hostName: hostName,
-            hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
-            turfName: turfName,
-            turfAddress: turfAddress,
-            date: formatDate(game.date),
-            timeSlot: `${startTime}-${endTime}`,
-            format: game.sport || game.format || "Game",
-            skillLevel: capitalizeSkillLevel(game.skill_level || game.skillLevel),
-            currentPlayers: game.current_players || game.currentPlayers || 1,
-            maxPlayers: game.max_players || game.maxPlayers || 2,
-            costPerPerson: game.price_per_player || game.cost_per_person || game.costPerPerson || 0,
-            notes: game.notes,
-            hostPhone: hostPhone,
-            distanceKm: undefined, // Will be calculated if location is available
-            isUrgent: false, // Can be calculated based on date/time
-            createdAt: game.created_at || game.createdAt || new Date().toISOString()
-          };
-        });
+        const transformedGames = await transformGamesData(response.data);
         console.log('🎮 Transformed games:', transformedGames);
         setGames(transformedGames);
       } else {
@@ -910,37 +771,7 @@ export default function App() {
           try {
             const response = await gamesAPI.getAvailable({ limit: 20 });
             if (response.success && response.data) {
-              // Transform API games to match GameData interface
-              const transformedGames = response.data.map((gameData: any) => {
-                // Handle both database structure (game.users.name) and flat structure (game.host_name)
-                const hostName = gameData.users?.name || gameData.host_name || gameData.hostName || "Unknown Host";
-                const hostPhone = gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999";
-                const turfName = gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf";
-                const turfAddress = gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address";
-                
-                // Handle time slots - could be start_time/end_time or startTime/endTime
-                const startTime = gameData.start_time || gameData.startTime || "00:00";
-                const endTime = gameData.end_time || gameData.endTime || "00:00";
-                
-                return {
-                  id: gameData.id,
-                  hostName: hostName,
-                  hostAvatar: gameData.host_profile_image_url || gameData.host_avatar || gameData.hostAvatar || "",
-                  turfName: turfName,
-                  turfAddress: turfAddress,
-                  date: formatDate(gameData.date),
-                  timeSlot: `${startTime}-${endTime}`,
-                  format: gameData.format || "Game",
-                  skillLevel: capitalizeSkillLevel(gameData.skill_level || gameData.skillLevel),
-                  currentPlayers: gameData.current_players || gameData.currentPlayers || 1,
-                  maxPlayers: gameData.max_players || gameData.maxPlayers || 2,
-                  costPerPerson: gameData.cost_per_person || gameData.costPerPerson || 0,
-                  notes: gameData.notes,
-                  hostPhone: hostPhone,
-                  distanceKm: undefined,
-                  isUrgent: false
-                };
-              });
+              const transformedGames = await transformGamesData(response.data);
               // Call loadGames to refresh the state properly
               await loadGames();
             }

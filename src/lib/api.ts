@@ -1,4 +1,4 @@
-import { supabase, gameHelpers, turfHelpers } from './supabase';
+import { supabase, gameHelpers, turfHelpers, gameRequestHelpers, notificationHelpers } from './supabase';
 
 // API configuration and client
 const API_BASE_URL = import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api');
@@ -338,8 +338,15 @@ export const gamesAPI = {
   },
 
   async joinGame(gameId: string): Promise<ApiResponse<unknown>> {
-    // This would require a helper function to be implemented
-    return { success: false, error: 'Not implemented yet' };
+    try {
+      const { data, error } = await gameRequestHelpers.sendJoinRequest(gameId);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async createGame(gameData: Record<string, unknown>): Promise<ApiResponse<unknown>> {
@@ -389,24 +396,91 @@ export const gamesAPI = {
   },
 
   // Game request system
-  async requestToJoin(gameId: string): Promise<ApiResponse<any>> {
-    return { success: false, error: 'Not implemented yet' };
+  async requestToJoin(gameId: string, note?: string): Promise<ApiResponse<any>> {
+    try {
+      const { data, error } = await gameRequestHelpers.sendJoinRequest(gameId, note);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getGameRequests(gameId: string): Promise<ApiResponse<any[]>> {
-    return { success: true, data: [] };
+    try {
+      const { data, error } = await gameRequestHelpers.getGameRequests(gameId);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getMyRequests(): Promise<ApiResponse<any[]>> {
-    return { success: true, data: [] };
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { success: false, error: 'Not authenticated' };
+      }
+      
+      // This function doesn't exist yet, return empty array
+      const data: any[] = [];
+      return { success: true, data: data || [] };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
-  async acceptRequest(gameId: string, userId: string): Promise<ApiResponse<any>> {
-    return { success: false, error: 'Not implemented yet' };
+  async acceptRequest(requestId: string, gameId: string): Promise<ApiResponse<any>> {
+    try {
+      const { data, error } = await gameRequestHelpers.acceptRequest(requestId, gameId);
+      if (error) {
+        return { success: false, error };
+      }
+
+      // Create notification for the accepted user
+      if (data && data.user_id) {
+        await notificationHelpers.createNotification(
+          data.user_id,
+          'game_request_accepted',
+          'Request Accepted! 🎉',
+          'Your request to join the game has been accepted. Get ready to play!',
+          { gameId, requestId }
+        );
+      }
+
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 
-  async rejectRequest(gameId: string, userId: string): Promise<ApiResponse<any>> {
-    return { success: false, error: 'Not implemented yet' };
+  async rejectRequest(requestId: string, gameId: string): Promise<ApiResponse<any>> {
+    try {
+      const { data, error } = await gameRequestHelpers.rejectRequest(requestId, gameId);
+      if (error) {
+        return { success: false, error };
+      }
+
+      // Create notification for the rejected user (optional, might be annoying)
+      if (data && data.user_id) {
+        await notificationHelpers.createNotification(
+          data.user_id,
+          'game_request_rejected',
+          'Request Update',
+          'Your request to join the game was not accepted. Keep looking for other games!',
+          { gameId, requestId }
+        );
+      }
+
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   },
 };
 

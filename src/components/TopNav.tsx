@@ -8,6 +8,7 @@ import { authManager, type User as UserType } from '../lib/api';
 import { performSignOut } from '../lib/signOut';
 import { SignOutModal } from './SignOutModal';
 import { NotificationSystem } from './NotificationSystem';
+import { NotificationDropdown } from './NotificationDropdown';
 import { userHelpers } from '../lib/supabase';
 import TapTurfLogo from '../assets/TapTurf_Logo.png';
 
@@ -111,12 +112,7 @@ export function TopNav({
 
           {/* Notifications */}
           {user && (
-            <NotificationSystem 
-              onNotificationClick={(notification) => {
-                console.log('Notification clicked:', notification);
-                // Handle notification clicks - could navigate to relevant page
-              }}
-            />
+            <NotificationDropdown />
           )}
 
           {/* User Menu or Login Button */}

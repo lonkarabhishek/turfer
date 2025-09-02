@@ -7,6 +7,7 @@ import {
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { gamesAPI } from '../lib/api';
+import { gameRequestHelpers } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { buildWhatsAppShareLink } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
@@ -35,6 +36,7 @@ interface GameDetails {
   players?: Array<{
     id: string;
     name: string;
+    profile_image_url?: string;
     joinedAt: string;
   }>;
 }
@@ -42,15 +44,42 @@ interface GameDetails {
 export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
   const { user } = useAuth();
   const [game, setGame] = useState<GameDetails | null>(null);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requestLoading, setRequestLoading] = useState(false);
 
   useEffect(() => {
     loadGameDetails();
+    loadGameParticipants();
   }, [gameId]);
+
+  const loadGameParticipants = async () => {
+    setLoadingPlayers(true);
+    try {
+      const response = await gameRequestHelpers.getGameParticipants(gameId);
+      if (response.data) {
+        // Add the host as the first player
+        const participantsWithHost = response.data.map((participant: any) => ({
+          id: participant.users?.id || participant.user_id,
+          name: participant.users?.name || 'Player',
+          profile_image_url: participant.users?.profile_image_url || '',
+          joinedAt: participant.joined_at
+        }));
+        
+        setPlayers(participantsWithHost);
+      }
+    } catch (error) {
+      console.error('Error loading game participants:', error);
+      setPlayers([]);
+    } finally {
+      setLoadingPlayers(false);
+    }
+  };
 
   const loadGameDetails = async () => {
     try {
@@ -61,12 +90,12 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
         
         // Transform the data to match expected interface
         const transformedGame = {
-          id: gameData.id,
+          id: gameData.id || 'unknown',
           hostName: gameData.users?.name || gameData.host_name || gameData.hostName || "Unknown Host",
           hostPhone: gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999", 
           turfName: gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf",
           turfAddress: gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address",
-          date: gameData.date,
+          date: gameData.date || new Date().toISOString().split('T')[0],
           timeSlot: `${gameData.start_time || gameData.startTime || '00:00'} - ${gameData.end_time || gameData.endTime || '00:00'}`,
           format: gameData.sport || gameData.format || "Game",
           skillLevel: gameData.skill_level || gameData.skillLevel || 'beginner',
@@ -160,6 +189,29 @@ Hosted by ${game.hostName}
       track('copy_game_link', { game_id: gameId });
     } catch (err) {
       console.error('Failed to copy link:', err);
+    }
+  };
+
+  const handleRequestToJoin = async () => {
+    if (!user) {
+      alert('Please login to request to join games');
+      return;
+    }
+
+    setRequestLoading(true);
+    try {
+      const response = await gameRequestHelpers.sendJoinRequest(gameId, `Hi, I'd like to join your ${game?.format} game!`);
+      if (response.success) {
+        alert('Join request sent! The host will be notified.');
+        track('game_request_sent', { game_id: gameId });
+      } else {
+        alert(response.error || 'Failed to send join request');
+      }
+    } catch (error) {
+      console.error('Error sending join request:', error);
+      alert('Failed to send join request');
+    } finally {
+      setRequestLoading(false);
     }
   };
 
@@ -332,32 +384,102 @@ Hosted by ${game.hostName}
               )}
 
               {/* Players List */}
-              {game.players && game.players.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">Players ({game.players.length})</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {game.players.map((player, index) => (
-                      <div key={player.id} className="flex items-center gap-2 text-sm">
-                        <Star className="w-4 h-4 text-yellow-500" />
-                        <span>{player.name}</span>
-                        {index === 0 && <span className="text-xs text-gray-500">(Host)</span>}
-                      </div>
-                    ))}
-                  </div>
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900">
+                    Players ({game.currentPlayers}/{game.maxPlayers})
+                  </h3>
+                  {loadingPlayers && (
+                    <div className="animate-spin w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>
+                  )}
                 </div>
-              )}
+                
+                <div className="space-y-3">
+                  {/* Host */}
+                  <div className="flex items-center gap-3 p-3 bg-primary-50 border border-primary-200 rounded-lg">
+                    <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                      👑
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{game.hostName}</div>
+                      <div className="text-sm text-primary-600">Host & Organizer</div>
+                    </div>
+                  </div>
+                  
+                  {/* Other Players */}
+                  {players.length > 0 ? (
+                    players.map((player, index) => (
+                      <div key={player.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg">
+                        {player.profile_image_url ? (
+                          <img
+                            src={player.profile_image_url}
+                            alt={player.name}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold">
+                            {player.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{player.name}</div>
+                          <div className="text-sm text-gray-500">
+                            Joined {new Date(player.joinedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : !loadingPlayers && game.currentPlayers > 1 && (
+                    <div className="text-center py-4 text-gray-500">
+                      <Users className="w-6 h-6 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm">
+                        {game.currentPlayers - 1} other player{game.currentPlayers > 2 ? 's' : ''} joined
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Player details loading...
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Empty Slots */}
+                  {Array.from({ length: Math.max(0, game.maxPlayers - game.currentPlayers) }, (_, i) => (
+                    <div key={`empty-${i}`} className="flex items-center gap-3 p-3 border-2 border-dashed border-gray-200 rounded-lg">
+                      <div className="w-10 h-10 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center text-gray-400">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-gray-400">Open spot</div>
+                        <div className="text-sm text-gray-300">Waiting for player...</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Action Buttons */}
               {!isGameCompleted && (
-                <div className="flex gap-4">
+                <div className="space-y-3">
                   {!isHost && !hasJoined && !isFull && user && (
-                    <Button 
-                      onClick={handleJoinGame}
-                      disabled={joining}
-                      className="flex-1 bg-primary-600 hover:bg-primary-700"
-                    >
-                      {joining ? 'Joining...' : `Join Game - ₹${game.costPerPerson}`}
-                    </Button>
+                    <div className="flex gap-3">
+                      <Button 
+                        onClick={() => {
+                          // Request to join functionality
+                          handleRequestToJoin();
+                        }}
+                        disabled={requestLoading}
+                        className="flex-1 bg-primary-600 hover:bg-primary-700"
+                      >
+                        {requestLoading ? 'Sending...' : 'Request to Join'}
+                      </Button>
+                      <Button 
+                        onClick={handleJoinGame}
+                        disabled={joining}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        {joining ? 'Joining...' : `Chat Host - ₹${game.costPerPerson}`}
+                      </Button>
+                    </div>
                   )}
                   
                   {hasJoined && (

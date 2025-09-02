@@ -54,10 +54,12 @@ interface GameCardProps {
 
 export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const [requestLoading, setRequestLoading] = useState(false);
+  const [hasRequestedToJoin, setHasRequestedToJoin] = useState(false);
   const { success, error } = useToast();
   const spotsLeft = game.maxPlayers - game.currentPlayers;
   const isAlmostFull = spotsLeft <= 2;
   const isUrgent = game.isUrgent || spotsLeft === 1;
+  const isFull = spotsLeft <= 0;
 
   const handleJoinClick = () => {
     analytics.gameJoined(game.id, spotsLeft);
@@ -110,13 +112,32 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
       return;
     }
 
+    // Check if game is full
+    if (game.currentPlayers >= game.maxPlayers) {
+      error('This game is already full!');
+      return;
+    }
+
     setRequestLoading(true);
     try {
       const response = await gamesAPI.requestToJoin(game.id);
       if (response.success) {
         success('Join request sent! The host will review your request.');
         analytics.gameRequestSent(game.id);
+        setHasRequestedToJoin(true);
+
+        // Create notification for the host
+        // Note: This would normally be handled server-side, but for now we do it client-side
+        try {
+          // We would need to get the host's user ID to send them a notification
+          // For now, we'll rely on the host checking their dashboard
+        } catch (notificationError) {
+          console.warn('Could not send notification to host:', notificationError);
+        }
       } else {
+        if (response.error?.includes('already have a pending request')) {
+          setHasRequestedToJoin(true);
+        }
         error(response.error || 'Failed to send join request');
       }
     } catch (err) {
@@ -265,32 +286,45 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
           {/* Action buttons - only show when user is authenticated */}
           {user ? (
             <div className="space-y-2">
-              <Button
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRequestToJoin();
-                }}
-                disabled={requestLoading}
-              >
-                {requestLoading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                ) : (
-                  <UserPlus className="w-4 h-4 mr-2" />
-                )}
-                {requestLoading ? 'Sending...' : 'Request to Join'}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleJoinClick();
-                }}
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Chat on WhatsApp
-              </Button>
+              {isFull ? (
+                <div className="w-full p-3 bg-red-50 border border-red-200 rounded-lg text-center text-sm text-red-600 font-medium">
+                  🎯 Game is Full
+                </div>
+              ) : hasRequestedToJoin ? (
+                <div className="w-full p-3 bg-orange-50 border border-orange-200 rounded-lg text-center text-sm text-orange-700 font-medium">
+                  ⏳ Request Sent - Awaiting Host Response
+                </div>
+              ) : (
+                <Button
+                  className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRequestToJoin();
+                  }}
+                  disabled={requestLoading}
+                >
+                  {requestLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  ) : (
+                    <UserPlus className="w-4 h-4 mr-2" />
+                  )}
+                  {requestLoading ? 'Sending...' : 'Request to Join'}
+                </Button>
+              )}
+              
+              {!isFull && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleJoinClick();
+                  }}
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Chat on WhatsApp
+                </Button>
+              )}
             </div>
           ) : (
             <div className="w-full p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500 border border-gray-200">

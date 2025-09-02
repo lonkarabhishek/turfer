@@ -456,13 +456,27 @@ export const gameHelpers = {
       
       console.log('🔍 ALL games in database:', { dbGames, dbError, count: dbGames?.length });
       
-      // Also check games without status filter (no JOINs)
-      const { data: rawGames, error: rawError } = await supabase
+      // Try to get games with turf data joined
+      const { data: gamesWithTurfs, error: joinError } = await supabase
         .from('games')
-        .select('*')
-        .limit(5);
+        .select(`
+          *,
+          turfs!inner (
+            id,
+            name,
+            address,
+            pricePerHour
+          ),
+          users (
+            id,
+            name,
+            phone,
+            profile_image_url
+          )
+        `)
+        .limit(params.limit || 20);
       
-      console.log('🔍 ALL games without filters (no JOINs):', { rawGames, rawError, count: rawGames?.length });
+      console.log('🔍 Games with turfs joined:', { gamesWithTurfs, joinError, count: gamesWithTurfs?.length });
       
       // Let's also try a super simple query without any JOINs
       const { data: simpleGames, error: simpleError } = await supabase
@@ -799,6 +813,482 @@ export const turfHelpers = {
       return { data, error: null };
     } catch (error: any) {
       return { data: null, error: error.message };
+    }
+  }
+};
+
+// Game Request helpers
+export const gameRequestHelpers = {
+  // Send a join request for a game
+  async sendJoinRequest(gameId: string, note?: string) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // First, try using Supabase database
+      try {
+        // Check if user already has a pending request for this game
+        const { data: existingRequest } = await supabase
+          .from('game_requests')
+          .select('*')
+          .eq('game_id', gameId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (existingRequest) {
+          if (existingRequest.status === 'pending') {
+            return { data: null, error: 'You already have a pending request for this game' };
+          }
+          if (existingRequest.status === 'accepted') {
+            return { data: null, error: 'You have already joined this game' };
+          }
+        }
+
+        // Create new join request in database
+        const { data: newRequest, error: requestError } = await supabase
+          .from('game_requests')
+          .insert([
+            {
+              game_id: gameId,
+              user_id: user.id,
+              note: note || null,
+              status: 'pending'
+            }
+          ])
+          .select()
+          .single();
+
+        if (requestError) throw requestError;
+
+        // Get game data to find the host
+        const { data: gameData } = await supabase
+          .from('games')
+          .select('creator_id, sport, users!creator_id(name)')
+          .eq('id', gameId)
+          .single();
+
+        if (gameData && gameData.creator_id) {
+          // Create notification for the host
+          const { error: notificationError } = await supabase
+            .from('notifications')
+            .insert([
+              {
+                user_id: gameData.creator_id,
+                type: 'game_request',
+                title: 'New Join Request! 🎾',
+                message: `${user.user_metadata?.name || user.email?.split('@')[0] || 'Someone'} wants to join your ${gameData.sport || 'game'}`,
+                metadata: { gameId, requestId: newRequest.id },
+                is_read: false
+              }
+            ]);
+
+          if (notificationError) {
+            console.warn('Could not create notification:', notificationError);
+          } else {
+            console.log('✅ Database notification sent to host:', gameData.creator_id);
+          }
+        }
+
+        return { data: newRequest, error: null };
+
+      } catch (dbError) {
+        console.warn('Database request failed, falling back to localStorage:', dbError);
+        
+        // Fallback to localStorage
+        const existingRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const existingRequest = existingRequests.find((r: any) => 
+          r.game_id === gameId && r.user_id === user.id
+        );
+
+        if (existingRequest) {
+          if (existingRequest.status === 'pending') {
+            return { data: null, error: 'You already have a pending request for this game' };
+          }
+          if (existingRequest.status === 'accepted') {
+            return { data: null, error: 'You have already joined this game' };
+          }
+        }
+
+        // Create new request in localStorage
+        const localRequest = {
+          id: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          game_id: gameId,
+          user_id: user.id,
+          note: note || null,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          user_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          user_email: user.email,
+          user_phone: user.user_metadata?.phone || ''
+        };
+
+        if (existingRequest) {
+          const requestIndex = existingRequests.findIndex((r: any) => r.id === existingRequest.id);
+          existingRequests[requestIndex] = localRequest;
+        } else {
+          existingRequests.push(localRequest);
+        }
+
+        localStorage.setItem('tapturf_game_requests', JSON.stringify(existingRequests));
+
+        // Try to notify host via localStorage
+        try {
+          const games = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
+          const targetGame = games.find((g: any) => g.id === gameId);
+          let hostUserId = targetGame?.creator_id;
+
+          if (!hostUserId) {
+            const { data: gameData } = await supabase.from('games').select('creator_id').eq('id', gameId).single();
+            hostUserId = gameData?.creator_id;
+          }
+
+          if (hostUserId) {
+            const hostNotification = {
+              id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              user_id: hostUserId,
+              type: 'game_request',
+              title: 'New Join Request! 🎾',
+              message: `${localRequest.user_name} wants to join your game`,
+              metadata: { gameId, requestId: localRequest.id },
+              is_read: false,
+              created_at: new Date().toISOString()
+            };
+
+            const hostNotifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
+            hostNotifications.unshift(hostNotification);
+            localStorage.setItem('tapturf_notifications', JSON.stringify(hostNotifications));
+            
+            console.log('✅ localStorage notification sent to host:', hostUserId);
+          }
+        } catch (error) {
+          console.warn('Error creating host notification:', error);
+        }
+
+        return { data: localRequest, error: null };
+      }
+
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get requests for a specific game (for host)
+  async getGameRequests(gameId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('game_requests')
+        .select(`
+          *,
+          users!user_id (
+            id,
+            name,
+            email,
+            phone,
+            profile_image_url
+          )
+        `)
+        .eq('game_id', gameId)
+        .eq('status', 'pending')
+        .order('requested_at', { ascending: false });
+
+      if (error) {
+        // Fallback to localStorage
+        const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const gameRequests = localRequests.filter((r: any) => 
+          r.game_id === gameId && r.status === 'pending'
+        );
+        return { data: gameRequests, error: null };
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: [], error: error.message };
+    }
+  },
+
+  // Accept a join request (for host)
+  async acceptRequest(requestId: string, gameId: string) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Check if game exists and user is the host
+      const { data: game } = await supabase
+        .from('games')
+        .select('id, creator_id, current_players, max_players')
+        .eq('id', gameId)
+        .eq('creator_id', user.id)
+        .single();
+
+      if (!game) {
+        return { data: null, error: 'Game not found or you are not the host' };
+      }
+
+      if (game.current_players >= game.max_players) {
+        return { data: null, error: 'Game is already full' };
+      }
+
+      // Update request status
+      const { data: updatedRequest, error: requestError } = await supabase
+        .from('game_requests')
+        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .eq('id', requestId)
+        .select(`
+          *,
+          users!user_id (
+            id,
+            name,
+            email,
+            phone
+          )
+        `)
+        .single();
+
+      if (requestError) {
+        // Fallback to localStorage
+        const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const requestIndex = localRequests.findIndex((r: any) => r.id === requestId);
+        
+        if (requestIndex >= 0) {
+          localRequests[requestIndex].status = 'accepted';
+          localRequests[requestIndex].responded_at = new Date().toISOString();
+          localStorage.setItem('tapturf_game_requests', JSON.stringify(localRequests));
+          
+          // Update game player count in localStorage
+          const localGames = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
+          const gameIndex = localGames.findIndex((g: any) => g.id === gameId);
+          if (gameIndex >= 0) {
+            localGames[gameIndex].current_players = (localGames[gameIndex].current_players || 1) + 1;
+            localStorage.setItem('tapturf_frontend_games', JSON.stringify(localGames));
+          }
+          
+          return { data: localRequests[requestIndex], error: null };
+        }
+        return { data: null, error: 'Request not found' };
+      }
+
+      // Increment player count in game
+      await supabase
+        .from('games')
+        .update({ current_players: game.current_players + 1 })
+        .eq('id', gameId);
+
+      // Create game participant entry
+      await supabase
+        .from('game_participants')
+        .insert([{
+          game_id: gameId,
+          user_id: updatedRequest.user_id,
+          joined_at: new Date().toISOString()
+        }]);
+
+      return { data: updatedRequest, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Reject a join request (for host)
+  async rejectRequest(requestId: string, gameId: string) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Check if user is the host
+      const { data: game } = await supabase
+        .from('games')
+        .select('id, creator_id')
+        .eq('id', gameId)
+        .eq('creator_id', user.id)
+        .single();
+
+      if (!game) {
+        return { data: null, error: 'Game not found or you are not the host' };
+      }
+
+      // Update request status
+      const { data, error } = await supabase
+        .from('game_requests')
+        .update({ status: 'rejected', responded_at: new Date().toISOString() })
+        .eq('id', requestId)
+        .select()
+        .single();
+
+      if (error) {
+        // Fallback to localStorage
+        const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const requestIndex = localRequests.findIndex((r: any) => r.id === requestId);
+        
+        if (requestIndex >= 0) {
+          localRequests[requestIndex].status = 'rejected';
+          localRequests[requestIndex].responded_at = new Date().toISOString();
+          localStorage.setItem('tapturf_game_requests', JSON.stringify(localRequests));
+          return { data: localRequests[requestIndex], error: null };
+        }
+        return { data: null, error: 'Request not found' };
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get game participants
+  async getGameParticipants(gameId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('game_participants')
+        .select(`
+          *,
+          users!user_id (
+            id,
+            name,
+            email,
+            profile_image_url
+          )
+        `)
+        .eq('game_id', gameId)
+        .order('joined_at', { ascending: true });
+
+      if (error) {
+        // Fallback to basic data
+        return { data: [], error: null };
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: [], error: error.message };
+    }
+  }
+};
+
+// Notification helpers
+export const notificationHelpers = {
+  // Create notification
+  async createNotification(userId: string, type: string, title: string, message: string, metadata?: any) {
+    try {
+      const notificationData = {
+        user_id: userId,
+        type,
+        title,
+        message,
+        metadata: metadata || {},
+        is_read: false,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert([notificationData])
+        .select()
+        .single();
+
+      if (error) {
+        // Fallback to localStorage
+        const localNotification = {
+          id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          ...notificationData
+        };
+
+        const existingNotifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
+        existingNotifications.unshift(localNotification);
+        localStorage.setItem('tapturf_notifications', JSON.stringify(existingNotifications));
+        
+        return { data: localNotification, error: null };
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get user notifications
+  async getUserNotifications(userId: string, limit: number = 50) {
+    try {
+      // First try Supabase database
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (!error && data) {
+        console.log('✅ Loaded notifications from database:', data.length);
+        return { data, error: null };
+      }
+
+      // Fallback to localStorage
+      console.warn('Database failed, using localStorage for notifications:', error);
+      const localNotifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
+      const userNotifications = localNotifications.filter((n: any) => n.user_id === userId);
+      return { data: userNotifications.slice(0, limit), error: null };
+    } catch (error: any) {
+      return { data: [], error: error.message };
+    }
+  },
+
+  // Mark notification as read
+  async markAsRead(notificationId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId)
+        .select()
+        .single();
+
+      if (error) {
+        // Fallback to localStorage
+        const localNotifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
+        const notifIndex = localNotifications.findIndex((n: any) => n.id === notificationId);
+        
+        if (notifIndex >= 0) {
+          localNotifications[notifIndex].is_read = true;
+          localStorage.setItem('tapturf_notifications', JSON.stringify(localNotifications));
+          return { data: localNotifications[notifIndex], error: null };
+        }
+        return { data: null, error: 'Notification not found' };
+      }
+
+      return { data, error: null };
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  // Get unread count
+  async getUnreadCount(userId: string) {
+    try {
+      // First try Supabase database
+      const { data, error, count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+
+      if (!error && typeof count === 'number') {
+        console.log('✅ Got unread count from database:', count);
+        return { data: count, error: null };
+      }
+
+      // Fallback to localStorage
+      console.warn('Database failed, using localStorage for unread count:', error);
+      const localNotifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
+      const unreadCount = localNotifications.filter((n: any) => 
+        n.user_id === userId && !n.is_read
+      ).length;
+      return { data: unreadCount, error: null };
+    } catch (error: any) {
+      return { data: 0, error: error.message };
     }
   }
 };
