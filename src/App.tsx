@@ -364,7 +364,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
   const loadGames = async () => {
     try {
       console.log('🔄 Loading games...');
-      const response = await gamesAPI.getAvailable({ limit: 20 });
+      const response = await gamesAPI.getAvailable();
       console.log('📊 Games API response:', response);
       if (response.success && response.data) {
         console.log('✅ Found games:', response.data.length);
@@ -464,7 +464,7 @@ export default function App() {
   const loadGames = async () => {
     try {
       console.log('🔄 Loading games...');
-      const response = await gamesAPI.getAvailable({ limit: 20 });
+      const response = await gamesAPI.getAvailable();
       console.log('📊 Games API response:', response);
       if (response.success && response.data) {
         console.log('✅ Found games:', response.data.length);
@@ -769,7 +769,7 @@ export default function App() {
           // setShowCreateGame(false);
           // Always refresh the games list to show the newly created game
           try {
-            const response = await gamesAPI.getAvailable({ limit: 20 });
+            const response = await gamesAPI.getAvailable();
             if (response.success && response.data) {
               const transformedGames = await transformGamesData(response.data);
               // Call loadGames to refresh the state properly

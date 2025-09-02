@@ -428,7 +428,7 @@ export const gameHelpers = {
           )
         `)
         .eq('creator_id', userId)
-        .order('date', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (error) {
         throw error;
@@ -452,7 +452,7 @@ export const gameHelpers = {
       const { data: dbGames, error: dbError } = await supabase
         .from('games')
         .select('*')
-        .limit(10);
+        .order('created_at', { ascending: false });
       
       console.log('🔍 ALL games in database:', { dbGames, dbError, count: dbGames?.length });
       
@@ -474,7 +474,7 @@ export const gameHelpers = {
             profile_image_url
           )
         `)
-        .limit(params.limit || 20);
+        .order('created_at', { ascending: false });
       
       console.log('🔍 Games with turfs joined:', { gamesWithTurfs, joinError, count: gamesWithTurfs?.length });
       
@@ -482,7 +482,7 @@ export const gameHelpers = {
       const { data: simpleGames, error: simpleError } = await supabase
         .from('games')
         .select('id, sport, date, status, creator_id, host_name')
-        .limit(10);
+        .order('created_at', { ascending: false });
       
       console.log('🔍 SIMPLE games query (no joins):', { simpleGames, simpleError, count: simpleGames?.length });
       
@@ -512,11 +512,7 @@ export const gameHelpers = {
         query = query.eq('date', params.date);
       }
 
-      if (params.limit) {
-        query = query.limit(params.limit);
-      }
-
-      query = query.order('date', { ascending: true });
+      query = query.order('created_at', { ascending: false });
 
       const { data, error } = await query;
       
@@ -619,13 +615,8 @@ export const gameHelpers = {
         return true;
       });
 
-      // Apply limit
-      if (params.limit) {
-        filteredGames = filteredGames.slice(0, params.limit);
-      }
-
-      // Sort by date
-      filteredGames.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Sort by creation date (newest first)
+      filteredGames.sort((a: any, b: any) => new Date(b.created_at || b.createdAt).getTime() - new Date(a.created_at || a.createdAt).getTime());
 
       console.log(`Found ${filteredGames.length} frontend games`);
       return filteredGames;

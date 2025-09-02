@@ -106,7 +106,7 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
     setLoadingGames(true);
     try {
       // Get all available games and filter by turf
-      const response = await gamesAPI.getAvailable({ limit: 50 });
+      const response = await gamesAPI.getAvailable();
       if (response.success && response.data) {
         // Filter games that are at this specific turf
         const turfGames = response.data.filter((game: any) => {
