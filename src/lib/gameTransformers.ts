@@ -216,13 +216,24 @@ export async function transformGamesData(games: any[], includeDistance: boolean 
   const transformPromises = games.map(game => transformGameData(game, userLocation));
   const transformedGames = await Promise.all(transformPromises);
   
-  // Sort by distance if we have it, otherwise by date
+  // Sort with full games at the bottom, then by distance/creation date
   return transformedGames.sort((a, b) => {
+    // Check if games are full
+    const aFull = a.currentPlayers >= a.maxPlayers;
+    const bFull = b.currentPlayers >= b.maxPlayers;
+    
+    // If one is full and other isn't, prioritize non-full
+    if (aFull !== bFull) {
+      return aFull ? 1 : -1; // Full games go to bottom
+    }
+    
+    // If both have same fullness status, sort by distance if available
     if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
       return a.distanceKm - b.distanceKm;
     }
-    // Fallback to date sorting
-    return new Date(a.date).getTime() - new Date(b.date).getTime();
+    
+    // Fallback to creation date (newest first)
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 }
 

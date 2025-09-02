@@ -1072,6 +1072,28 @@ export const gameRequestHelpers = {
             localStorage.setItem('tapturf_frontend_games', JSON.stringify(localGames));
           }
           
+          // Send notification to the player (localStorage version)
+          try {
+            const acceptanceNotification = {
+              id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              user_id: localRequests[requestIndex].user_id,
+              type: 'game_request_accepted',
+              title: 'Request Accepted! 🎉',
+              message: `Your request to join the game has been accepted!`,
+              metadata: { gameId, requestId },
+              is_read: false,
+              created_at: new Date().toISOString()
+            };
+
+            const notifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
+            notifications.unshift(acceptanceNotification);
+            localStorage.setItem('tapturf_notifications', JSON.stringify(notifications));
+            
+            console.log('✅ localStorage acceptance notification sent to player:', localRequests[requestIndex].user_id);
+          } catch (notifError) {
+            console.warn('Could not send localStorage acceptance notification:', notifError);
+          }
+          
           return { data: localRequests[requestIndex], error: null };
         }
         return { data: null, error: 'Request not found' };
@@ -1091,6 +1113,30 @@ export const gameRequestHelpers = {
           user_id: updatedRequest.user_id,
           joined_at: new Date().toISOString()
         }]);
+
+      // Send notification to the player that their request was accepted
+      try {
+        const { data: gameData } = await supabase
+          .from('games')
+          .select('sport, date, start_time, end_time')
+          .eq('id', gameId)
+          .single();
+
+        await supabase
+          .from('notifications')
+          .insert([{
+            user_id: updatedRequest.user_id,
+            type: 'game_request_accepted',
+            title: 'Request Accepted! 🎉',
+            message: `Your request to join the ${gameData?.sport || 'game'} has been accepted!`,
+            metadata: { gameId, requestId },
+            is_read: false
+          }]);
+
+        console.log('✅ Acceptance notification sent to player:', updatedRequest.user_id);
+      } catch (notifError) {
+        console.warn('Could not send acceptance notification:', notifError);
+      }
 
       return { data: updatedRequest, error: null };
     } catch (error: any) {
@@ -1171,6 +1217,57 @@ export const gameRequestHelpers = {
       return { data, error: null };
     } catch (error: any) {
       return { data: [], error: error.message };
+    }
+  },
+
+  // Wrapper functions with consistent naming
+  async acceptGameRequest(requestId: string) {
+    // Use the existing acceptRequest function but extract gameId from the request
+    try {
+      const { data, error } = await supabase
+        .from('game_requests')
+        .select('game_id')
+        .eq('id', requestId)
+        .single();
+
+      if (error || !data) {
+        // Fallback to localStorage
+        const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const request = localRequests.find((r: any) => r.id === requestId);
+        if (request) {
+          return await this.acceptRequest(requestId, request.game_id);
+        }
+        return { data: null, error: 'Request not found' };
+      }
+
+      return await this.acceptRequest(requestId, data.game_id);
+    } catch (error: any) {
+      return { data: null, error: error.message };
+    }
+  },
+
+  async rejectGameRequest(requestId: string) {
+    // Use the existing rejectRequest function but extract gameId from the request
+    try {
+      const { data, error } = await supabase
+        .from('game_requests')
+        .select('game_id')
+        .eq('id', requestId)
+        .single();
+
+      if (error || !data) {
+        // Fallback to localStorage
+        const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const request = localRequests.find((r: any) => r.id === requestId);
+        if (request) {
+          return await this.rejectRequest(requestId, request.game_id);
+        }
+        return { data: null, error: 'Request not found' };
+      }
+
+      return await this.rejectRequest(requestId, data.game_id);
+    } catch (error: any) {
+      return { data: null, error: error.message };
     }
   }
 };

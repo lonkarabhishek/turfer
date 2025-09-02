@@ -292,6 +292,20 @@ Hosted by ${game.hostName}
             </div>
           </motion.div>
         )}
+        
+        {/* Full Game Badge */}
+        {!isGameCompleted && isFull && (
+          <motion.div
+            className="bg-red-100 border border-red-200 text-red-800 px-4 py-2 rounded-lg mb-6"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              <span className="font-medium">🎯 Game Full - No More Spots Available</span>
+            </div>
+          </motion.div>
+        )}
 
         {/* Main Game Card */}
         <motion.div

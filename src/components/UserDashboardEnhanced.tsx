@@ -4,7 +4,7 @@ import {
   Calendar, Clock, MapPin, Star, Users, Trophy, 
   Bell, Settings, CreditCard, Heart, LogOut,
   GamepadIcon, Building, History, User as UserIcon,
-  Phone, Mail, Edit3, ChevronRight, Plus
+  Phone, Mail, Edit3, ChevronRight, Plus, Check, X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -13,7 +13,7 @@ import { ProfilePhotoUpload } from './ProfilePhotoUpload';
 import { GameRequestSystem } from './GameRequestSystem';
 import { useAuth } from '../hooks/useAuth';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
-import { userHelpers } from '../lib/supabase';
+import { userHelpers, gameRequestHelpers } from '../lib/supabase';
 
 interface UserDashboardEnhancedProps {
   onNavigate: (page: string) => void;
@@ -46,6 +46,7 @@ interface BookingData {
 const tabs = [
   { id: 'overview', label: 'Overview', icon: UserIcon },
   { id: 'games', label: 'Games', icon: GamepadIcon },
+  { id: 'requests', label: 'Game Requests', icon: Bell },
   { id: 'bookings', label: 'Bookings', icon: Calendar },
   { id: 'profile', label: 'Profile', icon: Settings },
 ];
@@ -56,6 +57,8 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
   const [loading, setLoading] = useState(false);
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [userBookings, setUserBookings] = useState<BookingData[]>([]);
+  const [gameRequests, setGameRequests] = useState<any[]>([]);
+  const [joinedGames, setJoinedGames] = useState<GameData[]>([]);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(user?.profile_image_url || '');
 
   useEffect(() => {
@@ -74,31 +77,42 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
                               '';
       setProfilePhotoUrl(profilePhotoUrl);
 
-      // Load games and bookings (mock data for now)
-      setUserGames([
-        {
-          id: '1',
-          title: 'Football Match',
-          sport: 'Football',
-          date: '2024-01-20',
-          time: '18:00',
-          turfName: 'Green Field Arena',
-          turfAddress: 'Nashik Road',
-          players: '10/14',
-          status: 'upcoming'
-        },
-        {
-          id: '2',
-          title: 'Cricket Practice',
-          sport: 'Cricket',
-          date: '2024-01-18',
-          time: '16:00',
-          turfName: 'Sports Complex',
-          turfAddress: 'College Road',
-          players: '12/16',
-          status: 'completed'
+      // Load game requests for games I host
+      await loadGameRequests();
+
+      // Load real games hosted by the user
+      try {
+        const hostedGamesResponse = await gamesAPI.getUserGames(user.id);
+        if (hostedGamesResponse.success && hostedGamesResponse.data) {
+          const transformedHostedGames = hostedGamesResponse.data.map((gameData: any) => ({
+            id: gameData.id,
+            title: `${gameData.sport || gameData.format || 'Game'}`,
+            sport: gameData.sport || gameData.format || 'Game',
+            date: gameData.date,
+            time: `${gameData.start_time || '00:00'} - ${gameData.end_time || '00:00'}`,
+            turfName: gameData.turfs?.name || gameData.turf_name || 'Unknown Turf',
+            turfAddress: gameData.turfs?.address || gameData.turf_address || 'Unknown Address',
+            players: `${gameData.current_players || 1}/${gameData.max_players || 10}`,
+            status: new Date(`${gameData.date}T${gameData.end_time || '23:59'}`) < new Date() ? 'completed' as const : 'upcoming' as const
+          }));
+          setUserGames(transformedHostedGames);
+        } else {
+          setUserGames([]);
         }
-      ]);
+      } catch (error) {
+        console.error('Error loading hosted games:', error);
+        setUserGames([]);
+      }
+
+      // Load games the user has joined (accepted requests)
+      try {
+        // This would require a new API endpoint to get games user has joined
+        // For now, using empty array
+        setJoinedGames([]);
+      } catch (error) {
+        console.error('Error loading joined games:', error);
+        setJoinedGames([]);
+      }
 
       setUserBookings([
         {
@@ -116,6 +130,71 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
       console.error('Error loading user data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGameRequests = async () => {
+    if (!user) return;
+
+    try {
+      // Get all requests for games I host
+      const myGames = await gamesAPI.getUserGames(user.id);
+      if (myGames.success && myGames.data) {
+        const allRequests = [];
+        
+        for (const game of myGames.data) {
+          const requests = await gameRequestHelpers.getGameRequests(game.id);
+          if (requests.data) {
+            // Add game info to each request
+            const requestsWithGameInfo = requests.data.map((request: any) => ({
+              ...request,
+              game: {
+                id: game.id,
+                sport: game.sport || game.format,
+                date: game.date,
+                time: `${game.start_time || '00:00'} - ${game.end_time || '00:00'}`,
+                turfName: game.turfs?.name || game.turf_name || 'Unknown Turf',
+                turfAddress: game.turfs?.address || game.turf_address || 'Unknown Address'
+              }
+            }));
+            allRequests.push(...requestsWithGameInfo);
+          }
+        }
+        
+        setGameRequests(allRequests);
+      }
+    } catch (error) {
+      console.error('Error loading game requests:', error);
+    }
+  };
+
+  const handleAcceptRequest = async (requestId: string, gameId: string, userId: string) => {
+    try {
+      // Accept the request
+      const response = await gameRequestHelpers.acceptGameRequest(requestId);
+      if (response.data) {
+        // Refresh the requests list
+        await loadGameRequests();
+        
+        // Send notification to the requester
+        // This will be handled by the acceptGameRequest function
+        console.log('Request accepted successfully');
+      }
+    } catch (error) {
+      console.error('Error accepting request:', error);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      const response = await gameRequestHelpers.rejectGameRequest(requestId);
+      if (response.data) {
+        // Refresh the requests list
+        await loadGameRequests();
+        console.log('Request rejected successfully');
+      }
+    } catch (error) {
+      console.error('Error rejecting request:', error);
     }
   };
 
@@ -170,7 +249,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
                 <GamepadIcon className="w-6 h-6 text-white" />
               </div>
               <div className="text-2xl font-bold text-blue-900">{userGames.length}</div>
-              <div className="text-sm text-blue-600">Total Games</div>
+              <div className="text-sm text-blue-600">Games Hosted</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -199,10 +278,10 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
           <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100">
             <CardContent className="p-6 text-center">
               <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Calendar className="w-6 h-6 text-white" />
+                <Bell className="w-6 h-6 text-white" />
               </div>
-              <div className="text-2xl font-bold text-purple-900">{userBookings.length}</div>
-              <div className="text-sm text-purple-600">Bookings</div>
+              <div className="text-2xl font-bold text-purple-900">{gameRequests.length}</div>
+              <div className="text-sm text-purple-600">Join Requests</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -218,7 +297,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
                 <Clock className="w-6 h-6 text-white" />
               </div>
               <div className="text-2xl font-bold text-orange-900">{upcomingGames.length}</div>
-              <div className="text-sm text-orange-600">Upcoming</div>
+              <div className="text-sm text-orange-600">Upcoming Games</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -582,6 +661,113 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
     </div>
   );
 
+  const renderGameRequests = () => (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Game Requests</h2>
+        <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+          {gameRequests.length} pending
+        </Badge>
+      </div>
+
+      {gameRequests.length === 0 ? (
+        <Card className="border-0 shadow-lg rounded-3xl">
+          <CardContent className="text-center py-16">
+            <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">No pending requests</h3>
+            <p className="text-gray-500">
+              When players request to join your games, they'll appear here.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {gameRequests.map((request) => (
+            <Card key={request.id} className="border-0 shadow-lg rounded-3xl">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {(request.users?.name || request.user_name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {request.users?.name || request.user_name || 'Unknown Player'}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          wants to join your {request.game?.sport} game
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-4 mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-500" />
+                          <span>{new Date(request.game?.date).toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            month: 'short', 
+                            day: 'numeric' 
+                          })}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-500" />
+                          <span>{request.game?.time}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-gray-500" />
+                          <span className="truncate">{request.game?.turfName}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {request.note && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+                        <p className="text-sm text-blue-800">
+                          <strong>Message:</strong> "{request.note}"
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="text-xs text-gray-400">
+                      Requested {new Date(request.created_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 ml-4">
+                    <Button
+                      onClick={() => handleRejectRequest(request.id)}
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Reject
+                    </Button>
+                    <Button
+                      onClick={() => handleAcceptRequest(request.id, request.game.id, request.user_id)}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      Accept
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -663,6 +849,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
               >
                 {activeTab === 'overview' && renderOverview()}
                 {activeTab === 'games' && renderGames()}
+                {activeTab === 'requests' && renderGameRequests()}
                 {activeTab === 'bookings' && renderBookings()}
                 {activeTab === 'profile' && renderProfile()}
               </motion.div>
