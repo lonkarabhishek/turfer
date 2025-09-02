@@ -830,12 +830,12 @@ export const gameRequestHelpers = {
       // First, try using Supabase database
       try {
         // Check if user already has a pending request for this game
-        const { data: existingRequest } = await supabase
+        const { data: existingRequest, error: existingError } = await supabase
           .from('game_requests')
           .select('*')
           .eq('game_id', gameId)
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no record exists
 
         if (existingRequest) {
           if (existingRequest.status === 'pending') {
@@ -862,33 +862,48 @@ export const gameRequestHelpers = {
 
         if (requestError) throw requestError;
 
-        // Get game data to find the host
+        // Get game data to find the host (without JOIN to avoid foreign key issues)
         const { data: gameData } = await supabase
           .from('games')
-          .select('creator_id, sport, users!creator_id(name)')
+          .select('creator_id, sport')
           .eq('id', gameId)
           .single();
 
+        console.log('🔍 Game data received:', gameData);
+        
         if (gameData && gameData.creator_id) {
+          console.log('🎯 Creating notification for host:', gameData.creator_id, 'from user:', user.id);
+          console.log('📧 User metadata:', user.user_metadata);
+          console.log('📧 User email:', user.email);
+          
+          const notificationPayload = {
+            user_id: gameData.creator_id,
+            type: 'game_request',
+            title: 'New Join Request! 🎾',
+            message: `${user.user_metadata?.name || user.email?.split('@')[0] || 'Someone'} wants to join your ${gameData.sport || 'game'}`,
+            metadata: { gameId, requestId: newRequest.id },
+            is_read: false
+          };
+          
+          console.log('📦 Notification payload:', notificationPayload);
+          
           // Create notification for the host
-          const { error: notificationError } = await supabase
+          const { data: notificationResult, error: notificationError } = await supabase
             .from('notifications')
-            .insert([
-              {
-                user_id: gameData.creator_id,
-                type: 'game_request',
-                title: 'New Join Request! 🎾',
-                message: `${user.user_metadata?.name || user.email?.split('@')[0] || 'Someone'} wants to join your ${gameData.sport || 'game'}`,
-                metadata: { gameId, requestId: newRequest.id },
-                is_read: false
-              }
-            ]);
+            .insert([notificationPayload])
+            .select();
+
+          console.log('🔍 Insert result:', { data: notificationResult, error: notificationError });
 
           if (notificationError) {
-            console.warn('Could not create notification:', notificationError);
+            console.error('❌ Could not create notification:', notificationError);
+            console.error('❌ Full error details:', JSON.stringify(notificationError, null, 2));
           } else {
             console.log('✅ Database notification sent to host:', gameData.creator_id);
+            console.log('✅ Created notification:', notificationResult);
           }
+        } else {
+          console.warn('⚠️ Could not find game creator_id. Game data:', gameData);
         }
 
         return { data: newRequest, error: null };
@@ -1213,6 +1228,8 @@ export const notificationHelpers = {
   // Get user notifications
   async getUserNotifications(userId: string, limit: number = 50) {
     try {
+      console.log('🔔 Loading notifications for user:', userId);
+      
       // First try Supabase database
       const { data, error } = await supabase
         .from('notifications')
@@ -1222,7 +1239,7 @@ export const notificationHelpers = {
         .limit(limit);
 
       if (!error && data) {
-        console.log('✅ Loaded notifications from database:', data.length);
+        console.log('✅ Loaded notifications from database:', data.length, data);
         return { data, error: null };
       }
 
@@ -1230,6 +1247,7 @@ export const notificationHelpers = {
       console.warn('Database failed, using localStorage for notifications:', error);
       const localNotifications = JSON.parse(localStorage.getItem('tapturf_notifications') || '[]');
       const userNotifications = localNotifications.filter((n: any) => n.user_id === userId);
+      console.log('📦 Using localStorage notifications:', userNotifications.length, userNotifications);
       return { data: userNotifications.slice(0, limit), error: null };
     } catch (error: any) {
       return { data: [], error: error.message };

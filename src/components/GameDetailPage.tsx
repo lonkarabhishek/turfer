@@ -201,7 +201,7 @@ Hosted by ${game.hostName}
     setRequestLoading(true);
     try {
       const response = await gameRequestHelpers.sendJoinRequest(gameId, `Hi, I'd like to join your ${game?.format} game!`);
-      if (response.success) {
+      if (response.data && !response.error) {
         alert('Join request sent! The host will be notified.');
         track('game_request_sent', { game_id: gameId });
       } else {
