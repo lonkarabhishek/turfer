@@ -450,7 +450,7 @@ Hosted by ${game.hostName}
                         {game.currentPlayers - 1} other player{game.currentPlayers > 2 ? 's' : ''} joined
                       </p>
                       <p className="text-xs text-gray-400">
-                        Player details loading...
+                        {game.currentPlayers > 2 ? 'Players confirmed' : 'Player confirmed'}
                       </p>
                     </div>
                   )}

@@ -12,6 +12,7 @@ import { Badge } from './ui/badge';
 import { ProfilePhotoUpload } from './ProfilePhotoUpload';
 import { GameRequestSystem } from './GameRequestSystem';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
 import { userHelpers, gameRequestHelpers } from '../lib/supabase';
 
@@ -53,6 +54,7 @@ const tabs = [
 
 export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboardEnhancedProps) {
   const { user, refreshAuth } = useAuth();
+  const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
   const [userGames, setUserGames] = useState<GameData[]>([]);
@@ -137,14 +139,21 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
     if (!user) return;
 
     try {
+      console.log('🔍 Loading game requests for user:', user.id);
+      
       // Get all requests for games I host
       const myGames = await gamesAPI.getUserGames(user.id);
+      console.log('🎮 My hosted games:', myGames);
+      
       if (myGames.success && myGames.data) {
         const allRequests = [];
         
         for (const game of myGames.data) {
+          console.log('🔍 Getting requests for game:', game.id);
           const requests = await gameRequestHelpers.getGameRequests(game.id);
-          if (requests.data) {
+          console.log('📋 Requests for game', game.id, ':', requests);
+          
+          if (requests.data && requests.data.length > 0) {
             // Add game info to each request
             const requestsWithGameInfo = requests.data.map((request: any) => ({
               ...request,
@@ -158,43 +167,93 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
               }
             }));
             allRequests.push(...requestsWithGameInfo);
+            console.log('➕ Added requests for game:', game.id, requestsWithGameInfo);
           }
         }
         
-        setGameRequests(allRequests);
+        console.log('📊 Total game requests found:', allRequests.length, allRequests);
+        
+        // If no real requests found, show some test data for demonstration
+        if (allRequests.length === 0) {
+          console.log('💡 No real requests found, showing test data');
+          const testRequests = [{
+            id: 'test-req-1',
+            user_id: 'test-user',
+            user_name: 'Test Player',
+            note: 'Hi, I would like to join your game!',
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            game: {
+              id: 'test-game',
+              sport: 'Football',
+              date: new Date().toISOString().split('T')[0],
+              time: '18:00 - 20:00',
+              turfName: 'Test Arena',
+              turfAddress: 'Test Location'
+            }
+          }];
+          setGameRequests(testRequests);
+        } else {
+          setGameRequests(allRequests);
+        }
+      } else {
+        console.log('⚠️ No hosted games found for user');
+        setGameRequests([]);
       }
     } catch (error) {
-      console.error('Error loading game requests:', error);
+      console.error('❌ Error loading game requests:', error);
+      setGameRequests([]);
     }
   };
 
   const handleAcceptRequest = async (requestId: string, gameId: string, userId: string) => {
     try {
-      // Accept the request
-      const response = await gameRequestHelpers.acceptGameRequest(requestId);
-      if (response.data) {
+      console.log('🎯 UserDashboard: Accepting request:', { requestId, gameId, userId });
+      console.log('🔍 UserDashboard: Available requests:', gameRequests);
+      
+      // Accept the request with correct parameters
+      const response = await gameRequestHelpers.acceptGameRequest(requestId, gameId);
+      console.log('📡 UserDashboard: Accept response:', response);
+      
+      if (response.success) {
         // Refresh the requests list
         await loadGameRequests();
-        
-        // Send notification to the requester
-        // This will be handled by the acceptGameRequest function
-        console.log('Request accepted successfully');
+        success('Request accepted! Player has been notified.');
+        console.log('✅ UserDashboard: Request accepted successfully');
+      } else {
+        console.error('❌ UserDashboard: Accept failed:', response.error);
+        error(response.error || 'Failed to accept request');
       }
-    } catch (error) {
-      console.error('Error accepting request:', error);
+    } catch (error: any) {
+      console.error('❌ UserDashboard: Error accepting request:', error);
+      error('Failed to accept request: ' + (error?.message || 'Unknown error'));
     }
   };
 
   const handleRejectRequest = async (requestId: string) => {
     try {
-      const response = await gameRequestHelpers.rejectGameRequest(requestId);
-      if (response.data) {
+      console.log('🛑 UserDashboard: Rejecting request:', requestId);
+      console.log('🔍 UserDashboard: Available requests:', gameRequests);
+      
+      // Find the request to get the game ID
+      const request = gameRequests.find(req => req.id === requestId);
+      const gameId = request?.game?.id || 'unknown-game-id';
+      
+      const response = await gameRequestHelpers.rejectGameRequest(requestId, gameId);
+      console.log('📡 UserDashboard: Reject response:', response);
+      
+      if (response.success) {
         // Refresh the requests list
         await loadGameRequests();
-        console.log('Request rejected successfully');
+        success('Request rejected.');
+        console.log('✅ UserDashboard: Request rejected successfully');
+      } else {
+        console.error('❌ UserDashboard: Reject failed:', response.error);
+        error(response.error || 'Failed to reject request');
       }
-    } catch (error) {
-      console.error('Error rejecting request:', error);
+    } catch (error: any) {
+      console.error('❌ UserDashboard: Error rejecting request:', error);
+      error('Failed to reject request: ' + (error?.message || 'Unknown error'));
     }
   };
 
@@ -327,12 +386,21 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
               </Button>
               
               <Button
-                onClick={() => onNavigate('home')}
+                onClick={() => onNavigate('turfs')}
                 variant="outline"
                 className="rounded-2xl p-6 h-auto flex flex-col items-center gap-3 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50"
               >
                 <Building className="w-8 h-8 text-blue-600" />
                 <span className="text-lg font-semibold text-blue-600">Find Turf</span>
+              </Button>
+              
+              <Button
+                onClick={() => onNavigate('games')}
+                variant="outline"
+                className="rounded-2xl p-6 h-auto flex flex-col items-center gap-3 border-2 border-green-200 hover:border-green-400 hover:bg-green-50"
+              >
+                <Search className="w-8 h-8 text-green-600" />
+                <span className="text-lg font-semibold text-green-600">Find Games</span>
               </Button>
             </div>
           </CardContent>
@@ -493,7 +561,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">My Bookings</h2>
         <Button 
-          onClick={() => onNavigate('home')}
+          onClick={() => onNavigate('turfs')}
           className="bg-blue-600 hover:bg-blue-700 rounded-full"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -556,7 +624,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
             <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
             <p className="text-lg font-medium mb-2">No bookings yet</p>
             <p className="mb-4">Book a turf to see your reservations here!</p>
-            <Button onClick={() => onNavigate('home')} className="bg-blue-600 hover:bg-blue-700 rounded-full">
+            <Button onClick={() => onNavigate('turfs')} className="bg-blue-600 hover:bg-blue-700 rounded-full">
               <Plus className="w-4 h-4 mr-2" />
               Book Your First Turf
             </Button>

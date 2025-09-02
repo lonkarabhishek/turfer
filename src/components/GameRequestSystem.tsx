@@ -10,6 +10,8 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
+import { gamesAPI } from '../lib/api';
+import { gameRequestHelpers } from '../lib/supabase';
 
 export interface GameRequest {
   id: string;
@@ -52,54 +54,69 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
   const loadGameRequests = async () => {
     setLoading(true);
     try {
-      // Mock data for now - replace with actual API call
-      const mockRequests: GameRequest[] = [
-        {
-          id: '1',
-          gameId: 'game-1',
-          gameName: 'Evening Football Match',
-          turfName: 'Green Field Arena',
-          turfAddress: 'Nashik Road',
-          date: '2024-01-20',
-          timeSlot: '18:00-19:00',
-          requesterId: 'user-2',
-          requesterName: 'Rahul Sharma',
-          requesterPhone: '+91 9876543210',
-          requesterAvatar: '',
-          hostId: user!.id,
-          status: 'pending',
-          message: 'Hi! I\'m a regular football player and would love to join this game. My skill level is intermediate.',
-          createdAt: '2024-01-19T10:30:00Z',
-          skillLevel: 'Intermediate',
-          currentPlayers: 8,
-          maxPlayers: 14
-        },
-        {
-          id: '2',
-          gameId: 'game-2',
-          gameName: 'Cricket Practice Session',
-          turfName: 'Sports Complex',
-          turfAddress: 'College Road',
-          date: '2024-01-21',
-          timeSlot: '16:00-18:00',
-          requesterId: 'user-3',
-          requesterName: 'Amit Patel',
-          requesterPhone: '+91 8765432109',
-          requesterAvatar: '',
-          hostId: user!.id,
-          status: 'pending',
-          message: 'Looking forward to playing cricket with you all!',
-          createdAt: '2024-01-19T14:15:00Z',
-          skillLevel: 'Beginner',
-          currentPlayers: 12,
-          maxPlayers: 16
-        }
-      ];
+      console.log('🔍 GameRequestSystem: Loading game requests for user:', user?.id);
       
-      setRequests(mockRequests.filter(req => req.hostId === user!.id));
-    } catch (err) {
-      console.error('Error loading game requests:', err);
-      error('Failed to load game requests');
+      // Get user's hosted games
+      const myGames = await gamesAPI.getUserGames(user!.id);
+      console.log('🎮 GameRequestSystem: My hosted games:', myGames);
+      
+      if (myGames.success && myGames.data) {
+        const allRequests: GameRequest[] = [];
+        
+        for (const game of myGames.data) {
+          console.log('📋 GameRequestSystem: Checking requests for game:', game.id);
+          const requests = await gameRequestHelpers.getGameRequests(game.id);
+          
+          if (requests.data && requests.data.length > 0) {
+            console.log('✨ GameRequestSystem: Found requests for game', game.id, ':', requests.data);
+            
+            // Transform database requests to UI format
+            const transformedRequests = requests.data.map((req: any) => ({
+              id: req.id,
+              gameId: game.id,
+              gameName: `${game.sport || 'Game'} at ${game.turfs?.name || game.turf_name || 'Unknown Turf'}`,
+              turfName: game.turfs?.name || game.turf_name || 'Unknown Turf',
+              turfAddress: game.turfs?.address || game.turf_address || 'Unknown Address',
+              date: new Date(game.date).toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+              }),
+              timeSlot: `${game.start_time || '00:00'} - ${game.end_time || '00:00'}`,
+              requesterId: req.user_id,
+              requesterName: req.users?.name || req.requester_name || 'Unknown User',
+              requesterPhone: req.users?.phone || req.requester_phone || '',
+              requesterAvatar: req.users?.profile_image_url || req.requester_avatar || '',
+              hostId: game.creator_id,
+              status: req.status,
+              message: req.message || 'Would like to join this game.',
+              createdAt: req.created_at,
+              skillLevel: req.skill_level || 'All levels',
+              currentPlayers: game.current_players || 1,
+              maxPlayers: game.max_players || 2
+            }));
+            
+            allRequests.push(...transformedRequests);
+          }
+        }
+        
+        console.log('🎯 GameRequestSystem: Total requests found:', allRequests);
+        setRequests(allRequests);
+      } else {
+        console.log('📭 GameRequestSystem: No hosted games found or no requests');
+        setRequests([]);
+      }
+    } catch (err: any) {
+      console.error('❌ GameRequestSystem: Error loading game requests:', err);
+      console.error('❌ GameRequestSystem: Error details:', {
+        message: err?.message,
+        stack: err?.stack,
+        name: err?.name
+      });
+      // Always show error for debugging
+      error('Failed to load game requests: ' + (err?.message || 'Unknown error'));
+      // Set empty array so UI shows "no requests" instead of loading forever
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -109,26 +126,52 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
     setProcessingRequests(prev => new Set(prev).add(requestId));
     
     try {
-      // Mock API call - replace with actual implementation
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log(`🎯 GameRequestSystem: ${action}ing request:`, requestId);
+      console.log(`🔍 GameRequestSystem: Available requests:`, requests);
+      console.log(`🔍 GameRequestSystem: Looking for request with ID:`, requestId);
       
-      const updatedRequests = requests.map(req => 
-        req.id === requestId 
-          ? { ...req, status: (action === 'accept' ? 'accepted' : 'declined') as 'accepted' | 'declined' }
-          : req
-      );
+      // Find the request to get the game ID
+      const request = requests.find(req => {
+        console.log(`🔍 Comparing req.id: "${req.id}" with requestId: "${requestId}"`);
+        return req.id === requestId;
+      });
       
-      setRequests(updatedRequests);
-      onRequestStatusChange?.(requestId, action === 'accept' ? 'accepted' : 'declined');
-      
-      if (action === 'accept') {
-        success('Request accepted! Player will be notified.');
-      } else {
-        success('Request declined.');
+      if (!request) {
+        console.error(`❌ GameRequestSystem: Request not found! Available request IDs:`, requests.map(r => r.id));
+        throw new Error(`Request not found. Available: ${requests.map(r => r.id).join(', ')}`);
       }
-    } catch (err) {
-      console.error(`Error ${action}ing request:`, err);
-      error(`Failed to ${action} request`);
+      
+      console.log(`✅ GameRequestSystem: Found request:`, request);
+      
+      let response;
+      if (action === 'accept') {
+        response = await gameRequestHelpers.acceptGameRequest(requestId, request.gameId);
+      } else {
+        response = await gameRequestHelpers.rejectGameRequest(requestId, request.gameId);
+      }
+      
+      if (response.success) {
+        // Update the local state
+        const updatedRequests = requests.map(req => 
+          req.id === requestId 
+            ? { ...req, status: (action === 'accept' ? 'accepted' : 'declined') as 'accepted' | 'declined' }
+            : req
+        );
+        
+        setRequests(updatedRequests);
+        onRequestStatusChange?.(requestId, action === 'accept' ? 'accepted' : 'declined');
+        
+        if (action === 'accept') {
+          success('Request accepted! Player has been notified and added to the game.');
+        } else {
+          success('Request declined.');
+        }
+      } else {
+        error(response.error || `Failed to ${action} request`);
+      }
+    } catch (err: any) {
+      console.error(`❌ GameRequestSystem: Error ${action}ing request:`, err);
+      error(err.message || `Failed to ${action} request`);
     } finally {
       setProcessingRequests(prev => {
         const newSet = new Set(prev);

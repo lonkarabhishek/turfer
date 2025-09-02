@@ -983,33 +983,72 @@ export const gameRequestHelpers = {
   // Get requests for a specific game (for host)
   async getGameRequests(gameId: string) {
     try {
+      console.log('🔍 Getting requests for game ID:', gameId);
+      
+      // Try simplified query without foreign key relationship
       const { data, error } = await supabase
         .from('game_requests')
-        .select(`
-          *,
-          users!user_id (
-            id,
-            name,
-            email,
-            phone,
-            profile_image_url
-          )
-        `)
+        .select('*')
         .eq('game_id', gameId)
         .eq('status', 'pending')
-        .order('requested_at', { ascending: false });
+        .order('created_at', { ascending: false });
+
+      console.log('📊 Database query result for game', gameId, ':', { data, error });
+
+      // If we got data, return it with fallback user details
+      if (data && data.length > 0 && !error) {
+        const enrichedRequests = [];
+        
+        // Get user details for each request
+        for (const request of data) {
+          let userName = request.requester_name || 'Game Player';
+          
+          // Try to get user details from auth or users table
+          try {
+            const { data: userData } = await supabase.auth.admin.getUserById(request.user_id);
+            if (userData?.user) {
+              userName = userData.user.user_metadata?.name || 
+                        userData.user.user_metadata?.full_name || 
+                        userData.user.email?.split('@')[0] || 
+                        'Game Player';
+            }
+          } catch (err) {
+            console.log('Could not fetch user details for', request.user_id);
+          }
+          
+          enrichedRequests.push({
+            ...request,
+            users: {
+              id: request.user_id,
+              name: userName,
+              email: '',
+              phone: request.requester_phone || '',
+              profile_image_url: request.requester_avatar || ''
+            }
+          });
+        }
+        console.log('✅ Enriched database requests:', enrichedRequests);
+        return { data: enrichedRequests, error: null };
+      }
 
       if (error) {
+        console.log('⚠️ Database error, falling back to localStorage:', error);
         // Fallback to localStorage
         const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        console.log('📦 All localStorage requests:', localRequests);
+        
         const gameRequests = localRequests.filter((r: any) => 
           r.game_id === gameId && r.status === 'pending'
         );
+        console.log('🎯 Filtered requests for game', gameId, ':', gameRequests);
+        
         return { data: gameRequests, error: null };
       }
 
+      console.log('✅ Returning database requests:', data);
       return { data, error: null };
     } catch (error: any) {
+      console.error('❌ Error in getGameRequests:', error);
       return { data: [], error: error.message };
     }
   },
@@ -1038,30 +1077,26 @@ export const gameRequestHelpers = {
         return { data: null, error: 'Game is already full' };
       }
 
-      // Update request status
+      // Update request status in database
+      console.log('🔄 Attempting to update request:', requestId, 'with status: accepted');
       const { data: updatedRequest, error: requestError } = await supabase
         .from('game_requests')
-        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .update({ status: 'accepted' })
         .eq('id', requestId)
-        .select(`
-          *,
-          users!user_id (
-            id,
-            name,
-            email,
-            phone
-          )
-        `)
+        .select('*')
         .single();
 
+      console.log('📊 Database update result:', { updatedRequest, requestError });
+
       if (requestError) {
+        console.log('⚠️ Database update failed, falling back to localStorage:', requestError);
         // Fallback to localStorage
         const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        console.log('🔍 Looking for request ID:', requestId, 'in localStorage:', localRequests.map(r => r.id));
         const requestIndex = localRequests.findIndex((r: any) => r.id === requestId);
         
         if (requestIndex >= 0) {
           localRequests[requestIndex].status = 'accepted';
-          localRequests[requestIndex].responded_at = new Date().toISOString();
           localStorage.setItem('tapturf_game_requests', JSON.stringify(localRequests));
           
           // Update game player count in localStorage
@@ -1094,9 +1129,11 @@ export const gameRequestHelpers = {
             console.warn('Could not send localStorage acceptance notification:', notifError);
           }
           
-          return { data: localRequests[requestIndex], error: null };
+          console.log('✅ Request accepted successfully in localStorage');
+          return { success: true, data: localRequests[requestIndex], error: null };
         }
-        return { data: null, error: 'Request not found' };
+        console.error('❌ Request not found in localStorage');
+        return { success: false, data: null, error: 'Request not found' };
       }
 
       // Increment player count in game
@@ -1138,9 +1175,11 @@ export const gameRequestHelpers = {
         console.warn('Could not send acceptance notification:', notifError);
       }
 
-      return { data: updatedRequest, error: null };
+      console.log('✅ Request accepted successfully in database');
+      return { success: true, data: updatedRequest, error: null };
     } catch (error: any) {
-      return { data: null, error: error.message };
+      console.error('❌ Error in acceptRequest:', error);
+      return { success: false, data: null, error: error.message };
     }
   },
 
@@ -1164,31 +1203,40 @@ export const gameRequestHelpers = {
         return { data: null, error: 'Game not found or you are not the host' };
       }
 
-      // Update request status
+      // Update request status in database
+      console.log('🔄 Attempting to update request:', requestId, 'with status: rejected');
       const { data, error } = await supabase
         .from('game_requests')
-        .update({ status: 'rejected', responded_at: new Date().toISOString() })
+        .update({ status: 'rejected' })
         .eq('id', requestId)
-        .select()
+        .select('*')
         .single();
 
+      console.log('📊 Database update result:', { data, error });
+
       if (error) {
+        console.log('⚠️ Database update failed, falling back to localStorage:', error);
         // Fallback to localStorage
         const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        console.log('🔍 Looking for request ID:', requestId, 'in localStorage:', localRequests.map(r => r.id));
         const requestIndex = localRequests.findIndex((r: any) => r.id === requestId);
         
         if (requestIndex >= 0) {
           localRequests[requestIndex].status = 'rejected';
-          localRequests[requestIndex].responded_at = new Date().toISOString();
           localStorage.setItem('tapturf_game_requests', JSON.stringify(localRequests));
-          return { data: localRequests[requestIndex], error: null };
+          
+          console.log('✅ Request rejected successfully in localStorage');
+          return { success: true, data: localRequests[requestIndex], error: null };
         }
-        return { data: null, error: 'Request not found' };
+        console.error('❌ Request not found in localStorage');
+        return { success: false, data: null, error: 'Request not found' };
       }
 
-      return { data, error: null };
+      console.log('✅ Request rejected successfully in database');
+      return { success: true, data: data, error: null };
     } catch (error: any) {
-      return { data: null, error: error.message };
+      console.error('❌ Error in rejectRequest:', error);
+      return { success: false, data: null, error: error.message };
     }
   },
 
