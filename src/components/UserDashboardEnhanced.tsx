@@ -4,7 +4,7 @@ import {
   Calendar, Clock, MapPin, Star, Users, Trophy, 
   Bell, Settings, CreditCard, Heart, LogOut,
   GamepadIcon, Building, History, User as UserIcon,
-  Phone, Mail, Edit3, ChevronRight, Plus, Check, X
+  Phone, Mail, Edit3, ChevronRight, Plus, Check, X, Search
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
