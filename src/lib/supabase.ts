@@ -985,12 +985,32 @@ export const gameRequestHelpers = {
     try {
       console.log('🔍 Getting requests for game ID:', gameId);
       
-      // Try simplified query without foreign key relationship
+      // First try with user join to get full user details
+      const { data: requestsWithUsers, error: joinError } = await supabase
+        .from('game_requests')
+        .select(`
+          *,
+          users (
+            name,
+            phone,
+            profile_image_url
+          )
+        `)
+        .eq('game_id', gameId)
+        .order('created_at', { ascending: false });
+
+      if (requestsWithUsers && !joinError) {
+        console.log('✅ Successfully fetched requests with user details:', requestsWithUsers);
+        return { data: requestsWithUsers, error: null };
+      }
+
+      console.log('⚠️ Join query failed, trying simplified query:', joinError);
+
+      // Fallback to simplified query without foreign key relationship
       const { data, error } = await supabase
         .from('game_requests')
         .select('*')
         .eq('game_id', gameId)
-        .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
       console.log('📊 Database query result for game', gameId, ':', { data, error });
@@ -1002,19 +1022,51 @@ export const gameRequestHelpers = {
         // Get user details for each request
         for (const request of data) {
           let userName = request.requester_name || 'Game Player';
+          let userPhone = request.requester_phone || '';
+          let userAvatar = request.requester_avatar || '';
           
-          // Try to get user details from auth or users table
+          console.log('🔍 Fetching user details for user_id:', request.user_id);
+          
+          // Method 1: Try users table first
           try {
-            const { data: userData } = await supabase.auth.admin.getUserById(request.user_id);
-            if (userData?.user) {
-              userName = userData.user.user_metadata?.name || 
-                        userData.user.user_metadata?.full_name || 
-                        userData.user.email?.split('@')[0] || 
-                        'Game Player';
+            const { data: userTableData, error: userError } = await supabase
+              .from('users')
+              .select('name, phone, profile_image_url')
+              .eq('id', request.user_id)
+              .single();
+            
+            if (userTableData && !userError) {
+              console.log('✅ Found user in users table:', userTableData);
+              userName = userTableData.name || userName;
+              userPhone = userTableData.phone || userPhone;
+              userAvatar = userTableData.profile_image_url || userAvatar;
+            } else {
+              console.log('⚠️ User not found in users table:', userError);
             }
-          } catch (err) {
-            console.log('Could not fetch user details for', request.user_id);
+          } catch (userTableError) {
+            console.log('❌ Error querying users table:', userTableError);
           }
+          
+          // Method 2: Try auth.admin as fallback if still no name
+          if (userName === 'Game Player' || !userName) {
+            try {
+              console.log('🔄 Trying auth.admin for user:', request.user_id);
+              const { data: userData } = await supabase.auth.admin.getUserById(request.user_id);
+              if (userData?.user) {
+                console.log('✅ Auth user data:', userData.user.user_metadata);
+                userName = userData.user.user_metadata?.name || 
+                          userData.user.user_metadata?.full_name || 
+                          userData.user.email?.split('@')[0] || 
+                          userName;
+                userPhone = userData.user.user_metadata?.phone || userData.user.phone || userPhone;
+                userAvatar = userData.user.user_metadata?.profile_image_url || userAvatar;
+              }
+            } catch (authError) {
+              console.log('❌ Could not fetch auth user details for', request.user_id, ':', authError);
+            }
+          }
+          
+          console.log('📝 Final user details for request:', { userName, userPhone, userAvatar });
           
           enrichedRequests.push({
             ...request,
@@ -1022,8 +1074,8 @@ export const gameRequestHelpers = {
               id: request.user_id,
               name: userName,
               email: '',
-              phone: request.requester_phone || '',
-              profile_image_url: request.requester_avatar || ''
+              phone: userPhone,
+              profile_image_url: userAvatar
             }
           });
         }

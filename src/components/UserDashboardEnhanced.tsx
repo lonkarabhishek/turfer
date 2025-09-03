@@ -116,18 +116,22 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
         setJoinedGames([]);
       }
 
-      setUserBookings([
-        {
-          id: '1',
-          turfName: 'Premium Sports Club',
-          turfAddress: 'Gangapur Road',
-          date: '2024-01-22',
-          time: '19:00',
-          duration: '2 hours',
-          status: 'confirmed',
-          amount: 1200
+      // Load user bookings from API
+      try {
+        console.log('📋 Loading user bookings...');
+        const bookingsResponse = await bookingsAPI.getUserBookings(user.id);
+        
+        if (bookingsResponse.success && bookingsResponse.data) {
+          console.log('✅ User bookings loaded:', bookingsResponse.data);
+          setUserBookings(bookingsResponse.data);
+        } else {
+          console.log('📭 No bookings found for user');
+          setUserBookings([]);
         }
-      ]);
+      } catch (bookingError) {
+        console.error('❌ Error loading bookings:', bookingError);
+        setUserBookings([]);
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {
@@ -733,9 +737,17 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold">
-                        {(request.users?.name || request.user_name || 'U').charAt(0).toUpperCase()}
-                      </div>
+                      {request.users?.profile_image_url ? (
+                        <img 
+                          src={request.users.profile_image_url} 
+                          alt={request.users.name || 'Player'} 
+                          className="w-12 h-12 rounded-full object-cover border-2 border-emerald-200"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center text-white font-semibold">
+                          {(request.users?.name || request.user_name || 'U').charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <h3 className="font-semibold text-gray-900">
                           {request.users?.name || request.user_name || 'Unknown Player'}
