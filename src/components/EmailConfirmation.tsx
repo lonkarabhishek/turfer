@@ -9,73 +9,70 @@ export function EmailConfirmation() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    console.log('📧 Starting email confirmation process');
+    console.log('🔗 Current URL:', window.location.href);
+
+    // Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔄 Auth state changed:', event, !!session);
+      
+      if (event === 'SIGNED_IN' && session) {
+        console.log('✅ User signed in successfully');
+        setStatus('success');
+        setMessage('Your email has been verified successfully!');
+        
+        // Auto-redirect to dashboard after 2 seconds
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+        return;
+      }
+      
+      if (event === 'TOKEN_REFRESHED' && session) {
+        console.log('✅ Token refreshed, user verified');
+        setStatus('success');
+        setMessage('Your email has been verified successfully!');
+        
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+        return;
+      }
+    });
+
     const confirmEmail = async () => {
       try {
-        console.log('📧 Starting email confirmation process');
-        console.log('🔗 Current URL:', window.location.href);
-        console.log('📍 Hash:', window.location.hash);
-        console.log('🔍 Search params:', window.location.search);
-        
-        // Try different ways to get the tokens
-        let accessToken = null;
-        let refreshToken = null;
-        let type = null;
-        
-        // Method 1: Check hash params (most common)
-        if (window.location.hash) {
-          const hashParams = new URLSearchParams(window.location.hash.substring(1));
-          accessToken = hashParams.get('access_token');
-          refreshToken = hashParams.get('refresh_token');
-          type = hashParams.get('type');
-          console.log('🔑 From hash - Access Token:', !!accessToken, 'Refresh Token:', !!refreshToken, 'Type:', type);
-        }
-        
-        // Method 2: Check query params (alternative)
-        if (!accessToken && window.location.search) {
-          const urlParams = new URLSearchParams(window.location.search);
-          accessToken = urlParams.get('access_token');
-          refreshToken = urlParams.get('refresh_token');
-          type = urlParams.get('type');
-          console.log('🔑 From search - Access Token:', !!accessToken, 'Refresh Token:', !!refreshToken, 'Type:', type);
-        }
-        
-        // Method 3: Try Supabase's built-in session from URL
-        if (!accessToken) {
-          console.log('🔄 Trying Supabase getSessionFromUrl...');
-          const { data, error } = await supabase.auth.getSession();
-          console.log('📱 Current session:', !!data.session, error?.message);
+        // First check if user is already authenticated
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user.email_confirmed_at) {
+          console.log('✅ User already verified and logged in');
+          setStatus('success');
+          setMessage('Your email has been verified successfully!');
           
-          if (!data.session) {
-            // Try to exchange the URL for a session
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSessionFromUrl(window.location.href);
-            console.log('🔄 Session from URL:', !!sessionData.session, sessionError?.message);
-            
-            if (sessionData.session) {
-              setStatus('success');
-              setMessage('Your email has been verified successfully!');
-              
-              // Auto-redirect to dashboard after 2 seconds
-              setTimeout(() => {
-                window.location.href = '/';
-              }, 2000);
-              return;
-            }
-          } else {
-            // Already have a session
-            setStatus('success');
-            setMessage('Your email has been verified successfully!');
-            
-            setTimeout(() => {
-              window.location.href = '/';
-            }, 2000);
-            return;
-          }
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+          return;
         }
+
+        // Try to extract tokens from URL
+        const urlParams = new URLSearchParams(window.location.hash.substring(1) || window.location.search);
+        const accessToken = urlParams.get('access_token');
+        const refreshToken = urlParams.get('refresh_token');
+        const type = urlParams.get('type');
+        
+        console.log('🔑 URL params:', { 
+          hasAccessToken: !!accessToken, 
+          hasRefreshToken: !!refreshToken, 
+          type,
+          hash: window.location.hash,
+          search: window.location.search
+        });
         
         if (accessToken && refreshToken) {
           console.log('✅ Found tokens, setting session...');
-          // Set the session
-          const { error } = await supabase.auth.setSession({
+          
+          const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
@@ -85,21 +82,18 @@ export function EmailConfirmation() {
             throw error;
           }
 
-          console.log('🎉 Session set successfully!');
-          setStatus('success');
-          setMessage('Your email has been verified successfully!');
+          console.log('🎉 Session set successfully!', !!data.session);
+          // Success will be handled by the auth state change listener
           
-          // Auto-redirect to dashboard after 2 seconds
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 2000);
         } else {
-          console.error('❌ No valid tokens found');
-          console.log('🔍 Available URL parts:');
-          console.log('  - Hash:', window.location.hash);
-          console.log('  - Search:', window.location.search);
-          console.log('  - Pathname:', window.location.pathname);
-          throw new Error('Invalid confirmation link. Please make sure you clicked the correct link from your email.');
+          // No tokens found, wait a bit for potential auth state changes
+          setTimeout(() => {
+            if (status === 'loading') {
+              console.error('❌ No valid tokens found after timeout');
+              setStatus('error');
+              setMessage('Invalid confirmation link. Please make sure you clicked the correct link from your email, or try signing up again.');
+            }
+          }, 5000); // Wait 5 seconds for auth state change
         }
       } catch (error: any) {
         console.error('❌ Email confirmation error:', error);
@@ -109,7 +103,12 @@ export function EmailConfirmation() {
     };
 
     confirmEmail();
-  }, []);
+
+    // Cleanup auth listener
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [status]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-blue-50 flex items-center justify-center p-4">
