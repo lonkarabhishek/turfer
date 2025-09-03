@@ -75,6 +75,14 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
           }
         });
 
+        console.log('🔐 Signup response:', { 
+          user: !!data.user, 
+          session: !!data.session,
+          userId: data.user?.id,
+          emailConfirmed: data.user?.email_confirmed_at,
+          redirectTo: `${window.location.origin}/confirm`
+        });
+
         if (error) throw error;
 
         if (data.user) {
