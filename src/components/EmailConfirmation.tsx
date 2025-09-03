@@ -11,12 +11,69 @@ export function EmailConfirmation() {
   useEffect(() => {
     const confirmEmail = async () => {
       try {
-        // Get the hash params from URL
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
+        console.log('📧 Starting email confirmation process');
+        console.log('🔗 Current URL:', window.location.href);
+        console.log('📍 Hash:', window.location.hash);
+        console.log('🔍 Search params:', window.location.search);
+        
+        // Try different ways to get the tokens
+        let accessToken = null;
+        let refreshToken = null;
+        let type = null;
+        
+        // Method 1: Check hash params (most common)
+        if (window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          accessToken = hashParams.get('access_token');
+          refreshToken = hashParams.get('refresh_token');
+          type = hashParams.get('type');
+          console.log('🔑 From hash - Access Token:', !!accessToken, 'Refresh Token:', !!refreshToken, 'Type:', type);
+        }
+        
+        // Method 2: Check query params (alternative)
+        if (!accessToken && window.location.search) {
+          const urlParams = new URLSearchParams(window.location.search);
+          accessToken = urlParams.get('access_token');
+          refreshToken = urlParams.get('refresh_token');
+          type = urlParams.get('type');
+          console.log('🔑 From search - Access Token:', !!accessToken, 'Refresh Token:', !!refreshToken, 'Type:', type);
+        }
+        
+        // Method 3: Try Supabase's built-in session from URL
+        if (!accessToken) {
+          console.log('🔄 Trying Supabase getSessionFromUrl...');
+          const { data, error } = await supabase.auth.getSession();
+          console.log('📱 Current session:', !!data.session, error?.message);
+          
+          if (!data.session) {
+            // Try to exchange the URL for a session
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSessionFromUrl(window.location.href);
+            console.log('🔄 Session from URL:', !!sessionData.session, sessionError?.message);
+            
+            if (sessionData.session) {
+              setStatus('success');
+              setMessage('Your email has been verified successfully!');
+              
+              // Auto-redirect to dashboard after 2 seconds
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 2000);
+              return;
+            }
+          } else {
+            // Already have a session
+            setStatus('success');
+            setMessage('Your email has been verified successfully!');
+            
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 2000);
+            return;
+          }
+        }
         
         if (accessToken && refreshToken) {
+          console.log('✅ Found tokens, setting session...');
           // Set the session
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -24,23 +81,30 @@ export function EmailConfirmation() {
           });
 
           if (error) {
+            console.error('❌ Session error:', error);
             throw error;
           }
 
+          console.log('🎉 Session set successfully!');
           setStatus('success');
           setMessage('Your email has been verified successfully!');
           
-          // Auto-redirect to dashboard after 3 seconds
+          // Auto-redirect to dashboard after 2 seconds
           setTimeout(() => {
             window.location.href = '/';
-          }, 3000);
+          }, 2000);
         } else {
-          throw new Error('Invalid confirmation link');
+          console.error('❌ No valid tokens found');
+          console.log('🔍 Available URL parts:');
+          console.log('  - Hash:', window.location.hash);
+          console.log('  - Search:', window.location.search);
+          console.log('  - Pathname:', window.location.pathname);
+          throw new Error('Invalid confirmation link. Please make sure you clicked the correct link from your email.');
         }
       } catch (error: any) {
-        console.error('Email confirmation error:', error);
+        console.error('❌ Email confirmation error:', error);
         setStatus('error');
-        setMessage(error.message || 'Failed to verify email. Please try again.');
+        setMessage(error.message || 'Failed to verify email. Please try signing up again or contact support.');
       }
     };
 
