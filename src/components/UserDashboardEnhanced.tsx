@@ -172,30 +172,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
         }
         
         console.log('📊 Total game requests found:', allRequests.length, allRequests);
-        
-        // If no real requests found, show some test data for demonstration
-        if (allRequests.length === 0) {
-          console.log('💡 No real requests found, showing test data');
-          const testRequests = [{
-            id: 'test-req-1',
-            user_id: 'test-user',
-            user_name: 'Test Player',
-            note: 'Hi, I would like to join your game!',
-            status: 'pending',
-            created_at: new Date().toISOString(),
-            game: {
-              id: 'test-game',
-              sport: 'Football',
-              date: new Date().toISOString().split('T')[0],
-              time: '18:00 - 20:00',
-              turfName: 'Test Arena',
-              turfAddress: 'Test Location'
-            }
-          }];
-          setGameRequests(testRequests);
-        } else {
-          setGameRequests(allRequests);
-        }
+        setGameRequests(allRequests);
       } else {
         console.log('⚠️ No hosted games found for user');
         setGameRequests([]);
