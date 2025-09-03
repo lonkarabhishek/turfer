@@ -66,7 +66,7 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
           email: formData.email,
           password: formData.password,
           options: {
-            emailRedirectTo: `${window.location.origin}/welcome`,
+            emailRedirectTo: `${window.location.origin}/confirm`,
             data: {
               name: formData.name,
               phone: formData.phone,

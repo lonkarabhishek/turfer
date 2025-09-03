@@ -20,6 +20,7 @@ import { UserDashboardEnhanced } from "./components/UserDashboardEnhanced";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { GameDetailPage } from "./components/GameDetailPage";
 import { WelcomePage } from "./components/WelcomePage";
+import { EmailConfirmation } from "./components/EmailConfirmation";
 import { ToastContainer } from "./components/ui/toast";
 
 import { useAuth } from "./hooks/useAuth";
@@ -449,7 +450,7 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -487,6 +488,20 @@ export default function App() {
       loadGames();
     }
   }, [currentPage]);
+
+  // Handle URL routing on mount
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes('/confirm')) {
+      setCurrentPage('confirm');
+    } else if (path.includes('/game/')) {
+      const gameId = path.split('/game/')[1];
+      if (gameId) {
+        setSelectedGameId(gameId);
+        setCurrentPage('game-detail');
+      }
+    }
+  }, []);
 
   // Update URL when navigating to game pages
   const handleGameClick = useCallback((gameId: string) => {
@@ -599,7 +614,9 @@ export default function App() {
         onHomeClick={handleBackToHome}
       />
       
-      {currentPage === 'turf-detail' && selectedTurfId ? (
+      {currentPage === 'confirm' ? (
+        <EmailConfirmation />
+      ) : currentPage === 'turf-detail' && selectedTurfId ? (
         <TurfDetailPage
           turfId={selectedTurfId}
           onBack={handleBackToHome}
