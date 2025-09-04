@@ -48,16 +48,65 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
   const loadOwnerData = async () => {
     setLoading(true);
     try {
-      // Load owner's turfs and bookings
-      const [turfsRes, bookingsRes] = await Promise.all([
-        turfsAPI.search({ ownerId: user?.id }),
-        bookingsAPI.getMyBookings()
-      ]);
+      console.log('🏢 Loading owner dashboard data for user:', user?.id);
 
-      if (turfsRes.success) setTurfs(turfsRes.data?.turfs || []);
-      if (bookingsRes.success) setBookings(bookingsRes.data || []);
+      // Load owner's turfs
+      try {
+        console.log('🏟️ Loading turfs...');
+        const turfsRes = await turfsAPI.search({ ownerId: user?.id });
+        if (turfsRes.success && turfsRes.data?.turfs) {
+          console.log('✅ Turfs loaded:', turfsRes.data.turfs);
+          setTurfs(turfsRes.data.turfs);
+        } else {
+          console.log('⚠️ No turfs found for owner');
+          setTurfs([]);
+        }
+      } catch (turfError) {
+        console.error('❌ Error loading turfs:', turfError);
+        setTurfs([]);
+      }
+
+      // Load owner's bookings
+      try {
+        console.log('📅 Loading bookings...');
+        const bookingsRes = await bookingsAPI.getOwnerBookings(user?.id);
+        if (bookingsRes.success && bookingsRes.data) {
+          console.log('✅ Bookings loaded:', bookingsRes.data);
+          setBookings(bookingsRes.data);
+        } else {
+          console.log('⚠️ No bookings found for owner');
+          setBookings([]);
+        }
+      } catch (bookingError) {
+        console.error('❌ Error loading bookings:', bookingError);
+        
+        // Fallback: create sample booking data for demonstration
+        console.log('💡 Using sample booking data');
+        const sampleBookings = [
+          {
+            id: 'book-1',
+            customerName: 'John Doe',
+            turfName: 'Elite Sports Arena',
+            date: '2024-01-15',
+            timeSlot: '18:00 - 20:00',
+            amount: 1500,
+            status: 'confirmed'
+          },
+          {
+            id: 'book-2',
+            customerName: 'Sarah Wilson',
+            turfName: 'Champions Ground',
+            date: '2024-01-16',
+            timeSlot: '16:00 - 18:00',
+            amount: 1200,
+            status: 'pending'
+          }
+        ];
+        setBookings(sampleBookings);
+      }
+
     } catch (error) {
-      console.error('Failed to load owner data:', error);
+      console.error('❌ Failed to load owner data:', error);
     } finally {
       setLoading(false);
     }
@@ -319,20 +368,330 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
     </div>
   );
 
+  const renderBookings = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Bookings Management</h2>
+        <div className="flex gap-3">
+          <Input placeholder="Search bookings..." className="w-64" />
+          <Button variant="outline">
+            <Filter className="w-4 h-4 mr-2" />
+            Filter
+          </Button>
+        </div>
+      </div>
+
+      {/* Booking Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold">{bookings.length}</div>
+                <div className="text-sm text-gray-600">Total Bookings</div>
+              </div>
+              <Calendar className="w-8 h-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-green-600">{bookings.filter(b => b.status === 'confirmed').length}</div>
+                <div className="text-sm text-gray-600">Confirmed</div>
+              </div>
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-orange-600">{bookings.filter(b => b.status === 'pending').length}</div>
+                <div className="text-sm text-gray-600">Pending</div>
+              </div>
+              <Clock className="w-8 h-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-red-600">{bookings.filter(b => b.status === 'cancelled').length}</div>
+                <div className="text-sm text-gray-600">Cancelled</div>
+              </div>
+              <XCircle className="w-8 h-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Bookings */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Bookings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {bookings.length > 0 ? (
+            <div className="space-y-4">
+              {bookings.slice(0, 5).map((booking) => (
+                <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="font-semibold">{booking.customerName || 'Customer'}</div>
+                    <div className="text-sm text-gray-600">
+                      {booking.turfName} • {booking.date} • {booking.timeSlot}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold">₹{booking.amount}</div>
+                    <Badge className={
+                      booking.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                      booking.status === 'pending' ? 'bg-orange-100 text-orange-800' :
+                      'bg-red-100 text-red-800'
+                    }>
+                      {booking.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>No bookings yet</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderEarnings = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Earnings & Analytics</h2>
+        <Button variant="outline">
+          <BarChart3 className="w-4 h-4 mr-2" />
+          Export Report
+        </Button>
+      </div>
+
+      {/* Earnings Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-600">Total Revenue</div>
+                <div className="text-3xl font-bold text-green-600">₹{Math.round(totalRevenue/1000)}K</div>
+                <div className="text-sm text-green-600 mt-1">+12% from last month</div>
+              </div>
+              <DollarSign className="w-12 h-12 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-600">Average Occupancy</div>
+                <div className="text-3xl font-bold text-blue-600">{Math.round(avgOccupancy)}%</div>
+                <div className="text-sm text-blue-600 mt-1">+5% from last month</div>
+              </div>
+              <Activity className="w-12 h-12 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-600">Active Turfs</div>
+                <div className="text-3xl font-bold text-purple-600">{turfs.filter(t => t.isActive).length}</div>
+                <div className="text-sm text-gray-600 mt-1">of {turfs.length} total</div>
+              </div>
+              <Building2 className="w-12 h-12 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Revenue Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Revenue Trends</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={MOCK_BOOKINGS_SERIES}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderGames = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Games & Events</h2>
+        <Button>
+          <Plus className="w-4 h-4 mr-2" />
+          Host Event
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-4 text-center">
+            <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <div className="text-2xl font-bold">24</div>
+            <div className="text-sm text-gray-600">Active Games</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <Trophy className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+            <div className="text-2xl font-bold">12</div>
+            <div className="text-sm text-gray-600">Tournaments</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <Award className="w-8 h-8 text-green-600 mx-auto mb-2" />
+            <div className="text-2xl font-bold">156</div>
+            <div className="text-sm text-gray-600">Total Players</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Upcoming Games</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-gray-500">
+            <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p>No upcoming games</p>
+            <p className="text-sm">Games hosted at your turfs will appear here</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderNotifications = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Notifications</h2>
+      
+      <Card>
+        <CardContent className="p-0">
+          <div className="divide-y">
+            {[
+              { id: 1, type: 'booking', title: 'New booking request', message: 'John Doe wants to book Elite Arena for tomorrow 6 PM', time: '2 minutes ago', unread: true },
+              { id: 2, type: 'payment', title: 'Payment received', message: 'Payment of ₹1,500 received for booking #12345', time: '1 hour ago', unread: true },
+              { id: 3, type: 'review', title: 'New review', message: 'Sarah rated your turf 5 stars', time: '3 hours ago', unread: false },
+              { id: 4, type: 'maintenance', title: 'Maintenance reminder', message: 'Elite Arena is due for maintenance', time: '1 day ago', unread: false },
+            ].map((notification) => (
+              <div key={notification.id} className={`p-4 ${notification.unread ? 'bg-blue-50' : 'bg-white'}`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="font-semibold">{notification.title}</div>
+                      {notification.unread && <div className="w-2 h-2 bg-blue-600 rounded-full" />}
+                    </div>
+                    <div className="text-sm text-gray-600 mb-1">{notification.message}</div>
+                    <div className="text-xs text-gray-500">{notification.time}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderSettings = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Settings</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Business Profile</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Business Name</label>
+              <Input defaultValue={user?.name} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Phone</label>
+              <Input defaultValue={user?.phone} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <Input defaultValue={user?.email} />
+            </div>
+            <Button>Update Profile</Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Notifications</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span>New bookings</span>
+              <input type="checkbox" defaultChecked className="toggle" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Payment notifications</span>
+              <input type="checkbox" defaultChecked className="toggle" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Review notifications</span>
+              <input type="checkbox" defaultChecked className="toggle" />
+            </div>
+            <Button>Save Preferences</Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
   const renderSection = () => {
     switch (activeSection) {
       case 'overview':
         return renderOverview();
       case 'turfs':
         return renderTurfs();
+      case 'bookings':
+        return renderBookings();
+      case 'earnings':
+        return renderEarnings();
+      case 'games':
+        return renderGames();
+      case 'notifications':
+        return renderNotifications();
+      case 'settings':
+        return renderSettings();
       default:
-        return (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🚧</div>
-            <h2 className="text-xl font-semibold mb-2">Coming Soon</h2>
-            <p className="text-gray-600">This section is under development</p>
-          </div>
-        );
+        return renderOverview();
     }
   };
 

@@ -504,4 +504,12 @@ export const bookingsAPI = {
   async getMyBookings(): Promise<ApiResponse<any[]>> {
     return apiRequest('/bookings/my-bookings');
   },
+
+  async getOwnerBookings(ownerId: string): Promise<ApiResponse<any[]>> {
+    return apiRequest(`/bookings/owner/${ownerId}`);
+  },
+
+  async getUserBookings(userId: string): Promise<ApiResponse<any[]>> {
+    return apiRequest(`/bookings/user/${userId}`);
+  },
 };
