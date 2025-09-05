@@ -61,12 +61,12 @@ export function Modal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => !preventClickOutside && onClose()}
-            className="fixed inset-0 bg-black bg-opacity-50 z-[140]"
+            className="fixed inset-0 bg-black bg-opacity-50 z-[9999]"
             role="backdrop"
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-[150] overflow-y-auto">
+          <div className="fixed inset-0 z-[10000] overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}

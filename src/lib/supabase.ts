@@ -99,7 +99,7 @@ export const userHelpers = {
     }
   },
 
-  // Get user profile
+  // Get user profile from users table
   async getProfile(userId: string) {
     try {
       const { data, error } = await supabase
@@ -109,11 +109,13 @@ export const userHelpers = {
         .single();
 
       if (error) {
-        throw error;
+        console.error('Error fetching user profile:', error);
+        return { data: null, error: error.message };
       }
 
       return { data, error: null };
     } catch (error: any) {
+      console.error('Exception in getProfile:', error);
       return { data: null, error: error.message };
     }
   }

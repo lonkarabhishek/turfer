@@ -1,4 +1,4 @@
-import { ChevronDown, User, LogOut, Building2, Plus } from 'lucide-react';
+import { ChevronDown, User, LogOut, Building2, Plus, LayoutDashboard, Settings, HelpCircle, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -20,6 +20,8 @@ interface TopNavProps {
   onCreateGame?: () => void;
   onCityChange?: (city: string) => void;
   onHomeClick?: () => void;
+  onDashboardNavigation?: (section: string) => void;
+  onGameNavigation?: (gameId: string) => void;
 }
 
 export function TopNav({ 
@@ -29,7 +31,9 @@ export function TopNav({
   onProfileClick,
   onCreateGame,
   onCityChange,
-  onHomeClick
+  onHomeClick,
+  onDashboardNavigation,
+  onGameNavigation
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
@@ -99,6 +103,18 @@ export function TopNav({
 
         {/* Right Side - Auth & Actions */}
         <div className="flex items-center gap-3">
+          {/* Dashboard Button - Always Visible for logged in users */}
+          {user && (
+            <Button
+              onClick={onProfileClick}
+              variant="outline"
+              className="hidden sm:flex border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-700 hover:text-primary-800 text-sm px-4 py-2"
+            >
+              <LayoutDashboard className="w-4 h-4 mr-1" />
+              Dashboard
+            </Button>
+          )}
+
           {/* Create Game Button - Always Visible */}
           {user && (
             <Button
@@ -112,7 +128,10 @@ export function TopNav({
 
           {/* Notifications */}
           {user && (
-            <NotificationDropdown />
+            <NotificationDropdown 
+              onGameNavigation={onGameNavigation}
+              onRequestsNavigation={() => onDashboardNavigation?.('requests')}
+            />
           )}
 
           {/* User Menu or Login Button */}
@@ -182,25 +201,90 @@ export function TopNav({
                       </div>
                     </div>
                     
-                    {/* Dashboard Link */}
+                    {/* Dashboard Link - Only for owners */}
+                    {user.role === 'owner' && (
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onProfileClick?.();
+                        }}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <Building2 className="w-4 h-4" />
+                        Owner Dashboard
+                      </button>
+                    )}
+
+                    {/* Dashboard Overview */}
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
-                        onProfileClick?.();
+                        onDashboardNavigation?.('overview');
                       }}
                       className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
                     >
-                      {user.role === 'owner' ? (
-                        <>
-                          <Building2 className="w-4 h-4" />
-                          Owner Dashboard
-                        </>
-                      ) : (
-                        <>
-                          <User className="w-4 h-4" />
-                          My Dashboard
-                        </>
-                      )}
+                      <User className="w-4 h-4" />
+                      Overview
+                    </button>
+
+                    {/* My Games */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onDashboardNavigation?.('games');
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      My Games
+                    </button>
+
+                    {/* Game Requests */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onDashboardNavigation?.('requests');
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Star className="w-4 h-4" />
+                      Game Requests
+                    </button>
+
+                    {/* My Bookings */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onDashboardNavigation?.('bookings');
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Building2 className="w-4 h-4" />
+                      My Bookings
+                    </button>
+
+                    {/* Profile Settings */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onDashboardNavigation?.('profile');
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Profile Settings
+                    </button>
+
+                    {/* Help & Support */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        // Navigate to help
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      Help & Support
                     </button>
                     
                     {/* Mobile Create Game */}

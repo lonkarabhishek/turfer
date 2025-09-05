@@ -22,6 +22,7 @@ import { GameDetailPage } from "./components/GameDetailPage";
 import { WelcomePage } from "./components/WelcomePage";
 import { EmailConfirmation } from "./components/EmailConfirmation";
 import { ToastContainer } from "./components/ui/toast";
+import { UserSyncUtility } from "./components/UserSyncUtility";
 
 import { useAuth } from "./hooks/useAuth";
 import { gamesAPI } from "./lib/api";
@@ -460,6 +461,7 @@ export default function App() {
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
   const [games, setGames] = useState<GameData[]>([]);
   const [turfs, setTurfs] = useState<any[]>([]);
+  const [dashboardSection, setDashboardSection] = useState<string>('overview');
 
   // Load games for the games page
   const loadGames = async () => {
@@ -576,6 +578,12 @@ export default function App() {
       handleBackToHome();
       setActiveTab('home');
     } else if (section === 'games') {
+      setCurrentPage('games');
+      setActiveTab('games');
+    } else if (section === 'turfs') {
+      setCurrentPage('turfs');
+      setActiveTab('turfs');
+    } else {
       handleBackToHome();
       setActiveTab('home');
     }
@@ -584,6 +592,18 @@ export default function App() {
   const handleLegalPageClick = (type: 'privacy' | 'terms' | 'support') => {
     setLegalPageType(type);
     setCurrentPage('legal');
+  };
+
+  const handleDashboardNavigation = (section: string) => {
+    setDashboardSection(section);
+    setCurrentPage('dashboard');
+    setActiveTab('dashboard');
+  };
+
+  const handleGameNavigation = (gameId: string) => {
+    setSelectedGameId(gameId);
+    setCurrentPage('game-detail');
+    window.history.pushState({}, '', `/game/${gameId}`);
   };
 
 
@@ -603,6 +623,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      {/* Ensure user is synced to users table */}
+      <UserSyncUtility />
+      
       <div className="min-h-screen bg-gray-50">
         <TopNav 
         currentCity={currentCity}
@@ -612,6 +635,8 @@ export default function App() {
         onCreateGame={() => setShowCreateGame(true)}
         onCityChange={setCurrentCity}
         onHomeClick={handleBackToHome}
+        onDashboardNavigation={handleDashboardNavigation}
+        onGameNavigation={handleGameNavigation}
       />
       
       {currentPage === 'confirm' ? (
@@ -634,7 +659,7 @@ export default function App() {
         user.role === 'owner' ? (
           <OwnerDashboard onNavigate={handleNavigate} />
         ) : (
-          <UserDashboardEnhanced onNavigate={handleNavigate} onCreateGame={() => setCurrentPage('create-game')} />
+          <UserDashboardEnhanced onNavigate={handleNavigate} onCreateGame={() => setShowCreateGame(true)} initialTab={dashboardSection} onGameNavigation={handleGameNavigation} />
         )
       ) : currentPage === 'profile' && user ? (
         <UserProfile

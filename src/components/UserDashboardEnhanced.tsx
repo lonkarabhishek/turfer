@@ -16,9 +16,23 @@ import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
 import { userHelpers, gameRequestHelpers } from '../lib/supabase';
 
+// Utility function to format time to 12-hour format for Indian users
+const formatTo12Hour = (time24: string): string => {
+  if (!time24) return time24;
+  
+  const [hours, minutes] = time24.split(':');
+  const hour24 = parseInt(hours, 10);
+  const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+  const ampm = hour24 >= 12 ? 'PM' : 'AM';
+  
+  return `${hour12}:${minutes} ${ampm}`;
+};
+
 interface UserDashboardEnhancedProps {
   onNavigate: (page: string) => void;
   onCreateGame: () => void;
+  initialTab?: string;
+  onGameNavigation?: (gameId: string) => void;
 }
 
 interface GameData {
@@ -52,22 +66,27 @@ const tabs = [
   { id: 'profile', label: 'Profile', icon: Settings },
 ];
 
-export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboardEnhancedProps) {
+export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = 'overview', onGameNavigation }: UserDashboardEnhancedProps) {
   const { user, refreshAuth } = useAuth();
   const { success, error } = useToast();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [loading, setLoading] = useState(false);
   const [userGames, setUserGames] = useState<GameData[]>([]);
   const [userBookings, setUserBookings] = useState<BookingData[]>([]);
   const [gameRequests, setGameRequests] = useState<any[]>([]);
   const [joinedGames, setJoinedGames] = useState<GameData[]>([]);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(user?.profile_image_url || '');
+  const [gamesTab, setGamesTab] = useState<'upcoming' | 'completed'>('upcoming');
 
   useEffect(() => {
     if (user) {
       loadUserData();
     }
   }, [user]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const loadUserData = async () => {
     setLoading(true);
@@ -86,17 +105,22 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
       try {
         const hostedGamesResponse = await gamesAPI.getUserGames(user.id);
         if (hostedGamesResponse.success && hostedGamesResponse.data) {
-          const transformedHostedGames = hostedGamesResponse.data.map((gameData: any) => ({
-            id: gameData.id,
-            title: `${gameData.sport || gameData.format || 'Game'}`,
-            sport: gameData.sport || gameData.format || 'Game',
-            date: gameData.date,
-            time: `${gameData.start_time || '00:00'} - ${gameData.end_time || '00:00'}`,
-            turfName: gameData.turfs?.name || gameData.turf_name || 'Unknown Turf',
-            turfAddress: gameData.turfs?.address || gameData.turf_address || 'Unknown Address',
-            players: `${gameData.current_players || 1}/${gameData.max_players || 10}`,
-            status: new Date(`${gameData.date}T${gameData.end_time || '23:59'}`) < new Date() ? 'completed' as const : 'upcoming' as const
-          }));
+          const transformedHostedGames = hostedGamesResponse.data.map((gameData: any) => {
+            const startTime12 = formatTo12Hour(gameData.start_time || '00:00');
+            const endTime12 = formatTo12Hour(gameData.end_time || '00:00');
+            
+            return {
+              id: gameData.id,
+              title: `${gameData.sport || gameData.format || 'Game'}`,
+              sport: gameData.sport || gameData.format || 'Game',
+              date: gameData.date,
+              time: `${startTime12} - ${endTime12}`,
+              turfName: gameData.turfs?.name || gameData.turf_name || 'Unknown Turf',
+              turfAddress: gameData.turfs?.address || gameData.turf_address || 'Unknown Address',
+              players: `${gameData.current_players || 1}/${gameData.max_players || 10}`,
+              status: new Date(`${gameData.date}T${gameData.end_time || '23:59'}`) < new Date() ? 'completed' as const : 'upcoming' as const
+            };
+          });
           setUserGames(transformedHostedGames);
         } else {
           setUserGames([]);
@@ -193,7 +217,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
       console.log('🔍 UserDashboard: Available requests:', gameRequests);
       
       // Accept the request with correct parameters
-      const response = await gameRequestHelpers.acceptGameRequest(requestId, gameId);
+      const response = await gameRequestHelpers.acceptGameRequest(requestId);
       console.log('📡 UserDashboard: Accept response:', response);
       
       if (response.success) {
@@ -220,7 +244,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
       const request = gameRequests.find(req => req.id === requestId);
       const gameId = request?.game?.id || 'unknown-game-id';
       
-      const response = await gameRequestHelpers.rejectGameRequest(requestId, gameId);
+      const response = await gameRequestHelpers.rejectGameRequest(requestId);
       console.log('📡 UserDashboard: Reject response:', response);
       
       if (response.success) {
@@ -282,14 +306,23 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <GamepadIcon className="w-6 h-6 text-white" />
+          <Card 
+            className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 cursor-pointer hover:shadow-xl hover:shadow-blue-500/25 transition-all duration-300 group"
+            onClick={() => setActiveTab('games')}
+          >
+            <CardContent className="p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
+              <div className="relative">
+                <div className="w-14 h-14 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-blue-500/50 transition-all duration-300">
+                  <GamepadIcon className="w-7 h-7 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-blue-900 mb-1">{userGames.length}</div>
+                <div className="text-sm text-blue-600 font-medium">Games Hosted</div>
+                <div className="mt-2 text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to view →</div>
               </div>
-              <div className="text-2xl font-bold text-blue-900">{userGames.length}</div>
-              <div className="text-sm text-blue-600">Games Hosted</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -298,14 +331,23 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-green-50 to-green-100">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trophy className="w-6 h-6 text-white" />
+          <Card 
+            className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-green-50 to-green-100 cursor-pointer hover:shadow-xl hover:shadow-green-500/25 transition-all duration-300 group"
+            onClick={() => setActiveTab('games')}
+          >
+            <CardContent className="p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-400/20 to-green-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
+              <div className="relative">
+                <div className="w-14 h-14 bg-gradient-to-r from-green-600 to-green-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-green-500/50 transition-all duration-300">
+                  <Trophy className="w-7 h-7 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-green-900 mb-1">{completedGames.length}</div>
+                <div className="text-sm text-green-600 font-medium">Games Played</div>
+                <div className="mt-2 text-xs text-green-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to view →</div>
               </div>
-              <div className="text-2xl font-bold text-green-900">{completedGames.length}</div>
-              <div className="text-sm text-green-600">Games Played</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -314,14 +356,28 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Bell className="w-6 h-6 text-white" />
+          <Card 
+            className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 cursor-pointer hover:shadow-xl hover:shadow-purple-500/25 transition-all duration-300 group"
+            onClick={() => setActiveTab('requests')}
+          >
+            <CardContent className="p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-400/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
+              <div className="relative">
+                <div className="w-14 h-14 bg-gradient-to-r from-purple-600 to-purple-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300">
+                  <Bell className="w-7 h-7 text-white" />
+                  {gameRequests.length > 0 && (
+                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                      <span className="text-xs text-white font-bold">{gameRequests.length}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-3xl font-bold text-purple-900 mb-1">{gameRequests.length}</div>
+                <div className="text-sm text-purple-600 font-medium">Join Requests</div>
+                <div className="mt-2 text-xs text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to manage →</div>
               </div>
-              <div className="text-2xl font-bold text-purple-900">{gameRequests.length}</div>
-              <div className="text-sm text-purple-600">Join Requests</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -330,14 +386,23 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock className="w-6 h-6 text-white" />
+          <Card 
+            className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100 cursor-pointer hover:shadow-xl hover:shadow-orange-500/25 transition-all duration-300 group"
+            onClick={() => setActiveTab('games')}
+          >
+            <CardContent className="p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-400/20 to-orange-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
+              <div className="relative">
+                <div className="w-14 h-14 bg-gradient-to-r from-orange-600 to-orange-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-orange-500/50 transition-all duration-300">
+                  <Clock className="w-7 h-7 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-orange-900 mb-1">{upcomingGames.length}</div>
+                <div className="text-sm text-orange-600 font-medium">Upcoming Games</div>
+                <div className="mt-2 text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to view →</div>
               </div>
-              <div className="text-2xl font-bold text-orange-900">{upcomingGames.length}</div>
-              <div className="text-sm text-orange-600">Upcoming Games</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -350,38 +415,47 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
         transition={{ delay: 0.5 }}
       >
         <Card className="border-0 shadow-lg rounded-3xl">
-          <CardHeader>
-            <CardTitle className="text-2xl flex items-center gap-2">
-              <Plus className="w-6 h-6 text-emerald-600" />
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Plus className="w-5 h-5 text-emerald-600" />
               Quick Actions
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-4 gap-3">
               <Button
                 onClick={onCreateGame}
-                className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-2xl p-6 h-auto flex flex-col items-center gap-3"
+                className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-xl p-4 h-auto flex flex-col items-center gap-2 hover:shadow-lg hover:shadow-emerald-500/25 transition-all duration-300"
               >
-                <GamepadIcon className="w-8 h-8" />
-                <span className="text-lg font-semibold">Create Game</span>
+                <GamepadIcon className="w-6 h-6" />
+                <span className="text-sm font-semibold">Create Game</span>
               </Button>
               
               <Button
                 onClick={() => onNavigate('turfs')}
                 variant="outline"
-                className="rounded-2xl p-6 h-auto flex flex-col items-center gap-3 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50"
+                className="rounded-xl p-4 h-auto flex flex-col items-center gap-2 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50 hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300"
               >
-                <Building className="w-8 h-8 text-blue-600" />
-                <span className="text-lg font-semibold text-blue-600">Find Turf</span>
+                <Building className="w-6 h-6 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-600">Find Turf</span>
               </Button>
               
               <Button
                 onClick={() => onNavigate('games')}
                 variant="outline"
-                className="rounded-2xl p-6 h-auto flex flex-col items-center gap-3 border-2 border-green-200 hover:border-green-400 hover:bg-green-50"
+                className="rounded-xl p-4 h-auto flex flex-col items-center gap-2 border-2 border-green-200 hover:border-green-400 hover:bg-green-50 hover:shadow-lg hover:shadow-green-500/25 transition-all duration-300"
               >
-                <Search className="w-8 h-8 text-green-600" />
-                <span className="text-lg font-semibold text-green-600">Find Games</span>
+                <Search className="w-6 h-6 text-green-600" />
+                <span className="text-sm font-semibold text-green-600">Find Games</span>
+              </Button>
+              
+              <Button
+                onClick={() => setActiveTab('bookings')}
+                variant="outline"
+                className="rounded-xl p-4 h-auto flex flex-col items-center gap-2 border-2 border-purple-200 hover:border-purple-400 hover:bg-purple-50 hover:shadow-lg hover:shadow-purple-500/25 transition-all duration-300"
+              >
+                <Calendar className="w-6 h-6 text-purple-600" />
+                <span className="text-sm font-semibold text-purple-600">My Bookings</span>
               </Button>
             </div>
           </CardContent>
@@ -456,86 +530,161 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame }: UserDashboar
     </div>
   );
 
-  const renderGames = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">My Games</h2>
-        <Button 
-          onClick={onCreateGame}
-          className="bg-emerald-600 hover:bg-emerald-700 rounded-full"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Game
-        </Button>
-      </div>
-
-      {/* Games Tabs */}
-      <div className="flex gap-4 border-b border-gray-200">
-        <button className="pb-3 px-1 border-b-2 border-emerald-600 text-emerald-600 font-semibold">
-          Upcoming ({upcomingGames.length})
-        </button>
-        <button className="pb-3 px-1 text-gray-500 hover:text-gray-700">
-          Completed ({completedGames.length})
-        </button>
-      </div>
-
-      <div className="space-y-4">
-        {upcomingGames.map((game) => (
-          <Card key={game.id} className="border-0 shadow-lg rounded-2xl">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-xl font-bold">{game.title}</h3>
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                      {game.sport}
-                    </Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>{game.date}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      <span>{game.time}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4" />
-                      <span>{game.turfName}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      <span>{game.players}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="rounded-full">
-                    View Details
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+  const renderGames = () => {
+    const currentGames = gamesTab === 'upcoming' ? upcomingGames : completedGames;
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">My Games</h2>
+          <Button 
+            onClick={onCreateGame}
+            className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Game
+          </Button>
+        </div>
         
-        {upcomingGames.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <GamepadIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-lg font-medium mb-2">No upcoming games</p>
-            <p className="mb-4">Create or join a game to get started!</p>
-            <Button onClick={onCreateGame} className="bg-emerald-600 hover:bg-emerald-700 rounded-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Your First Game
-            </Button>
-          </div>
-        )}
+        {/* Enhanced Games Tabs */}
+        <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
+          <button 
+            onClick={() => setGamesTab('upcoming')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
+              gamesTab === 'upcoming' 
+                ? 'bg-white shadow-lg text-emerald-600 scale-105' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Upcoming ({upcomingGames.length})
+          </button>
+          <button 
+            onClick={() => setGamesTab('completed')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
+              gamesTab === 'completed' 
+                ? 'bg-white shadow-lg text-emerald-600 scale-105' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Completed ({completedGames.length})
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          {currentGames.map((game, index) => (
+            <motion.div
+              key={game.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <Card className="border-0 shadow-lg rounded-3xl hover:shadow-xl transition-all duration-300 group cursor-pointer"
+                    onClick={() => onGameNavigation?.(game.id)}>
+                <CardContent className="p-8">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg">
+                          <GamepadIcon className="w-8 h-8 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-bold text-gray-900 group-hover:text-emerald-600 transition-colors">{game.title}</h3>
+                          <Badge className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300 mt-2">
+                            {game.sport}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-6 text-gray-600">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Calendar className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Date</p>
+                            <p className="font-semibold text-gray-900">{game.date}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                            <Clock className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Time</p>
+                            <p className="font-semibold text-gray-900">{game.time}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                            <MapPin className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Venue</p>
+                            <p className="font-semibold text-gray-900">{game.turfName}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                            <Users className="w-5 h-5 text-orange-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Players</p>
+                            <p className="font-semibold text-gray-900">{game.players}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity text-sm text-emerald-600 font-medium">
+                        Click to view details →
+                      </div>
+                      <Badge className={`${
+                        gamesTab === 'upcoming' 
+                          ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-300'
+                          : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 border-gray-300'
+                      }`}>
+                        {gamesTab === 'upcoming' ? 'Upcoming' : 'Completed'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+          
+          {currentGames.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-16"
+            >
+              <div className="w-24 h-24 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full flex items-center justify-center mx-auto mb-6">
+                <GamepadIcon className="w-12 h-12 text-gray-400" />
+              </div>
+              <p className="text-2xl font-semibold text-gray-600 mb-2">
+                {gamesTab === 'upcoming' ? 'No upcoming games' : 'No completed games yet'}
+              </p>
+              <p className="text-gray-500 mb-8 max-w-md mx-auto">
+                {gamesTab === 'upcoming' 
+                  ? 'Create or join a game to get started on your sports journey!' 
+                  : 'Complete some games and they\'ll show up here.'}
+              </p>
+              {gamesTab === 'upcoming' && (
+                <Button 
+                  onClick={onCreateGame} 
+                  className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-2xl px-8 py-4 text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Your First Game
+                </Button>
+              )}
+            </motion.div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderBookings = () => (
     <div className="space-y-6">

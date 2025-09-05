@@ -11,7 +11,19 @@ import { Badge } from './ui/badge';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
 import { gamesAPI } from '../lib/api';
-import { gameRequestHelpers } from '../lib/supabase';
+import { gameRequestHelpers, userHelpers, supabase } from '../lib/supabase';
+
+// Utility function to format time to 12-hour format for Indian users
+const formatTo12Hour = (time24: string): string => {
+  if (!time24) return time24;
+  
+  const [hours, minutes] = time24.split(':');
+  const hour24 = parseInt(hours, 10);
+  const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+  const ampm = hour24 >= 12 ? 'PM' : 'AM';
+  
+  return `${hour12}:${minutes} ${ampm}`;
+};
 
 export interface GameRequest {
   id: string;
@@ -70,30 +82,76 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
           if (requests.data && requests.data.length > 0) {
             console.log('✨ GameRequestSystem: Found requests for game', game.id, ':', requests.data);
             
-            // Transform database requests to UI format
-            const transformedRequests = requests.data.map((req: any) => ({
-              id: req.id,
-              gameId: game.id,
-              gameName: `${game.sport || 'Game'} at ${game.turfs?.name || game.turf_name || 'Unknown Turf'}`,
-              turfName: game.turfs?.name || game.turf_name || 'Unknown Turf',
-              turfAddress: game.turfs?.address || game.turf_address || 'Unknown Address',
-              date: new Date(game.date).toLocaleDateString('en-US', { 
-                weekday: 'short', 
-                month: 'short', 
-                day: 'numeric' 
-              }),
-              timeSlot: `${game.start_time || '00:00'} - ${game.end_time || '00:00'}`,
-              requesterId: req.user_id,
-              requesterName: req.users?.name || req.requester_name || 'Unknown User',
-              requesterPhone: req.users?.phone || req.requester_phone || '',
-              requesterAvatar: req.users?.profile_image_url || req.requester_avatar || '',
-              hostId: game.creator_id,
-              status: req.status,
-              message: req.message || 'Would like to join this game.',
-              createdAt: req.created_at,
-              skillLevel: req.skill_level || 'All levels',
-              currentPlayers: game.current_players || 1,
-              maxPlayers: game.max_players || 2
+            // Transform database requests to UI format with proper user data fetching
+            const transformedRequests = await Promise.all(requests.data.map(async (req: any) => {
+              console.log('🔍 Processing game request:', req);
+              
+              // Get user data from users table (much simpler and more reliable)
+              let actualUserName = 'Game Player';
+              let actualUserAvatar = '';
+              
+              if (req.user_id) {
+                console.log('🔍 Fetching user data from users table for user_id:', req.user_id);
+                
+                try {
+                  const { data: userData, error: userError } = await supabase
+                    .from('users')
+                    .select('name, email, profile_image_url')
+                    .eq('id', req.user_id)
+                    .single();
+                  
+                  console.log('📊 Users table response:', { userData, userError });
+                  
+                  if (userData && !userError) {
+                    console.log('✅ Found user data from users table:', userData);
+                    actualUserName = userData.name || userData.email?.split('@')[0] || 'Game Player';
+                    actualUserAvatar = userData.profile_image_url || '';
+                    
+                    console.log('📝 Extracted user info:', { 
+                      actualUserName, 
+                      actualUserAvatar,
+                      source: 'users_table'
+                    });
+                  } else {
+                    console.log('⚠️ User not found in users table:', userError);
+                    console.log('🔄 This user may need to be synced to users table');
+                  }
+                } catch (userErr) {
+                  console.log('⚠️ Users table fetch exception:', userErr);
+                }
+              } else {
+                console.log('⚠️ No user_id provided in request');
+              }
+
+              console.log('📝 Final user data:', { actualUserName, actualUserAvatar });
+
+              const startTime12 = formatTo12Hour(game.start_time || '00:00');
+              const endTime12 = formatTo12Hour(game.end_time || '00:00');
+
+              return {
+                id: req.id,
+                gameId: game.id,
+                gameName: `${game.sport || 'Game'} at ${game.turfs?.name || game.turf_name || 'Unknown Turf'}`,
+                turfName: game.turfs?.name || game.turf_name || 'Unknown Turf',
+                turfAddress: game.turfs?.address || game.turf_address || 'Unknown Address',
+                date: new Date(game.date).toLocaleDateString('en-US', { 
+                  weekday: 'short', 
+                  month: 'short', 
+                  day: 'numeric' 
+                }),
+                timeSlot: `${startTime12} - ${endTime12}`,
+                requesterId: req.user_id,
+                requesterName: actualUserName,
+                requesterPhone: userData?.phone || req.requester_phone || '',
+                requesterAvatar: actualUserAvatar,
+                hostId: game.creator_id,
+                status: req.status,
+                message: req.message || 'Would like to join this game.',
+                createdAt: req.created_at,
+                skillLevel: req.skill_level || 'All levels',
+                currentPlayers: game.current_players || 1,
+                maxPlayers: game.max_players || 2
+              };
             }));
             
             allRequests.push(...transformedRequests);
@@ -145,9 +203,9 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
       
       let response;
       if (action === 'accept') {
-        response = await gameRequestHelpers.acceptGameRequest(requestId, request.gameId);
+        response = await gameRequestHelpers.acceptGameRequest(requestId);
       } else {
-        response = await gameRequestHelpers.rejectGameRequest(requestId, request.gameId);
+        response = await gameRequestHelpers.rejectGameRequest(requestId);
       }
       
       if (response.success) {
