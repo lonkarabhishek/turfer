@@ -130,7 +130,7 @@ export function TopNav({
           {user && (
             <NotificationDropdown 
               onGameNavigation={onGameNavigation}
-              onRequestsNavigation={() => onDashboardNavigation?.('requests')}
+              onRequestsNavigation={() => onDashboardNavigation?.('overview')}
             />
           )}
 
@@ -243,7 +243,7 @@ export function TopNav({
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
-                        onDashboardNavigation?.('requests');
+                        onDashboardNavigation?.('overview');
                       }}
                       className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
                     >

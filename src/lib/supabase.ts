@@ -1003,6 +1003,10 @@ export const gameRequestHelpers = {
 
       if (requestsWithUsers && !joinError) {
         console.log('✅ Successfully fetched requests with user details:', requestsWithUsers);
+        console.log('🔧 DEBUG: Request statuses from database:');
+        requestsWithUsers.forEach((req: any, index: number) => {
+          console.log(`  ${index + 1}. ID: ${req.id}, Status: "${req.status}" (type: ${typeof req.status})`);
+        });
         return { data: requestsWithUsers, error: null };
       }
 
@@ -1019,6 +1023,11 @@ export const gameRequestHelpers = {
 
       // If we got data, return it with fallback user details
       if (data && data.length > 0 && !error) {
+        console.log('🔧 DEBUG: Fallback query - Request statuses from database:');
+        data.forEach((req: any, index: number) => {
+          console.log(`  ${index + 1}. ID: ${req.id}, Status: "${req.status}" (type: ${typeof req.status})`);
+        });
+        
         const enrichedRequests = [];
         
         // Get user details for each request
@@ -1141,6 +1150,13 @@ export const gameRequestHelpers = {
         .single();
 
       console.log('📊 Database update result:', { updatedRequest, requestError });
+      
+      if (updatedRequest) {
+        console.log('✅ Request successfully updated in database:');
+        console.log('  - Request ID:', updatedRequest.id);
+        console.log('  - New status:', updatedRequest.status);
+        console.log('  - Status type:', typeof updatedRequest.status);
+      }
 
       if (requestError) {
         console.log('⚠️ Database update failed, falling back to localStorage:', requestError);

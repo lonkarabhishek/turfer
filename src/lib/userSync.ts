@@ -4,8 +4,9 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  password?: string; // Placeholder field for database compatibility
   phone?: string;
-  role: 'player' | 'owner' | 'admin';
+  role: 'user' | 'owner' | 'admin';
   profile_image_url?: string;
   created_at?: string;
   updated_at?: string;
@@ -29,16 +30,30 @@ export async function ensureUserExists(): Promise<{ success: boolean; error?: st
 
     console.log('👤 Auth user:', authUser);
 
-    // Check if user already exists in users table
-    const { data: existingUser, error: fetchError } = await supabase
+    // Check if user already exists in users table (try both by ID and by email)
+    let existingUser = null;
+    
+    // First try by ID
+    const { data: userById, error: fetchByIdError } = await supabase
       .from('users')
       .select('*')
       .eq('id', authUser.id)
       .maybeSingle();
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('❌ Error checking existing user:', fetchError);
-      return { success: false, error: fetchError.message };
+    if (userById) {
+      existingUser = userById;
+    } else {
+      // If not found by ID, try by email (in case there's a duplicate email issue)
+      const { data: userByEmail, error: fetchByEmailError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', authUser.email)
+        .maybeSingle();
+      
+      if (userByEmail) {
+        existingUser = userByEmail;
+        console.log('⚠️ Found user by email but not by ID - potential data inconsistency:', userByEmail);
+      }
     }
 
     if (existingUser) {
@@ -52,13 +67,14 @@ export async function ensureUserExists(): Promise<{ success: boolean; error?: st
     const userData = {
       id: authUser.id,
       email: authUser.email || '',
+      password: '', // Placeholder since Supabase Auth handles authentication
       name: authUser.user_metadata?.name || 
             authUser.user_metadata?.full_name || 
             authUser.user_metadata?.display_name || 
             authUser.email?.split('@')[0] || 
             'User',
       phone: authUser.user_metadata?.phone || authUser.phone || null,
-      role: 'player' as const,
+      role: 'user' as const, // Use 'user' to match database constraint
       profile_image_url: authUser.user_metadata?.profile_image_url || 
                         authUser.user_metadata?.avatar_url || 
                         authUser.user_metadata?.picture || 

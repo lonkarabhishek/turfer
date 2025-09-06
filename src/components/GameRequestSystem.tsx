@@ -72,6 +72,7 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
       // Get user's hosted games
       const myGames = await gamesAPI.getUserGames(user!.id);
       console.log('🎮 GameRequestSystem: My hosted games:', myGames);
+      console.log('🔧 DEBUG: Starting to load requests for', myGames.data?.length || 0, 'games');
       
       if (myGames.success && myGames.data) {
         const allRequests: GameRequest[] = [];
@@ -131,7 +132,7 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
               const startTime12 = formatTo12Hour(game.start_time || '00:00');
               const endTime12 = formatTo12Hour(game.end_time || '00:00');
 
-              return {
+              const transformedRequest = {
                 id: req.id,
                 gameId: game.id,
                 gameName: `${game.sport || 'Game'} at ${game.turfs?.name || game.turf_name || 'Unknown Turf'}`,
@@ -155,6 +156,15 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
                 currentPlayers: game.current_players || 1,
                 maxPlayers: game.max_players || 2
               };
+              
+              console.log('🔧 DEBUG: Transforming request:', {
+                requestId: req.id,
+                rawStatus: req.status,
+                transformedStatus: transformedRequest.status,
+                statusType: typeof req.status
+              });
+              
+              return transformedRequest;
             }));
             
             allRequests.push(...transformedRequests);
@@ -162,6 +172,11 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
         }
         
         console.log('🎯 GameRequestSystem: Total requests found:', allRequests);
+        console.log('🔧 DEBUG: Request statuses breakdown:');
+        allRequests.forEach(req => {
+          console.log(`  - ID: ${req.id}, Status: "${req.status}" (type: ${typeof req.status})`);
+        });
+        
         setRequests(allRequests);
       } else {
         console.log('📭 GameRequestSystem: No hosted games found or no requests');
@@ -277,6 +292,12 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
 
   const pendingRequests = requests.filter(req => req.status === 'pending');
   const processedRequests = requests.filter(req => req.status !== 'pending');
+  
+  // DEBUG: Log filtering results
+  console.log('🔧 DEBUG: Filtering results:');
+  console.log('  - Total requests:', requests.length);
+  console.log('  - Pending requests:', pendingRequests.length, pendingRequests.map(r => ({ id: r.id, status: r.status })));
+  console.log('  - Processed requests:', processedRequests.length, processedRequests.map(r => ({ id: r.id, status: r.status })));
 
   if (loading) {
     return (

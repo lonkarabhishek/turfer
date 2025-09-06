@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ProfilePhotoUpload } from './ProfilePhotoUpload';
-import { GameRequestSystem } from './GameRequestSystem';
 import { MyGameRequests } from './MyGameRequests';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
@@ -62,7 +61,6 @@ interface BookingData {
 const tabs = [
   { id: 'overview', label: 'Overview', icon: UserIcon },
   { id: 'games', label: 'Games', icon: GamepadIcon },
-  { id: 'requests', label: 'Game Requests', icon: Bell },
   { id: 'bookings', label: 'Bookings', icon: Calendar },
   { id: 'profile', label: 'Profile', icon: Settings },
 ];
@@ -362,7 +360,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
         >
           <Card 
             className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 cursor-pointer hover:shadow-xl hover:shadow-purple-500/25 transition-all duration-300 group"
-            onClick={() => setActiveTab('requests')}
+            onClick={() => setActiveTab('overview')}
           >
             <CardContent className="p-6 text-center relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-purple-400/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
@@ -515,19 +513,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
         </motion.div>
       )}
 
-      {/* Game Requests Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
-      >
-        <GameRequestSystem 
-          onRequestStatusChange={(requestId, status) => {
-            console.log(`Request ${requestId} ${status}`);
-            // Handle request status change - could update game player count, etc.
-          }}
-        />
-      </motion.div>
 
       {/* My Game Requests Section */}
       <motion.div
@@ -869,120 +854,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
     </div>
   );
 
-  const renderGameRequests = () => (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Game Requests</h2>
-        <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-          {gameRequests.length} pending
-        </Badge>
-      </div>
-
-      {gameRequests.length === 0 ? (
-        <Card className="border-0 shadow-lg rounded-3xl">
-          <CardContent className="text-center py-16">
-            <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No pending requests</h3>
-            <p className="text-gray-500">
-              When players request to join your games, they'll appear here.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {gameRequests.map((request) => (
-            <Card key={request.id} className="border-0 shadow-lg rounded-3xl">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      {request.users?.profile_image_url ? (
-                        <img 
-                          src={request.users.profile_image_url} 
-                          alt={request.users.name || 'Player'} 
-                          className="w-12 h-12 rounded-full object-cover border-2 border-emerald-200"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center text-white font-semibold">
-                          {(request.users?.name || request.user_name || 'U').charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          {request.users?.name || request.user_name || 'Unknown Player'}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          wants to join your {request.game?.sport} game
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-50 rounded-xl p-4 mb-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-gray-500" />
-                          <span>{new Date(request.game?.date).toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            month: 'short', 
-                            day: 'numeric' 
-                          })}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-gray-500" />
-                          <span>{request.game?.time}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <span className="truncate">{request.game?.turfName}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {request.note && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-                        <p className="text-sm text-blue-800">
-                          <strong>Message:</strong> "{request.note}"
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="text-xs text-gray-400">
-                      Requested {new Date(request.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 ml-4">
-                    <Button
-                      onClick={() => handleRejectRequest(request.id)}
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Reject
-                    </Button>
-                    <Button
-                      onClick={() => handleAcceptRequest(request.id, request.game.id, request.user_id)}
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Check className="w-4 h-4 mr-2" />
-                      Accept
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1065,7 +936,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
               >
                 {activeTab === 'overview' && renderOverview()}
                 {activeTab === 'games' && renderGames()}
-                {activeTab === 'requests' && renderGameRequests()}
                 {activeTab === 'bookings' && renderBookings()}
                 {activeTab === 'profile' && renderProfile()}
               </motion.div>
