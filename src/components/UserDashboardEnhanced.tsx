@@ -11,6 +11,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ProfilePhotoUpload } from './ProfilePhotoUpload';
 import { GameRequestSystem } from './GameRequestSystem';
+import { MyGameRequests } from './MyGameRequests';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
@@ -526,6 +527,15 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
             // Handle request status change - could update game player count, etc.
           }}
         />
+      </motion.div>
+
+      {/* My Game Requests Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.9 }}
+      >
+        <MyGameRequests />
       </motion.div>
     </div>
   );

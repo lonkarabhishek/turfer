@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bell, Check, X, User, Clock, MapPin, Users, 
   MessageCircle, AlertCircle, Loader, CheckCircle,
-  XCircle
+  XCircle, RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -55,6 +55,7 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
   const { success, error } = useToast();
   const [requests, setRequests] = useState<GameRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -89,20 +90,22 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
               // Get user data from users table (much simpler and more reliable)
               let actualUserName = 'Game Player';
               let actualUserAvatar = '';
+              let userData: any = null;
               
               if (req.user_id) {
                 console.log('🔍 Fetching user data from users table for user_id:', req.user_id);
                 
                 try {
-                  const { data: userData, error: userError } = await supabase
+                  const { data: fetchedUserData, error: userError } = await supabase
                     .from('users')
-                    .select('name, email, profile_image_url')
+                    .select('name, email, profile_image_url, phone')
                     .eq('id', req.user_id)
                     .single();
                   
-                  console.log('📊 Users table response:', { userData, userError });
+                  console.log('📊 Users table response:', { userData: fetchedUserData, userError });
                   
-                  if (userData && !userError) {
+                  if (fetchedUserData && !userError) {
+                    userData = fetchedUserData;
                     console.log('✅ Found user data from users table:', userData);
                     actualUserName = userData.name || userData.email?.split('@')[0] || 'Game Player';
                     actualUserAvatar = userData.profile_image_url || '';
@@ -180,6 +183,20 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
     }
   };
 
+  const handleRefresh = async () => {
+    if (refreshing) return; // Prevent double refresh
+    
+    setRefreshing(true);
+    try {
+      await loadGameRequests();
+      success('Requests refreshed');
+    } catch (err) {
+      error('Failed to refresh requests');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleRequestAction = async (requestId: string, action: 'accept' | 'decline') => {
     setProcessingRequests(prev => new Set(prev).add(requestId));
     
@@ -209,21 +226,18 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
       }
       
       if (response.success) {
-        // Update the local state
-        const updatedRequests = requests.map(req => 
-          req.id === requestId 
-            ? { ...req, status: (action === 'accept' ? 'accepted' : 'declined') as 'accepted' | 'declined' }
-            : req
-        );
-        
-        setRequests(updatedRequests);
-        onRequestStatusChange?.(requestId, action === 'accept' ? 'accepted' : 'declined');
-        
+        // Show success message first
         if (action === 'accept') {
           success('Request accepted! Player has been notified and added to the game.');
         } else {
           success('Request declined.');
         }
+        
+        // Reload all requests to get the latest status from the database
+        // This ensures the UI reflects the true state and handles any backend updates
+        await loadGameRequests();
+        
+        onRequestStatusChange?.(requestId, action === 'accept' ? 'accepted' : 'declined');
       } else {
         error(response.error || `Failed to ${action} request`);
       }
@@ -295,6 +309,15 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
               </Badge>
             )}
           </div>
+          <Button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            variant="ghost"
+            size="sm"
+            className="p-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

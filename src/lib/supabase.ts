@@ -1371,6 +1371,161 @@ export const gameRequestHelpers = {
     } catch (error: any) {
       return { data: null, error: error.message };
     }
+  },
+
+  // Get requests sent by the current user (to join other games)
+  async getMyRequests(userId: string) {
+    try {
+      console.log('🔍 Getting requests sent by user ID:', userId);
+      
+      // Get all requests sent by this user
+      const { data, error } = await supabase
+        .from('game_requests')
+        .select(`
+          *,
+          games (
+            id,
+            sport,
+            date,
+            start_time,
+            end_time,
+            creator_id,
+            current_players,
+            max_players,
+            turfs (
+              name,
+              address
+            )
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (data && !error) {
+        console.log('✅ Successfully fetched user requests:', data);
+        return { data, error: null };
+      }
+
+      console.log('⚠️ Join query failed, trying simplified query:', error);
+
+      // Fallback to simplified query
+      const { data: simpleData, error: simpleError } = await supabase
+        .from('game_requests')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (simpleData && !simpleError) {
+        // Enrich with game data manually
+        const enrichedRequests = [];
+        for (const request of simpleData) {
+          try {
+            const { data: gameData } = await supabase
+              .from('games')
+              .select(`
+                id,
+                sport,
+                date,
+                start_time,
+                end_time,
+                creator_id,
+                current_players,
+                max_players,
+                turf_name,
+                turf_address
+              `)
+              .eq('id', request.game_id)
+              .single();
+
+            enrichedRequests.push({
+              ...request,
+              games: gameData ? {
+                ...gameData,
+                turfs: {
+                  name: gameData.turf_name,
+                  address: gameData.turf_address
+                }
+              } : null
+            });
+          } catch (gameError) {
+            console.log('Could not fetch game data for request:', request.id, gameError);
+            enrichedRequests.push({
+              ...request,
+              games: null
+            });
+          }
+        }
+        
+        console.log('✅ Successfully enriched user requests:', enrichedRequests);
+        return { data: enrichedRequests, error: null };
+      }
+
+      // Fallback to localStorage
+      console.log('⚠️ Database failed, trying localStorage');
+      const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+      const userRequests = localRequests.filter((r: any) => r.user_id === userId);
+      
+      return { data: userRequests, error: null };
+    } catch (error: any) {
+      console.error('❌ Error in getMyRequests:', error);
+      return { data: [], error: error.message };
+    }
+  },
+
+  // Cancel a request sent by the current user
+  async cancelMyRequest(requestId: string) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      console.log('🔄 Cancelling request:', requestId, 'for user:', user.id);
+
+      // First check if the request belongs to this user and is still pending
+      const { data: request, error: fetchError } = await supabase
+        .from('game_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .single();
+
+      if (!request || fetchError) {
+        console.log('❌ Request not found or not cancellable:', fetchError);
+        return { success: false, error: 'Request not found or cannot be cancelled' };
+      }
+
+      // Delete the request
+      const { error: deleteError } = await supabase
+        .from('game_requests')
+        .delete()
+        .eq('id', requestId)
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.log('❌ Database delete failed, trying localStorage:', deleteError);
+        
+        // Fallback to localStorage
+        const localRequests = JSON.parse(localStorage.getItem('tapturf_game_requests') || '[]');
+        const requestIndex = localRequests.findIndex((r: any) => r.id === requestId && r.user_id === user.id);
+        
+        if (requestIndex >= 0) {
+          localRequests.splice(requestIndex, 1);
+          localStorage.setItem('tapturf_game_requests', JSON.stringify(localRequests));
+          console.log('✅ Request cancelled in localStorage');
+          return { success: true, data: null, error: null };
+        }
+        
+        return { success: false, error: deleteError.message };
+      }
+
+      console.log('✅ Request cancelled successfully in database');
+      return { success: true, data: null, error: null };
+    } catch (error: any) {
+      console.error('❌ Error in cancelMyRequest:', error);
+      return { success: false, error: error.message };
+    }
   }
 };
 
