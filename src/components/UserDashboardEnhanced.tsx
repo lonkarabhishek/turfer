@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Calendar, Clock, MapPin, Star, Users, Trophy, 
   Bell, Settings, CreditCard, Heart, LogOut,
-  GamepadIcon, Building, History, User as UserIcon,
-  Phone, Mail, Edit3, ChevronRight, Plus, Check, X, Search
+  GamepadIcon, Building, History, User, User as UserIcon,
+  Phone, Mail, Edit3, ChevronRight, Plus, Check, X, Search, MessageCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -513,6 +513,104 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
         </motion.div>
       )}
 
+      {/* Incoming Game Requests Section */}
+      {gameRequests.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+        >
+          <Card className="border-0 shadow-lg rounded-3xl">
+            <CardHeader>
+              <CardTitle className="text-2xl flex items-center gap-2">
+                <Bell className="w-6 h-6 text-purple-600" />
+                Join Requests for Your Games
+                <Badge className="bg-purple-100 text-purple-700">
+                  {gameRequests.length} pending
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <AnimatePresence>
+                {gameRequests.map((request, index) => (
+                  <motion.div
+                    key={request.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center">
+                            <User className="w-6 h-6 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-purple-900">
+                              {request.user?.name || `User ${request.user_id?.slice(0, 8)}`} wants to join
+                            </h3>
+                            <p className="text-purple-700 font-medium">
+                              {request.game?.sport || 'Game'} at {request.game?.turfName || 'Unknown Turf'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4 text-sm">
+                          <div className="flex items-center gap-2 text-purple-700">
+                            <Calendar className="w-4 h-4" />
+                            <span>{request.game?.date || 'Unknown date'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-purple-700">
+                            <Clock className="w-4 h-4" />
+                            <span>{request.game?.time || 'Unknown time'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-purple-700">
+                            <MapPin className="w-4 h-4" />
+                            <span>{request.game?.turfName || 'Unknown venue'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-purple-700">
+                            <Users className="w-4 h-4" />
+                            <span>{request.game?.players || '1/10'} players</span>
+                          </div>
+                        </div>
+                        
+                        {request.message && (
+                          <div className="bg-white/50 rounded-lg p-3 mb-4 border border-purple-200">
+                            <div className="flex items-start gap-2">
+                              <MessageCircle className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                              <p className="text-sm text-purple-800 italic">"{request.message}"</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="flex gap-3">
+                          <Button
+                            onClick={() => handleAcceptRequest(request.id, request.game_id, request.user_id)}
+                            className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                          >
+                            <Check className="w-4 h-4 mr-2" />
+                            Accept
+                          </Button>
+                          <Button
+                            onClick={() => handleRejectRequest(request.id)}
+                            variant="outline"
+                            className="border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl transition-all duration-200"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* My Game Requests Section */}
       <motion.div
