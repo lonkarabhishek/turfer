@@ -62,6 +62,7 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
         }
       } else {
         // Sign up with Supabase Auth
+        const dbRole = userType === 'user' ? 'player' : userType; // Map 'user' -> 'player'
         const { data, error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
@@ -70,7 +71,7 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
             data: {
               name: formData.name,
               phone: formData.phone,
-              role: userType,
+              role: dbRole,
             }
           }
         });
@@ -80,7 +81,9 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
           session: !!data.session,
           userId: data.user?.id,
           emailConfirmed: data.user?.email_confirmed_at,
-          redirectTo: `${window.location.origin}/confirm`
+          redirectTo: `${window.location.origin}/confirm`,
+          userRole: dbRole,
+          formData: { name: formData.name, phone: formData.phone, email: formData.email }
         });
 
         if (error) throw error;
@@ -127,6 +130,9 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
 
   const createUserProfile = async (user: any) => {
     try {
+      // Map userType to database role constraint
+      const dbRole = userType === 'user' ? 'player' : userType; // 'user' -> 'player', keep 'owner'
+      
       const { error } = await supabase
         .from('users')
         .insert([
@@ -135,12 +141,20 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
             email: user.email,
             name: formData.name,
             phone: formData.phone,
-            role: userType,
+            role: dbRole,
+            password: '', // Empty string to satisfy NOT NULL constraint
             isVerified: true,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }
         ]);
+
+      console.log('🔄 Creating user profile:', { 
+        userId: user.id, 
+        email: user.email,
+        role: dbRole,
+        error: error?.message 
+      });
 
       if (error && !error.message.includes('duplicate key')) {
         throw error;
