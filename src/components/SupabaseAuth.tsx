@@ -4,6 +4,7 @@ import { X, Eye, EyeOff, User, Building2, Mail, Phone, Shield, CheckCircle, Load
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { supabase } from '../lib/supabase';
+import { ensureUserExists } from '../lib/userSync';
 
 interface SupabaseAuthProps {
   open: boolean;
@@ -114,7 +115,21 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user && user.email_confirmed_at) {
           clearInterval(checkInterval);
-          await createUserProfile(user);
+          
+          // Wait for user to be properly authenticated before creating profile
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            console.log('✅ User is now authenticated, ensuring profile exists...');
+            const result = await ensureUserExists();
+            if (!result.success) {
+              console.error('❌ Failed to create user profile:', result.error);
+            } else {
+              console.log('✅ User profile created/verified successfully');
+            }
+          } else {
+            console.log('⚠️ User verified but no session, profile will be created on next login');
+          }
+          
           setShowVerifyEmail(false);
           onSuccess();
           onClose();
@@ -128,41 +143,6 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
     setTimeout(() => clearInterval(checkInterval), 600000);
   };
 
-  const createUserProfile = async (user: any) => {
-    try {
-      // Map userType to database role constraint
-      const dbRole = userType === 'user' ? 'player' : userType; // 'user' -> 'player', keep 'owner'
-      
-      const { error } = await supabase
-        .from('users')
-        .insert([
-          {
-            id: user.id,
-            email: user.email,
-            name: formData.name,
-            phone: formData.phone,
-            role: dbRole,
-            password: '', // Empty string to satisfy NOT NULL constraint
-            isVerified: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-        ]);
-
-      console.log('🔄 Creating user profile:', { 
-        userId: user.id, 
-        email: user.email,
-        role: dbRole,
-        error: error?.message 
-      });
-
-      if (error && !error.message.includes('duplicate key')) {
-        throw error;
-      }
-    } catch (err) {
-      console.error('Error creating user profile:', err);
-    }
-  };
 
   const validateStep = () => {
     if (currentStep === 1) {

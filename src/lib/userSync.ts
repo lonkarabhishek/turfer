@@ -74,7 +74,7 @@ export async function ensureUserExists(): Promise<{ success: boolean; error?: st
             authUser.email?.split('@')[0] || 
             'User',
       phone: authUser.user_metadata?.phone || authUser.phone || null,
-      role: 'user' as const, // Use 'user' to match database constraint
+      role: 'player' as const, // Use 'player' to match database constraint
       profile_image_url: authUser.user_metadata?.profile_image_url || 
                         authUser.user_metadata?.avatar_url || 
                         authUser.user_metadata?.picture || 
