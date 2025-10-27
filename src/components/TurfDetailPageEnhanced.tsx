@@ -399,11 +399,6 @@ export function TurfDetailPageEnhanced({
         {/* Animated overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-70" />
 
-        {/* Diagonal pattern overlay */}
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 10px, white 10px, white 20px)`
-        }} />
-
         {/* Image Navigation */}
         {turf.images.length > 1 && (
           <>
