@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Upload, X, Check, Loader } from 'lucide-react';
+import { Camera, Upload, X, Check, Loader, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
+import { validateImageFile } from '../lib/validation';
+import { toastManager } from '../lib/toastManager';
 
 interface ProfilePhotoUploadProps {
   currentPhotoUrl?: string;
@@ -42,22 +44,31 @@ export function ProfilePhotoUpload({
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
-      return;
-    }
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be less than 5MB');
-      return;
-    }
-
     setUploading(true);
     setError(null);
 
     try {
+      // Comprehensive image validation
+      const validation = await validateImageFile(file, {
+        maxSizeBytes: 5 * 1024 * 1024, // 5MB
+        allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+        maxWidth: 1024,
+        maxHeight: 1024,
+        minWidth: 100,
+        minHeight: 100
+      });
+
+      if (!validation.isValid) {
+        setError(validation.errors.join('. '));
+        setUploading(false);
+        toastManager.validationError('Profile Photo', validation.errors.join('. '));
+        return;
+      }
+
+      // Show warnings if any
+      if (validation.warnings.length > 0) {
+        toastManager.warning('Image Upload', validation.warnings.join('. '));
+      }
       // Generate unique filename
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/profile.${fileExt}`;

@@ -13,6 +13,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { ResponsiveContainer, AreaChart, CartesianGrid, BarChart, Bar, XAxis, YAxis, Tooltip, Area } from 'recharts';
 import { authManager, turfsAPI, bookingsAPI } from '../lib/api';
+import { filterNonExpiredGames, isGameExpired } from '../lib/gameUtils';
 
 type DashboardSection = 'overview' | 'turfs' | 'bookings' | 'earnings' | 'games' | 'notifications' | 'settings';
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Plus, Users, Clock, DollarSign, MessageCircle, X, Check, Search, MapPin, 
+import {
+  Plus, Users, Clock, IndianRupee, MessageCircle, X, Check, Search, MapPin,
   Loader2, Calendar, Trophy, Star, Info, ChevronRight, ChevronLeft,
   Zap, Target, Award, Shield
 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { GameSuccessPage } from './GameSuccessPage';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
 import { gamesAPI, turfsAPI } from '../lib/api';
+import { formatPriceDisplay } from '../lib/priceUtils';
 import { useAuth } from '../hooks/useAuth';
 import type { GameData } from './GameCard';
 import type { TurfData } from './TurfCard';
@@ -206,7 +207,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
           const turfs = response.data.turfs || [];
           const transformedTurfs = turfs.map((turf: any) => ({
             ...turf,
-            priceDisplay: `₹${turf.pricePerHour}/hr`,
+            priceDisplay: formatPriceDisplay(turf.pricePerHour),
             slots: [],
             contacts: turf.contactInfo
           }));
@@ -231,7 +232,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
             const turfs = response.data.turfs || [];
             const transformedTurfs = turfs.map((turf: any) => ({
               ...turf,
-              priceDisplay: `₹${turf.pricePerHour}/hr`,
+              priceDisplay: formatPriceDisplay(turf.pricePerHour),
               slots: [],
               contacts: turf.contactInfo
             }));
@@ -787,7 +788,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
 
                 <div>
                   <Label htmlFor="cost" className="flex items-center gap-2 mb-2">
-                    <DollarSign className="w-4 h-4" />
+                    <IndianRupee className="w-4 h-4" />
                     Cost per person (₹)
                   </Label>
                   <Input

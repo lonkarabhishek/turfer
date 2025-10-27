@@ -25,7 +25,20 @@ export interface PaymentResponse {
   paymentId?: string;
   error?: string;
   gateway: 'razorpay' | 'stripe';
+  status?: 'pending' | 'completed' | 'failed' | 'cancelled';
+  receipt?: string;
+  refundable?: boolean;
   data?: unknown;
+}
+
+export interface PaymentConfirmation {
+  paymentId: string;
+  orderId: string;
+  amount: number;
+  status: string;
+  method: string;
+  gateway: string;
+  timestamp: string;
 }
 
 // Payment configuration

@@ -14,6 +14,7 @@ import { CreateGameFlow } from "./components/CreateGameFlow";
 import { SupabaseAuth } from "./components/SupabaseAuth";
 import { UserProfile } from "./components/UserProfile";
 import { TurfDetailPage } from "./components/TurfDetailPage";
+import { TurfDetailPageEnhanced } from "./components/TurfDetailPageEnhanced";
 import { LegalPages } from "./components/LegalPages";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UserDashboardEnhanced } from "./components/UserDashboardEnhanced";
@@ -29,6 +30,7 @@ import { gamesAPI } from "./lib/api";
 import type { AppUser } from "./hooks/useAuth";
 import TapTurfLogo from "./assets/TapTurf_Logo.png";
 import { transformGamesData, filterGamesByLocation, getUniqueLocations, getUniqueSports } from "./lib/gameTransformers";
+import { filterNonExpiredGames, isGameExpired } from "./lib/gameUtils";
 
 
 // Games will be loaded from API
@@ -196,11 +198,12 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
     }
   };
 
-  // Filter games based on location and sport
+  // Filter games based on location, sport, and expiry
   const locationFiltered = locationFilter ? filterGamesByLocation(games, locationFilter) : games;
-  const filteredGames = sportFilter 
-    ? locationFiltered.filter(game => game.format.toLowerCase().includes(sportFilter.toLowerCase()))
-    : locationFiltered;
+  const nonExpiredGames = filterNonExpiredGames(locationFiltered);
+  const filteredGames = sportFilter
+    ? nonExpiredGames.filter(game => game.format.toLowerCase().includes(sportFilter.toLowerCase()))
+    : nonExpiredGames;
 
   // Get unique locations and sports for filter options
   const uniqueLocations = getUniqueLocations(games);
@@ -228,9 +231,9 @@ function GamesYouCanJoin({ games, user, onGameClick, onCreateGame }: { games: Ga
                 </div>
               ))}
             </div>
-          ) : userGames.length > 0 ? (
+          ) : filterNonExpiredGames(userGames).length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {userGames.slice(0, 3).map((game) => (
+              {filterNonExpiredGames(userGames).slice(0, 3).map((game) => (
                 <GameCard key={game.id} game={game} user={user} onGameClick={onGameClick} />
               ))}
             </div>
@@ -512,12 +515,12 @@ export default function App() {
     window.history.pushState({}, '', `/game/${gameId}`);
   }, []);
 
-  // Auto-set dashboard tab for owners
-  useEffect(() => {
-    if (user?.role === 'owner' && activeTab === 'home') {
-      setActiveTab('dashboard');
-    }
-  }, [user]);
+  // Auto-set dashboard tab for owners - Disabled for now (owner dashboard hidden)
+  // useEffect(() => {
+  //   if (user?.role === 'owner' && activeTab === 'home') {
+  //     setActiveTab('dashboard');
+  //   }
+  // }, [user]);
 
   // Handle welcome flow for new signups
   useEffect(() => {
@@ -607,8 +610,8 @@ export default function App() {
   };
 
 
-  // Determine which interface to show based on user role
-  const showOwnerDashboard = user?.role === 'owner' && (activeTab === "owner" || activeTab === "dashboard");
+  // Owner dashboard functionality hidden for now - focusing on user experience
+  // const showOwnerDashboard = user?.role === 'owner' && (activeTab === "owner" || activeTab === "dashboard");
 
   if (loading) {
     return (
@@ -642,12 +645,16 @@ export default function App() {
       {currentPage === 'confirm' ? (
         <EmailConfirmation />
       ) : currentPage === 'turf-detail' && selectedTurfId ? (
-        <TurfDetailPage
+        <TurfDetailPageEnhanced
           turfId={selectedTurfId}
           onBack={handleBackToHome}
           onCreateGame={() => {
             handleBackToHome();
             setShowCreateGame(true);
+          }}
+          onBookTurf={() => {
+            // Handle booking
+            console.log('Booking turf:', selectedTurfId);
           }}
         />
       ) : currentPage === 'game-detail' && selectedGameId ? (
@@ -656,11 +663,12 @@ export default function App() {
           onBack={handleBackToHome}
         />
       ) : currentPage === 'dashboard' && user ? (
-        user.role === 'owner' ? (
-          <OwnerDashboard onNavigate={handleNavigate} />
-        ) : (
-          <UserDashboardEnhanced onNavigate={handleNavigate} onCreateGame={() => setShowCreateGame(true)} initialTab={dashboardSection} onGameNavigation={handleGameNavigation} />
-        )
+        // Owner dashboard hidden for now - focusing on user experience
+        // user.role === 'owner' ? (
+        //   <OwnerDashboard onNavigate={handleNavigate} />
+        // ) : (
+        <UserDashboardEnhanced onNavigate={handleNavigate} onCreateGame={() => setShowCreateGame(true)} initialTab={dashboardSection} onGameNavigation={handleGameNavigation} />
+        // )
       ) : currentPage === 'profile' && user ? (
         <UserProfile
           user={user}
@@ -670,8 +678,6 @@ export default function App() {
             setShowCreateGame(true);
           }}
         />
-      ) : showOwnerDashboard ? (
-        <OwnerDashboard onNavigate={handleNavigate} />
       ) : activeTab === "create" ? (
         <div className="max-w-xl mx-auto mt-8 px-4">
           <Card>
@@ -759,7 +765,7 @@ export default function App() {
           onSignIn={() => setShowLogin(true)}
         />
       )}
-      
+
       <MobileNav 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
@@ -848,10 +854,9 @@ export default function App() {
         />
       )}
 
-      </div>
-      
       {/* Global Toast Container */}
       <ToastContainer />
+      </div>
     </ErrorBoundary>
   );
 }

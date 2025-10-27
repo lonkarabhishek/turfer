@@ -97,28 +97,43 @@ export function GameRequestSystem({ onRequestStatusChange }: GameRequestSystemPr
                 console.log('🔍 Fetching user data from users table for user_id:', req.user_id);
                 
                 try {
-                  const { data: fetchedUserData, error: userError } = await supabase
-                    .from('users')
-                    .select('name, email, profile_image_url, phone')
-                    .eq('id', req.user_id)
-                    .single();
+                  // First get user email from auth.users
+                  const { data: authData, error: authError } = await supabase.auth.admin.getUserById(req.user_id);
+                  console.log('📧 Auth data for user lookup:', { authData: authData?.user?.email, authError });
                   
-                  console.log('📊 Users table response:', { userData: fetchedUserData, userError });
-                  
-                  if (fetchedUserData && !userError) {
-                    userData = fetchedUserData;
-                    console.log('✅ Found user data from users table:', userData);
-                    actualUserName = userData.name || userData.email?.split('@')[0] || 'Game Player';
-                    actualUserAvatar = userData.profile_image_url || '';
+                  if (authData?.user?.email) {
+                    // Now find user in users table by email
+                    const { data: fetchedUserData, error: userError } = await supabase
+                      .from('users')
+                      .select('name, email, profile_image_url, phone')
+                      .eq('email', authData.user.email)
+                      .single();
                     
-                    console.log('📝 Extracted user info:', { 
-                      actualUserName, 
-                      actualUserAvatar,
-                      source: 'users_table'
-                    });
+                    console.log('📊 Users table response by email:', { userData: fetchedUserData, userError });
+                    
+                    if (fetchedUserData && !userError) {
+                      userData = fetchedUserData;
+                      console.log('✅ Found user data from users table by email:', userData);
+                      actualUserName = userData.name || userData.email?.split('@')[0] || 'Game Player';
+                      actualUserAvatar = userData.profile_image_url || '';
+                      
+                      console.log('📝 Extracted user info:', { 
+                        actualUserName, 
+                        actualUserAvatar,
+                        source: 'users_table_by_email'
+                      });
+                    } else {
+                      console.log('⚠️ User not found in users table by email:', userError);
+                      // Fallback: use auth data directly
+                      actualUserName = authData.user.user_metadata?.name || 
+                                      authData.user.user_metadata?.full_name || 
+                                      authData.user.email?.split('@')[0] || 
+                                      'Game Player';
+                      actualUserAvatar = authData.user.user_metadata?.avatar_url || '';
+                      console.log('📝 Using auth fallback data:', { actualUserName, actualUserAvatar });
+                    }
                   } else {
-                    console.log('⚠️ User not found in users table:', userError);
-                    console.log('🔄 This user may need to be synced to users table');
+                    console.log('⚠️ Could not get user email from auth.users');
                   }
                 } catch (userErr) {
                   console.log('⚠️ Users table fetch exception:', userErr);

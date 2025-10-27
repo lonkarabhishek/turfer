@@ -724,7 +724,14 @@ export const turfHelpers = {
       }
 
       if (params.sport) {
-        query = query.contains('sports', [params.sport]);
+        // Handle both JSON array and text search for sports
+        try {
+          query = query.contains('sports', [params.sport]);
+        } catch (error) {
+          // Fallback to text search if JSON search fails
+          console.log('JSON sports search failed, using text search:', error);
+          query = query.or(`sports.ilike.%${params.sport}%`);
+        }
       }
 
       if (params.priceMin) {

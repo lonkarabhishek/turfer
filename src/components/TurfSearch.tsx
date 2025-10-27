@@ -6,7 +6,10 @@ import { Input } from './ui/input';
 import { Chip } from './ui/chip';
 import { Spinner } from './ui/spinner';
 import { TurfCard } from './TurfCard';
+import { TurfCardEnhanced } from './TurfCardEnhanced';
 import { turfsAPI, type Turf, type User } from '../lib/api';
+import { formatPriceDisplay, cleanPriceData } from '../lib/priceUtils';
+import { demoDataManager, type DemoTurf } from '../lib/demoData';
 
 // Sample turf data for fallback when backend is unavailable
 const SAMPLE_TURFS: Turf[] = [
@@ -84,6 +87,7 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: TurfSearchProps) {
   const [query, setQuery] = useState('');
   const [turfs, setTurfs] = useState<Turf[]>([]);
+  const [demoTurfs, setDemoTurfs] = useState<DemoTurf[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -99,25 +103,40 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
     rating: '',
   });
 
-  // Load turfs on mount and when filters change
+  // Load turfs and demo turfs on mount and when filters change
   useEffect(() => {
     loadTurfs();
+    loadDemoTurfs();
   }, [query, filters]);
+
+  const loadDemoTurfs = () => {
+    const allDemoTurfs = demoDataManager.getTurfs();
+    setDemoTurfs(allDemoTurfs);
+  };
 
   const loadTurfs = async () => {
     setLoading(true);
     setError('');
     
     try {
+      // Clean and validate filter parameters
       const params: any = {
-        query: query || undefined,
-        sport: filters.sport || undefined,
-        priceMin: filters.priceMin ? Number(filters.priceMin) : undefined,
-        priceMax: filters.priceMax ? Number(filters.priceMax) : undefined,
-        rating: filters.rating ? Number(filters.rating) : undefined,
+        query: query?.trim() || undefined,
+        sport: filters.sport?.trim() || undefined,
+        priceMin: filters.priceMin && !isNaN(Number(filters.priceMin)) ? Number(filters.priceMin) : undefined,
+        priceMax: filters.priceMax && !isNaN(Number(filters.priceMax)) ? Number(filters.priceMax) : undefined,
+        rating: filters.rating && !isNaN(Number(filters.rating)) ? Number(filters.rating) : undefined,
         limit: 20,
       };
 
+      // Remove undefined values to avoid sending them to API
+      Object.keys(params).forEach(key => {
+        if (params[key] === undefined || params[key] === null || params[key] === '') {
+          delete params[key];
+        }
+      });
+
+      console.log('🔍 Searching turfs with params:', params);
       const response = await turfsAPI.search(params);
       
       if (response.success && response.data) {
@@ -200,18 +219,45 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
   };
 
   const displayTurfs = useMemo(() => {
+    // First, add demo turfs
+    const transformedDemoTurfs = demoTurfs.map(demoTurf => ({
+      id: demoTurf.id,
+      name: demoTurf.name,
+      address: demoTurf.address,
+      rating: demoTurf.rating,
+      totalReviews: demoTurf.totalReviews,
+      pricePerHour: demoTurf.pricePerHour,
+      pricePerHourWeekend: demoTurf.pricePerHourWeekend,
+      pricePerHourMin: demoTurf.pricePerHour,
+      priceDisplay: `₹${demoTurf.pricePerHour}${demoTurf.pricePerHourWeekend ? `-${demoTurf.pricePerHourWeekend}` : ''}/hr`,
+      amenities: demoTurf.amenities,
+      images: demoTurf.images,
+      slots: ['06:00', '07:00', '08:00', '18:00', '19:00', '20:00', '21:00', '22:00'],
+      contacts: { phone: '9876543210', whatsapp: '9876543210' },
+      coords: demoTurf.coordinates || { lat: 19.9975, lng: 73.7898 },
+      distanceKm: demoTurf.coordinates && userLocation
+        ? calculateDistance(userLocation.lat, userLocation.lng, demoTurf.coordinates.lat, demoTurf.coordinates.lng)
+        : null,
+      nextAvailable: '8:00 PM Today',
+      isPopular: demoTurf.rating >= 4.5,
+      hasLights: demoTurf.amenities?.includes('Floodlights'),
+      isDemo: true,
+      demoTurf: demoTurf
+    }));
+
+    // Then, add regular turfs
     const transformedTurfs = turfs.map(turf => ({
       id: turf.id,
       name: turf.name,
       address: turf.address,
       rating: turf.rating,
       totalReviews: turf.totalReviews,
-      pricePerHour: turf.pricePerHour,
-      pricePerHourMin: turf.pricePerHour,
-      pricePerHourWeekend: turf.pricePerHourWeekend,
-      priceDisplay: turf.pricePerHourWeekend 
-        ? `₹${turf.pricePerHour}–₹${turf.pricePerHourWeekend}/hr`
-        : `₹${turf.pricePerHour}/hr`,
+      ...cleanPriceData({
+        pricePerHour: turf.pricePerHour,
+        pricePerHourWeekend: turf.pricePerHourWeekend
+      }),
+      pricePerHourMin: turf.pricePerHour || 500,
+      priceDisplay: formatPriceDisplay(turf.pricePerHour, turf.pricePerHourWeekend),
       amenities: turf.amenities,
       images: turf.images,
       slots: ['06 AM - 07 AM', '07 AM - 08 AM', '08 PM - 09 PM', '09 PM - 10 PM'], // Mock slots for now
@@ -225,9 +271,12 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
       hasLights: turf.amenities?.some(a => a && typeof a === 'string' && a.toLowerCase().includes('light')) || false,
     }));
 
+    // Combine demo turfs and regular turfs
+    const allTransformedTurfs = [...transformedDemoTurfs, ...transformedTurfs];
+
     // Sort by distance when user location is available and turfs have distance calculated
     if (userLocation) {
-      return transformedTurfs.sort((a, b) => {
+      return allTransformedTurfs.sort((a, b) => {
         // Put turfs with known distance first, sorted by distance
         if (a.distanceKm !== null && b.distanceKm !== null) {
           return a.distanceKm - b.distanceKm;
@@ -239,13 +288,17 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
       });
     }
 
-    // Otherwise sort by rating and popularity
-    return transformedTurfs.sort((a, b) => {
+    // Otherwise sort by rating and popularity (demo turfs first)
+    return allTransformedTurfs.sort((a, b) => {
+      // Demo turfs always appear first
+      if (a.isDemo && !b.isDemo) return -1;
+      if (!a.isDemo && b.isDemo) return 1;
+      // Then by popularity and rating
       if (a.isPopular && !b.isPopular) return -1;
       if (!a.isPopular && b.isPopular) return 1;
       return (b.rating || 0) - (a.rating || 0);
     });
-  }, [turfs, userLocation]);
+  }, [turfs, demoTurfs, userLocation]);
 
   // Get active filters for chips
   const activeFilters = useMemo(() => {
@@ -271,7 +324,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
     if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0)) {
       setFilters(prev => {
         const newFilters = { ...prev, [type]: value };
-        
+
         // Validate min <= max
         if (type === 'priceMin' && newFilters.priceMax && parseInt(value) > parseInt(newFilters.priceMax)) {
           return prev; // Don't update if min > max
@@ -279,10 +332,16 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
         if (type === 'priceMax' && newFilters.priceMin && parseInt(value) < parseInt(newFilters.priceMin)) {
           return prev; // Don't update if max < min
         }
-        
+
         return newFilters;
       });
     }
+  };
+
+  // Turf click handler
+  const handleTurfClick = (turf: any) => {
+    // Just navigate to turf detail page for all turfs
+    onTurfClick?.(turf.id);
   };
 
   return (
@@ -516,12 +575,13 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
         ) : (
           <div className="space-y-4">
             {displayTurfs.map((turf) => (
-              <TurfCard 
-                key={turf.id} 
-                turf={turf} 
-                variant="default" 
-                onClick={() => onTurfClick?.(turf.id)}
+              <TurfCardEnhanced
+                key={turf.id}
+                turf={turf}
+                variant="default"
+                onClick={() => handleTurfClick(turf)}
                 user={user}
+                showStats={true}
               />
             ))}
           </div>

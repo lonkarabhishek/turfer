@@ -20,19 +20,19 @@ export function Button({
   disabled,
   ...props 
 }: ButtonProps) {
-  const base = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50';
-  
+  const base = 'inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 touch-manipulation active:scale-95';
+
   const variants: Record<ButtonVariant, string> = {
-    default: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm',
-    outline: 'border border-gray-300 hover:bg-gray-50 text-gray-900 bg-white shadow-sm',
-    ghost: 'hover:bg-gray-100 text-gray-900',
-    destructive: 'bg-red-600 hover:bg-red-700 text-white shadow-sm',
+    default: 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm hover:shadow-md',
+    outline: 'border border-gray-300 hover:bg-gray-50 active:bg-gray-100 text-gray-900 bg-white shadow-sm hover:shadow-md',
+    ghost: 'hover:bg-gray-100 active:bg-gray-200 text-gray-900',
+    destructive: 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white shadow-sm hover:shadow-md',
   };
   
   const sizes: Record<ButtonSize, string> = {
-    sm: 'h-9 px-3 text-sm',
-    md: 'h-10 px-4 text-sm',
-    lg: 'h-11 px-8 text-base',
+    sm: 'h-10 px-3 text-sm min-w-[44px] sm:h-8 sm:px-2 sm:text-xs', // 44px minimum touch target
+    md: 'h-12 px-6 text-base min-w-[48px] sm:h-10 sm:px-4 sm:text-sm', // 48px comfortable touch target
+    lg: 'h-14 px-8 text-lg min-w-[56px] sm:h-12 sm:px-6 sm:text-base', // 56px large touch target
   };
   
   return (

@@ -181,12 +181,12 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                   />
                 ) : (
                   <span className="text-sm font-medium text-primary-700">
-                    {game.hostName.charAt(0).toUpperCase()}
+                    {game.hostName?.charAt(0)?.toUpperCase() || 'H'}
                   </span>
                 )}
               </div>
               <div>
-                <div className="font-medium text-sm">{game.hostName}</div>
+                <div className="font-medium text-sm">{game.hostName || 'Host'}</div>
                 <div className="text-xs text-gray-500">
                   Host {game.createdAt ? `• ${timeAgo(game.createdAt)}` : ''}
                 </div>

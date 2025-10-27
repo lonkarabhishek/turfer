@@ -11,10 +11,13 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ProfilePhotoUpload } from './ProfilePhotoUpload';
 import { MyGameRequests } from './MyGameRequests';
+import { ManualBookingUpload } from './ManualBookingUpload';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
 import { userHelpers, gameRequestHelpers } from '../lib/supabase';
+import { filterNonExpiredGames, isGameExpired } from '../lib/gameUtils';
+import { demoDataManager, type DemoBooking, type DemoUser } from '../lib/demoData';
 
 // Utility function to format time to 12-hour format for Indian users
 const formatTo12Hour = (time24: string): string => {
@@ -41,6 +44,7 @@ interface GameData {
   sport: string;
   date: string;
   time: string;
+  timeSlot?: string;
   turfName: string;
   turfAddress: string;
   players: string;
@@ -76,12 +80,31 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const [joinedGames, setJoinedGames] = useState<GameData[]>([]);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(user?.profile_image_url || '');
   const [gamesTab, setGamesTab] = useState<'upcoming' | 'completed'>('upcoming');
+  const [demoBookings, setDemoBookings] = useState<DemoBooking[]>([]);
+  const [demoUser, setDemoUser] = useState<DemoUser | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [showManualBookingUpload, setShowManualBookingUpload] = useState(false);
+  const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
       loadUserData();
     }
+    loadDemoData();
   }, [user]);
+
+  const loadDemoData = () => {
+    const currentDemoUser = demoDataManager.getCurrentUser();
+    setDemoUser(currentDemoUser);
+    setIsDemoMode(!!currentDemoUser);
+
+    if (currentDemoUser) {
+      const userDemoBookings = demoDataManager.getUserBookings(currentDemoUser.id);
+      setDemoBookings(userDemoBookings);
+    } else {
+      setDemoBookings([]);
+    }
+  };
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -107,17 +130,18 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
           const transformedHostedGames = hostedGamesResponse.data.map((gameData: any) => {
             const startTime12 = formatTo12Hour(gameData.start_time || '00:00');
             const endTime12 = formatTo12Hour(gameData.end_time || '00:00');
-            
+
             return {
               id: gameData.id,
               title: `${gameData.sport || gameData.format || 'Game'}`,
               sport: gameData.sport || gameData.format || 'Game',
               date: gameData.date,
               time: `${startTime12} - ${endTime12}`,
+              timeSlot: `${gameData.start_time || '00:00'}-${gameData.end_time || '23:59'}`,
               turfName: gameData.turfs?.name || gameData.turf_name || 'Unknown Turf',
               turfAddress: gameData.turfs?.address || gameData.turf_address || 'Unknown Address',
               players: `${gameData.current_players || 1}/${gameData.max_players || 10}`,
-              status: new Date(`${gameData.date}T${gameData.end_time || '23:59'}`) < new Date() ? 'completed' as const : 'upcoming' as const
+              status: isGameExpired(gameData) ? 'completed' as const : 'upcoming' as const
             };
           });
           setUserGames(transformedHostedGames);
@@ -211,14 +235,23 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   };
 
   const handleAcceptRequest = async (requestId: string, gameId: string, userId: string) => {
+    // Prevent duplicate processing
+    if (processingRequests.has(requestId)) {
+      console.log('⚠️ Request already being processed:', requestId);
+      return;
+    }
+
     try {
+      // Mark request as processing
+      setProcessingRequests(prev => new Set(prev).add(requestId));
+
       console.log('🎯 UserDashboard: Accepting request:', { requestId, gameId, userId });
       console.log('🔍 UserDashboard: Available requests:', gameRequests);
-      
+
       // Accept the request with correct parameters
       const response = await gameRequestHelpers.acceptGameRequest(requestId);
       console.log('📡 UserDashboard: Accept response:', response);
-      
+
       if (response.success) {
         // Refresh the requests list
         await loadGameRequests();
@@ -231,6 +264,13 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
     } catch (error: any) {
       console.error('❌ UserDashboard: Error accepting request:', error);
       error('Failed to accept request: ' + (error?.message || 'Unknown error'));
+    } finally {
+      // Remove from processing set
+      setProcessingRequests(prev => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
     }
   };
 
@@ -275,6 +315,101 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const upcomingGames = userGames.filter(game => !isGameCompleted(game));
   const completedGames = userGames.filter(game => isGameCompleted(game));
 
+  const renderPendingBookingsAlert = () => {
+    const pendingBookings = isDemoMode
+      ? demoBookings.filter(b => b.status === 'pending')
+      : userBookings.filter(b => b.status === 'pending');
+
+    if (pendingBookings.length === 0) return null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mb-6"
+      >
+        <Card className="border-l-4 border-l-orange-500 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center animate-pulse">
+                  <Clock className="w-6 h-6 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    {pendingBookings.length} Booking{pendingBookings.length !== 1 ? 's' : ''} Pending Approval
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    Waiting for turf owner approval. You'll be notified once they respond.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab('bookings')}
+                  className="border-orange-200 text-orange-700 hover:bg-orange-100"
+                >
+                  View Details
+                </Button>
+              </div>
+            </div>
+
+            {pendingBookings.length > 0 && (
+              <div className="mt-4 grid gap-3">
+                {pendingBookings.slice(0, 2).map((booking) => {
+                  const turfName = isDemoMode
+                    ? demoDataManager.getTurf(booking.turfId)?.name || 'Unknown Turf'
+                    : booking.turfName;
+                  const bookingDate = isDemoMode
+                    ? formatDate(booking.date)
+                    : booking.date;
+                  const bookingTime = isDemoMode
+                    ? `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`
+                    : booking.time;
+
+                  return (
+                    <div
+                      key={booking.id}
+                      className="flex items-center justify-between bg-white/70 rounded-lg p-3 border border-orange-200"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                          <Calendar className="w-4 h-4 text-orange-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{turfName}</p>
+                          <p className="text-xs text-gray-600">{bookingDate} • {bookingTime}</p>
+                        </div>
+                      </div>
+                      <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">
+                        Pending
+                      </Badge>
+                    </div>
+                  );
+                })}
+                {pendingBookings.length > 2 && (
+                  <div className="text-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab('bookings')}
+                      className="text-orange-600 hover:text-orange-700 hover:bg-orange-100 text-xs"
+                    >
+                      View {pendingBookings.length - 2} more pending booking{pendingBookings.length - 2 !== 1 ? 's' : ''}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
+
   const renderOverview = () => (
     <div className="space-y-8">
       {/* Welcome Header */}
@@ -298,6 +433,9 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
           </div>
         </div>
       </motion.div>
+
+      {/* Pending Bookings Alert */}
+      {renderPendingBookingsAlert()}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -388,18 +526,18 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          <Card 
+          <Card
             className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100 cursor-pointer hover:shadow-xl hover:shadow-orange-500/25 transition-all duration-300 group"
-            onClick={() => setActiveTab('games')}
+            onClick={() => setActiveTab('bookings')}
           >
             <CardContent className="p-6 text-center relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-orange-400/20 to-orange-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
               <div className="relative">
                 <div className="w-14 h-14 bg-gradient-to-r from-orange-600 to-orange-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-orange-500/50 transition-all duration-300">
-                  <Clock className="w-7 h-7 text-white" />
+                  <Calendar className="w-7 h-7 text-white" />
                 </div>
-                <div className="text-3xl font-bold text-orange-900 mb-1">{upcomingGames.length}</div>
-                <div className="text-sm text-orange-600 font-medium">Upcoming Games</div>
+                <div className="text-3xl font-bold text-orange-900 mb-1">{userBookings.length + demoBookings.length}</div>
+                <div className="text-sm text-orange-600 font-medium">Total Bookings</div>
                 <div className="mt-2 text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to view →</div>
               </div>
             </CardContent>
@@ -549,7 +687,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                           </div>
                           <div>
                             <h3 className="text-lg font-bold text-purple-900">
-                              {request.user?.name || `User ${request.user_id?.slice(0, 8)}`} wants to join
+                              {request.users?.name || request.user?.name || request.user_name || `User ${request.user_id?.slice(0, 8)}`} wants to join
                             </h3>
                             <p className="text-purple-700 font-medium">
                               {request.game?.sport || 'Game'} at {request.game?.turfName || 'Unknown Turf'}
@@ -588,15 +726,17 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                         <div className="flex gap-3">
                           <Button
                             onClick={() => handleAcceptRequest(request.id, request.game_id, request.user_id)}
-                            className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                            disabled={processingRequests.has(request.id)}
+                            className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                           >
                             <Check className="w-4 h-4 mr-2" />
-                            Accept
+                            {processingRequests.has(request.id) ? 'Processing...' : 'Accept'}
                           </Button>
                           <Button
                             onClick={() => handleRejectRequest(request.id)}
+                            disabled={processingRequests.has(request.id)}
                             variant="outline"
-                            className="border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl transition-all duration-200"
+                            className="border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <X className="w-4 h-4 mr-2" />
                             Decline
@@ -779,83 +919,189 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
     );
   };
 
-  const renderBookings = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">My Bookings</h2>
-        <Button 
-          onClick={() => onNavigate('turfs')}
-          className="bg-blue-600 hover:bg-blue-700 rounded-full"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Book Turf
-        </Button>
-      </div>
+  const formatTime = (timeString: string) => {
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
 
-      <div className="space-y-4">
-        {userBookings.map((booking) => (
-          <Card key={booking.id} className="border-0 shadow-lg rounded-2xl">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-xl font-bold">{booking.turfName}</h3>
-                    <Badge 
-                      className={`${
-                        booking.status === 'confirmed' 
-                          ? 'bg-green-100 text-green-700 border-green-200'
-                          : booking.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-700 border-yellow-200'  
-                          : 'bg-red-100 text-red-700 border-red-200'
-                      }`}
-                    >
-                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                    </Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>{booking.date}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      <span>{booking.time} • {booking.duration}</span>
-                    </div>
-                    <div className="flex items-center gap-2 col-span-2">
-                      <MapPin className="w-4 h-4" />
-                      <span>{booking.turfAddress}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-gray-900 mb-2">
-                    ₹{booking.amount}
-                  </div>
-                  <Button variant="outline" size="sm" className="rounded-full">
-                    View Receipt
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        
-        {userBookings.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-lg font-medium mb-2">No bookings yet</p>
-            <p className="mb-4">Book a turf to see your reservations here!</p>
-            <Button onClick={() => onNavigate('turfs')} className="bg-blue-600 hover:bg-blue-700 rounded-full">
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const renderBookings = () => {
+    // Combine regular bookings and demo bookings
+    const allBookings = [];
+
+    // Add regular bookings
+    userBookings.forEach(booking => {
+      allBookings.push({
+        id: booking.id,
+        turfName: booking.turfName,
+        turfAddress: booking.turfAddress,
+        date: booking.date,
+        time: booking.time,
+        duration: booking.duration,
+        status: booking.status,
+        amount: booking.amount,
+        type: 'regular'
+      });
+    });
+
+    // Add demo bookings if in demo mode
+    if (isDemoMode) {
+      demoBookings.forEach(booking => {
+        const turf = demoDataManager.getTurf(booking.turfId);
+        allBookings.push({
+          id: booking.id,
+          turfName: turf?.name || 'Unknown Turf',
+          turfAddress: turf?.address || 'Unknown Address',
+          date: formatDate(booking.date),
+          time: `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`,
+          duration: `${Math.abs(new Date(`1970-01-01T${booking.endTime}:00`).getTime() - new Date(`1970-01-01T${booking.startTime}:00`).getTime()) / (1000 * 60 * 60)}h`,
+          status: booking.status,
+          amount: booking.totalAmount,
+          type: 'demo',
+          paymentStatus: booking.paymentStatus,
+          notes: booking.notes
+        });
+      });
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">My Bookings</h2>
+            {isDemoMode && (
+              <p className="text-sm text-purple-600 mt-1">
+                Showing bookings for {demoUser?.name} (Demo Mode)
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowManualBookingUpload(true)}
+              variant="outline"
+              className="rounded-full border-2 border-green-600 text-green-600 hover:bg-green-50"
+            >
               <Plus className="w-4 h-4 mr-2" />
-              Book Your First Turf
+              Add Booking
+            </Button>
+            <Button
+              onClick={() => onNavigate('turfs')}
+              className="bg-blue-600 hover:bg-blue-700 rounded-full"
+            >
+              Browse Turfs
             </Button>
           </div>
-        )}
+        </div>
+
+        <div className="space-y-4">
+          {allBookings.map((booking) => (
+            <motion.div
+              key={booking.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Card className="border-0 shadow-lg rounded-2xl hover:shadow-xl transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-xl font-bold">{booking.turfName}</h3>
+                        <Badge
+                          className={`${
+                            booking.status === 'confirmed'
+                              ? 'bg-green-100 text-green-700 border-green-200'
+                              : booking.status === 'pending'
+                              ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                              : 'bg-red-100 text-red-700 border-red-200'
+                          }`}
+                        >
+                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                        </Badge>
+                        {booking.type === 'demo' && (
+                          <Badge className="bg-purple-100 text-purple-700 border-purple-200">
+                            Demo
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          <span>{booking.date}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          <span>{booking.time}</span>
+                          {booking.duration && <span className="text-gray-400">• {booking.duration}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 col-span-2">
+                          <MapPin className="w-4 h-4" />
+                          <span>{booking.turfAddress}</span>
+                        </div>
+                      </div>
+
+                      {booking.type === 'demo' && booking.paymentStatus && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-green-600" />
+                          <span className="text-sm text-green-600 font-medium">
+                            Payment: {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
+                          </span>
+                        </div>
+                      )}
+
+                      {booking.notes && (
+                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-700">
+                            <span className="font-medium">Note:</span> {booking.notes}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-gray-900 mb-2">
+                        ₹{booking.amount.toLocaleString()}
+                      </div>
+                      <Button variant="outline" size="sm" className="rounded-full">
+                        View Details
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+
+          {allBookings.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p className="text-lg font-medium mb-2">No bookings yet</p>
+              <p className="mb-4">
+                {isDemoMode
+                  ? 'Use the demo mode to create bookings and see them here!'
+                  : 'Book a turf to see your reservations here!'}
+              </p>
+              <Button onClick={() => onNavigate('turfs')} className="bg-blue-600 hover:bg-blue-700 rounded-full">
+                <Plus className="w-4 h-4 mr-2" />
+                {isDemoMode ? 'Try Demo Booking' : 'Book Your First Turf'}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderProfile = () => (
     <div className="space-y-8">
@@ -1041,6 +1287,16 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
           </div>
         </div>
       </div>
+
+      {/* Manual Booking Upload Modal */}
+      <ManualBookingUpload
+        isOpen={showManualBookingUpload}
+        onClose={() => setShowManualBookingUpload(false)}
+        onSuccess={() => {
+          setShowManualBookingUpload(false);
+          loadUserData(); // Refresh bookings
+        }}
+      />
     </div>
   );
 }

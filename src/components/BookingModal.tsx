@@ -8,8 +8,10 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { bookingsAPI, authManager } from '../lib/api';
-import { paymentManager, type PaymentRequest } from '../lib/payments';
+import { paymentManager, type PaymentRequest, type PaymentResponse } from '../lib/payments';
 import { useToast } from '../lib/toastManager';
+import { getSafePrice, formatBookingPrice } from '../lib/priceUtils';
+import { validateBookingSlot, calculateBookingTotal, type SlotBooking } from '../lib/bookingUtils';
 
 interface BookingModalProps {
   open: boolean;
@@ -18,13 +20,17 @@ interface BookingModalProps {
   onBookingSuccess?: (booking: any) => void;
 }
 
-type BookingStep = 'datetime' | 'details' | 'payment' | 'confirmation';
+type BookingStep = 'datetime' | 'details' | 'validation' | 'payment' | 'confirmation';
 
 export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingModalProps) {
   const [step, setStep] = useState<BookingStep>('datetime');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'venue' | 'online'>('venue');
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const [isSlotLocked, setIsSlotLocked] = useState(false);
+  const [lockExpiresAt, setLockExpiresAt] = useState<Date | null>(null);
   const [bookingData, setBookingData] = useState({
     date: new Date().toISOString().split('T')[0],
     startTime: '',
@@ -35,7 +41,7 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
   });
 
   const user = authManager.getUser();
-  const pricePerHour = turf?.pricePerHour || 500;
+  const pricePerHour = getSafePrice(turf?.pricePerHour);
   const { success } = useToast();
 
   if (!open) return null;
@@ -65,6 +71,46 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
     } catch (error) {
       console.error('Error calculating amount:', error);
       return 0;
+    }
+  };
+
+  const validateAndProceed = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // Validate booking slot
+      const validation = validateBookingSlot(
+        bookingData.date,
+        bookingData.startTime,
+        bookingData.endTime,
+        [] // TODO: Pass existing bookings from API
+      );
+
+      setValidationErrors(validation.errors);
+      setValidationWarnings(validation.warnings);
+
+      if (!validation.isValid) {
+        setStep('validation');
+        setLoading(false);
+        return;
+      }
+
+      // Try to lock the slot
+      if (!isSlotLocked) {
+        // TODO: Call API to lock slot
+        setIsSlotLocked(true);
+        const lockExpiry = new Date();
+        lockExpiry.setMinutes(lockExpiry.getMinutes() + 10);
+        setLockExpiresAt(lockExpiry);
+      }
+
+      // Proceed to payment
+      setStep('payment');
+    } catch (err: any) {
+      setError(err.message || 'Failed to validate booking. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -99,10 +145,13 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
     setError('');
     
     try {
+      // Calculate total with fees and taxes
+      const bookingTotal = calculateBookingTotal(calculateAmount());
+
       // Handle online payment
       if (paymentMethod === 'online') {
         const paymentRequest: PaymentRequest = {
-          amount: paymentManager.convertToSmallestUnit(bookingData.totalAmount),
+          amount: paymentManager.convertToSmallestUnit(bookingTotal.totalAmount),
           currency: 'INR',
           orderId: `booking_${turf.id}_${Date.now()}`,
           description: `Turf booking at ${turf.name}`,
@@ -112,7 +161,11 @@ export function BookingModal({ open, onClose, turf, onBookingSuccess }: BookingM
             turfId: turf.id,
             bookingDate: bookingData.date,
             startTime: bookingData.startTime,
-            endTime: bookingData.endTime
+            endTime: bookingData.endTime,
+            baseAmount: bookingTotal.baseAmount,
+            platformFee: bookingTotal.platformFee,
+            gst: bookingTotal.gst,
+            processingFee: bookingTotal.processingFee
           }
         };
 
