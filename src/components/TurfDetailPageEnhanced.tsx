@@ -16,6 +16,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { turfsAPI, bookingsAPI, gamesAPI } from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import type { TurfData } from './TurfCard';
 import { GameCard, type GameData } from './GameCard';
@@ -156,31 +157,9 @@ export function TurfDetailPageEnhanced({
   const [activeTab, setActiveTab] = useState('overview');
   const [viewCount, setViewCount] = useState(0);
 
-  // Mock data for enhanced features
-  const mockReviews: Review[] = [
-    {
-      id: '1',
-      user: { name: 'Rajesh Kumar', avatar: '', rating: 4.5 },
-      rating: 5,
-      comment: 'Excellent turf with great facilities. The lighting is perfect for evening games!',
-      date: '2 days ago',
-      verified: true,
-      helpful: 12
-    },
-    {
-      id: '2',
-      user: { name: 'Priya Sharma', avatar: '', rating: 4.2 },
-      rating: 4,
-      comment: 'Good turf but parking can be a bit crowded during peak hours.',
-      date: '1 week ago',
-      verified: true,
-      helpful: 8
-    }
-  ];
-
   useEffect(() => {
     loadTurfDetails();
-    setReviews(mockReviews);
+    loadReviews();
     setViewCount(Math.floor(Math.random() * 500) + 100);
   }, [turfId]);
 
@@ -230,6 +209,42 @@ export function TurfDetailPageEnhanced({
       }
     } catch (error) {
       console.error('Error loading games:', error);
+    }
+  };
+
+  const loadReviews = async () => {
+    try {
+      // Try to load reviews from database
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('turf_id', turfId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (data && data.length > 0) {
+        // Transform database reviews to match our interface
+        const transformedReviews = data.map((review: any) => ({
+          id: review.id,
+          user: {
+            name: review.user_name || 'Anonymous',
+            avatar: '',
+            rating: review.rating
+          },
+          rating: review.rating,
+          comment: review.comment || '',
+          date: new Date(review.created_at).toLocaleDateString(),
+          verified: true,
+          helpful: 0
+        }));
+        setReviews(transformedReviews);
+      } else {
+        // No reviews yet
+        setReviews([]);
+      }
+    } catch (error) {
+      console.error('Error loading reviews:', error);
+      setReviews([]);
     }
   };
 
@@ -412,7 +427,7 @@ export function TurfDetailPageEnhanced({
               onClick={onBack}
               variant="ghost"
               size="sm"
-              className="bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/20 rounded-full"
+              className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full font-semibold"
             >
               <ArrowLeft className="w-5 h-5 mr-2" />
               <span className="hidden sm:inline">Back</span>
@@ -425,7 +440,7 @@ export function TurfDetailPageEnhanced({
                 onClick={() => setIsLiked(!isLiked)}
                 variant="ghost"
                 size="sm"
-                className="bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/20 rounded-full w-10 h-10 p-0"
+                className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full w-10 h-10 p-0"
               >
                 <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
               </Button>
@@ -435,7 +450,7 @@ export function TurfDetailPageEnhanced({
                 onClick={() => setIsBookmarked(!isBookmarked)}
                 variant="ghost"
                 size="sm"
-                className="bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/20 rounded-full w-10 h-10 p-0"
+                className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full w-10 h-10 p-0"
               >
                 <Bookmark className={`w-5 h-5 ${isBookmarked ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
@@ -445,7 +460,7 @@ export function TurfDetailPageEnhanced({
                 onClick={handleShare}
                 variant="ghost"
                 size="sm"
-                className="bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/20 rounded-full w-10 h-10 p-0"
+                className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full w-10 h-10 p-0"
               >
                 <Share2 className="w-5 h-5" />
               </Button>
@@ -662,7 +677,7 @@ export function TurfDetailPageEnhanced({
 
         {/* Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-6 bg-white rounded-2xl shadow-lg border border-gray-100 p-2 mb-6">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-5 bg-white rounded-2xl shadow-lg border border-gray-100 p-2 mb-6">
             <TabsTrigger
               value="overview"
               className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
@@ -692,12 +707,6 @@ export function TurfDetailPageEnhanced({
               className="hidden lg:block data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
             >
               Gallery
-            </TabsTrigger>
-            <TabsTrigger
-              value="location"
-              className="hidden lg:block data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
-            >
-              Location
             </TabsTrigger>
           </TabsList>
 
@@ -753,6 +762,65 @@ export function TurfDetailPageEnhanced({
                       <p className="text-sm text-gray-600">6:00 AM - 12:00 AM</p>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Location & Map */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-emerald-600" />
+                  Location & Map
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Address */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm font-medium text-gray-700">{turf.address}</p>
+                  <a
+                    href={getGoogleMapsUrl(turf.address, turf.coords)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 transition-colors text-sm inline-flex items-center gap-1 mt-2"
+                  >
+                    <span>View on Google Maps</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                {/* Google Maps Embed */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {turf.gmap_embed_link ? (
+                    <div className="relative w-full h-96 bg-gray-100">
+                      <iframe
+                        src={turf.gmap_embed_link}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        allowFullScreen
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title={`Map of ${turf.name}`}
+                        className="w-full h-full"
+                      />
+                    </div>
+                  ) : (
+                    <a
+                      href={getGoogleMapsUrl(turf.address, turf.coords)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
+                    >
+                      <div className="h-full flex items-center justify-center">
+                        <div className="text-center text-gray-600">
+                          <MapPin className="w-12 h-12 mx-auto mb-2" />
+                          <p className="font-medium mb-1">{turf.name}</p>
+                          <p className="text-sm">Click to view on Google Maps</p>
+                        </div>
+                      </div>
+                    </a>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1015,133 +1083,6 @@ export function TurfDetailPageEnhanced({
             </Card>
           </TabsContent>
 
-          {/* Location Tab */}
-          <TabsContent value="location" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-emerald-600" />
-                  Location & Directions
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="p-4 bg-gray-100 rounded-lg">
-                    <p className="font-medium mb-2">Address</p>
-                    <div className="flex items-start gap-2">
-                      <p className="text-gray-700 flex-1">{turf.address}</p>
-                      <a
-                        href={getGoogleMapsUrl(turf.address, turf.coords)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
-                        title="View on Google Maps"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </div>
-                    {turf.coords && (
-                      <p className="text-sm text-gray-500 mt-2">
-                        Coordinates: {turf.coords.lat.toFixed(6)}, {turf.coords.lng.toFixed(6)}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <a
-                      href={getGoogleMapsDirectionsUrl(turf.address, turf.coords)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full"
-                    >
-                      <Button variant="outline" className="w-full flex items-center gap-2 hover:bg-blue-50 hover:border-blue-300">
-                        <Navigation className="w-4 h-4" />
-                        Get Directions
-                      </Button>
-                    </a>
-                    <a
-                      href={getGoogleMapsUrl(turf.address, turf.coords)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full"
-                    >
-                      <Button variant="outline" className="w-full flex items-center gap-2 hover:bg-green-50 hover:border-green-300">
-                        <Map className="w-4 h-4" />
-                        View on Maps
-                      </Button>
-                    </a>
-                    {turf.contacts?.phone && (
-                      <a href={`tel:${turf.contacts.phone}`} className="w-full">
-                        <Button variant="outline" className="w-full flex items-center gap-2 hover:bg-emerald-50 hover:border-emerald-300">
-                          <Phone className="w-4 h-4" />
-                          Call Turf
-                        </Button>
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Enhanced map - Google Maps Embed or Placeholder */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-500 to-emerald-500 text-white p-4">
-                      <h4 className="font-medium mb-1">Interactive Map</h4>
-                      <p className="text-sm text-blue-100">
-                        {turf.gmap_embed_link ? 'Explore the venue location' : 'Click to open Google Maps'}
-                      </p>
-                    </div>
-
-                    {turf.gmap_embed_link ? (
-                      // Display embedded Google Map if link is available
-                      <div className="relative w-full h-96 bg-gray-100">
-                        <iframe
-                          src={turf.gmap_embed_link}
-                          width="100%"
-                          height="100%"
-                          style={{ border: 0 }}
-                          allowFullScreen
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                          title={`Map of ${turf.name}`}
-                          className="w-full h-full"
-                        />
-                      </div>
-                    ) : (
-                      // Fallback to clickable placeholder
-                      <a
-                        href={getGoogleMapsUrl(turf.address, turf.coords)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
-                      >
-                        <div className="h-full flex items-center justify-center">
-                          <div className="text-center text-gray-600">
-                            <MapPin className="w-12 h-12 mx-auto mb-2" />
-                            <p className="font-medium mb-1">{turf.name}</p>
-                            <p className="text-sm">Click to view on Google Maps</p>
-                            <div className="flex items-center justify-center gap-1 mt-2 text-blue-600">
-                              <ExternalLink className="w-4 h-4" />
-                              <span className="text-sm">Open in Google Maps</span>
-                            </div>
-                          </div>
-                        </div>
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Additional location info */}
-                  {turf.distanceKm && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                      <div className="flex items-center gap-2 text-emerald-700">
-                        <Navigation className="w-4 h-4" />
-                        <span className="text-sm font-medium">
-                          Approximately {turf.distanceKm.toFixed(1)} km from your location
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
 

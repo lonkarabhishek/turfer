@@ -37,6 +37,7 @@ export interface TurfData {
   totalBookings?: number;
   responseTime?: string;
   instantBook?: boolean;
+  gmap_embed_link?: string;
 }
 
 interface TurfCardEnhancedProps {

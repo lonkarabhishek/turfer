@@ -28,6 +28,7 @@ export interface TurfData {
   nextAvailable?: string;
   isPopular?: boolean;
   hasLights?: boolean;
+  gmap_embed_link?: string;
 }
 
 interface TurfCardProps {

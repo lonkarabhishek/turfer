@@ -810,6 +810,12 @@ export const turfHelpers = {
         throw error;
       }
 
+      console.log('🗺️ Turf data fetched:', {
+        turfId: id,
+        hasGmapLink: !!data?.gmap_embed_link,
+        gmapLink: data?.gmap_embed_link
+      });
+
       return { data, error: null };
     } catch (error: any) {
       return { data: null, error: error.message };

@@ -49,6 +49,7 @@ export interface Turf {
   pricePerHourWeekend?: number;
   operatingHours: Record<string, unknown>;
   contactInfo: Record<string, unknown>;
+  gmap_embed_link?: string;
   rating: number;
   totalReviews: number;
   isActive: boolean;
