@@ -177,14 +177,6 @@ export function TurfCardEnhanced({
                   <span className="text-xs">{availability.icon}</span>
                   <span className={`text-xs ${availability.color}`}>{availability.message}</span>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={handleWhatsAppClick}
-                  className="text-xs px-2 py-1 h-6 bg-green-600 hover:bg-green-700 w-full mt-1"
-                >
-                  <MessageCircle className="w-3 h-3 mr-1" />
-                  Chat to Book
-                </Button>
               </div>
             </div>
           </div>
@@ -361,16 +353,6 @@ export function TurfCardEnhanced({
                   {availability.message}
                 </span>
               </div>
-
-              {/* WhatsApp CTA */}
-              <Button
-                onClick={handleWhatsAppClick}
-                className="w-full bg-green-600 hover:bg-green-700 text-white"
-                size="lg"
-              >
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Chat with Owner on WhatsApp
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -497,16 +479,6 @@ export function TurfCardEnhanced({
                 {availability.message}
               </span>
             </div>
-
-            {/* WhatsApp CTA */}
-            <Button
-              onClick={handleWhatsAppClick}
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
-              size="sm"
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Chat to Book
-            </Button>
           </div>
         </CardContent>
       </Card>
