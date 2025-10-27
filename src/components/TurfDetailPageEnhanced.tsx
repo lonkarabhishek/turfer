@@ -169,6 +169,11 @@ export function TurfDetailPageEnhanced({
       // First try to load from database
       const response = await turfsAPI.getById(turfId);
       if (response.success && response.data) {
+        console.log('🏟️ Turf loaded:', {
+          name: response.data.name,
+          hasGmapLink: !!response.data.gmap_embed_link,
+          gmapLink: response.data.gmap_embed_link?.substring(0, 50) + '...'
+        });
         setTurf(response.data);
         loadUpcomingGames();
         generateMockAvailability();
@@ -201,14 +206,28 @@ export function TurfDetailPageEnhanced({
   const loadUpcomingGames = async () => {
     try {
       const response = await gamesAPI.getAvailable();
+      console.log('🎮 Games API response:', {
+        success: response.success,
+        totalGames: response.data?.length || 0,
+        turfId: turfId
+      });
+
       if (response.success && response.data) {
         const turfGames = response.data
           .filter((game: any) => game.turf_id === turfId || game.turf_name === turf?.name);
+
+        console.log('🎮 Filtered games for this turf:', {
+          matchingGames: turfGames.length,
+          games: turfGames
+        });
+
         const nonExpiredTurfGames = filterNonExpiredGames(turfGames);
+        console.log('🎮 Non-expired games:', nonExpiredTurfGames.length);
+
         setUpcomingGames(nonExpiredTurfGames.slice(0, 3));
       }
     } catch (error) {
-      console.error('Error loading games:', error);
+      console.error('❌ Error loading games:', error);
     }
   };
 
@@ -495,8 +514,8 @@ export function TurfDetailPageEnhanced({
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
           >
-            <Badge className="bg-emerald-500 text-white border-0 shadow-xl px-4 py-2">
-              <Verified className="w-4 h-4 mr-1" />
+            <Badge className="bg-white text-emerald-600 border-2 border-emerald-600 shadow-2xl px-4 py-2 font-bold">
+              <Verified className="w-4 h-4 mr-1 fill-emerald-600" />
               Verified
             </Badge>
           </motion.div>
@@ -506,7 +525,7 @@ export function TurfDetailPageEnhanced({
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: 0.4 }}
             >
-              <Badge className="bg-orange-500 text-white border-0 shadow-xl px-4 py-2">
+              <Badge className="bg-white text-orange-600 border-2 border-orange-600 shadow-2xl px-4 py-2 font-bold">
                 <TrendingUp className="w-4 h-4 mr-1" />
                 Popular
               </Badge>
@@ -623,15 +642,26 @@ export function TurfDetailPageEnhanced({
               >
                 <Button
                   onClick={() => {
+                    console.log('📱 Chat to Book clicked:', {
+                      hasContacts: !!turf.contacts,
+                      contacts: turf.contacts,
+                      hasContactInfo: !!turf.contact_info,
+                      contactInfo: turf.contact_info
+                    });
+
                     const message = generateTurfInquiryMessage(turf);
                     const phone = turf.contacts?.phone || turf.contacts?.whatsapp || turf.contact_info?.phone;
 
+                    console.log('📱 Phone number found:', phone);
+
                     if (!phone) {
-                      alert('Contact information not available for this venue. Please try again later.');
+                      console.error('❌ No phone number found!');
+                      alert('Contact information not available for this venue. Please add phone number in database.');
                       return;
                     }
 
                     const whatsappUrl = buildWhatsAppLink({ phone, text: message });
+                    console.log('📱 WhatsApp URL:', whatsappUrl);
                     window.open(whatsappUrl, '_blank');
                   }}
                   className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold py-6 rounded-xl shadow-lg hover:shadow-xl transition-all text-lg"
