@@ -53,7 +53,8 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: T
   };
 
   const handleWhatsAppFallback = () => {
-    if (turf.contacts?.phone) {
+    const phone = (turf.contact_info as any)?.phone || turf.contacts?.phone;
+    if (phone) {
       setShowWhatsAppFallback(true);
       analytics.whatsappClicked('booking', 'turf_card');
     }
@@ -61,8 +62,9 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: T
 
   const handleCallClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (turf.contacts?.phone) {
-      window.open(`tel:${turf.contacts.phone}`, '_blank');
+    const phone = (turf.contact_info as any)?.phone || turf.contacts?.phone;
+    if (phone) {
+      window.open(`tel:${phone}`, '_blank');
       track('whatsapp_cta_clicked', { action: 'call', turf_id: turf.id });
     }
   };
@@ -320,7 +322,7 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: T
             <div className="flex items-center gap-2">
               {user ? (
                 <>
-                  {turf.contacts?.phone && (
+                  {((turf.contact_info as any)?.phone || turf.contacts?.phone) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -363,11 +365,11 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: T
       />
 
       {/* WhatsApp Fallback Modal */}
-      {showWhatsAppFallback && turf.contacts?.phone && (
+      {showWhatsAppFallback && ((turf.contact_info as any)?.phone || turf.contacts?.phone) && (
         <WhatsAppFallback
           isOpen={showWhatsAppFallback}
           onClose={() => setShowWhatsAppFallback(false)}
-          phone={turf.contacts.phone}
+          phone={(turf.contact_info as any)?.phone || turf.contacts?.phone || ''}
           message={generateBookingMessage({
             turfName: turf.name,
             address: turf.address,

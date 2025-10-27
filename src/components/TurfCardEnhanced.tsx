@@ -77,8 +77,11 @@ export function TurfCardEnhanced({
 
   const handleWhatsAppClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const phone = (turf.contact_info as any)?.phone || turf.contacts?.phone;
+    if (!phone) return;
+
     const message = generateBookingMessage(turf);
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${turf.contacts.phone}&text=${encodeURIComponent(message)}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
 
     const newWindow = window.open(whatsappUrl, '_blank');
 
