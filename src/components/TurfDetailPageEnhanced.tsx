@@ -24,64 +24,6 @@ import { generateTurfInquiryMessage, buildWhatsAppLink } from '../lib/whatsapp';
 import { predictAvailability } from '../lib/availabilityPredictor';
 import { filterNonExpiredGames } from '../lib/gameUtils';
 
-// Sample turf data for fallback when database turfs are not available
-const SAMPLE_TURFS = [
-  {
-    id: 'turf_1',
-    name: 'Big Bounce Turf',
-    address: 'Govind Nagar Link Road, Govind Nagar, Nashik',
-    rating: 4.5,
-    totalReviews: 128,
-    priceDisplay: '₹400-600/hr',
-    pricePerHour: 500,
-    amenities: ['Parking', 'Washroom', 'Water', 'Lighting'],
-    images: ['/api/placeholder/400/300', '/api/placeholder/400/301', '/api/placeholder/400/302'],
-    slots: ['Football', 'Cricket'],
-    contacts: { phone: '9876543210', whatsapp: '9876543210' },
-    coords: { lat: 19.9975, lng: 73.7898 },
-    nextAvailable: '6:00 PM Today',
-    isPopular: true,
-    hasLights: true,
-    distanceKm: 2.5
-  },
-  {
-    id: 'turf_2',
-    name: 'Greenfield The Multisports Turf',
-    address: 'Near K.K. Wagh Engineering, Gangotri Vihar, Nashik',
-    rating: 4.2,
-    totalReviews: 89,
-    priceDisplay: '₹350-550/hr',
-    pricePerHour: 450,
-    amenities: ['Parking', 'Washroom', 'Cafeteria', 'First Aid'],
-    images: ['/api/placeholder/400/303', '/api/placeholder/400/304'],
-    slots: ['Football', 'Basketball'],
-    contacts: { phone: '9876543211', whatsapp: '9876543211' },
-    coords: { lat: 19.9945, lng: 73.7868 },
-    nextAvailable: '7:00 PM Today',
-    isPopular: false,
-    hasLights: true,
-    distanceKm: 3.1
-  },
-  {
-    id: 'turf_3',
-    name: 'Kridabhumi – The Multisports Turf',
-    address: 'Behind Maruti Wafers, Tigraniya Road, Dwarka, Nashik',
-    rating: 4.7,
-    totalReviews: 156,
-    priceDisplay: '₹600-900/hr',
-    pricePerHour: 750,
-    amenities: ['Flood Lights', 'Parking', 'Washrooms', 'Changing Rooms', 'Drinking Water', 'First Aid'],
-    images: ['/api/placeholder/400/305', '/api/placeholder/400/306', '/api/placeholder/400/307'],
-    slots: ['Football', 'Cricket'],
-    contacts: { phone: '9028960311', whatsapp: '9028960311' },
-    coords: { lat: 19.9925, lng: 73.7888 },
-    nextAvailable: '5:00 PM Today',
-    isPopular: true,
-    hasLights: true,
-    distanceKm: 1.8
-  }
-];
-
 interface TurfDetailPageEnhancedProps {
   turfId: string;
   onBack: () => void;
@@ -178,26 +120,10 @@ export function TurfDetailPageEnhanced({
         loadUpcomingGames();
         generateMockAvailability();
       } else {
-        // Fallback to sample turfs for demo purposes
-        console.log('🔄 Turf not found in database, using sample data for:', turfId);
-        const sampleTurf = SAMPLE_TURFS.find(turf => turf.id === turfId);
-        if (sampleTurf) {
-          setTurf(sampleTurf as any);
-          generateMockAvailability();
-          // Don't load games for sample turfs since they won't exist
-        } else {
-          console.error('❌ Turf not found in database or samples:', turfId);
-        }
+        console.error('❌ Turf not found in database:', turfId);
       }
     } catch (error) {
       console.error('Error loading turf details:', error);
-      // Try sample turfs as final fallback
-      const sampleTurf = SAMPLE_TURFS.find(turf => turf.id === turfId);
-      if (sampleTurf) {
-        console.log('🔄 Using sample turf due to error:', turfId);
-        setTurf(sampleTurf as any);
-        generateMockAvailability();
-      }
     } finally {
       setLoading(false);
     }

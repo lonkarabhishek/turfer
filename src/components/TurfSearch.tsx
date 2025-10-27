@@ -9,61 +9,6 @@ import { TurfCard } from './TurfCard';
 import { TurfCardEnhanced } from './TurfCardEnhanced';
 import { turfsAPI, type Turf, type User } from '../lib/api';
 import { formatPriceDisplay, cleanPriceData } from '../lib/priceUtils';
-import { demoDataManager, type DemoTurf } from '../lib/demoData';
-
-// Sample turf data for fallback when backend is unavailable
-const SAMPLE_TURFS: Turf[] = [
-  {
-    id: 'turf_1',
-    name: 'Big Bounce Turf',
-    address: 'Govind Nagar Link Road, Govind Nagar, Nashik',
-    rating: 4.5,
-    totalReviews: 128,
-    priceDisplay: '₹400-600/hr',
-    pricePerHour: 500,
-    amenities: ['Parking', 'Washroom', 'Water', 'Lighting'],
-    images: ['/api/placeholder/400/300'],
-    slots: ['06:00', '07:00', '18:00', '19:00', '20:00'],
-    contacts: { phone: '9876543210', whatsapp: '9876543210' },
-    coords: { lat: 19.9975, lng: 73.7898 },
-    nextAvailable: '6:00 PM Today',
-    isPopular: true,
-    hasLights: true
-  },
-  {
-    id: 'turf_2', 
-    name: 'Greenfield The Multisports Turf',
-    address: 'Near K.K. Wagh Engineering, Gangotri Vihar, Nashik',
-    rating: 4.2,
-    totalReviews: 89,
-    priceDisplay: '₹350-550/hr',
-    pricePerHour: 450,
-    amenities: ['Parking', 'Washroom', 'Cafeteria', 'First Aid'],
-    images: ['/api/placeholder/400/300'],
-    slots: ['07:00', '08:00', '17:00', '18:00', '19:00'],
-    contacts: { phone: '9876543211', whatsapp: '9876543211' },
-    coords: { lat: 19.9915, lng: 73.7747 },
-    nextAvailable: '7:00 PM Today',
-    hasLights: true
-  },
-  {
-    id: 'turf_3',
-    name: 'Kridabhumi The Multisports Turf', 
-    address: 'Tigraniya Road, Dwarka, Nashik',
-    rating: 4.7,
-    totalReviews: 156,
-    priceDisplay: '₹500-800/hr',
-    pricePerHour: 650,
-    amenities: ['Premium Facility', 'Parking', 'Washroom', 'AC Lounge', 'Lighting'],
-    images: ['/api/placeholder/400/300'],
-    slots: ['06:00', '07:00', '08:00', '18:00', '19:00', '20:00'],
-    contacts: { phone: '9876543212', whatsapp: '9876543212' },
-    coords: { lat: 20.0042, lng: 73.7749 },
-    nextAvailable: '8:00 PM Today',
-    isPopular: true,
-    hasLights: true
-  }
-];
 
 interface TurfSearchProps {
   user: User | null;
@@ -87,14 +32,13 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: TurfSearchProps) {
   const [query, setQuery] = useState('');
   const [turfs, setTurfs] = useState<Turf[]>([]);
-  const [demoTurfs, setDemoTurfs] = useState<DemoTurf[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
-  
+
   // Search filters
   const [filters, setFilters] = useState({
     sport: '',
@@ -103,16 +47,10 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
     rating: '',
   });
 
-  // Load turfs and demo turfs on mount and when filters change
+  // Load turfs on mount and when filters change
   useEffect(() => {
     loadTurfs();
-    loadDemoTurfs();
   }, [query, filters]);
-
-  const loadDemoTurfs = () => {
-    const allDemoTurfs = demoDataManager.getTurfs();
-    setDemoTurfs(allDemoTurfs);
-  };
 
   const loadTurfs = async () => {
     setLoading(true);
@@ -146,9 +84,9 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
         setTurfs([]);
       }
     } catch (err) {
-      console.warn('API unavailable, using sample data:', err);
-      setError('');
-      setTurfs(SAMPLE_TURFS);
+      console.error('Error loading turfs:', err);
+      setError('Unable to load turfs. Please try again.');
+      setTurfs([]);
     } finally {
       setLoading(false);
     }
@@ -541,23 +479,6 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
             >
               Try Again
             </Button>
-          </div>
-        )}
-
-        {/* Demo data notice */}
-        {turfs.length > 0 && turfs === SAMPLE_TURFS && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-amber-800">Demo Mode</h3>
-                <p className="text-sm text-amber-700 mt-1">Showing sample turfs while our servers are updating. All features are functional!</p>
-              </div>
-            </div>
           </div>
         )}
 
