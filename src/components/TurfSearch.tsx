@@ -157,33 +157,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
   };
 
   const displayTurfs = useMemo(() => {
-    // First, add demo turfs
-    const transformedDemoTurfs = demoTurfs.map(demoTurf => ({
-      id: demoTurf.id,
-      name: demoTurf.name,
-      address: demoTurf.address,
-      rating: demoTurf.rating,
-      totalReviews: demoTurf.totalReviews,
-      pricePerHour: demoTurf.pricePerHour,
-      pricePerHourWeekend: demoTurf.pricePerHourWeekend,
-      pricePerHourMin: demoTurf.pricePerHour,
-      priceDisplay: `₹${demoTurf.pricePerHour}${demoTurf.pricePerHourWeekend ? `-${demoTurf.pricePerHourWeekend}` : ''}/hr`,
-      amenities: demoTurf.amenities,
-      images: demoTurf.images,
-      slots: ['06:00', '07:00', '08:00', '18:00', '19:00', '20:00', '21:00', '22:00'],
-      contacts: { phone: '9876543210', whatsapp: '9876543210' },
-      coords: demoTurf.coordinates || { lat: 19.9975, lng: 73.7898 },
-      distanceKm: demoTurf.coordinates && userLocation
-        ? calculateDistance(userLocation.lat, userLocation.lng, demoTurf.coordinates.lat, demoTurf.coordinates.lng)
-        : null,
-      nextAvailable: '8:00 PM Today',
-      isPopular: demoTurf.rating >= 4.5,
-      hasLights: demoTurf.amenities?.includes('Floodlights'),
-      isDemo: true,
-      demoTurf: demoTurf
-    }));
-
-    // Then, add regular turfs
+    // Transform regular turfs from database
     const transformedTurfs = turfs.map(turf => ({
       id: turf.id,
       name: turf.name,
@@ -198,23 +172,21 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
       priceDisplay: formatPriceDisplay(turf.pricePerHour, turf.pricePerHourWeekend),
       amenities: turf.amenities,
       images: turf.images,
-      slots: ['06 AM - 07 AM', '07 AM - 08 AM', '08 PM - 09 PM', '09 PM - 10 PM'], // Mock slots for now
+      slots: ['06 AM - 07 AM', '07 AM - 08 AM', '08 PM - 09 PM', '09 PM - 10 PM'],
       contacts: turf.contactInfo,
+      contact_info: turf.contactInfo,
       coords: turf.coordinates,
-      distanceKm: turf.coordinates && userLocation 
-        ? calculateDistance(userLocation.lat, userLocation.lng, turf.coordinates.lat, turf.coordinates.lng) 
-        : null, // No distance if no coordinates or user location
+      distanceKm: turf.coordinates && userLocation
+        ? calculateDistance(userLocation.lat, userLocation.lng, turf.coordinates.lat, turf.coordinates.lng)
+        : null,
       nextAvailable: '06 AM - 07 AM',
       isPopular: turf.rating >= 4.5,
       hasLights: turf.amenities?.some(a => a && typeof a === 'string' && a.toLowerCase().includes('light')) || false,
     }));
 
-    // Combine demo turfs and regular turfs
-    const allTransformedTurfs = [...transformedDemoTurfs, ...transformedTurfs];
-
-    // Sort by distance when user location is available and turfs have distance calculated
+    // Sort by distance when user location is available
     if (userLocation) {
-      return allTransformedTurfs.sort((a, b) => {
+      return transformedTurfs.sort((a, b) => {
         // Put turfs with known distance first, sorted by distance
         if (a.distanceKm !== null && b.distanceKm !== null) {
           return a.distanceKm - b.distanceKm;
@@ -226,17 +198,15 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
       });
     }
 
-    // Otherwise sort by rating and popularity (demo turfs first)
-    return allTransformedTurfs.sort((a, b) => {
-      // Demo turfs always appear first
-      if (a.isDemo && !b.isDemo) return -1;
-      if (!a.isDemo && b.isDemo) return 1;
-      // Then by popularity and rating
+    // Otherwise sort by rating and popularity
+    return transformedTurfs.sort((a, b) => {
+      // Popular turfs first
       if (a.isPopular && !b.isPopular) return -1;
       if (!a.isPopular && b.isPopular) return 1;
+      // Then by rating
       return (b.rating || 0) - (a.rating || 0);
     });
-  }, [turfs, demoTurfs, userLocation]);
+  }, [turfs, userLocation]);
 
   // Get active filters for chips
   const activeFilters = useMemo(() => {
