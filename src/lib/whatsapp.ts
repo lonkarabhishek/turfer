@@ -38,24 +38,56 @@ export function generateBookingMessage({
   notes = ''
 }: {
   turfName: string;
-  address: string;
-  date: string;
-  slot: string;
-  players: number;
+  address?: string;
+  date?: string;
+  slot?: string;
+  players?: number;
   notes?: string;
 }): string {
+  // If no date/slot/players provided, use generic inquiry message
+  if (!date || !slot) {
+    return `Hi! I'm interested in booking ${turfName}.
+
+Found your venue via TapTurf - https://tapturf.in
+
+Could you please share:
+✅ Available time slots
+💰 Pricing details
+📋 Booking process
+
+Thanks!`;
+  }
+
   return `Hi! I'd like to book ${turfName} for ${slot} on ${date}.
 
 Details:
 📍 Venue: ${turfName}
 📅 Date: ${date}
 ⏰ Time: ${slot}
-👥 Players: ${players}
+👥 Players: ${players || 'TBD'}
 ${notes ? `📝 Notes: ${notes}` : ''}
 
 Found via TapTurf - https://tapturf.in
 
 Please confirm availability and total cost. Thanks!`;
+}
+
+// Simple booking inquiry message generator for turf objects
+export function generateTurfInquiryMessage(turf: any): string {
+  return `Hi! I'm interested in booking *${turf.name}*.
+
+📍 ${turf.address || 'Your venue'}
+
+Found your venue via TapTurf - https://tapturf.in
+
+Could you please share:
+✅ Available time slots
+💰 Pricing details
+📋 Booking process
+
+Looking forward to playing here! 🏃‍♂️
+
+Thanks!`;
 }
 
 export function generateGameInviteMessage({

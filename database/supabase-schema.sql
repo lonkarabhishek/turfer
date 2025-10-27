@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS turfs (
   price_per_hour_weekend DECIMAL,
   operating_hours JSONB NOT NULL,
   contact_info JSONB,
+  gmap_embed_link TEXT,
   rating DECIMAL DEFAULT 0,
   total_reviews INTEGER DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,

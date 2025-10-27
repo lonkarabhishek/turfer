@@ -1,4 +1,4 @@
-import { Home, Search, Plus, MessageCircle, User, BarChart3 } from 'lucide-react';
+import { Home, Plus, User, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { type User as UserType } from '../lib/api';
 
@@ -15,13 +15,10 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
     { id: 'home', label: 'Home', icon: Home },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'create', label: 'Create Game', icon: Plus },
-    { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'profile', label: 'Profile', icon: User },
   ] : [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'explore', label: 'Explore', icon: Search },
     { id: 'create', label: 'Create Game', icon: Plus },
-    { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
@@ -32,11 +29,6 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
     }
     if (tabId === 'profile') {
       onProfileClick?.();
-      return;
-    }
-    if (tabId === 'messages') {
-      // TODO: Implement messaging system
-      alert('Messaging feature coming soon - stay tuned!');
       return;
     }
     setActiveTab(tabId);

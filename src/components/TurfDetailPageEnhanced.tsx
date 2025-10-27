@@ -19,7 +19,7 @@ import { turfsAPI, bookingsAPI, gamesAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import type { TurfData } from './TurfCard';
 import { GameCard, type GameData } from './GameCard';
-import { generateBookingMessage } from '../lib/whatsapp';
+import { generateTurfInquiryMessage, buildWhatsAppLink } from '../lib/whatsapp';
 import { predictAvailability } from '../lib/availabilityPredictor';
 import { filterNonExpiredGames } from '../lib/gameUtils';
 
@@ -608,8 +608,15 @@ export function TurfDetailPageEnhanced({
               >
                 <Button
                   onClick={() => {
-                    const message = generateBookingMessage(turf);
-                    const whatsappUrl = `https://api.whatsapp.com/send?phone=${turf.contacts?.phone}&text=${encodeURIComponent(message)}`;
+                    const message = generateTurfInquiryMessage(turf);
+                    const phone = turf.contacts?.phone || turf.contacts?.whatsapp || turf.contact_info?.phone;
+
+                    if (!phone) {
+                      alert('Contact information not available for this venue. Please try again later.');
+                      return;
+                    }
+
+                    const whatsappUrl = buildWhatsAppLink({ phone, text: message });
                     window.open(whatsappUrl, '_blank');
                   }}
                   className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold py-6 rounded-xl shadow-lg hover:shadow-xl transition-all text-lg"
@@ -1073,30 +1080,51 @@ export function TurfDetailPageEnhanced({
                     )}
                   </div>
 
-                  {/* Enhanced map placeholder with Google Maps integration */}
+                  {/* Enhanced map - Google Maps Embed or Placeholder */}
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-500 to-emerald-500 text-white p-4">
                       <h4 className="font-medium mb-1">Interactive Map</h4>
-                      <p className="text-sm text-blue-100">Click to open Google Maps</p>
+                      <p className="text-sm text-blue-100">
+                        {turf.gmap_embed_link ? 'Explore the venue location' : 'Click to open Google Maps'}
+                      </p>
                     </div>
-                    <a
-                      href={getGoogleMapsUrl(turf.address, turf.coords)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
-                    >
-                      <div className="h-full flex items-center justify-center">
-                        <div className="text-center text-gray-600">
-                          <MapPin className="w-12 h-12 mx-auto mb-2" />
-                          <p className="font-medium mb-1">{turf.name}</p>
-                          <p className="text-sm">Click to view on Google Maps</p>
-                          <div className="flex items-center justify-center gap-1 mt-2 text-blue-600">
-                            <ExternalLink className="w-4 h-4" />
-                            <span className="text-sm">Open in Google Maps</span>
+
+                    {turf.gmap_embed_link ? (
+                      // Display embedded Google Map if link is available
+                      <div className="relative w-full h-96 bg-gray-100">
+                        <iframe
+                          src={turf.gmap_embed_link}
+                          width="100%"
+                          height="100%"
+                          style={{ border: 0 }}
+                          allowFullScreen
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          title={`Map of ${turf.name}`}
+                          className="w-full h-full"
+                        />
+                      </div>
+                    ) : (
+                      // Fallback to clickable placeholder
+                      <a
+                        href={getGoogleMapsUrl(turf.address, turf.coords)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
+                      >
+                        <div className="h-full flex items-center justify-center">
+                          <div className="text-center text-gray-600">
+                            <MapPin className="w-12 h-12 mx-auto mb-2" />
+                            <p className="font-medium mb-1">{turf.name}</p>
+                            <p className="text-sm">Click to view on Google Maps</p>
+                            <div className="flex items-center justify-center gap-1 mt-2 text-blue-600">
+                              <ExternalLink className="w-4 h-4" />
+                              <span className="text-sm">Open in Google Maps</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </a>
+                      </a>
+                    )}
                   </div>
 
                   {/* Additional location info */}
