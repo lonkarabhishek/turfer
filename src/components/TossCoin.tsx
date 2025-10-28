@@ -55,7 +55,7 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
       playResultSound();
       setTimeout(() => {
         setShowResult(true);
-      }, 200);
+      }, 100);
     }, 2000); // 2 seconds of tossing
   };
 
@@ -141,7 +141,7 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                             },
                           }
                         : {
-                            duration: 0.4,
+                            duration: 0.3,
                             ease: "easeOut"
                           }
                     }
