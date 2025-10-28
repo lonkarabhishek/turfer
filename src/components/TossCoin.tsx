@@ -13,26 +13,11 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
   const [result, setResult] = useState<'heads' | 'tails' | null>(null);
   const [showResult, setShowResult] = useState(false);
 
-  // Play toss sound using Web Audio API - clear "ding" sound
+  // Play toss sound using audio file
   const playTossSound = () => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    // Clear bell-like "ding" frequency
-    oscillator.frequency.value = 1200;
-    oscillator.type = 'sine';
-
-    // Bell envelope - quick attack, longer decay
-    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01); // Quick attack
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.5); // Long decay
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 1.5);
+    const audio = new Audio('/coin-flip.mp3');
+    audio.volume = 0.5; // Set volume to 50%
+    audio.play().catch(err => console.log('Audio play failed:', err));
   };
 
   // Play result sound
