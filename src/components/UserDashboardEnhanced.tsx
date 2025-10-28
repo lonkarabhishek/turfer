@@ -17,7 +17,6 @@ import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
 import { userHelpers, gameRequestHelpers } from '../lib/supabase';
 import { filterNonExpiredGames, isGameExpired } from '../lib/gameUtils';
-import { demoDataManager, type DemoBooking, type DemoUser } from '../lib/demoData';
 
 // Utility function to format time to 12-hour format for Indian users
 const formatTo12Hour = (time24: string): string => {
@@ -80,9 +79,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const [joinedGames, setJoinedGames] = useState<GameData[]>([]);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState(user?.profile_image_url || '');
   const [gamesTab, setGamesTab] = useState<'upcoming' | 'completed'>('upcoming');
-  const [demoBookings, setDemoBookings] = useState<DemoBooking[]>([]);
-  const [demoUser, setDemoUser] = useState<DemoUser | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [showManualBookingUpload, setShowManualBookingUpload] = useState(false);
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
 
@@ -90,21 +86,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
     if (user) {
       loadUserData();
     }
-    loadDemoData();
   }, [user]);
-
-  const loadDemoData = () => {
-    const currentDemoUser = demoDataManager.getCurrentUser();
-    setDemoUser(currentDemoUser);
-    setIsDemoMode(!!currentDemoUser);
-
-    if (currentDemoUser) {
-      const userDemoBookings = demoDataManager.getUserBookings(currentDemoUser.id);
-      setDemoBookings(userDemoBookings);
-    } else {
-      setDemoBookings([]);
-    }
-  };
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -316,9 +298,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const completedGames = userGames.filter(game => isGameCompleted(game));
 
   const renderPendingBookingsAlert = () => {
-    const pendingBookings = isDemoMode
-      ? demoBookings.filter(b => b.status === 'pending')
-      : userBookings.filter(b => b.status === 'pending');
+    const pendingBookings = userBookings.filter(b => b.status === 'pending');
 
     if (pendingBookings.length === 0) return null;
 
@@ -359,37 +339,25 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
 
             {pendingBookings.length > 0 && (
               <div className="mt-4 grid gap-3">
-                {pendingBookings.slice(0, 2).map((booking) => {
-                  const turfName = isDemoMode
-                    ? demoDataManager.getTurf(booking.turfId)?.name || 'Unknown Turf'
-                    : booking.turfName;
-                  const bookingDate = isDemoMode
-                    ? formatDate(booking.date)
-                    : booking.date;
-                  const bookingTime = isDemoMode
-                    ? `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`
-                    : booking.time;
-
-                  return (
-                    <div
-                      key={booking.id}
-                      className="flex items-center justify-between bg-white/70 rounded-lg p-3 border border-orange-200"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                          <Calendar className="w-4 h-4 text-orange-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{turfName}</p>
-                          <p className="text-xs text-gray-600">{bookingDate} • {bookingTime}</p>
-                        </div>
+                {pendingBookings.slice(0, 2).map((booking) => (
+                  <div
+                    key={booking.id}
+                    className="flex items-center justify-between bg-white/70 rounded-lg p-3 border border-orange-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                        <Calendar className="w-4 h-4 text-orange-600" />
                       </div>
-                      <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">
-                        Pending
-                      </Badge>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{booking.turfName}</p>
+                        <p className="text-xs text-gray-600">{booking.date} • {booking.time}</p>
+                      </div>
                     </div>
-                  );
-                })}
+                    <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">
+                      Pending
+                    </Badge>
+                  </div>
+                ))}
                 {pendingBookings.length > 2 && (
                   <div className="text-center">
                     <Button
@@ -536,7 +504,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                 <div className="w-14 h-14 bg-gradient-to-r from-orange-600 to-orange-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-orange-500/50 transition-all duration-300">
                   <Calendar className="w-7 h-7 text-white" />
                 </div>
-                <div className="text-3xl font-bold text-orange-900 mb-1">{userBookings.length + demoBookings.length}</div>
+                <div className="text-3xl font-bold text-orange-900 mb-1">{userBookings.length}</div>
                 <div className="text-sm text-orange-600 font-medium">Total Bookings</div>
                 <div className="mt-2 text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to view →</div>
               </div>
@@ -955,36 +923,11 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
       });
     });
 
-    // Add demo bookings if in demo mode
-    if (isDemoMode) {
-      demoBookings.forEach(booking => {
-        const turf = demoDataManager.getTurf(booking.turfId);
-        allBookings.push({
-          id: booking.id,
-          turfName: turf?.name || 'Unknown Turf',
-          turfAddress: turf?.address || 'Unknown Address',
-          date: formatDate(booking.date),
-          time: `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`,
-          duration: `${Math.abs(new Date(`1970-01-01T${booking.endTime}:00`).getTime() - new Date(`1970-01-01T${booking.startTime}:00`).getTime()) / (1000 * 60 * 60)}h`,
-          status: booking.status,
-          amount: booking.totalAmount,
-          type: 'demo',
-          paymentStatus: booking.paymentStatus,
-          notes: booking.notes
-        });
-      });
-    }
-
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">My Bookings</h2>
-            {isDemoMode && (
-              <p className="text-sm text-purple-600 mt-1">
-                Showing bookings for {demoUser?.name} (Demo Mode)
-              </p>
-            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -1028,11 +971,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                         >
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </Badge>
-                        {booking.type === 'demo' && (
-                          <Badge className="bg-purple-100 text-purple-700 border-purple-200">
-                            Demo
-                          </Badge>
-                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4 text-gray-600">
@@ -1050,15 +988,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                           <span>{booking.turfAddress}</span>
                         </div>
                       </div>
-
-                      {booking.type === 'demo' && booking.paymentStatus && (
-                        <div className="mt-3 flex items-center gap-2">
-                          <CreditCard className="w-4 h-4 text-green-600" />
-                          <span className="text-sm text-green-600 font-medium">
-                            Payment: {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
-                          </span>
-                        </div>
-                      )}
 
                       {booking.notes && (
                         <div className="mt-3 p-3 bg-gray-50 rounded-lg">
@@ -1087,14 +1016,10 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
             <div className="text-center py-12 text-gray-500">
               <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
               <p className="text-lg font-medium mb-2">No bookings yet</p>
-              <p className="mb-4">
-                {isDemoMode
-                  ? 'Use the demo mode to create bookings and see them here!'
-                  : 'Book a turf to see your reservations here!'}
-              </p>
+              <p className="mb-4">Book a turf to see your reservations here!</p>
               <Button onClick={() => onNavigate('turfs')} className="bg-blue-600 hover:bg-blue-700 rounded-full">
                 <Plus className="w-4 h-4 mr-2" />
-                {isDemoMode ? 'Try Demo Booking' : 'Book Your First Turf'}
+                Book Your First Turf
               </Button>
             </div>
           )}

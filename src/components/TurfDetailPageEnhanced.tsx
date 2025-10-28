@@ -140,7 +140,16 @@ export function TurfDetailPageEnhanced({
 
       if (response.success && response.data) {
         const turfGames = response.data
-          .filter((game: any) => game.turf_id === turfId || game.turf_name === turf?.name);
+          .filter((game: any) => game.turf_id === turfId || game.turf_name === turf?.name)
+          .filter((game: any) => {
+            // Filter out games with invalid/incomplete data
+            const hasValidTitle = game.sport && game.sport !== 'Game' && game.format && game.format !== 'Game';
+            const hasValidPlayers = game.max_players && game.max_players > 0 && !isNaN(game.max_players);
+            const hasValidDate = game.date && game.date !== '2025-10-31'; // Filter out dummy date
+            const hasValidHost = game.host_name && game.host_name !== 'Host';
+
+            return hasValidTitle && hasValidPlayers && hasValidDate && hasValidHost;
+          });
 
         console.log('🎮 Filtered games for this turf:', {
           matchingGames: turfGames.length,
@@ -526,7 +535,6 @@ export function TurfDetailPageEnhanced({
 
               {/* Pricing */}
               <div className="flex items-center gap-2 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border-2 border-emerald-200">
-                <DollarSign className="w-6 h-6 text-emerald-600" />
                 <div>
                   <p className="text-sm text-gray-600">Starting from</p>
                   <p className="text-2xl font-bold text-emerald-600">{turf.priceDisplay}</p>

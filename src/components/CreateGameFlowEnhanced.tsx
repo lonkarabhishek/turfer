@@ -23,6 +23,7 @@ interface CreateGameFlowEnhancedProps {
   open: boolean;
   onClose: () => void;
   onGameCreated?: (game: GameData) => void;
+  initialTurfId?: string;
 }
 
 interface CreateGameData {
@@ -153,7 +154,7 @@ const generateTimeSlots = () => {
 
 const timeSlots = generateTimeSlots();
 
-export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateGameFlowEnhancedProps) {
+export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTurfId }: CreateGameFlowEnhancedProps) {
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -179,7 +180,9 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
       setStep(1);
       setError(null);
       setSearchTerm('');
-      setSelectedTurf(null);
+      if (!initialTurfId) {
+        setSelectedTurf(null);
+      }
       setSelectedFormat(null);
       setShowTurfSearch(false);
       setCreatedGame(null);
@@ -191,7 +194,30 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated }: CreateG
         notes: ''
       });
     }
-  }, [open]);
+  }, [open, initialTurfId]);
+
+  // Load initial turf if provided
+  useEffect(() => {
+    if (open && initialTurfId && !selectedTurf) {
+      const loadInitialTurf = async () => {
+        try {
+          const response = await turfsAPI.getById(initialTurfId);
+          if (response.success && response.data) {
+            const turf = {
+              ...response.data,
+              priceDisplay: formatPriceDisplay(response.data.pricePerHour),
+              slots: [],
+              contacts: response.data.contactInfo
+            };
+            setSelectedTurf(turf);
+          }
+        } catch (error) {
+          console.error('Error loading initial turf:', error);
+        }
+      };
+      loadInitialTurf();
+    }
+  }, [open, initialTurfId, selectedTurf]);
 
   // Load default turfs when component mounts and search for turfs when search term changes
   useEffect(() => {

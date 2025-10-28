@@ -461,6 +461,7 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [turfIdForGame, setTurfIdForGame] = useState<string | undefined>(undefined);
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
   const [games, setGames] = useState<GameData[]>([]);
   const [turfs, setTurfs] = useState<any[]>([]);
@@ -649,7 +650,7 @@ export default function App() {
           turfId={selectedTurfId}
           onBack={handleBackToHome}
           onCreateGame={() => {
-            handleBackToHome();
+            setTurfIdForGame(selectedTurfId);
             setShowCreateGame(true);
           }}
           onBookTurf={() => {
@@ -808,9 +809,13 @@ export default function App() {
         </div>
       </footer>
       
-      <CreateGameFlow 
-        open={showCreateGame} 
-        onClose={() => setShowCreateGame(false)}
+      <CreateGameFlow
+        open={showCreateGame}
+        onClose={() => {
+          setShowCreateGame(false);
+          setTurfIdForGame(undefined);
+        }}
+        initialTurfId={turfIdForGame}
         onGameCreated={async (game) => {
           console.log('Game created:', game);
           // Don't close immediately - let user see success page first
