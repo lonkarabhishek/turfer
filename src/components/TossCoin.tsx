@@ -70,8 +70,8 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
       playResultSound();
       setTimeout(() => {
         setShowResult(true);
-      }, 300);
-    }, 2500); // 2.5 seconds of tossing
+      }, 200);
+    }, 2000); // 2 seconds of tossing
   };
 
   const handleTossAgain = () => {
@@ -134,29 +134,37 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                     animate={
                       isTossing
                         ? {
-                            rotateY: [0, 360, 720, 1080, 1440, 1800], // Smooth continuous flips
-                            y: [0, -80, -120, -80, -40, 0], // Smooth bounce arc
+                            rotateY: 1800, // 5 complete rotations
+                            y: [-100, 0], // Simple up and down
                           }
                         : result
                         ? {
-                            rotateY: result === 'heads' ? 1800 : 1980, // Land on correct side (1800 = 0, 1980 = 180)
+                            rotateY: result === 'heads' ? 0 : 180, // Land on correct side
                           }
                         : {}
                     }
                     transition={
                       isTossing
                         ? {
-                            duration: 2.5,
-                            ease: [0.22, 1, 0.36, 1], // Custom ease-out curve for smooth deceleration
-                            times: [0, 0.2, 0.4, 0.6, 0.8, 1],
+                            rotateY: {
+                              duration: 2,
+                              ease: "linear", // Constant spin speed
+                            },
+                            y: {
+                              duration: 2,
+                              ease: [0.45, 0, 0.55, 1], // Natural bounce (ease-in-out)
+                            },
                           }
-                        : { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] } // Smooth landing with slight overshoot
+                        : {
+                            duration: 0.4,
+                            ease: "easeOut"
+                          }
                     }
                     style={{
                       transformStyle: 'preserve-3d',
                     }}
                   >
-                    {/* Heads side - Ashoka Lion Capital */}
+                    {/* Heads side - National Emblem */}
                     <div
                       className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-200 via-gray-300 to-slate-400 shadow-2xl flex items-center justify-center border-[6px] border-slate-300"
                       style={{
@@ -169,29 +177,31 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                         {/* Outer border circle */}
                         <div className="absolute inset-0 -m-16 rounded-full border-2 border-slate-400/40"></div>
 
-                        {/* Ashoka Lion Capital representation */}
+                        {/* National Emblem text */}
                         <div className="relative">
-                          {/* Three stylized lions */}
-                          <div className="flex items-center justify-center mb-2">
-                            <div className="text-5xl font-bold text-slate-700" style={{ textShadow: '1px 1px 2px rgba(0, 0, 0, 0.2)' }}>
-                              🦁
-                            </div>
+                          <div className="text-sm font-bold text-slate-600 mb-2 tracking-wider">भारत</div>
+
+                          {/* Ashoka Chakra */}
+                          <div className="w-16 h-16 mx-auto rounded-full border-3 border-slate-700 flex items-center justify-center bg-slate-300 mb-2">
+                            {/* Simplified 8 spokes */}
+                            {[...Array(8)].map((_, i) => (
+                              <div
+                                key={i}
+                                className="absolute w-0.5 h-6 bg-slate-700"
+                                style={{
+                                  transform: `rotate(${i * 45}deg)`,
+                                }}
+                              />
+                            ))}
+                            <div className="w-2 h-2 rounded-full bg-slate-700 z-10"></div>
                           </div>
 
-                          {/* BHARAT and INDIA text */}
-                          <div className="flex items-center justify-center gap-3 mb-1">
-                            <div className="text-[10px] font-bold text-slate-600 tracking-wide">BHĀRAT</div>
-                            <div className="w-1 h-1 rounded-full bg-slate-500"></div>
-                            <div className="text-[10px] font-bold text-slate-600 tracking-wide">INDIA</div>
-                          </div>
-
-                          {/* Satyameva Jayate */}
-                          <div className="text-[9px] font-semibold text-slate-600 tracking-wider">सत्यमेव जयते</div>
+                          <div className="text-[10px] font-bold text-slate-600 tracking-wide">INDIA</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Tails side - 1 Rupee with wheat stalks */}
+                    {/* Tails side - Simple 1 Rupee */}
                     <div
                       className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-200 via-gray-300 to-slate-400 shadow-2xl flex items-center justify-center border-[6px] border-slate-300"
                       style={{
@@ -204,31 +214,13 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                         {/* Outer border circle */}
                         <div className="absolute inset-0 -m-16 rounded-full border-2 border-slate-400/40"></div>
 
-                        {/* Hindi text at top */}
-                        <div className="text-[11px] font-bold text-slate-600 mb-2 tracking-wide">रुपया</div>
-
-                        {/* Main content with wheat stalks and 1 */}
-                        <div className="flex items-center justify-center gap-2 mb-1">
-                          {/* Left wheat stalk */}
-                          <div className="text-2xl text-slate-600">🌾</div>
-
-                          {/* Large 1 */}
-                          <div className="text-6xl font-bold text-slate-700 leading-none" style={{ textShadow: '2px 2px 3px rgba(0, 0, 0, 0.15)' }}>
-                            1
-                          </div>
-
-                          {/* Right wheat stalk */}
-                          <div className="text-2xl text-slate-600">🌾</div>
+                        {/* Large 1 */}
+                        <div className="text-8xl font-bold text-slate-700 leading-none mb-2" style={{ textShadow: '2px 2px 3px rgba(0, 0, 0, 0.15)' }}>
+                          1
                         </div>
 
                         {/* RUPEE text */}
-                        <div className="text-xs font-bold text-slate-600 tracking-widest mb-1">RUPEE</div>
-
-                        {/* Year placeholder */}
-                        <div className="text-[10px] font-semibold text-slate-500">2024</div>
-
-                        {/* Small dot at bottom */}
-                        <div className="w-1.5 h-1.5 rounded-full bg-slate-500 mx-auto mt-1"></div>
+                        <div className="text-sm font-bold text-slate-600 tracking-widest">RUPEE</div>
                       </div>
                     </div>
 
@@ -265,10 +257,10 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                     <div className={`text-4xl font-bold mb-2 ${
                       result === 'heads' ? 'text-slate-700' : 'text-slate-700'
                     }`}>
-                      {result === 'heads' ? '🦁 HEADS!' : '1️⃣ TAILS!'}
+                      {result === 'heads' ? 'HEADS!' : 'TAILS!'}
                     </div>
                     <p className="text-gray-600">
-                      {result === 'heads' ? 'Lion Capital wins!' : 'Rupee side wins!'}
+                      {result === 'heads' ? 'Emblem side wins!' : 'Number side wins!'}
                     </p>
                   </motion.div>
                 )}
