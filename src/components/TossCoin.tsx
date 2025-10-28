@@ -42,10 +42,10 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
     // Randomly decide result (pre-calculate so animation can land correctly)
     const randomResult = Math.random() > 0.5 ? 'heads' : 'tails';
 
-    // Play drop sound after 0.8 seconds
+    // Play drop sound after 1 second
     setTimeout(() => {
       playResultSound();
-    }, 800);
+    }, 1000);
 
     // Show result after animation
     setTimeout(() => {
