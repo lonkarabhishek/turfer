@@ -105,7 +105,11 @@
       "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_nf7mr4/**)",
       "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_1slDGt/**)",
       "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_zFpIqK/**)",
-      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_54F6K0/**)"
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_54F6K0/**)",
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_sFNHCg/**)",
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_liDEf2/**)",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=https://hwfsbpzercuoshodmnuf.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo npx supabase db push:*)",
+      "Bash(PGPASSWORD=5rCkckqFBOy0Wkrp psql:*)"
     ],
     "deny": [],
     "ask": [],

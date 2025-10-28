@@ -1,4 +1,4 @@
-import { Home, Plus, User, BarChart3, Bell } from 'lucide-react';
+import { Home, Plus, User, BarChart3, Bell, Coins } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { type User as UserType } from '../lib/api';
 
@@ -10,18 +10,21 @@ interface MobileNavProps {
   onCreateGame?: () => void;
   onHomeClick?: () => void;
   onNotificationsClick?: () => void;
+  onTossClick?: () => void;
   unreadCount?: number;
 }
 
-export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCreateGame, onHomeClick, onNotificationsClick, unreadCount = 0 }: MobileNavProps) {
+export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCreateGame, onHomeClick, onNotificationsClick, onTossClick, unreadCount = 0 }: MobileNavProps) {
   const tabs = user?.role === 'owner' ? [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'toss', label: 'Toss', icon: Coins },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'create', label: 'Create Game', icon: Plus },
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell, showBadge: true },
   ] : [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'toss', label: 'Toss', icon: Coins },
     { id: 'create', label: 'Create Game', icon: Plus },
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell, showBadge: true },
@@ -43,6 +46,10 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
     }
     if (tabId === 'notifications') {
       onNotificationsClick?.();
+      return;
+    }
+    if (tabId === 'toss') {
+      onTossClick?.();
       return;
     }
     setActiveTab(tabId);

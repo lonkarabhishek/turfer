@@ -25,6 +25,7 @@ import { WelcomePage } from "./components/WelcomePage";
 import { EmailConfirmation } from "./components/EmailConfirmation";
 import { ToastContainer } from "./components/ui/toast";
 import { UserSyncUtility } from "./components/UserSyncUtility";
+import { TossCoin } from "./components/TossCoin";
 
 import { useAuth } from "./hooks/useAuth";
 import { useNotifications } from "./hooks/useNotifications";
@@ -462,6 +463,7 @@ export default function App() {
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showTossCoin, setShowTossCoin] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [turfIdForGame, setTurfIdForGame] = useState<string | undefined>(undefined);
@@ -659,6 +661,10 @@ export default function App() {
     }
   };
 
+  const handleTossClick = () => {
+    setShowTossCoin(true);
+  };
+
 
   // Owner dashboard functionality hidden for now - focusing on user experience
   // const showOwnerDashboard = user?.role === 'owner' && (activeTab === "owner" || activeTab === "dashboard");
@@ -829,6 +835,7 @@ export default function App() {
         onCreateGame={() => setShowCreateGame(true)}
         onHomeClick={handleBackToHome}
         onNotificationsClick={handleNotificationsClick}
+        onTossClick={handleTossClick}
         unreadCount={unreadCount}
       />
       
@@ -889,6 +896,11 @@ export default function App() {
             console.error('Error refreshing games after creation:', error);
           }
         }}
+      />
+
+      <TossCoin
+        isOpen={showTossCoin}
+        onClose={() => setShowTossCoin(false)}
       />
 
       <SupabaseAuth
