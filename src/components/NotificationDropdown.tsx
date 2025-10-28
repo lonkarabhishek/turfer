@@ -4,7 +4,6 @@ import { Bell, Check, X, Users, GamepadIcon, Calendar, AlertCircle } from 'lucid
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { useNotifications } from '../hooks/useNotifications';
-import { createDemoNotifications } from '../lib/demoData';
 
 interface NotificationDropdownProps {
   className?: string;
@@ -139,22 +138,6 @@ export function NotificationDropdown({ className = '', onGameNavigation, onReque
                 <h3 className="font-bold text-lg text-gray-900">Notifications</h3>
               </div>
               <div className="flex gap-2">
-                {notifications.length === 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const user = JSON.parse(localStorage.getItem('supabase.auth.token') || '{}');
-                      if (user?.user?.id) {
-                        createDemoNotifications(user.user.id);
-                        loadNotifications();
-                      }
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-700"
-                  >
-                    Add Demo
-                  </Button>
-                )}
                 {unreadCount > 0 && (
                   <Button
                     variant="ghost"
