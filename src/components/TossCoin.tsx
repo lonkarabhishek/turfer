@@ -13,31 +13,26 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
   const [result, setResult] = useState<'heads' | 'tails' | null>(null);
   const [showResult, setShowResult] = useState(false);
 
-  // Play toss sound using Web Audio API - metallic coin sound
+  // Play toss sound using Web Audio API - clear "ding" sound
   const playTossSound = () => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
 
-    // Create multiple oscillators for a metallic clink sound
-    const frequencies = [800, 1200, 1600, 2400]; // Harmonics for metallic sound
-    const oscillators = frequencies.map(() => audioContext.createOscillator());
-    const gainNodes = frequencies.map(() => audioContext.createGain());
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
 
-    oscillators.forEach((osc, i) => {
-      osc.connect(gainNodes[i]);
-      gainNodes[i].connect(audioContext.destination);
-      osc.frequency.value = frequencies[i];
-      osc.type = 'sine';
+    // Clear bell-like "ding" frequency
+    oscillator.frequency.value = 1200;
+    oscillator.type = 'sine';
 
-      // Varying volumes for different harmonics
-      const baseGain = 0.15 / (i + 1); // Decreasing volume for higher frequencies
-      gainNodes[i].gain.setValueAtTime(baseGain, audioContext.currentTime);
+    // Bell envelope - quick attack, longer decay
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01); // Quick attack
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.5); // Long decay
 
-      // Quick attack and decay for coin clink
-      gainNodes[i].gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-      osc.start(audioContext.currentTime);
-      osc.stop(audioContext.currentTime + 0.3);
-    });
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 1.5);
   };
 
   // Play result sound
@@ -161,59 +156,79 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                       transformStyle: 'preserve-3d',
                     }}
                   >
-                    {/* Heads side - Indian Rupee */}
+                    {/* Heads side - Ashoka Lion Capital */}
                     <div
-                      className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 shadow-2xl flex items-center justify-center border-8 border-amber-200"
+                      className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-200 via-gray-300 to-slate-400 shadow-2xl flex items-center justify-center border-[6px] border-slate-300"
                       style={{
                         backfaceVisibility: 'hidden',
                         transform: 'rotateY(0deg)',
-                        boxShadow: '0 10px 40px rgba(217, 119, 6, 0.5), inset 0 2px 10px rgba(255, 255, 255, 0.5)',
+                        boxShadow: '0 10px 40px rgba(71, 85, 105, 0.4), inset 0 2px 10px rgba(255, 255, 255, 0.6)',
                       }}
                     >
                       <div className="text-center relative">
-                        {/* Outer circle design */}
-                        <div className="absolute inset-0 -m-16 rounded-full border-4 border-amber-600/30"></div>
-                        <div className="absolute inset-0 -m-12 rounded-full border-2 border-amber-600/20"></div>
+                        {/* Outer border circle */}
+                        <div className="absolute inset-0 -m-16 rounded-full border-2 border-slate-400/40"></div>
 
-                        {/* Rupee symbol */}
-                        <div className="text-7xl font-bold text-amber-900 mb-1" style={{ textShadow: '2px 2px 4px rgba(120, 53, 15, 0.3)' }}>₹</div>
-                        <div className="text-xs font-bold text-amber-800 tracking-widest">INDIA</div>
-                        <div className="text-[10px] font-semibold text-amber-700 mt-1">5 RUPEES</div>
+                        {/* Ashoka Lion Capital representation */}
+                        <div className="relative">
+                          {/* Three stylized lions */}
+                          <div className="flex items-center justify-center mb-2">
+                            <div className="text-5xl font-bold text-slate-700" style={{ textShadow: '1px 1px 2px rgba(0, 0, 0, 0.2)' }}>
+                              🦁
+                            </div>
+                          </div>
+
+                          {/* BHARAT and INDIA text */}
+                          <div className="flex items-center justify-center gap-3 mb-1">
+                            <div className="text-[10px] font-bold text-slate-600 tracking-wide">BHĀRAT</div>
+                            <div className="w-1 h-1 rounded-full bg-slate-500"></div>
+                            <div className="text-[10px] font-bold text-slate-600 tracking-wide">INDIA</div>
+                          </div>
+
+                          {/* Satyameva Jayate */}
+                          <div className="text-[9px] font-semibold text-slate-600 tracking-wider">सत्यमेव जयते</div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Tails side - Ashoka Lion Capital */}
+                    {/* Tails side - 1 Rupee with wheat stalks */}
                     <div
-                      className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 shadow-2xl flex items-center justify-center border-8 border-amber-200"
+                      className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-200 via-gray-300 to-slate-400 shadow-2xl flex items-center justify-center border-[6px] border-slate-300"
                       style={{
                         backfaceVisibility: 'hidden',
                         transform: 'rotateY(180deg)',
-                        boxShadow: '0 10px 40px rgba(217, 119, 6, 0.5), inset 0 2px 10px rgba(255, 255, 255, 0.5)',
+                        boxShadow: '0 10px 40px rgba(71, 85, 105, 0.4), inset 0 2px 10px rgba(255, 255, 255, 0.6)',
                       }}
                     >
                       <div className="text-center relative">
-                        {/* Outer circle design */}
-                        <div className="absolute inset-0 -m-16 rounded-full border-4 border-amber-600/30"></div>
-                        <div className="absolute inset-0 -m-12 rounded-full border-2 border-amber-600/20"></div>
+                        {/* Outer border circle */}
+                        <div className="absolute inset-0 -m-16 rounded-full border-2 border-slate-400/40"></div>
 
-                        {/* Ashoka Chakra simplified */}
-                        <div className="relative">
-                          <div className="w-20 h-20 mx-auto rounded-full border-4 border-amber-900 flex items-center justify-center bg-gradient-to-br from-amber-200 to-amber-400">
-                            {/* 8 spokes */}
-                            {[...Array(8)].map((_, i) => (
-                              <div
-                                key={i}
-                                className="absolute w-0.5 h-8 bg-amber-900"
-                                style={{
-                                  transform: `rotate(${i * 45}deg)`,
-                                  transformOrigin: 'center',
-                                }}
-                              />
-                            ))}
-                            <div className="w-3 h-3 rounded-full bg-amber-900 z-10"></div>
+                        {/* Hindi text at top */}
+                        <div className="text-[11px] font-bold text-slate-600 mb-2 tracking-wide">रुपया</div>
+
+                        {/* Main content with wheat stalks and 1 */}
+                        <div className="flex items-center justify-center gap-2 mb-1">
+                          {/* Left wheat stalk */}
+                          <div className="text-2xl text-slate-600">🌾</div>
+
+                          {/* Large 1 */}
+                          <div className="text-6xl font-bold text-slate-700 leading-none" style={{ textShadow: '2px 2px 3px rgba(0, 0, 0, 0.15)' }}>
+                            1
                           </div>
-                          <div className="text-[10px] font-bold text-amber-800 mt-2 tracking-widest">SATYAMEVA JAYATE</div>
+
+                          {/* Right wheat stalk */}
+                          <div className="text-2xl text-slate-600">🌾</div>
                         </div>
+
+                        {/* RUPEE text */}
+                        <div className="text-xs font-bold text-slate-600 tracking-widest mb-1">RUPEE</div>
+
+                        {/* Year placeholder */}
+                        <div className="text-[10px] font-semibold text-slate-500">2024</div>
+
+                        {/* Small dot at bottom */}
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-500 mx-auto mt-1"></div>
                       </div>
                     </div>
 
@@ -223,9 +238,9 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                         className="absolute inset-0 rounded-full"
                         animate={{
                           boxShadow: [
-                            '0 0 20px rgba(217, 119, 6, 0.6)',
-                            '0 0 40px rgba(217, 119, 6, 0.8)',
-                            '0 0 20px rgba(217, 119, 6, 0.6)',
+                            '0 0 20px rgba(148, 163, 184, 0.6)',
+                            '0 0 40px rgba(148, 163, 184, 0.8)',
+                            '0 0 20px rgba(148, 163, 184, 0.6)',
                           ],
                         }}
                         transition={{
@@ -248,12 +263,12 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                     className="text-center mb-6"
                   >
                     <div className={`text-4xl font-bold mb-2 ${
-                      result === 'heads' ? 'text-amber-600' : 'text-amber-600'
+                      result === 'heads' ? 'text-slate-700' : 'text-slate-700'
                     }`}>
-                      {result === 'heads' ? '₹ HEADS!' : '☸️ TAILS!'}
+                      {result === 'heads' ? '🦁 HEADS!' : '1️⃣ TAILS!'}
                     </div>
                     <p className="text-gray-600">
-                      {result === 'heads' ? 'Rupee side wins!' : 'Chakra side wins!'}
+                      {result === 'heads' ? 'Lion Capital wins!' : 'Rupee side wins!'}
                     </p>
                   </motion.div>
                 )}
