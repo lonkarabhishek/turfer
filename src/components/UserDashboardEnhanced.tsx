@@ -655,7 +655,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                           </div>
                           <div>
                             <h3 className="text-lg font-bold text-purple-900">
-                              {request.users?.name || request.user?.name || request.user_name || `User ${request.user_id?.slice(0, 8)}`} wants to join
+                              {request.users?.name || request.requester_name || request.user?.name || request.user_name || `User ${request.user_id?.slice(0, 8)}`} wants to join
                             </h3>
                             <p className="text-purple-700 font-medium">
                               {request.game?.sport || 'Game'} at {request.game?.turfName || 'Unknown Turf'}

@@ -860,7 +860,10 @@ export const gameRequestHelpers = {
               game_id: gameId,
               user_id: user.id,
               note: note || null,
-              status: 'pending'
+              status: 'pending',
+              requester_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+              requester_phone: user.user_metadata?.phone || user.phone || '',
+              requester_avatar: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || ''
             }
           ])
           .select()

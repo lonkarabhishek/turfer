@@ -20,12 +20,14 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UserDashboardEnhanced } from "./components/UserDashboardEnhanced";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { GameDetailPage } from "./components/GameDetailPage";
+import { NotificationsPage } from "./components/NotificationsPage";
 import { WelcomePage } from "./components/WelcomePage";
 import { EmailConfirmation } from "./components/EmailConfirmation";
 import { ToastContainer } from "./components/ui/toast";
 import { UserSyncUtility } from "./components/UserSyncUtility";
 
 import { useAuth } from "./hooks/useAuth";
+import { useNotifications } from "./hooks/useNotifications";
 import { gamesAPI } from "./lib/api";
 import type { AppUser } from "./hooks/useAuth";
 import TapTurfLogo from "./assets/TapTurf_Logo.png";
@@ -453,8 +455,9 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 
 export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm' | 'notifications'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -495,24 +498,53 @@ export default function App() {
     }
   }, [currentPage]);
 
-  // Handle URL routing on mount
+  // Handle URL routing on mount and browser navigation
   useEffect(() => {
-    const path = window.location.pathname;
-    if (path.includes('/confirm')) {
-      setCurrentPage('confirm');
-    } else if (path.includes('/game/')) {
-      const gameId = path.split('/game/')[1];
-      if (gameId) {
-        setSelectedGameId(gameId);
-        setCurrentPage('game-detail');
+    const handleRouting = () => {
+      const path = window.location.pathname;
+      console.log('🔍 Routing to path:', path);
+
+      if (path.includes('/confirm')) {
+        setCurrentPage('confirm');
+      } else if (path.includes('/notifications')) {
+        console.log('🔔 Navigating to notifications');
+        setCurrentPage('notifications');
+      } else if (path.includes('/game/')) {
+        const gameId = path.split('/game/')[1]?.split('?')[0]; // Remove query params
+        console.log('🎮 Navigating to game:', gameId);
+        if (gameId) {
+          setSelectedGameId(gameId);
+          setCurrentPage('game-detail');
+        }
+      } else if (path.includes('/turf/')) {
+        const turfId = path.split('/turf/')[1]?.split('?')[0]; // Remove query params
+        console.log('🏟️ Navigating to turf:', turfId);
+        if (turfId) {
+          setSelectedTurfId(turfId);
+          setCurrentPage('turf-detail');
+        }
+      } else if (path === '/' || path === '') {
+        console.log('🏠 Navigating to home');
+        setCurrentPage('home');
+        setSelectedTurfId(null);
+        setSelectedGameId(null);
       }
-    } else if (path.includes('/turf/')) {
-      const turfId = path.split('/turf/')[1];
-      if (turfId) {
-        setSelectedTurfId(turfId);
-        setCurrentPage('turf-detail');
-      }
-    }
+    };
+
+    // Handle initial route
+    handleRouting();
+
+    // Listen for browser back/forward navigation
+    const handlePopState = () => {
+      console.log('↩️ Browser navigation detected');
+      handleRouting();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   // Update URL when navigating to game pages
@@ -617,6 +649,16 @@ export default function App() {
     window.history.pushState({}, '', `/game/${gameId}`);
   };
 
+  const handleNotificationsClick = () => {
+    if (!user) {
+      setShowLogin(true);
+    } else {
+      setCurrentPage('notifications');
+      setActiveTab('notifications');
+      window.history.pushState({}, '', '/notifications');
+    }
+  };
+
 
   // Owner dashboard functionality hidden for now - focusing on user experience
   // const showOwnerDashboard = user?.role === 'owner' && (activeTab === "owner" || activeTab === "dashboard");
@@ -669,6 +711,11 @@ export default function App() {
         <GameDetailPage
           gameId={selectedGameId}
           onBack={handleBackToHome}
+        />
+      ) : currentPage === 'notifications' && user ? (
+        <NotificationsPage
+          onBack={handleBackToHome}
+          onGameNavigation={handleGameNavigation}
         />
       ) : currentPage === 'dashboard' && user ? (
         // Owner dashboard hidden for now - focusing on user experience
@@ -774,12 +821,15 @@ export default function App() {
         />
       )}
 
-      <MobileNav 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        user={user} 
+      <MobileNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        user={user}
         onProfileClick={handleProfileClick}
         onCreateGame={() => setShowCreateGame(true)}
+        onHomeClick={handleBackToHome}
+        onNotificationsClick={handleNotificationsClick}
+        unreadCount={unreadCount}
       />
       
       <footer className="border-t mt-12">

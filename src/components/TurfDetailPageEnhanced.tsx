@@ -244,19 +244,20 @@ export function TurfDetailPageEnhanced({
   };
 
   const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/turf/${turfId}`;
     if (navigator.share) {
       try {
         await navigator.share({
           title: turf?.name,
           text: `Check out ${turf?.name} on TapTurf`,
-          url: window.location.href,
+          url: shareUrl,
         });
       } catch (error) {
         console.log('Error sharing:', error);
       }
     } else {
       // Fallback: copy to clipboard
-      navigator.clipboard.writeText(window.location.href);
+      navigator.clipboard.writeText(shareUrl);
     }
   };
 
