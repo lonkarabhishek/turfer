@@ -20,23 +20,11 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
     audio.play().catch(err => console.log('Audio play failed:', err));
   };
 
-  // Play result sound
+  // Play coin drop sound when result is revealed
   const playResultSound = () => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 600;
-    oscillator.type = 'square';
-
-    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
+    const audio = new Audio('/coin-drop.mp3');
+    audio.volume = 0.5; // Set volume to 50%
+    audio.play().catch(err => console.log('Audio play failed:', err));
   };
 
   const handleToss = () => {
