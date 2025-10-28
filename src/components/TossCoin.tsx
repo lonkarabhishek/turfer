@@ -34,10 +34,16 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
   };
 
   const handleToss = () => {
-    setIsTossing(true);
     setShowResult(false);
     setResult(null);
+
+    // Play sound immediately
     playTossSound();
+
+    // Start animation after 0.15s delay to sync with sound
+    setTimeout(() => {
+      setIsTossing(true);
+    }, 150);
 
     // Randomly decide result (pre-calculate so animation can land correctly)
     const randomResult = Math.random() > 0.5 ? 'heads' : 'tails';
@@ -47,14 +53,14 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
       playResultSound();
     }, 1150);
 
-    // Show result after animation
+    // Show result after animation (2s animation + 0.15s delay)
     setTimeout(() => {
       setResult(randomResult);
       setIsTossing(false);
       setTimeout(() => {
         setShowResult(true);
       }, 100);
-    }, 2000); // 2 seconds of tossing
+    }, 2150); // 2 seconds of tossing + 0.15s delay
   };
 
   const handleTossAgain = () => {
