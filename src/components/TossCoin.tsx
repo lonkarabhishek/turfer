@@ -13,23 +13,31 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
   const [result, setResult] = useState<'heads' | 'tails' | null>(null);
   const [showResult, setShowResult] = useState(false);
 
-  // Play toss sound using Web Audio API
+  // Play toss sound using Web Audio API - metallic coin sound
   const playTossSound = () => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
 
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    // Create multiple oscillators for a metallic clink sound
+    const frequencies = [800, 1200, 1600, 2400]; // Harmonics for metallic sound
+    const oscillators = frequencies.map(() => audioContext.createOscillator());
+    const gainNodes = frequencies.map(() => audioContext.createGain());
 
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
+    oscillators.forEach((osc, i) => {
+      osc.connect(gainNodes[i]);
+      gainNodes[i].connect(audioContext.destination);
+      osc.frequency.value = frequencies[i];
+      osc.type = 'sine';
 
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      // Varying volumes for different harmonics
+      const baseGain = 0.15 / (i + 1); // Decreasing volume for higher frequencies
+      gainNodes[i].gain.setValueAtTime(baseGain, audioContext.currentTime);
 
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
+      // Quick attack and decay for coin clink
+      gainNodes[i].gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+      osc.start(audioContext.currentTime);
+      osc.stop(audioContext.currentTime + 0.3);
+    });
   };
 
   // Play result sound
@@ -153,31 +161,59 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                       transformStyle: 'preserve-3d',
                     }}
                   >
-                    {/* Heads side */}
+                    {/* Heads side - Indian Rupee */}
                     <div
-                      className="absolute inset-0 rounded-full bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 shadow-2xl flex items-center justify-center border-8 border-yellow-300"
+                      className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 shadow-2xl flex items-center justify-center border-8 border-amber-200"
                       style={{
                         backfaceVisibility: 'hidden',
                         transform: 'rotateY(0deg)',
+                        boxShadow: '0 10px 40px rgba(217, 119, 6, 0.5), inset 0 2px 10px rgba(255, 255, 255, 0.5)',
                       }}
                     >
-                      <div className="text-center">
-                        <div className="text-6xl font-bold text-white mb-2">H</div>
-                        <div className="text-sm font-semibold text-yellow-100">HEADS</div>
+                      <div className="text-center relative">
+                        {/* Outer circle design */}
+                        <div className="absolute inset-0 -m-16 rounded-full border-4 border-amber-600/30"></div>
+                        <div className="absolute inset-0 -m-12 rounded-full border-2 border-amber-600/20"></div>
+
+                        {/* Rupee symbol */}
+                        <div className="text-7xl font-bold text-amber-900 mb-1" style={{ textShadow: '2px 2px 4px rgba(120, 53, 15, 0.3)' }}>₹</div>
+                        <div className="text-xs font-bold text-amber-800 tracking-widest">INDIA</div>
+                        <div className="text-[10px] font-semibold text-amber-700 mt-1">5 RUPEES</div>
                       </div>
                     </div>
 
-                    {/* Tails side */}
+                    {/* Tails side - Ashoka Lion Capital */}
                     <div
-                      className="absolute inset-0 rounded-full bg-gradient-to-br from-gray-400 via-gray-500 to-gray-600 shadow-2xl flex items-center justify-center border-8 border-gray-300"
+                      className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 shadow-2xl flex items-center justify-center border-8 border-amber-200"
                       style={{
                         backfaceVisibility: 'hidden',
                         transform: 'rotateY(180deg)',
+                        boxShadow: '0 10px 40px rgba(217, 119, 6, 0.5), inset 0 2px 10px rgba(255, 255, 255, 0.5)',
                       }}
                     >
-                      <div className="text-center">
-                        <div className="text-6xl font-bold text-white mb-2">T</div>
-                        <div className="text-sm font-semibold text-gray-100">TAILS</div>
+                      <div className="text-center relative">
+                        {/* Outer circle design */}
+                        <div className="absolute inset-0 -m-16 rounded-full border-4 border-amber-600/30"></div>
+                        <div className="absolute inset-0 -m-12 rounded-full border-2 border-amber-600/20"></div>
+
+                        {/* Ashoka Chakra simplified */}
+                        <div className="relative">
+                          <div className="w-20 h-20 mx-auto rounded-full border-4 border-amber-900 flex items-center justify-center bg-gradient-to-br from-amber-200 to-amber-400">
+                            {/* 8 spokes */}
+                            {[...Array(8)].map((_, i) => (
+                              <div
+                                key={i}
+                                className="absolute w-0.5 h-8 bg-amber-900"
+                                style={{
+                                  transform: `rotate(${i * 45}deg)`,
+                                  transformOrigin: 'center',
+                                }}
+                              />
+                            ))}
+                            <div className="w-3 h-3 rounded-full bg-amber-900 z-10"></div>
+                          </div>
+                          <div className="text-[10px] font-bold text-amber-800 mt-2 tracking-widest">SATYAMEVA JAYATE</div>
+                        </div>
                       </div>
                     </div>
 
@@ -187,9 +223,9 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                         className="absolute inset-0 rounded-full"
                         animate={{
                           boxShadow: [
-                            '0 0 20px rgba(234, 179, 8, 0.6)',
-                            '0 0 40px rgba(234, 179, 8, 0.8)',
-                            '0 0 20px rgba(234, 179, 8, 0.6)',
+                            '0 0 20px rgba(217, 119, 6, 0.6)',
+                            '0 0 40px rgba(217, 119, 6, 0.8)',
+                            '0 0 20px rgba(217, 119, 6, 0.6)',
                           ],
                         }}
                         transition={{
@@ -212,12 +248,12 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                     className="text-center mb-6"
                   >
                     <div className={`text-4xl font-bold mb-2 ${
-                      result === 'heads' ? 'text-yellow-600' : 'text-gray-600'
+                      result === 'heads' ? 'text-amber-600' : 'text-amber-600'
                     }`}>
-                      {result === 'heads' ? '👑 HEADS!' : '🎯 TAILS!'}
+                      {result === 'heads' ? '₹ HEADS!' : '☸️ TAILS!'}
                     </div>
                     <p className="text-gray-600">
-                      {result === 'heads' ? 'Heads wins the toss!' : 'Tails wins the toss!'}
+                      {result === 'heads' ? 'Rupee side wins!' : 'Chakra side wins!'}
                     </p>
                   </motion.div>
                 )}
@@ -230,7 +266,7 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                     onClick={handleToss}
                     className="flex-1 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold py-6 text-lg rounded-2xl shadow-lg"
                   >
-                    Toss Coin 🪙
+                    Toss Coin ₹
                   </Button>
                 )}
 
