@@ -506,6 +506,12 @@ export default function App() {
         setSelectedGameId(gameId);
         setCurrentPage('game-detail');
       }
+    } else if (path.includes('/turf/')) {
+      const turfId = path.split('/turf/')[1];
+      if (turfId) {
+        setSelectedTurfId(turfId);
+        setCurrentPage('turf-detail');
+      }
     }
   }, []);
 
@@ -565,6 +571,7 @@ export default function App() {
   const handleTurfClick = (turfId: string) => {
     setSelectedTurfId(turfId);
     setCurrentPage('turf-detail');
+    window.history.pushState({}, '', `/turf/${turfId}`);
   };
 
   const handleBackToHome = () => {
