@@ -42,10 +42,10 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
     // Randomly decide result (pre-calculate so animation can land correctly)
     const randomResult = Math.random() > 0.5 ? 'heads' : 'tails';
 
-    // Play drop sound right after flip sound ends (0.6 seconds)
+    // Play drop sound after 0.8 seconds
     setTimeout(() => {
       playResultSound();
-    }, 600);
+    }, 800);
 
     // Show result after animation
     setTimeout(() => {
