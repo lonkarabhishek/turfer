@@ -60,7 +60,7 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
     setResult(null);
     playTossSound();
 
-    // Randomly decide result
+    // Randomly decide result (pre-calculate so animation can land correctly)
     const randomResult = Math.random() > 0.5 ? 'heads' : 'tails';
 
     // Show result after animation
@@ -70,8 +70,8 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
       playResultSound();
       setTimeout(() => {
         setShowResult(true);
-      }, 500);
-    }, 3000); // 3 seconds of tossing
+      }, 300);
+    }, 2500); // 2.5 seconds of tossing
   };
 
   const handleTossAgain = () => {
@@ -134,23 +134,23 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
                     animate={
                       isTossing
                         ? {
-                            rotateY: [0, 1800], // Multiple flips
-                            y: [-50, -100, -50, -100, -50, 0],
+                            rotateY: [0, 360, 720, 1080, 1440, 1800], // Smooth continuous flips
+                            y: [0, -80, -120, -80, -40, 0], // Smooth bounce arc
                           }
                         : result
                         ? {
-                            rotateY: result === 'heads' ? 0 : 180,
+                            rotateY: result === 'heads' ? 1800 : 1980, // Land on correct side (1800 = 0, 1980 = 180)
                           }
                         : {}
                     }
                     transition={
                       isTossing
                         ? {
-                            duration: 3,
-                            ease: 'easeInOut',
+                            duration: 2.5,
+                            ease: [0.22, 1, 0.36, 1], // Custom ease-out curve for smooth deceleration
                             times: [0, 0.2, 0.4, 0.6, 0.8, 1],
                           }
-                        : { duration: 0.6, ease: 'easeOut' }
+                        : { duration: 0.5, ease: [0.34, 1.56, 0.64, 1] } // Smooth landing with slight overshoot
                     }
                     style={{
                       transformStyle: 'preserve-3d',
