@@ -13,17 +13,17 @@ export function TossCoin({ isOpen, onClose }: TossCoinProps) {
   const [result, setResult] = useState<'heads' | 'tails' | null>(null);
   const [showResult, setShowResult] = useState(false);
 
-  // Play toss sound using audio file (cut to 1 second)
+  // Play toss sound using audio file (cut to 0.6 seconds)
   const playTossSound = () => {
     const audio = new Audio('/coin-flip.mp3');
     audio.volume = 0.5; // Set volume to 50%
     audio.play().catch(err => console.log('Audio play failed:', err));
 
-    // Stop audio after 1 second
+    // Stop audio after 0.6 seconds
     setTimeout(() => {
       audio.pause();
       audio.currentTime = 0;
-    }, 1000);
+    }, 600);
   };
 
   // Play coin drop sound when result is revealed
