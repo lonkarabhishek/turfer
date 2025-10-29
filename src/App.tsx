@@ -609,11 +609,11 @@ export default function App() {
   };
 
   const handleBackToHome = () => {
-    setCurrentPage('home');
+    setCurrentPage('turfs'); // Navigate to turf booking section
     setSelectedTurfId(null);
     setSelectedGameId(null);
-    setActiveTab('home');
-    window.history.pushState({}, '', '/');
+    setActiveTab('turfs');
+    window.history.pushState({}, '', '/turfs');
   };
 
   const handleNavigate = (section: string) => {
