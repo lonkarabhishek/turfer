@@ -1,11 +1,9 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Upload, X, Check, Loader, AlertTriangle } from 'lucide-react';
+import { Camera, Upload, X, Check, Loader } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
-import { validateImageFile } from '../lib/validation';
-import { toastManager } from '../lib/toastManager';
 
 interface ProfilePhotoUploadProps {
   currentPhotoUrl?: string;
@@ -48,27 +46,7 @@ export function ProfilePhotoUpload({
     setError(null);
 
     try {
-      // Comprehensive image validation
-      const validation = await validateImageFile(file, {
-        maxSizeBytes: 5 * 1024 * 1024, // 5MB
-        allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
-        maxWidth: 1024,
-        maxHeight: 1024,
-        minWidth: 100,
-        minHeight: 100
-      });
-
-      if (!validation.isValid) {
-        setError(validation.errors.join('. '));
-        setUploading(false);
-        toastManager.validationError('Profile Photo', validation.errors.join('. '));
-        return;
-      }
-
-      // Show warnings if any
-      if (validation.warnings.length > 0) {
-        toastManager.warning('Image Upload', validation.warnings.join('. '));
-      }
+      // No validation - accept any image
       // Generate unique filename
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/profile.${fileExt}`;
@@ -257,8 +235,7 @@ export function ProfilePhotoUpload({
       {/* File requirements */}
       {size === 'lg' && (
         <div className="text-xs text-gray-500 text-center max-w-xs">
-          <p>JPG, PNG or WebP. Max 5MB.</p>
-          <p>Square images work best.</p>
+          <p>Upload any image format.</p>
         </div>
       )}
     </div>
