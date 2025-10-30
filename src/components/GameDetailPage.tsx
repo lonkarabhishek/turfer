@@ -52,6 +52,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestLoading, setRequestLoading] = useState(false);
@@ -65,7 +66,8 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
     loadGameDetails();
     loadGameParticipants();
     loadPendingRequests();
-  }, [gameId]);
+    checkUserRequest();
+  }, [gameId, user]);
 
   const loadGameParticipants = async () => {
     setLoadingPlayers(true);
@@ -110,6 +112,27 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
       setPendingRequests([]);
     } finally {
       setLoadingRequests(false);
+    }
+  };
+
+  const checkUserRequest = async () => {
+    if (!user) {
+      setHasPendingRequest(false);
+      return;
+    }
+
+    try {
+      const response = await gameRequestHelpers.getUserGameRequests(user.id);
+      if (response.data) {
+        // Check if user has a pending request for this specific game
+        const userRequest = response.data.find(
+          (req: any) => req.game_id === gameId && req.status === 'pending'
+        );
+        setHasPendingRequest(!!userRequest);
+      }
+    } catch (error) {
+      console.error('Error checking user request:', error);
+      setHasPendingRequest(false);
     }
   };
 
@@ -305,6 +328,8 @@ Hosted by ${game.hostName}
       const response = await gameRequestHelpers.sendJoinRequest(gameId, `Hi, I'd like to join your ${game?.format} game!`);
       if (response.data && !response.error) {
         alert('Join request sent! The host will be notified.');
+        // Update the hasPendingRequest status
+        setHasPendingRequest(true);
         track('game_request_sent', { game_id: gameId });
       } else {
         alert(response.error || 'Failed to send join request');
@@ -653,34 +678,31 @@ Hosted by ${game.hostName}
               {/* Action Buttons */}
               {!isGameCompleted && (
                 <div className="space-y-3">
-                  {!isHost && !hasJoined && !isFull && user && (
-                    <div className="flex gap-3">
-                      <Button
-                        onClick={() => {
-                          // Request to join functionality
-                          handleRequestToJoin();
-                        }}
-                        disabled={requestLoading}
-                        className="flex-1 bg-primary-600 hover:bg-primary-700"
-                      >
-                        {requestLoading ? 'Sending...' : 'Request to Join'}
-                      </Button>
-                      <Button
-                        onClick={handleJoinGame}
-                        disabled={joining}
-                        variant="outline"
-                        className="flex-1"
-                      >
-                        {joining ? 'Joining...' : `Chat Host - ₹${game.costPerPerson}`}
-                      </Button>
+                  {/* Show "You're In!" if user has joined */}
+                  {hasJoined && user && (
+                    <div className="bg-green-100 text-green-800 px-4 py-3 rounded-lg flex items-center justify-center gap-2">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="font-medium">You're In!</span>
                     </div>
                   )}
 
-                  {hasJoined && (
-                    <div className="flex-1 bg-green-100 text-green-800 px-4 py-2 rounded-lg flex items-center justify-center gap-2">
-                      <CheckCircle className="w-5 h-5" />
-                      You're In!
+                  {/* Show "Request Pending" if user has pending request */}
+                  {!hasJoined && hasPendingRequest && user && (
+                    <div className="bg-yellow-100 text-yellow-800 px-4 py-3 rounded-lg flex items-center justify-center gap-2">
+                      <Clock className="w-5 h-5" />
+                      <span className="font-medium">Request Pending</span>
                     </div>
+                  )}
+
+                  {/* Show "Request to Join" button if not joined, no pending request, not full, and not host */}
+                  {!isHost && !hasJoined && !hasPendingRequest && !isFull && user && (
+                    <Button
+                      onClick={handleRequestToJoin}
+                      disabled={requestLoading}
+                      className="w-full bg-primary-600 hover:bg-primary-700"
+                    >
+                      {requestLoading ? 'Sending...' : 'Request to Join'}
+                    </Button>
                   )}
 
                   {isFull && !hasJoined && (
