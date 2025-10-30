@@ -467,7 +467,8 @@ export const gameHelpers = {
             id,
             name,
             address,
-            pricePerHour
+            pricePerHour,
+            gmap_embed_link
           ),
           users (
             id,

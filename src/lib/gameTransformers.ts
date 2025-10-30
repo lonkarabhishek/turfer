@@ -1,6 +1,6 @@
 // Game data transformation utilities
 import type { GameData } from '../components/GameCard';
-import { getUserLocation, calculateDistance, geocodeAddress } from './location';
+import { getUserLocation as getLocation, calculateDistance as calcDistance, extractCoordinatesFromMapUrl } from './geolocation';
 
 // Helper functions for data transformation
 export const formatDate = (dateStr: string) => {
@@ -91,16 +91,20 @@ const DEFAULT_TURFS: { [key: string]: { name: string; address: string; coordinat
 };
 
 // Get turf information with fallback
-function getTurfInfo(game: any): { name: string; address: string; coordinates?: { lat: number; lng: number } } {
+function getTurfInfo(game: any): { name: string; address: string; coordinates?: { lat: number; lng: number }; gmapLink?: string } {
   // First try to get from joined data
   if (game.turfs?.name && game.turfs?.address) {
+    const gmapLink = game.turfs.gmap_embed_link || game.turfs['Gmap Embed link'];
+    const extractedCoords = gmapLink ? extractCoordinatesFromMapUrl(gmapLink) : null;
+
     return {
       name: game.turfs.name,
       address: game.turfs.address,
-      coordinates: game.turfs.coordinates || DEFAULT_TURFS[game.turfs.id]?.coordinates
+      coordinates: extractedCoords || game.turfs.coordinates || DEFAULT_TURFS[game.turfs.id]?.coordinates,
+      gmapLink: gmapLink
     };
   }
-  
+
   // Try flat structure
   if (game.turf_name && game.turf_address) {
     return {
@@ -109,7 +113,7 @@ function getTurfInfo(game: any): { name: string; address: string; coordinates?: 
       coordinates: DEFAULT_TURFS[game.turf_id || game.turfId]?.coordinates
     };
   }
-  
+
   // Try direct properties
   if (game.turfName && game.turfAddress) {
     return {
@@ -118,13 +122,13 @@ function getTurfInfo(game: any): { name: string; address: string; coordinates?: 
       coordinates: DEFAULT_TURFS[game.turf_id || game.turfId]?.coordinates
     };
   }
-  
+
   // Fallback to default data if we have turf_id
   const turfId = game.turf_id || game.turfId || 'default';
   if (turfId && DEFAULT_TURFS[turfId]) {
     return DEFAULT_TURFS[turfId];
   }
-  
+
   // Try a few more fallback patterns based on common IDs
   if (turfId && turfId.length > 0) {
     const firstChar = turfId.toString().charAt(0);
@@ -132,33 +136,29 @@ function getTurfInfo(game: any): { name: string; address: string; coordinates?: 
       return DEFAULT_TURFS[firstChar];
     }
   }
-  
+
   // Last resort - return default arena instead of unknown
   return DEFAULT_TURFS['default'];
 }
 
 // Calculate distance for a game
-async function calculateGameDistance(game: any, userLocation: any): Promise<number | undefined> {
+function calculateGameDistance(game: any, userLocation: any): number | undefined {
   if (!userLocation) return undefined;
-  
+
   const turfInfo = getTurfInfo(game);
-  let turfCoordinates = turfInfo.coordinates;
-  
-  // If we don't have coordinates, try to geocode the address
-  if (!turfCoordinates && turfInfo.address) {
-    const coords = await geocodeAddress(turfInfo.address);
-    if (coords) {
-      turfCoordinates = { lat: coords.latitude, lng: coords.longitude };
-    }
+  const turfCoordinates = turfInfo.coordinates;
+
+  if (!turfCoordinates) {
+    console.warn('No coordinates available for turf:', turfInfo.name);
+    return undefined;
   }
-  
-  if (!turfCoordinates) return undefined;
-  
+
   try {
-    const distance = calculateDistance(
-      { latitude: userLocation.latitude, longitude: userLocation.longitude },
-      { latitude: turfCoordinates.lat, longitude: turfCoordinates.lng }
+    const distance = calcDistance(
+      { lat: userLocation.lat, lng: userLocation.lng },
+      { lat: turfCoordinates.lat, lng: turfCoordinates.lng }
     );
+    console.log(`📍 Distance to game at ${turfInfo.name}:`, distance, 'km');
     return distance;
   } catch (error) {
     console.warn('Error calculating distance:', error);
@@ -167,9 +167,9 @@ async function calculateGameDistance(game: any, userLocation: any): Promise<numb
 }
 
 // Transform a single game from API response to GameData interface
-export async function transformGameData(game: any, userLocation?: any): Promise<GameData> {
+export function transformGameData(game: any, userLocation?: any): GameData {
   const turfInfo = getTurfInfo(game);
-  const distance = userLocation ? await calculateGameDistance(game, userLocation) : undefined;
+  const distance = userLocation ? calculateGameDistance(game, userLocation) : undefined;
   
   // Handle both database structure (game.users.name) and flat structure (game.host_name)
   const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
@@ -204,18 +204,18 @@ export async function transformGameData(game: any, userLocation?: any): Promise<
 // Transform multiple games from API response
 export async function transformGamesData(games: any[], includeDistance: boolean = true): Promise<GameData[]> {
   let userLocation = null;
-  
+
   if (includeDistance) {
     try {
-      userLocation = await getUserLocation();
+      userLocation = await getLocation();
+      console.log('📍 User location for game distances:', userLocation);
     } catch (error) {
       console.warn('Could not get user location for distance calculation:', error);
     }
   }
-  
-  // Transform games in parallel for better performance
-  const transformPromises = games.map(game => transformGameData(game, userLocation));
-  const transformedGames = await Promise.all(transformPromises);
+
+  // Transform games synchronously now since distance calculation is sync
+  const transformedGames = games.map(game => transformGameData(game, userLocation));
   
   // Sort with full games at the bottom, then by distance/creation date
   return transformedGames.sort((a, b) => {

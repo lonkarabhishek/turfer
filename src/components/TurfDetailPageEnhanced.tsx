@@ -237,13 +237,13 @@ export function TurfDetailPageEnhanced({
   };
 
   const nextImage = () => {
-    if (turf?.images) {
+    if (turf?.images && Array.isArray(turf.images) && turf.images.length > 0) {
       setCurrentImageIndex((prev) => (prev + 1) % turf.images.length);
     }
   };
 
   const prevImage = () => {
-    if (turf?.images) {
+    if (turf?.images && Array.isArray(turf.images) && turf.images.length > 0) {
       setCurrentImageIndex((prev) => (prev - 1 + turf.images.length) % turf.images.length);
     }
   };
@@ -327,7 +327,7 @@ export function TurfDetailPageEnhanced({
         <AnimatePresence mode="wait">
           <motion.img
             key={currentImageIndex}
-            src={turf.images[currentImageIndex] || '/api/placeholder/800/400'}
+            src={(turf.images && Array.isArray(turf.images) && turf.images[currentImageIndex]) || '/api/placeholder/800/400'}
             alt={turf.name}
             className="w-full h-full object-cover"
             initial={{ opacity: 0, scale: 1.1 }}
@@ -341,7 +341,7 @@ export function TurfDetailPageEnhanced({
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-70" />
 
         {/* Image Navigation */}
-        {turf.images.length > 1 && (
+        {turf.images && Array.isArray(turf.images) && turf.images.length > 1 && (
           <>
             <motion.div
               whileHover={{ scale: 1.1 }}
@@ -424,24 +424,26 @@ export function TurfDetailPageEnhanced({
         </div>
 
         {/* Image Counter & Gallery Dots */}
-        <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-3">
-          <div className="flex gap-2">
-            {turf.images.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentImageIndex(index)}
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  index === currentImageIndex
-                    ? 'w-8 bg-white'
-                    : 'w-2 bg-white/50 hover:bg-white/75'
-                }`}
-              />
-            ))}
+        {turf.images && Array.isArray(turf.images) && turf.images.length > 0 && (
+          <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-3">
+            <div className="flex gap-2">
+              {turf.images.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentImageIndex(index)}
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    index === currentImageIndex
+                      ? 'w-8 bg-white'
+                      : 'w-2 bg-white/50 hover:bg-white/75'
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="bg-black/30 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-medium border border-white/20">
+              {currentImageIndex + 1} / {turf.images.length}
+            </div>
           </div>
-          <div className="bg-black/30 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-medium border border-white/20">
-            {currentImageIndex + 1} / {turf.images.length}
-          </div>
-        </div>
+        )}
 
         {/* Floating badges */}
         <div className="absolute top-24 right-6 flex flex-col gap-2 z-10">
@@ -1041,25 +1043,32 @@ export function TurfDetailPageEnhanced({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {turf.images.map((image, index) => (
-                    <motion.div
-                      key={index}
-                      whileHover={{ scale: 1.05 }}
-                      className="relative aspect-square rounded-lg overflow-hidden cursor-pointer"
-                      onClick={() => setCurrentImageIndex(index)}
-                    >
-                      <img
-                        src={image || '/api/placeholder/300/300'}
-                        alt={`${turf.name} ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center">
-                        <Eye className="w-6 h-6 text-white opacity-0 hover:opacity-100 transition-opacity" />
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                {turf.images && Array.isArray(turf.images) && turf.images.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {turf.images.map((image, index) => (
+                      <motion.div
+                        key={index}
+                        whileHover={{ scale: 1.05 }}
+                        className="relative aspect-square rounded-lg overflow-hidden cursor-pointer"
+                        onClick={() => setCurrentImageIndex(index)}
+                      >
+                        <img
+                          src={image || '/api/placeholder/300/300'}
+                          alt={`${turf.name} ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <Eye className="w-6 h-6 text-white opacity-0 hover:opacity-100 transition-opacity" />
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <Camera className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No images available for this turf</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
