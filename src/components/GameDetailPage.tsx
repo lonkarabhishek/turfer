@@ -412,13 +412,27 @@ Hosted by ${game.hostName}
           </p>
           <div className="space-y-3">
             <Button
-              onClick={() => onNavigate?.('profile')}
+              onClick={() => {
+                if (onNavigate) {
+                  onNavigate('profile');
+                } else {
+                  // Fallback: reload to home and let auth redirect happen
+                  window.location.href = '/';
+                }
+              }}
               className="w-full bg-primary-600 hover:bg-primary-700 text-white"
             >
-              Go to Sign In
+              Sign In to Continue
             </Button>
             <Button
-              onClick={onBack}
+              onClick={() => {
+                if (onBack) {
+                  onBack();
+                } else {
+                  // Fallback: go back in history
+                  window.history.back();
+                }
+              }}
               variant="outline"
               className="w-full"
             >
