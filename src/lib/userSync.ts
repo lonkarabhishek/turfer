@@ -4,9 +4,8 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
-  password?: string; // Placeholder field for database compatibility
   phone?: string;
-  role: 'user' | 'owner' | 'admin';
+  role: 'player' | 'owner' | 'admin';
   profile_image_url?: string;
   created_at?: string;
   updated_at?: string;
@@ -30,11 +29,11 @@ export async function ensureUserExists(): Promise<{ success: boolean; error?: st
 
     console.log('👤 Auth user:', authUser);
 
-    // Check if user already exists in users table by email (since ID is auto-generated)
+    // Check if user already exists in users table by ID (match auth.users.id)
     const { data: existingUser, error: fetchError } = await supabase
       .from('users')
       .select('*')
-      .eq('email', authUser.email)
+      .eq('id', authUser.id)
       .maybeSingle();
 
     if (existingUser) {
@@ -46,24 +45,24 @@ export async function ensureUserExists(): Promise<{ success: boolean; error?: st
 
     // Extract user information from auth user
     const userData = {
+      id: authUser.id, // CRITICAL: Use the same ID from auth.users
       email: authUser.email || '',
-      password: 'supabase_auth', // Placeholder since Supabase Auth handles authentication
-      name: authUser.user_metadata?.name || 
-            authUser.user_metadata?.full_name || 
-            authUser.user_metadata?.display_name || 
-            authUser.email?.split('@')[0] || 
+      name: authUser.user_metadata?.name ||
+            authUser.user_metadata?.full_name ||
+            authUser.user_metadata?.display_name ||
+            authUser.email?.split('@')[0] ||
             'User',
       phone: authUser.user_metadata?.phone || authUser.phone || null,
-      role: 'user' as const, // Use 'user' to match database constraint
-      profile_image_url: authUser.user_metadata?.profile_image_url || 
-                        authUser.user_metadata?.avatar_url || 
-                        authUser.user_metadata?.picture || 
+      role: 'player' as const, // Use 'player' to match database constraint (default role)
+      profile_image_url: authUser.user_metadata?.profile_image_url ||
+                        authUser.user_metadata?.avatar_url ||
+                        authUser.user_metadata?.picture ||
                         null
     };
 
     console.log('📝 User data to insert:', userData);
 
-    // Insert user into users table
+    // Insert user into users table with explicit ID
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert([userData])
