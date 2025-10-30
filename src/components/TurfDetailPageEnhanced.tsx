@@ -108,22 +108,27 @@ export function TurfDetailPageEnhanced({
   const loadTurfDetails = async () => {
     setLoading(true);
     try {
+      console.log('🔍 Loading turf with ID:', turfId);
       // First try to load from database
       const response = await turfsAPI.getById(turfId);
+      console.log('📦 Turf API response:', response);
+
       if (response.success && response.data) {
         console.log('🏟️ Turf loaded:', {
+          id: response.data.id,
           name: response.data.name,
           hasGmapLink: !!(response.data.gmap_embed_link || response.data['Gmap Embed link']),
-          gmapLink: (response.data.gmap_embed_link || response.data['Gmap Embed link'])?.substring(0, 50) + '...'
+          gmapLink: (response.data.gmap_embed_link || response.data['Gmap Embed link'])?.substring(0, 50) + '...',
+          fullData: response.data
         });
         setTurf(response.data);
         loadUpcomingGames();
         generateMockAvailability();
       } else {
-        console.error('❌ Turf not found in database:', turfId);
+        console.error('❌ Turf not found in database:', turfId, 'Response:', response);
       }
     } catch (error) {
-      console.error('Error loading turf details:', error);
+      console.error('💥 Error loading turf details:', error);
     } finally {
       setLoading(false);
     }
