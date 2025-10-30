@@ -81,6 +81,12 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
         }));
 
         setPlayers(participantsWithHost);
+
+        // Check if current user has joined by checking participants
+        if (user) {
+          const userHasJoined = participantsWithHost.some((p: any) => p.id === user.id);
+          setHasJoined(userHasJoined);
+        }
       }
     } catch (error) {
       console.error('Error loading game participants:', error);
@@ -239,8 +245,9 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
     try {
       const response = await gamesAPI.joinGame(gameId);
       if (response.success) {
-        setHasJoined(true);
-        loadGameDetails(); // Refresh to get updated player count
+        // Reload participants to update the list and hasJoined status
+        await loadGameParticipants();
+        await loadGameDetails(); // Refresh to get updated player count
         track('game_joined', { game_id: gameId });
       } else {
         alert(response.error || 'Failed to join game');
