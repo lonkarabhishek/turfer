@@ -9,6 +9,7 @@ import { TurfCard } from './TurfCard';
 import { TurfCardEnhanced } from './TurfCardEnhanced';
 import { turfsAPI, type Turf, type User } from '../lib/api';
 import { formatPriceDisplay, cleanPriceData } from '../lib/priceUtils';
+import { extractCoordinatesFromMapUrl, calculateDistance as calcDistance } from '../lib/geolocation';
 
 interface TurfSearchProps {
   user: User | null;
@@ -38,6 +39,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
+  const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'price'>('distance');
 
   // Search filters
   const [filters, setFilters] = useState({
@@ -158,55 +160,79 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
 
   const displayTurfs = useMemo(() => {
     // Transform regular turfs from database
-    const transformedTurfs = turfs.map(turf => ({
-      id: turf.id,
-      name: turf.name,
-      address: turf.address,
-      rating: turf.rating,
-      totalReviews: turf.totalReviews,
-      ...cleanPriceData({
-        pricePerHour: turf.pricePerHour,
-        pricePerHourWeekend: turf.pricePerHourWeekend
-      }),
-      pricePerHourMin: turf.pricePerHour || 500,
-      priceDisplay: formatPriceDisplay(turf.pricePerHour, turf.pricePerHourWeekend),
-      amenities: turf.amenities,
-      images: turf.images,
-      slots: ['06 AM - 07 AM', '07 AM - 08 AM', '08 PM - 09 PM', '09 PM - 10 PM'],
-      contacts: turf.contactInfo,
-      contact_info: turf.contactInfo,
-      coords: turf.coordinates,
-      distanceKm: turf.coordinates && userLocation
-        ? calculateDistance(userLocation.lat, userLocation.lng, turf.coordinates.lat, turf.coordinates.lng)
-        : null,
-      nextAvailable: '06 AM - 07 AM',
-      isPopular: turf.rating >= 4.5,
-      hasLights: turf.amenities?.some(a => a && typeof a === 'string' && a.toLowerCase().includes('light')) || false,
-    }));
+    const transformedTurfs = turfs.map(turf => {
+      // Extract coordinates from Google Maps embed link
+      const gmapLink = (turf as any).gmap_embed_link || (turf as any)['Gmap Embed link'];
+      const extractedCoords = gmapLink ? extractCoordinatesFromMapUrl(gmapLink) : null;
 
-    // Sort by distance when user location is available
-    if (userLocation) {
-      return transformedTurfs.sort((a, b) => {
-        // Put turfs with known distance first, sorted by distance
-        if (a.distanceKm !== null && b.distanceKm !== null) {
-          return a.distanceKm - b.distanceKm;
-        }
-        if (a.distanceKm !== null && b.distanceKm === null) return -1;
-        if (a.distanceKm === null && b.distanceKm !== null) return 1;
-        // If both have no distance, sort by rating
-        return (b.rating || 0) - (a.rating || 0);
-      });
-    }
+      // Use extracted coords or fallback to stored coordinates
+      const turfCoords = extractedCoords || turf.coordinates;
 
-    // Otherwise sort by rating and popularity
-    return transformedTurfs.sort((a, b) => {
-      // Popular turfs first
-      if (a.isPopular && !b.isPopular) return -1;
-      if (!a.isPopular && b.isPopular) return 1;
-      // Then by rating
-      return (b.rating || 0) - (a.rating || 0);
+      // Calculate distance if we have both user location and turf coordinates
+      let distanceKm = null;
+      if (userLocation && turfCoords) {
+        distanceKm = calcDistance(userLocation, turfCoords);
+        console.log(`📍 Distance to ${turf.name}:`, distanceKm, 'km');
+      }
+
+      return {
+        id: turf.id,
+        name: turf.name,
+        address: turf.address,
+        rating: turf.rating,
+        totalReviews: turf.totalReviews,
+        ...cleanPriceData({
+          pricePerHour: turf.pricePerHour,
+          pricePerHourWeekend: turf.pricePerHourWeekend
+        }),
+        pricePerHourMin: turf.pricePerHour || 500,
+        priceDisplay: formatPriceDisplay(turf.pricePerHour, turf.pricePerHourWeekend),
+        amenities: turf.amenities,
+        images: turf.images,
+        slots: ['06 AM - 07 AM', '07 AM - 08 AM', '08 PM - 09 PM', '09 PM - 10 PM'],
+        contacts: turf.contactInfo,
+        contact_info: turf.contactInfo,
+        coords: turfCoords,
+        distanceKm,
+        nextAvailable: '06 AM - 07 AM',
+        isPopular: turf.rating >= 4.5,
+        hasLights: turf.amenities?.some(a => a && typeof a === 'string' && a.toLowerCase().includes('light')) || false,
+      };
     });
-  }, [turfs, userLocation]);
+
+    // Sort based on selected option
+    return transformedTurfs.sort((a, b) => {
+      switch (sortBy) {
+        case 'distance':
+          // Sort by distance when user location is available
+          if (userLocation) {
+            // Put turfs with known distance first, sorted by distance
+            if (a.distanceKm !== null && b.distanceKm !== null) {
+              return a.distanceKm - b.distanceKm;
+            }
+            if (a.distanceKm !== null && b.distanceKm === null) return -1;
+            if (a.distanceKm === null && b.distanceKm !== null) return 1;
+          }
+          // If no location, fall back to rating
+          return (b.rating || 0) - (a.rating || 0);
+
+        case 'rating':
+          // Sort by rating (highest first)
+          if (a.rating !== b.rating) {
+            return (b.rating || 0) - (a.rating || 0);
+          }
+          // Then by number of reviews
+          return (b.totalReviews || 0) - (a.totalReviews || 0);
+
+        case 'price':
+          // Sort by price (lowest first)
+          return (a.pricePerHourMin || 0) - (b.pricePerHourMin || 0);
+
+        default:
+          return 0;
+      }
+    });
+  }, [turfs, userLocation, sortBy]);
 
   // Get active filters for chips
   const activeFilters = useMemo(() => {
@@ -280,33 +306,45 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
           </div>
           
           {/* Mobile action buttons */}
-          <div className="flex items-center gap-2 sm:hidden">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleLocate} 
-              disabled={locationLoading}
-              className="flex-1"
+          <div className="sm:hidden space-y-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLocate}
+                disabled={locationLoading}
+                className="flex-1"
+              >
+                {locationLoading ? <Spinner size="sm" className="mr-1" /> : <LocateFixed className="w-4 h-4 mr-1"/>}
+                Near me
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="flex-1">
+                <Filter className="w-4 h-4 mr-1"/>Filters
+                {activeFilters.length > 0 && (
+                  <span className="ml-1 bg-primary-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFilters.length}
+                  </span>
+                )}
+              </Button>
+            </div>
+            {/* Mobile sort */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'distance' | 'rating' | 'price')}
+              className="w-full text-sm border rounded-md px-3 py-2 bg-white"
             >
-              {locationLoading ? <Spinner size="sm" className="mr-1" /> : <LocateFixed className="w-4 h-4 mr-1"/>}
-              Near me
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="flex-1">
-              <Filter className="w-4 h-4 mr-1"/>Filters
-              {activeFilters.length > 0 && (
-                <span className="ml-1 bg-primary-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {activeFilters.length}
-                </span>
-              )}
-            </Button>
+              <option value="distance">Sort by: Distance</option>
+              <option value="rating">Sort by: Rating</option>
+              <option value="price">Sort by: Price</option>
+            </select>
           </div>
           
           {/* Desktop action buttons */}
           <div className="hidden sm:flex items-center justify-between mt-3">
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleLocate}
                 disabled={locationLoading}
               >
@@ -321,6 +359,20 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
                   </span>
                 )}
               </Button>
+            </div>
+
+            {/* Sort dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'distance' | 'rating' | 'price')}
+                className="text-sm border rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="distance">Distance</option>
+                <option value="rating">Rating</option>
+                <option value="price">Price</option>
+              </select>
             </div>
           </div>
 
