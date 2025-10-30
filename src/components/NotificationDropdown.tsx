@@ -80,7 +80,7 @@ export function NotificationDropdown({ className = '', onGameNavigation, onReque
     if (!notification.is_read) {
       await markAsRead(notification.id);
     }
-    
+
     setIsOpen(false);
 
     // Handle different notification types with navigation
@@ -89,12 +89,15 @@ export function NotificationDropdown({ className = '', onGameNavigation, onReque
       case 'game_request_rejected':
       case 'game_full':
       case 'game_cancelled':
+      case 'new_player_joined':
+        // For player notifications, navigate to the specific game
         if (notification.metadata?.gameId && onGameNavigation) {
           onGameNavigation(notification.metadata.gameId);
         }
         break;
       case 'game_request':
-      case 'new_player_joined':
+        // For host notifications about join requests, navigate to requests page
+        // The requests page will show all pending requests for their games
         if (onRequestsNavigation) {
           onRequestsNavigation();
         }

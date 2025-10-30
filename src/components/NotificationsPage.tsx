@@ -18,9 +18,10 @@ import { Button } from './ui/button';
 interface NotificationsPageProps {
   onBack?: () => void;
   onGameNavigation?: (gameId: string) => void;
+  onRequestsNavigation?: () => void;
 }
 
-export function NotificationsPage({ onBack, onGameNavigation }: NotificationsPageProps) {
+export function NotificationsPage({ onBack, onGameNavigation, onRequestsNavigation }: NotificationsPageProps) {
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = useNotifications();
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
 
@@ -64,8 +65,29 @@ export function NotificationsPage({ onBack, onGameNavigation }: NotificationsPag
     }
 
     // Handle navigation based on notification type
-    if (notification.metadata?.gameId && onGameNavigation) {
-      onGameNavigation(notification.metadata.gameId);
+    switch (notification.type) {
+      case 'game_request_accepted':
+      case 'game_request_rejected':
+      case 'game_full':
+      case 'game_cancelled':
+      case 'new_player_joined':
+        // For player notifications, navigate to the specific game
+        if (notification.metadata?.gameId && onGameNavigation) {
+          onGameNavigation(notification.metadata.gameId);
+        }
+        break;
+      case 'game_request':
+        // For host notifications about join requests, navigate to requests page
+        if (onRequestsNavigation) {
+          onRequestsNavigation();
+        }
+        break;
+      default:
+        // Fallback: try to navigate to game if gameId exists
+        if (notification.metadata?.gameId && onGameNavigation) {
+          onGameNavigation(notification.metadata.gameId);
+        }
+        break;
     }
   };
 
