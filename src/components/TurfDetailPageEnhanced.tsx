@@ -113,8 +113,8 @@ export function TurfDetailPageEnhanced({
       if (response.success && response.data) {
         console.log('🏟️ Turf loaded:', {
           name: response.data.name,
-          hasGmapLink: !!response.data.gmap_embed_link,
-          gmapLink: response.data.gmap_embed_link?.substring(0, 50) + '...'
+          hasGmapLink: !!(response.data.gmap_embed_link || response.data['Gmap Embed link']),
+          gmapLink: (response.data.gmap_embed_link || response.data['Gmap Embed link'])?.substring(0, 50) + '...'
         });
         setTurf(response.data);
         loadUpcomingGames();
@@ -758,10 +758,10 @@ export function TurfDetailPageEnhanced({
 
                 {/* Google Maps Embed */}
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  {turf.gmap_embed_link ? (
+                  {(turf.gmap_embed_link || turf['Gmap Embed link']) ? (
                     <div className="relative w-full h-96 bg-gray-100">
                       <iframe
-                        src={turf.gmap_embed_link}
+                        src={turf.gmap_embed_link || turf['Gmap Embed link']}
                         width="100%"
                         height="100%"
                         style={{ border: 0 }}
