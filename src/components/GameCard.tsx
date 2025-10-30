@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Users, Clock, Trophy, MessageCircle, UserPlus } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
@@ -56,12 +56,40 @@ interface GameCardProps {
 export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const [requestLoading, setRequestLoading] = useState(false);
   const [hasRequestedToJoin, setHasRequestedToJoin] = useState(false);
+  const [checkingRequest, setCheckingRequest] = useState(true);
   const { success, error } = useToast();
   const spotsLeft = game.maxPlayers - game.currentPlayers;
   const isAlmostFull = spotsLeft <= 2;
   const isUrgent = game.isUrgent || spotsLeft === 1;
   const isFull = spotsLeft <= 0;
   const isGameCreator = user && game.creatorId && user.id === game.creatorId;
+
+  // Check if user has already requested to join this game
+  useEffect(() => {
+    async function checkExistingRequest() {
+      if (!user || !game.id) {
+        setCheckingRequest(false);
+        return;
+      }
+
+      try {
+        const response = await gamesAPI.getMyRequests();
+        if (response.success && response.data) {
+          // Check if there's a pending request for this game
+          const hasPendingRequest = response.data.some(
+            (request: any) => request.game_id === game.id && request.status === 'pending'
+          );
+          setHasRequestedToJoin(hasPendingRequest);
+        }
+      } catch (err) {
+        console.warn('Could not check existing requests:', err);
+      } finally {
+        setCheckingRequest(false);
+      }
+    }
+
+    checkExistingRequest();
+  }, [user, game.id]);
 
   const handleJoinClick = () => {
     analytics.gameJoined(game.id, spotsLeft);
@@ -306,6 +334,14 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                 <div className="w-full p-3 bg-orange-50 border border-orange-200 rounded-lg text-center text-sm text-orange-700 font-medium">
                   ⏳ Request Sent - Awaiting Host Response
                 </div>
+              ) : checkingRequest ? (
+                <Button
+                  className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+                  disabled
+                >
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Checking...
+                </Button>
               ) : (
                 <Button
                   className="w-full bg-primary-600 hover:bg-primary-700 text-white"
