@@ -369,6 +369,27 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
     }
   }, [activeSection]);
 
+  const sortGames = (games: GameData[]) => {
+    return games.sort((a, b) => {
+      // Calculate spots left for each game
+      const spotsLeftA = a.maxPlayers - a.currentPlayers;
+      const spotsLeftB = b.maxPlayers - b.currentPlayers;
+
+      // Primary sort: More spots left = higher priority (descending)
+      if (spotsLeftA !== spotsLeftB) {
+        return spotsLeftB - spotsLeftA;
+      }
+
+      // Secondary sort: More recently created = higher priority (descending)
+      // If createdAt is available, use it
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      return 0;
+    });
+  };
+
   const loadGames = async () => {
     try {
       console.log('🔄 Loading games...');
@@ -377,8 +398,9 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
       if (response.success && response.data) {
         console.log('✅ Found games:', response.data.length);
         const transformedGames = await transformGamesData(response.data);
-        console.log('🎮 Transformed games:', transformedGames);
-        setGames(transformedGames);
+        const sortedGames = sortGames(transformedGames);
+        console.log('🎮 Sorted games:', sortedGames);
+        setGames(sortedGames);
       } else {
         console.log('❌ No games found or API error:', response);
         setGames([]);
@@ -472,6 +494,27 @@ export default function App() {
   const [turfs, setTurfs] = useState<any[]>([]);
   const [dashboardSection, setDashboardSection] = useState<string>('overview');
 
+  // Sort games by spots left (descending) and then by creation time (newest first)
+  const sortGames = (games: GameData[]) => {
+    return games.sort((a, b) => {
+      // Calculate spots left for each game
+      const spotsLeftA = a.maxPlayers - a.currentPlayers;
+      const spotsLeftB = b.maxPlayers - b.currentPlayers;
+
+      // Primary sort: More spots left = higher priority (descending)
+      if (spotsLeftA !== spotsLeftB) {
+        return spotsLeftB - spotsLeftA;
+      }
+
+      // Secondary sort: More recently created = higher priority (descending)
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      return 0;
+    });
+  };
+
   // Load games for the games page
   const loadGames = async () => {
     try {
@@ -481,8 +524,9 @@ export default function App() {
       if (response.success && response.data) {
         console.log('✅ Found games:', response.data.length);
         const transformedGames = await transformGamesData(response.data);
-        console.log('🎮 Transformed games:', transformedGames);
-        setGames(transformedGames);
+        const sortedGames = sortGames(transformedGames);
+        console.log('🎮 Sorted games:', sortedGames);
+        setGames(sortedGames);
       } else {
         console.log('❌ No games found or API error:', response);
         setGames([]);
