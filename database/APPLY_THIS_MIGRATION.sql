@@ -1,6 +1,7 @@
 -- ============================================
 -- PRODUCTION DATABASE MIGRATION
 -- Apply this in Supabase SQL Editor
+-- SAFE TO RUN MULTIPLE TIMES
 -- ============================================
 
 -- 1. Create game_requests table
@@ -40,19 +41,27 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 CREATE INDEX IF NOT EXISTS idx_games_creator_id ON games(creator_id);
 
--- 5. Enable RLS
+-- 5. Enable RLS (safe to run multiple times)
 ALTER TABLE game_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
--- 6. Drop old policies (if they exist)
-DROP POLICY IF EXISTS "Hosts can view requests for their games" ON game_requests;
-DROP POLICY IF EXISTS "Users can view own requests" ON game_requests;
-DROP POLICY IF EXISTS "Users can create requests" ON game_requests;
-DROP POLICY IF EXISTS "Hosts can update requests" ON game_requests;
-DROP POLICY IF EXISTS "Users can view own notifications" ON notifications;
-DROP POLICY IF EXISTS "Anyone can create notifications" ON notifications;
-DROP POLICY IF EXISTS "Users can update own notifications" ON notifications;
-DROP POLICY IF EXISTS "Users can delete own notifications" ON notifications;
+-- 6. Drop and recreate all policies to ensure they're correct
+DO $$
+BEGIN
+  -- Drop game_requests policies
+  DROP POLICY IF EXISTS "Hosts can view requests for their games" ON game_requests;
+  DROP POLICY IF EXISTS "Users can view own requests" ON game_requests;
+  DROP POLICY IF EXISTS "Users can create requests" ON game_requests;
+  DROP POLICY IF EXISTS "Hosts can update requests" ON game_requests;
+  DROP POLICY IF EXISTS "Hosts can view requests" ON game_requests;
+
+  -- Drop notifications policies
+  DROP POLICY IF EXISTS "Users can view own notifications" ON notifications;
+  DROP POLICY IF EXISTS "Anyone can create notifications" ON notifications;
+  DROP POLICY IF EXISTS "System can create notifications" ON notifications;
+  DROP POLICY IF EXISTS "Users can update own notifications" ON notifications;
+  DROP POLICY IF EXISTS "Users can delete own notifications" ON notifications;
+END $$;
 
 -- 7. Create RLS policies for game_requests
 CREATE POLICY "Users can view own requests" ON game_requests
@@ -92,7 +101,7 @@ CREATE POLICY "Users can update own notifications" ON notifications
 CREATE POLICY "Users can delete own notifications" ON notifications
   FOR DELETE USING (user_id = auth.uid());
 
--- 9. Create updated_at trigger for game_requests
+-- 9. Create or replace trigger function for game_requests updated_at
 CREATE OR REPLACE FUNCTION update_game_requests_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -101,6 +110,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 10. Create trigger (drop first to avoid errors)
 DROP TRIGGER IF EXISTS update_game_requests_updated_at ON game_requests;
 CREATE TRIGGER update_game_requests_updated_at
   BEFORE UPDATE ON game_requests
@@ -108,14 +118,22 @@ CREATE TRIGGER update_game_requests_updated_at
   EXECUTE FUNCTION update_game_requests_updated_at();
 
 -- ============================================
--- VERIFICATION QUERIES (Run after migration)
+-- VERIFICATION QUERIES (Uncomment to run)
 -- ============================================
 
 -- Check tables were created
--- SELECT table_name FROM information_schema.tables
--- WHERE table_schema = 'public'
--- AND table_name IN ('game_requests', 'notifications');
+SELECT 'Tables created:' as status;
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+AND table_name IN ('game_requests', 'notifications');
 
 -- Check creator_id column was added
--- SELECT column_name FROM information_schema.columns
--- WHERE table_name = 'games' AND column_name = 'creator_id';
+SELECT 'creator_id column added:' as status;
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'games' AND column_name = 'creator_id';
+
+-- Check RLS policies
+SELECT 'RLS policies created:' as status;
+SELECT tablename, policyname FROM pg_policies
+WHERE tablename IN ('game_requests', 'notifications')
+ORDER BY tablename, policyname;
