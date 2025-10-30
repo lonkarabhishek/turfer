@@ -645,7 +645,8 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200"
+                    onClick={() => request.game_id && onGameNavigation?.(request.game_id)}
+                    className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200 cursor-pointer hover:shadow-lg transition-shadow"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -691,7 +692,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                           </div>
                         )}
                         
-                        <div className="flex gap-3">
+                        <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
                           <Button
                             onClick={() => handleAcceptRequest(request.id, request.game_id, request.user_id)}
                             disabled={processingRequests.has(request.id)}

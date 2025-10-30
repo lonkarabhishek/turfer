@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Calendar, Clock, MapPin, Users, DollarSign, Phone, ArrowLeft, 
-  CheckCircle, Trophy, Star, MessageCircle, Share2, Copy, User
+import {
+  Calendar, Clock, MapPin, Users, DollarSign, Phone, ArrowLeft,
+  CheckCircle, Trophy, Star, MessageCircle, Share2, Copy, User, Check, X
 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
@@ -52,10 +52,14 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestLoading, setRequestLoading] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     loadGameDetails();
     loadGameParticipants();
+    loadPendingRequests();
   }, [gameId]);
 
   const loadGameParticipants = async () => {
@@ -70,7 +74,7 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
           profile_image_url: participant.users?.profile_image_url || '',
           joinedAt: participant.joined_at
         }));
-        
+
         setPlayers(participantsWithHost);
       }
     } catch (error) {
@@ -78,6 +82,65 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
       setPlayers([]);
     } finally {
       setLoadingPlayers(false);
+    }
+  };
+
+  const loadPendingRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const response = await gameRequestHelpers.getGameRequests(gameId);
+      if (response.data) {
+        // Filter only pending requests
+        const pending = response.data.filter((req: any) => req.status === 'pending');
+        setPendingRequests(pending);
+      }
+    } catch (error) {
+      console.error('Error loading pending requests:', error);
+      setPendingRequests([]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const handleAcceptRequest = async (requestId: string) => {
+    setProcessingRequestId(requestId);
+    try {
+      const response = await gameRequestHelpers.acceptRequest(requestId, gameId);
+      if (response.data && !response.error) {
+        // Refresh both the requests list and participants list
+        await Promise.all([
+          loadPendingRequests(),
+          loadGameParticipants(),
+          loadGameDetails()
+        ]);
+        track('game_request_accepted', { game_id: gameId, request_id: requestId });
+      } else {
+        alert(response.error || 'Failed to accept request');
+      }
+    } catch (error) {
+      console.error('Error accepting request:', error);
+      alert('Failed to accept request');
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  const handleDeclineRequest = async (requestId: string) => {
+    setProcessingRequestId(requestId);
+    try {
+      const response = await gameRequestHelpers.rejectRequest(requestId, gameId);
+      if (response.data && !response.error) {
+        // Refresh the requests list
+        await loadPendingRequests();
+        track('game_request_rejected', { game_id: gameId, request_id: requestId });
+      } else {
+        alert(response.error || 'Failed to decline request');
+      }
+    } catch (error) {
+      console.error('Error declining request:', error);
+      alert('Failed to decline request');
+    } finally {
+      setProcessingRequestId(null);
     }
   };
 
@@ -388,6 +451,84 @@ Hosted by ${game.hostName}
                   </div>
                 </div>
               </div>
+
+              {/* Pending Requests (visible only to host) */}
+              {isHost && pendingRequests.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900">
+                      Pending Join Requests ({pendingRequests.length})
+                    </h3>
+                    {loadingRequests && (
+                      <div className="animate-spin w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full"></div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {pendingRequests.map((request) => (
+                      <motion.div
+                        key={request.id}
+                        className="bg-white rounded-lg p-3 border border-blue-200"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 flex-1">
+                            {request.users?.profile_image_url || request.requester_avatar ? (
+                              <img
+                                src={request.users?.profile_image_url || request.requester_avatar}
+                                alt={request.users?.name || request.requester_name}
+                                className="w-10 h-10 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                {(request.users?.name || request.requester_name || 'P').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">
+                                {request.users?.name || request.requester_name || 'Game Player'}
+                              </div>
+                              {request.note && (
+                                <div className="text-sm text-gray-500 mt-1">{request.note}</div>
+                              )}
+                              <div className="text-xs text-gray-400 mt-1">
+                                Requested {new Date(request.created_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleAcceptRequest(request.id)}
+                              disabled={processingRequestId === request.id}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              {processingRequestId === request.id ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeclineRequest(request.id)}
+                              disabled={processingRequestId === request.id}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              {processingRequestId === request.id ? (
+                                <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <X className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Notes */}
               {game.notes && (

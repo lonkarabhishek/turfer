@@ -1,4 +1,4 @@
-import { Home, Plus, User, BarChart3, Bell, Coins } from 'lucide-react';
+import { Home, Plus, User, BarChart3, Bell, Coins, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { type User as UserType } from '../lib/api';
 
@@ -11,23 +11,24 @@ interface MobileNavProps {
   onHomeClick?: () => void;
   onNotificationsClick?: () => void;
   onTossClick?: () => void;
+  onFindGamesClick?: () => void;
   unreadCount?: number;
 }
 
-export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCreateGame, onHomeClick, onNotificationsClick, onTossClick, unreadCount = 0 }: MobileNavProps) {
+export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCreateGame, onHomeClick, onNotificationsClick, onTossClick, onFindGamesClick, unreadCount = 0 }: MobileNavProps) {
   const tabs = user?.role === 'owner' ? [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'toss', label: 'Toss', icon: Coins },
+    { id: 'findGames', label: 'Find Games', icon: Search },
+    { id: 'create', label: 'Create', icon: Plus },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'create', label: 'Create Game', icon: Plus },
-    { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell, showBadge: true },
+    { id: 'profile', label: 'Profile', icon: User },
   ] : [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'toss', label: 'Toss', icon: Coins },
-    { id: 'create', label: 'Create Game', icon: Plus },
-    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'findGames', label: 'Find Games', icon: Search },
+    { id: 'create', label: 'Create', icon: Plus },
     { id: 'notifications', label: 'Notifications', icon: Bell, showBadge: true },
+    { id: 'profile', label: 'Profile', icon: User },
   ];
 
   const handleTabClick = (tabId: string) => {
@@ -48,12 +49,14 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
       onNotificationsClick?.();
       return;
     }
-    if (tabId === 'toss') {
-      onTossClick?.();
+    if (tabId === 'findGames') {
+      onFindGamesClick?.();
       return;
     }
     setActiveTab(tabId);
   };
+
+  const isProfileTab = (tabId: string) => tabId === 'profile';
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 sm:hidden">
@@ -63,6 +66,7 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
           const isActive = activeTab === tab.id;
           const isCreateTab = tab.id === 'create';
           const isNotificationsTab = tab.id === 'notifications';
+          const isProfile = isProfileTab(tab.id);
 
           return (
             <button
@@ -78,6 +82,20 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
                   className="bg-primary-600 text-white rounded-full p-2 mb-1"
                 >
                   <Icon className="w-5 h-5" />
+                </motion.div>
+              ) : isProfile && user?.profile_image_url ? (
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="mb-1"
+                >
+                  <img
+                    src={user.profile_image_url}
+                    alt="Profile"
+                    className={`w-8 h-8 rounded-full object-cover border-2 ${
+                      isActive ? 'border-primary-600' : 'border-gray-300'
+                    }`}
+                  />
                 </motion.div>
               ) : (
                 <motion.div

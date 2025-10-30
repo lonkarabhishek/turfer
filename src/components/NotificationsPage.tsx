@@ -66,20 +66,15 @@ export function NotificationsPage({ onBack, onGameNavigation, onRequestsNavigati
 
     // Handle navigation based on notification type
     switch (notification.type) {
+      case 'game_request':
       case 'game_request_accepted':
       case 'game_request_rejected':
       case 'game_full':
       case 'game_cancelled':
       case 'new_player_joined':
-        // For player notifications, navigate to the specific game
+        // For all game-related notifications, navigate to the specific game
         if (notification.metadata?.gameId && onGameNavigation) {
           onGameNavigation(notification.metadata.gameId);
-        }
-        break;
-      case 'game_request':
-        // For host notifications about join requests, navigate to requests page
-        if (onRequestsNavigation) {
-          onRequestsNavigation();
         }
         break;
       default:

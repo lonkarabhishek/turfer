@@ -1332,6 +1332,8 @@ export const gameRequestHelpers = {
   // Get game participants
   async getGameParticipants(gameId: string) {
     try {
+      console.log('🔍 Fetching participants for game:', gameId);
+
       const { data, error } = await supabase
         .from('game_participants')
         .select(`
@@ -1346,13 +1348,47 @@ export const gameRequestHelpers = {
         .eq('game_id', gameId)
         .order('joined_at', { ascending: true });
 
+      console.log('📊 Game participants query result:', { data, error });
+
       if (error) {
-        // Fallback to basic data
+        console.warn('⚠️ Error fetching participants, trying fallback:', error);
+        // Fallback: get participants without JOIN
+        const { data: basicData, error: basicError } = await supabase
+          .from('game_participants')
+          .select('*')
+          .eq('game_id', gameId)
+          .order('joined_at', { ascending: true });
+
+        console.log('📊 Fallback query result:', { basicData, basicError });
+
+        if (basicData && !basicError) {
+          // Manually fetch user details for each participant
+          const enrichedData = await Promise.all(
+            basicData.map(async (participant: any) => {
+              const { data: userData } = await supabase
+                .from('users')
+                .select('id, name, email, profile_image_url')
+                .eq('id', participant.user_id)
+                .single();
+
+              return {
+                ...participant,
+                users: userData
+              };
+            })
+          );
+
+          console.log('✅ Enriched participant data:', enrichedData);
+          return { data: enrichedData, error: null };
+        }
+
         return { data: [], error: null };
       }
 
+      console.log('✅ Successfully fetched participants:', data);
       return { data, error: null };
     } catch (error: any) {
+      console.error('❌ Error in getGameParticipants:', error);
       return { data: [], error: error.message };
     }
   },

@@ -665,6 +665,11 @@ export default function App() {
     setShowTossCoin(true);
   };
 
+  const handleFindGamesClick = () => {
+    setCurrentPage('games');
+    setActiveTab('games');
+  };
+
 
   // Owner dashboard functionality hidden for now - focusing on user experience
   // const showOwnerDashboard = user?.role === 'owner' && (activeTab === "owner" || activeTab === "dashboard");
@@ -686,7 +691,7 @@ export default function App() {
       <UserSyncUtility />
       
       <div className="min-h-screen bg-gray-50">
-        <TopNav 
+        <TopNav
         currentCity={currentCity}
         user={user}
         onAuthChange={refreshAuth}
@@ -696,6 +701,7 @@ export default function App() {
         onHomeClick={handleBackToHome}
         onDashboardNavigation={handleDashboardNavigation}
         onGameNavigation={handleGameNavigation}
+        onTossClick={handleTossClick}
       />
       
       {currentPage === 'confirm' ? (
@@ -836,6 +842,7 @@ export default function App() {
         onHomeClick={handleBackToHome}
         onNotificationsClick={handleNotificationsClick}
         onTossClick={handleTossClick}
+        onFindGamesClick={handleFindGamesClick}
         unreadCount={unreadCount}
       />
       

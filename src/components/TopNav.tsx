@@ -1,4 +1,4 @@
-import { ChevronDown, User, LogOut, Building2, Plus, LayoutDashboard, Settings, HelpCircle, Star } from 'lucide-react';
+import { ChevronDown, User, LogOut, Building2, Plus, LayoutDashboard, Settings, HelpCircle, Star, Coins } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -22,9 +22,10 @@ interface TopNavProps {
   onHomeClick?: () => void;
   onDashboardNavigation?: (section: string) => void;
   onGameNavigation?: (gameId: string) => void;
+  onTossClick?: () => void;
 }
 
-export function TopNav({ 
+export function TopNav({
   currentCity = 'Your City',
   user,
   onAuthChange,
@@ -33,7 +34,8 @@ export function TopNav({
   onCityChange,
   onHomeClick,
   onDashboardNavigation,
-  onGameNavigation
+  onGameNavigation,
+  onTossClick
 }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
@@ -286,7 +288,19 @@ export function TopNav({
                       <HelpCircle className="w-4 h-4" />
                       Help & Support
                     </button>
-                    
+
+                    {/* Toss Coin */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onTossClick?.();
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Coins className="w-4 h-4" />
+                      Toss Coin
+                    </button>
+
                     {/* Mobile Create Game */}
                     <div className="sm:hidden">
                       <button
