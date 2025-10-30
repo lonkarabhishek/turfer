@@ -674,6 +674,9 @@ export default function App() {
     } else if (section === 'turfs') {
       setCurrentPage('turfs');
       setActiveTab('turfs');
+    } else if (section === 'profile') {
+      setCurrentPage('profile');
+      setActiveTab('profile');
     } else {
       handleBackToHome();
       setActiveTab('home');

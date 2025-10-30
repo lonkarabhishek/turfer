@@ -89,17 +89,25 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
           joinedAt: participant.joined_at
         }));
 
+        console.log('🎮 All participants:', allParticipants);
+        console.log('👑 Game creator ID:', game?.creatorId);
+
         // Separate host from other players
         // Host is identified by creator_id from game data
         if (game?.creatorId) {
           const host = allParticipants.find((p: any) => p.id === game.creatorId);
           const otherPlayers = allParticipants.filter((p: any) => p.id !== game.creatorId);
 
-          setHostInfo(host);
+          console.log('👑 Found host:', host);
+          console.log('👥 Other players:', otherPlayers);
+
+          setHostInfo(host || null);
           setPlayers(otherPlayers);
         } else {
-          // Fallback: show all participants if creator_id not available
-          setPlayers(allParticipants);
+          console.warn('⚠️ No creator_id available, cannot separate host');
+          // Don't show anyone if we can't separate host properly
+          setHostInfo(null);
+          setPlayers([]);
         }
 
         // Check if current user has joined by checking participants
@@ -111,6 +119,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
     } catch (error) {
       console.error('Error loading game participants:', error);
       setPlayers([]);
+      setHostInfo(null);
     } finally {
       setLoadingPlayers(false);
     }
