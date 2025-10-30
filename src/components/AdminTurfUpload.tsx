@@ -114,8 +114,22 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
       // Extract Google Maps src URL from iframe HTML
       const extractMapSrc = (embedHtml: string): string | null => {
         if (!embedHtml) return null;
-        const srcMatch = embedHtml.match(/src="([^"]+)"/);
-        return srcMatch ? srcMatch[1] : embedHtml; // Return src if found, otherwise return as-is
+
+        // If it's already a URL (starts with http), return as-is
+        if (embedHtml.trim().startsWith('http')) {
+          return embedHtml.trim();
+        }
+
+        // If it's an iframe, extract the src attribute
+        const srcMatch = embedHtml.match(/src=["']([^"']+)["']/);
+        if (srcMatch) {
+          console.log('✅ Extracted map URL from iframe:', srcMatch[1].substring(0, 50) + '...');
+          return srcMatch[1];
+        }
+
+        // If no src found, return null
+        console.warn('⚠️ Could not extract map URL from:', embedHtml.substring(0, 100));
+        return null;
       };
 
       const turfData = {
@@ -307,8 +321,22 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
           // Extract Google Maps src URL from iframe HTML
           const extractMapSrc = (embedHtml: string): string | null => {
             if (!embedHtml) return null;
-            const srcMatch = embedHtml.match(/src="([^"]+)"/);
-            return srcMatch ? srcMatch[1] : embedHtml; // Return src if found, otherwise return as-is
+
+            // If it's already a URL (starts with http), return as-is
+            if (embedHtml.trim().startsWith('http')) {
+              return embedHtml.trim();
+            }
+
+            // If it's an iframe, extract the src attribute
+            const srcMatch = embedHtml.match(/src=["']([^"']+)["']/);
+            if (srcMatch) {
+              console.log('✅ Extracted map URL from iframe:', srcMatch[1].substring(0, 50) + '...');
+              return srcMatch[1];
+            }
+
+            // If no src found, return null
+            console.warn('⚠️ Could not extract map URL from:', embedHtml.substring(0, 100));
+            return null;
           };
 
           const turfData = {
@@ -723,7 +751,7 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                     <strong>Example:</strong> "Green Valley","123 Main St, Nashik","Best turf",...
                   </p>
                   <p className="text-xs text-blue-700">
-                    <strong>Google Maps:</strong> For the embed, use ONLY the src URL, not the full iframe. Example: https://www.google.com/maps/embed?pb=...
+                    <strong>Google Maps:</strong> You can paste either the full iframe HTML OR just the src URL. We'll extract it automatically!
                   </p>
                   <p className="text-xs text-blue-700">
                     <strong>Note:</strong> Use semicolon (;) to separate multiple values in Sports and Aminites columns.
