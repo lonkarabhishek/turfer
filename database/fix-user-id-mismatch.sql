@@ -1,15 +1,14 @@
 -- FIX: Resolve user ID mismatch between auth.users and public.users
 -- This script handles the situation where public.users has different IDs than auth.users
 
--- APPROACH: Since game_participants.user_id references auth.users.id,
--- we need to ensure public.users has records with those same IDs.
+-- SAFEST APPROACH: Just insert the missing records with correct auth IDs
+-- and temporarily add a suffix to the email to avoid conflicts
 
--- STEP 1: For each auth user, check if there's a matching public.users by email but different ID
--- If so, we need to insert a NEW record with the correct auth ID
+-- STEP 1: Insert users with correct auth.users IDs (with temporary email modification)
 INSERT INTO public.users (id, email, password, name, phone, role, profile_image_url)
 SELECT
-  au.id as id, -- Use auth.users ID
-  au.email,
+  au.id as id,
+  au.email || '.auth' as email, -- Temporary email to avoid conflict
   'supabase_auth' as password,
   COALESCE(
     au.raw_user_meta_data->>'name',
@@ -34,10 +33,24 @@ SELECT
 FROM auth.users au
 LEFT JOIN public.users pu ON pu.email = au.email
 WHERE NOT EXISTS (
-  -- Only insert if there isn't already a user with this auth ID
   SELECT 1 FROM public.users WHERE id = au.id
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- STEP 2: Now fix the emails back to normal
+UPDATE public.users
+SET email = REPLACE(email, '.auth', '')
+WHERE email LIKE '%.auth';
+
+-- STEP 3: Delete the old duplicate records (with wrong IDs)
+-- Only delete if there's a newer record with the correct auth ID
+DELETE FROM public.users pu
+WHERE pu.id NOT IN (SELECT id FROM auth.users)
+  AND EXISTS (
+    SELECT 1 FROM auth.users au
+    INNER JOIN public.users pu2 ON pu2.id = au.id
+    WHERE au.email = pu.email
+  );
 
 -- STEP 2: Now we have users with correct IDs.
 -- The old records with wrong IDs can be left (they might have FK references)
