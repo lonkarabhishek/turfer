@@ -71,7 +71,12 @@ export function NotificationsPage({ onBack, onGameNavigation }: NotificationsPag
 
   const filteredNotifications = activeTab === 'all'
     ? notifications
-    : notifications.filter(n => n.type === 'game_request' || n.type.includes('request'));
+    : notifications.filter(n =>
+        n.type === 'game_request' ||
+        n.type === 'game_request_accepted' ||
+        n.type === 'game_request_rejected' ||
+        n.type === 'new_player_joined'
+      );
 
   return (
     <div className="min-h-screen bg-white">
@@ -169,15 +174,15 @@ export function NotificationsPage({ onBack, onGameNavigation }: NotificationsPag
                 animate={{ opacity: 1 }}
                 transition={{ delay: index * 0.03 }}
                 onClick={() => handleNotificationClick(notification)}
-                className={`px-4 py-3 cursor-pointer transition-colors hover:bg-gray-50 ${
-                  !notification.is_read ? 'bg-blue-50/30' : ''
+                className={`px-4 py-3 cursor-pointer transition-all duration-200 hover:bg-gray-50 ${
+                  !notification.is_read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                 }`}
               >
                 <div className="flex items-start gap-3">
                   {/* Icon */}
                   <div className="flex-shrink-0 mt-0.5">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      !notification.is_read ? 'bg-blue-100' : 'bg-gray-100'
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                      !notification.is_read ? 'bg-blue-100 ring-2 ring-blue-200' : 'bg-gray-100'
                     }`}>
                       {getNotificationIcon(notification.type)}
                     </div>
@@ -203,7 +208,7 @@ export function NotificationsPage({ onBack, onGameNavigation }: NotificationsPag
                       {/* Unread indicator */}
                       {!notification.is_read && (
                         <div className="flex-shrink-0 mt-2">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"></div>
                         </div>
                       )}
                     </div>
