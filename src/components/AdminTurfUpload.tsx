@@ -111,6 +111,13 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
 
       const validImages = formData.images.filter(img => img.trim() !== '');
 
+      // Extract Google Maps src URL from iframe HTML
+      const extractMapSrc = (embedHtml: string): string | null => {
+        if (!embedHtml) return null;
+        const srcMatch = embedHtml.match(/src="([^"]+)"/);
+        return srcMatch ? srcMatch[1] : embedHtml; // Return src if found, otherwise return as-is
+      };
+
       const turfData = {
         owner_id: user.id,
         name: formData.name,
@@ -124,7 +131,7 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
         contact_info: Object.keys(contactInfo).length > 0 ? contactInfo : null,
         rating: formData.rating || 0,
         total_reviews: formData.total_reviews || 0,
-        'Gmap Embed link': formData.gmap_embed || null,
+        'Gmap Embed link': extractMapSrc(formData.gmap_embed),
         external_review_url: formData.review_url || null,
         images: validImages,
         cover_image: validImages[0] || null,
@@ -297,6 +304,13 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                 sunday: { open: '06:00', close: '23:00' }
               };
 
+          // Extract Google Maps src URL from iframe HTML
+          const extractMapSrc = (embedHtml: string): string | null => {
+            if (!embedHtml) return null;
+            const srcMatch = embedHtml.match(/src="([^"]+)"/);
+            return srcMatch ? srcMatch[1] : embedHtml; // Return src if found, otherwise return as-is
+          };
+
           const turfData = {
             owner_id: user.id,
             name: row['Turf Name'],
@@ -310,7 +324,7 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
             contact_info: Object.keys(contactInfo).length > 0 ? contactInfo : null,
             rating: parseFloat(row['Ratings']) || 0,
             total_reviews: parseInt(row['No. of reviews']) || 0,
-            'Gmap Embed link': row['Google Maps Embed Html Link'] || null,
+            'Gmap Embed link': extractMapSrc(row['Google Maps Embed Html Link']),
             external_review_url: row['Link to reviews'] || null,
             images: images,
             cover_image: images[0] || null,
@@ -628,13 +642,15 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                   {/* URLs */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium mb-2">Google Maps Embed Link</label>
-                      <input
-                        type="text"
+                      <label className="block text-sm font-medium mb-2">Google Maps Embed (Full iframe or just src URL)</label>
+                      <textarea
                         value={formData.gmap_embed}
                         onChange={(e) => setFormData({ ...formData, gmap_embed: e.target.value })}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                        rows={3}
+                        placeholder='Paste full iframe: <iframe src="https://..." ... ></iframe>'
                       />
+                      <p className="text-xs text-gray-500 mt-1">Paste the entire iframe code from Google Maps</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">Link to Reviews</label>
