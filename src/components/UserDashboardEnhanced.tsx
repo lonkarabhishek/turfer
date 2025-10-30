@@ -350,7 +350,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                       </div>
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{booking.turfName}</p>
-                        <p className="text-xs text-gray-600">{booking.date} • {booking.time}</p>
+                        <p className="text-xs text-gray-600">{formatDate(booking.date)} • {booking.time}</p>
                       </div>
                     </div>
                     <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">
@@ -597,7 +597,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                     <div className="space-y-2 text-emerald-700">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
-                        <span>{upcomingGames[0].date} • {upcomingGames[0].time}</span>
+                        <span>{formatDate(upcomingGames[0].date)} • {upcomingGames[0].time}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4" />
@@ -667,7 +667,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4 text-sm">
                           <div className="flex items-center gap-2 text-purple-700">
                             <Calendar className="w-4 h-4" />
-                            <span>{request.game?.date || 'Unknown date'}</span>
+                            <span>{request.game?.date ? formatDate(request.game.date) : 'Unknown date'}</span>
                           </div>
                           <div className="flex items-center gap-2 text-purple-700">
                             <Clock className="w-4 h-4" />
@@ -804,7 +804,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Date</p>
-                            <p className="font-semibold text-gray-900">{game.date}</p>
+                            <p className="font-semibold text-gray-900">{formatDate(game.date)}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -897,12 +897,27 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+    if (!dateString) return 'Date not set';
+
+    const date = new Date(dateString);
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return dateString; // Return original string if invalid
+    }
+
+    const day = date.getDate();
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    const year = date.getFullYear().toString().slice(-2);
+
+    // Add ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
+    const getOrdinal = (n: number) => {
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    };
+
+    return `${getOrdinal(day)} ${month} ${year}`;
   };
 
   const renderBookings = () => {
@@ -977,7 +992,7 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                       <div className="grid grid-cols-2 gap-4 text-gray-600">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
-                          <span>{booking.date}</span>
+                          <span>{formatDate(booking.date)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4" />

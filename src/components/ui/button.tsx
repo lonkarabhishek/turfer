@@ -11,33 +11,44 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-export function Button({ 
-  variant = 'default', 
-  size = 'md', 
-  className = '', 
+export function Button({
+  variant = 'default',
+  size = 'md',
+  className = '',
   children,
   loading = false,
   disabled,
-  ...props 
+  ...props
 }: ButtonProps) {
-  const base = 'inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 touch-manipulation active:scale-95';
+  const base = 'inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none disabled:pointer-events-none disabled:opacity-50 touch-manipulation';
 
   const variants: Record<ButtonVariant, string> = {
-    default: 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm hover:shadow-md',
-    outline: 'border border-gray-300 hover:bg-gray-50 active:bg-gray-100 text-gray-900 bg-white shadow-sm hover:shadow-md',
-    ghost: 'hover:bg-gray-100 active:bg-gray-200 text-gray-900',
-    destructive: 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white shadow-sm hover:shadow-md',
+    default: 'neuro-button text-white',
+    outline: 'neuro-button text-gray-700',
+    ghost: 'neuro-button-pressed text-gray-700',
+    destructive: 'neuro-button text-gray-700',
   };
-  
+
   const sizes: Record<ButtonSize, string> = {
     sm: 'h-10 px-3 text-sm min-w-[44px] sm:h-8 sm:px-2 sm:text-xs', // 44px minimum touch target
     md: 'h-12 px-6 text-base min-w-[48px] sm:h-10 sm:px-4 sm:text-sm', // 48px comfortable touch target
     lg: 'h-14 px-8 text-lg min-w-[56px] sm:h-12 sm:px-6 sm:text-base', // 56px large touch target
   };
-  
+
+  // Apply specific styles for different variants
+  const getVariantStyle = () => {
+    if (variant === 'default') {
+      return {
+        background: 'radial-gradient(circle at 30% 30%, rgba(76, 175, 80, 0.8), rgba(56, 142, 60, 1))'
+      };
+    }
+    return {};
+  };
+
   return (
-    <button 
+    <button
       className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+      style={getVariantStyle()}
       disabled={disabled || loading}
       {...props}
     >

@@ -31,3 +31,27 @@ body {
   animation: fade-in-up 0.6s ease-out forwards;
   opacity: 0;
 }
+
+/* Hide scrollbar for iOS time picker */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Slide up animation for iOS picker */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}

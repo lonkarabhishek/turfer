@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Users, Clock, Trophy, MessageCircle, UserPlus, Check } from 'lucide-react';
-import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { buildWhatsAppLink, generateGameInviteMessage } from '../lib/whatsapp';
@@ -21,6 +20,31 @@ const timeAgo = (createdAt: string): string => {
   if (diffInHours < 24) return `${diffInHours}h ago`;
   if (diffInDays < 7) return `${diffInDays}d ago`;
   return gameCreated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// Utility function to format date in readable format
+const formatDate = (dateString: string): string => {
+  if (!dateString) return 'Date not set';
+
+  const date = new Date(dateString);
+
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return dateString; // Return original string if invalid
+  }
+
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const year = date.getFullYear().toString().slice(-2);
+
+  // Add ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
+  const getOrdinal = (n: number) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
+  return `${getOrdinal(day)} ${month} ${year}`;
 };
 import { gamesAPI } from '../lib/api';
 import { useToast } from '../lib/toastManager';
@@ -197,26 +221,22 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
       transition={{ duration: 0.1 }}
+      className="neuro-card cursor-pointer"
+      onClick={handleCardClick}
     >
-      <Card 
-        className={`overflow-hidden hover:shadow-airbnb transition-all duration-200 cursor-pointer ${
-          isUrgent ? 'border-accent-300 bg-accent-50/20' : ''
-        }`}
-        onClick={handleCardClick}
-      >
-        <CardContent className="p-4 space-y-3">
+      <div className="space-y-3">
           {/* Header with host info and urgency badge */}
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+              <div className="neuro-orb w-10 h-10 flex items-center justify-center">
                 {game.hostAvatar ? (
-                  <img 
-                    src={game.hostAvatar} 
+                  <img
+                    src={game.hostAvatar}
                     alt={game.hostName}
-                    className="w-full h-full rounded-full object-cover"
+                    className="w-9 h-9 rounded-full object-cover"
                   />
                 ) : (
-                  <span className="text-sm font-medium text-primary-700">
+                  <span className="text-sm font-medium text-gray-600">
                     {game.hostName?.charAt(0)?.toUpperCase() || 'H'}
                   </span>
                 )}
@@ -231,14 +251,14 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
             
             <div className="flex flex-col items-end gap-1">
               {isUrgent && (
-                <Badge className="bg-accent-100 text-accent-700 border-accent-200">
+                <span className="neuro-badge">
                   {spotsLeft === 1 ? 'Last spot!' : 'Starting soon'}
-                </Badge>
+                </span>
               )}
               {isAlmostFull && !isUrgent && (
-                <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+                <span className="neuro-badge">
                   Almost full
-                </Badge>
+                </span>
               )}
             </div>
           </div>
@@ -246,11 +266,11 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
           {/* Game details */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <div className="font-semibold text-lg">{game.format} Game</div>
-              <Badge className={getSkillLevelColor(game.skillLevel)} variant="outline">
-                <Trophy className="w-3 h-3 mr-1" />
+              <div className="font-semibold text-lg text-gray-700">{game.format} Game</div>
+              <span className="neuro-badge flex items-center gap-1">
+                <Trophy className="w-3 h-3" />
                 {game.skillLevel}
-              </Badge>
+              </span>
             </div>
 
             <div className="flex items-center text-sm text-gray-600 gap-2">
@@ -281,7 +301,7 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                <span>{game.date} • {game.timeSlot}</span>
+                <span>{formatDate(game.date)} • {game.timeSlot}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
@@ -300,10 +320,10 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                 ₹{game.costPerPerson}/person
               </span>
             </div>
-            
+
             {/* Progress bar */}
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
+              <div
                 className={`h-2 rounded-full transition-all duration-300 ${
                   isAlmostFull ? 'bg-accent-500' : 'bg-primary-500'
                 }`}
@@ -314,7 +334,7 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
 
           {/* Notes */}
           {game.notes && (
-            <div className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg p-2">
+            <div className="neuro-inset text-sm text-gray-600 p-2">
               <span className="font-medium">Note:</span> {game.notes}
             </div>
           )}
@@ -323,11 +343,11 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
           {user ? (
             <div className="space-y-2">
               {isGameCreator ? (
-                <div className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-sm text-emerald-700 font-medium">
+                <div className="w-full p-3 neuro-surface text-center text-sm font-medium" style={{ color: '#388E3C' }}>
                   ✨ You are hosting this game
                 </div>
               ) : isFull ? (
-                <div className="w-full p-3 bg-red-50 border border-red-200 rounded-lg text-center text-sm text-red-600 font-medium">
+                <div className="w-full p-3 neuro-surface text-center text-sm font-medium" style={{ color: '#D84315' }}>
                   🎯 Game is Full
                 </div>
               ) : checkingRequest ? (
@@ -379,12 +399,11 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
               )}
             </div>
           ) : (
-            <div className="w-full p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500 border border-gray-200">
+            <div className="w-full p-3 neuro-inset text-center text-sm text-gray-500">
               Sign in to join this game
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
     </motion.div>
   );
 }

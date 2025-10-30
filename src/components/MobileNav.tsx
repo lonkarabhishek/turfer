@@ -59,13 +59,10 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
   const isProfileTab = (tabId: string) => tabId === 'profile';
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-      {/* Gradient background with blur effect */}
-      <div className="absolute inset-0 bg-gradient-to-t from-white via-white to-white/95 backdrop-blur-xl border-t border-gray-200/80" />
-
-      {/* Active tab indicator */}
-      <div className="relative">
-        <div className="flex items-center justify-around py-3 px-2">
+    <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden" style={{ background: 'var(--neuro-bg)' }}>
+      {/* Neumorphic container */}
+      <div className="relative px-4 py-4">
+        <div className="flex items-center justify-around gap-2">
           {tabs.map((tab, index) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -77,119 +74,69 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
               <motion.button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
-                className="flex flex-col items-center py-1 px-2 min-w-0 flex-1 relative"
+                className="flex flex-col items-center min-w-0 flex-1 relative"
                 aria-label={tab.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
+                style={{ background: 'transparent', border: 'none' }}
               >
-                {/* Active background glow */}
-                {isActive && !isCreateTab && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute inset-0 bg-primary-50 rounded-2xl"
-                    initial={false}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                )}
-
                 {isCreateTab ? (
                   <motion.div
-                    whileHover={{ scale: 1.1, rotate: 90 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="relative bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-2xl p-3 mb-1 shadow-lg shadow-primary-500/50"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="relative mb-1"
                   >
                     <motion.div
-                      animate={{ rotate: isActive ? 90 : 0 }}
-                      transition={{ type: "spring", stiffness: 200, damping: 10 }}
+                      className="w-14 h-14 flex items-center justify-center neuro-orb"
                     >
-                      <Icon className="w-6 h-6" />
+                      <motion.div
+                        animate={{ rotate: isActive ? 45 : 0 }}
+                        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                      >
+                        <Icon className={`w-6 h-6 ${isActive ? 'text-primary-600' : 'text-gray-600'}`} />
+                      </motion.div>
                     </motion.div>
-
-                    {/* Pulse animation */}
-                    <motion.div
-                      className="absolute inset-0 bg-primary-400 rounded-2xl"
-                      animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.5, 0, 0.5],
-                      }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                    />
                   </motion.div>
                 ) : isProfile && user?.profile_image_url ? (
                   <motion.div
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="relative mb-1 z-10"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="relative mb-1"
                   >
-                    <motion.img
-                      src={user.profile_image_url}
-                      alt="Profile"
-                      className={`w-10 h-10 rounded-full object-cover border-2 transition-all ${
-                        isActive
-                          ? 'border-primary-600 shadow-lg shadow-primary-500/30'
-                          : 'border-gray-300'
-                      }`}
-                      animate={{
-                        scale: isActive ? 1 : 0.95,
-                      }}
-                    />
-                    {isActive && (
-                      <motion.div
-                        className="absolute inset-0 rounded-full bg-primary-400"
-                        animate={{
-                          scale: [1, 1.3, 1],
-                          opacity: [0.3, 0, 0.3],
-                        }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                        }}
+                    <motion.div className="p-1 neuro-orb">
+                      <img
+                        src={user.profile_image_url}
+                        alt="Profile"
+                        className="w-10 h-10 object-cover"
+                        style={{ borderRadius: '16px' }}
                       />
-                    )}
+                    </motion.div>
                   </motion.div>
                 ) : (
                   <motion.div
-                    whileHover={{ scale: 1.1, y: -2 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="relative mb-1 z-10"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="relative mb-1"
                   >
                     <motion.div
-                      className={`p-2 rounded-xl transition-all ${
-                        isActive
-                          ? 'text-primary-600 bg-primary-100/50'
-                          : 'text-gray-400 hover:text-gray-600'
-                      }`}
-                      animate={{
-                        y: isActive ? -2 : 0,
-                      }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      className="w-12 h-12 flex items-center justify-center neuro-orb"
                     >
-                      <Icon className="w-6 h-6" />
+                      <Icon className={`w-5 h-5 ${isActive ? 'text-primary-600' : 'text-gray-600'}`} />
                     </motion.div>
 
                     {isNotificationsTab && unreadCount > 0 && (
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="absolute -top-1 -right-1 min-w-[20px] h-[20px] bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center px-1 shadow-lg shadow-red-500/50 border-2 border-white"
+                        className="neuro-badge absolute -top-1 -right-1 min-w-[20px] h-[20px] rounded-full flex items-center justify-center px-1"
                       >
-                        <motion.span
-                          className="text-[10px] text-white font-bold"
-                          animate={{
-                            scale: [1, 1.2, 1],
-                          }}
-                          transition={{
-                            duration: 1.5,
-                            repeat: Infinity,
-                          }}
+                        <span
+                          className="text-[10px] font-bold"
+                          style={{ color: '#E65100' }}
                         >
                           {unreadCount > 9 ? '9+' : unreadCount}
-                        </motion.span>
+                        </span>
                       </motion.div>
                     )}
                   </motion.div>
@@ -197,14 +144,9 @@ export function MobileNav({ activeTab, setActiveTab, user, onProfileClick, onCre
 
                 {!isCreateTab && (
                   <motion.span
-                    className={`text-[11px] font-semibold truncate transition-all relative z-10 ${
-                      isActive
-                        ? 'text-primary-600'
-                        : 'text-gray-500'
-                    }`}
-                    animate={{
-                      y: isActive ? -1 : 0,
-                      fontWeight: isActive ? 700 : 600,
+                    className="text-[11px] font-semibold truncate transition-all relative z-10 mt-1"
+                    style={{
+                      color: isActive ? '#388E3C' : '#78909C'
                     }}
                   >
                     {tab.label}

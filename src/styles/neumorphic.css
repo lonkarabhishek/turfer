@@ -1,0 +1,161 @@
+/* Neumorphic Design System */
+
+:root {
+  /* Neumorphic Colors */
+  --neuro-bg: #ffffff;
+  --neuro-light: #ffffff;
+  --neuro-dark: #d1d9e6;
+
+  /* Shadows */
+  --neuro-shadow-light: -2px -2px 4px rgba(255, 255, 255, 0.8);
+  --neuro-shadow-dark: 2px 2px 6px rgba(209, 217, 230, 0.3);
+  --neuro-shadow-inset-light: inset -1px -1px 2px rgba(255, 255, 255, 0.5);
+  --neuro-shadow-inset-dark: inset 1px 1px 3px rgba(209, 217, 230, 0.2);
+
+  /* Accent Colors */
+  --neuro-primary: #4CAF50;
+  --neuro-primary-light: #81C784;
+  --neuro-accent: #FF9800;
+  --neuro-accent-light: #FFB74D;
+}
+
+/* Base Neumorphic Surface */
+.neuro-surface {
+  background: var(--neuro-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(209, 217, 230, 0.15);
+}
+
+/* Raised Button */
+.neuro-button {
+  background: var(--neuro-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(209, 217, 230, 0.2);
+  border-radius: 16px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.neuro-button:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.neuro-button:active,
+.neuro-button-pressed {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Flat/Inset Surface */
+.neuro-inset {
+  background: #fafafa;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  border: 1px solid rgba(209, 217, 230, 0.15);
+}
+
+/* Card */
+.neuro-card {
+  background: var(--neuro-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08),
+              0 1px 2px rgba(0, 0, 0, 0.06);
+  border-radius: 24px;
+  padding: 24px;
+  border: 1px solid rgba(209, 217, 230, 0.15);
+}
+
+/* Orb/Square Button */
+.neuro-orb {
+  background: var(--neuro-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08),
+              0 1px 2px rgba(0, 0, 0, 0.06);
+  border-radius: 20px;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(209, 217, 230, 0.2);
+}
+
+.neuro-orb:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1),
+              0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.neuro-orb:active {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Active/Highlighted Orb with Gradient */
+.neuro-orb-active {
+  background: radial-gradient(circle at 30% 30%, rgba(76, 175, 80, 0.8), rgba(56, 142, 60, 1));
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2),
+              0 1px 3px rgba(76, 175, 80, 0.15);
+}
+
+/* Toggle/Pill Switch */
+.neuro-toggle {
+  background: var(--neuro-bg);
+  box-shadow: var(--neuro-shadow-inset-light), var(--neuro-shadow-inset-dark);
+  border-radius: 50px;
+  position: relative;
+}
+
+.neuro-toggle-knob {
+  background: radial-gradient(circle at 30% 30%, rgba(76, 175, 80, 0.6), rgba(56, 142, 60, 0.9));
+  box-shadow: -4px -4px 8px rgba(255, 255, 255, 0.5),
+              4px 4px 8px rgba(163, 177, 198, 0.4);
+  border-radius: 50%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Badge/Tag */
+.neuro-badge {
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.3), rgba(255, 183, 77, 0.4));
+  box-shadow: -2px -2px 4px rgba(255, 255, 255, 0.6),
+              2px 2px 4px rgba(163, 177, 198, 0.3);
+  border-radius: 12px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #E65100;
+}
+
+/* Input Field */
+.neuro-input {
+  background: var(--neuro-bg);
+  box-shadow: var(--neuro-shadow-inset-light), var(--neuro-shadow-inset-dark);
+  border: none;
+  border-radius: 16px;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+}
+
+.neuro-input:focus {
+  outline: none;
+  box-shadow: inset -6px -6px 12px rgba(255, 255, 255, 0.6),
+              inset 6px 6px 12px rgba(163, 177, 198, 0.4);
+}
+
+/* Icon Button */
+.neuro-icon-button {
+  background: var(--neuro-bg);
+  box-shadow: -4px -4px 8px rgba(255, 255, 255, 0.8),
+              4px 4px 8px rgba(163, 177, 198, 0.4);
+  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.neuro-icon-button:hover {
+  box-shadow: -6px -6px 12px rgba(255, 255, 255, 0.9),
+              6px 6px 12px rgba(163, 177, 198, 0.5);
+}
+
+.neuro-icon-button:active {
+  box-shadow: inset -2px -2px 4px rgba(255, 255, 255, 0.5),
+              inset 2px 2px 4px rgba(163, 177, 198, 0.3);
+}
