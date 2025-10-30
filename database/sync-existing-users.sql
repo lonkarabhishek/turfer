@@ -2,10 +2,11 @@
 -- This migration ensures all users in auth.users also exist in public.users
 
 -- Insert users from auth.users that don't exist in public.users
-INSERT INTO public.users (id, email, name, profile_image_url)
+INSERT INTO public.users (id, email, password, name, profile_image_url)
 SELECT
   au.id,
   au.email,
+  'supabase_auth' as password, -- Placeholder since Supabase Auth handles authentication
   COALESCE(
     au.raw_user_meta_data->>'name',
     au.raw_user_meta_data->>'full_name',

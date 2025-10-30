@@ -4,8 +4,9 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  password?: string; // Required by current DB schema (placeholder for Supabase Auth)
   phone?: string;
-  role: 'player' | 'owner' | 'admin';
+  role: 'user' | 'owner' | 'admin';
   profile_image_url?: string;
   created_at?: string;
   updated_at?: string;
@@ -47,13 +48,14 @@ export async function ensureUserExists(): Promise<{ success: boolean; error?: st
     const userData = {
       id: authUser.id, // CRITICAL: Use the same ID from auth.users
       email: authUser.email || '',
+      password: 'supabase_auth', // Placeholder since Supabase Auth handles authentication
       name: authUser.user_metadata?.name ||
             authUser.user_metadata?.full_name ||
             authUser.user_metadata?.display_name ||
             authUser.email?.split('@')[0] ||
             'User',
       phone: authUser.user_metadata?.phone || authUser.phone || null,
-      role: 'player' as const, // Use 'player' to match database constraint (default role)
+      role: 'user' as const, // Use 'user' to match database constraint (default role)
       profile_image_url: authUser.user_metadata?.profile_image_url ||
                         authUser.user_metadata?.avatar_url ||
                         authUser.user_metadata?.picture ||
