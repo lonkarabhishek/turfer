@@ -1351,42 +1351,64 @@ export const gameRequestHelpers = {
       console.log('📊 Game participants query result:', { data, error });
 
       if (error) {
-        console.warn('⚠️ Error fetching participants, trying fallback:', error);
-        // Fallback: get participants without JOIN
-        const { data: basicData, error: basicError } = await supabase
-          .from('game_participants')
-          .select('*')
-          .eq('game_id', gameId)
-          .order('joined_at', { ascending: true });
-
-        console.log('📊 Fallback query result:', { basicData, basicError });
-
-        if (basicData && !basicError) {
-          // Manually fetch user details for each participant
-          const enrichedData = await Promise.all(
-            basicData.map(async (participant: any) => {
-              const { data: userData } = await supabase
-                .from('users')
-                .select('id, name, email, profile_image_url')
-                .eq('id', participant.user_id)
-                .single();
-
-              return {
-                ...participant,
-                users: userData
-              };
-            })
-          );
-
-          console.log('✅ Enriched participant data:', enrichedData);
-          return { data: enrichedData, error: null };
-        }
-
-        return { data: [], error: null };
+        console.warn('⚠️ Error fetching participants with JOIN, using fallback:', error);
       }
 
-      console.log('✅ Successfully fetched participants:', data);
-      return { data, error: null };
+      // Always use fallback method since game_participants.user_id references auth.users
+      // but we need data from public.users
+      const { data: basicData, error: basicError } = await supabase
+        .from('game_participants')
+        .select('*')
+        .eq('game_id', gameId)
+        .order('joined_at', { ascending: true });
+
+      console.log('📊 Participants query result:', { basicData, basicError });
+
+      if (basicError || !basicData || basicData.length === 0) {
+        console.log('ℹ️ No participants found or error:', basicError);
+        return { data: [], error: basicError?.message || null };
+      }
+
+      // Batch fetch user details from public.users
+      const userIds = basicData.map((p: any) => p.user_id);
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, name, email, profile_image_url')
+        .in('id', userIds);
+
+      console.log('📊 Users data query result:', { usersData, usersError });
+
+      if (usersError) {
+        console.warn('⚠️ Error fetching user details:', usersError);
+        // Return participants without full user details
+        const fallbackData = basicData.map((participant: any) => ({
+          ...participant,
+          users: {
+            id: participant.user_id,
+            name: 'Player',
+            email: '',
+            profile_image_url: ''
+          }
+        }));
+        return { data: fallbackData, error: null };
+      }
+
+      // Merge participants with user data
+      const enrichedData = basicData.map((participant: any) => {
+        const userData = usersData?.find((u: any) => u.id === participant.user_id);
+        return {
+          ...participant,
+          users: userData || {
+            id: participant.user_id,
+            name: 'Player',
+            email: '',
+            profile_image_url: ''
+          }
+        };
+      });
+
+      console.log('✅ Enriched participant data:', enrichedData);
+      return { data: enrichedData, error: null };
     } catch (error: any) {
       console.error('❌ Error in getGameParticipants:', error);
       return { data: [], error: error.message };
