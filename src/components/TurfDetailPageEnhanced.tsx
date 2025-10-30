@@ -766,7 +766,16 @@ export function TurfDetailPageEnhanced({
                   {(turf.gmap_embed_link || turf['Gmap Embed link']) ? (
                     <div className="relative w-full h-96 bg-gray-100">
                       <iframe
-                        src={turf.gmap_embed_link || turf['Gmap Embed link']}
+                        src={(() => {
+                          const gmapValue = turf.gmap_embed_link || turf['Gmap Embed link'];
+                          // If it's already a URL, use it
+                          if (gmapValue.trim().startsWith('http')) {
+                            return gmapValue.trim();
+                          }
+                          // If it's iframe HTML, extract the src
+                          const srcMatch = gmapValue.match(/src=["']([^"']+)["']/);
+                          return srcMatch ? srcMatch[1] : gmapValue;
+                        })()}
                         width="100%"
                         height="100%"
                         style={{ border: 0 }}

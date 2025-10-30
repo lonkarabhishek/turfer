@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TapTurf Admin - Redirect</title>
+</head>
+<body>
+    <script>
+        // Redirect to admin page
+        window.location.href = 'http://localhost:5173';
+
+        // After page loads, navigate to admin
+        setTimeout(() => {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'navigate', page: 'admin-turf-upload' }, '*');
+            }
+        }, 1000);
+    </script>
+    <p>Redirecting to admin panel...</p>
+    <p>If not redirected, <a href="http://localhost:5173">click here</a> and then in the browser console type:</p>
+    <pre>window.location.href = '/'</pre>
+    <p>Then use the Profile page to access admin.</p>
+</body>
+</html>
