@@ -279,17 +279,19 @@ export function TopNav({
                       Profile Settings
                     </button>
 
-                    {/* Admin Panel - Turf Upload */}
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onAdminClick?.();
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-orange-50 flex items-center gap-2 border-t border-gray-100"
-                    >
-                      <ShieldCheck className="w-4 h-4 text-orange-600" />
-                      <span className="text-orange-600 font-medium">Admin Panel</span>
-                    </button>
+                    {/* Admin Panel - Turf Upload - ONLY for authorized admin */}
+                    {user.email === 'abhishek.lonkar@viit.ac.in' && (
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          onAdminClick?.();
+                        }}
+                        className="w-full px-4 py-3 text-left hover:bg-orange-50 flex items-center gap-2 border-t border-gray-100"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-orange-600" />
+                        <span className="text-orange-600 font-medium">Admin Panel</span>
+                      </button>
+                    )}
 
                     {/* Help & Support */}
                     <button

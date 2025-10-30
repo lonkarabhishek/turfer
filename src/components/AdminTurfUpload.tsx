@@ -317,14 +317,21 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
     }));
   };
 
-  if (!user) {
+  // CRITICAL: Only allow access to authorized admin email
+  const AUTHORIZED_ADMIN_EMAIL = 'abhishek.lonkar@viit.ac.in';
+
+  if (!user || user.email !== AUTHORIZED_ADMIN_EMAIL) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center px-4">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Admin Access Required</h2>
-            <p className="text-gray-600 mb-6">Please login to access the admin panel.</p>
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+            <p className="text-gray-600 mb-6">
+              {!user
+                ? 'Please login to access the admin panel.'
+                : 'You do not have permission to access this page.'}
+            </p>
             <Button onClick={onBack}>Back to Home</Button>
           </CardContent>
         </Card>
