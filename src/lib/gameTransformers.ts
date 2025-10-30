@@ -197,7 +197,7 @@ export async function transformGameData(game: any, userLocation?: any): Promise<
     distanceKm: distance,
     isUrgent: false, // Can be calculated based on date/time
     createdAt: game.created_at || game.createdAt || new Date().toISOString(),
-    creatorId: game.creator_id || game.creatorId || game.host_id || game.hostId
+    creatorId: game.creator_id || game.creatorId
   };
 }
 

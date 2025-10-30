@@ -872,17 +872,16 @@ export const gameRequestHelpers = {
         if (requestError) throw requestError;
 
         // Get game data to find the host (without JOIN to avoid foreign key issues)
-        // Try to get both creator_id and host_id (for compatibility)
         const { data: gameData } = await supabase
           .from('games')
-          .select('creator_id, host_id, sport')
+          .select('creator_id, sport')
           .eq('id', gameId)
           .single();
 
         console.log('🔍 Game data received:', gameData);
 
-        // Use creator_id if available, otherwise fall back to host_id
-        const hostUserId = gameData?.creator_id || gameData?.host_id;
+        // Use creator_id to find the host
+        const hostUserId = gameData?.creator_id;
 
         if (gameData && hostUserId) {
           console.log('🎯 Creating notification for host:', hostUserId, 'from user:', user.id);
@@ -916,7 +915,7 @@ export const gameRequestHelpers = {
             console.log('✅ Created notification:', notificationResult);
           }
         } else {
-          console.warn('⚠️ Could not find game host (creator_id or host_id). Game data:', gameData);
+          console.warn('⚠️ Could not find game creator_id. Game data:', gameData);
         }
 
         return { data: newRequest, error: null };
