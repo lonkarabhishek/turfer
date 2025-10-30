@@ -43,6 +43,7 @@ export interface GameData {
   distanceKm?: number;
   isUrgent?: boolean; // Game starting soon
   createdAt?: string; // When the game was created
+  creatorId?: string; // ID of the user who created the game
 }
 
 interface GameCardProps {
@@ -60,6 +61,7 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const isAlmostFull = spotsLeft <= 2;
   const isUrgent = game.isUrgent || spotsLeft === 1;
   const isFull = spotsLeft <= 0;
+  const isGameCreator = user && game.creatorId && user.id === game.creatorId;
 
   const handleJoinClick = () => {
     analytics.gameJoined(game.id, spotsLeft);
@@ -109,6 +111,12 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const handleRequestToJoin = async () => {
     if (!user) {
       error('Please sign in to request to join games');
+      return;
+    }
+
+    // Prevent game creator from joining their own game
+    if (game.creatorId && user.id === game.creatorId) {
+      error('You cannot send a join request to your own game!');
       return;
     }
 
@@ -286,7 +294,11 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
           {/* Action buttons - only show when user is authenticated */}
           {user ? (
             <div className="space-y-2">
-              {isFull ? (
+              {isGameCreator ? (
+                <div className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-sm text-emerald-700 font-medium">
+                  ✨ You are hosting this game
+                </div>
+              ) : isFull ? (
                 <div className="w-full p-3 bg-red-50 border border-red-200 rounded-lg text-center text-sm text-red-600 font-medium">
                   🎯 Game is Full
                 </div>
@@ -311,8 +323,8 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                   {requestLoading ? 'Sending...' : 'Request to Join'}
                 </Button>
               )}
-              
-              {!isFull && (
+
+              {!isFull && !isGameCreator && (
                 <Button
                   variant="outline"
                   className="w-full"
