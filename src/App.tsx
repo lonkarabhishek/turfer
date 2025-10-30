@@ -52,9 +52,9 @@ function HeroSection({
   user?: AppUser | null;
 }) {
   return (
-    <div className="relative min-h-screen bg-white overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden" style={{ background: 'var(--neuro-bg)' }}>
       {/* Subtle Background Pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-white" />
+      <div className="absolute inset-0" style={{ background: 'var(--neuro-bg)' }} />
       <div className="absolute inset-0 opacity-[0.03]">
         <div className="absolute inset-0" style={{
           backgroundImage: `radial-gradient(circle at 25px 25px, #000 2px, transparent 2px)`,
@@ -676,7 +676,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--neuro-bg)' }}>
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
@@ -689,8 +689,8 @@ export default function App() {
     <ErrorBoundary>
       {/* Ensure user is synced to users table */}
       <UserSyncUtility />
-      
-      <div className="min-h-screen bg-gray-50">
+
+      <div className="min-h-screen" style={{ background: 'var(--neuro-bg)' }}>
         <TopNav
         currentCity={currentCity}
         user={user}
@@ -723,6 +723,7 @@ export default function App() {
         <GameDetailPage
           gameId={selectedGameId}
           onBack={handleBackToHome}
+          onNavigate={handleNavigate}
         />
       ) : currentPage === 'notifications' && user ? (
         <NotificationsPage

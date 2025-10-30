@@ -8,6 +8,7 @@ import {
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { IOSTimePicker } from './IOSTimePicker';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { GameSuccessPage } from './GameSuccessPage';
@@ -167,6 +168,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
   const [formData, setFormData] = useState({
     date: '',
     timeSlot: '',
+    startTime: '',
+    endTime: '',
     skillLevel: 'all' as 'beginner' | 'intermediate' | 'advanced' | 'all',
     maxPlayers: 10, // Default value, will be updated when format is selected
     costPerPerson: 0,
@@ -189,7 +192,10 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
       setFormData({
         date: '',
         timeSlot: '',
+        startTime: '',
+        endTime: '',
         skillLevel: 'all',
+        maxPlayers: 10,
         costPerPerson: 0,
         notes: ''
       });
@@ -305,7 +311,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
 
   const handleNext = () => {
     // Basic validation for step 2
-    if (step === 2 && (!selectedTurf || !formData.date || !formData.timeSlot)) {
+    if (step === 2 && (!selectedTurf || !formData.date || !formData.startTime || !formData.endTime)) {
       setError('Please fill in all required fields');
       return;
     }
@@ -341,18 +347,18 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
 
     try {
       console.log('✅ All required data available, proceeding...');
-      // Parse time slot to get start and end times
-      const selectedTimeSlot = timeSlots.find(slot => slot.value === formData.timeSlot);
-      if (!selectedTimeSlot) {
-        throw new Error('Invalid time slot selected');
+
+      // Validate time inputs
+      if (!formData.startTime || !formData.endTime) {
+        throw new Error('Please select start and end times');
       }
-      
+
       // Prepare game data for backend
       const gameData: CreateGameData = {
         turfId: selectedTurf.id,
         date: formData.date,
-        startTime: selectedTimeSlot.startTime,
-        endTime: selectedTimeSlot.endTime,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
         sport: formatToSport[selectedFormat.label as keyof typeof formatToSport] || 'football',
         format: selectedFormat.label,
         skillLevel: formData.skillLevel,
@@ -427,12 +433,13 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
   const isStepComplete = (stepNum: number) => {
     switch (stepNum) {
       case 1: return !!selectedFormat;
-      case 2: 
-        const isComplete = !!(selectedTurf && formData.date && formData.timeSlot);
+      case 2:
+        const isComplete = !!(selectedTurf && formData.date && formData.startTime && formData.endTime);
         console.log('Step 2 validation:', {
           selectedTurf: !!selectedTurf,
           date: !!formData.date,
-          timeSlot: !!formData.timeSlot,
+          startTime: !!formData.startTime,
+          endTime: !!formData.endTime,
           isComplete
         });
         return isComplete;
@@ -560,7 +567,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                 )}
 
                 {/* Date and Time Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div>
                     <Label className="flex items-center gap-2 mb-2">
                       <Calendar className="w-4 h-4" />
@@ -571,25 +578,68 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                       value={formData.date}
                       onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                       min={new Date().toISOString().split('T')[0]}
-                      className="h-12"
+                      className="h-12 text-base"
+                      style={{
+                        colorScheme: 'light'
+                      }}
                     />
                   </div>
-                  
-                  <div>
-                    <Label className="flex items-center gap-2 mb-2">
-                      <Clock className="w-4 h-4" />
-                      Time Slot *
-                    </Label>
-                    <select
-                      value={formData.timeSlot}
-                      onChange={(e) => setFormData(prev => ({ ...prev, timeSlot: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg h-12 px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white"
-                    >
-                      <option value="">Select time slot</option>
-                      {timeSlots.map(slot => (
-                        <option key={slot.value} value={slot.value}>{slot.label}</option>
-                      ))}
-                    </select>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="flex items-center gap-2 mb-2">
+                        <Clock className="w-4 h-4" />
+                        Start Time *
+                      </Label>
+                      <select
+                        value={formData.startTime || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Auto-populate end time with +1 hour
+                          const [hour, minute] = value.split(':').map(Number);
+                          const endHour = (hour + 1) % 24;
+                          const endTime = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                          setFormData(prev => ({ ...prev, startTime: value, endTime }));
+                        }}
+                        className="w-full border border-gray-300 rounded-lg h-12 px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white text-base"
+                      >
+                        <option value="">Select time</option>
+                        {Array.from({ length: 24 }, (_, i) => i).flatMap(hour => [
+                          { value: `${hour.toString().padStart(2, '0')}:00`, label: `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}:00 ${hour < 12 ? 'AM' : 'PM'}` },
+                          { value: `${hour.toString().padStart(2, '0')}:30`, label: `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}:30 ${hour < 12 ? 'AM' : 'PM'}` }
+                        ]).map(time => (
+                          <option key={time.value} value={time.value}>{time.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <Label className="flex items-center gap-2 mb-2">
+                        <Clock className="w-4 h-4" />
+                        End Time *
+                      </Label>
+                      <select
+                        value={formData.endTime || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg h-12 px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white text-base"
+                        disabled={!formData.startTime}
+                      >
+                        <option value="">Select time</option>
+                        {formData.startTime && Array.from({ length: 24 }, (_, i) => i).flatMap(hour => [
+                          { value: `${hour.toString().padStart(2, '0')}:00`, label: `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}:00 ${hour < 12 ? 'AM' : 'PM'}` },
+                          { value: `${hour.toString().padStart(2, '0')}:30`, label: `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}:30 ${hour < 12 ? 'AM' : 'PM'}` }
+                        ]).filter(time => {
+                          // Filter to show times after start time and within 5 hours maximum (300 minutes)
+                          const [startHour, startMinute] = formData.startTime.split(':').map(Number);
+                          const [timeHour, timeMinute] = time.value.split(':').map(Number);
+                          const startInMinutes = startHour * 60 + startMinute;
+                          const timeInMinutes = timeHour * 60 + timeMinute;
+                          return timeInMinutes > startInMinutes && timeInMinutes <= startInMinutes + 300;
+                        }).map(time => (
+                          <option key={time.value} value={time.value}>{time.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 

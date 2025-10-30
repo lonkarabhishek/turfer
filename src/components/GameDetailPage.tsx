@@ -11,10 +11,12 @@ import { gameRequestHelpers } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { buildWhatsAppShareLink } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
+import { useToast } from '../lib/toastManager';
 
 interface GameDetailPageProps {
   gameId: string;
   onBack: () => void;
+  onNavigate?: (section: string) => void;
 }
 
 interface GameDetails {
@@ -41,8 +43,9 @@ interface GameDetails {
   }>;
 }
 
-export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
+export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPageProps) {
   const { user } = useAuth();
+  const { success, error: showError } = useToast();
   const [game, setGame] = useState<GameDetails | null>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
@@ -152,17 +155,24 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
       const response = await gamesAPI.deleteGame(gameId);
       if (response.success) {
         track('game_deleted', { game_id: gameId });
-        // Navigate back to home
-        onBack();
+        success('Game deleted successfully!', 'Redirecting you to find games...');
+        setShowDeleteModal(false);
+        // Wait a moment for the toast to show before navigating to games page
+        setTimeout(() => {
+          if (onNavigate) {
+            onNavigate('games');
+          } else {
+            onBack();
+          }
+        }, 1500);
       } else {
-        alert(response.error || 'Failed to delete game');
+        showError(response.error || 'Failed to delete game');
       }
-    } catch (error) {
-      console.error('Error deleting game:', error);
-      alert('Failed to delete game');
+    } catch (err) {
+      console.error('Error deleting game:', err);
+      showError('Failed to delete game');
     } finally {
       setDeleting(false);
-      setShowDeleteModal(false);
     }
   };
 
