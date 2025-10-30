@@ -761,6 +761,7 @@ export default function App() {
         onDashboardNavigation={handleDashboardNavigation}
         onGameNavigation={handleGameNavigation}
         onTossClick={handleTossClick}
+        onAdminClick={() => setCurrentPage('admin-turf-upload')}
       />
       
       {currentPage === 'confirm' ? (
