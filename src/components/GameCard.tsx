@@ -80,6 +80,7 @@ interface GameCardProps {
 export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const [requestLoading, setRequestLoading] = useState(false);
   const [hasRequestedToJoin, setHasRequestedToJoin] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
   const [checkingRequest, setCheckingRequest] = useState(true);
   const { success, error } = useToast();
   const spotsLeft = game.maxPlayers - game.currentPlayers;
@@ -88,31 +89,37 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
   const isFull = spotsLeft <= 0;
   const isGameCreator = user && game.creatorId && user.id === game.creatorId;
 
-  // Check if user has already requested to join this game
+  // Check if user has already requested to join or has joined this game
   useEffect(() => {
-    async function checkExistingRequest() {
+    async function checkUserStatus() {
       if (!user || !game.id) {
         setCheckingRequest(false);
         return;
       }
 
       try {
-        const response = await gamesAPI.getMyRequests();
-        if (response.success && response.data) {
-          // Check if there's a pending request for this game
-          const hasPendingRequest = response.data.some(
+        // Check pending requests
+        const requestsResponse = await gamesAPI.getMyRequests();
+        if (requestsResponse.success && requestsResponse.data) {
+          const hasPendingRequest = requestsResponse.data.some(
             (request: any) => request.game_id === game.id && request.status === 'pending'
           );
           setHasRequestedToJoin(hasPendingRequest);
+
+          // If has accepted request, user has joined
+          const hasAcceptedRequest = requestsResponse.data.some(
+            (request: any) => request.game_id === game.id && request.status === 'accepted'
+          );
+          setHasJoined(hasAcceptedRequest);
         }
       } catch (err) {
-        console.warn('Could not check existing requests:', err);
+        console.warn('Could not check user status:', err);
       } finally {
         setCheckingRequest(false);
       }
     }
 
-    checkExistingRequest();
+    checkUserStatus();
   }, [user, game.id]);
 
   const handleJoinClick = () => {
@@ -358,14 +365,16 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                   Checking...
                 </Button>
+              ) : hasJoined ? (
+                <div className="w-full p-3 text-center text-sm font-medium rounded-lg flex items-center justify-center gap-2" style={{ backgroundColor: '#E8F5E9', color: '#388E3C' }}>
+                  <Check className="w-4 h-4" />
+                  <span>You're In!</span>
+                </div>
               ) : hasRequestedToJoin ? (
-                <Button
-                  className="w-full bg-gray-400 text-white cursor-not-allowed"
-                  disabled
-                >
-                  <Check className="w-4 h-4 mr-2" />
-                  Request Sent
-                </Button>
+                <div className="w-full p-3 text-center text-sm font-medium rounded-lg flex items-center justify-center gap-2" style={{ backgroundColor: '#FFF9C4', color: '#F57F17' }}>
+                  <Clock className="w-4 h-4" />
+                  <span>Request Pending</span>
+                </div>
               ) : (
                 <Button
                   className="w-full bg-primary-600 hover:bg-primary-700 text-white"
@@ -384,7 +393,7 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                 </Button>
               )}
 
-              {!isFull && !isGameCreator && (
+              {!isFull && !isGameCreator && !hasJoined && (
                 <Button
                   variant="outline"
                   className="w-full"
