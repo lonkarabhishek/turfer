@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Users, Clock, Trophy, MessageCircle, UserPlus } from 'lucide-react';
+import { MapPin, Users, Clock, Trophy, MessageCircle, UserPlus, Check } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -330,17 +330,21 @@ export function GameCard({ game, onJoin, onGameClick, user }: GameCardProps) {
                 <div className="w-full p-3 bg-red-50 border border-red-200 rounded-lg text-center text-sm text-red-600 font-medium">
                   🎯 Game is Full
                 </div>
-              ) : hasRequestedToJoin ? (
-                <div className="w-full p-3 bg-orange-50 border border-orange-200 rounded-lg text-center text-sm text-orange-700 font-medium">
-                  ⏳ Request Sent - Awaiting Host Response
-                </div>
               ) : checkingRequest ? (
                 <Button
-                  className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+                  className="w-full bg-gray-400 text-white cursor-not-allowed"
                   disabled
                 >
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                   Checking...
+                </Button>
+              ) : hasRequestedToJoin ? (
+                <Button
+                  className="w-full bg-gray-400 text-white cursor-not-allowed"
+                  disabled
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Request Sent
                 </Button>
               ) : (
                 <Button
