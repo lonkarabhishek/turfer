@@ -663,6 +663,7 @@ export default function App() {
   };
 
   const handleNavigate = (section: string) => {
+    console.log('🧭 handleNavigate called with section:', section);
     if (section === 'home') {
       handleBackToHome();
     } else if (section === 'search') {
@@ -675,8 +676,16 @@ export default function App() {
       setCurrentPage('turfs');
       setActiveTab('turfs');
     } else if (section === 'profile') {
-      setCurrentPage('profile');
-      setActiveTab('profile');
+      console.log('🧭 Navigating to profile, user:', user ? 'logged in' : 'not logged in');
+      if (user) {
+        // User is logged in, show profile page
+        setCurrentPage('profile');
+        setActiveTab('profile');
+      } else {
+        // User not logged in, show login modal
+        console.log('🧭 Opening login modal');
+        setShowLogin(true);
+      }
     } else {
       handleBackToHome();
       setActiveTab('home');

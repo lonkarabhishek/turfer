@@ -425,35 +425,23 @@ Hosted by ${game.hostName}
           <p className="text-gray-600 mb-6">
             Please sign in to view game details and join games.
           </p>
-          <div className="space-y-3">
-            <Button
-              onClick={() => {
-                if (onNavigate) {
-                  onNavigate('profile');
-                } else {
-                  // Fallback: reload to home and let auth redirect happen
-                  window.location.href = '/';
-                }
-              }}
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white"
-            >
-              Sign In to Continue
-            </Button>
-            <Button
-              onClick={() => {
-                if (onBack) {
-                  onBack();
-                } else {
-                  // Fallback: go back in history
-                  window.history.back();
-                }
-              }}
-              variant="outline"
-              className="w-full"
-            >
-              Back to Games
-            </Button>
-          </div>
+          <Button
+            onClick={() => {
+              console.log('🔐 Sign In button clicked');
+              console.log('📍 onNavigate available?', !!onNavigate);
+              if (onNavigate) {
+                console.log('📍 Calling onNavigate with "profile"');
+                onNavigate('profile');
+              } else {
+                console.log('📍 Fallback: redirecting to home');
+                // Fallback: reload to home and let auth redirect happen
+                window.location.href = '/';
+              }
+            }}
+            className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+          >
+            Sign In to Continue
+          </Button>
         </div>
       </div>
     );
