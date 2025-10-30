@@ -109,6 +109,17 @@ The app automatically deploys to [tapturf.in](https://tapturf.in) on push to mai
 
 ## 🔐 Security Considerations
 
+### ⚠️ CRITICAL: Admin Panel Access
+**Admin panel is RESTRICTED to authorized email only.**
+
+📄 **See `SECURITY_CONFIG.md` for complete details**
+
+- **Authorized Admin**: `abhishek.lonkar@viit.ac.in`
+- **Protected Files**:
+  - `src/components/TopNav.tsx:283`
+  - `src/components/AdminTurfUpload.tsx:321`
+- **Security Layers**: UI + Component access control
+
 ### Frontend Security
 - **Input Validation**: All user inputs are validated and sanitized
 - **XSS Protection**: Proper escaping and Content Security Policy
