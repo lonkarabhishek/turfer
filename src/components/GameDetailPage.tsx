@@ -34,7 +34,8 @@ interface GameDetails {
   costPerPerson: number;
   notes?: string;
   status: 'upcoming' | 'live' | 'completed';
-  endTime?: string; // Added this field
+  endTime?: string;
+  creatorId?: string; // ID of the user who created the game
   players?: Array<{
     id: string;
     name: string;
@@ -216,7 +217,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
         const transformedGame = {
           id: gameData.id || 'unknown',
           hostName: gameData.users?.name || gameData.host_name || gameData.hostName || "Unknown Host",
-          hostPhone: gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999", 
+          hostPhone: gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999",
           turfName: gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf",
           turfAddress: gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address",
           date: gameData.date || new Date().toISOString().split('T')[0],
@@ -227,6 +228,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
           maxPlayers: gameData.max_players || gameData.maxPlayers || 10,
           costPerPerson: gameData.price_per_player || gameData.costPerPerson || 0,
           notes: gameData.notes || gameData.description || '',
+          creatorId: gameData.creator_id || gameData.creatorId || gameData.host_id || undefined,
           players: gameData.players || []
         };
         
@@ -382,7 +384,8 @@ Hosted by ${game.hostName}
   const isGameCompleted = game.status === 'completed';
   const spotsLeft = game.maxPlayers - game.currentPlayers;
   const isFull = spotsLeft <= 0;
-  const isHost = user?.name === game.hostName || user?.phone === game.hostPhone;
+  // Check if the current user is the host/creator of the game
+  const isHost = user && game?.creatorId ? user.id === game.creatorId : false;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
