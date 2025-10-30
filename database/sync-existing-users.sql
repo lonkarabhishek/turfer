@@ -1,7 +1,27 @@
 -- Sync existing auth.users to public.users
 -- This migration ensures all users in auth.users also exist in public.users
 
--- Insert users from auth.users that don't exist in public.users
+-- STEP 1: Update existing users that have matching email
+-- This preserves their existing data and foreign key relationships
+UPDATE public.users pu
+SET
+  name = COALESCE(
+    au.raw_user_meta_data->>'name',
+    au.raw_user_meta_data->>'full_name',
+    au.raw_user_meta_data->>'display_name',
+    pu.name
+  ),
+  profile_image_url = COALESCE(
+    au.raw_user_meta_data->>'profile_image_url',
+    au.raw_user_meta_data->>'avatar_url',
+    au.raw_user_meta_data->>'picture',
+    pu.profile_image_url
+  )
+FROM auth.users au
+WHERE pu.email = au.email;
+
+-- STEP 2: Insert NEW users from auth.users that don't exist in public.users
+-- Only insert if there's no user with that email OR that ID
 INSERT INTO public.users (id, email, password, name, profile_image_url)
 SELECT
   au.id,
@@ -21,12 +41,9 @@ SELECT
   ) as profile_image_url
 FROM auth.users au
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.users pu WHERE pu.id = au.id
+  SELECT 1 FROM public.users pu WHERE pu.email = au.email
 )
-ON CONFLICT (id) DO UPDATE SET
-  email = EXCLUDED.email,
-  name = COALESCE(EXCLUDED.name, public.users.name),
-  profile_image_url = COALESCE(EXCLUDED.profile_image_url, public.users.profile_image_url);
+ON CONFLICT (id) DO NOTHING;
 
 -- Log the sync
 DO $$
