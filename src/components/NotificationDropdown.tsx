@@ -105,12 +105,12 @@ export function NotificationDropdown({ className = '', onGameNavigation, onReque
   };
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={`relative flex items-center ${className}`} ref={dropdownRef}>
       <Button
         variant="ghost"
         size="sm"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 hover:bg-primary-50 rounded-full transition-all duration-200 hover:scale-105"
+        className="relative p-2 hover:bg-primary-50 rounded-full transition-all duration-200 hover:scale-105 flex items-center justify-center"
       >
         <Bell className={`w-5 h-5 transition-colors duration-200 ${unreadCount > 0 ? 'text-primary-600' : 'text-gray-600'} ${isOpen ? 'animate-pulse' : ''}`} />
         {unreadCount > 0 && (
