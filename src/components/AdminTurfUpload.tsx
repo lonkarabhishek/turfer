@@ -723,6 +723,9 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                     <strong>Example:</strong> "Green Valley","123 Main St, Nashik","Best turf",...
                   </p>
                   <p className="text-xs text-blue-700">
+                    <strong>Google Maps:</strong> For the embed, use ONLY the src URL, not the full iframe. Example: https://www.google.com/maps/embed?pb=...
+                  </p>
+                  <p className="text-xs text-blue-700">
                     <strong>Note:</strong> Use semicolon (;) to separate multiple values in Sports and Aminites columns.
                   </p>
                 </div>
