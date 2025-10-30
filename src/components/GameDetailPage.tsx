@@ -66,10 +66,16 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
 
   useEffect(() => {
     loadGameDetails();
-    loadGameParticipants();
     loadPendingRequests();
     checkUserRequest();
   }, [gameId, user]);
+
+  // Load participants after game details are loaded (so we have creator_id)
+  useEffect(() => {
+    if (game?.id) {
+      loadGameParticipants();
+    }
+  }, [game?.id, game?.creatorId]);
 
   const loadGameParticipants = async () => {
     setLoadingPlayers(true);

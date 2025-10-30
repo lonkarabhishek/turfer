@@ -375,9 +375,10 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
       const spotsLeftA = a.maxPlayers - a.currentPlayers;
       const spotsLeftB = b.maxPlayers - b.currentPlayers;
 
-      // Primary sort: More spots left = higher priority (descending)
+      // Primary sort: FEWER spots left = higher priority (ascending)
+      // Games that are almost full appear first
       if (spotsLeftA !== spotsLeftB) {
-        return spotsLeftB - spotsLeftA;
+        return spotsLeftA - spotsLeftB;
       }
 
       // Secondary sort: More recently created = higher priority (descending)
@@ -494,16 +495,17 @@ export default function App() {
   const [turfs, setTurfs] = useState<any[]>([]);
   const [dashboardSection, setDashboardSection] = useState<string>('overview');
 
-  // Sort games by spots left (descending) and then by creation time (newest first)
+  // Sort games by spots left (ascending - almost full first) and then by creation time (newest first)
   const sortGames = (games: GameData[]) => {
     return games.sort((a, b) => {
       // Calculate spots left for each game
       const spotsLeftA = a.maxPlayers - a.currentPlayers;
       const spotsLeftB = b.maxPlayers - b.currentPlayers;
 
-      // Primary sort: More spots left = higher priority (descending)
+      // Primary sort: FEWER spots left = higher priority (ascending)
+      // Games that are almost full appear first
       if (spotsLeftA !== spotsLeftB) {
-        return spotsLeftB - spotsLeftA;
+        return spotsLeftA - spotsLeftB;
       }
 
       // Secondary sort: More recently created = higher priority (descending)
