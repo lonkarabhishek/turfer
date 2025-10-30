@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar, Clock, MapPin, Users, DollarSign, Phone, ArrowLeft,
-  CheckCircle, Trophy, Star, MessageCircle, Share2, Copy, User, Check, X
+  CheckCircle, Trophy, Star, MessageCircle, Share2, Copy, User, Check, X, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
@@ -55,6 +55,8 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadGameDetails();
@@ -141,6 +143,26 @@ export function GameDetailPage({ gameId, onBack }: GameDetailPageProps) {
       alert('Failed to decline request');
     } finally {
       setProcessingRequestId(null);
+    }
+  };
+
+  const handleDeleteGame = async () => {
+    setDeleting(true);
+    try {
+      const response = await gamesAPI.deleteGame(gameId);
+      if (response.success) {
+        track('game_deleted', { game_id: gameId });
+        // Navigate back to home
+        onBack();
+      } else {
+        alert(response.error || 'Failed to delete game');
+      }
+    } catch (error) {
+      console.error('Error deleting game:', error);
+      alert('Failed to delete game');
+    } finally {
+      setDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -616,7 +638,7 @@ Hosted by ${game.hostName}
                 <div className="space-y-3">
                   {!isHost && !hasJoined && !isFull && user && (
                     <div className="flex gap-3">
-                      <Button 
+                      <Button
                         onClick={() => {
                           // Request to join functionality
                           handleRequestToJoin();
@@ -626,7 +648,7 @@ Hosted by ${game.hostName}
                       >
                         {requestLoading ? 'Sending...' : 'Request to Join'}
                       </Button>
-                      <Button 
+                      <Button
                         onClick={handleJoinGame}
                         disabled={joining}
                         variant="outline"
@@ -636,7 +658,7 @@ Hosted by ${game.hostName}
                       </Button>
                     </div>
                   )}
-                  
+
                   {hasJoined && (
                     <div className="flex-1 bg-green-100 text-green-800 px-4 py-2 rounded-lg flex items-center justify-center gap-2">
                       <CheckCircle className="w-5 h-5" />
@@ -651,11 +673,23 @@ Hosted by ${game.hostName}
                   )}
 
                   {!user && (
-                    <Button 
+                    <Button
                       onClick={() => alert('Please login to join this game')}
                       className="flex-1 bg-primary-600 hover:bg-primary-700"
                     >
                       Login to Join
+                    </Button>
+                  )}
+
+                  {/* Delete Game Button for Host */}
+                  {isHost && (
+                    <Button
+                      onClick={() => setShowDeleteModal(true)}
+                      variant="outline"
+                      className="w-full border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 mt-4"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Game
                     </Button>
                   )}
                 </div>
@@ -663,6 +697,83 @@ Hosted by ${game.hostName}
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* Delete Confirmation Modal */}
+        <AnimatePresence>
+          {showDeleteModal && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 z-50"
+                onClick={() => !deleting && setShowDeleteModal(false)}
+              />
+
+              {/* Modal */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              >
+                <Card className="w-full max-w-md bg-white shadow-2xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                        <Trash2 className="w-6 h-6 text-red-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">Delete Game?</h3>
+                        <p className="text-sm text-gray-500">This action cannot be undone</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                      <p className="text-sm text-red-800">
+                        <strong>Warning:</strong> Deleting this game will:
+                      </p>
+                      <ul className="mt-2 text-sm text-red-700 space-y-1 ml-4 list-disc">
+                        <li>Remove all pending join requests</li>
+                        <li>Remove all participants from the game</li>
+                        <li>Permanently delete the game</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => setShowDeleteModal(false)}
+                        disabled={deleting}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleDeleteGame}
+                        disabled={deleting}
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        {deleting ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                            Deleting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Game
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

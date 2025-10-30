@@ -483,6 +483,107 @@ export const gamesAPI = {
       return { success: false, error: error.message };
     }
   },
+
+  async deleteGame(gameId: string): Promise<ApiResponse<any>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      // Verify user is the game creator
+      const { data: game } = await supabase
+        .from('games')
+        .select('creator_id')
+        .eq('id', gameId)
+        .single();
+
+      if (!game || game.creator_id !== user.id) {
+        return { success: false, error: 'Not authorized to delete this game' };
+      }
+
+      console.log('🗑️ Starting game deletion for:', gameId);
+
+      // Delete related records first (in order of dependencies)
+
+      // 1. Delete game participants
+      const { data: deletedParticipants, error: participantsError } = await supabase
+        .from('game_participants')
+        .delete()
+        .eq('game_id', gameId)
+        .select();
+
+      if (participantsError) {
+        console.error('❌ Error deleting game participants:', participantsError);
+        return { success: false, error: `Failed to delete participants: ${participantsError.message}` };
+      }
+      console.log('✅ Deleted', deletedParticipants?.length || 0, 'game participants');
+
+      // 2. Delete game requests - THIS IS CRITICAL
+      // First, let's see how many requests exist
+      const { data: existingRequests, error: countError } = await supabase
+        .from('game_requests')
+        .select('id')
+        .eq('game_id', gameId);
+
+      console.log('🔍 Found', existingRequests?.length || 0, 'game requests to delete');
+
+      const { data: deletedRequests, error: requestsError } = await supabase
+        .from('game_requests')
+        .delete()
+        .eq('game_id', gameId)
+        .select();
+
+      if (requestsError) {
+        console.error('❌ Error deleting game requests:', requestsError);
+        return { success: false, error: `Failed to delete requests: ${requestsError.message}` };
+      }
+      console.log('✅ Deleted', deletedRequests?.length || 0, 'game requests');
+
+      // Verify all requests were deleted
+      const { data: remainingRequests } = await supabase
+        .from('game_requests')
+        .select('id')
+        .eq('game_id', gameId);
+
+      if (remainingRequests && remainingRequests.length > 0) {
+        console.error('❌ Some game requests were not deleted:', remainingRequests.length, 'remaining');
+        return { success: false, error: `Could not delete all game requests. ${remainingRequests.length} requests still exist. This may be an RLS policy issue.` };
+      }
+
+      // 3. Delete notifications related to this game
+      const { data: deletedNotifications, error: notificationsError } = await supabase
+        .from('notifications')
+        .delete()
+        .or(`metadata->>gameId.eq.${gameId},metadata->gameId.eq.${gameId}`)
+        .select();
+
+      if (notificationsError) {
+        console.error('⚠️ Error deleting notifications (non-critical):', notificationsError);
+        // Don't fail the deletion if notifications can't be deleted
+      } else {
+        console.log('✅ Deleted', deletedNotifications?.length || 0, 'notifications');
+      }
+
+      // 4. Finally, delete the game itself
+      const { data: deletedGame, error: gameError } = await supabase
+        .from('games')
+        .delete()
+        .eq('id', gameId)
+        .select();
+
+      if (gameError) {
+        console.error('❌ Error deleting game:', gameError);
+        return { success: false, error: `Failed to delete game: ${gameError.message}` };
+      }
+
+      console.log('✅ Game deleted successfully:', deletedGame);
+      return { success: true, data: { message: 'Game deleted successfully' } };
+    } catch (error: any) {
+      console.error('❌ Error in deleteGame:', error);
+      return { success: false, error: error.message };
+    }
+  },
 };
 
 // Bookings API functions
