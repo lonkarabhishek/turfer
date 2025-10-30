@@ -64,7 +64,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
         priceMin: filters.priceMin && !isNaN(Number(filters.priceMin)) ? Number(filters.priceMin) : undefined,
         priceMax: filters.priceMax && !isNaN(Number(filters.priceMax)) ? Number(filters.priceMax) : undefined,
         rating: filters.rating && !isNaN(Number(filters.rating)) ? Number(filters.rating) : undefined,
-        limit: 20,
+        limit: 1000, // Show up to 1000 turfs (effectively all)
       };
 
       // Remove undefined values to avoid sending them to API
