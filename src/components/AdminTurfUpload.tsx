@@ -168,6 +168,46 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
     }
   };
 
+  // Proper CSV parser that handles quoted fields with commas
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (char === '"') {
+        // Toggle quote state
+        if (i + 1 < line.length && line[i + 1] === '"' && inQuotes) {
+          // Handle escaped quotes ("")
+          current += '"';
+          i++; // Skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Found field separator outside quotes
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+
+    // Push last field
+    result.push(current.trim());
+
+    // Remove surrounding quotes from each field
+    return result.map(field => {
+      // Remove leading/trailing quotes
+      if (field.startsWith('"') && field.endsWith('"')) {
+        return field.slice(1, -1);
+      }
+      return field;
+    });
+  };
+
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,8 +222,18 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
 
     try {
       const text = await file.text();
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+      if (lines.length < 2) {
+        showError('CSV file is empty or has no data rows');
+        setUploading(false);
+        return;
+      }
+
+      // Parse headers using proper CSV parser
+      const headers = parseCSVLine(lines[0]);
+
+      console.log('📋 CSV Headers detected:', headers);
 
       const results: BulkUploadResult = {
         success: 0,
@@ -192,14 +242,22 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
       };
 
       for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
+        const line = lines[i];
         if (!line) continue;
 
         try {
-          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          // Parse values using proper CSV parser
+          const values = parseCSVLine(line);
           const row: any = {};
+
           headers.forEach((header, index) => {
             row[header] = values[index] || '';
+          });
+
+          console.log(`📝 Row ${i}:`, {
+            name: row['Turf Name'],
+            address: row['Address'],
+            fieldsCount: values.length
           });
 
           // Skip if no turf name
@@ -643,6 +701,12 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                     <li><strong>Optional:</strong> Image 1, Image 2, Image 3, Image 4, Image 5</li>
                   </ul>
                   <p className="text-xs text-blue-700 mt-2">
+                    <strong>Important:</strong> Fields with commas (like Address, Description) must be wrapped in double quotes.
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    <strong>Example:</strong> "Green Valley","123 Main St, Nashik","Best turf",...
+                  </p>
+                  <p className="text-xs text-blue-700">
                     <strong>Note:</strong> Use semicolon (;) to separate multiple values in Sports and Aminites columns.
                   </p>
                 </div>
