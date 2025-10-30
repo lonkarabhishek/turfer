@@ -26,6 +26,7 @@ import { EmailConfirmation } from "./components/EmailConfirmation";
 import { ToastContainer } from "./components/ui/toast";
 import { UserSyncUtility } from "./components/UserSyncUtility";
 import { TossCoin } from "./components/TossCoin";
+import { AdminTurfUpload } from "./components/AdminTurfUpload";
 
 import { useAuth } from "./hooks/useAuth";
 import { useNotifications } from "./hooks/useNotifications";
@@ -481,7 +482,7 @@ export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm' | 'notifications'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm' | 'notifications' | 'admin-turf-upload'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -787,6 +788,10 @@ export default function App() {
         <NotificationsPage
           onBack={handleBackToHome}
           onGameNavigation={handleGameNavigation}
+        />
+      ) : currentPage === 'admin-turf-upload' ? (
+        <AdminTurfUpload
+          onBack={handleBackToHome}
         />
       ) : currentPage === 'dashboard' && user ? (
         // Owner dashboard hidden for now - focusing on user experience
