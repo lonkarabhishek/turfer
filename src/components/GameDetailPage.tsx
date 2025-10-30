@@ -49,6 +49,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
   const { success, error: showError } = useToast();
   const [game, setGame] = useState<GameDetails | null>(null);
   const [players, setPlayers] = useState<any[]>([]);
+  const [hostInfo, setHostInfo] = useState<any>(null); // Store host profile info
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -75,19 +76,29 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
     try {
       const response = await gameRequestHelpers.getGameParticipants(gameId);
       if (response.data) {
-        // Add the host as the first player
-        const participantsWithHost = response.data.map((participant: any) => ({
+        const allParticipants = response.data.map((participant: any) => ({
           id: participant.users?.id || participant.user_id,
           name: participant.users?.name || 'Player',
           profile_image_url: participant.users?.profile_image_url || '',
           joinedAt: participant.joined_at
         }));
 
-        setPlayers(participantsWithHost);
+        // Separate host from other players
+        // Host is identified by creator_id from game data
+        if (game?.creatorId) {
+          const host = allParticipants.find((p: any) => p.id === game.creatorId);
+          const otherPlayers = allParticipants.filter((p: any) => p.id !== game.creatorId);
+
+          setHostInfo(host);
+          setPlayers(otherPlayers);
+        } else {
+          // Fallback: show all participants if creator_id not available
+          setPlayers(allParticipants);
+        }
 
         // Check if current user has joined by checking participants
         if (user) {
-          const userHasJoined = participantsWithHost.some((p: any) => p.id === user.id);
+          const userHasJoined = allParticipants.some((p: any) => p.id === user.id);
           setHasJoined(userHasJoined);
         }
       }
@@ -387,6 +398,38 @@ Hosted by ${game.hostName}
   // Check if the current user is the host/creator of the game
   const isHost = user && game?.creatorId ? user.id === game.creatorId : false;
 
+  // Require login to view game details
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <User className="w-8 h-8 text-primary-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign In Required</h2>
+          <p className="text-gray-600 mb-6">
+            Please sign in to view game details and join games.
+          </p>
+          <div className="space-y-3">
+            <Button
+              onClick={() => onNavigate?.('profile')}
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+            >
+              Go to Sign In
+            </Button>
+            <Button
+              onClick={onBack}
+              variant="outline"
+              className="w-full"
+            >
+              Back to Games
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -619,8 +662,21 @@ Hosted by ${game.hostName}
                 <div className="space-y-3">
                   {/* Host */}
                   <div className="flex items-center gap-3 p-3 bg-primary-50 border border-primary-200 rounded-lg">
-                    <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
-                      👑
+                    <div className="relative">
+                      {hostInfo?.profile_image_url ? (
+                        <img
+                          src={hostInfo.profile_image_url}
+                          alt={game.hostName}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                          {game.hostName?.charAt(0)?.toUpperCase() || 'H'}
+                        </div>
+                      )}
+                      <div className="absolute -bottom-1 -right-1 bg-yellow-400 rounded-full p-1">
+                        <span className="text-xs">👑</span>
+                      </div>
                     </div>
                     <div className="flex-1">
                       <div className="font-medium text-gray-900">{game.hostName}</div>
