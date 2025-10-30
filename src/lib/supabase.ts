@@ -872,21 +872,25 @@ export const gameRequestHelpers = {
         if (requestError) throw requestError;
 
         // Get game data to find the host (without JOIN to avoid foreign key issues)
+        // Try to get both creator_id and host_id (for compatibility)
         const { data: gameData } = await supabase
           .from('games')
-          .select('creator_id, sport')
+          .select('creator_id, host_id, sport')
           .eq('id', gameId)
           .single();
 
         console.log('🔍 Game data received:', gameData);
-        
-        if (gameData && gameData.creator_id) {
-          console.log('🎯 Creating notification for host:', gameData.creator_id, 'from user:', user.id);
+
+        // Use creator_id if available, otherwise fall back to host_id
+        const hostUserId = gameData?.creator_id || gameData?.host_id;
+
+        if (gameData && hostUserId) {
+          console.log('🎯 Creating notification for host:', hostUserId, 'from user:', user.id);
           console.log('📧 User metadata:', user.user_metadata);
           console.log('📧 User email:', user.email);
           
           const notificationPayload = {
-            user_id: gameData.creator_id,
+            user_id: hostUserId,
             type: 'game_request',
             title: 'New Join Request! 🎾',
             message: `${user.user_metadata?.name || user.email?.split('@')[0] || 'Someone'} wants to join your ${gameData.sport || 'game'}`,
@@ -908,11 +912,11 @@ export const gameRequestHelpers = {
             console.error('❌ Could not create notification:', notificationError);
             console.error('❌ Full error details:', JSON.stringify(notificationError, null, 2));
           } else {
-            console.log('✅ Database notification sent to host:', gameData.creator_id);
+            console.log('✅ Database notification sent to host:', hostUserId);
             console.log('✅ Created notification:', notificationResult);
           }
         } else {
-          console.warn('⚠️ Could not find game creator_id. Game data:', gameData);
+          console.warn('⚠️ Could not find game host (creator_id or host_id). Game data:', gameData);
         }
 
         return { data: newRequest, error: null };
