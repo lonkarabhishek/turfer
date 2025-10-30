@@ -1,0 +1,13 @@
+═══════════════════════════════════════════════════════════
+🔒 ADMIN PANEL ACCESS - CRITICAL REMINDER
+═══════════════════════════════════════════════════════════
+
+AUTHORIZED ADMIN: abhishek.lonkar@viit.ac.in
+
+SECURITY FILES TO CHECK:
+  - src/components/TopNav.tsx (line 283)
+  - src/components/AdminTurfUpload.tsx (line 321)
+
+FULL DOCUMENTATION: See SECURITY_CONFIG.md
+
+═══════════════════════════════════════════════════════════
