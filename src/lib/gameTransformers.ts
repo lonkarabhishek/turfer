@@ -183,6 +183,7 @@ export function transformGameData(game: any, userLocation?: any): GameData {
     id: game.id,
     hostName: hostName,
     hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
+    turfId: game.turfs?.id || game.turf_id || game.turfId || undefined,
     turfName: turfInfo.name,
     turfAddress: turfInfo.address,
     date: formatDate(game.date),
@@ -216,25 +217,45 @@ export async function transformGamesData(games: any[], includeDistance: boolean 
 
   // Transform games synchronously now since distance calculation is sync
   const transformedGames = games.map(game => transformGameData(game, userLocation));
-  
-  // Sort with full games at the bottom, then by distance/creation date
+
+  // Sort games by: 1) spots left (fewer spots = higher priority), 2) distance (closer = higher), 3) time (sooner = higher)
   return transformedGames.sort((a, b) => {
-    // Check if games are full
-    const aFull = a.currentPlayers >= a.maxPlayers;
-    const bFull = b.currentPlayers >= b.maxPlayers;
-    
-    // If one is full and other isn't, prioritize non-full
-    if (aFull !== bFull) {
-      return aFull ? 1 : -1; // Full games go to bottom
+    // Calculate spots left for each game
+    const aSpotsLeft = a.maxPlayers - a.currentPlayers;
+    const bSpotsLeft = b.maxPlayers - b.currentPlayers;
+
+    // First: Sort by spots left (increasing order - fewer spots left means game is filling up fast)
+    if (aSpotsLeft !== bSpotsLeft) {
+      return aSpotsLeft - bSpotsLeft; // Games with fewer spots left come first
     }
-    
-    // If both have same fullness status, sort by distance if available
+
+    // Second: Sort by distance (closer games first)
     if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
-      return a.distanceKm - b.distanceKm;
+      if (a.distanceKm !== b.distanceKm) {
+        return a.distanceKm - b.distanceKm;
+      }
     }
-    
-    // Fallback to creation date (newest first)
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+    // Third: Sort by game time (sooner games first)
+    // Parse the date from the formatted date string
+    const parseGameDate = (dateStr: string): Date => {
+      // dateStr could be "Today", "Tomorrow", "Monday, Nov 1", etc.
+      if (dateStr === "Today") {
+        return new Date();
+      } else if (dateStr === "Tomorrow") {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return tomorrow;
+      } else {
+        // Try to parse the date string
+        return new Date(dateStr);
+      }
+    };
+
+    const aDate = parseGameDate(a.date);
+    const bDate = parseGameDate(b.date);
+
+    return aDate.getTime() - bDate.getTime(); // Sooner games first
   });
 }
 

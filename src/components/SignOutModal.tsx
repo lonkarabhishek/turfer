@@ -132,28 +132,34 @@ export function SignOutModal({ isOpen, onClose, onConfirm, userName }: SignOutMo
                   </div>
 
                   {/* Content with improved styling */}
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4, duration: 0.4 }}
                     className="space-y-4 mb-8"
                   >
-                    <p className="text-gray-600 leading-relaxed text-base">
+                    <p className="text-gray-700 leading-relaxed text-base font-medium">
                       {userName ? (
                         <>
-                          You'll be signed out of{' '}
-                          <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                          Are you sure you want to sign out of{' '}
+                          <span className="font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-lg">
                             {userName}'s
                           </span>{' '}
-                          account. You can always sign back in anytime.
+                          account?
                         </>
                       ) : (
-                        "You'll be signed out of your account. You can always sign back in anytime."
+                        "Are you sure you want to sign out of your account?"
                       )}
                     </p>
-                    <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                      Your data and preferences will be saved securely.
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-3 text-sm text-gray-600 bg-emerald-50 rounded-lg p-3">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full mt-1 flex-shrink-0" />
+                        <span>All your data, games, and bookings will be saved securely</span>
+                      </div>
+                      <div className="flex items-start gap-3 text-sm text-gray-600 bg-blue-50 rounded-lg p-3">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
+                        <span>You can sign back in anytime to continue where you left off</span>
+                      </div>
                     </div>
                   </motion.div>
 

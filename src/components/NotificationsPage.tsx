@@ -23,7 +23,7 @@ interface NotificationsPageProps {
 
 export function NotificationsPage({ onBack, onGameNavigation, onRequestsNavigation }: NotificationsPageProps) {
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = useNotifications();
-  const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'my_requests' | 'join_requests'>('all');
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -86,14 +86,23 @@ export function NotificationsPage({ onBack, onGameNavigation, onRequestsNavigati
     }
   };
 
-  const filteredNotifications = activeTab === 'all'
-    ? notifications
-    : notifications.filter(n =>
-        n.type === 'game_request' ||
+  const filteredNotifications = (() => {
+    if (activeTab === 'all') {
+      return notifications;
+    } else if (activeTab === 'my_requests') {
+      // My requests: requests I sent to join games (accepted/rejected statuses)
+      return notifications.filter(n =>
         n.type === 'game_request_accepted' ||
-        n.type === 'game_request_rejected' ||
+        n.type === 'game_request_rejected'
+      );
+    } else {
+      // Join requests: requests others sent to join my games
+      return notifications.filter(n =>
+        n.type === 'game_request' ||
         n.type === 'new_player_joined'
       );
+    }
+  })();
 
   return (
     <div className="min-h-screen bg-white">
@@ -143,15 +152,31 @@ export function NotificationsPage({ onBack, onGameNavigation, onRequestsNavigati
             )}
           </button>
           <button
-            onClick={() => setActiveTab('requests')}
+            onClick={() => setActiveTab('my_requests')}
             className={`flex-1 text-center py-4 text-[15px] font-medium relative transition-colors ${
-              activeTab === 'requests'
+              activeTab === 'my_requests'
                 ? 'text-gray-900'
                 : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            Requests
-            {activeTab === 'requests' && (
+            My Requests
+            {activeTab === 'my_requests' && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-full"
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('join_requests')}
+            className={`flex-1 text-center py-4 text-[15px] font-medium relative transition-colors ${
+              activeTab === 'join_requests'
+                ? 'text-gray-900'
+                : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Join Requests
+            {activeTab === 'join_requests' && (
               <motion.div
                 layoutId="activeTab"
                 className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 rounded-full"

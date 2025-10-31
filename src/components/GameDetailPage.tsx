@@ -23,6 +23,7 @@ interface GameDetails {
   id: string;
   hostName: string;
   hostPhone: string;
+  turfId?: string;
   turfName: string;
   turfAddress: string;
   date: string;
@@ -244,6 +245,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
           id: gameData.id || 'unknown',
           hostName: gameData.users?.name || gameData.host_name || gameData.hostName || "Unknown Host",
           hostPhone: gameData.users?.phone || gameData.host_phone || gameData.hostPhone || "9999999999",
+          turfId: gameData.turfs?.id || gameData.turf_id || gameData.turfId || undefined,
           turfName: gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf",
           turfAddress: gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address",
           date: gameData.date || new Date().toISOString().split('T')[0],
@@ -539,9 +541,17 @@ Hosted by ${game.hostName}
 
                   <div className="flex items-start gap-3">
                     <MapPin className="w-5 h-5 text-primary-600 mt-0.5 flex-shrink-0" />
-                    <div>
+                    <div className="flex-1">
                       <div className="font-semibold text-gray-900">{game.turfName}</div>
                       <div className="text-gray-600 text-sm">{game.turfAddress}</div>
+                      {game.turfId && onNavigate && (
+                        <button
+                          onClick={() => onNavigate(`turf:${game.turfId}`)}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-1 flex items-center gap-1"
+                        >
+                          View Turf Details →
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -130,7 +130,9 @@
       "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_StCIee/**)",
       "Bash(gh repo view:*)",
       "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_vcazY9/**)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_oztm62/**)",
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_uBRQBN/**)"
     ],
     "deny": [],
     "ask": [],
