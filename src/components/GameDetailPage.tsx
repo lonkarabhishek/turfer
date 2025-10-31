@@ -26,6 +26,7 @@ interface GameDetails {
   turfId?: string;
   turfName: string;
   turfAddress: string;
+  turfGmapEmbedLink?: string;
   date: string;
   timeSlot: string;
   format: string;
@@ -248,6 +249,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
           turfId: gameData.turfs?.id || gameData.turf_id || gameData.turfId || undefined,
           turfName: gameData.turfs?.name || gameData.turf_name || gameData.turfName || "Unknown Turf",
           turfAddress: gameData.turfs?.address || gameData.turf_address || gameData.turfAddress || "Unknown Address",
+          turfGmapEmbedLink: gameData.turfs?.gmap_embed_link || gameData.turf_gmap_embed_link || gameData.turfGmapEmbedLink || undefined,
           date: gameData.date || new Date().toISOString().split('T')[0],
           timeSlot: `${gameData.start_time || gameData.startTime || '00:00'} - ${gameData.end_time || gameData.endTime || '00:00'}`,
           format: gameData.sport || gameData.format || "Game",
@@ -543,11 +545,29 @@ Hosted by ${game.hostName}
                     <MapPin className="w-5 h-5 text-primary-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <div className="font-semibold text-gray-900">{game.turfName}</div>
-                      <div className="text-gray-600 text-sm">{game.turfAddress}</div>
+                      {game.turfGmapEmbedLink ? (
+                        <div className="mt-2 rounded-lg overflow-hidden">
+                          <iframe
+                            src={game.turfGmapEmbedLink}
+                            width="100%"
+                            height="200"
+                            style={{ border: 0 }}
+                            allowFullScreen
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                            className="rounded-lg"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-gray-600 text-sm">{game.turfAddress}</div>
+                      )}
                       {game.turfId && onNavigate && (
                         <button
-                          onClick={() => onNavigate(`turf:${game.turfId}`)}
-                          className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-1 flex items-center gap-1"
+                          onClick={() => {
+                            console.log('🏟️ View Turf Details clicked, turfId:', game.turfId);
+                            onNavigate(`turf:${game.turfId}`);
+                          }}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-2 flex items-center gap-1"
                         >
                           View Turf Details →
                         </button>

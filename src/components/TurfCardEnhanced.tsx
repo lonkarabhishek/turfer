@@ -151,32 +151,19 @@ export function TurfCardEnhanced({
               </div>
 
               <div className="flex items-center gap-1 mb-1">
-                <Star className="w-3 h-3 text-yellow-500 fill-current" />
-                <span className="text-xs font-medium">{turf.rating}</span>
-                <span className="text-xs text-gray-500">({turf.totalReviews})</span>
+                <Star className="w-3.5 h-3.5 text-gray-900 fill-current" />
+                <span className="text-xs font-semibold text-gray-900">{turf.rating}</span>
+                <span className="text-xs text-gray-600">({turf.totalReviews} reviews)</span>
               </div>
 
-              <div className="flex items-center gap-1 mb-2">
-                <MapPin className="w-3 h-3 text-gray-400" />
-                <span className="text-xs text-gray-600 truncate flex-1">{turf.address}</span>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(turf.address)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-blue-600 hover:text-blue-800 transition-colors"
-                  title="View on Google Maps"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              </div>
+              {turf.distanceKm && (
+                <div className="text-xs text-gray-500 mb-2">
+                  {turf.distanceKm.toFixed(1)} km away
+                </div>
+              )}
 
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-emerald-600">{turf.priceDisplay}</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs">{availability.icon}</span>
-                  <span className={`text-xs ${availability.color}`}>{availability.message}</span>
-                </div>
               </div>
             </div>
           </div>
@@ -280,33 +267,19 @@ export function TurfCardEnhanced({
             {/* Header */}
             <div className="flex items-start justify-between mb-2">
               <h3 className="font-bold text-lg leading-tight">{turf.name}</h3>
-              <div className="flex items-center gap-1">
-                <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                <span className="font-semibold text-sm">{turf.rating}</span>
-                <span className="text-gray-500 text-sm">({turf.totalReviews})</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Star className="w-4 h-4 text-gray-900 fill-current" />
+                <span className="font-semibold text-sm text-gray-900">{turf.rating}</span>
+                <span className="text-sm text-gray-600">({turf.totalReviews})</span>
               </div>
             </div>
 
-            {/* Location */}
-            <div className="flex items-center gap-1 mb-3">
-              <MapPin className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-600 flex-1">{turf.address}</span>
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(turf.address)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-blue-600 hover:text-blue-800 transition-colors"
-                title="View on Google Maps"
-              >
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              {turf.distanceKm && (
-                <span className="text-sm text-emerald-600 ml-2">
-                  {turf.distanceKm.toFixed(1)} km
-                </span>
-              )}
-            </div>
+            {/* Distance */}
+            {turf.distanceKm && (
+              <div className="text-sm text-gray-600 mb-3">
+                {turf.distanceKm.toFixed(1)} km away
+              </div>
+            )}
 
             {/* Sports */}
             <div className="flex flex-wrap gap-1 mb-3">
@@ -344,14 +317,6 @@ export function TurfCardEnhanced({
                     <span className="text-xs text-gray-500">Responds in {turf.responseTime}</span>
                   )}
                 </div>
-              </div>
-
-              {/* Availability Prediction */}
-              <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                <span className="text-sm">{availability.icon}</span>
-                <span className={`text-sm font-medium ${availability.color}`}>
-                  {availability.message}
-                </span>
               </div>
             </div>
           </CardContent>
@@ -425,23 +390,19 @@ export function TurfCardEnhanced({
           {/* Header */}
           <div className="flex items-start justify-between mb-2">
             <h3 className="font-semibold text-lg leading-tight">{turf.name}</h3>
-            <div className="flex items-center gap-1">
-              <Star className="w-4 h-4 text-yellow-500 fill-current" />
-              <span className="font-medium">{turf.rating}</span>
-              <span className="text-gray-500 text-sm">({turf.totalReviews})</span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Star className="w-4 h-4 text-gray-900 fill-current" />
+              <span className="font-semibold text-sm text-gray-900">{turf.rating}</span>
+              <span className="text-sm text-gray-600">({turf.totalReviews})</span>
             </div>
           </div>
 
-          {/* Location & Distance */}
-          <div className="flex items-center gap-1 mb-3">
-            <MapPin className="w-4 h-4 text-gray-400" />
-            <span className="text-sm text-gray-600 flex-1">{turf.address}</span>
-            {turf.distanceKm && (
-              <span className="text-sm text-emerald-600">
-                {turf.distanceKm.toFixed(1)} km
-              </span>
-            )}
-          </div>
+          {/* Distance */}
+          {turf.distanceKm && (
+            <div className="text-sm text-gray-600 mb-3">
+              {turf.distanceKm.toFixed(1)} km away
+            </div>
+          )}
 
           {/* Sports & Amenities */}
           <div className="space-y-2 mb-4">
@@ -467,18 +428,8 @@ export function TurfCardEnhanced({
           </div>
 
           {/* Footer */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-bold text-emerald-600">{turf.priceDisplay}</span>
-            </div>
-
-            {/* Availability Prediction */}
-            <div className="flex items-center gap-1 p-2 bg-gray-50 rounded-lg">
-              <span className="text-xs">{availability.icon}</span>
-              <span className={`text-xs font-medium ${availability.color}`}>
-                {availability.message}
-              </span>
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="text-lg font-bold text-emerald-600">{turf.priceDisplay}</span>
           </div>
         </CardContent>
       </Card>

@@ -665,6 +665,17 @@ export default function App() {
 
   const handleNavigate = (section: string) => {
     console.log('🧭 handleNavigate called with section:', section);
+
+    // Handle turf navigation (format: "turf:turfId")
+    if (section.startsWith('turf:')) {
+      const turfId = section.replace('turf:', '');
+      console.log('🏟️ Navigating to turf:', turfId);
+      setSelectedTurfId(turfId);
+      setCurrentPage('turf-detail');
+      window.history.pushState({}, '', `/turf/${turfId}`);
+      return;
+    }
+
     if (section === 'home') {
       handleBackToHome();
     } else if (section === 'search') {
@@ -778,6 +789,7 @@ export default function App() {
             // Handle booking
             console.log('Booking turf:', selectedTurfId);
           }}
+          onGameClick={handleGameClick}
         />
       ) : currentPage === 'game-detail' && selectedGameId ? (
         <GameDetailPage

@@ -130,14 +130,6 @@ export function TopNav({
             </Button>
           )}
 
-          {/* Notifications */}
-          {user && (
-            <NotificationDropdown 
-              onGameNavigation={onGameNavigation}
-              onRequestsNavigation={() => onDashboardNavigation?.('overview')}
-            />
-          )}
-
           {/* User Menu or Login Button */}
           {user ? (
             <div className="relative">

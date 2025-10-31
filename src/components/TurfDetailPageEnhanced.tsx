@@ -29,6 +29,7 @@ interface TurfDetailPageEnhancedProps {
   onBack: () => void;
   onCreateGame?: () => void;
   onBookTurf?: () => void;
+  onGameClick?: (gameId: string) => void;
 }
 
 interface TimeSlot {
@@ -83,7 +84,8 @@ export function TurfDetailPageEnhanced({
   turfId,
   onBack,
   onCreateGame,
-  onBookTurf
+  onBookTurf,
+  onGameClick
 }: TurfDetailPageEnhancedProps) {
   const { user } = useAuth();
   const [turf, setTurf] = useState<TurfData | null>(null);
@@ -144,27 +146,105 @@ export function TurfDetailPageEnhanced({
       });
 
       if (response.success && response.data) {
-        const turfGames = response.data
-          .filter((game: any) => game.turf_id === turfId || game.turf_name === turf?.name)
-          .filter((game: any) => {
-            // Filter out games with invalid/incomplete data
-            const hasValidTitle = game.sport && game.sport !== 'Game' && game.format && game.format !== 'Game';
-            const hasValidPlayers = game.max_players && game.max_players > 0 && !isNaN(game.max_players);
-            const hasValidDate = game.date && game.date !== '2025-10-31'; // Filter out dummy date
-            const hasValidHost = game.host_name && game.host_name !== 'Host';
+        console.log('🎮 All games from API:', response.data);
 
-            return hasValidTitle && hasValidPlayers && hasValidDate && hasValidHost;
+        const turfGames = response.data
+          .filter((game: any) => {
+            // Check multiple ways the turf ID might be stored
+            const gameTurfId = game.turfs?.id || game.turf_id || game.turfId;
+            const gameTurfName = game.turfs?.name || game.turf_name || game.turfName;
+
+            // Only match if we have a valid comparison (not undefined === undefined)
+            const matchesTurfId = gameTurfId && turfId && gameTurfId === turfId;
+            const matchesTurfName = gameTurfName && turf?.name && gameTurfName === turf.name;
+            const matches = matchesTurfId || matchesTurfName;
+
+            console.log('🔍 Checking game:', {
+              gameId: game.id,
+              gameTurfId,
+              gameTurfName,
+              targetTurfId: turfId,
+              targetTurfName: turf?.name,
+              matchesTurfId,
+              matchesTurfName,
+              matches: matches,
+              fullGame: game
+            });
+
+            return matches;
           });
 
-        console.log('🎮 Filtered games for this turf:', {
+        console.log('🎮 Games matching turf ID/name:', {
           matchingGames: turfGames.length,
           games: turfGames
         });
 
-        const nonExpiredTurfGames = filterNonExpiredGames(turfGames);
-        console.log('🎮 Non-expired games:', nonExpiredTurfGames.length);
+        // More lenient filtering - only filter out truly invalid games
+        const validGames = turfGames.filter((game: any) => {
+          const isValid = !!(game.id && game.sport && game.date);
+          console.log('✅ Game validity check:', {
+            gameId: game.id,
+            sport: game.sport,
+            date: game.date,
+            isValid: isValid
+          });
+          return isValid;
+        });
 
-        setUpcomingGames(nonExpiredTurfGames.slice(0, 3));
+        console.log('🎮 Valid games:', {
+          count: validGames.length,
+          games: validGames
+        });
+
+        const nonExpiredTurfGames = filterNonExpiredGames(validGames);
+        console.log('🎮 Non-expired games:', {
+          count: nonExpiredTurfGames.length,
+          games: nonExpiredTurfGames
+        });
+
+        // Transform games to match GameCard interface and filter out current user's games
+        const transformedGames = nonExpiredTurfGames
+          .filter((game: any) => {
+            // Filter out games created by the current user
+            const gameCreatorId = game.creator_id || game.creatorId;
+            const isOwnGame = user && gameCreatorId && user.id === gameCreatorId;
+            console.log('🔍 Checking game ownership:', {
+              gameId: game.id,
+              gameCreatorId,
+              currentUserId: user?.id,
+              isOwnGame
+            });
+            return !isOwnGame;
+          })
+          .slice(0, 3)
+          .map((game: any) => ({
+            id: game.id,
+            hostName: game.host_name || game.hostName || 'Host',
+            hostAvatar: game.host_avatar || game.users?.profile_image_url,
+            turfId: game.turf_id || game.turfs?.id || turfId,
+            turfName: game.turfs?.name || turf?.name || 'Turf',
+            turfAddress: game.turfs?.address || turf?.address || '',
+            date: game.date,
+            timeSlot: game.start_time ? game.start_time.slice(0, 5) : game.timeSlot || 'TBD',
+            format: game.sport ? game.sport.charAt(0).toUpperCase() + game.sport.slice(1) : game.format || 'Game',
+            skillLevel: game.skill_level || game.skillLevel || 'All levels',
+            currentPlayers: game.current_players || game.currentPlayers || 0,
+            maxPlayers: game.max_players || game.maxPlayers || 10,
+            costPerPerson: game.cost_per_person || game.costPerPerson || 0,
+            notes: game.notes,
+            hostPhone: game.host_phone || game.users?.phone || '',
+            distanceKm: game.distanceKm,
+            isUrgent: game.is_urgent || game.isUrgent,
+            createdAt: game.created_at || game.createdAt,
+            creatorId: game.creator_id || game.creatorId
+          }));
+
+        console.log('🎯 Setting transformed games in state:', {
+          count: transformedGames.length,
+          games: transformedGames
+        });
+
+        setUpcomingGames(transformedGames);
       }
     } catch (error) {
       console.error('❌ Error loading games:', error);
@@ -236,15 +316,25 @@ export function TurfDetailPageEnhanced({
     setAvailability(dates);
   };
 
-  const nextImage = () => {
-    if (turf?.images && Array.isArray(turf.images) && turf.images.length > 0) {
-      setCurrentImageIndex((prev) => (prev + 1) % turf.images.length);
+  const nextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (turf?.images && Array.isArray(turf.images) && turf.images.length > 1) {
+      const newIndex = (currentImageIndex + 1) % turf.images.length;
+      console.log('📸 Next image:', newIndex, '/', turf.images.length);
+      setCurrentImageIndex(newIndex);
+    } else {
+      console.log('📸 Cannot navigate: only', turf?.images?.length || 0, 'images');
     }
   };
 
-  const prevImage = () => {
-    if (turf?.images && Array.isArray(turf.images) && turf.images.length > 0) {
-      setCurrentImageIndex((prev) => (prev - 1 + turf.images.length) % turf.images.length);
+  const prevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (turf?.images && Array.isArray(turf.images) && turf.images.length > 1) {
+      const newIndex = (currentImageIndex - 1 + turf.images.length) % turf.images.length;
+      console.log('📸 Previous image:', newIndex, '/', turf.images.length);
+      setCurrentImageIndex(newIndex);
+    } else {
+      console.log('📸 Cannot navigate: only', turf?.images?.length || 0, 'images');
     }
   };
 
@@ -343,32 +433,18 @@ export function TurfDetailPageEnhanced({
         {/* Image Navigation */}
         {turf.images && Array.isArray(turf.images) && turf.images.length > 1 && (
           <>
-            <motion.div
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+            <button
+              onClick={(e) => prevImage(e)}
+              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 backdrop-blur-md hover:bg-white/30 active:bg-white/40 text-white border border-white/30 rounded-full w-12 h-12 flex items-center justify-center shadow-2xl z-20 cursor-pointer transition-all hover:scale-110 active:scale-95"
             >
-              <Button
-                onClick={prevImage}
-                variant="ghost"
-                size="sm"
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/20 rounded-full w-12 h-12 p-0 shadow-2xl"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </Button>
-            </motion.div>
-            <motion.div
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <button
+              onClick={(e) => nextImage(e)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 backdrop-blur-md hover:bg-white/30 active:bg-white/40 text-white border border-white/30 rounded-full w-12 h-12 flex items-center justify-center shadow-2xl z-20 cursor-pointer transition-all hover:scale-110 active:scale-95"
             >
-              <Button
-                onClick={nextImage}
-                variant="ghost"
-                size="sm"
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/20 rounded-full w-12 h-12 p-0 shadow-2xl"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </Button>
-            </motion.div>
+              <ChevronRight className="w-6 h-6" />
+            </button>
           </>
         )}
 
@@ -493,18 +569,20 @@ export function TurfDetailPageEnhanced({
                         href={turf.external_review_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full hover:bg-yellow-100 transition-colors group"
+                        className="flex items-center gap-1.5 hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors group -ml-2"
                       >
-                        <Star className="w-5 h-5 text-yellow-500 fill-current" />
-                        <span className="font-bold text-gray-900">{turf.rating}</span>
-                        <span className="text-gray-600 text-sm">({turf.totalReviews})</span>
-                        <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                        <Star className="w-4 h-4 text-gray-900 fill-current" />
+                        <span className="font-semibold text-gray-900">{turf.rating}</span>
+                        <span className="text-gray-900">·</span>
+                        <span className="text-gray-900 font-medium underline">{turf.totalReviews} reviews</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-gray-600 group-hover:text-gray-900 transition-colors" />
                       </a>
                     ) : (
-                      <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
-                        <Star className="w-5 h-5 text-yellow-500 fill-current" />
-                        <span className="font-bold text-gray-900">{turf.rating}</span>
-                        <span className="text-gray-600 text-sm">({turf.totalReviews})</span>
+                      <div className="flex items-center gap-1.5 px-2 py-1 -ml-2">
+                        <Star className="w-4 h-4 text-gray-900 fill-current" />
+                        <span className="font-semibold text-gray-900">{turf.rating}</span>
+                        <span className="text-gray-900">·</span>
+                        <span className="text-gray-900 font-medium">{turf.totalReviews} reviews</span>
                       </div>
                     )}
                     {turf.distanceKm && (
@@ -684,6 +762,21 @@ export function TurfDetailPageEnhanced({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
+            {/* Description */}
+            {turf.description && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-emerald-600" />
+                    About This Turf
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 leading-relaxed">{turf.description}</p>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Amenities */}
             <Card>
               <CardHeader>
@@ -911,10 +1004,16 @@ export function TurfDetailPageEnhanced({
                 <p className="text-gray-600">Join ongoing games or create your own</p>
               </CardHeader>
               <CardContent>
-                {upcomingGames.length > 0 ? (
+                {!user ? (
+                  <div className="text-center py-12">
+                    <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Sign in to view games</h3>
+                    <p className="text-gray-500 mb-6">Create an account or sign in to see and join games at this turf</p>
+                  </div>
+                ) : upcomingGames.length > 0 ? (
                   <div className="grid gap-4">
                     {upcomingGames.map((game) => (
-                      <GameCard key={game.id} game={game} variant="compact" />
+                      <GameCard key={game.id} game={game} variant="compact" onGameClick={onGameClick} user={user} />
                     ))}
                   </div>
                 ) : (

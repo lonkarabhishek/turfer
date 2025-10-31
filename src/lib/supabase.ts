@@ -762,7 +762,7 @@ export const turfHelpers = {
         // If turfs table doesn't exist, return mock data for development
         if (error.message.includes('relation "turfs" does not exist')) {
           console.log('Turfs table not found, returning mock data');
-          return { 
+          return {
             data: [
               {
                 id: '1',
@@ -770,28 +770,44 @@ export const turfHelpers = {
                 address: 'Gangapur Road, Nashik',
                 pricePerHour: 800,
                 rating: 4.5,
+                totalReviews: 50,
                 sports: ['Football', 'Cricket'],
                 amenities: ['Parking', 'Changing Rooms', 'Flood Lights'],
                 is_active: true
               },
               {
-                id: '2', 
+                id: '2',
                 name: 'Victory Ground',
                 address: 'College Road, Nashik',
                 pricePerHour: 600,
                 rating: 4.2,
+                totalReviews: 30,
                 sports: ['Football', 'Cricket'],
                 amenities: ['Parking', 'Rest Area'],
                 is_active: true
               }
-            ], 
-            error: null 
+            ],
+            error: null
           };
         }
         throw error;
       }
 
-      return { data, error: null };
+      // Transform snake_case to camelCase for frontend compatibility
+      const transformedData = data?.map((turf: any) => ({
+        ...turf,
+        totalReviews: turf.total_reviews || 0,
+        pricePerHour: turf.price_per_hour || turf.pricePerHour,
+        gmapEmbedLink: turf.gmap_embed_link,
+        contactInfo: turf.contact_info,
+        isActive: turf.is_active,
+        createdAt: turf.created_at,
+        updatedAt: turf.updated_at,
+        externalReviewUrl: turf.external_review_url,
+        coverImage: turf.cover_image
+      }));
+
+      return { data: transformedData, error: null };
     } catch (error: any) {
       console.error('Turf search failed:', error);
       return { data: [], error: error.message };
@@ -817,7 +833,21 @@ export const turfHelpers = {
         gmapLink: data?.gmap_embed_link
       });
 
-      return { data, error: null };
+      // Transform snake_case to camelCase for frontend compatibility
+      const transformedData = data ? {
+        ...data,
+        totalReviews: data.total_reviews || 0,
+        pricePerHour: data.price_per_hour || data.pricePerHour,
+        gmapEmbedLink: data.gmap_embed_link,
+        contactInfo: data.contact_info,
+        isActive: data.is_active,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        externalReviewUrl: data.external_review_url,
+        coverImage: data.cover_image
+      } : null;
+
+      return { data: transformedData, error: null };
     } catch (error: any) {
       return { data: null, error: error.message };
     }
