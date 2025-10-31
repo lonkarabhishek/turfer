@@ -488,11 +488,25 @@ export function TurfDetailPageEnhanced({
                 <div className="flex-1">
                   <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2 leading-tight">{turf.name}</h1>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
-                      <Star className="w-5 h-5 text-yellow-500 fill-current" />
-                      <span className="font-bold text-gray-900">{turf.rating}</span>
-                      <span className="text-gray-600 text-sm">({turf.totalReviews} reviews)</span>
-                    </div>
+                    {turf.external_review_url ? (
+                      <a
+                        href={turf.external_review_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full hover:bg-yellow-100 transition-colors group"
+                      >
+                        <Star className="w-5 h-5 text-yellow-500 fill-current" />
+                        <span className="font-bold text-gray-900">{turf.rating}</span>
+                        <span className="text-gray-600 text-sm">({turf.totalReviews})</span>
+                        <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
+                        <Star className="w-5 h-5 text-yellow-500 fill-current" />
+                        <span className="font-bold text-gray-900">{turf.rating}</span>
+                        <span className="text-gray-600 text-sm">({turf.totalReviews})</span>
+                      </div>
+                    )}
                     {turf.distanceKm && (
                       <div className="flex items-center gap-1 bg-blue-50 px-3 py-1 rounded-full text-blue-700">
                         <Navigation className="w-4 h-4" />
@@ -507,22 +521,6 @@ export function TurfDetailPageEnhanced({
                 </div>
               </div>
 
-              {/* Address */}
-              <div className="flex items-start gap-2 text-gray-600 mb-6 p-4 bg-gray-50 rounded-xl">
-                <MapPin className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-600" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{turf.address}</p>
-                  <a
-                    href={getGoogleMapsUrl(turf.address, turf.coords)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 transition-colors text-sm inline-flex items-center gap-1 mt-1"
-                  >
-                    <span>View on Google Maps</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </div>
 
               {/* Sports */}
               <div className="mb-6">
@@ -740,30 +738,15 @@ export function TurfDetailPageEnhanced({
               </CardContent>
             </Card>
 
-            {/* Location & Map */}
+            {/* Location - Google Maps Only */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-emerald-600" />
-                  Location & Map
+                  Location
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Address */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700">{turf.address}</p>
-                  <a
-                    href={getGoogleMapsUrl(turf.address, turf.coords)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 transition-colors text-sm inline-flex items-center gap-1 mt-2"
-                  >
-                    <span>View on Google Maps</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-
-                {/* Google Maps Embed */}
+              <CardContent>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   {(turf.gmap_embed_link || turf['Gmap Embed link']) ? (
                     <div className="relative w-full h-96 bg-gray-100">
@@ -804,6 +787,19 @@ export function TurfDetailPageEnhanced({
                       </div>
                     </a>
                   )}
+                </div>
+                {/* Address below map */}
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm font-medium text-gray-700 mb-2">{turf.address}</p>
+                  <a
+                    href={getGoogleMapsUrl(turf.address, turf.coords)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 transition-colors text-sm inline-flex items-center gap-1"
+                  >
+                    <span>Open in Google Maps</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               </CardContent>
             </Card>
