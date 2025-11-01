@@ -64,6 +64,37 @@ const getPlaceholderImage = (width: number, height: number, text: string = 'Turf
   return `https://placehold.co/${width}x${height}/10b981/ffffff?text=${encodeURIComponent(text)}`;
 };
 
+// Convert Google Drive sharing link to direct image URL
+const convertGoogleDriveUrl = (url: string): string => {
+  if (!url) return '';
+
+  // If it's already a direct link, return as is
+  if (!url.includes('drive.google.com')) return url;
+
+  // Extract file ID from various Google Drive URL formats
+  let fileId = '';
+
+  // Format: https://drive.google.com/file/d/FILE_ID/view
+  const match1 = url.match(/\/file\/d\/([^\/]+)/);
+  if (match1) fileId = match1[1];
+
+  // Format: https://drive.google.com/open?id=FILE_ID
+  const match2 = url.match(/[?&]id=([^&]+)/);
+  if (match2) fileId = match2[1];
+
+  // Format: https://drive.google.com/uc?id=FILE_ID
+  const match3 = url.match(/\/uc\?id=([^&]+)/);
+  if (match3) fileId = match3[1];
+
+  // Return direct image URL if we found a file ID
+  if (fileId) {
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  }
+
+  // If no file ID found, return original URL
+  return url;
+};
+
 export function TurfCardEnhanced({
   turf,
   onBook,
@@ -134,7 +165,7 @@ export function TurfCardEnhanced({
             {/* Image */}
             <div className="relative w-24 h-24 flex-shrink-0">
               <img
-                src={turf.images?.[0] || getPlaceholderImage(150, 150, 'Turf')}
+                src={turf.images?.[0] ? convertGoogleDriveUrl(turf.images[0]) : getPlaceholderImage(150, 150, 'Turf')}
                 alt={turf.name}
                 className="w-full h-full object-cover"
                 onLoad={() => setImageLoaded(true)}
@@ -190,13 +221,15 @@ export function TurfCardEnhanced({
           {/* Image with Overlay */}
           <div className="relative h-48 overflow-hidden">
             <motion.img
-              src={turf.images?.[currentImageIndex] || getPlaceholderImage(400, 300, turf.name)}
+              key={currentImageIndex}
+              src={turf.images?.[currentImageIndex] ? convertGoogleDriveUrl(turf.images[currentImageIndex]) : getPlaceholderImage(400, 300, turf.name)}
               alt={turf.name}
               className="w-full h-full object-cover"
               onLoad={() => setImageLoaded(true)}
-              initial={{ scale: 1.1 }}
-              animate={{ scale: 1 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
             />
 
             {/* Gradient Overlay */}
@@ -343,12 +376,16 @@ export function TurfCardEnhanced({
         {/* Image */}
         <div className="relative h-48 overflow-hidden">
           <motion.img
-            src={turf.images?.[currentImageIndex] || getPlaceholderImage(400, 300, turf.name)}
+            key={currentImageIndex}
+            src={turf.images?.[currentImageIndex] ? convertGoogleDriveUrl(turf.images[currentImageIndex]) : getPlaceholderImage(400, 300, turf.name)}
             alt={turf.name}
             className="w-full h-full object-cover"
             onLoad={() => setImageLoaded(true)}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
             whileHover={{ scale: 1.05 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           />
 
           {/* Quick Badges */}
