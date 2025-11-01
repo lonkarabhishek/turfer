@@ -24,6 +24,41 @@ import { generateTurfInquiryMessage, buildWhatsAppLink } from '../lib/whatsapp';
 import { predictAvailability } from '../lib/availabilityPredictor';
 import { filterNonExpiredGames } from '../lib/gameUtils';
 
+// Convert Google Drive sharing link to direct image URL
+const convertGoogleDriveUrl = (url: string): string => {
+  if (!url) return '';
+
+  // If it's already a direct link, return as is
+  if (!url.includes('drive.google.com') && !url.includes('drive.usercontent.google.com')) return url;
+
+  // Extract file ID from various Google Drive URL formats
+  let fileId = '';
+
+  // Format: https://drive.google.com/file/d/FILE_ID/view
+  const match1 = url.match(/\/file\/d\/([^\/\?]+)/);
+  if (match1) fileId = match1[1];
+
+  // Format: https://drive.google.com/open?id=FILE_ID
+  const match2 = url.match(/[?&]id=([^&]+)/);
+  if (match2) fileId = match2[1];
+
+  // Format: https://drive.google.com/uc?id=FILE_ID
+  const match3 = url.match(/\/uc\?.*id=([^&]+)/);
+  if (match3) fileId = match3[1];
+
+  // Return direct image URL if we found a file ID
+  // Using thumbnail format which works better for images
+  if (fileId) {
+    const convertedUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+    console.log('🔄 Google Drive URL converted:', { original: url, converted: convertedUrl, fileId });
+    return convertedUrl;
+  }
+
+  console.log('❌ Could not extract file ID from:', url);
+  // If no file ID found, return original URL
+  return url;
+};
+
 interface TurfDetailPageEnhancedProps {
   turfId: string;
   onBack: () => void;
@@ -417,7 +452,9 @@ export function TurfDetailPageEnhanced({
         <AnimatePresence mode="wait">
           <motion.img
             key={currentImageIndex}
-            src={(turf.images && Array.isArray(turf.images) && turf.images[currentImageIndex]) || '/api/placeholder/800/400'}
+            src={(turf.images && Array.isArray(turf.images) && turf.images[currentImageIndex])
+              ? convertGoogleDriveUrl(turf.images[currentImageIndex])
+              : 'https://placehold.co/800x400/10b981/ffffff?text=Turf'}
             alt={turf.name}
             className="w-full h-full object-cover"
             initial={{ opacity: 0, x: 30 }}
