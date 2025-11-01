@@ -420,10 +420,10 @@ export function TurfDetailPageEnhanced({
             src={(turf.images && Array.isArray(turf.images) && turf.images[currentImageIndex]) || '/api/placeholder/800/400'}
             alt={turf.name}
             className="w-full h-full object-cover"
-            initial={{ opacity: 0, x: 50 }}
+            initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            exit={{ opacity: 0, x: -30 }}
+            transition={{ duration: 0.15, ease: "easeInOut" }}
           />
         </AnimatePresence>
 
