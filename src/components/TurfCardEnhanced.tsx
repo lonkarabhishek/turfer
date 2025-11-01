@@ -69,13 +69,13 @@ const convertGoogleDriveUrl = (url: string): string => {
   if (!url) return '';
 
   // If it's already a direct link, return as is
-  if (!url.includes('drive.google.com')) return url;
+  if (!url.includes('drive.google.com') && !url.includes('drive.usercontent.google.com')) return url;
 
   // Extract file ID from various Google Drive URL formats
   let fileId = '';
 
   // Format: https://drive.google.com/file/d/FILE_ID/view
-  const match1 = url.match(/\/file\/d\/([^\/]+)/);
+  const match1 = url.match(/\/file\/d\/([^\/\?]+)/);
   if (match1) fileId = match1[1];
 
   // Format: https://drive.google.com/open?id=FILE_ID
@@ -83,12 +83,13 @@ const convertGoogleDriveUrl = (url: string): string => {
   if (match2) fileId = match2[1];
 
   // Format: https://drive.google.com/uc?id=FILE_ID
-  const match3 = url.match(/\/uc\?id=([^&]+)/);
+  const match3 = url.match(/\/uc\?.*id=([^&]+)/);
   if (match3) fileId = match3[1];
 
   // Return direct image URL if we found a file ID
+  // Using thumbnail format which works better for images
   if (fileId) {
-    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
   }
 
   // If no file ID found, return original URL
