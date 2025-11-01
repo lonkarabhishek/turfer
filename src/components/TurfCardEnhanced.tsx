@@ -59,6 +59,11 @@ const amenityIcons: Record<string, React.ComponentType<any>> = {
   'changing_room': Users
 };
 
+// Placeholder image helper
+const getPlaceholderImage = (width: number, height: number, text: string = 'Turf') => {
+  return `https://placehold.co/${width}x${height}/10b981/ffffff?text=${encodeURIComponent(text)}`;
+};
+
 export function TurfCardEnhanced({
   turf,
   onBook,
@@ -129,7 +134,7 @@ export function TurfCardEnhanced({
             {/* Image */}
             <div className="relative w-24 h-24 flex-shrink-0">
               <img
-                src={turf.images[0] || '/api/placeholder/150/150'}
+                src={turf.images?.[0] || getPlaceholderImage(150, 150, 'Turf')}
                 alt={turf.name}
                 className="w-full h-full object-cover"
                 onLoad={() => setImageLoaded(true)}
@@ -185,7 +190,7 @@ export function TurfCardEnhanced({
           {/* Image with Overlay */}
           <div className="relative h-48 overflow-hidden">
             <motion.img
-              src={turf.images[currentImageIndex] || '/api/placeholder/400/300'}
+              src={turf.images?.[currentImageIndex] || getPlaceholderImage(400, 300, turf.name)}
               alt={turf.name}
               className="w-full h-full object-cover"
               onLoad={() => setImageLoaded(true)}
@@ -338,7 +343,7 @@ export function TurfCardEnhanced({
         {/* Image */}
         <div className="relative h-48 overflow-hidden">
           <motion.img
-            src={turf.images[currentImageIndex] || '/api/placeholder/400/300'}
+            src={turf.images?.[currentImageIndex] || getPlaceholderImage(400, 300, turf.name)}
             alt={turf.name}
             className="w-full h-full object-cover"
             onLoad={() => setImageLoaded(true)}
