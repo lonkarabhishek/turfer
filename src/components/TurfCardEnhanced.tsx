@@ -89,9 +89,12 @@ const convertGoogleDriveUrl = (url: string): string => {
   // Return direct image URL if we found a file ID
   // Using thumbnail format which works better for images
   if (fileId) {
-    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+    const convertedUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+    console.log('🔄 Google Drive URL converted:', { original: url, converted: convertedUrl, fileId });
+    return convertedUrl;
   }
 
+  console.log('❌ Could not extract file ID from:', url);
   // If no file ID found, return original URL
   return url;
 };
