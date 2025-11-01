@@ -953,45 +953,69 @@ export function TurfDetailPageEnhanced({
                 </div>
                 <CardContent className="p-6">
                   <div className="border-2 border-gray-200 rounded-2xl overflow-hidden shadow-lg">
-                    {(turf.gmap_embed_link || turf['Gmap Embed link']) ? (
-                      <div className="relative w-full h-96 bg-gray-100">
-                        <iframe
-                          src={(() => {
-                            const gmapValue = turf.gmap_embed_link || turf['Gmap Embed link'];
-                            // If it's already a URL, use it
-                            if (gmapValue.trim().startsWith('http')) {
-                              return gmapValue.trim();
-                            }
-                            // If it's iframe HTML, extract the src
-                            const srcMatch = gmapValue.match(/src=["']([^"']+)["']/);
-                            return srcMatch ? srcMatch[1] : gmapValue;
-                          })()}
-                          width="100%"
-                          height="100%"
-                          style={{ border: 0 }}
-                          allowFullScreen
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                          title={`Map of ${turf.name}`}
-                          className="w-full h-full"
-                        />
-                      </div>
-                    ) : (
-                      <a
-                        href={getGoogleMapsUrl(turf.address, turf.coords)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
-                      >
-                        <div className="h-full flex items-center justify-center">
-                          <div className="text-center text-gray-600">
-                            <MapPin className="w-12 h-12 mx-auto mb-2" />
-                            <p className="font-medium mb-1">{turf.name}</p>
-                            <p className="text-sm">Click to view on Google Maps</p>
+                    {(() => {
+                      const gmapValue = turf.gmap_embed_link || turf['Gmap Embed link'];
+
+                      // Check if we have a valid embed link
+                      if (gmapValue) {
+                        let embedUrl = '';
+
+                        // If it's already a valid Google Maps embed URL
+                        if (gmapValue.trim().startsWith('https://www.google.com/maps/embed')) {
+                          embedUrl = gmapValue.trim();
+                        }
+                        // If it's iframe HTML, extract the src
+                        else if (gmapValue.includes('<iframe')) {
+                          const srcMatch = gmapValue.match(/src=["']([^"']+)["']/);
+                          if (srcMatch && srcMatch[1].includes('google.com/maps/embed')) {
+                            embedUrl = srcMatch[1];
+                          }
+                        }
+
+                        // If we have a valid embed URL, show iframe
+                        if (embedUrl) {
+                          return (
+                            <div className="relative w-full h-96 bg-gray-100">
+                              <iframe
+                                src={embedUrl}
+                                width="100%"
+                                height="100%"
+                                style={{ border: 0 }}
+                                allowFullScreen
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                                title={`Map of ${turf.name}`}
+                                className="w-full h-full"
+                              />
+                            </div>
+                          );
+                        }
+                      }
+
+                      // Fallback: Show clickable map placeholder
+                      return (
+                        <a
+                          href={getGoogleMapsUrl(turf.address, turf.coords)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block h-96 bg-gradient-to-br from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 transition-colors"
+                        >
+                          <div className="h-full flex items-center justify-center">
+                            <div className="text-center text-gray-700">
+                              <div className="w-24 h-24 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                <MapPin className="w-12 h-12 text-white" />
+                              </div>
+                              <p className="font-bold text-xl mb-2">{turf.name}</p>
+                              <p className="text-base mb-4 px-4">{turf.address}</p>
+                              <div className="inline-flex items-center gap-2 bg-purple-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg">
+                                <Navigation className="w-5 h-5" />
+                                <span>View on Google Maps</span>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </a>
-                    )}
+                        </a>
+                      );
+                    })()}
                   </div>
                   {/* Address below map */}
                   <div className="mt-6 p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200">
