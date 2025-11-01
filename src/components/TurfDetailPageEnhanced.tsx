@@ -655,31 +655,48 @@ export function TurfDetailPageEnhanced({
               </div>
 
               {/* Pricing */}
-              <div className="flex items-center gap-2 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border-2 border-emerald-200">
-                <div>
-                  <p className="text-sm text-gray-600">Starting from</p>
-                  <p className="text-2xl font-bold text-emerald-600">{turf.priceDisplay}</p>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                className="relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 animate-gradient-x"></div>
+                <div className="relative flex items-center gap-4 p-6 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl border-4 border-white shadow-2xl">
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                    <DollarSign className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90 uppercase tracking-wide">Starting from</p>
+                    <p className="text-4xl font-bold text-white drop-shadow-lg">{turf.priceDisplay}</p>
+                    <p className="text-xs text-white/80 mt-1">Per hour • All inclusive</p>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col gap-4 lg:w-80">
+            <div className="flex flex-col gap-5 lg:w-96">
               {/* Availability Prediction */}
               {availabilityPrediction && (
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-gray-200 shadow-inner"
+                  className="relative overflow-hidden"
                 >
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-3xl">{availabilityPrediction.icon}</span>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Availability</p>
-                      <p className={`text-sm ${availabilityPrediction.color} font-bold`}>
-                        {availabilityPrediction.message}
-                      </p>
+                  <div className="absolute inset-0 bg-gradient-to-br from-yellow-100 via-orange-100 to-red-100"></div>
+                  <div className="relative p-6 rounded-2xl border-3 border-orange-300 shadow-lg backdrop-blur-sm">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-400 rounded-full flex items-center justify-center text-4xl shadow-lg">
+                        {availabilityPrediction.icon}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Live Status</p>
+                        <p className={`text-lg ${availabilityPrediction.color} font-bold`}>
+                          {availabilityPrediction.message}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -687,8 +704,11 @@ export function TurfDetailPageEnhanced({
 
               {/* WhatsApp Button */}
               <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
               >
                 <Button
                   onClick={() => {
@@ -718,23 +738,26 @@ export function TurfDetailPageEnhanced({
                     console.log('📱 WhatsApp URL:', whatsappUrl);
                     window.open(whatsappUrl, '_blank');
                   }}
-                  className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold py-6 rounded-xl shadow-lg hover:shadow-xl transition-all text-lg"
+                  className="w-full bg-gradient-to-r from-green-600 via-green-500 to-green-600 hover:from-green-700 hover:via-green-600 hover:to-green-700 text-white font-bold py-7 rounded-2xl shadow-2xl hover:shadow-green-200 transition-all text-lg border-2 border-green-400"
                 >
-                  <MessageCircle className="w-5 h-5 mr-2" />
-                  Chat to Book on WhatsApp
+                  <MessageCircle className="w-6 h-6 mr-3" />
+                  Book on WhatsApp
                 </Button>
               </motion.div>
 
               {onCreateGame && (
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
                 >
                   <Button
                     onClick={onCreateGame}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold py-6 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                    className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:via-teal-700 hover:to-emerald-700 text-white font-bold py-7 rounded-2xl shadow-2xl hover:shadow-emerald-200 transition-all border-2 border-emerald-400"
                   >
-                    <Plus className="w-5 h-5 mr-2" />
+                    <Plus className="w-6 h-6 mr-3" />
                     Create a Game Here
                   </Button>
                 </motion.div>
@@ -742,18 +765,21 @@ export function TurfDetailPageEnhanced({
 
               {((turf.contact_info as any)?.phone || turf.contacts?.phone) && (
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
                 >
                   <Button
                     variant="outline"
-                    className="w-full border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-6 rounded-xl"
+                    className="w-full border-3 border-gray-300 hover:border-gray-500 bg-white hover:bg-gray-50 text-gray-900 font-bold py-7 rounded-2xl shadow-lg hover:shadow-xl transition-all"
                     onClick={() => {
                       const phoneNumber = (turf.contact_info as any)?.phone || turf.contacts?.phone;
                       window.open(`tel:${phoneNumber}`, '_self');
                     }}
                   >
-                    <Phone className="w-5 h-5 mr-2" />
+                    <Phone className="w-6 h-6 mr-3" />
                     Call Owner
                   </Button>
                 </motion.div>
@@ -801,230 +827,255 @@ export function TurfDetailPageEnhanced({
           <TabsContent value="overview" className="space-y-6">
             {/* Description */}
             {turf.description && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-emerald-600" />
-                    About This Turf
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 leading-relaxed">{turf.description}</p>
-                </CardContent>
-              </Card>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+              >
+                <Card className="border-2 border-emerald-50 shadow-xl overflow-hidden">
+                  <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-6">
+                    <CardTitle className="flex items-center gap-3 text-white">
+                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                        <Trophy className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="text-2xl">About This Turf</span>
+                    </CardTitle>
+                  </div>
+                  <CardContent className="p-8">
+                    <p className="text-gray-700 leading-relaxed text-lg">{turf.description}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
             )}
 
             {/* Amenities */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-emerald-600" />
-                  Facilities & Amenities
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {turf.amenities?.map((amenity) => {
-                    const amenityData = amenityIcons[amenity.toLowerCase().replace(' ', '_')] ||
-                                       { icon: CheckCircle, label: amenity, color: 'text-gray-600' };
-                    const AmenityIcon = amenityData.icon;
-
-                    return (
-                      <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <AmenityIcon className={`w-5 h-5 ${amenityData.color}`} />
-                        <span className="text-sm font-medium">{amenityData.label}</span>
-                      </div>
-                    );
-                  })}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+            >
+              <Card className="border-2 border-blue-50 shadow-xl overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6">
+                  <CardTitle className="flex items-center gap-3 text-white">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                      <Award className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-2xl">Facilities & Amenities</span>
+                  </CardTitle>
                 </div>
-              </CardContent>
-            </Card>
+                <CardContent className="p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {turf.amenities?.map((amenity, index) => {
+                      const amenityData = amenityIcons[amenity.toLowerCase().replace(' ', '_')] ||
+                                         { icon: CheckCircle, label: amenity, color: 'text-gray-600' };
+                      const AmenityIcon = amenityData.icon;
+
+                      return (
+                        <motion.div
+                          key={amenity}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.1 + index * 0.05 }}
+                          className="flex items-center gap-4 p-4 bg-gradient-to-br from-gray-50 to-white rounded-xl border-2 border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all"
+                        >
+                          <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center`}>
+                            <AmenityIcon className={`w-6 h-6 ${amenityData.color}`} />
+                          </div>
+                          <span className="text-base font-semibold text-gray-700">{amenityData.label}</span>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
             {/* Operating Hours */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-emerald-600" />
-                  Operating Hours
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                    <Sun className="w-5 h-5 text-blue-600" />
-                    <div>
-                      <p className="font-medium">Weekdays</p>
-                      <p className="text-sm text-gray-600">6:00 AM - 12:00 AM</p>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
+              <Card className="border-2 border-orange-50 shadow-xl overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6">
+                  <CardTitle className="flex items-center gap-3 text-white">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                      <Clock className="w-6 h-6 text-white" />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
-                    <Moon className="w-5 h-5 text-orange-600" />
-                    <div>
-                      <p className="font-medium">Weekends</p>
-                      <p className="text-sm text-gray-600">6:00 AM - 12:00 AM</p>
-                    </div>
-                  </div>
+                    <span className="text-2xl">Operating Hours</span>
+                  </CardTitle>
                 </div>
-              </CardContent>
-            </Card>
+                <CardContent className="p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="flex items-center gap-4 p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl border-2 border-blue-200 shadow-md"
+                    >
+                      <div className="w-14 h-14 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                        <Sun className="w-7 h-7 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-lg text-gray-900">Weekdays</p>
+                        <p className="text-base text-gray-700 font-medium">6:00 AM - 12:00 AM</p>
+                      </div>
+                    </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="flex items-center gap-4 p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl border-2 border-orange-200 shadow-md"
+                    >
+                      <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                        <Moon className="w-7 h-7 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-lg text-gray-900">Weekends</p>
+                        <p className="text-base text-gray-700 font-medium">6:00 AM - 12:00 AM</p>
+                      </div>
+                    </motion.div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
             {/* Location - Google Maps Only */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-emerald-600" />
-                  Location
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  {(turf.gmap_embed_link || turf['Gmap Embed link']) ? (
-                    <div className="relative w-full h-96 bg-gray-100">
-                      <iframe
-                        src={(() => {
-                          const gmapValue = turf.gmap_embed_link || turf['Gmap Embed link'];
-                          // If it's already a URL, use it
-                          if (gmapValue.trim().startsWith('http')) {
-                            return gmapValue.trim();
-                          }
-                          // If it's iframe HTML, extract the src
-                          const srcMatch = gmapValue.match(/src=["']([^"']+)["']/);
-                          return srcMatch ? srcMatch[1] : gmapValue;
-                        })()}
-                        width="100%"
-                        height="100%"
-                        style={{ border: 0 }}
-                        allowFullScreen
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        title={`Map of ${turf.name}`}
-                        className="w-full h-full"
-                      />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+            >
+              <Card className="border-2 border-purple-50 shadow-xl overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6">
+                  <CardTitle className="flex items-center gap-3 text-white">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                      <MapPin className="w-6 h-6 text-white" />
                     </div>
-                  ) : (
-                    <a
-                      href={getGoogleMapsUrl(turf.address, turf.coords)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
-                    >
-                      <div className="h-full flex items-center justify-center">
-                        <div className="text-center text-gray-600">
-                          <MapPin className="w-12 h-12 mx-auto mb-2" />
-                          <p className="font-medium mb-1">{turf.name}</p>
-                          <p className="text-sm">Click to view on Google Maps</p>
-                        </div>
+                    <span className="text-2xl">Location & Directions</span>
+                  </CardTitle>
+                </div>
+                <CardContent className="p-6">
+                  <div className="border-2 border-gray-200 rounded-2xl overflow-hidden shadow-lg">
+                    {(turf.gmap_embed_link || turf['Gmap Embed link']) ? (
+                      <div className="relative w-full h-96 bg-gray-100">
+                        <iframe
+                          src={(() => {
+                            const gmapValue = turf.gmap_embed_link || turf['Gmap Embed link'];
+                            // If it's already a URL, use it
+                            if (gmapValue.trim().startsWith('http')) {
+                              return gmapValue.trim();
+                            }
+                            // If it's iframe HTML, extract the src
+                            const srcMatch = gmapValue.match(/src=["']([^"']+)["']/);
+                            return srcMatch ? srcMatch[1] : gmapValue;
+                          })()}
+                          width="100%"
+                          height="100%"
+                          style={{ border: 0 }}
+                          allowFullScreen
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          title={`Map of ${turf.name}`}
+                          className="w-full h-full"
+                        />
                       </div>
-                    </a>
-                  )}
-                </div>
-                {/* Address below map */}
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700 mb-2">{turf.address}</p>
-                  <a
-                    href={getGoogleMapsUrl(turf.address, turf.coords)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 transition-colors text-sm inline-flex items-center gap-1"
-                  >
-                    <span>Open in Google Maps</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </CardContent>
-            </Card>
+                    ) : (
+                      <a
+                        href={getGoogleMapsUrl(turf.address, turf.coords)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block h-48 bg-gray-100 hover:bg-gray-200 transition-colors"
+                      >
+                        <div className="h-full flex items-center justify-center">
+                          <div className="text-center text-gray-600">
+                            <MapPin className="w-12 h-12 mx-auto mb-2" />
+                            <p className="font-medium mb-1">{turf.name}</p>
+                            <p className="text-sm">Click to view on Google Maps</p>
+                          </div>
+                        </div>
+                      </a>
+                    )}
+                  </div>
+                  {/* Address below map */}
+                  <div className="mt-6 p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <MapPin className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-base font-bold text-gray-900 mb-2">{turf.address}</p>
+                        <a
+                          href={getGoogleMapsUrl(turf.address, turf.coords)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 transition-colors font-semibold bg-white px-4 py-2 rounded-lg hover:shadow-md"
+                        >
+                          <Navigation className="w-4 h-4" />
+                          <span>Get Directions</span>
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </TabsContent>
 
           {/* Availability Tab */}
           <TabsContent value="availability" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Check Availability</CardTitle>
-                <p className="text-gray-600">Select a date to view available time slots</p>
-              </CardHeader>
-              <CardContent>
-                {/* Date Selector */}
-                <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
-                  {availability.map(({ date }) => {
-                    const dateObj = new Date(date);
-                    const isSelected = date === selectedDate;
-                    const isToday = date === new Date().toISOString().split('T')[0];
+            <Card className="border-2 border-emerald-100">
+              <CardContent className="pt-16 pb-16">
+                <div className="max-w-md mx-auto text-center">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", duration: 0.5 }}
+                  >
+                    <div className="w-24 h-24 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Calendar className="w-12 h-12 text-emerald-600" />
+                    </div>
+                  </motion.div>
 
-                    return (
-                      <button
-                        key={date}
-                        onClick={() => setSelectedDate(date)}
-                        className={`
-                          flex flex-col items-center gap-1 p-3 rounded-lg border whitespace-nowrap
-                          ${isSelected
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-white hover:bg-gray-50 border-gray-200'
-                          }
-                        `}
-                      >
-                        <span className="text-xs font-medium">
-                          {isToday ? 'Today' : dateObj.toLocaleDateString('en', { weekday: 'short' })}
-                        </span>
-                        <span className="text-sm">
-                          {dateObj.getDate()}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                  <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-6 py-2 text-lg mb-4">
+                    Coming Soon
+                  </Badge>
 
-                {/* Time Slots */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {availability
-                    .find(({ date }) => date === selectedDate)
-                    ?.slots.map((slot) => (
-                      <motion.button
-                        key={slot.time}
-                        whileHover={{ scale: slot.available ? 1.02 : 1 }}
-                        whileTap={{ scale: slot.available ? 0.98 : 1 }}
-                        disabled={!slot.available}
-                        onClick={() => {
-                          if (slot.available && turf.contacts?.phone) {
-                            const message = generateBookingMessage(turf);
-                            const whatsappUrl = `https://api.whatsapp.com/send?phone=${turf.contacts.phone}&text=${encodeURIComponent(message)}`;
-                            window.open(whatsappUrl, '_blank');
-                          }
-                        }}
-                        className={`
-                          p-3 rounded-lg border text-left relative overflow-hidden
-                          ${slot.available
-                            ? 'bg-white hover:bg-emerald-50 border-gray-200 hover:border-emerald-300'
-                            : 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-60'
-                          }
-                          ${slot.isPopular ? 'ring-2 ring-orange-200' : ''}
-                        `}
-                      >
-                        {slot.isPopular && (
-                          <Badge className="absolute top-1 right-1 text-xs bg-orange-500">
-                            Popular
-                          </Badge>
-                        )}
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                    Live Availability Calendar
+                  </h3>
 
-                        <div className="text-sm font-medium">
-                          {formatTime(slot.time)}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {slot.available ? (
-                            <>
-                              ₹{slot.price}
-                              {slot.discount && (
-                                <span className="text-green-600 font-medium ml-1">
-                                  ({slot.discount}% off)
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            'Booked'
-                          )}
-                        </div>
-                      </motion.button>
-                    ))
-                  }
+                  <p className="text-gray-600 mb-8 leading-relaxed">
+                    We're working on bringing you real-time slot availability and instant booking.
+                    For now, please use WhatsApp to check availability and book your slot.
+                  </p>
+
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Button
+                      onClick={() => {
+                        const message = generateTurfInquiryMessage(turf);
+                        const phone = (turf.contact_info as any)?.phone ||
+                                      turf.contacts?.phone ||
+                                      turf.contacts?.whatsapp;
+
+                        if (phone) {
+                          const whatsappUrl = buildWhatsAppLink({ phone, text: message });
+                          window.open(whatsappUrl, '_blank');
+                        }
+                      }}
+                      className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold px-8 py-6 text-lg shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <MessageCircle className="w-5 h-5 mr-2" />
+                      Check Availability on WhatsApp
+                    </Button>
+                  </motion.div>
+
+                  <div className="mt-8 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <p className="text-sm text-emerald-800">
+                      <Zap className="w-4 h-4 inline mr-1" />
+                      Quick response guaranteed within minutes!
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
