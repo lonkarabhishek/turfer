@@ -446,9 +446,9 @@ export function TurfDetailPageEnhanced({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50">
+    <div className="min-h-screen bg-white">
       {/* Hero Section with Image Gallery */}
-      <div className="relative h-[60vh] md:h-[70vh] bg-gray-900 overflow-hidden">
+      <div className="relative h-[50vh] md:h-[60vh] bg-gray-900 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.img
             key={currentImageIndex}
@@ -464,8 +464,8 @@ export function TurfDetailPageEnhanced({
           />
         </AnimatePresence>
 
-        {/* Animated overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-70" />
+        {/* Simple overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
 
         {/* Image Navigation */}
         {turf.images && Array.isArray(turf.images) && turf.images.length > 1 && (
@@ -486,471 +486,293 @@ export function TurfDetailPageEnhanced({
         )}
 
         {/* Header Controls */}
-        <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-20">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+        <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-20">
+          <Button
+            onClick={onBack}
+            variant="ghost"
+            size="sm"
+            className="bg-white/90 hover:bg-white text-gray-900 rounded-lg"
           >
-            <Button
-              onClick={onBack}
-              variant="ghost"
-              size="sm"
-              className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full font-semibold"
-            >
-              <ArrowLeft className="w-5 h-5 mr-2" />
-              <span className="hidden sm:inline">Back</span>
-            </Button>
-          </motion.div>
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Back
+          </Button>
 
           <div className="flex gap-2">
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                onClick={() => setIsLiked(!isLiked)}
-                variant="ghost"
-                size="sm"
-                className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full w-10 h-10 p-0"
-              >
-                <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                onClick={() => setIsBookmarked(!isBookmarked)}
-                variant="ghost"
-                size="sm"
-                className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full w-10 h-10 p-0"
-              >
-                <Bookmark className={`w-5 h-5 ${isBookmarked ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                onClick={handleShare}
-                variant="ghost"
-                size="sm"
-                className="bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border-2 border-white shadow-2xl rounded-full w-10 h-10 p-0"
-              >
-                <Share2 className="w-5 h-5" />
-              </Button>
-            </motion.div>
+            <Button
+              onClick={handleShare}
+              variant="ghost"
+              size="sm"
+              className="bg-white/90 hover:bg-white text-gray-900 rounded-lg"
+            >
+              <Share2 className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
-        {/* Image Counter & Gallery Dots */}
-        {turf.images && Array.isArray(turf.images) && turf.images.length > 0 && (
-          <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-3">
-            <div className="flex gap-2">
-              {turf.images.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => setCurrentImageIndex(index)}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    index === currentImageIndex
-                      ? 'w-8 bg-white'
-                      : 'w-2 bg-white/50 hover:bg-white/75'
-                  }`}
-                />
-              ))}
-            </div>
-            <div className="bg-black/30 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-medium border border-white/20">
-              {currentImageIndex + 1} / {turf.images.length}
-            </div>
+        {/* Image Counter */}
+        {turf.images && Array.isArray(turf.images) && turf.images.length > 1 && (
+          <div className="absolute bottom-4 right-4 bg-black/60 text-white px-3 py-1 rounded-lg text-sm">
+            {currentImageIndex + 1} / {turf.images.length}
           </div>
         )}
-
-        {/* Floating badges */}
-        <div className="absolute top-24 right-6 flex flex-col gap-2 z-10">
-          <motion.div
-            initial={{ x: 100, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Badge className="bg-white text-emerald-600 border-2 border-emerald-600 shadow-2xl px-4 py-2 font-bold">
-              <Verified className="w-4 h-4 mr-1 fill-emerald-600" />
-              Verified
-            </Badge>
-          </motion.div>
-          {turf.isPopular && (
-            <motion.div
-              initial={{ x: 100, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.4 }}
-            >
-              <Badge className="bg-white text-orange-600 border-2 border-orange-600 shadow-2xl px-4 py-2 font-bold">
-                <TrendingUp className="w-4 h-4 mr-1" />
-                Popular
-              </Badge>
-            </motion.div>
-          )}
-        </div>
       </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Turf Header */}
-        <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white rounded-3xl shadow-2xl p-8 -mt-32 relative z-10 mb-8 border border-gray-100"
-        >
+        <div className="bg-white rounded-xl shadow-lg p-6 -mt-20 relative z-10 mb-6 border border-gray-200">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
             <div className="flex-1">
               {/* Title */}
-              <div className="flex items-start gap-3 mb-4">
-                <div className="flex-1">
-                  <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2 leading-tight">{turf.name}</h1>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {turf.external_review_url ? (
-                      <a
-                        href={turf.external_review_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors group -ml-2"
-                      >
-                        <Star className="w-4 h-4 text-gray-900 fill-current" />
-                        <span className="font-semibold text-gray-900">{turf.rating}</span>
-                        <span className="text-gray-900">·</span>
-                        <span className="text-gray-900 font-medium underline">{turf.totalReviews} reviews</span>
-                        <ExternalLink className="w-3.5 h-3.5 text-gray-600 group-hover:text-gray-900 transition-colors" />
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-1.5 px-2 py-1 -ml-2">
-                        <Star className="w-4 h-4 text-gray-900 fill-current" />
-                        <span className="font-semibold text-gray-900">{turf.rating}</span>
-                        <span className="text-gray-900">·</span>
-                        <span className="text-gray-900 font-medium">{turf.totalReviews} reviews</span>
-                      </div>
-                    )}
-                    {turf.distanceKm && (
-                      <div className="flex items-center gap-1 bg-blue-50 px-3 py-1 rounded-full text-blue-700">
-                        <Navigation className="w-4 h-4" />
-                        <span className="text-sm font-medium">{turf.distanceKm.toFixed(1)} km</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-full text-gray-600">
-                      <Eye className="w-4 h-4" />
-                      <span className="text-sm">{viewCount} views</span>
-                    </div>
+              <div className="mb-4">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">{turf.name}</h1>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <span className="font-medium">{turf.rating}</span>
+                    <span>({turf.totalReviews})</span>
                   </div>
+                  {turf.distanceKm && (
+                    <div className="flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      <span>{turf.distanceKm.toFixed(1)} km away</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
 
               {/* Sports */}
-              <div className="mb-6">
-                <p className="text-sm font-medium text-gray-500 mb-3">AVAILABLE SPORTS</p>
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Sports Available</p>
                 <div className="flex flex-wrap gap-2">
-                  {turf.slots?.map((sport) => {
-                    const SportIcon = sportIcons[sport]?.icon || Target;
-                    const sportColor = sportIcons[sport]?.color || 'text-gray-600';
-                    return (
-                      <Badge key={sport} className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors px-4 py-2">
-                        <SportIcon className={`w-4 h-4 mr-2 ${sportColor}`} />
-                        <span className="font-semibold">{sport}</span>
-                      </Badge>
-                    );
-                  })}
+                  {turf.slots?.map((sport) => (
+                    <span key={sport} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md text-sm font-medium">
+                      {sport}
+                    </span>
+                  ))}
                 </div>
               </div>
 
               {/* Pricing */}
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.4, delay: 0.2 }}
-                className="relative overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 animate-gradient-x"></div>
-                <div className="relative flex items-center gap-4 p-6 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl border-4 border-white shadow-2xl">
-                  <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                    <DollarSign className="w-8 h-8 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white/90 uppercase tracking-wide">Starting from</p>
-                    <p className="text-4xl font-bold text-white drop-shadow-lg">{turf.priceDisplay}</p>
-                    <p className="text-xs text-white/80 mt-1">Per hour • All inclusive</p>
-                  </div>
-                </div>
-              </motion.div>
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <p className="text-sm text-emerald-700 font-medium mb-1">Starting from</p>
+                <p className="text-2xl font-bold text-emerald-900">{turf.priceDisplay}/hour</p>
+              </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col gap-5 lg:w-96">
-              {/* Availability Prediction */}
-              {availabilityPrediction && (
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-yellow-100 via-orange-100 to-red-100"></div>
-                  <div className="relative p-6 rounded-2xl border-3 border-orange-300 shadow-lg backdrop-blur-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-400 rounded-full flex items-center justify-center text-4xl shadow-lg">
-                        {availabilityPrediction.icon}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Live Status</p>
-                        <p className={`text-lg ${availabilityPrediction.color} font-bold`}>
-                          {availabilityPrediction.message}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
+            <div className="flex flex-col gap-3 lg:w-80">
               {/* WhatsApp Button */}
-              <motion.div
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+              <Button
+                onClick={() => {
+                  const message = generateTurfInquiryMessage(turf);
+                  const phone = (turf.contact_info as any)?.phone ||
+                                turf.contacts?.phone ||
+                                turf.contacts?.whatsapp;
+
+                  if (!phone) {
+                    alert('Contact information not available for this venue.');
+                    return;
+                  }
+
+                  const whatsappUrl = buildWhatsAppLink({ phone, text: message });
+                  window.open(whatsappUrl, '_blank');
+                }}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg"
               >
-                <Button
-                  onClick={() => {
-                    console.log('📱 Chat to Book clicked:', {
-                      hasContacts: !!turf.contacts,
-                      contacts: turf.contacts,
-                      hasContactInfo: !!turf.contact_info,
-                      contactInfo: turf.contact_info
-                    });
-
-                    const message = generateTurfInquiryMessage(turf);
-
-                    // Check contact_info first (database turfs), then contacts (demo turfs)
-                    const phone = (turf.contact_info as any)?.phone ||
-                                  turf.contacts?.phone ||
-                                  turf.contacts?.whatsapp;
-
-                    console.log('📱 Phone number found:', phone);
-
-                    if (!phone) {
-                      console.error('❌ No phone number found!');
-                      alert('Contact information not available for this venue. Please add phone number in database.');
-                      return;
-                    }
-
-                    const whatsappUrl = buildWhatsAppLink({ phone, text: message });
-                    console.log('📱 WhatsApp URL:', whatsappUrl);
-                    window.open(whatsappUrl, '_blank');
-                  }}
-                  className="w-full bg-gradient-to-r from-green-600 via-green-500 to-green-600 hover:from-green-700 hover:via-green-600 hover:to-green-700 text-white font-bold py-7 rounded-2xl shadow-2xl hover:shadow-green-200 transition-all text-lg border-2 border-green-400"
-                >
-                  <MessageCircle className="w-6 h-6 mr-3" />
-                  Book on WhatsApp
-                </Button>
-              </motion.div>
+                <MessageCircle className="w-5 h-5 mr-2" />
+                Book via WhatsApp
+              </Button>
 
               {onCreateGame && (
-                <motion.div
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
+                <Button
+                  onClick={onCreateGame}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg"
                 >
-                  <Button
-                    onClick={onCreateGame}
-                    className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:via-teal-700 hover:to-emerald-700 text-white font-bold py-7 rounded-2xl shadow-2xl hover:shadow-emerald-200 transition-all border-2 border-emerald-400"
-                  >
-                    <Plus className="w-6 h-6 mr-3" />
-                    Create a Game Here
-                  </Button>
-                </motion.div>
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Game
+                </Button>
               )}
 
               {((turf.contact_info as any)?.phone || turf.contacts?.phone) && (
-                <motion.div
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
+                <Button
+                  variant="outline"
+                  className="w-full border-2 border-gray-300 hover:bg-gray-50 font-medium py-3 rounded-lg"
+                  onClick={() => {
+                    const phoneNumber = (turf.contact_info as any)?.phone || turf.contacts?.phone;
+                    window.open(`tel:${phoneNumber}`, '_self');
+                  }}
                 >
-                  <Button
-                    variant="outline"
-                    className="w-full border-3 border-gray-300 hover:border-gray-500 bg-white hover:bg-gray-50 text-gray-900 font-bold py-7 rounded-2xl shadow-lg hover:shadow-xl transition-all"
-                    onClick={() => {
-                      const phoneNumber = (turf.contact_info as any)?.phone || turf.contacts?.phone;
-                      window.open(`tel:${phoneNumber}`, '_self');
-                    }}
-                  >
-                    <Phone className="w-6 h-6 mr-3" />
-                    Call Owner
-                  </Button>
-                </motion.div>
+                  <Phone className="w-5 h-5 mr-2" />
+                  Call Owner
+                </Button>
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-5 bg-white rounded-2xl shadow-lg border border-gray-100 p-2 mb-6">
+          <TabsList className="grid w-full grid-cols-3 bg-gray-100 rounded-lg p-1 mb-4">
             <TabsTrigger
               value="overview"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
+              className="data-[state=active]:bg-white data-[state=active]:text-gray-900 rounded-md font-medium"
             >
               Overview
             </TabsTrigger>
             <TabsTrigger
               value="availability"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
+              className="data-[state=active]:bg-white data-[state=active]:text-gray-900 rounded-md font-medium"
             >
               Availability
             </TabsTrigger>
             <TabsTrigger
               value="games"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
+              className="data-[state=active]:bg-white data-[state=active]:text-gray-900 rounded-md font-medium"
             >
               Games
-            </TabsTrigger>
-            <TabsTrigger
-              value="reviews"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
-            >
-              Reviews
-            </TabsTrigger>
-            <TabsTrigger
-              value="gallery"
-              className="hidden lg:block data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg rounded-xl font-semibold transition-all"
-            >
-              Gallery
             </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
+          <TabsContent value="overview" className="space-y-4">
             {/* Description */}
             {turf.description && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-              >
-                <Card className="border-2 border-emerald-50 shadow-xl overflow-hidden">
-                  <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-6">
-                    <CardTitle className="flex items-center gap-3 text-white">
-                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                        <Trophy className="w-6 h-6 text-white" />
-                      </div>
-                      <span className="text-2xl">About This Turf</span>
-                    </CardTitle>
-                  </div>
-                  <CardContent className="p-8">
-                    <p className="text-gray-700 leading-relaxed text-lg">{turf.description}</p>
-                  </CardContent>
-                </Card>
-              </motion.div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">About</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700">{turf.description}</p>
+                </CardContent>
+              </Card>
             )}
 
-            {/* Amenities */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-            >
-              <Card className="border-2 border-blue-50 shadow-xl overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6">
-                  <CardTitle className="flex items-center gap-3 text-white">
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                      <Award className="w-6 h-6 text-white" />
-                    </div>
-                    <span className="text-2xl">Facilities & Amenities</span>
-                  </CardTitle>
-                </div>
-                <CardContent className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {turf.amenities?.map((amenity, index) => {
-                      const amenityData = amenityIcons[amenity.toLowerCase().replace(' ', '_')] ||
-                                         { icon: CheckCircle, label: amenity, color: 'text-gray-600' };
-                      const AmenityIcon = amenityData.icon;
-
-                      return (
-                        <motion.div
-                          key={amenity}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.1 + index * 0.05 }}
-                          className="flex items-center gap-4 p-4 bg-gradient-to-br from-gray-50 to-white rounded-xl border-2 border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all"
-                        >
-                          <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center`}>
-                            <AmenityIcon className={`w-6 h-6 ${amenityData.color}`} />
-                          </div>
-                          <span className="text-base font-semibold text-gray-700">{amenityData.label}</span>
-                        </motion.div>
-                      );
-                    })}
+            {/* Turf Dimensions */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Turf Specifications</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Length</p>
+                    <p className="font-medium">60 ft</p>
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                  <div>
+                    <p className="text-sm text-gray-500">Width</p>
+                    <p className="font-medium">40 ft</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Height</p>
+                    <p className="font-medium">20 ft</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Grounds</p>
+                    <p className="font-medium">1 Box</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pricing Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Pricing</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Weekdays</p>
+                    <p className="font-medium text-emerald-600">₹600/hour</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Weekends</p>
+                    <p className="font-medium text-emerald-600">₹800/hour</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Facilities & Equipment */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Facilities</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {turf.amenities?.map((amenity) => {
+                    const amenityData = amenityIcons[amenity.toLowerCase().replace(' ', '_')] ||
+                                       { icon: CheckCircle, label: amenity, color: 'text-gray-600' };
+                    const AmenityIcon = amenityData.icon;
+
+                    return (
+                      <div key={amenity} className="flex items-center gap-2">
+                        <AmenityIcon className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm text-gray-700">{amenityData.label}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm text-gray-700">Equipment Provided</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm text-gray-700">Good Net Condition</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm text-gray-700">Well-maintained Grass</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Operating Hours */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-              <Card className="border-2 border-orange-50 shadow-xl overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6">
-                  <CardTitle className="flex items-center gap-3 text-white">
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                      <Clock className="w-6 h-6 text-white" />
-                    </div>
-                    <span className="text-2xl">Operating Hours</span>
-                  </CardTitle>
-                </div>
-                <CardContent className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="flex items-center gap-4 p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl border-2 border-blue-200 shadow-md"
-                    >
-                      <div className="w-14 h-14 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                        <Sun className="w-7 h-7 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-lg text-gray-900">Weekdays</p>
-                        <p className="text-base text-gray-700 font-medium">6:00 AM - 12:00 AM</p>
-                      </div>
-                    </motion.div>
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="flex items-center gap-4 p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl border-2 border-orange-200 shadow-md"
-                    >
-                      <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                        <Moon className="w-7 h-7 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-lg text-gray-900">Weekends</p>
-                        <p className="text-base text-gray-700 font-medium">6:00 AM - 12:00 AM</p>
-                      </div>
-                    </motion.div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Operating Hours</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Start Time</span>
+                    <span className="font-medium">6:00 AM</span>
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Location - Google Maps Only */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-            >
-              <Card className="border-2 border-purple-50 shadow-xl overflow-hidden">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6">
-                  <CardTitle className="flex items-center gap-3 text-white">
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                      <MapPin className="w-6 h-6 text-white" />
-                    </div>
-                    <span className="text-2xl">Location & Directions</span>
-                  </CardTitle>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">End Time</span>
+                    <span className="font-medium">12:00 AM</span>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Owner Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Owner & Contact</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Owner Name</span>
+                    <span className="font-medium">Contact via WhatsApp</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Booking Channel</span>
+                    <span className="font-medium">WhatsApp / Call</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Location */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Location</CardTitle>
+              </CardHeader>
                 <CardContent className="p-6">
                   <div className="border-2 border-gray-200 rounded-2xl overflow-hidden shadow-lg">
                     {(() => {
