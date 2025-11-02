@@ -861,8 +861,7 @@ export function TurfDetailPageEnhanced({
                     </div>
                   </div>
                 </CardContent>
-              </Card>
-            </motion.div>
+            </Card>
           </TabsContent>
 
           {/* Availability Tab */}
