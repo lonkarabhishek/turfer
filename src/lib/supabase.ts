@@ -632,8 +632,10 @@ export const gameHelpers = {
   // Get a specific game by ID
   async getGameById(gameId: string) {
     try {
-      // First try to get from database
-      const { data: dbGame, error: dbError } = await supabase
+      console.log('🔍 Getting game by ID:', gameId);
+
+      // First try with foreign key relationship
+      let { data: dbGame, error: dbError } = await supabase
         .from('games')
         .select(`
           *,
@@ -647,13 +649,41 @@ export const gameHelpers = {
         .eq('id', gameId)
         .single();
 
+      // If foreign key query fails, try simplified query
+      if (dbError) {
+        console.log('⚠️ Join query failed, trying simplified query:', dbError);
+        const result = await supabase
+          .from('games')
+          .select('*')
+          .eq('id', gameId)
+          .single();
+
+        dbGame = result.data;
+        dbError = result.error;
+
+        // If game found, try to fetch turf separately
+        if (dbGame && dbGame.turf_id) {
+          const { data: turfData } = await supabase
+            .from('turfs')
+            .select('id, name, address, price_per_hour')
+            .eq('id', dbGame.turf_id)
+            .single();
+
+          if (turfData) {
+            dbGame.turfs = turfData;
+          }
+        }
+      }
+
+      console.log('📊 Database query result for game', gameId, ':', dbGame);
+
       if (!dbError && dbGame) {
-        console.log('Found game in database:', dbGame);
+        console.log('✅ Found game in database:', dbGame);
         return { data: dbGame, error: null };
       }
 
       // If not found in database, check localStorage
-      console.log('Game not found in database, checking localStorage...');
+      console.log('⚠️ Game not found in database, checking localStorage...');
       const frontendGames = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
       const frontendGame = frontendGames.find((game: any) => game.id === gameId);
 
@@ -667,7 +697,7 @@ export const gameHelpers = {
             pricePerHour: frontendGame.turfId === '1' ? 800 : 600
           };
         }
-        
+
         if (!frontendGame.users && frontendGame.creator_id) {
           frontendGame.users = {
             id: frontendGame.creator_id,
@@ -675,26 +705,28 @@ export const gameHelpers = {
             phone: null
           };
         }
-        
-        console.log('Found game in localStorage:', frontendGame);
+
+        console.log('✅ Found game in localStorage:', frontendGame);
         return { data: frontendGame, error: null };
       }
 
       // Game not found anywhere
+      console.log('❌ Game not found anywhere');
       return { data: null, error: 'Game not found' };
 
     } catch (error: any) {
-      console.error('Error fetching game by ID:', error);
-      
+      console.error('❌ Error fetching game by ID:', error);
+
       // Fallback to localStorage only
       try {
         const frontendGames = JSON.parse(localStorage.getItem('tapturf_frontend_games') || '[]');
         const frontendGame = frontendGames.find((game: any) => game.id === gameId);
-        
+
         if (frontendGame) {
+          console.log('✅ Found game in localStorage (fallback):', frontendGame);
           return { data: frontendGame, error: null };
         }
-        
+
         return { data: null, error: 'Game not found' };
       } catch (localError) {
         return { data: null, error: error.message };
