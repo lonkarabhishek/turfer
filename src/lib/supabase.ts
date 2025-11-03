@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { convertImageUrls, convertGoogleDriveUrl } from './imageUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://hwfsbpzercuoshodmnuf.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo';
@@ -837,7 +838,10 @@ export const turfHelpers = {
         createdAt: turf.created_at,
         updatedAt: turf.updated_at,
         externalReviewUrl: turf.external_review_url,
-        coverImage: turf.cover_image
+        coverImage: turf.cover_image ? convertGoogleDriveUrl(turf.cover_image) : turf.cover_image,
+        images: Array.isArray(turf.images) ? convertImageUrls(turf.images) : turf.images,
+        signboard_image: turf.signboard_image ? convertGoogleDriveUrl(turf.signboard_image) : turf.signboard_image,
+        entry_parking_image: turf.entry_parking_image ? convertGoogleDriveUrl(turf.entry_parking_image) : turf.entry_parking_image
       }));
 
       return { data: transformedData, error: null };
@@ -878,7 +882,10 @@ export const turfHelpers = {
         createdAt: data.created_at,
         updatedAt: data.updated_at,
         externalReviewUrl: data.external_review_url,
-        coverImage: data.cover_image
+        coverImage: data.cover_image ? convertGoogleDriveUrl(data.cover_image) : data.cover_image,
+        images: Array.isArray(data.images) ? convertImageUrls(data.images) : data.images,
+        signboard_image: data.signboard_image ? convertGoogleDriveUrl(data.signboard_image) : data.signboard_image,
+        entry_parking_image: data.entry_parking_image ? convertGoogleDriveUrl(data.entry_parking_image) : data.entry_parking_image
       } : null;
 
       return { data: transformedData, error: null };
