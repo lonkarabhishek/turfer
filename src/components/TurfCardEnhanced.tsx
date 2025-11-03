@@ -1,18 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import {
-  MapPin, Star, Clock, Users, Phone, MessageCircle, Wifi, Car, Coffee,
-  Calendar, Heart, ChevronLeft, ChevronRight, Badge as BadgeIcon,
-  Zap, Navigation, TrendingUp, Eye, DollarSign, Award,
-  CheckCircle, Shield, Verified, ExternalLink
-} from 'lucide-react';
+import { MapPin, Star, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { WhatsAppFallback } from './WhatsAppFallback';
+import { BookingModal } from './BookingModal';
 import { generateBookingMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
-import { predictAvailability } from '../lib/availabilityPredictor';
 
 export interface TurfData {
   id: string;
@@ -38,6 +33,8 @@ export interface TurfData {
   responseTime?: string;
   instantBook?: boolean;
   gmap_embed_link?: string;
+  external_review_url?: string;
+  cover_image?: string;
 }
 
 interface TurfCardEnhancedProps {
@@ -49,91 +46,34 @@ interface TurfCardEnhancedProps {
   showStats?: boolean;
 }
 
-const amenityIcons: Record<string, React.ComponentType<any>> = {
-  'parking': Car,
-  'wifi': Wifi,
-  'washroom': Users,
-  'canteen': Coffee,
-  'security': Shield,
-  'flood_lights': Zap,
-  'changing_room': Users
-};
-
-// Placeholder image helper
-const getPlaceholderImage = (width: number, height: number, text: string = 'Turf') => {
-  return `https://placehold.co/${width}x${height}/10b981/ffffff?text=${encodeURIComponent(text)}`;
-};
-
-// Convert Google Drive sharing link to direct image URL
-const convertGoogleDriveUrl = (url: string): string => {
-  if (!url) return '';
-
-  // If it's already a direct link, return as is
-  if (!url.includes('drive.google.com') && !url.includes('drive.usercontent.google.com')) return url;
-
-  // Extract file ID from various Google Drive URL formats
-  let fileId = '';
-
-  // Format: https://drive.google.com/file/d/FILE_ID/view
-  const match1 = url.match(/\/file\/d\/([^\/\?]+)/);
-  if (match1) fileId = match1[1];
-
-  // Format: https://drive.google.com/open?id=FILE_ID
-  const match2 = url.match(/[?&]id=([^&]+)/);
-  if (match2) fileId = match2[1];
-
-  // Format: https://drive.google.com/uc?id=FILE_ID
-  const match3 = url.match(/\/uc\?.*id=([^&]+)/);
-  if (match3) fileId = match3[1];
-
-  // Return direct image URL if we found a file ID
-  // Using thumbnail format which works better for images
-  if (fileId) {
-    const convertedUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-    console.log('🔄 Google Drive URL converted:', { original: url, converted: convertedUrl, fileId });
-    return convertedUrl;
-  }
-
-  console.log('❌ Could not extract file ID from:', url);
-  // If no file ID found, return original URL
-  return url;
-};
-
-export function TurfCardEnhanced({
-  turf,
-  onBook,
-  variant = 'default',
-  onClick,
-  user,
-  showStats = false
-}: TurfCardEnhancedProps) {
+export function TurfCardEnhanced({ turf, onBook, variant = 'default', onClick, user, showStats }: TurfCardEnhancedProps) {
   const [showWhatsAppFallback, setShowWhatsAppFallback] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
-  // Get availability prediction
-  const availability = predictAvailability(turf.rating, turf.totalReviews);
-
-  const handleWhatsAppClick = (e: React.MouseEvent) => {
+  const handleBookClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const phone = (turf.contact_info as any)?.phone || turf.contacts?.phone;
-    if (!phone) return;
-
-    const message = generateBookingMessage(turf);
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
-
-    const newWindow = window.open(whatsappUrl, '_blank');
-
-    setTimeout(() => {
-      if (newWindow && !newWindow.closed) {
-        newWindow.close();
-      }
-      setShowWhatsAppFallback(true);
-    }, 3000);
+    analytics.bookingAttempted(turf.id, turf.nextAvailable || 'TBD', 10);
+    setShowBookingModal(true);
+    onBook?.(turf);
   };
 
-  const handleLikeClick = (e: React.MouseEvent) => {
+  const handleWhatsAppFallback = () => {
+    const phone = (turf.contact_info as any)?.phone || turf.contacts?.phone;
+    if (phone) {
+      setShowWhatsAppFallback(true);
+      analytics.whatsappClicked('booking', 'turf_card');
+    }
+  };
+
+  const handleCardClick = () => {
+    analytics.cardViewed('turf', turf.id, turf.name);
+    onClick?.();
+  };
+
+  const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsLiked(!isLiked);
     track('turf_liked', { turf_id: turf.id, liked: !isLiked });
@@ -141,350 +81,201 @@ export function TurfCardEnhanced({
 
   const nextImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentImageIndex((prev) => (prev + 1) % turf.images.length);
+    if (turf.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev + 1) % turf.images.length);
+    }
   };
 
   const prevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentImageIndex((prev) => (prev - 1 + turf.images.length) % turf.images.length);
+    if (turf.images.length > 1) {
+      setCurrentImageIndex((prev) => (prev - 1 + turf.images.length) % turf.images.length);
+    }
   };
 
-  const formatAmenity = (amenity: string) => {
-    return amenity.split('_').map(word =>
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
-  };
+  const validImages = turf.images?.filter(img => img && img.trim() !== '') || [];
+  const hasMultipleImages = validImages.length > 1;
 
-  if (variant === 'compact') {
-    return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        whileHover={{ y: -2 }}
-        transition={{ duration: 0.2 }}
-      >
-        <Card className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={onClick}>
-          <div className="flex">
-            {/* Image */}
-            <div className="relative w-24 h-24 flex-shrink-0">
-              <img
-                src={turf.images?.[0] ? convertGoogleDriveUrl(turf.images[0]) : getPlaceholderImage(150, 150, 'Turf')}
-                alt={turf.name}
-                className="w-full h-full object-cover"
-                onLoad={() => setImageLoaded(true)}
-              />
-              {turf.isVerified && (
-                <div className="absolute top-1 right-1">
-                  <Verified className="w-4 h-4 text-blue-500" />
-                </div>
-              )}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 p-3">
-              <div className="flex items-start justify-between mb-1">
-                <h3 className="font-semibold text-sm leading-tight">{turf.name}</h3>
-                <button onClick={handleLikeClick} className="p-1">
-                  <Heart className={`w-4 h-4 ${isLiked ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1 mb-1">
-                <Star className="w-3.5 h-3.5 text-gray-900 fill-current" />
-                <span className="text-xs font-semibold text-gray-900">{turf.rating}</span>
-                <span className="text-xs text-gray-600">({turf.totalReviews} reviews)</span>
-              </div>
-
-              {turf.distanceKm && (
-                <div className="text-xs text-gray-500 mb-2">
-                  {turf.distanceKm.toFixed(1)} km away
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-semibold text-emerald-600">{turf.priceDisplay}</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-    );
-  }
-
-  if (variant === 'featured') {
-    return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.02 }}
-        transition={{ duration: 0.3 }}
-      >
-        <Card className="overflow-hidden cursor-pointer shadow-lg hover:shadow-xl transition-all duration-300 border-0 bg-gradient-to-br from-white to-emerald-50" onClick={onClick}>
-          {/* Image with Overlay */}
-          <div className="relative h-48 overflow-hidden">
-            <motion.img
-              key={currentImageIndex}
-              src={turf.images?.[currentImageIndex] ? convertGoogleDriveUrl(turf.images[currentImageIndex]) : getPlaceholderImage(400, 300, turf.name)}
-              alt={turf.name}
-              className="w-full h-full object-cover"
-              onLoad={() => setImageLoaded(true)}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.15, ease: "easeInOut" }}
-            />
-
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-
-            {/* Badges */}
-            <div className="absolute top-3 left-3 flex flex-wrap gap-1">
-              {turf.isPopular && (
-                <Badge className="bg-orange-500 text-white text-xs">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Popular
-                </Badge>
-              )}
-              {turf.isVerified && (
-                <Badge className="bg-blue-500 text-white text-xs">
-                  <Verified className="w-3 h-3 mr-1" />
-                  Verified
-                </Badge>
-              )}
-              {turf.instantBook && (
-                <Badge className="bg-green-500 text-white text-xs">
-                  <Zap className="w-3 h-3 mr-1" />
-                  Instant Book
-                </Badge>
-              )}
-            </div>
-
-            {/* Heart Button */}
-            <button
-              onClick={handleLikeClick}
-              className="absolute top-3 right-3 p-2 bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 transition-colors"
-            >
-              <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-            </button>
-
-            {/* Image Navigation */}
-            {turf.images.length > 1 && (
-              <>
-                <button
-                  onClick={prevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-1 bg-black/30 rounded-full hover:bg-black/50 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4 text-white" />
-                </button>
-                <button
-                  onClick={nextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 bg-black/30 rounded-full hover:bg-black/50 transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4 text-white" />
-                </button>
-                <div className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                  {currentImageIndex + 1}/{turf.images.length}
-                </div>
-              </>
-            )}
-
-            {/* Quick Stats */}
-            {showStats && (
-              <div className="absolute bottom-3 left-3 flex gap-2">
-                <div className="bg-black/50 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-                  <Eye className="w-3 h-3" />
-                  {Math.floor(Math.random() * 500) + 100}
-                </div>
-                <div className="bg-black/50 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {turf.totalBookings || Math.floor(Math.random() * 200) + 50}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <CardContent className="p-4">
-            {/* Header */}
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="font-bold text-lg leading-tight">{turf.name}</h3>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <Star className="w-4 h-4 text-gray-900 fill-current" />
-                <span className="font-semibold text-sm text-gray-900">{turf.rating}</span>
-                <span className="text-sm text-gray-600">({turf.totalReviews})</span>
-              </div>
-            </div>
-
-            {/* Distance */}
-            {turf.distanceKm && (
-              <div className="text-sm text-gray-600 mb-3">
-                {turf.distanceKm.toFixed(1)} km away
-              </div>
-            )}
-
-            {/* Sports */}
-            <div className="flex flex-wrap gap-1 mb-3">
-              {turf.slots?.slice(0, 3).map((sport) => (
-                <Badge key={sport} variant="outline" className="text-xs">
-                  {sport}
-                </Badge>
-              ))}
-              {turf.slots && turf.slots.length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{turf.slots.length - 3} more
-                </Badge>
-              )}
-            </div>
-
-            {/* Amenities */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {turf.amenities?.slice(0, 4).map((amenity) => {
-                const IconComponent = amenityIcons[amenity.toLowerCase().replace(' ', '_')] || CheckCircle;
-                return (
-                  <div key={amenity} className="flex items-center gap-1 text-xs text-gray-600">
-                    <IconComponent className="w-3 h-3" />
-                    <span>{formatAmenity(amenity)}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Footer */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-lg font-bold text-emerald-600">{turf.priceDisplay}</span>
-                  {turf.responseTime && (
-                    <span className="text-xs text-gray-500">Responds in {turf.responseTime}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-    );
-  }
-
-  // Default variant
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4, scale: 1.01 }}
-      transition={{ duration: 0.2 }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      className="group w-full"
     >
-      <Card className="overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-300" onClick={onClick}>
-        {/* Image */}
-        <div className="relative h-48 overflow-hidden">
-          <motion.img
-            key={currentImageIndex}
-            src={turf.images?.[currentImageIndex] ? convertGoogleDriveUrl(turf.images[currentImageIndex]) : getPlaceholderImage(400, 300, turf.name)}
-            alt={turf.name}
-            className="w-full h-full object-cover"
-            onLoad={() => setImageLoaded(true)}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            whileHover={{ scale: 1.05 }}
-            transition={{ duration: 0.15, ease: "easeInOut" }}
-          />
+      <Card
+        className="overflow-hidden bg-white rounded-2xl border-0 cursor-pointer transition-shadow duration-300 hover:shadow-xl"
+        onClick={handleCardClick}
+      >
+        {/* Image Gallery - Larger, more prominent */}
+        <div className="relative w-full aspect-[4/3] overflow-hidden">
+          {validImages.length > 0 ? (
+            <>
+              <div className="relative w-full h-full">
+                <img
+                  src={validImages[currentImageIndex]}
+                  alt={`${turf.name}`}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%2310b981;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23059669;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='400' height='300' fill='url(%23grad)'/%3E%3Ctext x='200' y='140' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='48' opacity='0.8'%3E🏟️%3C/text%3E%3Ctext x='200' y='190' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='14' font-weight='500'%3E${encodeURIComponent(turf.name)}%3C/text%3E%3C/svg%3E`;
+                  }}
+                />
+              </div>
 
-          {/* Quick Badges */}
-          <div className="absolute top-2 left-2 flex flex-col gap-1">
-            {turf.isPopular && (
-              <Badge className="bg-orange-500 text-white text-xs">Popular</Badge>
-            )}
-            {turf.isVerified && (
-              <Badge className="bg-blue-500 text-white text-xs">
-                <Verified className="w-3 h-3 mr-1" />
-                Verified
-              </Badge>
-            )}
-          </div>
+              {/* Image Navigation - Show on hover */}
+              {hasMultipleImages && isHovered && (
+                <>
+                  <button
+                    onClick={prevImage}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-200 z-10"
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-800" />
+                  </button>
+                  <button
+                    onClick={nextImage}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-200 z-10"
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-800" />
+                  </button>
+                </>
+              )}
 
-          {/* Heart Button */}
+              {/* Image Dots - Always visible */}
+              {hasMultipleImages && (
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                  {validImages.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImageIndex(index);
+                      }}
+                      className={`w-1.5 h-1.5 rounded-full transition-all duration-200 ${
+                        index === currentImageIndex ? 'bg-white w-4' : 'bg-white/60'
+                      }`}
+                      aria-label={`Go to image ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-600 flex items-center justify-center">
+              <div className="text-center text-white">
+                <div className="text-5xl mb-2 opacity-80">🏟️</div>
+                <div className="text-sm font-medium opacity-90">{turf.name}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Heart/Like button - Top right */}
           <button
-            onClick={handleLikeClick}
-            className="absolute top-2 right-2 p-2 bg-white/80 backdrop-blur-sm rounded-full hover:bg-white transition-colors"
+            onClick={handleLike}
+            className="absolute top-3 right-3 w-8 h-8 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-200 shadow-sm hover:scale-105 z-10"
+            aria-label={`${isLiked ? 'Remove from' : 'Add to'} favorites`}
           >
-            <Heart className={`w-4 h-4 ${isLiked ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+            <Heart
+              className={`w-4 h-4 transition-all duration-200 ${
+                isLiked
+                  ? 'fill-red-500 text-red-500'
+                  : 'text-gray-700 hover:text-red-500'
+              }`}
+            />
           </button>
 
-          {/* Image Navigation */}
-          {turf.images.length > 1 && (
-            <>
-              <button
-                onClick={prevImage}
-                className="absolute left-2 top-1/2 -translate-y-1/2 p-1 bg-black/30 rounded-full hover:bg-black/50 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4 text-white" />
-              </button>
-              <button
-                onClick={nextImage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 bg-black/30 rounded-full hover:bg-black/50 transition-colors"
-              >
-                <ChevronRight className="w-4 h-4 text-white" />
-              </button>
-            </>
+          {/* Popular badge - Top left (minimal) */}
+          {turf.isPopular && (
+            <div className="absolute top-3 left-3">
+              <Badge className="bg-white/90 text-gray-800 shadow-sm backdrop-blur-sm border-0 text-xs font-medium px-2 py-0.5">
+                Popular
+              </Badge>
+            </div>
           )}
         </div>
 
-        <CardContent className="p-4">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-2">
-            <h3 className="font-semibold text-lg leading-tight">{turf.name}</h3>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Star className="w-4 h-4 text-gray-900 fill-current" />
-              <span className="font-semibold text-sm text-gray-900">{turf.rating}</span>
-              <span className="text-sm text-gray-600">({turf.totalReviews})</span>
+        {/* Card Content - Minimal, clean */}
+        <CardContent className="p-3">
+          {/* Location and Rating row */}
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-[15px] text-gray-900 truncate">
+                {turf.name}
+              </h3>
+              <button
+                className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 transition-colors mt-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const mapsUrl = turf.coords
+                    ? `https://maps.google.com/maps?q=${turf.coords.lat},${turf.coords.lng}&z=15`
+                    : `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
+                  window.open(mapsUrl, '_blank');
+                  track('whatsapp_cta_clicked', { action: 'google_maps', context: 'turf_card', turf_id: turf.id });
+                }}
+                title="Open in Google Maps"
+              >
+                <span className="truncate text-sm text-gray-600">{turf.address}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <Star className="w-3.5 h-3.5 fill-gray-900 text-gray-900" />
+              <span className="font-medium text-sm text-gray-900">{Number(turf.rating).toFixed(1)}</span>
             </div>
           </div>
 
           {/* Distance */}
-          {turf.distanceKm && (
-            <div className="text-sm text-gray-600 mb-3">
+          {typeof turf.distanceKm === 'number' && (
+            <div className="text-xs text-gray-500 mb-2">
               {turf.distanceKm.toFixed(1)} km away
             </div>
           )}
 
-          {/* Sports & Amenities */}
-          <div className="space-y-2 mb-4">
-            <div className="flex flex-wrap gap-1">
-              {turf.slots?.slice(0, 3).map((sport) => (
-                <Badge key={sport} variant="outline" className="text-xs">
-                  {sport}
-                </Badge>
-              ))}
+          {/* Amenities - Minimal display */}
+          {turf.amenities.length > 0 && (
+            <div className="text-xs text-gray-600 mb-2 truncate">
+              {turf.amenities.slice(0, 2).join(' · ')}
+              {turf.amenities.length > 2 && ` · +${turf.amenities.length - 2}`}
             </div>
+          )}
 
-            <div className="flex items-center gap-3 text-xs text-gray-600">
-              {turf.amenities?.slice(0, 3).map((amenity) => {
-                const IconComponent = amenityIcons[amenity.toLowerCase().replace(' ', '_')] || CheckCircle;
-                return (
-                  <div key={amenity} className="flex items-center gap-1">
-                    <IconComponent className="w-3 h-3" />
-                    <span>{formatAmenity(amenity)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-emerald-600">{turf.priceDisplay}</span>
+          {/* Price - Prominent */}
+          <div className="flex items-baseline gap-1 mt-2 pt-2 border-t border-gray-100">
+            <span className="font-semibold text-[15px] text-gray-900">
+              {turf.priceDisplay}
+            </span>
+            <span className="text-sm text-gray-600">per hour</span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Modals */}
-      {showWhatsAppFallback && (
+      {/* Booking Modal */}
+      <BookingModal
+        open={showBookingModal}
+        onClose={() => setShowBookingModal(false)}
+        turf={turf}
+        onBookingSuccess={(booking) => {
+          console.log('Booking successful:', booking);
+          setShowBookingModal(false);
+        }}
+      />
+
+      {/* WhatsApp Fallback Modal */}
+      {showWhatsAppFallback && ((turf.contact_info as any)?.phone || turf.contacts?.phone) && (
         <WhatsAppFallback
-          turf={turf}
+          isOpen={showWhatsAppFallback}
           onClose={() => setShowWhatsAppFallback(false)}
+          phone={(turf.contact_info as any)?.phone || turf.contacts?.phone || ''}
+          message={generateBookingMessage({
+            turfName: turf.name,
+            address: turf.address,
+            date: 'Today',
+            slot: turf.nextAvailable || 'Next available',
+            players: 10,
+            notes: 'Found via TapTurf app'
+          })}
+          context="turf_booking"
         />
       )}
     </motion.div>

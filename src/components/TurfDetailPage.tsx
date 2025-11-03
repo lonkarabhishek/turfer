@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  MapPin, Star, Clock, Users, Wifi, Car, WashingMachine, 
-  Coffee, Shield, Phone, ArrowLeft, ChevronLeft, 
-  ChevronRight, Plus, Heart, Share2, Calendar, 
-  CheckCircle, X, PlayCircle, Image as ImageIcon
+import {
+  MapPin, Star, Users, Wifi, Car, WashingMachine,
+  Coffee, Shield, ArrowLeft, ChevronLeft,
+  ChevronRight, Heart, Share2, Calendar,
+  CheckCircle, X, Image as ImageIcon, Phone, MessageSquare
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -13,6 +13,7 @@ import { turfsAPI, bookingsAPI, gamesAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import type { TurfData } from './TurfCard';
 import { GameCard, type GameData } from './GameCard';
+import { TurfReviewSystem } from './TurfReviewSystem';
 
 interface TurfDetailPageProps {
   turfId: string;
@@ -49,7 +50,7 @@ const timeSlots = [
 ];
 
 export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [turf, setTurf] = useState<TurfData | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -67,7 +68,6 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
     loadAvailability();
   }, [turfId]);
 
-  // Load games after turf is loaded
   useEffect(() => {
     if (turf?.name) {
       loadTurfGames();
@@ -88,7 +88,6 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
   };
 
   const loadAvailability = async () => {
-    // Mock availability data - replace with actual API call
     const mockAvailability = [
       {
         date: new Date().toISOString().split('T')[0],
@@ -105,23 +104,19 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
   const loadTurfGames = async () => {
     setLoadingGames(true);
     try {
-      // Get all available games and filter by turf
       const response = await gamesAPI.getAvailable();
       if (response.success && response.data) {
-        // Filter games that are at this specific turf
         const turfGames = response.data.filter((game: any) => {
           const gameTurfName = game.turfs?.name || game.turf_name || game.turfName || '';
           return gameTurfName.toLowerCase() === turf?.name.toLowerCase();
         }).map((game: any) => {
-          // Transform to GameData format
           const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
           const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
           const turfName = game.turfs?.name || game.turf_name || game.turfName || "Unknown Turf";
           const turfAddress = game.turfs?.address || game.turf_address || game.turfAddress || "Unknown Address";
-          
           const startTime = game.start_time || game.startTime || "00:00";
           const endTime = game.end_time || game.endTime || "00:00";
-          
+
           return {
             id: game.id,
             hostName: hostName,
@@ -159,10 +154,9 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
       alert('Please sign in to book slots');
       return;
     }
-    
+
     setBooking(true);
     try {
-      // Implement booking logic
       console.log('Booking slot:', slot);
     } catch (error) {
       console.error('Booking error:', error);
@@ -188,7 +182,7 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
@@ -196,11 +190,11 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
 
   if (!turf) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center space-y-4">
           <div className="text-6xl">🏟️</div>
           <div className="text-xl font-semibold text-gray-900">Turf not found</div>
-          <Button onClick={onBack} variant="outline">
+          <Button onClick={onBack} variant="outline" className="rounded-full">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Go Back
           </Button>
@@ -209,291 +203,325 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
     );
   }
 
+  // Mock reviews data - replace with actual API data
+  const mockReviews = [
+    {
+      id: '1',
+      user: {
+        id: 'user1',
+        name: 'Rajesh Kumar',
+        avatar: '',
+        totalReviews: 12,
+        joinedDate: '2023-01-15'
+      },
+      rating: 5,
+      title: 'Excellent turf with great maintenance',
+      comment: 'The turf quality is outstanding. Well-maintained grass, proper lighting for night games, and friendly staff. Definitely worth the price!',
+      date: '2024-10-15',
+      verified: true,
+      helpful: 24,
+      notHelpful: 2,
+      visitDate: '2024-10-10',
+      gameType: 'Football'
+    },
+    {
+      id: '2',
+      user: {
+        id: 'user2',
+        name: 'Priya Sharma',
+        avatar: '',
+        totalReviews: 8,
+        joinedDate: '2023-05-20'
+      },
+      rating: 4,
+      title: 'Good facilities, could be better',
+      comment: 'Overall good experience. The changing rooms are clean and parking is convenient. However, could use better seating arrangements for spectators.',
+      date: '2024-10-12',
+      verified: true,
+      helpful: 15,
+      notHelpful: 1,
+      visitDate: '2024-10-08',
+      gameType: 'Cricket'
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header with back button */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Button 
-            onClick={onBack}
-            variant="ghost"
-            size="sm"
-            className="rounded-full hover:bg-gray-100"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Back
-          </Button>
-          
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-white">
+      {/* Minimalist Header */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between">
             <Button
+              onClick={onBack}
               variant="ghost"
               size="sm"
-              onClick={() => setIsLiked(!isLiked)}
-              className="rounded-full hover:bg-gray-100"
+              className="rounded-full hover:bg-gray-100 px-2 sm:px-3"
             >
-              <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 sm:mr-2" />
+              <span className="hidden sm:inline">Back</span>
             </Button>
-            <Button variant="ghost" size="sm" className="rounded-full hover:bg-gray-100">
-              <Share2 className="w-5 h-5 text-gray-600" />
-            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsLiked(!isLiked)}
+                className="rounded-full hover:bg-gray-100 px-2 sm:px-3"
+              >
+                <Heart className={`w-4 h-4 sm:w-5 sm:h-5 ${isLiked ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+                <span className="hidden sm:inline sm:ml-2">Save</span>
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-full hover:bg-gray-100 px-2 sm:px-3">
+                <Share2 className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                <span className="hidden sm:inline sm:ml-2">Share</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {/* Hero Image Gallery */}
-        <div className="relative mb-6 sm:mb-8">
-          <motion.div
-            className="relative aspect-[21/9] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-emerald-400 to-emerald-600"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            {validImages.length > 0 ? (
-              <>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        {/* Title Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 sm:mb-6"
+        >
+          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-2">{turf.name}</h1>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <div className="flex items-center gap-1">
+              <Star className="w-4 h-4 fill-gray-900 text-gray-900" />
+              <span className="font-medium">{Number(turf.rating).toFixed(2)}</span>
+              <span className="text-gray-600">({turf.totalReviews} reviews)</span>
+            </div>
+            <span className="text-gray-400">·</span>
+            <button
+              className="underline text-gray-900 hover:text-gray-700"
+              onClick={() => {
+                const mapsUrl = turf.coords
+                  ? `https://maps.google.com/maps?q=${turf.coords.lat},${turf.coords.lng}&z=15`
+                  : `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
+                window.open(mapsUrl, '_blank');
+              }}
+            >
+              {turf.address}
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Image Grid - Airbnb Style */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-8 sm:mb-12"
+        >
+          {validImages.length > 0 ? (
+            <div className="grid grid-cols-4 gap-2 rounded-xl overflow-hidden h-[50vh] sm:h-[60vh] cursor-pointer"
+              onClick={() => setShowImageGallery(true)}
+            >
+              {/* Main image */}
+              <div className="col-span-4 sm:col-span-2 sm:row-span-2 relative group">
                 <img
-                  src={validImages[currentImageIndex]}
-                  alt={`${turf.name} - Image ${currentImageIndex + 1}`}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='343' viewBox='0 0 800 343'%3E%3Cdefs%3E%3ClinearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%2310b981;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23059669;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='800' height='343' fill='url(%23grad)'/%3E%3Ctext x='400' y='150' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='64' opacity='0.8'%3E🏟️%3C/text%3E%3Ctext x='400' y='220' text-anchor='middle' dy='.3em' fill='white' font-family='system-ui' font-size='24' font-weight='500'%3E${encodeURIComponent(turf.name)}%3C/text%3E%3C/svg%3E`;
-                  }}
+                  src={validImages[0]}
+                  alt={turf.name}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
-
-                {/* Navigation */}
-                {hasMultipleImages && (
-                  <>
-                    <button
-                      onClick={prevImage}
-                      className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
-                    >
-                      <ChevronLeft className="w-6 h-6 text-gray-700" />
-                    </button>
-                    <button
-                      onClick={nextImage}
-                      className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
-                    >
-                      <ChevronRight className="w-6 h-6 text-gray-700" />
-                    </button>
-                  </>
-                )}
-
-                {/* Gallery button */}
-                {validImages.length > 1 && (
-                  <button
-                    onClick={() => setShowImageGallery(true)}
-                    className="absolute bottom-6 right-6 bg-white/90 hover:bg-white rounded-full px-4 py-2 shadow-lg transition-all duration-200 flex items-center gap-2"
-                  >
-                    <ImageIcon className="w-4 h-4" />
-                    <span className="text-sm font-medium">View all {validImages.length} photos</span>
-                  </button>
-                )}
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center text-white">
-                  <div className="text-8xl mb-4 opacity-80">🏟️</div>
-                  <div className="text-3xl font-bold">{turf.name}</div>
-                  <div className="text-xl opacity-80 mt-2">Sports Facility</div>
-                </div>
               </div>
-            )}
-          </motion.div>
-        </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
+              {/* Side images */}
+              {validImages.slice(1, 5).map((img, idx) => (
+                <div key={idx} className="hidden sm:block col-span-2 sm:col-span-1 relative group">
+                  <img
+                    src={img}
+                    alt={`${turf.name} ${idx + 2}`}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  {idx === 3 && validImages.length > 5 && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-medium">
+                      <ImageIcon className="w-5 h-5 mr-2" />
+                      Show all {validImages.length} photos
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-[50vh] sm:h-[60vh] rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <div className="text-center text-white">
+                <div className="text-6xl sm:text-8xl mb-4 opacity-80">🏟️</div>
+                <div className="text-2xl sm:text-3xl font-bold">{turf.name}</div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
+        <div className="grid lg:grid-cols-3 gap-8 lg:gap-12">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6 lg:space-y-8">
-            {/* Header */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Quick Info */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="space-y-4"
+              transition={{ delay: 0.2 }}
+              className="pb-8 border-b border-gray-200"
             >
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 break-words">{turf.name}</h1>
-                  <button
-                    className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors group w-full sm:w-auto"
-                    onClick={() => {
-                      const mapsUrl = turf.coords 
-                        ? `https://maps.google.com/maps?q=${turf.coords.lat},${turf.coords.lng}&z=15`
-                        : `https://maps.google.com/maps/dir//${encodeURIComponent(turf.address)}`;
-                      window.open(mapsUrl, '_blank');
-                    }}
-                  >
-                    <MapPin className="w-5 h-5 group-hover:text-emerald-600 flex-shrink-0" />
-                    <span className="text-base sm:text-lg group-hover:underline break-words">{turf.address}</span>
-                  </button>
-                </div>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4">What this place offers</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {turf.amenities?.filter(amenity => amenity && typeof amenity === 'string').map((amenity) => {
+                  const amenityData = amenityIcons[amenity.toLowerCase().replace(/\s+/g, '_')];
+                  const IconComponent = amenityData?.icon;
 
-                <div className="flex items-center gap-2 justify-center sm:justify-end flex-shrink-0">
-                  <Star className="w-5 h-5 sm:w-6 sm:h-6 fill-yellow-400 text-yellow-400" />
-                  <span className="text-xl sm:text-2xl font-bold">{Number(turf.rating).toFixed(1)}</span>
-                  <span className="text-gray-500 text-sm sm:text-base">({turf.totalReviews} reviews)</span>
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="flex flex-wrap gap-4">
-                {turf.isPopular && (
-                  <Badge className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-4 py-2 rounded-full text-sm">
-                    ⭐ Popular Choice
-                  </Badge>
-                )}
-                {turf.hasLights && (
-                  <Badge className="bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-4 py-2 rounded-full text-sm">
-                    💡 Night Play Available
-                  </Badge>
-                )}
-                {turf.distanceKm && (
-                  <Badge variant="outline" className="px-4 py-2 rounded-full text-sm border-gray-300">
-                    📍 {turf.distanceKm.toFixed(1)}km away
-                  </Badge>
-                )}
+                  return (
+                    <div key={amenity} className="flex items-center gap-3">
+                      {IconComponent ? (
+                        <IconComponent className="w-6 h-6 text-gray-700" />
+                      ) : (
+                        <CheckCircle className="w-6 h-6 text-gray-700" />
+                      )}
+                      <span className="text-gray-900">{amenityData?.label || amenity}</span>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
 
-            {/* Amenities */}
+            {/* Reviews Section */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
+              transition={{ delay: 0.3 }}
+              className="pb-8 border-b border-gray-200"
             >
-              <Card className="border-0 shadow-lg rounded-3xl">
-                <CardHeader>
-                  <CardTitle className="text-2xl">Amenities</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {turf.amenities?.filter(amenity => amenity && typeof amenity === 'string').map((amenity) => {
-                      const amenityData = amenityIcons[amenity.toLowerCase().replace(/\s+/g, '_')];
-                      const IconComponent = amenityData?.icon;
-                      
-                      return (
-                        <div key={amenity} className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors">
-                          {IconComponent ? (
-                            <IconComponent className="w-6 h-6 text-emerald-600" />
-                          ) : (
-                            <div className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center text-white text-xs">
-                              ✓
-                            </div>
-                          )}
-                          <span className="font-medium text-gray-900">
-                            {amenityData?.label || amenity}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="flex items-center gap-2 mb-6">
+                <Star className="w-6 h-6 fill-gray-900 text-gray-900" />
+                <h2 className="text-xl sm:text-2xl font-semibold">
+                  {Number(turf.rating).toFixed(2)} · {turf.totalReviews} reviews
+                </h2>
+              </div>
+
+              <TurfReviewSystem
+                turfId={turf.id}
+                turfName={turf.name}
+                reviews={mockReviews}
+                overallRating={turf.rating}
+                totalReviews={turf.totalReviews}
+              />
             </motion.div>
 
             {/* Time Slots */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
+              transition={{ delay: 0.4 }}
+              className="pb-8"
             >
-              <Card className="border-0 shadow-lg rounded-3xl">
-                <CardHeader>
-                  <CardTitle className="text-2xl flex items-center gap-2">
-                    <Calendar className="w-6 h-6" />
-                    Available Slots
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {availability.map((day) => (
-                    <div key={day.date} className="space-y-4">
-                      <h4 className="font-semibold text-lg">Today</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {day.slots.map((slot) => (
-                          <button
-                            key={slot.time}
-                            onClick={() => slot.available && handleBookSlot(slot)}
-                            disabled={!slot.available || booking}
-                            className={`p-4 rounded-xl text-sm font-medium transition-all duration-200 ${
-                              slot.available
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:scale-105 shadow-sm'
-                                : 'bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200'
-                            }`}
-                          >
-                            <div>{slot.time}</div>
-                            <div className="text-xs mt-1">
-                              {slot.available ? `₹${slot.price}` : 'Booked'}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+              <h2 className="text-xl sm:text-2xl font-semibold mb-4">Available time slots</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {availability[0]?.slots.slice(0, 12).map((slot) => (
+                  <button
+                    key={slot.time}
+                    onClick={() => slot.available && handleBookSlot(slot)}
+                    disabled={!slot.available || booking}
+                    className={`p-4 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      slot.available
+                        ? 'border border-gray-300 hover:border-gray-900 hover:shadow-md'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                    }`}
+                  >
+                    <div className="font-semibold">{slot.time}</div>
+                    <div className="text-xs mt-1">
+                      {slot.available ? `₹${slot.price}` : 'Booked'}
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
+                  </button>
+                ))}
+              </div>
             </motion.div>
+
+            {/* Open Games */}
+            {turfGames.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="pb-8"
+              >
+                <h2 className="text-xl sm:text-2xl font-semibold mb-4">Games happening here</h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {turfGames.slice(0, 4).map((game) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      user={user}
+                      onGameClick={(gameId) => {
+                        console.log('Game clicked:', gameId);
+                      }}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
           </div>
 
-          {/* Sidebar */}
+          {/* Sticky Sidebar - Airbnb Style */}
           <div className="lg:col-span-1">
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="sticky top-24"
+              transition={{ delay: 0.2 }}
+              className="lg:sticky lg:top-24"
             >
-              <Card className="border-0 shadow-xl rounded-3xl overflow-hidden">
-                <CardContent className="p-8 space-y-6">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-2">
-                      {turf.priceDisplay}
+              <Card className="border border-gray-300 rounded-xl shadow-xl">
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-2xl font-semibold text-gray-900">
+                        {turf.priceDisplay}
+                      </span>
+                      <span className="text-gray-600">per hour</span>
                     </div>
-                    <div className="text-gray-600">All inclusive pricing</div>
+                    <div className="flex items-center gap-1 text-sm">
+                      <Star className="w-4 h-4 fill-gray-900 text-gray-900" />
+                      <span className="font-medium">{Number(turf.rating).toFixed(1)}</span>
+                      <span className="text-gray-600">· {turf.totalReviews} reviews</span>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
-                    <Button 
-                      className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-full py-6 text-lg font-semibold shadow-lg hover:shadow-emerald-200 transition-all duration-200"
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-6 text-base font-semibold shadow-md transition-all duration-200"
                       onClick={() => {
-                        // Handle quick booking
+                        // Handle booking
                       }}
                     >
-                      <Calendar className="w-5 h-5 mr-2" />
-                      Book Now
+                      Check availability
                     </Button>
 
                     {turf.contacts?.phone && (
-                      <Button 
+                      <Button
                         variant="outline"
-                        className="w-full rounded-full py-6 text-lg font-medium border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50"
+                        className="w-full rounded-lg py-6 text-base font-medium border-2 border-gray-300 hover:border-gray-900 hover:bg-gray-50"
                         onClick={() => window.open(`tel:${turf.contacts?.phone}`, '_blank')}
                       >
                         <Phone className="w-5 h-5 mr-2" />
-                        Call Owner
+                        Contact
                       </Button>
                     )}
 
                     {onCreateGame && isAuthenticated && (
-                      <Button 
+                      <Button
                         variant="outline"
-                        className="w-full rounded-full py-6 text-lg font-medium border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50"
+                        className="w-full rounded-lg py-6 text-base font-medium border-2 border-blue-300 hover:border-blue-600 hover:bg-blue-50 text-blue-600"
                         onClick={onCreateGame}
                       >
-                        <PlayCircle className="w-5 h-5 mr-2" />
+                        <Users className="w-5 h-5 mr-2" />
                         Create Game
                       </Button>
                     )}
                   </div>
 
-                  <div className="pt-6 border-t border-gray-200 space-y-3 text-center text-sm text-gray-600">
-                    <div className="flex items-center justify-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span>Instant booking confirmation</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span>Cancel up to 2 hours before</span>
-                    </div>
+                  <div className="pt-4 border-t border-gray-200 space-y-2 text-center text-sm text-gray-600">
+                    <p>You won't be charged yet</p>
                   </div>
                 </CardContent>
               </Card>
@@ -501,61 +529,6 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
           </div>
         </div>
       </div>
-
-      {/* Open Games at this Turf */}
-      {turfGames.length > 0 && (
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 mt-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-          >
-            <Card className="border-0 shadow-xl rounded-3xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                      <Users className="w-6 h-6 text-blue-600" />
-                      Open Games at {turf.name}
-                    </CardTitle>
-                    <p className="text-gray-600 mt-1">Join these games happening at this venue</p>
-                  </div>
-                  <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                    {turfGames.length} game{turfGames.length !== 1 ? 's' : ''}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {loadingGames ? (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="bg-white rounded-xl p-4 animate-pulse">
-                        <div className="h-20 bg-gray-200 rounded mb-2" />
-                        <div className="h-4 bg-gray-200 rounded mb-1" />
-                        <div className="h-4 bg-gray-200 rounded w-3/4" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {turfGames.map((game) => (
-                      <GameCard 
-                        key={game.id} 
-                        game={game} 
-                        user={user} 
-                        onGameClick={(gameId) => {
-                          // Handle game click - could navigate to game detail or show modal
-                          console.log('Game clicked:', gameId);
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-      )}
 
       {/* Image Gallery Modal */}
       <AnimatePresence>
@@ -564,25 +537,25 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-white flex items-center justify-center"
             onClick={() => setShowImageGallery(false)}
           >
-            <div className="relative max-w-4xl w-full">
-              <button
-                onClick={() => setShowImageGallery(false)}
-                className="absolute -top-12 right-0 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-              
+            <button
+              onClick={() => setShowImageGallery(false)}
+              className="absolute top-4 right-4 w-10 h-10 bg-white border border-gray-300 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="relative w-full h-full flex items-center justify-center p-4">
               <motion.img
                 key={currentImageIndex}
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
                 src={validImages[currentImageIndex]}
                 alt={`${turf.name} - Image ${currentImageIndex + 1}`}
-                className="w-full h-auto rounded-2xl"
+                className="max-w-full max-h-full object-contain"
                 onClick={(e) => e.stopPropagation()}
               />
 
@@ -590,30 +563,19 @@ export function TurfDetailPage({ turfId, onBack, onCreateGame }: TurfDetailPageP
                 <>
                   <button
                     onClick={(e) => { e.stopPropagation(); prevImage(); }}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white border border-gray-300 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
                   >
                     <ChevronLeft className="w-6 h-6" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); nextImage(); }}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white border border-gray-300 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
                   >
                     <ChevronRight className="w-6 h-6" />
                   </button>
 
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                    {validImages.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCurrentImageIndex(index);
-                        }}
-                        className={`w-3 h-3 rounded-full transition-all duration-200 ${
-                          index === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                        }`}
-                      />
-                    ))}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg text-sm font-medium">
+                    {currentImageIndex + 1} / {validImages.length}
                   </div>
                 </>
               )}
