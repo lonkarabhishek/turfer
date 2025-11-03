@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Users, Clock, IndianRupee, MessageCircle, X, Check, Search, MapPin,
   Loader2, Calendar, Trophy, Star, Info, ChevronRight, ChevronLeft,
-  Zap, Target, Award, Shield
+  Zap, Target, Award, Shield, CheckCircle
 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
