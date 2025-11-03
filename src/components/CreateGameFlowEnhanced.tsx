@@ -40,6 +40,7 @@ interface CreateGameData {
   description?: string;
   notes?: string;
   isPrivate?: boolean;
+  turfBooked?: boolean;
 }
 
 const gameFormats = [
@@ -173,7 +174,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
     skillLevel: 'all' as 'beginner' | 'intermediate' | 'advanced' | 'all',
     maxPlayers: 10, // Default value, will be updated when format is selected
     costPerPerson: 0,
-    notes: ''
+    notes: '',
+    turfBooked: false
   });
   const [createdGame, setCreatedGame] = useState<any>(null);
 
@@ -197,7 +199,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
         skillLevel: 'all',
         maxPlayers: 10,
         costPerPerson: 0,
-        notes: ''
+        notes: '',
+        turfBooked: false
       });
     }
   }, [open, initialTurfId]);
@@ -366,7 +369,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
         costPerPerson: formData.costPerPerson,
         description: `${selectedFormat.label} game at ${selectedTurf.name}`,
         notes: formData.notes || undefined,
-        isPrivate: false
+        isPrivate: false,
+        turfBooked: formData.turfBooked
       };
 
       // Create game via API
@@ -874,8 +878,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                     step="50"
                     placeholder="e.g., 200"
                     value={formData.costPerPerson || ''}
-                    onChange={(e) => setFormData(prev => ({ 
-                      ...prev, 
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
                       costPerPerson: parseInt(e.target.value) || 0
                     }))}
                     className="h-12 text-lg"
@@ -883,6 +887,39 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                   <p className="text-sm text-gray-500 mt-1">
                     Total venue cost will be split equally among players
                   </p>
+                </div>
+
+                {/* Turf Booking Status Toggle */}
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <Label htmlFor="turfBooked" className="flex items-center gap-2 font-semibold text-gray-900 cursor-pointer">
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        Turf Already Booked
+                      </Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {formData.turfBooked
+                          ? 'Great! The turf is reserved for this game.'
+                          : 'Players will need to book the turf separately.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      id="turfBooked"
+                      role="switch"
+                      aria-checked={formData.turfBooked}
+                      onClick={() => setFormData(prev => ({ ...prev, turfBooked: !prev.turfBooked }))}
+                      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                        formData.turfBooked ? 'bg-emerald-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          formData.turfBooked ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
                 <div>
