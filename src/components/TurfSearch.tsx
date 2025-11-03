@@ -275,6 +275,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
   // Turf click handler
   const handleTurfClick = (turf: any) => {
     // Just navigate to turf detail page for all turfs
+    console.log('🏟️ TurfSearch handleTurfClick called with turf:', turf.id, turf.name);
     onTurfClick?.(turf.id);
   };
 

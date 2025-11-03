@@ -650,6 +650,8 @@ export default function App() {
   };
 
   const handleTurfClick = (turfId: string) => {
+    console.log('🏟️ handleTurfClick called with turfId:', turfId);
+    console.log('🏟️ Setting currentPage to turf-detail');
     setSelectedTurfId(turfId);
     setCurrentPage('turf-detail');
     window.history.pushState({}, '', `/turf/${turfId}`);
@@ -775,28 +777,39 @@ export default function App() {
         onAdminClick={() => setCurrentPage('admin-turf-upload')}
       />
       
+      {(() => {
+        console.log('🎯 Rendering page:', { currentPage, selectedTurfId, selectedGameId });
+        return null;
+      })()}
+
       {currentPage === 'confirm' ? (
         <EmailConfirmation />
       ) : currentPage === 'turf-detail' && selectedTurfId ? (
-        <TurfDetailPageEnhanced
-          turfId={selectedTurfId}
-          onBack={handleBackToHome}
-          onCreateGame={() => {
-            setTurfIdForGame(selectedTurfId);
-            setShowCreateGame(true);
-          }}
-          onBookTurf={() => {
-            // Handle booking
-            console.log('Booking turf:', selectedTurfId);
-          }}
-          onGameClick={handleGameClick}
-        />
+        <>
+          {console.log('🏟️ Rendering TurfDetailPageEnhanced with turfId:', selectedTurfId)}
+          <TurfDetailPageEnhanced
+            turfId={selectedTurfId}
+            onBack={handleBackToHome}
+            onCreateGame={() => {
+              setTurfIdForGame(selectedTurfId);
+              setShowCreateGame(true);
+            }}
+            onBookTurf={() => {
+              // Handle booking
+              console.log('Booking turf:', selectedTurfId);
+            }}
+            onGameClick={handleGameClick}
+          />
+        </>
       ) : currentPage === 'game-detail' && selectedGameId ? (
-        <GameDetailPage
-          gameId={selectedGameId}
-          onBack={handleBackToHome}
-          onNavigate={handleNavigate}
-        />
+        <>
+          {console.log('🎮 Rendering GameDetailPage with gameId:', selectedGameId)}
+          <GameDetailPage
+            gameId={selectedGameId}
+            onBack={handleBackToHome}
+            onNavigate={handleNavigate}
+          />
+        </>
       ) : currentPage === 'notifications' && user ? (
         <NotificationsPage
           onBack={handleBackToHome}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Plus, Trash2, ArrowLeft, CheckCircle, AlertCircle, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -17,8 +17,13 @@ interface TurfFormData {
   description: string;
   sports: string[];
   amenities: string[];
-  price_per_hour: number;
-  price_per_hour_weekend: number;
+  // Time-based pricing (ONLY these exist in DB now)
+  morning_price?: number;
+  afternoon_price?: number;
+  evening_price?: number;
+  weekend_morning_price?: number;
+  weekend_afternoon_price?: number;
+  weekend_evening_price?: number;
   phone: string;
   email: string;
   website: string;
@@ -28,6 +33,27 @@ interface TurfFormData {
   gmap_embed: string;
   review_url: string;
   images: string[];
+  // NEW FIELDS
+  height_feet?: number;
+  length_feet?: number;
+  width_feet?: number;
+  start_time?: string;
+  end_time?: string;
+  equipment_provided: boolean;
+  parking_available: boolean;
+  washroom_available: boolean;
+  changing_room_available: boolean;
+  sitting_area_available: boolean;
+  number_of_grounds: number;
+  net_condition?: string;
+  grass_condition?: string;
+  owner_name?: string;
+  owner_phone?: string;
+  preferred_booking_channel?: string;
+  signboard_image?: string;
+  entry_parking_image?: string;
+  nearby_landmark?: string;
+  unique_features?: string;
 }
 
 interface BulkUploadResult {
@@ -43,6 +69,12 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkUploadResult | null>(null);
 
+  // Turf selection for editing
+  const [allTurfs, setAllTurfs] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTurfId, setSelectedTurfId] = useState<string>('');
+  const [isEditMode, setIsEditMode] = useState(false);
+
   // Single turf form state
   const [formData, setFormData] = useState<TurfFormData>({
     name: '',
@@ -50,8 +82,6 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
     description: '',
     sports: ['Football'],
     amenities: [],
-    price_per_hour: 0,
-    price_per_hour_weekend: 0,
     phone: '',
     email: '',
     website: '',
@@ -60,7 +90,14 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
     total_reviews: 0,
     gmap_embed: '',
     review_url: '',
-    images: ['', '', '', '', '']
+    images: ['', '', '', '', ''],
+    // NEW FIELDS
+    equipment_provided: false,
+    parking_available: false,
+    washroom_available: false,
+    changing_room_available: false,
+    sitting_area_available: false,
+    number_of_grounds: 1
   });
 
   const commonSports = ['Football', 'Cricket', 'Basketball', 'Tennis', 'Badminton', 'Volleyball'];
@@ -76,6 +113,120 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
     'Equipment Rental'
   ];
 
+  // Load all turfs on mount
+  useEffect(() => {
+    loadAllTurfs();
+  }, []);
+
+  const loadAllTurfs = async () => {
+    const { data, error } = await supabase
+      .from('turfs')
+      .select('id, name, address, owner_id')
+      .order('name');
+
+    if (data) {
+      setAllTurfs(data);
+    }
+  };
+
+  const loadTurfDetails = async (turfId: string) => {
+    console.log('📥 Loading turf details for ID:', turfId);
+    const { data, error } = await supabase
+      .from('turfs')
+      .select('*')
+      .eq('id', turfId)
+      .single();
+
+    if (error) {
+      console.error('❌ Error loading turf:', error);
+      showError('Failed to load turf details');
+      return;
+    }
+
+    if (data) {
+      console.log('✅ Turf data loaded:', data.name);
+      // Map database fields to form fields
+      setFormData({
+        name: data.name || '',
+        address: data.address || '',
+        description: data.description || '',
+        sports: data.sports || [],
+        amenities: data.amenities || [],
+        // Time-based pricing
+        morning_price: data.morning_price,
+        afternoon_price: data.afternoon_price,
+        evening_price: data.evening_price,
+        weekend_morning_price: data.weekend_morning_price,
+        weekend_afternoon_price: data.weekend_afternoon_price,
+        weekend_evening_price: data.weekend_evening_price,
+        phone: data.contact_info?.phone || '',
+        email: data.contact_info?.email || '',
+        website: data.contact_info?.website || '',
+        playing_hours: data.operating_hours?.raw || '',
+        rating: data.rating || 0,
+        total_reviews: data.total_reviews || 0,
+        gmap_embed: data['Gmap Embed link'] || '',
+        review_url: data.external_review_url || '',
+        images: data.images || ['', '', '', '', ''],
+        height_feet: data.height_feet,
+        length_feet: data.length_feet,
+        width_feet: data.width_feet,
+        start_time: data.start_time,
+        end_time: data.end_time,
+        equipment_provided: data.equipment_provided || false,
+        parking_available: data.parking_available || false,
+        washroom_available: data.washroom_available || false,
+        changing_room_available: data.changing_room_available || false,
+        sitting_area_available: data.sitting_area_available || false,
+        number_of_grounds: data.number_of_grounds || 1,
+        net_condition: data.net_condition,
+        grass_condition: data.grass_condition,
+        owner_name: data.owner_name,
+        owner_phone: data.owner_phone,
+        preferred_booking_channel: data.preferred_booking_channel,
+        signboard_image: data.signboard_image,
+        entry_parking_image: data.entry_parking_image,
+        nearby_landmark: data.nearby_landmark,
+        unique_features: data.unique_features
+      });
+      setIsEditMode(true);
+      console.log('✏️ Edit mode activated for turf:', data.name);
+    }
+  };
+
+  const resetToNewTurf = () => {
+    console.log('🆕 Resetting to new turf mode');
+    setFormData({
+      name: '',
+      address: '',
+      description: '',
+      sports: ['Football'],
+      amenities: [],
+      phone: '',
+      email: '',
+      website: '',
+      playing_hours: '',
+      rating: 0,
+      total_reviews: 0,
+      gmap_embed: '',
+      review_url: '',
+      images: ['', '', '', '', ''],
+      equipment_provided: false,
+      parking_available: false,
+      washroom_available: false,
+      changing_room_available: false,
+      sitting_area_available: false,
+      number_of_grounds: 1
+    });
+    setSelectedTurfId('');
+    setIsEditMode(false);
+    setSearchQuery('');
+  };
+
+  const filteredTurfs = allTurfs.filter(t =>
+    t.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const handleSingleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -84,8 +235,8 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
       return;
     }
 
-    if (!formData.name || !formData.address || formData.price_per_hour <= 0) {
-      showError('Please fill in all required fields');
+    if (!formData.name || !formData.address || (!formData.morning_price && !formData.afternoon_price && !formData.evening_price)) {
+      showError('Please fill in all required fields (name, address, and at least one pricing)');
       return;
     }
 
@@ -132,35 +283,127 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
         return null;
       };
 
-      const turfData = {
-        owner_id: user.id,
+      // Build turfData - only include fields with values
+      const turfData: any = {
         name: formData.name,
         address: formData.address,
-        description: formData.description || null,
         sports: formData.sports,
         amenities: formData.amenities,
-        price_per_hour: formData.price_per_hour,
-        price_per_hour_weekend: formData.price_per_hour_weekend || formData.price_per_hour,
         operating_hours: operatingHours,
-        contact_info: Object.keys(contactInfo).length > 0 ? contactInfo : null,
-        rating: formData.rating || 0,
-        total_reviews: formData.total_reviews || 0,
-        'Gmap Embed link': extractMapSrc(formData.gmap_embed),
-        external_review_url: formData.review_url || null,
-        images: validImages,
-        cover_image: validImages[0] || null,
         is_active: true
       };
 
-      const { error: insertError } = await supabase
-        .from('turfs')
-        .insert([turfData]);
+      // Only add owner_id for new turfs
+      if (!isEditMode) {
+        turfData.owner_id = user.id;
+      }
 
-      if (insertError) {
-        console.error('Insert error:', insertError);
-        showError(`Failed to upload turf: ${insertError.message}`);
+      // Add optional fields only if they have values
+      if (formData.description) turfData.description = formData.description;
+
+      // Time-based pricing - include if provided
+      if (formData.morning_price !== undefined) turfData.morning_price = formData.morning_price;
+      if (formData.afternoon_price !== undefined) turfData.afternoon_price = formData.afternoon_price;
+      if (formData.evening_price !== undefined) turfData.evening_price = formData.evening_price;
+      if (formData.weekend_morning_price !== undefined) turfData.weekend_morning_price = formData.weekend_morning_price;
+      if (formData.weekend_afternoon_price !== undefined) turfData.weekend_afternoon_price = formData.weekend_afternoon_price;
+      if (formData.weekend_evening_price !== undefined) turfData.weekend_evening_price = formData.weekend_evening_price;
+
+      // Contact info
+      if (Object.keys(contactInfo).length > 0) turfData.contact_info = contactInfo;
+
+      // Ratings
+      if (formData.rating) turfData.rating = formData.rating;
+      if (formData.total_reviews) turfData.total_reviews = formData.total_reviews;
+
+      // URLs
+      const mapSrc = extractMapSrc(formData.gmap_embed);
+      if (mapSrc) turfData['Gmap Embed link'] = mapSrc;
+      if (formData.review_url) turfData.external_review_url = formData.review_url;
+
+      // Images
+      if (validImages.length > 0) {
+        turfData.images = validImages;
+        turfData.cover_image = validImages[0];
+      }
+
+      // Dimensions
+      if (formData.height_feet) turfData.height_feet = formData.height_feet;
+      if (formData.length_feet) turfData.length_feet = formData.length_feet;
+      if (formData.width_feet) turfData.width_feet = formData.width_feet;
+
+      // Times
+      if (formData.start_time) turfData.start_time = formData.start_time;
+      if (formData.end_time) turfData.end_time = formData.end_time;
+
+      // Facilities (always include booleans)
+      turfData.equipment_provided = formData.equipment_provided;
+      turfData.parking_available = formData.parking_available;
+      turfData.washroom_available = formData.washroom_available;
+      turfData.changing_room_available = formData.changing_room_available;
+      turfData.sitting_area_available = formData.sitting_area_available;
+      turfData.number_of_grounds = formData.number_of_grounds;
+
+      // Conditions
+      if (formData.net_condition) turfData.net_condition = formData.net_condition;
+      if (formData.grass_condition) turfData.grass_condition = formData.grass_condition;
+
+      // Owner info
+      if (formData.owner_name) turfData.owner_name = formData.owner_name;
+      if (formData.owner_phone) turfData.owner_phone = formData.owner_phone;
+      if (formData.preferred_booking_channel) turfData.preferred_booking_channel = formData.preferred_booking_channel;
+
+      // Additional images
+      if (formData.signboard_image) turfData.signboard_image = formData.signboard_image;
+      if (formData.entry_parking_image) turfData.entry_parking_image = formData.entry_parking_image;
+
+      // Location
+      if (formData.nearby_landmark) turfData.nearby_landmark = formData.nearby_landmark;
+      if (formData.unique_features) turfData.unique_features = formData.unique_features;
+
+      // Debug logging
+      console.log('🔍 Form submission state:', {
+        isEditMode,
+        selectedTurfId,
+        turfName: formData.name,
+        willUpdate: isEditMode && selectedTurfId
+      });
+
+      if (isEditMode && selectedTurfId) {
+        // Update existing turf
+        console.log('🔄 Updating turf with ID:', selectedTurfId);
+        const { error: updateError } = await supabase
+          .from('turfs')
+          .update(turfData)
+          .eq('id', selectedTurfId);
+
+        if (updateError) {
+          console.error('❌ Update error:', updateError);
+          showError(`Failed to update turf: ${updateError.message}`);
+        } else {
+          console.log('✅ Turf updated successfully');
+          success('Turf updated successfully!');
+          loadAllTurfs(); // Refresh the list
+          // Stay in edit mode but refresh the data
+          loadTurfDetails(selectedTurfId);
+        }
       } else {
-        success('Turf uploaded successfully!');
+        // Insert new turf
+        console.log('➕ Creating new turf');
+        const { error: insertError } = await supabase
+          .from('turfs')
+          .insert([turfData]);
+
+        if (insertError) {
+          console.error('Insert error:', insertError);
+          showError(`Failed to upload turf: ${insertError.message}`);
+        } else {
+          success('Turf uploaded successfully!');
+          loadAllTurfs(); // Refresh the list
+        }
+      }
+
+      if (!isEditMode) {
         // Reset form
         setFormData({
           name: '',
@@ -168,8 +411,6 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
           description: '',
           sports: ['Football'],
           amenities: [],
-          price_per_hour: 0,
-          price_per_hour_weekend: 0,
           phone: '',
           email: '',
           website: '',
@@ -178,7 +419,13 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
           total_reviews: 0,
           gmap_embed: '',
           review_url: '',
-          images: ['', '', '', '', '']
+          images: ['', '', '', '', ''],
+          equipment_provided: false,
+          parking_available: false,
+          washroom_available: false,
+          changing_room_available: false,
+          sitting_area_available: false,
+          number_of_grounds: 1
         });
       }
     } catch (err) {
@@ -339,35 +586,186 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
             return null;
           };
 
-          const turfData = {
-            owner_id: user.id,
+          // Parse weekday pricing (comma-separated or single value)
+          const weekdayPriceStr = row['Price Per Hour'] || row['Price on weekdays (₹)'] || '';
+          const weekdayPrices = weekdayPriceStr.split(',').map((p: string) => p.trim()).filter((p: string) => p);
+          let weekdayPricing: any = {};
+
+          if (weekdayPrices.length === 3) {
+            // Morning, Afternoon, Evening
+            weekdayPricing = {
+              morning_price: parseFloat(weekdayPrices[0]) || null,
+              afternoon_price: parseFloat(weekdayPrices[1]) || null,
+              evening_price: parseFloat(weekdayPrices[2]) || null
+            };
+          } else if (weekdayPrices.length === 2) {
+            // Morning, Evening (no afternoon)
+            weekdayPricing = {
+              morning_price: parseFloat(weekdayPrices[0]) || null,
+              afternoon_price: null,
+              evening_price: parseFloat(weekdayPrices[1]) || null
+            };
+          } else if (weekdayPrices.length === 1) {
+            // Single price for all times
+            const singlePrice = parseFloat(weekdayPrices[0]) || null;
+            weekdayPricing = {
+              morning_price: singlePrice,
+              afternoon_price: singlePrice,
+              evening_price: singlePrice
+            };
+          } else {
+            // No pricing provided
+            weekdayPricing = {
+              morning_price: null,
+              afternoon_price: null,
+              evening_price: null
+            };
+          }
+
+          // Parse weekend pricing (comma-separated or single value)
+          const weekendPriceStr = row['Weekend Price'] || row['Price on weekends (₹)'] || '';
+          const weekendPrices = weekendPriceStr.split(',').map((p: string) => p.trim()).filter((p: string) => p);
+          let weekendPricing: any = {};
+
+          if (weekendPrices.length === 3) {
+            weekendPricing = {
+              weekend_morning_price: parseFloat(weekendPrices[0]) || null,
+              weekend_afternoon_price: parseFloat(weekendPrices[1]) || null,
+              weekend_evening_price: parseFloat(weekendPrices[2]) || null
+            };
+          } else if (weekendPrices.length === 2) {
+            weekendPricing = {
+              weekend_morning_price: parseFloat(weekendPrices[0]) || null,
+              weekend_afternoon_price: null,
+              weekend_evening_price: parseFloat(weekendPrices[1]) || null
+            };
+          } else if (weekendPrices.length === 1) {
+            const singlePrice = parseFloat(weekendPrices[0]) || null;
+            weekendPricing = {
+              weekend_morning_price: singlePrice,
+              weekend_afternoon_price: singlePrice,
+              weekend_evening_price: singlePrice
+            };
+          } else {
+            // Default to weekday pricing if no weekend pricing specified
+            weekendPricing = {
+              weekend_morning_price: weekdayPricing.morning_price,
+              weekend_afternoon_price: weekdayPricing.afternoon_price,
+              weekend_evening_price: weekdayPricing.evening_price
+            };
+          }
+
+          // Build turfData with selective field inclusion for partial updates
+          const turfData: any = {
             name: row['Turf Name'],
-            address: row['Address'] || '',
-            description: row['Description'] || null,
             sports: sports,
             amenities: amenities,
-            price_per_hour: parseFloat(row['Price Per Hour']) || 0,
-            price_per_hour_weekend: parseFloat(row['Weekend Price']) || parseFloat(row['Price Per Hour']) || 0,
-            operating_hours: operatingHours,
-            contact_info: Object.keys(contactInfo).length > 0 ? contactInfo : null,
-            rating: parseFloat(row['Ratings']) || 0,
-            total_reviews: parseInt(row['No. of reviews']) || 0,
-            'Gmap Embed link': extractMapSrc(row['Google Maps Embed Html Link']),
-            external_review_url: row['Link to reviews'] || null,
-            images: images,
-            cover_image: images[0] || null,
             is_active: true
           };
 
-          const { error: insertError } = await supabase
-            .from('turfs')
-            .insert([turfData]);
+          // Add optional fields only if they have values
+          if (row['Address']) turfData.address = row['Address'];
+          if (row['Description']) turfData.description = row['Description'];
 
-          if (insertError) {
+          // Add weekday pricing only if provided (not null)
+          if (weekdayPricing.morning_price !== null && weekdayPricing.morning_price !== undefined) {
+            turfData.morning_price = weekdayPricing.morning_price;
+          }
+          if (weekdayPricing.afternoon_price !== null && weekdayPricing.afternoon_price !== undefined) {
+            turfData.afternoon_price = weekdayPricing.afternoon_price;
+          }
+          if (weekdayPricing.evening_price !== null && weekdayPricing.evening_price !== undefined) {
+            turfData.evening_price = weekdayPricing.evening_price;
+          }
+
+          // Add weekend pricing only if provided (not null)
+          if (weekendPricing.weekend_morning_price !== null && weekendPricing.weekend_morning_price !== undefined) {
+            turfData.weekend_morning_price = weekendPricing.weekend_morning_price;
+          }
+          if (weekendPricing.weekend_afternoon_price !== null && weekendPricing.weekend_afternoon_price !== undefined) {
+            turfData.weekend_afternoon_price = weekendPricing.weekend_afternoon_price;
+          }
+          if (weekendPricing.weekend_evening_price !== null && weekendPricing.weekend_evening_price !== undefined) {
+            turfData.weekend_evening_price = weekendPricing.weekend_evening_price;
+          }
+
+          // Add operating hours if provided
+          if (operatingHours) turfData.operating_hours = operatingHours;
+
+          // Add contact info if provided
+          if (Object.keys(contactInfo).length > 0) turfData.contact_info = contactInfo;
+
+          // Add ratings if provided
+          const rating = parseFloat(row['Ratings']);
+          if (!isNaN(rating) && rating > 0) turfData.rating = rating;
+
+          const totalReviews = parseInt(row['No. of reviews']);
+          if (!isNaN(totalReviews) && totalReviews > 0) turfData.total_reviews = totalReviews;
+
+          // Add map link if provided
+          const mapLink = extractMapSrc(row['Google Maps Embed Html Link']);
+          if (mapLink) turfData['Gmap Embed link'] = mapLink;
+
+          // Add external review URL if provided
+          if (row['Link to reviews']) turfData.external_review_url = row['Link to reviews'];
+
+          // Add images if provided
+          if (images.length > 0) {
+            turfData.images = images;
+            turfData.cover_image = images[0];
+          }
+
+          // Check if turf with this name already exists
+          const turfName = row['Turf Name'];
+          console.log(`🔍 Checking for existing turf: "${turfName}"`);
+
+          const { data: existingTurf, error: checkError } = await supabase
+            .from('turfs')
+            .select('id, name')
+            .eq('name', turfName)
+            .maybeSingle();
+
+          console.log(`   Result:`, existingTurf ? `Found ID: ${existingTurf.id}` : 'Not found');
+
+          if (checkError) {
+            console.error(`❌ Error checking: ${checkError.message}`);
             results.failed++;
-            results.errors.push(`Row ${i}: ${row['Turf Name']} - ${insertError.message}`);
+            results.errors.push(`Row ${i}: ${turfName} - Error checking existing: ${checkError.message}`);
+            continue;
+          }
+
+          if (existingTurf) {
+            // Update existing turf
+            console.log(`🔄 Updating turf ID: ${existingTurf.id}, Name: "${turfName}"`);
+            const { error: updateError } = await supabase
+              .from('turfs')
+              .update(turfData)
+              .eq('id', existingTurf.id);
+
+            if (updateError) {
+              console.error(`❌ Update failed: ${updateError.message}`);
+              results.failed++;
+              results.errors.push(`Row ${i}: ${turfName} - Update failed: ${updateError.message}`);
+            } else {
+              results.success++;
+              console.log(`✅ Successfully updated: ${turfName}`);
+            }
           } else {
-            results.success++;
+            // Insert new turf - add owner_id for new turfs only
+            console.log(`➕ Creating new turf: "${turfName}"`);
+            const newTurfData = { ...turfData, owner_id: user.id };
+            const { error: insertError } = await supabase
+              .from('turfs')
+              .insert([newTurfData]);
+
+            if (insertError) {
+              console.error(`❌ Insert failed: ${insertError.message}`);
+              results.failed++;
+              results.errors.push(`Row ${i}: ${turfName} - Insert failed: ${insertError.message}`);
+            } else {
+              results.success++;
+              console.log(`✅ Successfully created: ${turfName}`);
+            }
           }
         } catch (rowError: any) {
           results.failed++;
@@ -485,9 +883,62 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
           >
             <Card>
               <CardHeader>
-                <CardTitle>Add New Turf</CardTitle>
+                <CardTitle>{isEditMode ? 'Edit Turf' : 'Add New Turf'}</CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Turf Selection / New Turf Button */}
+                <div className="mb-6 pb-6 border-b">
+                  <div className="flex gap-3">
+                    <div className="flex-1 relative">
+                      <label className="block text-sm font-medium mb-2">Search & Select Turf to Edit</label>
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Type turf name to search..."
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                      />
+                      {searchQuery && filteredTurfs.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredTurfs.map(turf => (
+                            <div
+                              key={turf.id}
+                              onClick={() => {
+                                console.log('🎯 Selected turf:', turf.name, 'ID:', turf.id);
+                                setSelectedTurfId(turf.id);
+                                loadTurfDetails(turf.id);
+                                setSearchQuery('');
+                              }}
+                              className="p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                            >
+                              <p className="font-medium text-gray-900">{turf.name}</p>
+                              <p className="text-sm text-gray-600">{turf.address}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        onClick={resetToNewTurf}
+                        variant="outline"
+                        className="whitespace-nowrap"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        New Turf
+                      </Button>
+                    </div>
+                  </div>
+                  {isEditMode && (
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        ✏️ <strong>Editing:</strong> {formData.name}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <form onSubmit={handleSingleUpload} className="space-y-6">
                   {/* Basic Info */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -571,32 +1022,126 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                   </div>
 
                   {/* Pricing */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Price Per Hour (₹) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.price_per_hour}
-                        onChange={(e) => setFormData({ ...formData, price_per_hour: parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
-                        min="0"
-                        step="50"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Weekend Price (₹)</label>
-                      <input
-                        type="number"
-                        value={formData.price_per_hour_weekend}
-                        onChange={(e) => setFormData({ ...formData, price_per_hour_weekend: parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
-                        min="0"
-                        step="50"
-                        placeholder="Same as weekday if empty"
-                      />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Weekday Price (₹) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={
+                            formData.morning_price && formData.afternoon_price && formData.evening_price
+                              ? `${formData.morning_price},${formData.afternoon_price},${formData.evening_price}`
+                              : formData.morning_price && formData.evening_price && !formData.afternoon_price
+                              ? `${formData.morning_price},${formData.evening_price}`
+                              : formData.morning_price && formData.morning_price === formData.afternoon_price && formData.morning_price === formData.evening_price
+                              ? `${formData.morning_price}`
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const prices = value.split(',').map(p => p.trim()).filter(p => p);
+
+                            if (prices.length === 3) {
+                              // Morning, Afternoon, Evening
+                              setFormData({
+                                ...formData,
+                                morning_price: parseFloat(prices[0]) || undefined,
+                                afternoon_price: parseFloat(prices[1]) || undefined,
+                                evening_price: parseFloat(prices[2]) || undefined
+                              });
+                            } else if (prices.length === 2) {
+                              // Morning, Evening (no afternoon)
+                              setFormData({
+                                ...formData,
+                                morning_price: parseFloat(prices[0]) || undefined,
+                                afternoon_price: undefined,
+                                evening_price: parseFloat(prices[1]) || undefined
+                              });
+                            } else if (prices.length === 1) {
+                              // Single price for all times
+                              const singlePrice = parseFloat(prices[0]) || undefined;
+                              setFormData({
+                                ...formData,
+                                morning_price: singlePrice,
+                                afternoon_price: singlePrice,
+                                evening_price: singlePrice
+                              });
+                            } else {
+                              // Empty - clear all
+                              setFormData({
+                                ...formData,
+                                morning_price: undefined,
+                                afternoon_price: undefined,
+                                evening_price: undefined
+                              });
+                            }
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="600 or 500,600 or 500,400,800"
+                          required
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Single: 600 | Morning,Evening: 500,600 | Morning,Afternoon,Evening: 500,400,800
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Weekend Price (₹)</label>
+                        <input
+                          type="text"
+                          value={
+                            formData.weekend_morning_price && formData.weekend_afternoon_price && formData.weekend_evening_price
+                              ? `${formData.weekend_morning_price},${formData.weekend_afternoon_price},${formData.weekend_evening_price}`
+                              : formData.weekend_morning_price && formData.weekend_evening_price && !formData.weekend_afternoon_price
+                              ? `${formData.weekend_morning_price},${formData.weekend_evening_price}`
+                              : formData.weekend_morning_price && formData.weekend_morning_price === formData.weekend_afternoon_price && formData.weekend_morning_price === formData.weekend_evening_price
+                              ? `${formData.weekend_morning_price}`
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const prices = value.split(',').map(p => p.trim()).filter(p => p);
+
+                            if (prices.length === 3) {
+                              setFormData({
+                                ...formData,
+                                weekend_morning_price: parseFloat(prices[0]) || undefined,
+                                weekend_afternoon_price: parseFloat(prices[1]) || undefined,
+                                weekend_evening_price: parseFloat(prices[2]) || undefined
+                              });
+                            } else if (prices.length === 2) {
+                              setFormData({
+                                ...formData,
+                                weekend_morning_price: parseFloat(prices[0]) || undefined,
+                                weekend_afternoon_price: undefined,
+                                weekend_evening_price: parseFloat(prices[1]) || undefined
+                              });
+                            } else if (prices.length === 1) {
+                              const singlePrice = parseFloat(prices[0]) || undefined;
+                              setFormData({
+                                ...formData,
+                                weekend_morning_price: singlePrice,
+                                weekend_afternoon_price: singlePrice,
+                                weekend_evening_price: singlePrice
+                              });
+                            } else {
+                              // Empty - clear all
+                              setFormData({
+                                ...formData,
+                                weekend_morning_price: undefined,
+                                weekend_afternoon_price: undefined,
+                                weekend_evening_price: undefined
+                              });
+                            }
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="700 or 600,700 or 600,500,800"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Same format as weekday (optional, defaults to weekday)
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -708,13 +1253,276 @@ export function AdminTurfUpload({ onBack }: AdminTurfUploadProps) {
                     </div>
                   </div>
 
+                  {/* NEW FIELDS - Dimensions */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Turf Specifications</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Height (feet)</label>
+                        <input
+                          type="number"
+                          value={formData.height_feet || ''}
+                          onChange={(e) => setFormData({ ...formData, height_feet: parseInt(e.target.value) || undefined })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="20"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Length (feet)</label>
+                        <input
+                          type="number"
+                          value={formData.length_feet || ''}
+                          onChange={(e) => setFormData({ ...formData, length_feet: parseInt(e.target.value) || undefined })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="60"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Width (feet)</label>
+                        <input
+                          type="number"
+                          value={formData.width_feet || ''}
+                          onChange={(e) => setFormData({ ...formData, width_feet: parseInt(e.target.value) || undefined })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Number of Grounds</label>
+                        <input
+                          type="number"
+                          value={formData.number_of_grounds}
+                          onChange={(e) => setFormData({ ...formData, number_of_grounds: parseInt(e.target.value) || 1 })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          min="1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Operating Hours */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Operating Hours</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Start Time</label>
+                        <input
+                          type="time"
+                          value={formData.start_time || ''}
+                          onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">End Time</label>
+                        <input
+                          type="time"
+                          value={formData.end_time || ''}
+                          onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Facilities */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Facilities</h3>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={formData.equipment_provided}
+                          onChange={(e) => setFormData({ ...formData, equipment_provided: e.target.checked })}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <span className="text-sm font-medium">Equipment Provided</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={formData.parking_available}
+                          onChange={(e) => setFormData({ ...formData, parking_available: e.target.checked })}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <span className="text-sm font-medium">Parking</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={formData.washroom_available}
+                          onChange={(e) => setFormData({ ...formData, washroom_available: e.target.checked })}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <span className="text-sm font-medium">Washroom</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={formData.changing_room_available}
+                          onChange={(e) => setFormData({ ...formData, changing_room_available: e.target.checked })}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <span className="text-sm font-medium">Changing Room</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={formData.sitting_area_available}
+                          onChange={(e) => setFormData({ ...formData, sitting_area_available: e.target.checked })}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <span className="text-sm font-medium">Sitting Area</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Condition */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Condition Assessment</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Net Condition</label>
+                        <select
+                          value={formData.net_condition || ''}
+                          onChange={(e) => setFormData({ ...formData, net_condition: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                        >
+                          <option value="">Select condition</option>
+                          <option value="excellent">Excellent</option>
+                          <option value="good">Good</option>
+                          <option value="fair">Fair</option>
+                          <option value="needs_replacement">Needs Replacement</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Grass Condition</label>
+                        <select
+                          value={formData.grass_condition || ''}
+                          onChange={(e) => setFormData({ ...formData, grass_condition: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                        >
+                          <option value="">Select condition</option>
+                          <option value="excellent">Excellent</option>
+                          <option value="good">Good</option>
+                          <option value="fair">Fair</option>
+                          <option value="needs_maintenance">Needs Maintenance</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Owner Information */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Owner Information</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Owner Name</label>
+                        <input
+                          type="text"
+                          value={formData.owner_name || ''}
+                          onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="Rajesh Kumar"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Owner Phone</label>
+                        <input
+                          type="tel"
+                          value={formData.owner_phone || ''}
+                          onChange={(e) => setFormData({ ...formData, owner_phone: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="+919876543210"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Preferred Booking Channel</label>
+                        <select
+                          value={formData.preferred_booking_channel || ''}
+                          onChange={(e) => setFormData({ ...formData, preferred_booking_channel: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                        >
+                          <option value="">Select channel</option>
+                          <option value="whatsapp">WhatsApp</option>
+                          <option value="call">Call</option>
+                          <option value="both">Both</option>
+                          <option value="online">Online</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Additional Images & Location */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Additional Information</h3>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Signboard Image URL</label>
+                        <input
+                          type="url"
+                          value={formData.signboard_image || ''}
+                          onChange={(e) => setFormData({ ...formData, signboard_image: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="URL of turf signboard photo"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Entry/Parking Image URL</label>
+                        <input
+                          type="url"
+                          value={formData.entry_parking_image || ''}
+                          onChange={(e) => setFormData({ ...formData, entry_parking_image: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="URL of entry and parking area photo"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Nearby Landmark</label>
+                        <input
+                          type="text"
+                          value={formData.nearby_landmark || ''}
+                          onChange={(e) => setFormData({ ...formData, nearby_landmark: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          placeholder="Near Deolali Railway Station"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Unique Features</label>
+                        <textarea
+                          value={formData.unique_features || ''}
+                          onChange={(e) => setFormData({ ...formData, unique_features: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-600"
+                          rows={3}
+                          placeholder="Indoor/outdoor hybrid turf with retractable roof..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Submit */}
                   <Button
                     type="submit"
                     disabled={uploading}
                     className="w-full"
                   >
-                    {uploading ? 'Uploading...' : 'Upload Turf'}
+                    {uploading ? (isEditMode ? 'Updating...' : 'Uploading...') : (isEditMode ? 'Update Turf' : 'Upload Turf')}
                   </Button>
                 </form>
               </CardContent>
