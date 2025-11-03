@@ -13,7 +13,7 @@ import { turfsAPI, bookingsAPI, gamesAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import type { TurfData } from './TurfCard';
 import { GameCard, type GameData } from './GameCard';
-import { TurfReviewSystem } from './TurfReviewSystem';
+import { convertImageUrls } from '../lib/imageUtils';
 
 interface TurfDetailPageProps {
   turfId: string;
@@ -78,6 +78,13 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
     try {
       const response = await turfsAPI.getById(turfId);
       if (response.success && response.data) {
+        console.log('🏟️ FULL TURF DATA RECEIVED:', response.data);
+        console.log('🏟️ Available fields:', Object.keys(response.data));
+        console.log('🏟️ Description:', (response.data as any).description);
+        console.log('🏟️ Morning Price:', (response.data as any).morning_price);
+        console.log('🏟️ Length:', (response.data as any).length_feet);
+        console.log('🏟️ Start Time:', (response.data as any).start_time);
+        console.log('🏟️ Owner Name:', (response.data as any).owner_name);
         setTurf(response.data as TurfData);
       }
     } catch (error) {
@@ -106,9 +113,30 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
     try {
       const response = await gamesAPI.getAvailable();
       if (response.success && response.data) {
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const currentTime = now.getHours() * 60 + now.getMinutes(); // Current time in minutes
+
         const turfGames = response.data.filter((game: any) => {
           const gameTurfName = game.turfs?.name || game.turf_name || game.turfName || '';
-          return gameTurfName.toLowerCase() === turf?.name.toLowerCase();
+          const gameDate = game.date;
+          const gameStartTime = game.start_time || game.startTime || "00:00";
+
+          // Only include games at this turf
+          if (gameTurfName.toLowerCase() !== turf?.name.toLowerCase()) {
+            return false;
+          }
+
+          // Only include upcoming games (future dates or today's future games)
+          if (gameDate > today) {
+            return true; // Future date
+          } else if (gameDate === today) {
+            // Same day - check if game hasn't started yet
+            const [hours, minutes] = gameStartTime.split(':').map(Number);
+            const gameTime = hours * 60 + minutes;
+            return gameTime > currentTime;
+          }
+          return false; // Past game
         }).map((game: any) => {
           const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
           const hostPhone = game.users?.phone || game.host_phone || game.hostPhone || "9999999999";
@@ -177,7 +205,7 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
     }
   };
 
-  const validImages = turf?.images?.filter(img => img && img.trim() !== '') || [];
+  const validImages = convertImageUrls(turf?.images || []);
   const hasMultipleImages = validImages.length > 1;
 
   if (loading) {
@@ -203,47 +231,8 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
     );
   }
 
-  // Mock reviews data - replace with actual API data
-  const mockReviews = [
-    {
-      id: '1',
-      user: {
-        id: 'user1',
-        name: 'Rajesh Kumar',
-        avatar: '',
-        totalReviews: 12,
-        joinedDate: '2023-01-15'
-      },
-      rating: 5,
-      title: 'Excellent turf with great maintenance',
-      comment: 'The turf quality is outstanding. Well-maintained grass, proper lighting for night games, and friendly staff. Definitely worth the price!',
-      date: '2024-10-15',
-      verified: true,
-      helpful: 24,
-      notHelpful: 2,
-      visitDate: '2024-10-10',
-      gameType: 'Football'
-    },
-    {
-      id: '2',
-      user: {
-        id: 'user2',
-        name: 'Priya Sharma',
-        avatar: '',
-        totalReviews: 8,
-        joinedDate: '2023-05-20'
-      },
-      rating: 4,
-      title: 'Good facilities, could be better',
-      comment: 'Overall good experience. The changing rooms are clean and parking is convenient. However, could use better seating arrangements for spectators.',
-      date: '2024-10-12',
-      verified: true,
-      helpful: 15,
-      notHelpful: 1,
-      visitDate: '2024-10-08',
-      gameType: 'Cricket'
-    }
-  ];
+  // No mock reviews - show real reviews only
+  const mockReviews: any[] = [];
 
   return (
     <div className="min-h-screen bg-white">
@@ -357,8 +346,69 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
         </motion.div>
 
         <div className="grid lg:grid-cols-3 gap-8 lg:gap-12">
+          {/* Sticky Sidebar - Shows first on mobile, right side on desktop */}
+          <div className="lg:col-span-1 lg:order-2">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="lg:sticky lg:top-24"
+            >
+              <Card className="border border-gray-300 rounded-xl shadow-xl">
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-sm text-gray-600">starts from</span>
+                      <span className="text-2xl font-semibold text-gray-900">
+                        ₹{(() => {
+                          // Calculate minimum price from all pricing fields
+                          const prices = [
+                            (turf as any).morning_price,
+                            (turf as any).afternoon_price,
+                            (turf as any).evening_price,
+                            (turf as any).weekend_morning_price,
+                            (turf as any).weekend_afternoon_price,
+                            (turf as any).weekend_evening_price
+                          ].filter(p => p != null && p > 0);
+
+                          return prices.length > 0 ? Math.min(...prices) : turf.pricePerHour || '500';
+                        })()}
+                      </span>
+                      <span className="text-gray-600">per hour</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-sm">
+                      <Star className="w-4 h-4 fill-gray-900 text-gray-900" />
+                      <span className="font-medium">{Number(turf.rating).toFixed(1)}</span>
+                      <span className="text-gray-600">· {turf.totalReviews} reviews</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-6 text-base font-semibold shadow-md transition-all duration-200"
+                      onClick={() => {
+                        // Get owner phone or contact phone
+                        const phone = (turf as any).owner_phone || turf.contacts?.phone || (turf as any).contact_info?.phone;
+                        if (phone) {
+                          const message = encodeURIComponent(`Hi! I'm interested in booking ${turf.name}. Can you help me check availability?`);
+                          window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${message}`, '_blank');
+                        }
+                      }}
+                    >
+                      Check availability
+                    </Button>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 space-y-2 text-center text-sm text-gray-600">
+                    <p>You won't be charged yet</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-2 lg:order-1 space-y-8">
             {/* Quick Info */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -386,7 +436,275 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
               </div>
             </motion.div>
 
-            {/* Reviews Section */}
+            {/* Description Section */}
+            {(turf as any).description && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                className="pb-8 border-b border-gray-200"
+              >
+                <h2 className="text-xl sm:text-2xl font-semibold mb-4">About this turf</h2>
+                <p className="text-gray-700 leading-relaxed">{(turf as any).description}</p>
+              </motion.div>
+            )}
+
+            {/* Turf Details */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.26 }}
+              className="pb-8 border-b border-gray-200"
+            >
+              <h2 className="text-xl sm:text-2xl font-semibold mb-6">Turf Details</h2>
+              <div className="grid sm:grid-cols-2 gap-6">
+                {/* Dimensions */}
+                {((turf as any).length_feet || (turf as any).width_feet || (turf as any).height_feet) && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Dimensions</h3>
+                    <div className="space-y-2">
+                      {(turf as any).length_feet && (
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+                          <span className="text-gray-600">Length</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{(turf as any).length_feet}ft</span>
+                            {(turf as any).length_feet > 110 ? (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Excellent</span>
+                            ) : (turf as any).length_feet >= 100 ? (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Fair</span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded">Compact</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {(turf as any).width_feet && (
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+                          <span className="text-gray-600">Width</span>
+                          <span className="font-semibold text-gray-900">{(turf as any).width_feet}ft</span>
+                        </div>
+                      )}
+                      {(turf as any).height_feet && (
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+                          <span className="text-gray-600">Height</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{(turf as any).height_feet}ft</span>
+                            {(turf as any).height_feet >= 25 ? (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Great</span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded">Limited</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Operating Hours */}
+                {((turf as any).start_time || (turf as any).end_time) && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Operating Hours</h3>
+                    <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                        <span className="font-semibold text-blue-900">
+                          {(turf as any).start_time && (turf as any).end_time
+                            ? `${(turf as any).start_time.slice(0, 5)} - ${(turf as any).end_time.slice(0, 5)}`
+                            : (turf as any).start_time || (turf as any).end_time}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Number of Grounds */}
+                {(turf as any).number_of_grounds && (turf as any).number_of_grounds > 1 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Capacity</h3>
+                    <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-5 h-5 text-purple-600" />
+                        <span className="font-semibold text-purple-900">
+                          {(turf as any).number_of_grounds} grounds available
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Grass Condition */}
+                {(turf as any).grass_condition && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Grass Condition</h3>
+                    <div className={`p-3 rounded-lg border ${
+                      (turf as any).grass_condition.toLowerCase() === 'excellent' ? 'bg-emerald-50 border-emerald-100' :
+                      (turf as any).grass_condition.toLowerCase() === 'good' ? 'bg-green-50 border-green-100' :
+                      (turf as any).grass_condition.toLowerCase() === 'fair' ? 'bg-yellow-50 border-yellow-100' :
+                      'bg-orange-50 border-orange-100'
+                    }`}>
+                      <span className={`font-semibold capitalize ${
+                        (turf as any).grass_condition.toLowerCase() === 'excellent' ? 'text-emerald-700' :
+                        (turf as any).grass_condition.toLowerCase() === 'good' ? 'text-green-700' :
+                        (turf as any).grass_condition.toLowerCase() === 'fair' ? 'text-yellow-700' :
+                        'text-orange-700'
+                      }`}>
+                        {(turf as any).grass_condition}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Net Condition */}
+                {(turf as any).net_condition && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Net Condition</h3>
+                    <div className={`p-3 rounded-lg border ${
+                      (turf as any).net_condition.toLowerCase() === 'excellent' ? 'bg-emerald-50 border-emerald-100' :
+                      (turf as any).net_condition.toLowerCase() === 'good' ? 'bg-green-50 border-green-100' :
+                      (turf as any).net_condition.toLowerCase() === 'fair' ? 'bg-yellow-50 border-yellow-100' :
+                      'bg-orange-50 border-orange-100'
+                    }`}>
+                      <span className={`font-semibold capitalize ${
+                        (turf as any).net_condition.toLowerCase() === 'excellent' ? 'text-emerald-700' :
+                        (turf as any).net_condition.toLowerCase() === 'good' ? 'text-green-700' :
+                        (turf as any).net_condition.toLowerCase() === 'fair' ? 'text-yellow-700' :
+                        'text-orange-700'
+                      }`}>
+                        {(turf as any).net_condition}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Nearby Landmark */}
+                {(turf as any).nearby_landmark && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3">Nearby Landmark</h3>
+                    <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-gray-600" />
+                        <span className="font-medium text-gray-900">{(turf as any).nearby_landmark}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Pricing Details */}
+            {((turf as any).morning_price || (turf as any).afternoon_price || (turf as any).evening_price) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.27 }}
+                className="pb-8 border-b border-gray-200"
+              >
+                <h2 className="text-xl sm:text-2xl font-semibold mb-4">Pricing</h2>
+                <div className="space-y-4">
+                  {/* Weekday Pricing */}
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">Weekday Rates</h3>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(turf as any).morning_price && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <div className="text-sm text-gray-600">Morning</div>
+                          <div className="text-lg font-semibold text-gray-900">₹{(turf as any).morning_price}</div>
+                        </div>
+                      )}
+                      {(turf as any).afternoon_price && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <div className="text-sm text-gray-600">Afternoon</div>
+                          <div className="text-lg font-semibold text-gray-900">₹{(turf as any).afternoon_price}</div>
+                        </div>
+                      )}
+                      {(turf as any).evening_price && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <div className="text-sm text-gray-600">Evening</div>
+                          <div className="text-lg font-semibold text-gray-900">₹{(turf as any).evening_price}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Weekend Pricing */}
+                  {((turf as any).weekend_morning_price || (turf as any).weekend_afternoon_price || (turf as any).weekend_evening_price) && (
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-2">Weekend Rates</h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        {(turf as any).weekend_morning_price && (
+                          <div className="p-3 bg-emerald-50 rounded-lg">
+                            <div className="text-sm text-emerald-600">Morning</div>
+                            <div className="text-lg font-semibold text-emerald-900">₹{(turf as any).weekend_morning_price}</div>
+                          </div>
+                        )}
+                        {(turf as any).weekend_afternoon_price && (
+                          <div className="p-3 bg-emerald-50 rounded-lg">
+                            <div className="text-sm text-emerald-600">Afternoon</div>
+                            <div className="text-lg font-semibold text-emerald-900">₹{(turf as any).weekend_afternoon_price}</div>
+                          </div>
+                        )}
+                        {(turf as any).weekend_evening_price && (
+                          <div className="p-3 bg-emerald-50 rounded-lg">
+                            <div className="text-sm text-emerald-600">Evening</div>
+                            <div className="text-lg font-semibold text-emerald-900">₹{(turf as any).weekend_evening_price}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Unique Features */}
+            {(turf as any).unique_features && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.28 }}
+                className="pb-8 border-b border-gray-200"
+              >
+                <h2 className="text-xl sm:text-2xl font-semibold mb-4">Unique Features</h2>
+                <p className="text-gray-700 leading-relaxed">{(turf as any).unique_features}</p>
+              </motion.div>
+            )}
+
+            {/* Owner Information */}
+            {((turf as any).owner_name || (turf as any).owner_phone) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.29 }}
+                className="pb-8 border-b border-gray-200"
+              >
+                <h2 className="text-xl sm:text-2xl font-semibold mb-4">Contact Information</h2>
+                <div className="space-y-3">
+                  {(turf as any).owner_name && (
+                    <div className="flex items-center gap-3">
+                      <Users className="w-5 h-5 text-gray-600" />
+                      <span className="text-gray-900">{(turf as any).owner_name}</span>
+                    </div>
+                  )}
+                  {(turf as any).owner_phone && (
+                    <div className="flex items-center gap-3">
+                      <Phone className="w-5 h-5 text-gray-600" />
+                      <a href={`tel:${(turf as any).owner_phone}`} className="text-emerald-600 hover:text-emerald-700 font-medium">
+                        {(turf as any).owner_phone}
+                      </a>
+                    </div>
+                  )}
+                  {(turf as any).preferred_booking_channel && (
+                    <div className="flex items-center gap-3">
+                      <MessageSquare className="w-5 h-5 text-gray-600" />
+                      <span className="text-gray-700 capitalize">Preferred: {(turf as any).preferred_booking_channel}</span>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Reviews Section - Coming Soon */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -400,13 +718,11 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                 </h2>
               </div>
 
-              <TurfReviewSystem
-                turfId={turf.id}
-                turfName={turf.name}
-                reviews={mockReviews}
-                overallRating={turf.rating}
-                totalReviews={turf.totalReviews}
-              />
+              <div className="text-center py-12 bg-gray-50 rounded-xl">
+                <Star className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Reviews Coming Soon</h3>
+                <p className="text-gray-600">We're working on bringing you authentic reviews from verified players.</p>
+              </div>
             </motion.div>
 
             {/* Time Slots */}
@@ -438,15 +754,26 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
               </div>
             </motion.div>
 
-            {/* Open Games */}
-            {turfGames.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="pb-8"
-              >
-                <h2 className="text-xl sm:text-2xl font-semibold mb-4">Games happening here</h2>
+            {/* Upcoming Games */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="pb-8"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-semibold">Upcoming Games</h2>
+                  <p className="text-sm text-gray-600 mt-1">Join games scheduled at this turf</p>
+                </div>
+                {turfGames.length > 0 && (
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full">
+                    {turfGames.length} {turfGames.length === 1 ? 'game' : 'games'} available
+                  </span>
+                )}
+              </div>
+
+              {turfGames.length > 0 ? (
                 <div className="grid sm:grid-cols-2 gap-4">
                   {turfGames.slice(0, 4).map((game) => (
                     <GameCard
@@ -459,72 +786,21 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                     />
                   ))}
                 </div>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Sticky Sidebar - Airbnb Style */}
-          <div className="lg:col-span-1">
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="lg:sticky lg:top-24"
-            >
-              <Card className="border border-gray-300 rounded-xl shadow-xl">
-                <CardContent className="p-6 space-y-4">
-                  <div>
-                    <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-2xl font-semibold text-gray-900">
-                        {turf.priceDisplay}
-                      </span>
-                      <span className="text-gray-600">per hour</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-sm">
-                      <Star className="w-4 h-4 fill-gray-900 text-gray-900" />
-                      <span className="font-medium">{Number(turf.rating).toFixed(1)}</span>
-                      <span className="text-gray-600">· {turf.totalReviews} reviews</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
+              ) : (
+                <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                  <Calendar className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Upcoming Games</h3>
+                  <p className="text-gray-600 mb-4">Be the first to create a game at this turf!</p>
+                  {onCreateGame && (
                     <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-6 text-base font-semibold shadow-md transition-all duration-200"
-                      onClick={() => {
-                        // Handle booking
-                      }}
+                      onClick={onCreateGame}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6"
                     >
-                      Check availability
+                      Create Game
                     </Button>
-
-                    {turf.contacts?.phone && (
-                      <Button
-                        variant="outline"
-                        className="w-full rounded-lg py-6 text-base font-medium border-2 border-gray-300 hover:border-gray-900 hover:bg-gray-50"
-                        onClick={() => window.open(`tel:${turf.contacts?.phone}`, '_blank')}
-                      >
-                        <Phone className="w-5 h-5 mr-2" />
-                        Contact
-                      </Button>
-                    )}
-
-                    {onCreateGame && isAuthenticated && (
-                      <Button
-                        variant="outline"
-                        className="w-full rounded-lg py-6 text-base font-medium border-2 border-blue-300 hover:border-blue-600 hover:bg-blue-50 text-blue-600"
-                        onClick={onCreateGame}
-                      >
-                        <Users className="w-5 h-5 mr-2" />
-                        Create Game
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200 space-y-2 text-center text-sm text-gray-600">
-                    <p>You won't be charged yet</p>
-                  </div>
-                </CardContent>
-              </Card>
+                  )}
+                </div>
+              )}
             </motion.div>
           </div>
         </div>

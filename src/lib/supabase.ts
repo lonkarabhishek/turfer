@@ -826,11 +826,12 @@ export const turfHelpers = {
       }
 
       // Transform snake_case to camelCase for frontend compatibility
+      // Note: Database has "Gmap Embed link" with capital G and space
       const transformedData = data?.map((turf: any) => ({
         ...turf,
         totalReviews: turf.total_reviews || 0,
         pricePerHour: turf.price_per_hour || turf.pricePerHour,
-        gmapEmbedLink: turf.gmap_embed_link,
+        gmapEmbedLink: turf['Gmap Embed link'], // Access the correctly-named field
         contactInfo: turf.contact_info,
         isActive: turf.is_active,
         createdAt: turf.created_at,
@@ -861,16 +862,17 @@ export const turfHelpers = {
 
       console.log('🗺️ Turf data fetched:', {
         turfId: id,
-        hasGmapLink: !!data?.gmap_embed_link,
-        gmapLink: data?.gmap_embed_link
+        hasGmapLink: !!data?.['Gmap Embed link'],
+        gmapLink: data?.['Gmap Embed link']
       });
 
       // Transform snake_case to camelCase for frontend compatibility
+      // Note: Database has "Gmap Embed link" with capital G and space
       const transformedData = data ? {
         ...data,
         totalReviews: data.total_reviews || 0,
         pricePerHour: data.price_per_hour || data.pricePerHour,
-        gmapEmbedLink: data.gmap_embed_link,
+        gmapEmbedLink: data['Gmap Embed link'], // Access the correctly-named field
         contactInfo: data.contact_info,
         isActive: data.is_active,
         createdAt: data.created_at,
