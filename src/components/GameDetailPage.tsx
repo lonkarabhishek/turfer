@@ -259,7 +259,8 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
           costPerPerson: gameData.price_per_player || gameData.costPerPerson || 0,
           notes: gameData.notes || gameData.description || '',
           creatorId: gameData.creator_id || gameData.creatorId || gameData.host_id || undefined,
-          players: gameData.players || []
+          players: gameData.players || [],
+          turfBooked: gameData.turf_booked || gameData.turfBooked || false
         };
         
         console.log('Transformed game data:', transformedGame);
@@ -544,7 +545,15 @@ Hosted by ${game.hostName}
                   <div className="flex items-start gap-3">
                     <MapPin className="w-5 h-5 text-primary-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                      <div className="font-semibold text-gray-900">{game.turfName}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="font-semibold text-gray-900">{game.turfName}</div>
+                        {game.turfBooked && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <CheckCircle className="w-3 h-3" />
+                            Turf Booked
+                          </span>
+                        )}
+                      </div>
                       {game.turfGmapEmbedLink ? (
                         <div className="mt-2 rounded-lg overflow-hidden">
                           <iframe
