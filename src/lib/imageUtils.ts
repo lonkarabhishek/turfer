@@ -4,7 +4,7 @@
  */
 
 /**
- * Converts a Google Drive sharing link to a direct image URL
+ * Converts a Google Drive sharing link to a direct image URL using thumbnail API
  *
  * Supported formats:
  * - https://drive.google.com/file/d/FILE_ID/view?usp=sharing
@@ -13,7 +13,7 @@
  * - https://drive.google.com/uc?id=FILE_ID
  *
  * @param url - The Google Drive URL to convert
- * @returns Direct image URL or original URL if not a Google Drive link
+ * @returns Direct image URL using thumbnail API or original URL if not a Google Drive link
  */
 export function convertGoogleDriveUrl(url: string): string {
   if (!url || typeof url !== 'string') {
@@ -25,8 +25,8 @@ export function convertGoogleDriveUrl(url: string): string {
     return url;
   }
 
-  // Already converted format
-  if (url.includes('uc?export=view') || url.includes('uc?id=')) {
+  // Already converted to thumbnail format
+  if (url.includes('drive.google.com/thumbnail')) {
     return url;
   }
 
@@ -42,6 +42,8 @@ export function convertGoogleDriveUrl(url: string): string {
     }
 
     // Format: https://drive.google.com/open?id=FILE_ID
+    // Format: https://drive.google.com/uc?id=FILE_ID
+    // Format: https://drive.google.com/uc?export=view&id=FILE_ID
     if (!fileId) {
       const openMatch = url.match(/[?&]id=([^&]+)/);
       if (openMatch) {
@@ -49,9 +51,11 @@ export function convertGoogleDriveUrl(url: string): string {
       }
     }
 
-    // If we found a file ID, convert to direct link
+    // If we found a file ID, convert to thumbnail link (works better for embedding)
     if (fileId) {
-      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+      // Use thumbnail API with large size for best quality
+      // sz=w2000 requests width of 2000px (you can adjust this)
+      return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
     }
 
     // Return original URL if we couldn't extract file ID
