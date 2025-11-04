@@ -208,6 +208,14 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
   const validImages = convertImageUrls(turf?.images || []);
   const hasMultipleImages = validImages.length > 1;
 
+  // Debug: Log image data
+  console.log('🖼️ IMAGE DEBUG:', {
+    rawImages: turf?.images,
+    validImages,
+    hasMultipleImages,
+    imageCount: validImages.length
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -315,6 +323,11 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                   src={validImages[0]}
                   alt={turf.name}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  onError={(e) => {
+                    console.error('❌ Main image failed to load:', validImages[0]);
+                    console.error('Error event:', e);
+                  }}
+                  onLoad={() => console.log('✅ Main image loaded:', validImages[0])}
                 />
               </div>
 
@@ -325,6 +338,11 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                     src={img}
                     alt={`${turf.name} ${idx + 2}`}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      console.error(`❌ Side image ${idx + 2} failed to load:`, img);
+                      console.error('Error event:', e);
+                    }}
+                    onLoad={() => console.log(`✅ Side image ${idx + 2} loaded:`, img)}
                   />
                   {idx === 3 && validImages.length > 5 && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-medium">
