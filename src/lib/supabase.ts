@@ -644,7 +644,8 @@ export const gameHelpers = {
             id,
             name,
             address,
-            price_per_hour
+            price_per_hour,
+            gmap_embed_link
           )
         `)
         .eq('id', gameId)
@@ -666,7 +667,7 @@ export const gameHelpers = {
         if (dbGame && dbGame.turf_id) {
           const { data: turfData } = await supabase
             .from('turfs')
-            .select('id, name, address, price_per_hour')
+            .select('id, name, address, price_per_hour, gmap_embed_link')
             .eq('id', dbGame.turf_id)
             .single();
 
