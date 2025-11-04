@@ -468,8 +468,8 @@ export const gameHelpers = {
             id,
             name,
             address,
-            pricePerHour,
-            gmap_embed_link
+            morning_price,
+            "Gmap Embed link"
           ),
           users (
             id,
@@ -644,8 +644,8 @@ export const gameHelpers = {
             id,
             name,
             address,
-            price_per_hour,
-            gmap_embed_link
+            morning_price,
+            "Gmap Embed link"
           )
         `)
         .eq('id', gameId)
@@ -667,7 +667,7 @@ export const gameHelpers = {
         if (dbGame && dbGame.turf_id) {
           const { data: turfData } = await supabase
             .from('turfs')
-            .select('id, name, address, price_per_hour, gmap_embed_link')
+            .select('id, name, address, morning_price, "Gmap Embed link"')
             .eq('id', dbGame.turf_id)
             .single();
 
