@@ -14,6 +14,7 @@ import { useAuth } from '../hooks/useAuth';
 import type { TurfData } from './TurfCard';
 import { GameCard, type GameData } from './GameCard';
 import { convertImageUrls } from '../lib/imageUtils';
+import { formatStartingPrice } from '../lib/priceUtils';
 
 interface TurfDetailPageProps {
   turfId: string;
@@ -385,21 +386,8 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                 <CardContent className="p-6 space-y-4">
                   <div>
                     <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-sm text-gray-600">starts from</span>
                       <span className="text-2xl font-semibold text-gray-900">
-                        ₹{(() => {
-                          // Calculate minimum price from all pricing fields
-                          const prices = [
-                            (turf as any).morning_price,
-                            (turf as any).afternoon_price,
-                            (turf as any).evening_price,
-                            (turf as any).weekend_morning_price,
-                            (turf as any).weekend_afternoon_price,
-                            (turf as any).weekend_evening_price
-                          ].filter(p => p != null && p > 0);
-
-                          return prices.length > 0 ? Math.min(...prices) : turf.pricePerHour || '500';
-                        })()}
+                        {formatStartingPrice(turf)}
                       </span>
                       <span className="text-gray-600">per hour</span>
                     </div>

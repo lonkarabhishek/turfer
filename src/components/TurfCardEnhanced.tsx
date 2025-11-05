@@ -53,19 +53,38 @@ const getExcellentFeatures = (turf: any): string[] => {
   const features: string[] = [];
   const turfData = turf as any;
 
+  // Net condition - Excellent or Great
+  if (turfData.net_condition && ['excellent', 'great', 'good'].includes(turfData.net_condition.toLowerCase())) {
+    if (turfData.net_condition.toLowerCase() === 'excellent') {
+      features.push('Excellent Nets');
+    }
+  }
+
+  // Grass condition - Excellent or Great
+  if (turfData.grass_condition && ['excellent', 'great', 'good'].includes(turfData.grass_condition.toLowerCase())) {
+    if (turfData.grass_condition.toLowerCase() === 'excellent') {
+      features.push('Excellent Grass');
+    }
+  }
+
   // Length > 105ft is excellent
   if (turfData.length_feet && turfData.length_feet > 105) {
-    features.push('Excellent Length');
+    features.push(`${turfData.length_feet}ft Length`);
   }
 
   // Width > 50ft is excellent
   if (turfData.width_feet && turfData.width_feet > 50) {
-    features.push('Excellent Width');
+    features.push(`${turfData.width_feet}ft Width`);
   }
 
   // Height > 25ft is excellent
   if (turfData.height_feet && turfData.height_feet > 25) {
-    features.push('Excellent Height');
+    features.push(`${turfData.height_feet}ft Height`);
+  }
+
+  // Equipment provided
+  if (turfData.equipment_provided && turfData.equipment_provided !== 'none' && turfData.equipment_provided !== 'no') {
+    features.push('Equipment Included');
   }
 
   return features;
