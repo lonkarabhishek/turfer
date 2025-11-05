@@ -7,6 +7,12 @@ export interface PriceData {
   pricePerHourWeekend?: number;
   priceMin?: number;
   priceMax?: number;
+  morning_price?: number;
+  afternoon_price?: number;
+  evening_price?: number;
+  weekend_morning_price?: number;
+  weekend_afternoon_price?: number;
+  weekend_evening_price?: number;
 }
 
 /**
@@ -54,6 +60,38 @@ export const cleanPriceData = (priceData: Partial<PriceData>): PriceData => {
     priceMin: priceData.priceMin && priceData.priceMin > 0 ? priceData.priceMin : undefined,
     priceMax: priceData.priceMax && priceData.priceMax > 0 ? priceData.priceMax : undefined
   };
+};
+
+/**
+ * Get minimum price from all available price fields
+ * @param priceData - Object containing various price fields
+ * @param defaultPrice - Default fallback price (default: 500)
+ * @returns Minimum price found or default
+ */
+export const getMinimumPrice = (priceData: any, defaultPrice: number = 500): number => {
+  const prices = [
+    priceData?.morning_price,
+    priceData?.afternoon_price,
+    priceData?.evening_price,
+    priceData?.weekend_morning_price,
+    priceData?.weekend_afternoon_price,
+    priceData?.weekend_evening_price,
+    priceData?.pricePerHour,
+    priceData?.priceMin
+  ].filter(p => p != null && p > 0);
+
+  return prices.length > 0 ? Math.min(...prices) : defaultPrice;
+};
+
+/**
+ * Format price display with minimum price (Starting From format)
+ * @param priceData - Object containing various price fields
+ * @param defaultPrice - Default fallback price (default: 500)
+ * @returns Formatted price string like "Starting ₹500"
+ */
+export const formatStartingPrice = (priceData: any, defaultPrice: number = 500): string => {
+  const minPrice = getMinimumPrice(priceData, defaultPrice);
+  return `Starting ₹${minPrice}`;
 };
 
 /**

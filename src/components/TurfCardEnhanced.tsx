@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Star, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Star, Heart, ChevronLeft, ChevronRight, Award } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -9,6 +9,7 @@ import { BookingModal } from './BookingModal';
 import { generateBookingMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
 import { convertImageUrls } from '../lib/imageUtils';
+import { formatStartingPrice } from '../lib/priceUtils';
 
 export interface TurfData {
   id: string;
@@ -47,12 +48,37 @@ interface TurfCardEnhancedProps {
   showStats?: boolean;
 }
 
+// Helper function to get excellent features
+const getExcellentFeatures = (turf: any): string[] => {
+  const features: string[] = [];
+  const turfData = turf as any;
+
+  // Length > 105ft is excellent
+  if (turfData.length_feet && turfData.length_feet > 105) {
+    features.push('Excellent Length');
+  }
+
+  // Width > 50ft is excellent
+  if (turfData.width_feet && turfData.width_feet > 50) {
+    features.push('Excellent Width');
+  }
+
+  // Height > 25ft is excellent
+  if (turfData.height_feet && turfData.height_feet > 25) {
+    features.push('Excellent Height');
+  }
+
+  return features;
+};
+
 export function TurfCardEnhanced({ turf, onBook, variant = 'default', onClick, user, showStats }: TurfCardEnhancedProps) {
   const [showWhatsAppFallback, setShowWhatsAppFallback] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+
+  const excellentFeatures = getExcellentFeatures(turf);
 
   const handleBookClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -244,6 +270,23 @@ export function TurfCardEnhanced({ turf, onBook, variant = 'default', onClick, u
             </div>
           )}
 
+          {/* Excellent Features - Display before amenities */}
+          {excellentFeatures.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {excellentFeatures.slice(0, 2).map((feature, idx) => (
+                <Badge key={idx} className="bg-emerald-100 text-emerald-700 border-0 text-[10px] px-1.5 py-0 font-medium flex items-center gap-0.5">
+                  <Award className="w-2.5 h-2.5" />
+                  {feature}
+                </Badge>
+              ))}
+              {excellentFeatures.length > 2 && (
+                <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px] px-1.5 py-0 font-medium">
+                  +{excellentFeatures.length - 2} more
+                </Badge>
+              )}
+            </div>
+          )}
+
           {/* Amenities - Minimal display */}
           {turf.amenities.length > 0 && (
             <div className="text-xs text-gray-600 mb-2 truncate">
@@ -252,12 +295,12 @@ export function TurfCardEnhanced({ turf, onBook, variant = 'default', onClick, u
             </div>
           )}
 
-          {/* Price - Prominent */}
+          {/* Price - Prominent - Show starting from minimum price */}
           <div className="flex items-baseline gap-1 mt-2 pt-2 border-t border-gray-100">
             <span className="font-semibold text-[15px] text-gray-900">
-              {turf.priceDisplay}
+              {formatStartingPrice(turf)}
             </span>
-            <span className="text-sm text-gray-600">per hour</span>
+            <span className="text-sm text-gray-600">/hr</span>
           </div>
         </CardContent>
       </Card>
