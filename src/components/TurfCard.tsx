@@ -8,6 +8,7 @@ import { WhatsAppFallback } from './WhatsAppFallback';
 import { BookingModal } from './BookingModal';
 import { generateBookingMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
+import { convertImageUrls } from '../lib/imageUtils';
 
 export interface TurfData {
   id: string;
@@ -88,7 +89,7 @@ export function TurfCard({ turf, onBook, variant = 'default', onClick, user }: T
     }
   };
 
-  const validImages = turf.images?.filter(img => img && img.trim() !== '') || [];
+  const validImages = convertImageUrls(turf.images || []);
   const hasMultipleImages = validImages.length > 1;
 
   return (

@@ -262,7 +262,14 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
           players: gameData.players || [],
           turfBooked: gameData.turf_booked || gameData.turfBooked || false
         };
-        
+
+        console.log('🎮 Game Data Debug:', {
+          turfName: transformedGame.turfName,
+          turfAddress: transformedGame.turfAddress,
+          turfId: transformedGame.turfId,
+          turfBooked: transformedGame.turfBooked,
+          turfGmapEmbedLink: transformedGame.turfGmapEmbedLink
+        });
         console.log('Transformed game data:', transformedGame);
         
         // Check if game is completed (past the end time)

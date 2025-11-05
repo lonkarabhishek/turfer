@@ -42,6 +42,15 @@ const amenityIcons: Record<string, { icon: React.ComponentType<any>, label: stri
   'changing_room': { icon: Users, label: 'Changing Room' }
 };
 
+// Utility function to convert 24-hour time to 12-hour AM/PM format
+const formatTo12Hour = (time24: string): string => {
+  if (!time24) return '';
+  const [hours, minutes] = time24.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12; // Convert 0 to 12 for midnight
+  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+};
+
 const timeSlots = [
   '05:00-06:00', '06:00-07:00', '07:00-08:00', '08:00-09:00', '09:00-10:00',
   '10:00-11:00', '11:00-12:00', '12:00-13:00', '13:00-14:00', '14:00-15:00',
@@ -486,10 +495,10 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                           <span className="text-gray-600">Length</span>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-gray-900">{(turf as any).length_feet}ft</span>
-                            {(turf as any).length_feet > 110 ? (
+                            {(turf as any).length_feet > 105 ? (
                               <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Excellent</span>
                             ) : (turf as any).length_feet >= 100 ? (
-                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Fair</span>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Good</span>
                             ) : (
                               <span className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded">Compact</span>
                             )}
@@ -499,7 +508,14 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                       {(turf as any).width_feet && (
                         <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
                           <span className="text-gray-600">Width</span>
-                          <span className="font-semibold text-gray-900">{(turf as any).width_feet}ft</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{(turf as any).width_feet}ft</span>
+                            {(turf as any).width_feet > 50 ? (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Excellent</span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Standard</span>
+                            )}
+                          </div>
                         </div>
                       )}
                       {(turf as any).height_feet && (
@@ -507,10 +523,12 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                           <span className="text-gray-600">Height</span>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-gray-900">{(turf as any).height_feet}ft</span>
-                            {(turf as any).height_feet >= 25 ? (
-                              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Great</span>
+                            {(turf as any).height_feet > 25 ? (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded">Excellent</span>
+                            ) : (turf as any).height_feet >= 20 ? (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Fair</span>
                             ) : (
-                              <span className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded">Limited</span>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">Poor</span>
                             )}
                           </div>
                         </div>
@@ -528,8 +546,8 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                         <Calendar className="w-5 h-5 text-blue-600" />
                         <span className="font-semibold text-blue-900">
                           {(turf as any).start_time && (turf as any).end_time
-                            ? `${(turf as any).start_time.slice(0, 5)} - ${(turf as any).end_time.slice(0, 5)}`
-                            : (turf as any).start_time || (turf as any).end_time}
+                            ? `${formatTo12Hour((turf as any).start_time)} - ${formatTo12Hour((turf as any).end_time)}`
+                            : formatTo12Hour((turf as any).start_time || (turf as any).end_time)}
                         </span>
                       </div>
                     </div>

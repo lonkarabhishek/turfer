@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { demoDataManager, type DemoTurf, type DemoUser } from '../lib/demoData';
 import { calculateBookingTotal } from '../lib/bookingUtils';
 import { toastManager } from '../lib/toastManager';
+import { getValidImageUrl } from '../lib/imageUtils';
 
 interface EnhancedBookingModalProps {
   open: boolean;
@@ -234,7 +235,7 @@ export function EnhancedBookingModal({ open, onClose, turf, onBookingSuccess, on
           <div className="mb-6 p-4 bg-gray-50 rounded-xl">
             <div className="flex items-start gap-3">
               <img
-                src={turf.images[0]}
+                src={getValidImageUrl(turf.images[0])}
                 alt={turf.name}
                 className="w-16 h-16 rounded-lg object-cover"
               />
