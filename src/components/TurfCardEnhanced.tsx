@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Star, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
@@ -8,6 +8,7 @@ import { WhatsAppFallback } from './WhatsAppFallback';
 import { BookingModal } from './BookingModal';
 import { generateBookingMessage } from '../lib/whatsapp';
 import { analytics, track } from '../lib/analytics';
+import { convertImageUrls } from '../lib/imageUtils';
 
 export interface TurfData {
   id: string;
@@ -93,8 +94,19 @@ export function TurfCardEnhanced({ turf, onBook, variant = 'default', onClick, u
     }
   };
 
-  const validImages = turf.images?.filter(img => img && img.trim() !== '') || [];
+  const validImages = convertImageUrls(turf.images || []);
   const hasMultipleImages = validImages.length > 1;
+
+  // Auto-rotate images every 3 seconds when not hovered
+  useEffect(() => {
+    if (!hasMultipleImages || isHovered) return;
+
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev + 1) % validImages.length);
+    }, 3000); // Change image every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [hasMultipleImages, isHovered, validImages.length]);
 
   return (
     <motion.div
@@ -122,19 +134,19 @@ export function TurfCardEnhanced({ turf, onBook, variant = 'default', onClick, u
                 />
               </div>
 
-              {/* Image Navigation - Show on hover */}
-              {hasMultipleImages && isHovered && (
+              {/* Image Navigation - Always visible on mobile, show on hover on desktop */}
+              {hasMultipleImages && (
                 <>
                   <button
                     onClick={prevImage}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-200 z-10"
+                    className={`absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-200 z-10 md:opacity-0 md:group-hover:opacity-100 ${isHovered ? 'opacity-100' : 'opacity-100 md:opacity-0'}`}
                     aria-label="Previous image"
                   >
                     <ChevronLeft className="w-4 h-4 text-gray-800" />
                   </button>
                   <button
                     onClick={nextImage}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-200 z-10"
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-200 z-10 md:opacity-0 md:group-hover:opacity-100 ${isHovered ? 'opacity-100' : 'opacity-100 md:opacity-0'}`}
                     aria-label="Next image"
                   >
                     <ChevronRight className="w-4 h-4 text-gray-800" />
