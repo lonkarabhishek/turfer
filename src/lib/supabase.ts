@@ -423,7 +423,7 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs (
+          turfs:turf_id (
             id,
             name,
             address,
@@ -431,7 +431,7 @@ export const gameHelpers = {
             gmap_embed_link,
             coordinates
           ),
-          users (
+          users:creator_id (
             id,
             name,
             phone,
@@ -472,7 +472,7 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs (
+          turfs:turf_id (
             id,
             name,
             address,
@@ -480,7 +480,7 @@ export const gameHelpers = {
             gmap_embed_link,
             coordinates
           ),
-          users (
+          users:creator_id (
             id,
             name,
             phone,
@@ -508,18 +508,19 @@ export const gameHelpers = {
       });
       
       // Query with turfs and users joined for complete game data
+      // Using LEFT JOIN (no !inner) to allow games without proper foreign key setup
       let query = supabase
         .from('games')
         .select(`
           *,
-          turfs (
+          turfs:turf_id (
             id,
             name,
             address,
             gmap_embed_link,
             coordinates
           ),
-          users (
+          users:creator_id (
             id,
             name,
             phone,
@@ -556,14 +557,14 @@ export const gameHelpers = {
             .from('games')
             .select(`
               *,
-              turfs (
+              turfs:turf_id (
                 id,
                 name,
                 address,
                 gmap_embed_link,
                 coordinates
               ),
-              users (
+              users:creator_id (
                 id,
                 name,
                 phone,
@@ -679,7 +680,7 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs (
+          turfs:turf_id (
             id,
             name,
             address,
@@ -687,7 +688,7 @@ export const gameHelpers = {
             gmap_embed_link,
             coordinates
           ),
-          users (
+          users:creator_id (
             id,
             name,
             phone,
