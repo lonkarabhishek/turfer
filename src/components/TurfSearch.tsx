@@ -185,6 +185,13 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
           pricePerHour: turf.pricePerHour,
           pricePerHourWeekend: turf.pricePerHourWeekend
         }),
+        // Pass through all time-based pricing fields for accurate minimum price calculation
+        morning_price: (turf as any).morning_price,
+        afternoon_price: (turf as any).afternoon_price,
+        evening_price: (turf as any).evening_price,
+        weekend_morning_price: (turf as any).weekend_morning_price,
+        weekend_afternoon_price: (turf as any).weekend_afternoon_price,
+        weekend_evening_price: (turf as any).weekend_evening_price,
         pricePerHourMin: turf.pricePerHour || 500,
         priceDisplay: formatPriceDisplay(turf.pricePerHour, turf.pricePerHourWeekend),
         amenities: turf.amenities,

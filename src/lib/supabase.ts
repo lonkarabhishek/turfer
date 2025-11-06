@@ -833,6 +833,13 @@ export const turfHelpers = {
         ...turf,
         totalReviews: turf.total_reviews || 0,
         pricePerHour: turf.price_per_hour || turf.pricePerHour,
+        // Pass through all time-based pricing fields for proper minimum price calculation
+        morning_price: turf.morning_price,
+        afternoon_price: turf.afternoon_price,
+        evening_price: turf.evening_price,
+        weekend_morning_price: turf.weekend_morning_price,
+        weekend_afternoon_price: turf.weekend_afternoon_price,
+        weekend_evening_price: turf.weekend_evening_price,
         gmapEmbedLink: turf['Gmap Embed link'], // Access the correctly-named field
         contactInfo: turf.contact_info,
         isActive: turf.is_active,
@@ -877,6 +884,13 @@ export const turfHelpers = {
         ...data,
         totalReviews: data.total_reviews || 0,
         pricePerHour: data.price_per_hour || data.pricePerHour,
+        // Pass through all time-based pricing fields for proper minimum price calculation
+        morning_price: data.morning_price,
+        afternoon_price: data.afternoon_price,
+        evening_price: data.evening_price,
+        weekend_morning_price: data.weekend_morning_price,
+        weekend_afternoon_price: data.weekend_afternoon_price,
+        weekend_evening_price: data.weekend_evening_price,
         gmapEmbedLink: data['Gmap Embed link'], // Access the correctly-named field
         contactInfo: data.contact_info,
         isActive: data.is_active,
