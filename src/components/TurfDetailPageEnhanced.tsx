@@ -20,6 +20,7 @@ interface TurfDetailPageProps {
   turfId: string;
   onBack: () => void;
   onCreateGame?: () => void;
+  onGameClick?: (gameId: string) => void;
 }
 
 interface TimeSlot {
@@ -59,7 +60,7 @@ const timeSlots = [
   '20:00-21:00', '21:00-22:00'
 ];
 
-export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDetailPageProps) {
+export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameClick }: TurfDetailPageProps) {
   const { isAuthenticated, user } = useAuth();
   const [turf, setTurf] = useState<TurfData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -787,9 +788,7 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                       game={game}
                       user={user}
                       hideTurfDetails={true}
-                      onGameClick={(gameId) => {
-                        console.log('Game clicked:', gameId);
-                      }}
+                      onGameClick={onGameClick}
                     />
                   ))}
                 </div>
