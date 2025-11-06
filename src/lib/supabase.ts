@@ -421,23 +421,7 @@ export const gameHelpers = {
     try {
       const { data, error } = await supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address,
-            price_per_hour,
-            gmap_embed_link,
-            coordinates
-          ),
-          users:creator_id (
-            id,
-            name,
-            phone,
-            profile_image_url
-          )
-        `)
+        .select('*')
         .eq('creator_id', userId)
         .order('created_at', { ascending: false });
 
@@ -467,29 +451,13 @@ export const gameHelpers = {
       
       console.log('🔍 ALL games in database:', { dbGames, dbError, count: dbGames?.length });
       
-      // Try to get games with turf data joined
+      // Try to get games with simple query
       const { data: gamesWithTurfs, error: joinError } = await supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address,
-            morning_price,
-            gmap_embed_link,
-            coordinates
-          ),
-          users:creator_id (
-            id,
-            name,
-            phone,
-            profile_image_url
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
-      
-      console.log('🔍 Games with turfs joined:', { gamesWithTurfs, joinError, count: gamesWithTurfs?.length });
+
+      console.log('🔍 Games query result:', { gamesWithTurfs, joinError, count: gamesWithTurfs?.length });
       
       // Let's also try a super simple query without any JOINs
       const { data: simpleGames, error: simpleError } = await supabase
@@ -507,26 +475,10 @@ export const gameHelpers = {
         isAuthenticated: !!currentUser 
       });
       
-      // Query with turfs and users joined for complete game data
-      // Using LEFT JOIN (no !inner) to allow games without proper foreign key setup
+      // Simple query without JOINs - let the transformer handle fallbacks
       let query = supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address,
-            gmap_embed_link,
-            coordinates
-          ),
-          users:creator_id (
-            id,
-            name,
-            phone,
-            profile_image_url
-          )
-        `)
+        .select('*')
         .in('status', ['open', 'upcoming', 'active']);
 
       if (params.sport) {
@@ -555,22 +507,7 @@ export const gameHelpers = {
           console.log('RLS error detected, trying simpler query...');
           const { data: simpleData, error: simpleError } = await supabase
             .from('games')
-            .select(`
-              *,
-              turfs:turf_id (
-                id,
-                name,
-                address,
-                gmap_embed_link,
-                coordinates
-              ),
-              users:creator_id (
-                id,
-                name,
-                phone,
-                profile_image_url
-              )
-            `)
+            .select('*')
             .in('status', ['open', 'upcoming', 'active'])
             .or('is_private.is.null,is_private.eq.false')
             .order('date', { ascending: true });
@@ -675,40 +612,12 @@ export const gameHelpers = {
     try {
       console.log('🔍 Getting game by ID:', gameId);
 
-      // First try with foreign key relationship
+      // Simple query without JOINs
       let { data: dbGame, error: dbError } = await supabase
         .from('games')
-        .select(`
-          *,
-          turfs:turf_id (
-            id,
-            name,
-            address,
-            morning_price,
-            gmap_embed_link,
-            coordinates
-          ),
-          users:creator_id (
-            id,
-            name,
-            phone,
-            profile_image_url
-          )
-        `)
+        .select('*')
         .eq('id', gameId)
         .single();
-
-      // If foreign key query fails, try simplified query
-      if (dbError) {
-        console.log('⚠️ Join query failed, trying simplified query:', dbError);
-        const result = await supabase
-          .from('games')
-          .select('*')
-          .eq('id', gameId)
-          .single();
-
-        dbGame = result.data;
-        dbError = result.error;
 
         // If game found, try to fetch turf separately
         if (dbGame && dbGame.turf_id) {
