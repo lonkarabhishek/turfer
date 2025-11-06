@@ -749,40 +749,11 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
               </div>
             </motion.div>
 
-            {/* Time Slots */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="pb-8"
-            >
-              <h2 className="text-xl sm:text-2xl font-semibold mb-4">Available time slots</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {availability[0]?.slots.slice(0, 12).map((slot) => (
-                  <button
-                    key={slot.time}
-                    onClick={() => slot.available && handleBookSlot(slot)}
-                    disabled={!slot.available || booking}
-                    className={`p-4 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      slot.available
-                        ? 'border border-gray-300 hover:border-gray-900 hover:shadow-md'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
-                    }`}
-                  >
-                    <div className="font-semibold">{slot.time}</div>
-                    <div className="text-xs mt-1">
-                      {slot.available ? `₹${slot.price}` : 'Booked'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-
             {/* Upcoming Games */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.4 }}
               className="pb-8"
             >
               <div className="flex items-center justify-between mb-4">
@@ -825,6 +796,40 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                   )}
                 </div>
               )}
+            </motion.div>
+
+            {/* Available Time Slots - Coming Soon */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="pb-8"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-semibold">Available Time Slots</h2>
+                  <p className="text-sm text-gray-600 mt-1">Book specific time slots directly</p>
+                </div>
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+                  Coming Soon
+                </span>
+              </div>
+
+              <div className="text-center py-12 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-dashed border-blue-200">
+                <Calendar className="w-12 h-12 mx-auto text-blue-400 mb-3" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Slot Booking Coming Soon</h3>
+                <p className="text-gray-600 mb-4">
+                  Direct slot booking feature is being developed. For now, you can join existing games or create a new one!
+                </p>
+                {onCreateGame && (
+                  <Button
+                    onClick={onCreateGame}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6"
+                  >
+                    Create Game Instead
+                  </Button>
+                )}
+              </div>
             </motion.div>
           </div>
         </div>
