@@ -69,6 +69,8 @@ export interface GameData {
   isUrgent?: boolean; // Game starting soon
   createdAt?: string; // When the game was created
   creatorId?: string; // ID of the user who created the game
+  isTurfBooked?: boolean; // Whether the turf has been confirmed/booked by the host
+  turfBookingStatus?: 'pending' | 'confirmed' | 'cancelled'; // Detailed booking status
 }
 
 interface GameCardProps {
@@ -286,19 +288,37 @@ export function GameCard({ game, onJoin, onGameClick, onTurfClick, user }: GameC
               <div className="flex items-center gap-2 flex-1">
                 <MapPin className="w-4 h-4 text-gray-600" />
                 <div className="flex-1">
-                  {game.turfId && onTurfClick ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTurfClick(game.turfId!);
-                      }}
-                      className="font-medium text-primary-600 hover:text-primary-700 hover:underline text-left"
-                    >
-                      {game.turfName}
-                    </button>
-                  ) : (
-                    <div className="font-medium">{game.turfName}</div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {game.turfId && onTurfClick ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTurfClick(game.turfId!);
+                        }}
+                        className="font-medium text-primary-600 hover:text-primary-700 hover:underline text-left"
+                      >
+                        {game.turfName}
+                      </button>
+                    ) : (
+                      <div className="font-medium">{game.turfName}</div>
+                    )}
+                    {/* Turf Booking Status Badge */}
+                    {game.turfBookingStatus === 'confirmed' || game.isTurfBooked ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        <Check className="w-3 h-3 mr-1" />
+                        Booked
+                      </span>
+                    ) : game.turfBookingStatus === 'pending' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Pending
+                      </span>
+                    ) : game.turfBookingStatus === 'cancelled' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">
+                        Cancelled
+                      </span>
+                    ) : null}
+                  </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
