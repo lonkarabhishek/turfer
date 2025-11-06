@@ -619,17 +619,16 @@ export const gameHelpers = {
         .eq('id', gameId)
         .single();
 
-        // If game found, try to fetch turf separately
-        if (dbGame && dbGame.turf_id) {
-          const { data: turfData } = await supabase
-            .from('turfs')
-            .select('id, name, address, morning_price, "Gmap Embed link"')
-            .eq('id', dbGame.turf_id)
-            .single();
+      // If game found, try to fetch turf separately
+      if (dbGame && dbGame.turf_id) {
+        const { data: turfData } = await supabase
+          .from('turfs')
+          .select('id, name, address, morning_price, "Gmap Embed link"')
+          .eq('id', dbGame.turf_id)
+          .single();
 
-          if (turfData) {
-            dbGame.turfs = turfData;
-          }
+        if (turfData) {
+          dbGame.turfs = turfData;
         }
       }
 
