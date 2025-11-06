@@ -786,6 +786,7 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
                       key={game.id}
                       game={game}
                       user={user}
+                      hideTurfDetails={true}
                       onGameClick={(gameId) => {
                         console.log('Game clicked:', gameId);
                       }}
