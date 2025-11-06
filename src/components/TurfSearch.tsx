@@ -49,6 +49,11 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
     rating: '',
   });
 
+  // Automatically get user location on mount
+  useEffect(() => {
+    getUserLocation();
+  }, []);
+
   // Load turfs on mount and when filters change
   useEffect(() => {
     loadTurfs();
@@ -98,6 +103,34 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
     loadTurfs();
   };
 
+  // Silently get user location for distance calculations (on mount)
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      console.log('Geolocation is not supported by this browser.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        // Store user location for distance calculations
+        setUserLocation({ lat, lng });
+        console.log('📍 User location obtained:', { lat, lng });
+      },
+      (error) => {
+        // Silently fail - user can still use the app without location
+        console.log('Could not get user location (will skip distance calculation):', error.message);
+      },
+      {
+        enableHighAccuracy: false, // Use less battery for automatic location
+        timeout: 5000,
+        maximumAge: 300000 // 5 minutes
+      }
+    );
+  };
+
   const handleLocate = () => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by this browser.');
@@ -111,13 +144,13 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
       async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        
+
         // Store user location for distance calculations
         setUserLocation({ lat, lng });
-        
+
         try {
           const response = await turfsAPI.getNearby(lat, lng, 10);
-          
+
           if (response.success && response.data) {
             setTurfs(response.data);
             setQuery('');
@@ -134,7 +167,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
       (error) => {
         setLocationLoading(false);
         let errorMessage = 'Unable to get your location.';
-        
+
         switch (error.code) {
           case error.PERMISSION_DENIED:
             errorMessage = 'Location access denied. Please enable location services for this site.';
@@ -146,7 +179,7 @@ export function TurfSearch({ user, currentCity = 'your city', onTurfClick }: Tur
             errorMessage = 'Location request timed out. Please try again.';
             break;
         }
-        
+
         setLocationError(errorMessage);
         console.error('Geolocation error:', error);
       },

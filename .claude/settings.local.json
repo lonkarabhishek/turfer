@@ -156,7 +156,9 @@
       "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_YqKoSu/**)",
       "Bash(NEXT_PUBLIC_SUPABASE_URL=https://hwfsbpzercuoshodmnuf.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo PGPASSWORD=5rCkckqFBOy0Wkrp psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.hwfsbpzercuoshodmnuf -d postgres -c \"\\d games\")",
       "Bash(NEXT_PUBLIC_SUPABASE_URL=https://hwfsbpzercuoshodmnuf.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo PGPASSWORD=5rCkckqFBOy0Wkrp psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.hwfsbpzercuoshodmnuf -d postgres -c \"SELECT name, array_length(images, 1) as image_count FROM turfs LIMIT 5;\")",
-      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_4QHjuc/**)"
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_4QHjuc/**)",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=https://hwfsbpzercuoshodmnuf.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3ZnNicHplcmN1b3Nob2RtbnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwNjMxODMsImV4cCI6MjA3MTYzOTE4M30.XCWCIZ2B3UxvaMbmLyCntkxTCnjfeobW7PTblpqfwbo PGPASSWORD=5rCkckqFBOy0Wkrp psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.hwfsbpzercuoshodmnuf -d postgres -c \"SELECT id, name, morning_price, afternoon_price, evening_price, weekend_morning_price, weekend_afternoon_price, weekend_evening_price FROM turfs LIMIT 5;\")",
+      "Read(//var/folders/b_/_r61bpqs5bx1x9g3ptc5vbjr0000gn/T/TemporaryItems/NSIRD_screencaptureui_RfUgRi/**)"
     ],
     "deny": [],
     "ask": [],
