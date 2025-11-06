@@ -429,6 +429,27 @@ export const gameHelpers = {
         throw error;
       }
 
+      // Fetch turfs separately for each game
+      if (data && data.length > 0) {
+        const turfIds = [...new Set(data.map((game: any) => game.turf_id).filter(Boolean))];
+
+        if (turfIds.length > 0) {
+          const { data: turfsData } = await supabase
+            .from('turfs')
+            .select('id, name, address, gmap_embed_link, coordinates')
+            .in('id', turfIds);
+
+          if (turfsData) {
+            const turfsMap = Object.fromEntries(turfsData.map((turf: any) => [turf.id, turf]));
+            data.forEach((game: any) => {
+              if (game.turf_id && turfsMap[game.turf_id]) {
+                game.turfs = turfsMap[game.turf_id];
+              }
+            });
+          }
+        }
+      }
+
       return { data, error: null };
     } catch (error: any) {
       return { data: null, error: error.message };
@@ -496,8 +517,53 @@ export const gameHelpers = {
       query = query.order('created_at', { ascending: false });
 
       const { data, error } = await query;
-      
+
       console.log('🎯 Raw games query result:', { data, error, count: data?.length });
+
+      // If we got games, fetch turfs and users separately
+      if (data && data.length > 0) {
+        // Get unique turf IDs
+        const turfIds = [...new Set(data.map((game: any) => game.turf_id).filter(Boolean))];
+        const creatorIds = [...new Set(data.map((game: any) => game.creator_id).filter(Boolean))];
+
+        // Fetch turfs in batch
+        let turfsMap: any = {};
+        if (turfIds.length > 0) {
+          const { data: turfsData } = await supabase
+            .from('turfs')
+            .select('id, name, address, gmap_embed_link, coordinates')
+            .in('id', turfIds);
+
+          if (turfsData) {
+            turfsMap = Object.fromEntries(turfsData.map((turf: any) => [turf.id, turf]));
+          }
+        }
+
+        // Fetch users in batch
+        let usersMap: any = {};
+        if (creatorIds.length > 0) {
+          const { data: usersData } = await supabase
+            .from('users')
+            .select('id, name, phone, profile_image_url')
+            .in('id', creatorIds);
+
+          if (usersData) {
+            usersMap = Object.fromEntries(usersData.map((user: any) => [user.id, user]));
+          }
+        }
+
+        // Attach turf and user data to games
+        data.forEach((game: any) => {
+          if (game.turf_id && turfsMap[game.turf_id]) {
+            game.turfs = turfsMap[game.turf_id];
+          }
+          if (game.creator_id && usersMap[game.creator_id]) {
+            game.users = usersMap[game.creator_id];
+          }
+        });
+
+        console.log('✅ Enriched games with turf and user data:', data.length, 'games');
+      }
 
       if (error) {
         console.error('Error fetching available games:', error);
