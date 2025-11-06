@@ -123,29 +123,40 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame }: TurfDet
     try {
       const response = await gamesAPI.getAvailable();
       if (response.success && response.data) {
+        console.log('🎮 All available games:', response.data);
+        console.log('🏟️ Current turf ID:', turfId);
+        console.log('🏟️ Current turf name:', turf?.name);
+
         const now = new Date();
         const today = now.toISOString().split('T')[0];
         const currentTime = now.getHours() * 60 + now.getMinutes(); // Current time in minutes
 
         const turfGames = response.data.filter((game: any) => {
-          const gameTurfName = game.turfs?.name || game.turf_name || game.turfName || '';
+          const gameTurfId = game.turf_id || game.turfId || '';
           const gameDate = game.date;
           const gameStartTime = game.start_time || game.startTime || "00:00";
 
-          // Only include games at this turf
-          if (gameTurfName.toLowerCase() !== turf?.name.toLowerCase()) {
+          console.log(`🔍 Checking game ${game.id}: turf_id=${gameTurfId}, date=${gameDate}`);
+
+          // Only include games at this turf - use ID comparison instead of name
+          if (gameTurfId !== turfId) {
+            console.log(`  ❌ Skipping - wrong turf (${gameTurfId} !== ${turfId})`);
             return false;
           }
 
           // Only include upcoming games (future dates or today's future games)
           if (gameDate > today) {
+            console.log(`  ✅ Including - future date`);
             return true; // Future date
           } else if (gameDate === today) {
             // Same day - check if game hasn't started yet
             const [hours, minutes] = gameStartTime.split(':').map(Number);
             const gameTime = hours * 60 + minutes;
-            return gameTime > currentTime;
+            const isUpcoming = gameTime > currentTime;
+            console.log(`  ${isUpcoming ? '✅' : '❌'} Game time ${gameTime} vs current ${currentTime}`);
+            return isUpcoming;
           }
+          console.log(`  ❌ Skipping - past game`);
           return false; // Past game
         }).map((game: any) => {
           const hostName = game.users?.name || game.host_name || game.hostName || "Unknown Host";
