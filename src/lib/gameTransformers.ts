@@ -198,7 +198,9 @@ export function transformGameData(game: any, userLocation?: any): GameData {
     distanceKm: distance,
     isUrgent: false, // Can be calculated based on date/time
     createdAt: game.created_at || game.createdAt || new Date().toISOString(),
-    creatorId: game.creator_id || game.creatorId
+    creatorId: game.creator_id || game.creatorId,
+    isTurfBooked: game.turf_booked || game.turfBooked || false,
+    turfBookingStatus: game.turf_booking_status || game.turfBookingStatus || (game.turf_booked || game.turfBooked ? 'confirmed' : undefined)
   };
 }
 
