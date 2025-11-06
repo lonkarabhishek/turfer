@@ -423,11 +423,19 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs!turf_id (
+          turfs (
             id,
             name,
             address,
-            price_per_hour
+            price_per_hour,
+            gmap_embed_link,
+            coordinates
+          ),
+          users (
+            id,
+            name,
+            phone,
+            profile_image_url
           )
         `)
         .eq('creator_id', userId)
@@ -464,12 +472,13 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs!inner (
+          turfs (
             id,
             name,
             address,
             morning_price,
-            "Gmap Embed link"
+            gmap_embed_link,
+            coordinates
           ),
           users (
             id,
@@ -498,10 +507,25 @@ export const gameHelpers = {
         isAuthenticated: !!currentUser 
       });
       
-      // Use simple query without JOINs since foreign keys aren't set up properly
+      // Query with turfs and users joined for complete game data
       let query = supabase
         .from('games')
-        .select('*')
+        .select(`
+          *,
+          turfs (
+            id,
+            name,
+            address,
+            gmap_embed_link,
+            coordinates
+          ),
+          users (
+            id,
+            name,
+            phone,
+            profile_image_url
+          )
+        `)
         .in('status', ['open', 'upcoming', 'active']);
 
       if (params.sport) {
@@ -530,7 +554,22 @@ export const gameHelpers = {
           console.log('RLS error detected, trying simpler query...');
           const { data: simpleData, error: simpleError } = await supabase
             .from('games')
-            .select('*')
+            .select(`
+              *,
+              turfs (
+                id,
+                name,
+                address,
+                gmap_embed_link,
+                coordinates
+              ),
+              users (
+                id,
+                name,
+                phone,
+                profile_image_url
+              )
+            `)
             .in('status', ['open', 'upcoming', 'active'])
             .or('is_private.is.null,is_private.eq.false')
             .order('date', { ascending: true });
@@ -640,12 +679,19 @@ export const gameHelpers = {
         .from('games')
         .select(`
           *,
-          turfs!turf_id (
+          turfs (
             id,
             name,
             address,
             morning_price,
-            "Gmap Embed link"
+            gmap_embed_link,
+            coordinates
+          ),
+          users (
+            id,
+            name,
+            phone,
+            profile_image_url
           )
         `)
         .eq('id', gameId)
