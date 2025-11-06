@@ -171,6 +171,7 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
             id: game.id,
             hostName: hostName,
             hostAvatar: game.users?.profile_image_url || game.host_profile_image_url || game.host_avatar || game.hostAvatar || "",
+            turfId: game.turfs?.id || game.turf_id || game.turfId || undefined,
             turfName: turfName,
             turfAddress: turfAddress,
             date: game.date,
@@ -184,7 +185,10 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
             hostPhone: hostPhone,
             distanceKm: undefined,
             isUrgent: false,
-            createdAt: game.created_at || game.createdAt || new Date().toISOString()
+            createdAt: game.created_at || game.createdAt || new Date().toISOString(),
+            creatorId: game.creator_id || game.creatorId || game.host_id || undefined,
+            isTurfBooked: game.turf_booked || game.turfBooked || false,
+            turfBookingStatus: game.turf_booking_status || game.turfBookingStatus || (game.turf_booked || game.turfBooked ? 'confirmed' : undefined)
           };
         });
         setTurfGames(turfGames);
