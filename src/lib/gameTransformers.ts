@@ -7,20 +7,23 @@ export const formatDate = (dateStr: string) => {
   const today = new Date();
   const gameDate = new Date(dateStr);
   const diffDays = Math.ceil((gameDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
+
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
-  if (diffDays < 7) return gameDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'short', 
-    day: 'numeric' 
-  });
-  return gameDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'short', 
-    day: 'numeric',
-    year: 'numeric'
-  });
+
+  // Format: "Fri, 8 Nov" for dates within a week
+  if (diffDays < 7) {
+    const weekday = gameDate.toLocaleDateString('en-US', { weekday: 'short' });
+    const day = gameDate.getDate();
+    const month = gameDate.toLocaleDateString('en-US', { month: 'short' });
+    return `${weekday}, ${day} ${month}`;
+  }
+
+  // Format: "8 Nov 2025" for dates beyond a week
+  const day = gameDate.getDate();
+  const month = gameDate.toLocaleDateString('en-US', { month: 'short' });
+  const year = gameDate.getFullYear();
+  return `${day} ${month} ${year}`;
 };
 
 // Convert 24-hour time to 12-hour format
@@ -35,11 +38,12 @@ export const formatTime = (timeStr: string) => {
   return `${hour12}:${minutes} ${ampm}`;
 };
 
-// Format time slot to 12-hour format
+// Format time slot to 12-hour format with en-dash
 export const formatTimeSlot = (startTime: string, endTime: string) => {
   const formattedStart = formatTime(startTime);
   const formattedEnd = formatTime(endTime);
-  return `${formattedStart} - ${formattedEnd}`;
+  // Use en-dash (–) instead of hyphen (-)
+  return `${formattedStart}–${formattedEnd}`;
 };
 
 export const capitalizeSkillLevel = (level: string | null | undefined): GameData['skillLevel'] => {
