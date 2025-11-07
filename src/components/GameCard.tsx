@@ -342,9 +342,17 @@ export function GameCard({ game, onJoin, onGameClick, onTurfClick, user, hideTur
                   </div>
                 </div>
                 {typeof game.distanceKm === 'number' && (
-                  <div className="ml-auto text-xs text-gray-500">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(game.turfAddress)}`;
+                      window.open(mapsUrl, '_blank');
+                    }}
+                    className="ml-auto text-xs text-primary-600 hover:text-primary-700 hover:underline transition-colors"
+                    title="Open directions in Google Maps"
+                  >
                     {game.distanceKm.toFixed(1)}km away
-                  </div>
+                  </button>
                 )}
               </div>
             )}
@@ -368,7 +376,7 @@ export function GameCard({ game, onJoin, onGameClick, onTurfClick, user, hideTur
                 {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
               </span>
               <span className="text-sm font-semibold text-primary-600">
-                ₹{game.costPerPerson}/person
+                {game.costPerPerson > 0 ? `₹${game.costPerPerson}/person` : 'Free'}
               </span>
             </div>
 
