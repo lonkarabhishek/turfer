@@ -327,18 +327,22 @@ export function GameCard({ game, onJoin, onGameClick, onTurfClick, user, hideTur
                     ) : (
                       <div className="font-medium">{game.turfName}</div>
                     )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const mapsUrl = `https://maps.google.com/maps/dir//${encodeURIComponent(game.turfAddress)}`;
-                        window.open(mapsUrl, '_blank');
-                        track('whatsapp_cta_clicked', { action: 'google_maps', context: 'game_card', game_id: game.id });
-                      }}
-                      className="text-xs text-gray-500 hover:text-primary-600 hover:underline text-left"
-                      title={`Open in Google Maps: ${game.turfAddress}`}
-                    >
-                      {game.turfAddress.split(',')[0]}
-                    </button>
+                    {game.turfId && onTurfClick ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTurfClick(game.turfId!);
+                        }}
+                        className="text-xs text-gray-500 hover:text-primary-600 hover:underline text-left"
+                        title={`View turf: ${game.turfAddress}`}
+                      >
+                        {game.turfAddress.split(',')[0]}
+                      </button>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        {game.turfAddress.split(',')[0]}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {typeof game.distanceKm === 'number' && (
