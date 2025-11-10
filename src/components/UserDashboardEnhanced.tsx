@@ -460,36 +460,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <Card 
-            className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 cursor-pointer hover:shadow-xl hover:shadow-purple-500/25 transition-all duration-300 group"
-            onClick={() => setActiveTab('overview')}
-          >
-            <CardContent className="p-6 text-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-400/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-sm transition-all duration-300"></div>
-              <div className="relative">
-                <div className="w-14 h-14 bg-gradient-to-r from-purple-600 to-purple-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300">
-                  <Bell className="w-7 h-7 text-white" />
-                  {gameRequests.length > 0 && (
-                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                      <span className="text-xs text-white font-bold">{gameRequests.length}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="text-3xl font-bold text-purple-900 mb-1">{gameRequests.length}</div>
-                <div className="text-sm text-purple-600 font-medium">Join Requests</div>
-                <div className="mt-2 text-xs text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to manage →</div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -619,108 +589,6 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
         </motion.div>
       )}
 
-      {/* Incoming Game Requests Section */}
-      {gameRequests.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-        >
-          <Card className="border-0 shadow-lg rounded-3xl">
-            <CardHeader>
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <Bell className="w-6 h-6 text-purple-600" />
-                Join Requests for Your Games
-                <Badge className="bg-purple-100 text-purple-700">
-                  {gameRequests.length} pending
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <AnimatePresence>
-                {gameRequests.map((request, index) => (
-                  <motion.div
-                    key={request.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ delay: index * 0.1 }}
-                    onClick={() => request.game_id && onGameNavigation?.(request.game_id)}
-                    className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200 cursor-pointer hover:shadow-lg transition-shadow"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center">
-                            <User className="w-6 h-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-purple-900">
-                              {request.users?.name || request.requester_name || request.user?.name || request.user_name || `User ${request.user_id?.slice(0, 8)}`} wants to join
-                            </h3>
-                            <p className="text-purple-700 font-medium">
-                              {request.game?.sport || 'Game'} at {request.game?.turfName || 'Unknown Turf'}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4 text-sm">
-                          <div className="flex items-center gap-2 text-purple-700">
-                            <Calendar className="w-4 h-4" />
-                            <span>{request.game?.date ? formatDate(request.game.date) : 'Unknown date'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-purple-700">
-                            <Clock className="w-4 h-4" />
-                            <span>{request.game?.time || 'Unknown time'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-purple-700">
-                            <MapPin className="w-4 h-4" />
-                            <span>{request.game?.turfName || 'Unknown venue'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-purple-700">
-                            <Users className="w-4 h-4" />
-                            <span>{request.game?.players || '1/10'} players</span>
-                          </div>
-                        </div>
-                        
-                        {request.message && (
-                          <div className="bg-white/50 rounded-lg p-3 mb-4 border border-purple-200">
-                            <div className="flex items-start gap-2">
-                              <MessageCircle className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                              <p className="text-sm text-purple-800 italic">"{request.message}"</p>
-                            </div>
-                          </div>
-                        )}
-                        
-                        <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            onClick={() => handleAcceptRequest(request.id, request.game_id, request.user_id)}
-                            disabled={processingRequests.has(request.id)}
-                            className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                          >
-                            <Check className="w-4 h-4 mr-2" />
-                            {processingRequests.has(request.id) ? 'Processing...' : 'Accept'}
-                          </Button>
-                          <Button
-                            onClick={() => handleRejectRequest(request.id)}
-                            disabled={processingRequests.has(request.id)}
-                            variant="outline"
-                            className="border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <X className="w-4 h-4 mr-2" />
-                            Decline
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
       {/* My Game Requests Section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -836,13 +704,27 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex flex-col gap-3">
+                      {gamesTab === 'upcoming' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            alert('Edit game functionality coming soon! You will be able to update game details like date, time, players, and more.');
+                          }}
+                          className="border-2 border-emerald-200 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all duration-200"
+                        >
+                          <Edit3 className="w-3 h-3 mr-1" />
+                          Edit Game
+                        </Button>
+                      )}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity text-sm text-emerald-600 font-medium">
                         Click to view details →
                       </div>
                       <Badge className={`${
-                        gamesTab === 'upcoming' 
+                        gamesTab === 'upcoming'
                           ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-300'
                           : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 border-gray-300'
                       }`}>

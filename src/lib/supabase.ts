@@ -755,6 +755,80 @@ export const gameHelpers = {
         return { data: null, error: error.message };
       }
     }
+  },
+
+  // Update an existing game
+  async updateGame(gameId: string, updateData: {
+    turfId?: string;
+    date?: string;
+    startTime?: string;
+    endTime?: string;
+    sport?: string;
+    format?: string;
+    skillLevel?: 'beginner' | 'intermediate' | 'advanced' | 'all';
+    maxPlayers?: number;
+    costPerPerson?: number;
+    description?: string;
+    notes?: string;
+    isPrivate?: boolean;
+  }) {
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Verify the user owns this game
+      const { data: existingGame, error: fetchError } = await supabase
+        .from('games')
+        .select('creator_id')
+        .eq('id', gameId)
+        .single();
+
+      if (fetchError || !existingGame) {
+        throw new Error('Game not found');
+      }
+
+      if (existingGame.creator_id !== user.id) {
+        throw new Error('You do not have permission to edit this game');
+      }
+
+      // Prepare update payload (convert camelCase to snake_case for database)
+      const updatePayload: any = {};
+      if (updateData.turfId !== undefined) updatePayload.turf_id = updateData.turfId;
+      if (updateData.date !== undefined) updatePayload.date = updateData.date;
+      if (updateData.startTime !== undefined) updatePayload.start_time = updateData.startTime;
+      if (updateData.endTime !== undefined) updatePayload.end_time = updateData.endTime;
+      if (updateData.sport !== undefined) updatePayload.sport = updateData.sport;
+      if (updateData.format !== undefined) updatePayload.format = updateData.format;
+      if (updateData.skillLevel !== undefined) updatePayload.skill_level = updateData.skillLevel;
+      if (updateData.maxPlayers !== undefined) updatePayload.max_players = updateData.maxPlayers;
+      if (updateData.costPerPerson !== undefined) updatePayload.price_per_player = updateData.costPerPerson;
+      if (updateData.description !== undefined) updatePayload.description = updateData.description;
+      if (updateData.notes !== undefined) updatePayload.notes = updateData.notes;
+      if (updateData.isPrivate !== undefined) updatePayload.is_private = updateData.isPrivate;
+
+      // Update the game
+      const { data, error } = await supabase
+        .from('games')
+        .update(updatePayload)
+        .eq('id', gameId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating game:', error);
+        throw error;
+      }
+
+      console.log('✅ Game updated successfully:', data);
+      return { data, error: null };
+
+    } catch (error: any) {
+      console.error('❌ Error updating game:', error);
+      return { data: null, error: error.message };
+    }
   }
 };
 

@@ -584,6 +584,18 @@ export const gamesAPI = {
       return { success: false, error: error.message };
     }
   },
+
+  async updateGame(gameId: string, gameData: Record<string, unknown>): Promise<ApiResponse<unknown>> {
+    try {
+      const { data, error } = await gameHelpers.updateGame(gameId, gameData as any);
+      if (error) {
+        return { success: false, error };
+      }
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  },
 };
 
 // Bookings API functions

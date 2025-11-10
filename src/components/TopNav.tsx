@@ -235,42 +235,6 @@ export function TopNav({
                       My Games
                     </button>
 
-                    {/* Game Requests */}
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onDashboardNavigation?.('overview');
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Star className="w-4 h-4" />
-                      Game Requests
-                    </button>
-
-                    {/* My Bookings */}
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onDashboardNavigation?.('bookings');
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Building2 className="w-4 h-4" />
-                      My Bookings
-                    </button>
-
-                    {/* Profile Settings */}
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onDashboardNavigation?.('profile');
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Settings className="w-4 h-4" />
-                      Profile Settings
-                    </button>
-
                     {/* Admin Panel - Turf Upload - ONLY for authorized admin */}
                     {user.email === 'abhishek.lonkar@viit.ac.in' && (
                       <button
