@@ -1,0 +1,16 @@
+# Allow all search engines to crawl the site
+User-agent: *
+Allow: /
+
+# Disallow admin and user-specific pages
+Disallow: /admin
+Disallow: /profile
+Disallow: /dashboard
+Disallow: /notifications
+Disallow: /my-games
+
+# Sitemap location
+Sitemap: https://www.tapturf.in/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1

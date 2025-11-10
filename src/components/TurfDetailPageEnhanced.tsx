@@ -15,6 +15,7 @@ import type { TurfData } from './TurfCard';
 import { GameCard, type GameData } from './GameCard';
 import { convertImageUrls } from '../lib/imageUtils';
 import { formatStartingPrice } from '../lib/priceUtils';
+import { useSEO, generateTurfSchema } from '../hooks/useSEO';
 
 interface TurfDetailPageProps {
   turfId: string;
@@ -84,6 +85,24 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
       loadTurfGames();
     }
   }, [turf?.name]);
+
+  // Add SEO for this turf page
+  useSEO({
+    title: turf ? `${turf.name} - Book Now` : 'Loading Turf...',
+    description: turf
+      ? `Book ${turf.name} in ${turf.address}. Rated ${Number(turf.rating).toFixed(1)}⭐ by ${turf.totalReviews} players. Premium sports facility ${turf.amenities?.length > 0 ? `with ${turf.amenities.slice(0, 3).join(', ')}` : 'with best amenities'}.`
+      : 'Loading turf details...',
+    keywords: turf
+      ? `${turf.name}, turf booking, sports facility, ${turf.address}, book turf online, ${(turf as any).sports?.join(', ') || 'sports'}`
+      : 'turf booking',
+    ogImage: turf?.images?.[0] || 'https://www.tapturf.in/turfer-favicon.png',
+    ogType: 'place',
+    canonicalUrl: `https://www.tapturf.in/turf/${turfId}`,
+    structuredData: turf ? generateTurfSchema({
+      ...turf,
+      owner_phone: (turf as any).owner_phone || turf.contacts?.phone
+    }) : undefined
+  });
 
   const loadTurf = async () => {
     try {

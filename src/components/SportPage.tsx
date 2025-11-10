@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { GameCard } from './GameCard';
 import { TurfCardEnhanced } from './TurfCardEnhanced';
 import { gamesAPI, turfsAPI } from '../lib/api';
+import { useSEO } from '../hooks/useSEO';
 import type { GameData } from './GameCard';
 import type { TurfData } from './TurfCard';
 
@@ -33,6 +34,15 @@ export function SportPage({ sport, onNavigateHome }: SportPageProps) {
     icon: '🏆',
     color: 'bg-gray-500'
   };
+
+  // Add SEO for this sport page
+  useSEO({
+    title: `${info.name} Turfs & Games in Your City`,
+    description: `Find ${info.name.toLowerCase()} turfs and join active games near you. Book premium ${info.name.toLowerCase()} facilities instantly. Connect with players and play ${info.name.toLowerCase()} today!`,
+    keywords: `${info.name.toLowerCase()}, ${info.name.toLowerCase()} turf, ${info.name.toLowerCase()} games, play ${info.name.toLowerCase()}, ${info.name.toLowerCase()} booking, ${info.name.toLowerCase()} near me, ${info.name.toLowerCase()} facilities`,
+    canonicalUrl: `https://www.tapturf.in/sport/${sport.toLowerCase()}`,
+    ogType: 'website'
+  });
 
   useEffect(() => {
     loadGames();
