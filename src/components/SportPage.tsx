@@ -60,13 +60,11 @@ export function SportPage({ sport, onNavigateHome }: SportPageProps) {
   const loadTurfs = async () => {
     setLoadingTurfs(true);
     try {
-      const response = await turfsAPI.getAllTurfs();
+      const response = await turfsAPI.search({ sport: sport.toLowerCase() });
       if (response.success && response.data) {
-        // Filter turfs that offer this sport
-        const filteredTurfs = response.data.filter((turf: TurfData) =>
-          turf.sports?.some(s => s.toLowerCase().includes(sport.toLowerCase()))
-        );
-        setTurfs(filteredTurfs);
+        // Extract turfs from the response (it returns SearchTurfsResponse with turfs array)
+        const turfs = response.data.turfs || [];
+        setTurfs(turfs);
       }
     } catch (error) {
       console.error('Error loading turfs:', error);
