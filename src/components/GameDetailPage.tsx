@@ -967,9 +967,10 @@ Hosted by ${game.hostName}
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-2xl mx-auto"
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
               >
-                <Card className="shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="w-full max-w-2xl">
+                  <Card className="shadow-2xl max-h-[90vh] overflow-y-auto">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center gap-3">
@@ -1125,6 +1126,7 @@ Hosted by ${game.hostName}
                     </form>
                   </CardContent>
                 </Card>
+                </div>
               </motion.div>
             </>
           )}

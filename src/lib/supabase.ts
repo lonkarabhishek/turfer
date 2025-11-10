@@ -432,20 +432,35 @@ export const gameHelpers = {
       // Fetch turfs separately for each game
       if (data && data.length > 0) {
         const turfIds = [...new Set(data.map((game: any) => game.turf_id).filter(Boolean))];
+        console.log('🔍 [getUserGames] Fetching turfs for IDs:', turfIds);
 
         if (turfIds.length > 0) {
-          const { data: turfsData } = await supabase
+          const { data: turfsData, error: turfsError } = await supabase
             .from('turfs')
             .select('id, name, address, gmap_embed_link, coordinates')
             .in('id', turfIds);
 
+          console.log('📊 [getUserGames] Turfs fetch result:', {
+            turfsData,
+            turfsError,
+            count: turfsData?.length,
+            turfIds: turfIds
+          });
+
           if (turfsData) {
             const turfsMap = Object.fromEntries(turfsData.map((turf: any) => [turf.id, turf]));
+            console.log('✅ [getUserGames] Turfs map created:', turfsMap);
+
             data.forEach((game: any) => {
               if (game.turf_id && turfsMap[game.turf_id]) {
                 game.turfs = turfsMap[game.turf_id];
+                console.log(`✅ [getUserGames] Attached turf "${game.turfs.name}" to game ${game.id}`);
+              } else if (game.turf_id) {
+                console.warn(`⚠️ [getUserGames] Turf ID ${game.turf_id} not found in turfsMap for game ${game.id}`);
               }
             });
+          } else if (turfsError) {
+            console.error('❌ [getUserGames] Error fetching turfs:', turfsError);
           }
         }
       }
