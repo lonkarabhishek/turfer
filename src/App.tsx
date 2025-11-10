@@ -27,6 +27,7 @@ import { ToastContainer } from "./components/ui/toast";
 import { UserSyncUtility } from "./components/UserSyncUtility";
 import { TossCoin } from "./components/TossCoin";
 import { AdminTurfUpload } from "./components/AdminTurfUpload";
+import { SportPage } from "./components/SportPage";
 
 import { useAuth } from "./hooks/useAuth";
 import { useNotifications } from "./hooks/useNotifications";
@@ -39,17 +40,19 @@ import { filterNonExpiredGames, isGameExpired } from "./lib/gameUtils";
 
 // Games will be loaded from API
 
-function HeroSection({ 
+function HeroSection({
   currentCity = 'your city',
   onFindGames,
   onBookTurf,
   onSignIn,
+  onSportClick,
   user
-}: { 
+}: {
   currentCity?: string;
   onFindGames?: () => void;
   onBookTurf?: () => void;
   onSignIn?: () => void;
+  onSportClick?: (sport: string) => void;
   user?: AppUser | null;
 }) {
   return (
@@ -147,6 +150,7 @@ function HeroSection({
           ].map((sport, index) => (
             <motion.div
               key={sport.name}
+              onClick={() => onSportClick?.(sport.name.toLowerCase())}
               className="flex flex-col items-center p-4 rounded-xl bg-gray-50 hover:bg-primary-50 transition-colors duration-200 cursor-pointer"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -416,11 +420,15 @@ function UserSurface({ user, currentCity = 'your city', onTurfClick, onGameClick
 
   return (
     <div className="pb-20 sm:pb-0">
-      <HeroSection 
-        currentCity={currentCity} 
+      <HeroSection
+        currentCity={currentCity}
         onFindGames={onNavigateToGames}
         onBookTurf={onNavigateToTurfs}
         onSignIn={onSignIn}
+        onSportClick={(sport) => {
+          setSelectedSport(sport);
+          setCurrentPage('sport');
+        }}
         user={user}
       />
       
@@ -483,13 +491,14 @@ export default function App() {
   const { user, loading, refreshAuth, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm' | 'notifications' | 'admin-turf-upload'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm' | 'notifications' | 'admin-turf-upload' | 'sport'>('home');
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showTossCoin, setShowTossCoin] = useState(false);
   const [selectedTurfId, setSelectedTurfId] = useState<string | null>(null);
+  const [selectedSport, setSelectedSport] = useState<string>('football');
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [turfIdForGame, setTurfIdForGame] = useState<string | undefined>(undefined);
   const [legalPageType, setLegalPageType] = useState<'privacy' | 'terms' | 'support'>('privacy');
@@ -811,6 +820,8 @@ export default function App() {
             onNavigate={handleNavigate}
           />
         </>
+      ) : currentPage === 'sport' ? (
+        <SportPage sport={selectedSport} onNavigateHome={handleBackToHome} />
       ) : currentPage === 'notifications' && user ? (
         <NotificationsPage
           onBack={handleBackToHome}
