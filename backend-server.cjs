@@ -105,12 +105,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Backend server running at http://localhost:${PORT}`);
   console.log('Available endpoints:');
   Object.keys(routes).forEach(route => {
     console.log(`  http://localhost:${PORT}${route}`);
   });
-  console.log('  http://localhost:3001/api/bookings/user/[userId]');
+  console.log(`  http://localhost:${PORT}/api/bookings/user/[userId]`);
 });
