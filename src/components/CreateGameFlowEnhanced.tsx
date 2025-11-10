@@ -84,13 +84,21 @@ const gameFormats = [
     color: 'bg-blue-100 border-blue-200 text-blue-800',
     description: 'Singles or doubles'
   },
-  { 
-    id: 'basketball', 
-    label: 'Basketball', 
-    players: 10, 
+  {
+    id: 'basketball',
+    label: 'Basketball',
+    players: 10,
     icon: '🏀',
     color: 'bg-purple-100 border-purple-200 text-purple-800',
     description: 'Full court game'
+  },
+  {
+    id: 'pickleball',
+    label: 'Pickleball',
+    players: 4,
+    icon: '🏓',
+    color: 'bg-pink-100 border-pink-200 text-pink-800',
+    description: 'Singles or doubles'
   }
 ];
 
@@ -996,7 +1004,7 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                 </Button>
                 
                 {step === 3 ? (
-                  <Button 
+                  <Button
                     onClick={handleCreateGame}
                     disabled={loading}
                     className="bg-primary-600 hover:bg-primary-700 flex items-center gap-2 min-w-[140px]"
@@ -1013,16 +1021,16 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                       </>
                     )}
                   </Button>
-                ) : (
-                  <Button 
+                ) : step === 2 ? (
+                  <Button
                     onClick={handleNext}
-                    disabled={step === 2 && !isStepComplete(2)}
+                    disabled={!isStepComplete(2)}
                     className="bg-primary-600 hover:bg-primary-700 flex items-center gap-2"
                   >
                     Continue
                     <ChevronRight className="w-4 h-4" />
                   </Button>
-                )}
+                ) : null}
               </div>
             </div>
           )}
