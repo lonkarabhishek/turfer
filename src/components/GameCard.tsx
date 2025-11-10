@@ -335,9 +335,9 @@ export function GameCard({ game, onJoin, onGameClick, onTurfClick, user, hideTur
                         track('whatsapp_cta_clicked', { action: 'google_maps', context: 'game_card', game_id: game.id });
                       }}
                       className="text-xs text-gray-500 hover:text-primary-600 hover:underline text-left"
-                      title="Open in Google Maps"
+                      title={`Open in Google Maps: ${game.turfAddress}`}
                     >
-                      {game.turfAddress}
+                      {game.turfAddress.split(',')[0]}
                     </button>
                   </div>
                 </div>

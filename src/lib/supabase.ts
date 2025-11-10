@@ -435,9 +435,9 @@ export const gameHelpers = {
         console.log('🔍 [getUserGames] Fetching turfs for IDs:', turfIds);
 
         if (turfIds.length > 0) {
-          const { data: turfsData, error: turfsError } = await supabase
+          const { data: turfsData, error: turfsError} = await supabase
             .from('turfs')
-            .select('id, name, address, gmap_embed_link, coordinates')
+            .select('id, name, address, "Gmap Embed link"')
             .in('id', turfIds);
 
           console.log('📊 [getUserGames] Turfs fetch result:', {
@@ -547,7 +547,7 @@ export const gameHelpers = {
           console.log('🔍 Fetching turfs for IDs:', turfIds);
           const { data: turfsData, error: turfsError } = await supabase
             .from('turfs')
-            .select('id, name, address')
+            .select('id, name, address, "Gmap Embed link"')
             .in('id', turfIds);
 
           console.log('📊 Turfs fetch result:', {

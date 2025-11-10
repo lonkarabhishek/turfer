@@ -108,14 +108,15 @@ function getTurfInfo(game: any): { name: string; address: string; coordinates?: 
 
   // First try to get from joined data
   if (game.turfs?.name) {
-    const gmapLink = game.turfs.gmap_embed_link || game.turfs['Gmap Embed link'];
+    const gmapLink = game.turfs['Gmap Embed link'] || game.turfs.gmap_embed_link;
     const extractedCoords = gmapLink ? extractCoordinatesFromMapUrl(gmapLink) : null;
 
     console.log('✅ [getTurfInfo] Found turf data in game.turfs:', game.turfs.name);
+    console.log('📍 [getTurfInfo] Extracted coordinates:', extractedCoords);
     return {
       name: game.turfs.name,
       address: game.turfs.address || 'Address not available',
-      coordinates: extractedCoords || game.turfs.coordinates || DEFAULT_TURFS[game.turfs.id]?.coordinates,
+      coordinates: extractedCoords || DEFAULT_TURFS[game.turfs.id]?.coordinates,
       gmapLink: gmapLink
     };
   }
