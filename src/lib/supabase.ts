@@ -547,7 +547,7 @@ export const gameHelpers = {
           console.log('🔍 Fetching turfs for IDs:', turfIds);
           const { data: turfsData, error: turfsError } = await supabase
             .from('turfs')
-            .select('id, name, address, gmap_embed_link, coordinates')
+            .select('id, name, address, coordinates')
             .in('id', turfIds);
 
           console.log('📊 Turfs fetch result:', {
