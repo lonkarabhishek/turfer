@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar, Clock, MapPin, Users, DollarSign, Phone, ArrowLeft,
-  CheckCircle, Trophy, Star, MessageCircle, Share2, Copy, User, Check, X, Trash2
+  CheckCircle, Trophy, Star, MessageCircle, Share2, Copy, User, Check, X, Trash2, Edit3
 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
@@ -65,6 +65,7 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     loadGameDetails();
@@ -842,12 +843,24 @@ Hosted by ${game.hostName}
                     </Button>
                   )}
 
+                  {/* Edit Game Button for Host */}
+                  {isHost && (
+                    <Button
+                      onClick={() => setShowEditModal(true)}
+                      variant="outline"
+                      className="w-full border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400 mt-4"
+                    >
+                      <Edit3 className="w-4 h-4 mr-2" />
+                      Edit Game
+                    </Button>
+                  )}
+
                   {/* Delete Game Button for Host */}
                   {isHost && (
                     <Button
                       onClick={() => setShowDeleteModal(true)}
                       variant="outline"
-                      className="w-full border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 mt-4"
+                      className="w-full border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 mt-2"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
                       Delete Game
@@ -929,6 +942,187 @@ Hosted by ${game.hostName}
                         )}
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Game Modal */}
+        <AnimatePresence>
+          {showEditModal && game && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 z-50"
+                onClick={() => setShowEditModal(false)}
+              />
+
+              {/* Modal */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-2xl mx-auto"
+              >
+                <Card className="shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
+                          <Edit3 className="w-6 h-6 text-emerald-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900">Edit Game</h3>
+                          <p className="text-sm text-gray-500">Update your game details</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowEditModal(false)}
+                        className="rounded-full"
+                      >
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </div>
+
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+
+                        const updateData = {
+                          date: formData.get('date') as string,
+                          startTime: formData.get('startTime') as string,
+                          endTime: formData.get('endTime') as string,
+                          maxPlayers: parseInt(formData.get('maxPlayers') as string),
+                          costPerPerson: parseFloat(formData.get('costPerPerson') as string),
+                          notes: formData.get('notes') as string,
+                        };
+
+                        try {
+                          const response = await gamesAPI.updateGame(gameId, updateData);
+                          if (response.success) {
+                            success('Game updated successfully!');
+                            setShowEditModal(false);
+                            // Reload game details
+                            loadGameDetails();
+                          } else {
+                            showError(response.error || 'Failed to update game');
+                          }
+                        } catch (error: any) {
+                          showError(error.message || 'Failed to update game');
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Date
+                        </label>
+                        <input
+                          type="date"
+                          name="date"
+                          defaultValue={game.date}
+                          required
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Start Time
+                          </label>
+                          <input
+                            type="time"
+                            name="startTime"
+                            defaultValue={game.timeSlot?.split('–')[0]?.trim().replace(/\s*(AM|PM)/i, '') || ''}
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            End Time
+                          </label>
+                          <input
+                            type="time"
+                            name="endTime"
+                            defaultValue={game.endTime || ''}
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Max Players
+                          </label>
+                          <input
+                            type="number"
+                            name="maxPlayers"
+                            defaultValue={game.maxPlayers}
+                            min="2"
+                            max="50"
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Cost Per Person (₹)
+                          </label>
+                          <input
+                            type="number"
+                            name="costPerPerson"
+                            defaultValue={game.costPerPerson}
+                            min="0"
+                            step="1"
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Notes (Optional)
+                        </label>
+                        <textarea
+                          name="notes"
+                          defaultValue={game.notes || ''}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="Add any additional details about the game..."
+                        />
+                      </div>
+
+                      <div className="flex gap-3 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowEditModal(false)}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          <Check className="w-4 h-4 mr-2" />
+                          Save Changes
+                        </Button>
+                      </div>
+                    </form>
                   </CardContent>
                 </Card>
               </motion.div>
