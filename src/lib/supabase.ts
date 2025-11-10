@@ -529,13 +529,24 @@ export const gameHelpers = {
         // Fetch turfs in batch
         let turfsMap: any = {};
         if (turfIds.length > 0) {
-          const { data: turfsData } = await supabase
+          console.log('🔍 Fetching turfs for IDs:', turfIds);
+          const { data: turfsData, error: turfsError } = await supabase
             .from('turfs')
             .select('id, name, address, gmap_embed_link, coordinates')
             .in('id', turfIds);
 
+          console.log('📊 Turfs fetch result:', {
+            turfsData,
+            turfsError,
+            count: turfsData?.length,
+            turfIds: turfIds
+          });
+
           if (turfsData) {
             turfsMap = Object.fromEntries(turfsData.map((turf: any) => [turf.id, turf]));
+            console.log('✅ Turfs map created:', turfsMap);
+          } else if (turfsError) {
+            console.error('❌ Error fetching turfs:', turfsError);
           }
         }
 
@@ -556,6 +567,9 @@ export const gameHelpers = {
         data.forEach((game: any) => {
           if (game.turf_id && turfsMap[game.turf_id]) {
             game.turfs = turfsMap[game.turf_id];
+            console.log(`✅ Attached turf "${game.turfs.name}" to game ${game.id}`);
+          } else if (game.turf_id) {
+            console.warn(`⚠️ Turf ID ${game.turf_id} not found in turfsMap for game ${game.id}`);
           }
           if (game.creator_id && usersMap[game.creator_id]) {
             game.users = usersMap[game.creator_id];

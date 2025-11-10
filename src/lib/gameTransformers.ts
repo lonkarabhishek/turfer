@@ -127,22 +127,22 @@ function getTurfInfo(game: any): { name: string; address: string; coordinates?: 
     };
   }
 
-  // Fallback to default data if we have turf_id
-  const turfId = game.turf_id || game.turfId || 'default';
-  if (turfId && DEFAULT_TURFS[turfId]) {
-    return DEFAULT_TURFS[turfId];
-  }
+  // If we reach here, turf data wasn't properly fetched
+  // Log for debugging
+  console.warn('⚠️ Turf data not found for game:', {
+    gameId: game.id,
+    turfId: game.turf_id || game.turfId,
+    hasTurfsObject: !!game.turfs,
+    turfName: game.turf_name,
+    gameSport: game.sport
+  });
 
-  // Try a few more fallback patterns based on common IDs
-  if (turfId && turfId.length > 0) {
-    const firstChar = turfId.toString().charAt(0);
-    if (DEFAULT_TURFS[firstChar]) {
-      return DEFAULT_TURFS[firstChar];
-    }
-  }
-
-  // Last resort - return default arena instead of unknown
-  return DEFAULT_TURFS['default'];
+  // Return unknown turf - don't use hardcoded fallbacks for UUIDs
+  return {
+    name: 'Unknown Turf',
+    address: 'Address not available',
+    coordinates: undefined
+  };
 }
 
 // Calculate distance for a game
