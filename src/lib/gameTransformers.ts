@@ -96,45 +96,58 @@ const DEFAULT_TURFS: { [key: string]: { name: string; address: string; coordinat
 
 // Get turf information with fallback
 function getTurfInfo(game: any): { name: string; address: string; coordinates?: { lat: number; lng: number }; gmapLink?: string } {
+  // Log what we received for debugging
+  console.log('🔍 [getTurfInfo] Processing game:', {
+    gameId: game.id,
+    turfId: game.turf_id,
+    hasTurfsObject: !!game.turfs,
+    turfsData: game.turfs,
+    turf_name: game.turf_name,
+    turfName: game.turfName
+  });
+
   // First try to get from joined data
-  if (game.turfs?.name && game.turfs?.address) {
+  if (game.turfs?.name) {
     const gmapLink = game.turfs.gmap_embed_link || game.turfs['Gmap Embed link'];
     const extractedCoords = gmapLink ? extractCoordinatesFromMapUrl(gmapLink) : null;
 
+    console.log('✅ [getTurfInfo] Found turf data in game.turfs:', game.turfs.name);
     return {
       name: game.turfs.name,
-      address: game.turfs.address,
+      address: game.turfs.address || 'Address not available',
       coordinates: extractedCoords || game.turfs.coordinates || DEFAULT_TURFS[game.turfs.id]?.coordinates,
       gmapLink: gmapLink
     };
   }
 
   // Try flat structure
-  if (game.turf_name && game.turf_address) {
+  if (game.turf_name) {
+    console.log('✅ [getTurfInfo] Found turf data in game.turf_name:', game.turf_name);
     return {
       name: game.turf_name,
-      address: game.turf_address,
+      address: game.turf_address || 'Address not available',
       coordinates: DEFAULT_TURFS[game.turf_id || game.turfId]?.coordinates
     };
   }
 
   // Try direct properties
-  if (game.turfName && game.turfAddress) {
+  if (game.turfName) {
+    console.log('✅ [getTurfInfo] Found turf data in game.turfName:', game.turfName);
     return {
       name: game.turfName,
-      address: game.turfAddress,
+      address: game.turfAddress || 'Address not available',
       coordinates: DEFAULT_TURFS[game.turf_id || game.turfId]?.coordinates
     };
   }
 
   // If we reach here, turf data wasn't properly fetched
   // Log for debugging
-  console.warn('⚠️ Turf data not found for game:', {
+  console.warn('⚠️ [getTurfInfo] Turf data not found for game:', {
     gameId: game.id,
     turfId: game.turf_id || game.turfId,
     hasTurfsObject: !!game.turfs,
-    turfName: game.turf_name,
-    gameSport: game.sport
+    turfsObjectKeys: game.turfs ? Object.keys(game.turfs) : [],
+    allGameKeys: Object.keys(game)
   });
 
   // Return unknown turf - don't use hardcoded fallbacks for UUIDs
