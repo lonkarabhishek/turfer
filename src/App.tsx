@@ -132,7 +132,7 @@ function HeroSection({
 
         {/* Sports Categories */}
         <motion.div
-          className="grid grid-cols-3 sm:grid-cols-5 gap-6 max-w-3xl mx-auto"
+          className="grid grid-cols-3 sm:grid-cols-6 gap-6 max-w-4xl mx-auto"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.6 }}
@@ -142,7 +142,8 @@ function HeroSection({
             { icon: '🏀', name: 'Basketball' },
             { icon: '🏏', name: 'Cricket' },
             { icon: '🏸', name: 'Badminton' },
-            { icon: '🎾', name: 'Tennis' }
+            { icon: '🎾', name: 'Tennis' },
+            { icon: '🏓', name: 'Pickleball' }
           ].map((sport, index) => (
             <motion.div
               key={sport.name}
