@@ -68,6 +68,14 @@ async function handler(req, res) {
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
+
+  <!-- Crawler-friendly games page for SEO/AEO -->
+  <url>
+    <loc>${baseUrl}/api/games-html</loc>
+    <lastmod>${currentDate}</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+  </url>
 `;
 
     // Add sport pages
