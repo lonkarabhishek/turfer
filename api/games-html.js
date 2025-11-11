@@ -190,6 +190,13 @@ async function handler(req, res) {
                 <span itemprop="name">📍 ${game.turf_name || 'TBD'}</span>
               </div>
 
+              ${game.sport ? `
+              <div class="game-detail">
+                <strong>Sport:</strong>
+                <span itemprop="sport">${game.sport}</span>
+              </div>
+              ` : ''}
+
               <div class="game-detail">
                 <strong>Date:</strong>
                 <time itemprop="startDate" datetime="${game.date}">
@@ -199,7 +206,7 @@ async function handler(req, res) {
 
               <div class="game-detail">
                 <strong>Time:</strong>
-                <span>${game.time_slot || 'TBD'}</span>
+                <span>${game.time_slot || game.timeSlot || 'TBD'}</span>
               </div>
 
               <div class="game-detail">
@@ -222,12 +229,20 @@ async function handler(req, res) {
                   '<span class="badge badge-success">Spots Available</span>'}
               </div>
 
+              ${game.price_per_person ? `
               <div class="price" itemprop="offers" itemscope itemtype="http://schema.org/Offer">
                 <meta itemprop="priceCurrency" content="INR">
-                <span itemprop="price">₹${game.cost_per_person || 0}</span>/person
+                <span itemprop="price">₹${game.price_per_person}</span>/person
               </div>
+              ` : game.cost_per_person ? `
+              <div class="price" itemprop="offers" itemscope itemtype="http://schema.org/Offer">
+                <meta itemprop="priceCurrency" content="INR">
+                <span itemprop="price">₹${game.cost_per_person}</span>/person
+              </div>
+              ` : ''}
 
               ${game.notes ? `<div class="game-detail"><strong>Notes:</strong> ${game.notes}</div>` : ''}
+              ${game.description ? `<div class="game-detail"><strong>Description:</strong> ${game.description}</div>` : ''}
 
               <a href="${baseUrl}/game/${game.id}" class="cta-button" itemprop="url">
                 View Details & Join →
