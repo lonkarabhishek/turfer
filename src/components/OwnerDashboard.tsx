@@ -528,26 +528,26 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
         </div>
 
         {/* Game Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <CardContent className="p-6 text-center">
-              <Calendar className="w-10 h-10 text-blue-600 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-blue-900">{upcomingGames.length}</div>
-              <div className="text-sm text-blue-700 font-medium">Upcoming Games</div>
+            <CardContent className="p-3 sm:p-5 text-center">
+              <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 mx-auto mb-1.5 sm:mb-2" />
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-900">{upcomingGames.length}</div>
+              <div className="text-[10px] sm:text-xs lg:text-sm text-blue-700 font-medium">Upcoming</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-            <CardContent className="p-6 text-center">
-              <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-green-900">{completedGames.length}</div>
-              <div className="text-sm text-green-700 font-medium">Completed Games</div>
+            <CardContent className="p-3 sm:p-5 text-center">
+              <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 mx-auto mb-1.5 sm:mb-2" />
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-900">{completedGames.length}</div>
+              <div className="text-[10px] sm:text-xs lg:text-sm text-green-700 font-medium">Completed</div>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <CardContent className="p-6 text-center">
-              <Users className="w-10 h-10 text-purple-600 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-purple-900">{games.reduce((acc, g) => acc + g.currentPlayers, 0)}</div>
-              <div className="text-sm text-purple-700 font-medium">Total Players</div>
+            <CardContent className="p-3 sm:p-5 text-center">
+              <Users className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 mx-auto mb-1.5 sm:mb-2" />
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-900">{games.reduce((acc, g) => acc + g.currentPlayers, 0)}</div>
+              <div className="text-[10px] sm:text-xs lg:text-sm text-purple-700 font-medium">Players</div>
             </CardContent>
           </Card>
         </div>
@@ -563,7 +563,7 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
           </div>
 
           {upcomingGames.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {upcomingGames.map((game) => (
                 <motion.div
                   key={game.id}
@@ -572,65 +572,57 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                   transition={{ duration: 0.3 }}
                 >
                   <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
-                    <CardContent className="p-4 sm:p-5">
+                    <CardContent className="p-3 sm:p-4">
                       {/* Game Header */}
-                      <div className="flex items-start justify-between mb-3 gap-2">
+                      <div className="flex items-start justify-between mb-2 gap-2">
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-base sm:text-lg text-gray-900 mb-1 truncate">{game.format}</h4>
-                          <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-1 truncate">
+                          <h4 className="font-bold text-sm sm:text-base text-gray-900 mb-0.5 truncate">{game.format}</h4>
+                          <p className="text-xs text-gray-600 flex items-center gap-1">
                             <MapPin className="w-3 h-3 flex-shrink-0" />
                             <span className="truncate">{game.turfName}</span>
                           </p>
                         </div>
-                        <Badge className="bg-green-100 text-green-700 text-xs whitespace-nowrap flex-shrink-0">Active</Badge>
+                        <Badge className="bg-green-100 text-green-700 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 whitespace-nowrap flex-shrink-0">
+                          Active
+                        </Badge>
                       </div>
 
-                      {/* Game Details */}
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
-                          <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{formatGameDate(game.date)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
-                          <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span>{game.timeSlot}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
-                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span>{game.currentPlayers}/{game.maxPlayers} players</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-green-700">
-                          <DollarSign className="w-4 h-4 flex-shrink-0" />
-                          <span>₹{game.costPerPerson}/person</span>
-                        </div>
-                      </div>
-
-                      {/* Player Progress Bar */}
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                          <span>Players</span>
-                          <span>{Math.round((game.currentPlayers / game.maxPlayers) * 100)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all"
-                            style={{ width: `${(game.currentPlayers / game.maxPlayers) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {/* Host Info */}
-                      <div className="pt-3 border-t border-gray-100">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                            {game.hostName?.charAt(0) || 'H'}
+                      {/* Game Details - More Compact */}
+                      <div className="space-y-1.5 mb-3 py-2 bg-gray-50 rounded-lg px-2">
+                        <div className="flex items-center justify-between text-xs text-gray-700">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <span className="truncate">{formatGameDate(game.date)}</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
-                              Hosted by {game.hostName}
-                            </p>
-                            <p className="text-xs text-gray-500 truncate">{game.skillLevel}</p>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-700">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <span>{game.timeSlot}</span>
                           </div>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 text-gray-700">
+                            <Users className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <span>{game.currentPlayers}/{game.maxPlayers}</span>
+                          </div>
+                          <div className="flex items-center gap-1 font-semibold text-green-700">
+                            <DollarSign className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>₹{game.costPerPerson}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Host Info - Simplified */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {game.hostName?.charAt(0) || 'H'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">
+                            {game.hostName}
+                          </p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 truncate">{game.skillLevel}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -662,7 +654,7 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
           </div>
 
           {completedGames.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {completedGames.slice(0, 6).map((game) => (
                 <motion.div
                   key={game.id}
@@ -671,47 +663,51 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                   transition={{ duration: 0.3 }}
                 >
                   <Card className="hover:shadow-md transition-shadow border-l-4 border-l-gray-400 opacity-90">
-                    <CardContent className="p-4 sm:p-5">
+                    <CardContent className="p-3 sm:p-4">
                       {/* Game Header */}
-                      <div className="flex items-start justify-between mb-3 gap-2">
+                      <div className="flex items-start justify-between mb-2 gap-2">
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-base sm:text-lg text-gray-900 mb-1 truncate">{game.format}</h4>
-                          <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-1 truncate">
+                          <h4 className="font-bold text-sm sm:text-base text-gray-900 mb-0.5 truncate">{game.format}</h4>
+                          <p className="text-xs text-gray-600 flex items-center gap-1">
                             <MapPin className="w-3 h-3 flex-shrink-0" />
                             <span className="truncate">{game.turfName}</span>
                           </p>
                         </div>
-                        <Badge className="bg-gray-100 text-gray-600 text-xs whitespace-nowrap flex-shrink-0">Completed</Badge>
+                        <Badge className="bg-gray-100 text-gray-600 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 whitespace-nowrap flex-shrink-0">
+                          Done
+                        </Badge>
                       </div>
 
-                      {/* Game Details */}
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
-                          <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span className="truncate">{formatGameDate(game.date)}</span>
+                      {/* Game Details - More Compact */}
+                      <div className="space-y-1.5 mb-3 py-2 bg-gray-50 rounded-lg px-2">
+                        <div className="flex items-center justify-between text-xs text-gray-700">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <span className="truncate">{formatGameDate(game.date)}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
-                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span>{game.currentPlayers}/{game.maxPlayers} players joined</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
-                          <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                          <span>₹{game.costPerPerson}/person</span>
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 text-gray-700">
+                            <Users className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <span>{game.currentPlayers}/{game.maxPlayers}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-gray-700">
+                            <DollarSign className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <span>₹{game.costPerPerson}</span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Host Info */}
-                      <div className="pt-3 border-t border-gray-100">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                            {game.hostName?.charAt(0) || 'H'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
-                              {game.hostName}
-                            </p>
-                            <p className="text-xs text-gray-500 truncate">{game.skillLevel}</p>
-                          </div>
+                      {/* Host Info - Simplified */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {game.hostName?.charAt(0) || 'H'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">
+                            {game.hostName}
+                          </p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 truncate">{game.skillLevel}</p>
                         </div>
                       </div>
                     </CardContent>
