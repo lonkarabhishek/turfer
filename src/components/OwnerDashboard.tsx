@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Building2, Plus, Calendar, Users, DollarSign, Star, 
+import {
+  Building2, Plus, Calendar, Users, DollarSign, Star,
   MapPin, Clock, Settings, Bell, BarChart3, TrendingUp,
   Filter, Search, Edit, Trash2, Eye, ChevronRight,
   AlertCircle, CheckCircle, XCircle, Activity,
-  CreditCard, MessageSquare, Award, Target
+  CreditCard, MessageSquare, Award, Target, Trophy, Sparkles
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { ResponsiveContainer, AreaChart, CartesianGrid, BarChart, Bar, XAxis, YAxis, Tooltip, Area } from 'recharts';
-import { authManager, turfsAPI, bookingsAPI } from '../lib/api';
+import { authManager, turfsAPI, bookingsAPI, gamesAPI } from '../lib/api';
 import { filterNonExpiredGames, isGameExpired } from '../lib/gameUtils';
+import type { GameData } from './GameCard';
 
 type DashboardSection = 'overview' | 'turfs' | 'bookings' | 'earnings' | 'games' | 'notifications' | 'settings';
 
@@ -26,6 +27,7 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
   const [user] = useState(authManager.getUser());
   const [turfs, setTurfs] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [games, setGames] = useState<GameData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddTurf, setShowAddTurf] = useState(false);
 
@@ -80,7 +82,7 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
         }
       } catch (bookingError) {
         console.error('❌ Error loading bookings:', bookingError);
-        
+
         // Fallback: create sample booking data for demonstration
         console.log('💡 Using sample booking data');
         const sampleBookings = [
@@ -106,6 +108,27 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
         setBookings(sampleBookings);
       }
 
+      // Load games for owner's turfs
+      try {
+        console.log('🎮 Loading games...');
+        const gamesRes = await gamesAPI.getAvailableGames();
+        if (gamesRes.success && gamesRes.data) {
+          // Filter games that are at owner's turfs
+          const turfIds = turfs.map(t => t.id);
+          const ownerGames = gamesRes.data.filter((game: GameData) =>
+            game.turfId && turfIds.includes(game.turfId)
+          );
+          console.log('✅ Games loaded:', ownerGames);
+          setGames(ownerGames);
+        } else {
+          console.log('⚠️ No games found');
+          setGames([]);
+        }
+      } catch (gameError) {
+        console.error('❌ Error loading games:', gameError);
+        setGames([]);
+      }
+
     } catch (error) {
       console.error('❌ Failed to load owner data:', error);
     } finally {
@@ -116,9 +139,9 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
   const sidebarItems = [
     { id: 'overview', icon: BarChart3, label: 'Overview', count: undefined },
     { id: 'turfs', icon: Building2, label: 'My Turfs', count: turfs.length },
-    { id: 'bookings', icon: Calendar, label: 'Bookings', count: bookings.length },
+    { id: 'bookings', icon: Calendar, label: 'Bookings', count: undefined },
     { id: 'earnings', icon: DollarSign, label: 'Earnings', count: undefined },
-    { id: 'games', icon: Users, label: 'Games', count: 5 },
+    { id: 'games', icon: Users, label: 'Games', count: games.length },
     { id: 'notifications', icon: Bell, label: 'Notifications', count: 3 },
     { id: 'settings', icon: Settings, label: 'Settings', count: undefined },
   ];
@@ -372,99 +395,31 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
   const renderBookings = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Bookings Management</h2>
-        <div className="flex gap-3">
-          <Input placeholder="Search bookings..." className="w-64" />
-          <Button variant="outline">
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-          </Button>
-        </div>
+        <h2 className="text-2xl font-bold">Bookings & Manual Booking</h2>
       </div>
 
-      {/* Booking Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold">{bookings.length}</div>
-                <div className="text-sm text-gray-600">Total Bookings</div>
-              </div>
-              <Calendar className="w-8 h-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-green-600">{bookings.filter(b => b.status === 'confirmed').length}</div>
-                <div className="text-sm text-gray-600">Confirmed</div>
-              </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-orange-600">{bookings.filter(b => b.status === 'pending').length}</div>
-                <div className="text-sm text-gray-600">Pending</div>
-              </div>
-              <Clock className="w-8 h-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-red-600">{bookings.filter(b => b.status === 'cancelled').length}</div>
-                <div className="text-sm text-gray-600">Cancelled</div>
-              </div>
-              <XCircle className="w-8 h-8 text-red-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Bookings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Bookings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {bookings.length > 0 ? (
-            <div className="space-y-4">
-              {bookings.slice(0, 5).map((booking) => (
-                <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="font-semibold">{booking.customerName || 'Customer'}</div>
-                    <div className="text-sm text-gray-600">
-                      {booking.turfName} • {booking.date} • {booking.timeSlot}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold">₹{booking.amount}</div>
-                    <Badge className={
-                      booking.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                      booking.status === 'pending' ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }>
-                      {booking.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No bookings yet</p>
-            </div>
-          )}
+      {/* Coming Soon Message */}
+      <Card className="border-2 border-dashed border-gray-300">
+        <CardContent className="p-12 text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-blue-100 rounded-full mx-auto mb-6 flex items-center justify-center">
+            <Sparkles className="w-10 h-10 text-purple-600" />
+          </div>
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">Coming Soon!</h3>
+          <p className="text-gray-600 max-w-md mx-auto mb-6">
+            We're working hard to bring you an amazing bookings management and manual booking system.
+            Stay tuned for updates!
+          </p>
+          <div className="flex flex-col md:flex-row gap-3 justify-center">
+            <Badge className="bg-purple-100 text-purple-700 px-4 py-2 text-sm">
+              📅 Automated Booking Management
+            </Badge>
+            <Badge className="bg-blue-100 text-blue-700 px-4 py-2 text-sm">
+              ✍️ Manual Booking Upload
+            </Badge>
+            <Badge className="bg-green-100 text-green-700 px-4 py-2 text-sm">
+              📊 Analytics & Reports
+            </Badge>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -544,54 +499,241 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
     </div>
   );
 
-  const renderGames = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Games & Events</h2>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Host Event
-        </Button>
-      </div>
+  const renderGames = () => {
+    // Helper function to format date
+    const formatGameDate = (dateString: string): string => {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold">24</div>
-            <div className="text-sm text-gray-600">Active Games</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Trophy className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold">12</div>
-            <div className="text-sm text-gray-600">Tournaments</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Award className="w-8 h-8 text-green-600 mx-auto mb-2" />
-            <div className="text-2xl font-bold">156</div>
-            <div className="text-sm text-gray-600">Total Players</div>
-          </CardContent>
-        </Card>
-      </div>
+    // Filter games into upcoming and completed
+    const now = new Date();
+    const upcomingGames = games.filter(game => {
+      const gameDate = new Date(game.date);
+      return gameDate >= now;
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Upcoming Games</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-gray-500">
-            <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>No upcoming games</p>
-            <p className="text-sm">Games hosted at your turfs will appear here</p>
+    const completedGames = games.filter(game => {
+      const gameDate = new Date(game.date);
+      return gameDate < now;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Games & Events</h2>
+            <p className="text-gray-600 text-sm">Manage games happening at your turfs</p>
           </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+        </div>
+
+        {/* Game Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardContent className="p-6 text-center">
+              <Calendar className="w-10 h-10 text-blue-600 mx-auto mb-3" />
+              <div className="text-3xl font-bold text-blue-900">{upcomingGames.length}</div>
+              <div className="text-sm text-blue-700 font-medium">Upcoming Games</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardContent className="p-6 text-center">
+              <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-3" />
+              <div className="text-3xl font-bold text-green-900">{completedGames.length}</div>
+              <div className="text-sm text-green-700 font-medium">Completed Games</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <CardContent className="p-6 text-center">
+              <Users className="w-10 h-10 text-purple-600 mx-auto mb-3" />
+              <div className="text-3xl font-bold text-purple-900">{games.reduce((acc, g) => acc + g.currentPlayers, 0)}</div>
+              <div className="text-sm text-purple-700 font-medium">Total Players</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Upcoming Games Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-blue-600" />
+              Upcoming Games
+            </h3>
+            <Badge className="bg-blue-100 text-blue-700">{upcomingGames.length}</Badge>
+          </div>
+
+          {upcomingGames.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {upcomingGames.map((game) => (
+                <motion.div
+                  key={game.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
+                    <CardContent className="p-5">
+                      {/* Game Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-lg text-gray-900 mb-1">{game.format}</h4>
+                          <p className="text-sm text-gray-600 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {game.turfName}
+                          </p>
+                        </div>
+                        <Badge className="bg-green-100 text-green-700 text-xs">Active</Badge>
+                      </div>
+
+                      {/* Game Details */}
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <Calendar className="w-4 h-4 text-gray-500" />
+                          <span>{formatGameDate(game.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <Clock className="w-4 h-4 text-gray-500" />
+                          <span>{game.timeSlot}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <Users className="w-4 h-4 text-gray-500" />
+                          <span>{game.currentPlayers}/{game.maxPlayers} players</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm font-semibold text-green-700">
+                          <DollarSign className="w-4 h-4" />
+                          <span>₹{game.costPerPerson}/person</span>
+                        </div>
+                      </div>
+
+                      {/* Player Progress Bar */}
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <span>Players</span>
+                          <span>{Math.round((game.currentPlayers / game.maxPlayers) * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all"
+                            style={{ width: `${(game.currentPlayers / game.maxPlayers) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* Host Info */}
+                      <div className="pt-3 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                            {game.hostName?.charAt(0) || 'H'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              Hosted by {game.hostName}
+                            </p>
+                            <p className="text-xs text-gray-500">{game.skillLevel}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <Card className="border-2 border-dashed border-gray-200">
+              <CardContent className="p-12 text-center">
+                <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <h4 className="text-lg font-semibold text-gray-900 mb-2">No upcoming games</h4>
+                <p className="text-gray-600 text-sm">
+                  Games scheduled at your turfs will appear here
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Completed Games Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              Completed Games
+            </h3>
+            <Badge className="bg-green-100 text-green-700">{completedGames.length}</Badge>
+          </div>
+
+          {completedGames.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {completedGames.slice(0, 6).map((game) => (
+                <motion.div
+                  key={game.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow border-l-4 border-l-gray-400 opacity-90">
+                    <CardContent className="p-5">
+                      {/* Game Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-lg text-gray-900 mb-1">{game.format}</h4>
+                          <p className="text-sm text-gray-600 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {game.turfName}
+                          </p>
+                        </div>
+                        <Badge className="bg-gray-100 text-gray-600 text-xs">Completed</Badge>
+                      </div>
+
+                      {/* Game Details */}
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <Calendar className="w-4 h-4 text-gray-500" />
+                          <span>{formatGameDate(game.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <Users className="w-4 h-4 text-gray-500" />
+                          <span>{game.currentPlayers}/{game.maxPlayers} players joined</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <DollarSign className="w-4 h-4 text-gray-500" />
+                          <span>₹{game.costPerPerson}/person</span>
+                        </div>
+                      </div>
+
+                      {/* Host Info */}
+                      <div className="pt-3 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                            {game.hostName?.charAt(0) || 'H'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {game.hostName}
+                            </p>
+                            <p className="text-xs text-gray-500">{game.skillLevel}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <Card className="border-2 border-dashed border-gray-200">
+              <CardContent className="p-12 text-center">
+                <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <h4 className="text-lg font-semibold text-gray-900 mb-2">No completed games yet</h4>
+                <p className="text-gray-600 text-sm">
+                  Past games will be shown here for your reference
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderNotifications = () => (
     <div className="space-y-6">
