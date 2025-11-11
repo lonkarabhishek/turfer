@@ -6,12 +6,14 @@ import { GameCard } from './GameCard';
 import { TurfCardEnhanced } from './TurfCardEnhanced';
 import { gamesAPI, turfsAPI } from '../lib/api';
 import { useSEO } from '../hooks/useSEO';
+import { usePageScrollToTop } from '../hooks/useScrollToTop';
 import type { GameData } from './GameCard';
 import type { TurfData } from './TurfCard';
 
 interface SportPageProps {
   sport: string;
   onNavigateHome: () => void;
+  onNavigateToFindTurfs?: () => void;
 }
 
 const sportInfo: { [key: string]: { name: string; icon: string; color: string } } = {
@@ -23,11 +25,14 @@ const sportInfo: { [key: string]: { name: string; icon: string; color: string } 
   'pickleball': { name: 'Pickleball', icon: '🏓', color: 'bg-pink-500' }
 };
 
-export function SportPage({ sport, onNavigateHome }: SportPageProps) {
+export function SportPage({ sport, onNavigateHome, onNavigateToFindTurfs }: SportPageProps) {
   const [games, setGames] = useState<GameData[]>([]);
   const [turfs, setTurfs] = useState<TurfData[]>([]);
   const [loadingGames, setLoadingGames] = useState(true);
   const [loadingTurfs, setLoadingTurfs] = useState(true);
+
+  // Scroll to top when component mounts
+  usePageScrollToTop();
 
   const info = sportInfo[sport.toLowerCase()] || {
     name: sport,
@@ -138,7 +143,7 @@ export function SportPage({ sport, onNavigateHome }: SportPageProps) {
                 Be the first to create a {info.name.toLowerCase()} game!
               </p>
               <Button
-                onClick={() => navigate('/find-turfs')}
+                onClick={onNavigateToFindTurfs}
                 className="bg-primary-600 hover:bg-primary-700"
               >
                 Find a Turf

@@ -9,6 +9,7 @@ import { Button } from './ui/button';
 import { gamesAPI } from '../lib/api';
 import { gameRequestHelpers } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { usePageScrollToTop } from '../hooks/useScrollToTop';
 import { buildWhatsAppShareLink } from '../lib/whatsapp';
 import { track } from '../lib/analytics';
 import { useToast } from '../lib/toastManager';
@@ -66,6 +67,9 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // Scroll to top when component mounts
+  usePageScrollToTop();
 
   useEffect(() => {
     loadGameDetails();
@@ -324,23 +328,42 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
     }
   };
 
+  // Helper function to convert 24-hour time to 12-hour AM/PM format
+  const convertTo12Hour = (timeSlot: string) => {
+    try {
+      // Handle formats like "14:00 - 16:00" or "14:00"
+      const times = timeSlot.split('-').map(t => t.trim());
+
+      const convert = (time: string) => {
+        const [hours, minutes] = time.split(':').map(Number);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const hour12 = hours % 12 || 12;
+        return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
+      };
+
+      if (times.length === 2) {
+        return `${convert(times[0])} - ${convert(times[1])}`;
+      }
+      return convert(times[0]);
+    } catch (e) {
+      return timeSlot; // Return original if parsing fails
+    }
+  };
+
   const handleShareWhatsApp = () => {
     if (!game) return;
-    
-    const message = `🏆 JOIN MY GAME! 🏆
 
-${game.format} at ${game.turfName}
+    const time12Hour = convertTo12Hour(game.timeSlot);
+    const message = `🏃‍♂️ ${game.format} - Join Us!
+
 📅 ${formatDate(game.date)}
-⏰ ${game.timeSlot}
-📍 ${game.turfAddress}
-👥 ${game.maxPlayers - game.currentPlayers} spots available
-💰 ₹{game.costPerPerson}/person
+⏰ ${time12Hour}
+📍 ${game.turfName}
+💰 ₹${game.costPerPerson}/person
 
-Ready to play? Join now!
-${window.location.href}
+${game.maxPlayers - game.currentPlayers} spots left!
 
-Hosted by ${game.hostName}
-#TapTurf #${game.format.replace(/\\s+/g, '')}`;
+Join here: ${window.location.href}`;
 
     const whatsappUrl = buildWhatsAppShareLink(message);
     window.open(whatsappUrl, '_blank');
