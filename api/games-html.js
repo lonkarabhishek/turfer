@@ -58,6 +58,22 @@ function toISO8601(dateStr, timeStr) {
   return `${year}-${month}-${day}T${hour}:${minute}:00+05:30`;
 }
 
+// Get turf info from joined data or fallback
+function getTurfInfo(game) {
+  // Try joined turfs data first
+  if (game.turfs?.name) {
+    return {
+      name: game.turfs.name,
+      address: game.turfs.address || 'Address not available'
+    };
+  }
+  // Fallback to flat structure
+  return {
+    name: game.turf_name || 'TapTurf Arena',
+    address: game.turf_address || 'Nashik, India'
+  };
+}
+
 // Generate JSON-LD structured data for a game
 function generateGameJsonLd(game, baseUrl) {
   const startDateTime = toISO8601(game.date, game.start_time);
@@ -65,10 +81,12 @@ function generateGameJsonLd(game, baseUrl) {
 
   if (!startDateTime || !endDateTime) return '';
 
+  const turfInfo = getTurfInfo(game);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
-    "name": `${game.format || 'Sports Game'} at ${game.turf_name || 'TapTurf Arena'}`,
+    "name": `${game.format || 'Sports Game'} at ${turfInfo.name}`,
     "sport": game.sport || game.format || 'Sports',
     "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
     "eventStatus": "https://schema.org/EventScheduled",
@@ -76,8 +94,8 @@ function generateGameJsonLd(game, baseUrl) {
     "endDate": endDateTime,
     "location": {
       "@type": "Place",
-      "name": game.turf_name || 'TapTurf Arena',
-      "address": game.turf_address || 'Nashik, India'
+      "name": turfInfo.name,
+      "address": turfInfo.address
     },
     "organizer": {
       "@type": "Person",
@@ -102,10 +120,17 @@ async function handler(req, res) {
   try {
     const baseUrl = 'https://www.tapturf.in';
 
-    // Fetch all upcoming games
+    // Fetch all upcoming games with turf details
     const { data: games, error: gamesError } = await supabase
       .from('games')
-      .select('*')
+      .select(`
+        *,
+        turfs (
+          id,
+          name,
+          address
+        )
+      `)
       .gte('date', new Date().toISOString().split('T')[0])
       .order('date', { ascending: true });
 
@@ -118,7 +143,8 @@ async function handler(req, res) {
     // Extract unique sports and locations for meta tags
     const uniqueSports = [...new Set(gamesList.map(g => g.sport || g.format).filter(Boolean))];
     const uniqueLocations = [...new Set(gamesList.map(g => {
-      const addr = g.turf_address || '';
+      const turfInfo = getTurfInfo(g);
+      const addr = turfInfo.address || '';
       return addr.split(',')[0]?.trim();
     }).filter(Boolean))];
 
@@ -279,13 +305,16 @@ async function handler(req, res) {
           const isAlmostFull = spotsLeft <= 2 && spotsLeft > 0;
           const startDateTime = toISO8601(game.date, game.start_time);
           const endDateTime = toISO8601(game.date, game.end_time);
+          const turfInfo = getTurfInfo(game);
 
           return `
             ${generateGameJsonLd(game, baseUrl)}
             <article class="game-card" itemscope itemtype="http://schema.org/SportsEvent">
-              <h2 class="game-title" itemprop="name">${game.format || 'Sports Game'} at ${game.turf_name || 'TapTurf'}</h2>
+              <h2 class="game-title" itemprop="name">${game.format || 'Sports Game'} at ${turfInfo.name}</h2>
               <div class="game-venue" itemprop="location" itemscope itemtype="http://schema.org/Place">
-                <span itemprop="name">📍 ${game.turf_name || 'TBD'}</span>
+                <span itemprop="name">📍 ${turfInfo.name}</span>
+                <br>
+                <span class="text-sm text-gray-600">${turfInfo.address}</span>
               </div>
 
               ${game.sport ? `
