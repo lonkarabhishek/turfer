@@ -354,11 +354,11 @@ export function GameDetailPage({ gameId, onBack, onNavigate }: GameDetailPagePro
     if (!game) return;
 
     const time12Hour = convertTo12Hour(game.timeSlot);
-    const message = `🏃‍♂️ ${game.format} - Join Us!
+    const message = `Join today's game at ${game.turfName}!
 
 📅 ${formatDate(game.date)}
 ⏰ ${time12Hour}
-📍 ${game.turfName}
+🏃‍♂️ ${game.format}
 💰 ₹${game.costPerPerson}/person
 
 ${game.maxPlayers - game.currentPlayers} spots left!
@@ -449,39 +449,7 @@ Join here: ${window.location.href}`;
   // Check if the current user is the host/creator of the game
   const isHost = user && game?.creatorId ? user.id === game.creatorId : false;
 
-  // Require login to view game details
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
-          <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <User className="w-8 h-8 text-primary-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign In Required</h2>
-          <p className="text-gray-600 mb-6">
-            Please sign in to view game details and join games.
-          </p>
-          <Button
-            onClick={() => {
-              console.log('🔐 Sign In button clicked');
-              console.log('📍 onNavigate available?', !!onNavigate);
-              if (onNavigate) {
-                console.log('📍 Calling onNavigate with "profile"');
-                onNavigate('profile');
-              } else {
-                console.log('📍 Fallback: redirecting to home');
-                // Fallback: reload to home and let auth redirect happen
-                window.location.href = '/';
-              }
-            }}
-            className="w-full bg-primary-600 hover:bg-primary-700 text-white"
-          >
-            Sign In to Continue
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // Allow unsigned users to view game details, but hide sensitive info
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
@@ -644,7 +612,11 @@ Join here: ${window.location.href}`;
                   <User className="w-5 h-5 text-gray-600" />
                   <div>
                     <div className="font-medium">{game.hostName}</div>
-                    <div className="text-sm text-gray-600">{game.hostPhone}</div>
+                    {user ? (
+                      <div className="text-sm text-gray-600">{game.hostPhone}</div>
+                    ) : (
+                      <div className="text-sm text-gray-500 italic">Sign in to see contact</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -857,12 +829,18 @@ Join here: ${window.location.href}`;
                     </div>
                   )}
 
-                  {!user && (
+                  {!user && !isFull && (
                     <Button
-                      onClick={() => alert('Please login to join this game')}
+                      onClick={() => {
+                        if (onNavigate) {
+                          onNavigate('profile');
+                        } else {
+                          window.location.href = '/';
+                        }
+                      }}
                       className="flex-1 bg-primary-600 hover:bg-primary-700"
                     >
-                      Login to Join
+                      Sign In to Join
                     </Button>
                   )}
 
