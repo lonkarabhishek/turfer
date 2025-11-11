@@ -37,6 +37,66 @@ function formatTimeSlot(startTime, endTime) {
   return `${formattedStart} – ${formattedEnd}`;
 }
 
+// Convert date and time to ISO 8601 format with timezone (IST = UTC+5:30)
+function toISO8601(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+
+  // Parse the date and time
+  const date = new Date(dateStr);
+  const [hours, minutes] = timeStr.split(':');
+
+  // Set the time
+  date.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+
+  // Format as ISO 8601 with IST timezone (+05:30)
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hour}:${minute}:00+05:30`;
+}
+
+// Generate JSON-LD structured data for a game
+function generateGameJsonLd(game, baseUrl) {
+  const startDateTime = toISO8601(game.date, game.start_time);
+  const endDateTime = toISO8601(game.date, game.end_time);
+
+  if (!startDateTime || !endDateTime) return '';
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SportsEvent",
+    "name": `${game.format || 'Sports Game'} at ${game.turf_name || 'TapTurf Arena'}`,
+    "sport": game.sport || game.format || 'Sports',
+    "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+    "eventStatus": "https://schema.org/EventScheduled",
+    "startDate": startDateTime,
+    "endDate": endDateTime,
+    "location": {
+      "@type": "Place",
+      "name": game.turf_name || 'TapTurf Arena',
+      "address": game.turf_address || 'Nashik, India'
+    },
+    "organizer": {
+      "@type": "Person",
+      "name": game.host_name || 'TapTurf Host'
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": (game.price_per_person || game.cost_per_person || 0).toString(),
+      "priceCurrency": "INR",
+      "availability": "https://schema.org/InStock",
+      "url": `${baseUrl}/game/${game.id}`
+    },
+    "maximumAttendeeCapacity": game.max_players || 0,
+    "remainingAttendeeCapacity": Math.max(0, (game.max_players || 0) - (game.current_players || 0))
+  };
+
+  return `<script type="application/ld+json">\n${JSON.stringify(jsonLd, null, 2)}\n</script>`;
+}
+
 // Generate static HTML page with all games for crawlers
 async function handler(req, res) {
   try {
@@ -55,29 +115,43 @@ async function handler(req, res) {
 
     const gamesList = games || [];
 
+    // Extract unique sports and locations for meta tags
+    const uniqueSports = [...new Set(gamesList.map(g => g.sport || g.format).filter(Boolean))];
+    const uniqueLocations = [...new Set(gamesList.map(g => {
+      const addr = g.turf_address || '';
+      return addr.split(',')[0]?.trim();
+    }).filter(Boolean))];
+
+    const sportsText = uniqueSports.slice(0, 5).join(', ') || 'Sports';
+    const locationsText = uniqueLocations.slice(0, 3).join(', ') || 'Near You';
+
     // Build HTML page
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TapTurf - Available Games | Find and Join Sports Games Near You</title>
-  <meta name="description" content="Find and join ${gamesList.length}+ active sports games near you on TapTurf. Book turfs, connect with players, and play football, cricket, basketball, and more!">
-  <meta name="keywords" content="sports games, turf booking, football games, cricket matches, join games, find players, sports near me">
-  <meta name="robots" content="index, follow">
+  <title>TapTurf - ${gamesList.length} ${sportsText} Games in ${locationsText} | Join Now</title>
+  <meta name="description" content="Find and join ${gamesList.length}+ live ${sportsText} games in ${locationsText}. Book turfs, connect with players. Upcoming matches for football, cricket, basketball, badminton, and more!">
+  <meta name="keywords" content="sports games near me, ${sportsText.toLowerCase()}, turf booking ${locationsText}, join games, find players, sports matches today, ${uniqueSports.map(s => `${s} games`).join(', ')}">
+  <meta name="robots" content="index, follow, max-image-preview:large">
   <link rel="canonical" href="${baseUrl}/api/games-html">
+  <meta name="geo.region" content="IN-MH">
+  <meta name="geo.placename" content="${locationsText}">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="${baseUrl}/api/games-html">
-  <meta property="og:title" content="TapTurf - Available Games">
-  <meta property="og:description" content="Find and join ${gamesList.length}+ active sports games near you">
+  <meta property="og:title" content="TapTurf - ${gamesList.length} ${sportsText} Games in ${locationsText}">
+  <meta property="og:description" content="Join ${gamesList.length}+ live ${sportsText} games. Book turfs, connect with players for football, cricket, basketball, and more sports!">
   <meta property="og:site_name" content="TapTurf">
+  <meta property="og:locale" content="en_IN">
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="TapTurf - Available Games">
-  <meta name="twitter:description" content="Find and join ${gamesList.length}+ active sports games near you">
+  <meta name="twitter:title" content="${gamesList.length} ${sportsText} Games in ${locationsText} | TapTurf">
+  <meta name="twitter:description" content="Join ${gamesList.length}+ live sports games. ${sportsText} matches available now!">
+  <meta name="twitter:site" content="@TapTurf">
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -203,10 +277,13 @@ async function handler(req, res) {
           const spotsLeft = game.max_players - game.current_players;
           const isFull = spotsLeft <= 0;
           const isAlmostFull = spotsLeft <= 2 && spotsLeft > 0;
+          const startDateTime = toISO8601(game.date, game.start_time);
+          const endDateTime = toISO8601(game.date, game.end_time);
 
           return `
+            ${generateGameJsonLd(game, baseUrl)}
             <article class="game-card" itemscope itemtype="http://schema.org/SportsEvent">
-              <h2 class="game-title" itemprop="name">${game.format || 'Sports Game'}</h2>
+              <h2 class="game-title" itemprop="name">${game.format || 'Sports Game'} at ${game.turf_name || 'TapTurf'}</h2>
               <div class="game-venue" itemprop="location" itemscope itemtype="http://schema.org/Place">
                 <span itemprop="name">📍 ${game.turf_name || 'TBD'}</span>
               </div>
@@ -220,14 +297,16 @@ async function handler(req, res) {
 
               <div class="game-detail">
                 <strong>Date:</strong>
-                <time itemprop="startDate" datetime="${game.date}">
+                <time itemprop="startDate" datetime="${startDateTime || game.date}">
                   ${formatDate(game.date)}
                 </time>
               </div>
 
               <div class="game-detail">
                 <strong>Time:</strong>
-                <span>${formatTimeSlot(game.start_time, game.end_time)}</span>
+                <time itemprop="endDate" datetime="${endDateTime || ''}">
+                  ${formatTimeSlot(game.start_time, game.end_time)}
+                </time>
               </div>
 
               <div class="game-detail">
