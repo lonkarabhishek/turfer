@@ -16,6 +16,27 @@ function formatDate(dateString) {
   });
 }
 
+// Convert 24-hour time to 12-hour format
+function formatTime(timeStr) {
+  if (!timeStr || timeStr === '00:00') return '12:00 AM';
+
+  const [hours, minutes] = timeStr.split(':');
+  const hour24 = parseInt(hours, 10);
+  const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+  const ampm = hour24 < 12 ? 'AM' : 'PM';
+
+  return `${hour12}:${minutes} ${ampm}`;
+}
+
+// Format time slot to 12-hour format with en-dash
+function formatTimeSlot(startTime, endTime) {
+  if (!startTime || !endTime) return 'TBD';
+  const formattedStart = formatTime(startTime);
+  const formattedEnd = formatTime(endTime);
+  // Use en-dash (–) instead of hyphen (-)
+  return `${formattedStart} – ${formattedEnd}`;
+}
+
 // Generate static HTML page with all games for crawlers
 async function handler(req, res) {
   try {
@@ -206,7 +227,7 @@ async function handler(req, res) {
 
               <div class="game-detail">
                 <strong>Time:</strong>
-                <span>${game.time_slot || game.timeSlot || 'TBD'}</span>
+                <span>${formatTimeSlot(game.start_time, game.end_time)}</span>
               </div>
 
               <div class="game-detail">
