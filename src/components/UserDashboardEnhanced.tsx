@@ -558,7 +558,10 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
               </div>
             </CardHeader>
             <CardContent>
-              <div className="bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-2xl p-6 border border-emerald-200">
+              <div
+                onClick={() => onGameNavigation?.(upcomingGames[0].id)}
+                className="bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-2xl p-6 border border-emerald-200 cursor-pointer hover:shadow-lg hover:border-emerald-300 transition-all duration-200 hover:scale-[1.02]"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-xl font-bold text-emerald-900 mb-2">
@@ -579,9 +582,12 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
                       </div>
                     </div>
                   </div>
-                  <Badge className="bg-emerald-200 text-emerald-800 border-emerald-300">
-                    {upcomingGames[0].sport}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge className="bg-emerald-200 text-emerald-800 border-emerald-300">
+                      {upcomingGames[0].sport}
+                    </Badge>
+                    <ChevronRight className="w-5 h-5 text-emerald-600" />
+                  </div>
                 </div>
               </div>
             </CardContent>

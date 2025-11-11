@@ -16,6 +16,7 @@ import { GameCard, type GameData } from './GameCard';
 import { convertImageUrls } from '../lib/imageUtils';
 import { formatStartingPrice } from '../lib/priceUtils';
 import { useSEO, generateTurfSchema } from '../hooks/useSEO';
+import { usePageScrollToTop } from '../hooks/useScrollToTop';
 
 interface TurfDetailPageProps {
   turfId: string;
@@ -74,6 +75,9 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
   const [booking, setBooking] = useState(false);
   const [turfGames, setTurfGames] = useState<GameData[]>([]);
   const [loadingGames, setLoadingGames] = useState(false);
+
+  // Scroll to top when component mounts
+  usePageScrollToTop();
 
   useEffect(() => {
     loadTurf();
@@ -763,24 +767,37 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
               </motion.div>
             )}
 
-            {/* Reviews Section - Coming Soon */}
+            {/* Available Time Slots - Coming Soon */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="pb-8 border-b border-gray-200"
             >
-              <div className="flex items-center gap-2 mb-6">
-                <Star className="w-6 h-6 fill-gray-900 text-gray-900" />
-                <h2 className="text-xl sm:text-2xl font-semibold">
-                  {Number(turf.rating).toFixed(2)} · {turf.totalReviews} reviews
-                </h2>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-semibold">Available Time Slots</h2>
+                  <p className="text-sm text-gray-600 mt-1">Book specific time slots directly</p>
+                </div>
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+                  Coming Soon
+                </span>
               </div>
 
-              <div className="text-center py-12 bg-gray-50 rounded-xl">
-                <Star className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Reviews Coming Soon</h3>
-                <p className="text-gray-600">We're working on bringing you authentic reviews from verified players.</p>
+              <div className="text-center py-12 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-dashed border-blue-200">
+                <Calendar className="w-12 h-12 mx-auto text-blue-400 mb-3" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Slot Booking Coming Soon</h3>
+                <p className="text-gray-600 mb-4">
+                  Direct slot booking feature is being developed. For now, you can join existing games or create a new one!
+                </p>
+                {onCreateGame && (
+                  <Button
+                    onClick={onCreateGame}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6"
+                  >
+                    Create Game Instead
+                  </Button>
+                )}
               </div>
             </motion.div>
 
@@ -789,7 +806,7 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="pb-8"
+              className="pb-8 border-b border-gray-200"
             >
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -832,37 +849,24 @@ export function TurfDetailPageEnhanced({ turfId, onBack, onCreateGame, onGameCli
               )}
             </motion.div>
 
-            {/* Available Time Slots - Coming Soon */}
+            {/* Reviews Section - Coming Soon */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               className="pb-8"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-semibold">Available Time Slots</h2>
-                  <p className="text-sm text-gray-600 mt-1">Book specific time slots directly</p>
-                </div>
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
-                  Coming Soon
-                </span>
+              <div className="flex items-center gap-2 mb-6">
+                <Star className="w-6 h-6 fill-gray-900 text-gray-900" />
+                <h2 className="text-xl sm:text-2xl font-semibold">
+                  {Number(turf.rating).toFixed(2)} · {turf.totalReviews} reviews
+                </h2>
               </div>
 
-              <div className="text-center py-12 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-dashed border-blue-200">
-                <Calendar className="w-12 h-12 mx-auto text-blue-400 mb-3" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Slot Booking Coming Soon</h3>
-                <p className="text-gray-600 mb-4">
-                  Direct slot booking feature is being developed. For now, you can join existing games or create a new one!
-                </p>
-                {onCreateGame && (
-                  <Button
-                    onClick={onCreateGame}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6"
-                  >
-                    Create Game Instead
-                  </Button>
-                )}
+              <div className="text-center py-12 bg-gray-50 rounded-xl">
+                <Star className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Reviews Coming Soon</h3>
+                <p className="text-gray-600">We're working on bringing you authentic reviews from verified players.</p>
               </div>
             </motion.div>
           </div>

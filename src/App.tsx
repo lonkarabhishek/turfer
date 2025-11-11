@@ -32,6 +32,7 @@ import { SportPage } from "./components/SportPage";
 
 import { useAuth } from "./hooks/useAuth";
 import { useNotifications } from "./hooks/useNotifications";
+import { useScrollToTop } from "./hooks/useScrollToTop";
 import { gamesAPI } from "./lib/api";
 import type { AppUser } from "./hooks/useAuth";
 import TapTurfLogo from "./assets/TapTurf_Logo.png";
@@ -493,6 +494,10 @@ export default function App() {
   const { unreadCount } = useNotifications();
   const [activeTab, setActiveTab] = useState<string>("home");
   const [currentPage, setCurrentPage] = useState<'home' | 'turf-detail' | 'profile' | 'legal' | 'dashboard' | 'game-detail' | 'create-game' | 'games' | 'turfs' | 'confirm' | 'notifications' | 'admin-turf-upload' | 'sport'>('home');
+  const [previousPage, setPreviousPage] = useState<typeof currentPage>('home'); // Track previous page for back navigation
+
+  // Scroll to top whenever page changes
+  useScrollToTop([currentPage]);
   const [currentCity, setCurrentCity] = useState('Nashik');
   const [showCreateGame, setShowCreateGame] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -609,10 +614,11 @@ export default function App() {
 
   // Update URL when navigating to game pages
   const handleGameClick = useCallback((gameId: string) => {
+    setPreviousPage(currentPage); // Track where we came from
     setSelectedGameId(gameId);
     setCurrentPage('game-detail');
     window.history.pushState({}, '', `/game/${gameId}`);
-  }, []);
+  }, [currentPage]);
 
   // Auto-set dashboard tab for owners - Disabled for now (owner dashboard hidden)
   // useEffect(() => {
@@ -663,6 +669,7 @@ export default function App() {
   const handleTurfClick = (turfId: string) => {
     console.log('🏟️ handleTurfClick called with turfId:', turfId);
     console.log('🏟️ Setting currentPage to turf-detail');
+    setPreviousPage(currentPage); // Track where we came from
     setSelectedTurfId(turfId);
     setCurrentPage('turf-detail');
     window.history.pushState({}, '', `/turf/${turfId}`);
@@ -674,6 +681,34 @@ export default function App() {
     setSelectedGameId(null);
     setActiveTab('home');
     window.history.pushState({}, '', '/');
+  };
+
+  // Smart back handler that navigates to previous page
+  const handleSmartBack = () => {
+    console.log('🔙 Smart back from:', currentPage, 'to:', previousPage);
+
+    // Clear selected items
+    if (currentPage === 'game-detail') {
+      setSelectedGameId(null);
+    } else if (currentPage === 'turf-detail') {
+      setSelectedTurfId(null);
+    }
+
+    // Navigate to previous page
+    if (previousPage === 'games') {
+      setCurrentPage('games');
+      setActiveTab('games');
+      window.history.pushState({}, '', '/games');
+    } else if (previousPage === 'turfs') {
+      setCurrentPage('turfs');
+      setActiveTab('turfs');
+      window.history.pushState({}, '', '/turfs');
+    } else if (previousPage === 'home') {
+      handleBackToHome();
+    } else {
+      // Default to home if previous page is unknown
+      handleBackToHome();
+    }
   };
 
   const handleNavigate = (section: string) => {
@@ -695,9 +730,11 @@ export default function App() {
       handleBackToHome();
       setActiveTab('home');
     } else if (section === 'games') {
+      setPreviousPage(currentPage); // Track previous page
       setCurrentPage('games');
       setActiveTab('games');
     } else if (section === 'turfs') {
+      setPreviousPage(currentPage); // Track previous page
       setCurrentPage('turfs');
       setActiveTab('turfs');
     } else if (section === 'profile') {
@@ -800,7 +837,7 @@ export default function App() {
           {console.log('🏟️ Rendering TurfDetailPageEnhanced with turfId:', selectedTurfId)}
           <TurfDetailPageEnhanced
             turfId={selectedTurfId}
-            onBack={handleBackToHome}
+            onBack={handleSmartBack}
             onCreateGame={() => {
               setTurfIdForGame(selectedTurfId);
               setShowCreateGame(true);
@@ -817,7 +854,7 @@ export default function App() {
           {console.log('🎮 Rendering GameDetailPage with gameId:', selectedGameId)}
           <GameDetailPage
             gameId={selectedGameId}
-            onBack={handleBackToHome}
+            onBack={handleSmartBack}
             onNavigate={handleNavigate}
           />
         </>

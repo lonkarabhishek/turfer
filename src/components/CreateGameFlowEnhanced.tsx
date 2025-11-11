@@ -583,25 +583,31 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                   <div>
                     <Label className="flex items-center gap-2 mb-2">
                       <Calendar className="w-4 h-4" />
-                      Date *
+                      Date <span className="text-red-600 font-bold">*</span>
                     </Label>
                     <Input
                       type="date"
                       value={formData.date}
                       onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                       min={new Date().toISOString().split('T')[0]}
-                      className="h-12 text-base"
+                      className={`h-12 text-base ${!formData.date ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500' : ''}`}
                       style={{
                         colorScheme: 'light'
                       }}
                     />
+                    {!formData.date && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <Info className="w-3 h-3" />
+                        Required field
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="flex items-center gap-2 mb-2">
                         <Clock className="w-4 h-4" />
-                        Start Time *
+                        Start Time <span className="text-red-600 font-bold">*</span>
                       </Label>
                       <select
                         value={formData.startTime || ''}
@@ -613,7 +619,11 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                           const endTime = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
                           setFormData(prev => ({ ...prev, startTime: value, endTime }));
                         }}
-                        className="w-full border border-gray-300 rounded-lg h-12 px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white text-base"
+                        className={`w-full border rounded-lg h-12 px-3 focus:ring-2 outline-none transition-all bg-white text-base ${
+                          !formData.startTime
+                            ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                            : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
+                        }`}
                       >
                         <option value="">Select time</option>
                         {Array.from({ length: 24 }, (_, i) => i).flatMap(hour => [
@@ -623,17 +633,27 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                           <option key={time.value} value={time.value}>{time.label}</option>
                         ))}
                       </select>
+                      {!formData.startTime && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <Info className="w-3 h-3" />
+                          Required field
+                        </p>
+                      )}
                     </div>
 
                     <div>
                       <Label className="flex items-center gap-2 mb-2">
                         <Clock className="w-4 h-4" />
-                        End Time *
+                        End Time <span className="text-red-600 font-bold">*</span>
                       </Label>
                       <select
                         value={formData.endTime || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg h-12 px-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white text-base"
+                        className={`w-full border rounded-lg h-12 px-3 focus:ring-2 outline-none transition-all bg-white text-base ${
+                          !formData.endTime
+                            ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                            : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
+                        }`}
                         disabled={!formData.startTime}
                       >
                         <option value="">Select time</option>
@@ -651,6 +671,12 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                           <option key={time.value} value={time.value}>{time.label}</option>
                         ))}
                       </select>
+                      {!formData.endTime && formData.startTime && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <Info className="w-3 h-3" />
+                          Required field
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -659,9 +685,9 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                 <div>
                   <Label className="flex items-center gap-2 mb-2">
                     <MapPin className="w-4 h-4" />
-                    Venue *
+                    Venue <span className="text-red-600 font-bold">*</span>
                   </Label>
-                  
+
                   {selectedTurf ? (
                     <div className="border-2 border-primary-300 bg-primary-50 rounded-xl p-4">
                       <div className="flex items-start justify-between">
@@ -675,8 +701,8 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                             {selectedTurf.priceDisplay}
                           </div>
                         </div>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           onClick={() => {
                             setSelectedTurf(null);
@@ -688,17 +714,23 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                       </div>
                     </div>
                   ) : (
-                    <Button 
-                      variant="outline" 
-                      className="w-full h-16 text-left justify-start border-dashed border-2"
-                      onClick={() => setShowTurfSearch(true)}
-                    >
-                      <Search className="w-5 h-5 mr-3 text-gray-400" />
-                      <div>
-                        <div className="font-medium text-gray-700">Search for a venue</div>
-                        <div className="text-sm text-gray-500">Find turfs, sports complexes, and more</div>
-                      </div>
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full h-16 text-left justify-start border-dashed border-2 border-red-300 bg-red-50 hover:bg-red-100"
+                        onClick={() => setShowTurfSearch(true)}
+                      >
+                        <Search className="w-5 h-5 mr-3 text-gray-400" />
+                        <div>
+                          <div className="font-medium text-gray-700">Search for a venue</div>
+                          <div className="text-sm text-gray-500">Find turfs, sports complexes, and more</div>
+                        </div>
+                      </Button>
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <Info className="w-3 h-3" />
+                        Required field
+                      </p>
+                    </>
                   )}
                 </div>
 
@@ -858,11 +890,26 @@ export function CreateGameFlowEnhanced({ open, onClose, onGameCreated, initialTu
                       min="2"
                       max="22"
                       placeholder="e.g., 10"
-                      value={formData.maxPlayers || ''}
-                      onChange={(e) => setFormData(prev => ({ 
-                        ...prev, 
-                        maxPlayers: parseInt(e.target.value) || 2
-                      }))}
+                      value={formData.maxPlayers === 0 ? '' : formData.maxPlayers}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Allow empty string for backspace/clearing
+                        if (value === '') {
+                          setFormData(prev => ({ ...prev, maxPlayers: 0 }));
+                        } else {
+                          const numValue = parseInt(value);
+                          if (!isNaN(numValue) && numValue >= 2 && numValue <= 22) {
+                            setFormData(prev => ({ ...prev, maxPlayers: numValue }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // On blur, enforce minimum value if field is empty or too low
+                        const value = parseInt(e.target.value);
+                        if (isNaN(value) || value < 2) {
+                          setFormData(prev => ({ ...prev, maxPlayers: selectedFormat?.players || 10 }));
+                        }
+                      }}
                       className="h-12 text-lg"
                     />
                     <div className="text-sm text-gray-500">
