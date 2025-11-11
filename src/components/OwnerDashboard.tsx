@@ -563,7 +563,7 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
           </div>
 
           {upcomingGames.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {upcomingGames.map((game) => (
                 <motion.div
                   key={game.id}
@@ -572,35 +572,35 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                   transition={{ duration: 0.3 }}
                 >
                   <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
-                    <CardContent className="p-5">
+                    <CardContent className="p-4 sm:p-5">
                       {/* Game Header */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-bold text-lg text-gray-900 mb-1">{game.format}</h4>
-                          <p className="text-sm text-gray-600 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {game.turfName}
+                      <div className="flex items-start justify-between mb-3 gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-base sm:text-lg text-gray-900 mb-1 truncate">{game.format}</h4>
+                          <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-1 truncate">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{game.turfName}</span>
                           </p>
                         </div>
-                        <Badge className="bg-green-100 text-green-700 text-xs">Active</Badge>
+                        <Badge className="bg-green-100 text-green-700 text-xs whitespace-nowrap flex-shrink-0">Active</Badge>
                       </div>
 
                       {/* Game Details */}
                       <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <Calendar className="w-4 h-4 text-gray-500" />
-                          <span>{formatGameDate(game.date)}</span>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                          <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="truncate">{formatGameDate(game.date)}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <Clock className="w-4 h-4 text-gray-500" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                          <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
                           <span>{game.timeSlot}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <Users className="w-4 h-4 text-gray-500" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
                           <span>{game.currentPlayers}/{game.maxPlayers} players</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm font-semibold text-green-700">
-                          <DollarSign className="w-4 h-4" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-green-700">
+                          <DollarSign className="w-4 h-4 flex-shrink-0" />
                           <span>₹{game.costPerPerson}/person</span>
                         </div>
                       </div>
@@ -622,14 +622,14 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                       {/* Host Info */}
                       <div className="pt-3 border-t border-gray-100">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                             {game.hostName?.charAt(0) || 'H'}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
                               Hosted by {game.hostName}
                             </p>
-                            <p className="text-xs text-gray-500">{game.skillLevel}</p>
+                            <p className="text-xs text-gray-500 truncate">{game.skillLevel}</p>
                           </div>
                         </div>
                       </div>
@@ -662,7 +662,7 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
           </div>
 
           {completedGames.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {completedGames.slice(0, 6).map((game) => (
                 <motion.div
                   key={game.id}
@@ -671,31 +671,31 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                   transition={{ duration: 0.3 }}
                 >
                   <Card className="hover:shadow-md transition-shadow border-l-4 border-l-gray-400 opacity-90">
-                    <CardContent className="p-5">
+                    <CardContent className="p-4 sm:p-5">
                       {/* Game Header */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-bold text-lg text-gray-900 mb-1">{game.format}</h4>
-                          <p className="text-sm text-gray-600 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {game.turfName}
+                      <div className="flex items-start justify-between mb-3 gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-base sm:text-lg text-gray-900 mb-1 truncate">{game.format}</h4>
+                          <p className="text-xs sm:text-sm text-gray-600 flex items-center gap-1 truncate">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{game.turfName}</span>
                           </p>
                         </div>
-                        <Badge className="bg-gray-100 text-gray-600 text-xs">Completed</Badge>
+                        <Badge className="bg-gray-100 text-gray-600 text-xs whitespace-nowrap flex-shrink-0">Completed</Badge>
                       </div>
 
                       {/* Game Details */}
                       <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <Calendar className="w-4 h-4 text-gray-500" />
-                          <span>{formatGameDate(game.date)}</span>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                          <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="truncate">{formatGameDate(game.date)}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <Users className="w-4 h-4 text-gray-500" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                          <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
                           <span>{game.currentPlayers}/{game.maxPlayers} players joined</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <DollarSign className="w-4 h-4 text-gray-500" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+                          <DollarSign className="w-4 h-4 text-gray-500 flex-shrink-0" />
                           <span>₹{game.costPerPerson}/person</span>
                         </div>
                       </div>
@@ -703,14 +703,14 @@ export function OwnerDashboard({ onNavigate }: OwnerDashboardProps) {
                       {/* Host Info */}
                       <div className="pt-3 border-t border-gray-100">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                          <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                             {game.hostName?.charAt(0) || 'H'}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
                               {game.hostName}
                             </p>
-                            <p className="text-xs text-gray-500">{game.skillLevel}</p>
+                            <p className="text-xs text-gray-500 truncate">{game.skillLevel}</p>
                           </div>
                         </div>
                       </div>
