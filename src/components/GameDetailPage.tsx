@@ -451,8 +451,61 @@ Join here: ${window.location.href}`;
 
   // Allow unsigned users to view game details, but hide sensitive info
 
+  // Generate JSON-LD structured data for search engines and AI crawlers
+  const generateGameStructuredData = () => {
+    if (!game) return null;
+
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "SportsEvent",
+      "name": `${game.format} at ${game.turfName}`,
+      "description": `Join a ${game.format} game at ${game.turfName}. ${game.maxPlayers - game.currentPlayers} spots available. Skill level: ${game.skillLevel}`,
+      "startDate": `${game.date}T${game.timeSlot.split('-')[0].trim()}`,
+      "endDate": game.endTime ? `${game.date}T${game.endTime}` : undefined,
+      "location": {
+        "@type": "SportsActivityLocation",
+        "name": game.turfName,
+        "address": game.turfAddress
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": game.costPerPerson,
+        "priceCurrency": "INR",
+        "availability": isFull ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
+        "validFrom": new Date().toISOString()
+      },
+      "performer": {
+        "@type": "Person",
+        "name": game.hostName
+      },
+      "maximumAttendeeCapacity": game.maxPlayers,
+      "attendeeCount": game.currentPlayers,
+      "eventStatus": isGameCompleted
+        ? "https://schema.org/EventScheduled"
+        : "https://schema.org/EventScheduled",
+      "url": typeof window !== 'undefined' ? window.location.href : `https://www.tapturf.in/game/${gameId}`
+    };
+
+    // Remove undefined values
+    Object.keys(structuredData).forEach(key =>
+      structuredData[key] === undefined && delete structuredData[key]
+    );
+
+    return structuredData;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
+      {/* JSON-LD Structured Data for SEO and AI Crawlers */}
+      {game && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(generateGameStructuredData())
+          }}
+        />
+      )}
+
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

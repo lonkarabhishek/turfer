@@ -11,6 +11,7 @@ const registerHandler = require('./api/auth/register.js');
 const turfsHandler = require('./api/turfs/index.js');
 const gamesHandler = require('./api/games/index.js');
 const bookingsUserHandler = require('./api/bookings/user/[userId].js');
+const sitemapHandler = require('./api/sitemap.xml.js');
 
 const routes = {
   '/api/ping': pingHandler,
@@ -22,7 +23,8 @@ const routes = {
   '/api/turfs': turfsHandler,
   '/api/turfs/index': turfsHandler,
   '/api/games': gamesHandler,
-  '/api/games/index': gamesHandler
+  '/api/games/index': gamesHandler,
+  '/sitemap.xml': sitemapHandler
 };
 
 // Add Express-like methods to response object
