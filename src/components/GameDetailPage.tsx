@@ -408,11 +408,11 @@ Join here: ${window.location.href}`;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-IN', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   };
 
@@ -590,7 +590,7 @@ Join here: ${window.location.href}`;
                     <div>
                       <div className="font-semibold text-gray-900">Date & Time</div>
                       <div className="text-gray-600">{formatDate(game.date)}</div>
-                      <div className="text-gray-600">{game.timeSlot}</div>
+                      <div className="text-gray-600">{convertTo12Hour(game.timeSlot)}</div>
                     </div>
                   </div>
 

@@ -22,7 +22,7 @@ const timeAgo = (createdAt: string): string => {
   return gameCreated.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// Utility function to format date in readable format
+// Utility function to format date in Indian format
 const formatDate = (dateString: string): string => {
   if (!dateString) return 'Date not set';
 
@@ -34,7 +34,7 @@ const formatDate = (dateString: string): string => {
   }
 
   const day = date.getDate();
-  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const month = date.toLocaleDateString('en-IN', { month: 'short' });
   const year = date.getFullYear().toString().slice(-2);
 
   // Add ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
@@ -45,6 +45,28 @@ const formatDate = (dateString: string): string => {
   };
 
   return `${getOrdinal(day)} ${month} ${year}`;
+};
+
+// Convert 24-hour time to 12-hour AM/PM format
+const convertTo12Hour = (timeSlot: string): string => {
+  try {
+    // Handle formats like "14:00 - 16:00" or "14:00"
+    const times = timeSlot.split('-').map(t => t.trim());
+
+    const convert = (time: string) => {
+      const [hours, minutes] = time.split(':').map(Number);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const hour12 = hours % 12 || 12;
+      return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
+    };
+
+    if (times.length === 2) {
+      return `${convert(times[0])} - ${convert(times[1])}`;
+    }
+    return convert(times[0]);
+  } catch (e) {
+    return timeSlot; // Return original if parsing fails
+  }
 };
 import { gamesAPI } from '../lib/api';
 import { useToast } from '../lib/toastManager';
@@ -364,7 +386,7 @@ export function GameCard({ game, onJoin, onGameClick, onTurfClick, user, hideTur
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                <span>{formatDate(game.date)} • {game.timeSlot}</span>
+                <span>{formatDate(game.date)} • {convertTo12Hour(game.timeSlot)}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
