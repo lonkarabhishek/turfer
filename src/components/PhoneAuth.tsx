@@ -66,13 +66,27 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
         setConfirmationResult(result.confirmationResult);
         setStep('otp');
         success('OTP sent successfully!');
-        setTimer(60);
+        setTimer(120); // Increased to 120 seconds to reduce rate limit issues
         setCanResend(false);
       } else {
-        error(result.error || 'Failed to send OTP');
+        // Better error handling for rate limits
+        const errorMsg = result.error || 'Failed to send OTP';
+        if (errorMsg.includes('too-many-requests') || errorMsg.includes('quota')) {
+          error('Too many attempts. Please wait 1 hour and try again, or use email login instead.');
+        } else {
+          error(errorMsg);
+        }
       }
     } catch (err: any) {
-      error(err.message || 'Failed to send OTP');
+      const errorMsg = err.message || 'Failed to send OTP';
+      // Handle Firebase rate limit errors
+      if (errorMsg.includes('too-many-requests') || errorMsg.includes('quota-exceeded')) {
+        error('Too many OTP requests. Please wait 1 hour or use Email & Password login instead.');
+      } else if (errorMsg.includes('invalid-phone-number')) {
+        error('Invalid phone number format. Please check and try again.');
+      } else {
+        error(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
