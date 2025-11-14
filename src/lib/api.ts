@@ -117,6 +117,52 @@ class AuthManager {
   isOwner() {
     return this.user?.role === 'owner' || this.user?.role === 'admin';
   }
+
+  // Firebase Phone Auth - Login with Firebase ID token
+  async loginWithFirebase(firebaseIdToken: string): Promise<ApiResponse<LoginResponse>> {
+    try {
+      console.log('🔐 Logging in with Firebase token');
+      const response = await fetch(`${API_BASE_URL}/auth/firebase-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firebaseIdToken })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        this.setAuth(data.data.token, data.data.user);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('❌ Firebase login failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Firebase Phone Auth - Signup with Firebase ID token
+  async signupWithFirebase(name: string, phone: string, firebaseIdToken: string): Promise<ApiResponse<LoginResponse>> {
+    try {
+      console.log('📝 Signing up with Firebase token');
+      const response = await fetch(`${API_BASE_URL}/auth/firebase-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone, firebaseIdToken })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        this.setAuth(data.data.token, data.data.user);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('❌ Firebase signup failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export const authManager = new AuthManager();

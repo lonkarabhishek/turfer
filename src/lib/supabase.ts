@@ -1862,17 +1862,29 @@ export const gameRequestHelpers = {
         .eq('user_id', userId)
         .eq('status', 'accepted');
 
+      console.log('📡 RAW Supabase response:', { acceptedRequests, requestsError });
+
       if (requestsError) {
         console.error('❌ Error fetching joined games:', requestsError);
         return { success: false, data: [], error: requestsError.message };
       }
 
+      console.log('📊 Accepted requests count:', acceptedRequests?.length || 0);
+      console.log('📋 First request structure:', acceptedRequests?.[0]);
+
       // Transform the data
       const joinedGames = (acceptedRequests || [])
-        .filter(req => req.games) // Filter out any requests where game was deleted
-        .map(req => req.games);
+        .filter(req => {
+          console.log('🔍 Checking request:', req);
+          return req.games;
+        })
+        .map(req => {
+          console.log('🎮 Mapping game:', req.games);
+          return req.games;
+        });
 
       console.log('✅ Found joined games:', joinedGames.length);
+      console.log('🎯 Final joined games:', joinedGames);
       return { success: true, data: joinedGames, error: null };
     } catch (error: any) {
       console.error('❌ Error in getUserJoinedGames:', error);

@@ -8,6 +8,8 @@ const helloHandler = require('./api/hello.js');
 const indexHandler = require('./api/index.js');
 const loginHandler = require('./api/auth/login.js');
 const registerHandler = require('./api/auth/register.js');
+const firebaseLoginHandler = require('./api/auth/firebase-login.js');
+const firebaseSignupHandler = require('./api/auth/firebase-signup.js');
 const turfsHandler = require('./api/turfs/index.js');
 const gamesHandler = require('./api/games/index.js');
 const bookingsUserHandler = require('./api/bookings/user/[userId].js');
@@ -20,6 +22,8 @@ const routes = {
   '/api/': indexHandler,
   '/api/auth/login': loginHandler,
   '/api/auth/register': registerHandler,
+  '/api/auth/firebase-login': firebaseLoginHandler,
+  '/api/auth/firebase-signup': firebaseSignupHandler,
   '/api/turfs': turfsHandler,
   '/api/turfs/index': turfsHandler,
   '/api/games': gamesHandler,

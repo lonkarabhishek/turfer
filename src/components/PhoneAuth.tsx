@@ -1,0 +1,383 @@
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Phone, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { phoneAuthHelpers } from '../lib/firebase';
+import { authManager } from '../lib/api';
+import { useToast } from '../lib/toastManager';
+
+interface PhoneAuthProps {
+  onSuccess: () => void;
+  onCancel?: () => void;
+}
+
+export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
+  const { success, error } = useToast();
+  const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [recaptchaVerifier, setRecaptchaVerifier] = useState<any>(null);
+  const [confirmationResult, setConfirmationResult] = useState<any>(null);
+  const [timer, setTimer] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Setup reCAPTCHA on mount
+  useEffect(() => {
+    const verifier = phoneAuthHelpers.setupRecaptcha('recaptcha-container');
+    setRecaptchaVerifier(verifier);
+
+    return () => {
+      if (verifier) {
+        verifier.clear();
+      }
+    };
+  }, []);
+
+  // OTP timer
+  useEffect(() => {
+    if (step === 'otp' && timer > 0) {
+      const interval = setInterval(() => {
+        setTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    } else if (timer === 0) {
+      setCanResend(true);
+    }
+  }, [step, timer]);
+
+  const handleSendOTP = async () => {
+    if (!phoneNumber || phoneNumber.length !== 10) {
+      error('Please enter a valid 10-digit phone number');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await phoneAuthHelpers.sendOTP(phoneNumber, recaptchaVerifier);
+
+      if (result.success && result.confirmationResult) {
+        setConfirmationResult(result.confirmationResult);
+        setStep('otp');
+        success('OTP sent successfully!');
+        setTimer(60);
+        setCanResend(false);
+      } else {
+        error(result.error || 'Failed to send OTP');
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    const otpCode = otp.join('');
+
+    if (otpCode.length !== 6) {
+      error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await phoneAuthHelpers.verifyOTP(confirmationResult, otpCode);
+
+      if (result.success && result.user) {
+        // Check if user exists in our system
+        const loginResult = await authManager.loginWithFirebase(result.user.idToken);
+
+        if (loginResult.success) {
+          success('Login successful!');
+          onSuccess();
+        } else {
+          // New user - ask for name
+          setStep('name');
+        }
+      } else {
+        error(result.error || 'Invalid OTP');
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to verify OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    if (!name.trim()) {
+      error('Please enter your name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const firebaseUser = phoneAuthHelpers.getCurrentUser();
+      if (!firebaseUser) {
+        error('Authentication error. Please try again.');
+        return;
+      }
+
+      const idToken = await firebaseUser.getIdToken();
+      const signupResult = await authManager.signupWithFirebase(
+        name,
+        firebaseUser.phoneNumber || '',
+        idToken
+      );
+
+      if (signupResult.success) {
+        success('Account created successfully!');
+        onSuccess();
+      } else {
+        error(signupResult.error || 'Failed to create account');
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to create account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOTPChange = (index: number, value: string) => {
+    if (value.length > 1) {
+      value = value[0];
+    }
+
+    if (!/^\d*$/.test(value)) {
+      return;
+    }
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOTPKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleResendOTP = () => {
+    setOtp(['', '', '', '', '', '']);
+    setTimer(60);
+    setCanResend(false);
+    handleSendOTP();
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        <Card className="border-0 shadow-2xl">
+          <CardHeader className="text-center pb-4">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
+            >
+              {step === 'phone' && <Phone className="w-10 h-10 text-white" />}
+              {step === 'otp' && <ShieldCheck className="w-10 h-10 text-white" />}
+              {step === 'name' && <Phone className="w-10 h-10 text-white" />}
+            </motion.div>
+            <CardTitle className="text-2xl font-bold text-gray-900">
+              {step === 'phone' && 'Enter Your Phone Number'}
+              {step === 'otp' && 'Verify OTP'}
+              {step === 'name' && 'Complete Your Profile'}
+            </CardTitle>
+            <p className="text-gray-600 text-sm mt-2">
+              {step === 'phone' && 'We\'ll send you a verification code'}
+              {step === 'otp' && `Code sent to +91${phoneNumber}`}
+              {step === 'name' && 'Just one more step to get started'}
+            </p>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <AnimatePresence mode="wait">
+              {/* Phone Number Step */}
+              {step === 'phone' && (
+                <motion.div
+                  key="phone"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-4"
+                >
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 text-gray-600 font-medium">
+                      <span>🇮🇳</span>
+                      <span>+91</span>
+                    </div>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      placeholder="Enter 10-digit number"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
+                      className="w-full pl-24 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleSendOTP}
+                    disabled={loading || phoneNumber.length !== 10}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white py-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Sending OTP...
+                      </>
+                    ) : (
+                      <>
+                        Continue
+                        <ArrowRight className="w-5 h-5 ml-2" />
+                      </>
+                    )}
+                  </Button>
+
+                  {onCancel && (
+                    <Button
+                      onClick={onCancel}
+                      variant="outline"
+                      className="w-full py-3 rounded-xl"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </motion.div>
+              )}
+
+              {/* OTP Verification Step */}
+              {step === 'otp' && (
+                <motion.div
+                  key="otp"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-6"
+                >
+                  <div className="flex gap-2 justify-center">
+                    {otp.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => (otpInputRefs.current[index] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOTPChange(index, e.target.value)}
+                        onKeyDown={(e) => handleOTPKeyDown(index, e)}
+                        className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                        disabled={loading}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="text-center">
+                    {!canResend ? (
+                      <p className="text-gray-600 text-sm">
+                        Resend code in <span className="font-bold text-emerald-600">{timer}s</span>
+                      </p>
+                    ) : (
+                      <button
+                        onClick={handleResendOTP}
+                        className="text-emerald-600 font-semibold hover:underline"
+                        disabled={loading}
+                      >
+                        Resend OTP
+                      </button>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={handleVerifyOTP}
+                    disabled={loading || otp.join('').length !== 6}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white py-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      'Verify OTP'
+                    )}
+                  </Button>
+
+                  <button
+                    onClick={() => setStep('phone')}
+                    className="w-full text-gray-600 hover:text-gray-900 text-sm font-medium"
+                    disabled={loading}
+                  >
+                    Change phone number
+                  </button>
+                </motion.div>
+              )}
+
+              {/* Name Input Step */}
+              {step === 'name' && (
+                <motion.div
+                  key="name"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-4"
+                >
+                  <input
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateAccount()}
+                    className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                    disabled={loading}
+                  />
+
+                  <Button
+                    onClick={handleCreateAccount}
+                    disabled={loading || !name.trim()}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white py-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      'Create Account'
+                    )}
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* reCAPTCHA container */}
+            <div id="recaptcha-container"></div>
+          </CardContent>
+        </Card>
+
+        {/* Footer */}
+        <p className="text-center text-gray-600 text-sm mt-6">
+          By continuing, you agree to TapTurf's Terms of Service and Privacy Policy
+        </p>
+      </motion.div>
+    </div>
+  );
+}
