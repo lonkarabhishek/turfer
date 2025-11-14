@@ -25,6 +25,7 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
+  const [inlineError, setInlineError] = useState(''); // Inline error message visible in modal
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -53,8 +54,10 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
   }, [step, timer]);
 
   const handleSendOTP = async () => {
+    setInlineError(''); // Clear previous errors
+
     if (!phoneNumber || phoneNumber.length !== 10) {
-      error('Please enter a valid 10-digit phone number');
+      setInlineError('Please enter a valid 10-digit phone number');
       return;
     }
 
@@ -65,27 +68,27 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
       if (result.success && result.confirmationResult) {
         setConfirmationResult(result.confirmationResult);
         setStep('otp');
-        success('OTP sent successfully!');
         setTimer(120); // Increased to 120 seconds to reduce rate limit issues
         setCanResend(false);
+        setInlineError(''); // Clear errors on success
       } else {
         // Better error handling for rate limits
         const errorMsg = result.error || 'Failed to send OTP';
         if (errorMsg.includes('too-many-requests') || errorMsg.includes('quota')) {
-          error('Too many attempts. Please wait 1 hour and try again, or use email login instead.');
+          setInlineError('Too many attempts. Please wait 1 hour or switch to Email & Password.');
         } else {
-          error(errorMsg);
+          setInlineError(errorMsg);
         }
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to send OTP';
       // Handle Firebase rate limit errors
       if (errorMsg.includes('too-many-requests') || errorMsg.includes('quota-exceeded')) {
-        error('Too many OTP requests. Please wait 1 hour or use Email & Password login instead.');
+        setInlineError('Too many OTP requests. Please wait 1 hour or use Email & Password login.');
       } else if (errorMsg.includes('invalid-phone-number')) {
-        error('Invalid phone number format. Please check and try again.');
+        setInlineError('Invalid phone number format. Please check and try again.');
       } else {
-        error(errorMsg);
+        setInlineError(errorMsg);
       }
     } finally {
       setLoading(false);
@@ -93,41 +96,58 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
   };
 
   const handleVerifyOTP = async () => {
+    setInlineError(''); // Clear previous errors
     const otpCode = otp.join('');
 
     if (otpCode.length !== 6) {
-      error('Please enter the 6-digit OTP');
+      setInlineError('Please enter the complete 6-digit OTP');
       return;
     }
 
     setLoading(true);
     try {
+      // Step 1: Verify OTP with Firebase
       const result = await phoneAuthHelpers.verifyOTP(confirmationResult, otpCode);
 
-      if (result.success && result.user) {
-        // Check if user exists in our system
-        const loginResult = await authManager.loginWithFirebase(result.user.idToken);
+      if (!result.success || !result.user) {
+        setInlineError(result.error || 'Invalid OTP. Please check and try again.');
+        return;
+      }
 
-        if (loginResult.success) {
-          success('Login successful!');
-          onSuccess();
-        } else {
-          // New user - ask for name
-          setStep('name');
-        }
+      // Step 2: Try to login (check if user exists in our database)
+      const loginResult = await authManager.loginWithFirebase(result.user.idToken);
+
+      if (loginResult.success && loginResult.data) {
+        // ✅ EXISTING USER - Account found, log them in
+        const { user, token } = loginResult.data;
+
+        // Save authentication state
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        success('Welcome back! Logged in successfully.');
+
+        // Trigger page refresh/redirect
+        onSuccess();
       } else {
-        error(result.error || 'Invalid OTP');
+        // ⭐ NEW USER - No account found, ask for details
+        console.log('New user detected, proceeding to registration');
+        setStep('name');
+        setInlineError(''); // Clear any errors before moving to name step
       }
     } catch (err: any) {
-      error(err.message || 'Failed to verify OTP');
+      console.error('OTP verification error:', err);
+      setInlineError(err.message || 'Failed to verify OTP. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreateAccount = async () => {
+    setInlineError(''); // Clear previous errors
+
     if (!name.trim()) {
-      error('Please enter your name');
+      setInlineError('Please enter your name');
       return;
     }
 
@@ -135,20 +155,24 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
     if (email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        error('Please enter a valid email address');
+        setInlineError('Please enter a valid email address');
         return;
       }
     }
 
     setLoading(true);
     try {
+      // Get current Firebase user
       const firebaseUser = phoneAuthHelpers.getCurrentUser();
       if (!firebaseUser) {
-        error('Authentication error. Please try again.');
+        setInlineError('Session expired. Please restart the signup process.');
         return;
       }
 
+      // Get Firebase ID token
       const idToken = await firebaseUser.getIdToken();
+
+      // Create account in our database
       const signupResult = await authManager.signupWithFirebase(
         name,
         firebaseUser.phoneNumber || '',
@@ -156,14 +180,36 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
         email.trim() || undefined
       );
 
-      if (signupResult.success) {
-        success('Account created successfully!');
+      if (signupResult.success && signupResult.data) {
+        // ✅ Account created successfully
+        const { user, token } = signupResult.data;
+
+        // Save authentication state
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        success('Account created successfully! Welcome to TapTurf!');
+
+        // Trigger page refresh/redirect
         onSuccess();
       } else {
-        error(signupResult.error || 'Failed to create account');
+        // Handle specific error cases
+        const errorMsg = signupResult.error || 'Failed to create account';
+        if (errorMsg.includes('already exists')) {
+          setInlineError('Account already exists. You were logged in successfully!');
+          // Still try to save the session if available
+          if (signupResult.data) {
+            localStorage.setItem('auth_token', signupResult.data.token);
+            localStorage.setItem('user', JSON.stringify(signupResult.data.user));
+          }
+          setTimeout(() => onSuccess(), 1500);
+        } else {
+          setInlineError(errorMsg);
+        }
       }
     } catch (err: any) {
-      error(err.message || 'Failed to create account');
+      console.error('Account creation error:', err);
+      setInlineError(err.message || 'Failed to create account. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -265,12 +311,23 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       maxLength={10}
                       placeholder="Enter 10-digit number"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                      onChange={(e) => {
+                        setPhoneNumber(e.target.value.replace(/\D/g, ''));
+                        setInlineError(''); // Clear error on input change
+                      }}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
                       className="w-full pl-24 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
                       disabled={loading}
                     />
                   </div>
+
+                  {/* Inline Error Message */}
+                  {inlineError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <span className="text-red-600 text-sm font-medium">⚠️</span>
+                      <p className="text-red-700 text-sm flex-1">{inlineError}</p>
+                    </div>
+                  )}
 
                   <Button
                     onClick={handleSendOTP}
@@ -320,7 +377,10 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                         inputMode="numeric"
                         maxLength={1}
                         value={digit}
-                        onChange={(e) => handleOTPChange(index, e.target.value)}
+                        onChange={(e) => {
+                          handleOTPChange(index, e.target.value);
+                          setInlineError(''); // Clear error on input change
+                        }}
                         onKeyDown={(e) => handleOTPKeyDown(index, e)}
                         className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
                         disabled={loading}
@@ -343,6 +403,14 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       </button>
                     )}
                   </div>
+
+                  {/* Inline Error Message */}
+                  {inlineError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <span className="text-red-600 text-sm font-medium">⚠️</span>
+                      <p className="text-red-700 text-sm flex-1">{inlineError}</p>
+                    </div>
+                  )}
 
                   <Button
                     onClick={handleVerifyOTP}
@@ -383,7 +451,10 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       type="text"
                       placeholder="Enter your full name *"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        setInlineError(''); // Clear error on input change
+                      }}
                       onKeyDown={(e) => e.key === 'Enter' && !loading && handleCreateAccount()}
                       className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
                       disabled={loading}
@@ -395,7 +466,10 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       type="email"
                       placeholder="Email (optional)"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setInlineError(''); // Clear error on input change
+                      }}
                       onKeyDown={(e) => e.key === 'Enter' && !loading && handleCreateAccount()}
                       className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
                       disabled={loading}
@@ -404,6 +478,14 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       Add your email to receive booking confirmations and updates
                     </p>
                   </div>
+
+                  {/* Inline Error Message */}
+                  {inlineError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <span className="text-red-600 text-sm font-medium">⚠️</span>
+                      <p className="text-red-700 text-sm flex-1">{inlineError}</p>
+                    </div>
+                  )}
 
                   <Button
                     onClick={handleCreateAccount}
