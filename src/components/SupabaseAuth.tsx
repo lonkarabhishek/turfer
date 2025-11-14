@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { supabase } from '../lib/supabase';
 import { ensureUserExists } from '../lib/userSync';
+import { PhoneAuth } from './PhoneAuth';
 
 interface SupabaseAuthProps {
   open: boolean;
@@ -13,13 +14,14 @@ interface SupabaseAuthProps {
 }
 
 export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
+  const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('phone'); // Default to phone auth
   const [isLogin, setIsLogin] = useState(true);
   const [userType, setUserType] = useState<'user' | 'owner'>('user');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,6 +34,17 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
   const [pendingUser, setPendingUser] = useState<any>(null);
 
   if (!open) return null;
+
+  // If phone auth is selected, show PhoneAuth component
+  if (authMethod === 'phone') {
+    return (
+      <PhoneAuth
+        onSuccess={onSuccess}
+        onCancel={onClose}
+        onSwitchToEmail={() => setAuthMethod('email')}
+      />
+    );
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -603,7 +616,7 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
           </form>
 
           {/* Toggle between login/signup */}
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-3">
             <button
               type="button"
               onClick={() => {
@@ -611,10 +624,21 @@ export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
                 setError('');
                 setMessage('');
               }}
-              className="text-emerald-600 hover:text-emerald-700 font-medium"
+              className="text-emerald-600 hover:text-emerald-700 font-medium block w-full"
             >
               {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
             </button>
+
+            <div className="border-t pt-3">
+              <button
+                type="button"
+                onClick={() => setAuthMethod('phone')}
+                className="text-gray-600 hover:text-emerald-600 text-sm font-medium flex items-center justify-center gap-2 w-full"
+              >
+                <Phone className="w-4 h-4" />
+                Use Phone Number Instead
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>

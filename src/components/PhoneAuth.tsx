@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Phone, ArrowRight, ShieldCheck, Loader2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { phoneAuthHelpers } from '../lib/firebase';
@@ -10,9 +10,10 @@ import { useToast } from '../lib/toastManager';
 interface PhoneAuthProps {
   onSuccess: () => void;
   onCancel?: () => void;
+  onSwitchToEmail?: () => void;
 }
 
-export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
+export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthProps) {
   const { success, error } = useToast();
   const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -187,14 +188,26 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
+      onClick={onCancel}
+    >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
+        className="w-full max-w-md bg-gradient-to-br from-emerald-50 via-white to-blue-50 rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
       >
         <Card className="border-0 shadow-2xl">
-          <CardHeader className="text-center pb-4">
+          <CardHeader className="text-center pb-4 relative">
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -402,9 +415,22 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-gray-600 text-sm mt-6">
-          By continuing, you agree to TapTurf's Terms of Service and Privacy Policy
-        </p>
+        <div className="mt-4 space-y-4">
+          {onSwitchToEmail && (
+            <div className="text-center">
+              <button
+                onClick={onSwitchToEmail}
+                className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200 hover:border-emerald-300"
+              >
+                Use Email & Password Instead
+              </button>
+            </div>
+          )}
+
+          <p className="text-center text-gray-600 text-xs px-4">
+            By continuing, you agree to TapTurf's Terms of Service and Privacy Policy
+          </p>
+        </div>
       </motion.div>
     </div>
   );
