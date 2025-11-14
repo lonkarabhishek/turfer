@@ -14,7 +14,7 @@ interface SupabaseAuthProps {
 }
 
 export function SupabaseAuth({ open, onClose, onSuccess }: SupabaseAuthProps) {
-  const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email'); // Default to email (phone has rate limits & reCAPTCHA)
+  const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('phone'); // Default to phone auth
   const [isLogin, setIsLogin] = useState(true);
   const [userType, setUserType] = useState<'user' | 'owner'>('user');
   const [showPassword, setShowPassword] = useState(false);
