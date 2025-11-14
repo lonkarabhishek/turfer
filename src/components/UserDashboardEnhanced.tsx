@@ -137,9 +137,29 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
 
       // Load games the user has joined (accepted requests)
       try {
-        // This would require a new API endpoint to get games user has joined
-        // For now, using empty array
-        setJoinedGames([]);
+        const joinedGamesResponse = await gameRequestHelpers.getUserJoinedGames(user.id);
+        if (joinedGamesResponse.success && joinedGamesResponse.data) {
+          const transformedJoinedGames = joinedGamesResponse.data.map((gameData: any) => {
+            const startTime12 = formatTo12Hour(gameData.start_time || '00:00');
+            const endTime12 = formatTo12Hour(gameData.end_time || '00:00');
+
+            return {
+              id: gameData.id,
+              title: `${gameData.sport || gameData.format || 'Game'}`,
+              sport: gameData.sport || gameData.format || 'Game',
+              date: gameData.date,
+              time: `${startTime12} - ${endTime12}`,
+              timeSlot: `${gameData.start_time || '00:00'}-${gameData.end_time || '23:59'}`,
+              turfName: gameData.turfs?.name || 'Unknown Turf',
+              turfAddress: gameData.turfs?.address || 'Unknown Address',
+              players: `${gameData.current_players || 1}/${gameData.max_players || 10}`,
+              status: isGameExpired(gameData) ? 'completed' as const : 'upcoming' as const
+            };
+          });
+          setJoinedGames(transformedJoinedGames);
+        } else {
+          setJoinedGames([]);
+        }
       } catch (error) {
         console.error('Error loading joined games:', error);
         setJoinedGames([]);
@@ -607,171 +627,170 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   );
 
   const renderGames = () => {
+    // Separate hosted and joined games
+    const hostedUpcoming = userGames.filter(g => g.status === 'upcoming');
+    const hostedCompleted = userGames.filter(g => g.status === 'completed');
+    const joinedUpcoming = joinedGames.filter(g => g.status === 'upcoming');
+    const joinedCompleted = joinedGames.filter(g => g.status === 'completed');
+
     const currentGames = gamesTab === 'upcoming' ? upcomingGames : completedGames;
-    
+
+    // Render compact game card
+    const renderGameCard = (game: GameData, isHosting: boolean) => (
+      <Card
+        key={game.id}
+        className="border shadow-md hover:shadow-lg transition-all cursor-pointer"
+        onClick={() => onGameNavigation?.(game.id)}
+      >
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex items-start gap-2 sm:gap-3 mb-2">
+            <div className={`w-12 h-12 sm:w-14 sm:h-14 ${isHosting ? 'bg-emerald-500' : 'bg-blue-500'} rounded-xl flex items-center justify-center flex-shrink-0`}>
+              <GamepadIcon className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-bold text-sm sm:text-base text-gray-900 truncate">{game.title}</h3>
+                <Badge className={`text-[10px] sm:text-xs flex-shrink-0 ${isHosting ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {isHosting ? 'Hosting' : 'Joined'}
+                </Badge>
+              </div>
+              <p className="text-xs text-gray-500">{game.sport}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <span className="text-gray-700 truncate">{formatDate(game.date)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <span className="text-gray-700 truncate">{game.time}</span>
+            </div>
+            <div className="flex items-center gap-1.5 col-span-2">
+              <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <span className="text-gray-700 truncate">{game.turfName}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <span className="text-gray-700">{game.players}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">My Games</h2>
-          <Button 
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">My Games</h2>
+          <Button
             onClick={onCreateGame}
-            className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl w-full sm:w-auto"
           >
             <Plus className="w-4 h-4 mr-2" />
             Create Game
           </Button>
         </div>
-        
-        {/* Enhanced Games Tabs */}
-        <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
-          <button 
-            onClick={() => setGamesTab('upcoming')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
-              gamesTab === 'upcoming' 
-                ? 'bg-white shadow-lg text-emerald-600 scale-105' 
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            Upcoming ({upcomingGames.length})
-          </button>
-          <button 
-            onClick={() => setGamesTab('completed')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
-              gamesTab === 'completed' 
-                ? 'bg-white shadow-lg text-emerald-600 scale-105' 
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            Completed ({completedGames.length})
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          {currentGames.map((game, index) => (
-            <motion.div
-              key={game.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <Card className="border-0 shadow-lg rounded-3xl hover:shadow-xl transition-all duration-300 group cursor-pointer"
-                    onClick={() => onGameNavigation?.(game.id)}>
-                <CardContent className="p-8">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg">
-                          <GamepadIcon className="w-8 h-8 text-white" />
-                        </div>
-                        <div>
-                          <h3 className="text-2xl font-bold text-gray-900 group-hover:text-emerald-600 transition-colors">{game.title}</h3>
-                          <Badge className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-300 mt-2">
-                            {game.sport}
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-6 text-gray-600">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Date</p>
-                            <p className="font-semibold text-gray-900">{formatDate(game.date)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                            <Clock className="w-5 h-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Time</p>
-                            <p className="font-semibold text-gray-900">{game.time}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                            <MapPin className="w-5 h-5 text-purple-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Venue</p>
-                            <p className="font-semibold text-gray-900">{game.turfName}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                            <Users className="w-5 h-5 text-orange-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Players</p>
-                            <p className="font-semibold text-gray-900">{game.players}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="flex flex-col gap-3">
-                      {gamesTab === 'upcoming' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            alert('Edit game functionality coming soon! You will be able to update game details like date, time, players, and more.');
-                          }}
-                          className="border-2 border-emerald-200 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all duration-200"
-                        >
-                          <Edit3 className="w-3 h-3 mr-1" />
-                          Edit Game
-                        </Button>
-                      )}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity text-sm text-emerald-600 font-medium">
-                        Click to view details →
-                      </div>
-                      <Badge className={`${
-                        gamesTab === 'upcoming'
-                          ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-300'
-                          : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 border-gray-300'
-                      }`}>
-                        {gamesTab === 'upcoming' ? 'Upcoming' : 'Completed'}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-          
-          {currentGames.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center py-16"
-            >
-              <div className="w-24 h-24 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full flex items-center justify-center mx-auto mb-6">
-                <GamepadIcon className="w-12 h-12 text-gray-400" />
-              </div>
-              <p className="text-2xl font-semibold text-gray-600 mb-2">
-                {gamesTab === 'upcoming' ? 'No upcoming games' : 'No completed games yet'}
-              </p>
-              <p className="text-gray-500 mb-8 max-w-md mx-auto">
-                {gamesTab === 'upcoming' 
-                  ? 'Create or join a game to get started on your sports journey!' 
-                  : 'Complete some games and they\'ll show up here.'}
-              </p>
-              {gamesTab === 'upcoming' && (
-                <Button 
-                  onClick={onCreateGame} 
-                  className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white rounded-2xl px-8 py-4 text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Create Your First Game
-                </Button>
-              )}
-            </motion.div>
-          )}
+        {/* Tabs */}
+        <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+          <button
+            onClick={() => setGamesTab('upcoming')}
+            className={`flex-1 px-4 py-2 sm:px-6 sm:py-3 rounded-lg font-semibold text-sm sm:text-base transition-all ${
+              gamesTab === 'upcoming'
+                ? 'bg-white shadow text-emerald-600'
+                : 'text-gray-600'
+            }`}
+          >
+            Upcoming ({hostedUpcoming.length + joinedUpcoming.length})
+          </button>
+          <button
+            onClick={() => setGamesTab('completed')}
+            className={`flex-1 px-4 py-2 sm:px-6 sm:py-3 rounded-lg font-semibold text-sm sm:text-base transition-all ${
+              gamesTab === 'completed'
+                ? 'bg-white shadow text-emerald-600'
+                : 'text-gray-600'
+            }`}
+          >
+            Completed ({hostedCompleted.length + joinedCompleted.length})
+          </button>
         </div>
+
+        {/* Games I'm Hosting */}
+        {gamesTab === 'upcoming' && hostedUpcoming.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Star className="w-4 h-4 text-emerald-600" />
+              Games I'm Hosting ({hostedUpcoming.length})
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              {hostedUpcoming.map(game => renderGameCard(game, true))}
+            </div>
+          </div>
+        )}
+
+        {gamesTab === 'completed' && hostedCompleted.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Star className="w-4 h-4 text-emerald-600" />
+              Hosted ({hostedCompleted.length})
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              {hostedCompleted.map(game => renderGameCard(game, true))}
+            </div>
+          </div>
+        )}
+
+        {/* Games I've Joined */}
+        {gamesTab === 'upcoming' && joinedUpcoming.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-600" />
+              Games I've Joined ({joinedUpcoming.length})
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              {joinedUpcoming.map(game => renderGameCard(game, false))}
+            </div>
+          </div>
+        )}
+
+        {gamesTab === 'completed' && joinedCompleted.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-600" />
+              Joined ({joinedCompleted.length})
+            </h3>
+            <div className="grid grid-cols-1 gap-3">
+              {joinedCompleted.map(game => renderGameCard(game, false))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {((gamesTab === 'upcoming' && hostedUpcoming.length === 0 && joinedUpcoming.length === 0) ||
+          (gamesTab === 'completed' && hostedCompleted.length === 0 && joinedCompleted.length === 0)) && (
+          <div className="text-center py-12">
+            <GamepadIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-lg font-semibold text-gray-600 mb-2">
+              {gamesTab === 'upcoming' ? 'No upcoming games' : 'No completed games yet'}
+            </p>
+            <p className="text-gray-500 text-sm mb-6">
+              {gamesTab === 'upcoming'
+                ? 'Create or join a game to get started!'
+                : 'Complete games will appear here'}
+            </p>
+            {gamesTab === 'upcoming' && (
+              <Button
+                onClick={onCreateGame}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Your First Game
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     );
   };

@@ -1830,6 +1830,54 @@ export const gameRequestHelpers = {
       console.error('❌ Error in cancelMyRequest:', error);
       return { success: false, error: error.message };
     }
+  },
+
+  // Get games the user has joined (accepted requests)
+  async getUserJoinedGames(userId: string) {
+    try {
+      console.log('🔍 Getting joined games for user:', userId);
+
+      // Get all accepted game requests for this user
+      const { data: acceptedRequests, error: requestsError } = await supabase
+        .from('game_requests')
+        .select(`
+          game_id,
+          games (
+            id,
+            sport,
+            format,
+            date,
+            start_time,
+            end_time,
+            max_players,
+            current_players,
+            cost_per_person,
+            turfs (
+              id,
+              name,
+              address
+            )
+          )
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'accepted');
+
+      if (requestsError) {
+        console.error('❌ Error fetching joined games:', requestsError);
+        return { success: false, data: [], error: requestsError.message };
+      }
+
+      // Transform the data
+      const joinedGames = (acceptedRequests || [])
+        .filter(req => req.games) // Filter out any requests where game was deleted
+        .map(req => req.games);
+
+      console.log('✅ Found joined games:', joinedGames.length);
+      return { success: true, data: joinedGames, error: null };
+    } catch (error: any) {
+      console.error('❌ Error in getUserJoinedGames:', error);
+      return { success: false, data: [], error: error.message };
+    }
   }
 };
 
