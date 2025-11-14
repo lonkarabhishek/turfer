@@ -138,6 +138,7 @@ export const gameHelpers = {
     description?: string;
     notes?: string;
     isPrivate?: boolean;
+    turfBooked?: boolean;
   }) {
     try {
       // Get current user
@@ -268,7 +269,8 @@ export const gameHelpers = {
             status: 'open',
             host_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
             host_phone: user.user_metadata?.phone || user.phone || '9999999999',
-            host_profile_image_url: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || ''
+            host_profile_image_url: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || '',
+            turf_booked: gameData.turfBooked || false
           }
         ])
         .select()

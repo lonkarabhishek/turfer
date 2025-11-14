@@ -97,20 +97,40 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
 
   const handleVerifyOTP = async () => {
     setInlineError(''); // Clear previous errors
-    const otpCode = otp.join('');
+    const otpCode = otp.join('').trim(); // Trim any whitespace
+
+    console.log('🔐 Verifying OTP:', { otpCode, length: otpCode.length });
 
     if (otpCode.length !== 6) {
       setInlineError('Please enter the complete 6-digit OTP');
       return;
     }
 
+    // Validate that OTP contains only digits
+    if (!/^\d{6}$/.test(otpCode)) {
+      setInlineError('OTP must be 6 digits (0-9 only)');
+      return;
+    }
+
     setLoading(true);
     try {
       // Step 1: Verify OTP with Firebase
+      console.log('📞 Calling Firebase verifyOTP with code:', otpCode);
       const result = await phoneAuthHelpers.verifyOTP(confirmationResult, otpCode);
+      console.log('📞 Firebase verifyOTP result:', result);
 
       if (!result.success || !result.user) {
-        setInlineError(result.error || 'Invalid OTP. Please check and try again.');
+        console.error('❌ OTP verification failed:', result.error);
+        // Better error messages for common Firebase OTP errors
+        let errorMessage = result.error || 'Invalid OTP. Please check and try again.';
+        if (errorMessage.includes('invalid-verification-code')) {
+          errorMessage = 'Invalid OTP code. Please check and try again.';
+        } else if (errorMessage.includes('session-expired')) {
+          errorMessage = 'OTP expired. Please request a new code.';
+        } else if (errorMessage.includes('too-many-requests')) {
+          errorMessage = 'Too many attempts. Please wait and try again later.';
+        }
+        setInlineError(errorMessage);
         return;
       }
 
