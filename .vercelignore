@@ -1,4 +1,17 @@
-api/**
-backend-server.cjs
-*.cjs
-node_modules
+# Ignore individual API files - we use the catch-all route instead
+api/auth/login.js
+api/auth/register.js
+api/auth/firebase-login.js
+api/auth/firebase-signup.js
+api/auth/me.js
+api/turfs/index.js
+api/games/index.js
+api/bookings/user/[userId].js
+api/ping.js
+api/hello.js
+api/index.js
+api/sitemap.xml.js
+
+# Keep only the catch-all route
+!api/[...path].js
+!api/auth/firebase-admin.js
