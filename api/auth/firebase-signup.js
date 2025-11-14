@@ -27,13 +27,24 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { name, phone, firebaseIdToken } = req.body;
+    const { name, phone, firebaseIdToken, email } = req.body;
 
     if (!name || !phone || !firebaseIdToken) {
       return res.status(400).json({
         success: false,
         error: 'Name, phone, and Firebase ID token are required'
       });
+    }
+
+    // Validate email format if provided
+    if (email && email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid email format'
+        });
+      }
     }
 
     // Verify Firebase token
@@ -87,7 +98,7 @@ module.exports = async (req, res) => {
     const newUser = {
       name: name.trim(),
       phone: tokenPhoneNumber,
-      email: `${firebaseUid}@firebase.tapturf.in`, // Temporary email for phone users
+      email: email && email.trim() ? email.trim() : `${firebaseUid}@firebase.tapturf.in`, // Use provided email or temporary one
       password: firebaseUid, // Store Firebase UID as password (won't be used for login)
       role: 'user',
       is_verified: true, // Phone is verified via Firebase

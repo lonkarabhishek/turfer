@@ -142,13 +142,13 @@ class AuthManager {
   }
 
   // Firebase Phone Auth - Signup with Firebase ID token
-  async signupWithFirebase(name: string, phone: string, firebaseIdToken: string): Promise<ApiResponse<LoginResponse>> {
+  async signupWithFirebase(name: string, phone: string, firebaseIdToken: string, email?: string): Promise<ApiResponse<LoginResponse>> {
     try {
       console.log('📝 Signing up with Firebase token');
       const response = await fetch(`${API_BASE_URL}/auth/firebase-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, firebaseIdToken })
+        body: JSON.stringify({ name, phone, firebaseIdToken, email })
       });
 
       const data = await response.json();

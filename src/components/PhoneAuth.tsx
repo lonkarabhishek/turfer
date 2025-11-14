@@ -18,6 +18,7 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<any>(null);
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
@@ -115,6 +116,15 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
       return;
     }
 
+    // Validate email format if provided
+    if (email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        error('Please enter a valid email address');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const firebaseUser = phoneAuthHelpers.getCurrentUser();
@@ -127,7 +137,8 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
       const signupResult = await authManager.signupWithFirebase(
         name,
         firebaseUser.phoneNumber || '',
-        idToken
+        idToken,
+        email.trim() || undefined
       );
 
       if (signupResult.success) {
@@ -331,7 +342,7 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
                 </motion.div>
               )}
 
-              {/* Name Input Step */}
+              {/* Name & Email Input Step */}
               {step === 'name' && (
                 <motion.div
                   key="name"
@@ -340,15 +351,32 @@ export function PhoneAuth({ onSuccess, onCancel }: PhoneAuthProps) {
                   exit={{ opacity: 0, x: -20 }}
                   className="space-y-4"
                 >
-                  <input
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleCreateAccount()}
-                    className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
-                    disabled={loading}
-                  />
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Enter your full name *"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !loading && handleCreateAccount()}
+                      className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="email"
+                      placeholder="Email (optional)"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !loading && handleCreateAccount()}
+                      className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                      disabled={loading}
+                    />
+                    <p className="text-xs text-gray-500 mt-2 ml-1">
+                      Add your email to receive booking confirmations and updates
+                    </p>
+                  </div>
 
                   <Button
                     onClick={handleCreateAccount}
