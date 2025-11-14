@@ -137,9 +137,14 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
 
       // Load games the user has joined (accepted requests)
       try {
+        console.log('🎮 Loading joined games for user:', user.id);
         const joinedGamesResponse = await gameRequestHelpers.getUserJoinedGames(user.id);
-        if (joinedGamesResponse.success && joinedGamesResponse.data) {
+        console.log('📊 Joined games response:', joinedGamesResponse);
+
+        if (joinedGamesResponse.success && joinedGamesResponse.data && joinedGamesResponse.data.length > 0) {
+          console.log('✅ Found joined games, transforming:', joinedGamesResponse.data);
           const transformedJoinedGames = joinedGamesResponse.data.map((gameData: any) => {
+            console.log('🔄 Transforming game:', gameData);
             const startTime12 = formatTo12Hour(gameData.start_time || '00:00');
             const endTime12 = formatTo12Hour(gameData.end_time || '00:00');
 
@@ -156,12 +161,14 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
               status: isGameExpired(gameData) ? 'completed' as const : 'upcoming' as const
             };
           });
+          console.log('✅ Transformed joined games:', transformedJoinedGames);
           setJoinedGames(transformedJoinedGames);
         } else {
+          console.log('📭 No joined games found');
           setJoinedGames([]);
         }
       } catch (error) {
-        console.error('Error loading joined games:', error);
+        console.error('❌ Error loading joined games:', error);
         setJoinedGames([]);
       }
 
