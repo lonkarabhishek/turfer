@@ -23,17 +23,27 @@ export { auth };
 
 // Phone Auth Helper Functions
 export const phoneAuthHelpers = {
-  // Setup reCAPTCHA verifier
+  // Setup reCAPTCHA verifier with better error handling
   setupRecaptcha: (containerId: string): RecaptchaVerifier => {
+    // Clean up any existing recaptcha widget
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.innerHTML = '';
+    }
+
     const recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
       'size': 'invisible',
       'callback': () => {
-        console.log('✅ reCAPTCHA verified');
+        console.log('✅ reCAPTCHA verified successfully');
       },
       'expired-callback': () => {
-        console.log('❌ reCAPTCHA expired');
+        console.log('⚠️ reCAPTCHA expired, please try again');
+      },
+      'error-callback': (error: any) => {
+        console.error('❌ reCAPTCHA error:', error);
       }
     });
+
     return recaptchaVerifier;
   },
 
