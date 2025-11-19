@@ -6,14 +6,14 @@ let loginHandler, registerHandler, firebaseLoginHandler, firebaseSignupHandler;
 let turfsHandler, gamesHandler, bookingsUserHandler, sitemapHandler;
 
 try {
-  loginHandler = require('../lib/api-handlers/auth/login.js');
-  registerHandler = require('../lib/api-handlers/auth/register.js');
-  firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.js');
-  firebaseSignupHandler = require('../lib/api-handlers/auth/firebase-signup.js');
-  turfsHandler = require('../lib/api-handlers/turfs/index.js');
-  gamesHandler = require('../lib/api-handlers/games/index.js');
-  bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].js');
-  sitemapHandler = require('../lib/api-handlers/sitemap.xml.js');
+  loginHandler = require('../lib/api-handlers/auth/login.cjs');
+  registerHandler = require('../lib/api-handlers/auth/register.cjs');
+  firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.cjs');
+  firebaseSignupHandler = require('../lib/api-handlers/auth/firebase-signup.cjs');
+  turfsHandler = require('../lib/api-handlers/turfs/index.cjs');
+  gamesHandler = require('../lib/api-handlers/games/index.cjs');
+  bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].cjs');
+  sitemapHandler = require('../lib/api-handlers/sitemap.xml.cjs');
   console.log('✅ All handlers loaded successfully');
 } catch (error) {
   console.error('❌ Error loading handlers:', error);
