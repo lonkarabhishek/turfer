@@ -1,15 +1,39 @@
 // Catch-all API route for Vercel - consolidates all endpoints into one function
 const url = require('url');
 
-// Import API handlers from lib/api-handlers
-const loginHandler = require('../lib/api-handlers/auth/login.js');
-const registerHandler = require('../lib/api-handlers/auth/register.js');
-const firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.js');
-const firebaseSignupHandler = require('../lib/api-handlers/auth/firebase-signup.js');
-const turfsHandler = require('../lib/api-handlers/turfs/index.js');
-const gamesHandler = require('../lib/api-handlers/games/index.js');
-const bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].js');
-const sitemapHandler = require('../lib/api-handlers/sitemap.xml.js');
+// Import API handlers from lib/api-handlers with error handling
+let loginHandler, registerHandler, firebaseLoginHandler, firebaseSignupHandler;
+let turfsHandler, gamesHandler, bookingsUserHandler, sitemapHandler;
+
+try {
+  loginHandler = require('../lib/api-handlers/auth/login.js');
+  registerHandler = require('../lib/api-handlers/auth/register.js');
+  firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.js');
+  firebaseSignupHandler = require('../lib/api-handlers/auth/firebase-signup.js');
+  turfsHandler = require('../lib/api-handlers/turfs/index.js');
+  gamesHandler = require('../lib/api-handlers/games/index.js');
+  bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].js');
+  sitemapHandler = require('../lib/api-handlers/sitemap.xml.js');
+  console.log('✅ All handlers loaded successfully');
+} catch (error) {
+  console.error('❌ Error loading handlers:', error);
+  // Create dummy handlers that return the error
+  const errorHandler = (req, res) => {
+    res.status(500).json({
+      success: false,
+      error: 'Handler loading failed: ' + error.message,
+      stack: error.stack
+    });
+  };
+  loginHandler = loginHandler || errorHandler;
+  registerHandler = registerHandler || errorHandler;
+  firebaseLoginHandler = firebaseLoginHandler || errorHandler;
+  firebaseSignupHandler = firebaseSignupHandler || errorHandler;
+  turfsHandler = turfsHandler || errorHandler;
+  gamesHandler = gamesHandler || errorHandler;
+  bookingsUserHandler = bookingsUserHandler || errorHandler;
+  sitemapHandler = sitemapHandler || errorHandler;
+}
 
 const routes = {
   '/api/auth/login': loginHandler,
