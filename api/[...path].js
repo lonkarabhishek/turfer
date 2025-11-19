@@ -1,18 +1,18 @@
 // Catch-all API route for Vercel - consolidates all endpoints into one function
 const url = require('url');
 
-// Import API handlers
-const pingHandler = require('./ping.js');
-const helloHandler = require('./hello.js');
-const indexHandler = require('./index.js');
-const loginHandler = require('./auth/login.js');
-const registerHandler = require('./auth/register.js');
-const firebaseLoginHandler = require('./auth/firebase-login.js');
-const firebaseSignupHandler = require('./auth/firebase-signup.js');
-const turfsHandler = require('./turfs/index.js');
-const gamesHandler = require('./games/index.js');
-const bookingsUserHandler = require('./bookings/user/[userId].js');
-const sitemapHandler = require('./sitemap.xml.js');
+// Import API handlers from lib/api-handlers
+const pingHandler = require('../lib/api-handlers/ping.js');
+const helloHandler = require('../lib/api-handlers/hello.js');
+const indexHandler = require('../lib/api-handlers/index.js');
+const loginHandler = require('../lib/api-handlers/auth/login.js');
+const registerHandler = require('../lib/api-handlers/auth/register.js');
+const firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.js');
+const firebaseSignupHandler = require('../lib/api-handlers/auth/firebase-signup.js');
+const turfsHandler = require('../lib/api-handlers/turfs/index.js');
+const gamesHandler = require('../lib/api-handlers/games/index.js');
+const bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].js');
+const sitemapHandler = require('../lib/api-handlers/sitemap.xml.js');
 
 const routes = {
   '/api/ping': pingHandler,
