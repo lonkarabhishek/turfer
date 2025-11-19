@@ -2,9 +2,6 @@
 const url = require('url');
 
 // Import API handlers from lib/api-handlers
-const pingHandler = require('../lib/api-handlers/ping.js');
-const helloHandler = require('../lib/api-handlers/hello.js');
-const indexHandler = require('../lib/api-handlers/index.js');
 const loginHandler = require('../lib/api-handlers/auth/login.js');
 const registerHandler = require('../lib/api-handlers/auth/register.js');
 const firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.js');
@@ -15,10 +12,6 @@ const bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].
 const sitemapHandler = require('../lib/api-handlers/sitemap.xml.js');
 
 const routes = {
-  '/api/ping': pingHandler,
-  '/api/hello': helloHandler,
-  '/api/index': indexHandler,
-  '/api': indexHandler,
   '/api/auth/login': loginHandler,
   '/api/auth/register': registerHandler,
   '/api/auth/firebase-login': firebaseLoginHandler,
