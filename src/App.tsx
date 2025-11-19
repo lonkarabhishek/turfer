@@ -566,6 +566,7 @@ export default function App() {
   // Handle URL routing with React Router - sync URL to page state
   useEffect(() => {
     const path = location.pathname;
+    const searchParams = new URLSearchParams(location.search);
     console.log('🔍 Routing to path:', path);
 
     if (path.includes('/confirm')) {
@@ -595,10 +596,20 @@ export default function App() {
       setCurrentPage('profile');
     } else if (path.includes('/dashboard')) {
       setCurrentPage('dashboard');
+      // Handle dashboard section query param
+      const section = searchParams.get('section');
+      if (section) {
+        setDashboardSection(section);
+      }
     } else if (path.includes('/admin-turf-upload')) {
       setCurrentPage('admin-turf-upload');
     } else if (path.includes('/legal')) {
       setCurrentPage('legal');
+      // Handle legal page type query param
+      const type = searchParams.get('type') as 'privacy' | 'terms' | 'support' | null;
+      if (type) {
+        setLegalPageType(type);
+      }
     } else if (path.includes('/sport/')) {
       const sport = path.split('/sport/')[1]?.split('?')[0];
       if (sport) {
@@ -611,7 +622,7 @@ export default function App() {
       setSelectedTurfId(null);
       setSelectedGameId(null);
     }
-  }, [location.pathname]); // React Router location changes trigger this
+  }, [location.pathname, location.search]); // React Router location changes trigger this
 
   // Update URL when navigating to game pages
   const handleGameClick = useCallback((gameId: string) => {
@@ -664,6 +675,7 @@ export default function App() {
       // Navigate to dashboard for both users and owners
       setCurrentPage('dashboard');
       setActiveTab('dashboard');
+      navigate('/dashboard');
     }
   };
 
@@ -734,16 +746,19 @@ export default function App() {
       setPreviousPage(currentPage); // Track previous page
       setCurrentPage('games');
       setActiveTab('games');
+      navigate('/games');
     } else if (section === 'turfs') {
       setPreviousPage(currentPage); // Track previous page
       setCurrentPage('turfs');
       setActiveTab('turfs');
+      navigate('/turfs');
     } else if (section === 'profile') {
       console.log('🧭 Navigating to profile, user:', user ? 'logged in' : 'not logged in');
       if (user) {
         // User is logged in, show profile page
         setCurrentPage('profile');
         setActiveTab('profile');
+        navigate('/profile');
       } else {
         // User not logged in, show login modal
         console.log('🧭 Opening login modal');
@@ -758,12 +773,14 @@ export default function App() {
   const handleLegalPageClick = (type: 'privacy' | 'terms' | 'support') => {
     setLegalPageType(type);
     setCurrentPage('legal');
+    navigate(`/legal?type=${type}`);
   };
 
   const handleDashboardNavigation = (section: string) => {
     setDashboardSection(section);
     setCurrentPage('dashboard');
     setActiveTab('dashboard');
+    navigate(`/dashboard?section=${section}`);
   };
 
   const handleGameNavigation = (gameId: string) => {
@@ -789,6 +806,7 @@ export default function App() {
   const handleFindGamesClick = () => {
     setCurrentPage('games');
     setActiveTab('games');
+    navigate('/games');
   };
 
 
@@ -968,12 +986,19 @@ export default function App() {
           onTurfClick={handleTurfClick}
           onGameClick={handleGameClick}
           onCreateGame={() => setShowCreateGame(true)}
-          onNavigateToGames={() => setCurrentPage('games')}
-          onNavigateToTurfs={() => setCurrentPage('turfs')}
+          onNavigateToGames={() => {
+            setCurrentPage('games');
+            navigate('/games');
+          }}
+          onNavigateToTurfs={() => {
+            setCurrentPage('turfs');
+            navigate('/turfs');
+          }}
           onSignIn={() => setShowLogin(true)}
           onSportClick={(sport) => {
             setSelectedSport(sport);
             setCurrentPage('sport');
+            navigate(`/sport/${sport}`);
           }}
         />
       )}
