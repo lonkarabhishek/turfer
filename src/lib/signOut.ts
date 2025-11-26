@@ -2,13 +2,17 @@ import { supabase } from './supabase';
 
 export const performSignOut = async (onAuthChange?: () => void) => {
   try {
+    // Clear Firebase-based auth from localStorage
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
+
     // Sign out with Supabase Auth
     await supabase.auth.signOut();
-    
+
     if (onAuthChange) {
       onAuthChange();
     }
-    
+
     // Redirect to home page
     if (window.location.pathname !== '/') {
       window.location.href = '/';
