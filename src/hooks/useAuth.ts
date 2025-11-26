@@ -27,17 +27,52 @@ export function useAuth() {
     // Get initial session with fast execution
     const getInitialSession = async () => {
       try {
+        // First, check for Firebase-based auth in localStorage
+        const authToken = localStorage.getItem('auth_token');
+        const storedUser = localStorage.getItem('user');
+
+        if (authToken && storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            const firebaseUser: AppUser = {
+              id: parsedUser.id,
+              email: parsedUser.email,
+              name: parsedUser.name,
+              phone: parsedUser.phone,
+              role: parsedUser.role || 'user',
+              profile_image_url: parsedUser.profile_image_url,
+              isVerified: parsedUser.isVerified || parsedUser.is_verified || true,
+              // Add required Supabase User fields
+              app_metadata: {},
+              user_metadata: {},
+              aud: 'authenticated',
+              created_at: parsedUser.createdAt || parsedUser.created_at || new Date().toISOString()
+            } as AppUser;
+
+            setUser(firebaseUser);
+            clearTimeout(emergencyTimeout);
+            setLoading(false);
+            return;
+          } catch (error) {
+            console.error('Error parsing stored user:', error);
+            // Clear invalid data and continue to Supabase Auth check
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+          }
+        }
+
+        // Fallback to Supabase Auth
         // Add a quick timeout for the session fetch itself
         const sessionPromise = supabase.auth.getSession();
-        const quickTimeout = new Promise((_, reject) => 
+        const quickTimeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Session fetch timeout')), 2000)
         );
 
         const { data: { session }, error: sessionError } = await Promise.race([
-          sessionPromise, 
+          sessionPromise,
           quickTimeout
         ]) as any;
-        
+
         if (sessionError) {
           console.warn('Session error:', sessionError);
           setUser(null);
@@ -45,7 +80,7 @@ export function useAuth() {
           setLoading(false);
           return;
         }
-        
+
         if (session?.user) {
           // Use Supabase Auth user directly - no database calls
           const baseUser: AppUser = {
@@ -56,9 +91,9 @@ export function useAuth() {
             profile_image_url: session.user.user_metadata?.profile_image_url || '',
             isVerified: session.user.email_confirmed_at ? true : false
           };
-          
+
           setUser(baseUser);
-          
+
           // Skip background profile enhancement to avoid RLS issues
         } else {
           // No session/user found, set user to null
@@ -104,8 +139,41 @@ export function useAuth() {
   }, []);
 
   const refreshAuth = async () => {
+    // First, check for Firebase-based auth in localStorage
+    const authToken = localStorage.getItem('auth_token');
+    const storedUser = localStorage.getItem('user');
+
+    if (authToken && storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        const firebaseUser: AppUser = {
+          id: parsedUser.id,
+          email: parsedUser.email,
+          name: parsedUser.name,
+          phone: parsedUser.phone,
+          role: parsedUser.role || 'user',
+          profile_image_url: parsedUser.profile_image_url,
+          isVerified: parsedUser.isVerified || parsedUser.is_verified || true,
+          // Add required Supabase User fields
+          app_metadata: {},
+          user_metadata: {},
+          aud: 'authenticated',
+          created_at: parsedUser.createdAt || parsedUser.created_at || new Date().toISOString()
+        } as AppUser;
+
+        setUser(firebaseUser);
+        return;
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        // Clear invalid data
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user');
+      }
+    }
+
+    // Fallback to Supabase Auth
     const { data: { session } } = await supabase.auth.getSession();
-    
+
     if (session?.user) {
       // Use Supabase Auth user directly, with optional profile enhancement
       const baseUser: AppUser = {
@@ -116,7 +184,7 @@ export function useAuth() {
         profile_image_url: session.user.user_metadata?.profile_image_url || '',
         isVerified: session.user.email_confirmed_at ? true : false
       };
-      
+
       // Use only Supabase Auth data to avoid RLS policy issues
       setUser(baseUser);
     } else {
@@ -125,7 +193,13 @@ export function useAuth() {
   };
 
   const logout = async () => {
+    // Clear Firebase-based auth from localStorage
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
+
+    // Also sign out from Supabase Auth
     await supabase.auth.signOut();
+
     setUser(null);
   };
 

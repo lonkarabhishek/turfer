@@ -1084,6 +1084,7 @@ export default function App() {
         open={showLogin}
         onClose={() => setShowLogin(false)}
         onSuccess={() => {
+          setShowLogin(false); // Close the modal
           refreshAuth();
           // Check if this was a signup that should show welcome
           setTimeout(() => {
