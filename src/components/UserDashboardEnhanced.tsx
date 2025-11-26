@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Calendar, Clock, MapPin, Star, Users, Trophy, 
+import {
+  Calendar, Clock, MapPin, Star, Users, Trophy,
   Bell, Settings, CreditCard, Heart, LogOut,
   GamepadIcon, Building, History, User, User as UserIcon,
-  Phone, Mail, Edit3, ChevronRight, Plus, Check, X, Search, MessageCircle
+  Phone, Mail, Edit3, ChevronRight, Plus, Check, X, Search, MessageCircle, Loader
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -15,7 +15,7 @@ import { ManualBookingUpload } from './ManualBookingUpload';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
-import { userHelpers, gameRequestHelpers } from '../lib/supabase';
+import { supabase, userHelpers, gameRequestHelpers } from '../lib/supabase';
 import { filterNonExpiredGames, isGameExpired } from '../lib/gameUtils';
 
 // Utility function to format time to 12-hour format for Indian users
@@ -81,6 +81,13 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const [gamesTab, setGamesTab] = useState<'upcoming' | 'completed'>('upcoming');
   const [showManualBookingUpload, setShowManualBookingUpload] = useState(false);
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set());
+
+  // Profile editing state
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editedName, setEditedName] = useState('');
+  const [editedEmail, setEditedEmail] = useState('');
+  const [editedPhone, setEditedPhone] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -958,6 +965,96 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
     );
   };
 
+  // Profile editing handlers
+  const handleStartEdit = (field: string, currentValue: string) => {
+    setEditingField(field);
+    switch (field) {
+      case 'name':
+        setEditedName(currentValue);
+        break;
+      case 'email':
+        setEditedEmail(currentValue);
+        break;
+      case 'phone':
+        setEditedPhone(currentValue);
+        break;
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingField(null);
+    setEditedName('');
+    setEditedEmail('');
+    setEditedPhone('');
+  };
+
+  const handleSaveField = async (field: string) => {
+    if (!user) return;
+
+    setSaving(true);
+    try {
+      const updates: any = { updated_at: new Date().toISOString() };
+      let newValue = '';
+
+      switch (field) {
+        case 'name':
+          if (!editedName.trim()) {
+            error('Name cannot be empty');
+            return;
+          }
+          updates.name = editedName.trim();
+          newValue = editedName.trim();
+          break;
+        case 'email':
+          if (!editedEmail.trim() || !editedEmail.includes('@')) {
+            error('Please enter a valid email');
+            return;
+          }
+          updates.email = editedEmail.trim();
+          newValue = editedEmail.trim();
+          break;
+        case 'phone':
+          updates.phone = editedPhone.trim();
+          newValue = editedPhone.trim();
+          break;
+        default:
+          return;
+      }
+
+      //Update user in Supabase
+      const { error: updateError } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Error updating profile:', updateError);
+        error('Failed to update profile');
+        return;
+      }
+
+      // Update localStorage with the new value
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        userData[field] = newValue;
+        userData.updatedAt = updates.updated_at;
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+
+      // Trigger auth refresh to update UI
+      await refreshAuth();
+
+      success(`${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully`);
+      setEditingField(null);
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      error('Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const renderProfile = () => (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -1002,39 +1099,138 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
               <label className="text-sm font-medium text-gray-700 mb-2 block">
                 Full Name
               </label>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <UserIcon className="w-5 h-5 text-gray-400" />
-                <span className="flex-1">{user?.name}</span>
-                <Button variant="ghost" size="sm">
-                  <Edit3 className="w-4 h-4" />
-                </Button>
-              </div>
+              {editingField === 'name' ? (
+                <div className="flex items-center gap-2">
+                  <UserIcon className="w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveField('name')}
+                    disabled={saving}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelEdit}
+                    disabled={saving}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <UserIcon className="w-5 h-5 text-gray-400" />
+                  <span className="flex-1">{user?.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleStartEdit('name', user?.name || '')}
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
-            
+
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">
                 Email Address
               </label>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <Mail className="w-5 h-5 text-gray-400" />
-                <span className="flex-1">{user?.email}</span>
-                <Button variant="ghost" size="sm">
-                  <Edit3 className="w-4 h-4" />
-                </Button>
-              </div>
+              {editingField === 'email' ? (
+                <div className="flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-gray-400" />
+                  <input
+                    type="email"
+                    value={editedEmail}
+                    onChange={(e) => setEditedEmail(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveField('email')}
+                    disabled={saving}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelEdit}
+                    disabled={saving}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <Mail className="w-5 h-5 text-gray-400" />
+                  <span className="flex-1">{user?.email}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleStartEdit('email', user?.email || '')}
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
-            
+
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">
                 Phone Number
               </label>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <Phone className="w-5 h-5 text-gray-400" />
-                <span className="flex-1">{user?.phone || 'Not provided'}</span>
-                <Button variant="ghost" size="sm">
-                  <Edit3 className="w-4 h-4" />
-                </Button>
-              </div>
+              {editingField === 'phone' ? (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-5 h-5 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={editedPhone}
+                    onChange={(e) => setEditedPhone(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSaveField('phone')}
+                    disabled={saving}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelEdit}
+                    disabled={saving}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <Phone className="w-5 h-5 text-gray-400" />
+                  <span className="flex-1">{user?.phone || 'Not provided'}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleStartEdit('phone', user?.phone || '')}
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
             
             <div>
