@@ -78,15 +78,40 @@ export function ProfilePhotoUpload({
         .from('profile-photos')
         .getPublicUrl(fileName);
 
-      // Update user profile in database
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ profile_image_url: publicUrl })
-        .eq('id', user.id);
+      // Update user profile via API endpoint (bypasses RLS)
+      const authToken = localStorage.getItem('auth_token');
+      if (authToken) {
+        try {
+          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
+          const response = await fetch(`${API_BASE_URL}/users/update-profile`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+              field: 'profile_image_url',
+              value: publicUrl
+            })
+          });
 
-      if (updateError) {
-        console.warn('Users table update failed (may not exist):', updateError);
-        // Don't throw - continue to update auth metadata
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            console.warn('API update failed:', result.error);
+          } else {
+            // Update localStorage with the new photo URL
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+              const userData = JSON.parse(storedUser);
+              userData.profile_image_url = publicUrl;
+              userData.updatedAt = result.data.user.updatedAt;
+              localStorage.setItem('user', JSON.stringify(userData));
+            }
+          }
+        } catch (apiErr) {
+          console.warn('API update error:', apiErr);
+        }
       }
 
       // Also update Supabase Auth user metadata for immediate availability
@@ -96,7 +121,7 @@ export function ProfilePhotoUpload({
             profile_image_url: publicUrl
           }
         });
-        
+
         if (metadataError) {
           console.warn('Auth metadata update failed:', metadataError);
         }

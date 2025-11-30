@@ -10,6 +10,7 @@ const loginHandler = require('./api/auth/login.js');
 const registerHandler = require('./api/auth/register.js');
 const firebaseLoginHandler = require('./api/auth/firebase-login.js');
 const firebaseSignupHandler = require('./api/auth/firebase-signup.js');
+const updateProfileHandler = require('./lib/api-handlers/users/update-profile.cjs');
 const turfsHandler = require('./api/turfs/index.js');
 const gamesHandler = require('./api/games/index.js');
 const bookingsUserHandler = require('./api/bookings/user/[userId].js');
@@ -24,6 +25,7 @@ const routes = {
   '/api/auth/register': registerHandler,
   '/api/auth/firebase-login': firebaseLoginHandler,
   '/api/auth/firebase-signup': firebaseSignupHandler,
+  '/api/users/update-profile': updateProfileHandler,
   '/api/turfs': turfsHandler,
   '/api/turfs/index': turfsHandler,
   '/api/games': gamesHandler,

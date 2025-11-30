@@ -12,6 +12,8 @@ import { Badge } from './ui/badge';
 import { ProfilePhotoUpload } from './ProfilePhotoUpload';
 import { MyGameRequests } from './MyGameRequests';
 import { ManualBookingUpload } from './ManualBookingUpload';
+import { OTPVerificationModal } from './OTPVerificationModal';
+import { EmailOTPModal } from './EmailOTPModal';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../lib/toastManager';
 import { gamesAPI, bookingsAPI, authManager } from '../lib/api';
@@ -88,6 +90,16 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const [editedEmail, setEditedEmail] = useState('');
   const [editedPhone, setEditedPhone] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // OTP verification state for phone
+  const [showPhoneOTPModal, setShowPhoneOTPModal] = useState(false);
+  const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
+  const [pendingPhoneUpdate, setPendingPhoneUpdate] = useState('');
+
+  // OTP verification state for email
+  const [showEmailOTPModal, setShowEmailOTPModal] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
+  const [pendingEmailUpdate, setPendingEmailUpdate] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -991,54 +1003,99 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
   const handleSaveField = async (field: string) => {
     if (!user) return;
 
+    // For phone updates, show OTP verification modal
+    if (field === 'phone') {
+      const newPhone = editedPhone.trim();
+      if (!newPhone || newPhone.length < 10) {
+        error('Please enter a valid phone number');
+        return;
+      }
+
+      // Store the pending phone update and show OTP modal
+      const normalizedPhone = newPhone.startsWith('+') ? newPhone : `+91${newPhone}`;
+      setPendingPhoneUpdate(normalizedPhone);
+      setOtpPhoneNumber(normalizedPhone);
+      setShowPhoneOTPModal(true);
+      return;
+    }
+
+    // For email updates, send OTP to the new email address
+    if (field === 'email') {
+      const newEmail = editedEmail.trim();
+      if (!newEmail || !newEmail.includes('@')) {
+        error('Please enter a valid email');
+        return;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        error('Please enter a valid email format');
+        return;
+      }
+
+      // Store the pending email update and show email OTP modal
+      setPendingEmailUpdate(newEmail);
+      setOtpEmail(newEmail);
+      setShowEmailOTPModal(true);
+      return;
+    }
+
     setSaving(true);
     try {
-      const updates: any = { updated_at: new Date().toISOString() };
       let newValue = '';
 
       switch (field) {
         case 'name':
           if (!editedName.trim()) {
             error('Name cannot be empty');
+            setSaving(false);
             return;
           }
-          updates.name = editedName.trim();
           newValue = editedName.trim();
           break;
-        case 'email':
-          if (!editedEmail.trim() || !editedEmail.includes('@')) {
-            error('Please enter a valid email');
-            return;
-          }
-          updates.email = editedEmail.trim();
-          newValue = editedEmail.trim();
-          break;
-        case 'phone':
-          updates.phone = editedPhone.trim();
-          newValue = editedPhone.trim();
-          break;
         default:
+          setSaving(false);
           return;
       }
 
-      //Update user in Supabase
-      const { error: updateError } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', user.id);
-
-      if (updateError) {
-        console.error('Error updating profile:', updateError);
-        error('Failed to update profile');
+      // Get auth token
+      const authToken = localStorage.getItem('auth_token');
+      if (!authToken) {
+        error('Authentication required');
+        setSaving(false);
         return;
       }
 
-      // Update localStorage with the new value
+      // Call API to update profile
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
+      const response = await fetch(`${API_BASE_URL}/users/update-profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          field,
+          value: newValue
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('Error updating profile:', result.error);
+        error(result.error || 'Failed to update profile');
+        setSaving(false);
+        return;
+      }
+
+      // Update localStorage with the new user data
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const userData = JSON.parse(storedUser);
-        userData[field] = newValue;
-        userData.updatedAt = updates.updated_at;
+        userData[field] = result.data.value;
+        userData.updatedAt = result.data.user.updatedAt;
         localStorage.setItem('user', JSON.stringify(userData));
       }
 
@@ -1050,6 +1107,126 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
     } catch (err: any) {
       console.error('Error updating profile:', err);
       error('Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle phone OTP verification
+  const handleOTPVerified = async (firebaseIdToken: string) => {
+    if (!user || !pendingPhoneUpdate) return;
+
+    setSaving(true);
+    try {
+      // Get auth token
+      const authToken = localStorage.getItem('auth_token');
+      if (!authToken) {
+        error('Authentication required');
+        setSaving(false);
+        return;
+      }
+
+      // Call API to update phone
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
+      const response = await fetch(`${API_BASE_URL}/users/update-profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          field: 'phone',
+          value: pendingPhoneUpdate
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('Error updating phone:', result.error);
+        error(result.error || 'Failed to update phone');
+        setSaving(false);
+        return;
+      }
+
+      // Update localStorage with the new user data
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        userData.phone = result.data.value;
+        userData.updatedAt = result.data.user.updatedAt;
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+
+      // Trigger auth refresh to update UI
+      await refreshAuth();
+
+      success('Phone updated successfully');
+      setEditingField(null);
+      setPendingPhoneUpdate('');
+    } catch (err: any) {
+      console.error('Error updating phone:', err);
+      error('Failed to update phone');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle email OTP verification
+  const handleEmailOTPVerified = async () => {
+    if (!user || !pendingEmailUpdate) return;
+
+    setSaving(true);
+    try {
+      // Get auth token
+      const authToken = localStorage.getItem('auth_token');
+      if (!authToken) {
+        error('Authentication required');
+        setSaving(false);
+        return;
+      }
+
+      // Call API to update email
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
+      const response = await fetch(`${API_BASE_URL}/users/update-profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          field: 'email',
+          value: pendingEmailUpdate
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('Error updating email:', result.error);
+        error(result.error || 'Failed to update email');
+        setSaving(false);
+        return;
+      }
+
+      // Update localStorage with the new user data
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        userData.email = result.data.value;
+        userData.updatedAt = result.data.user.updatedAt;
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+
+      // Trigger auth refresh to update UI
+      await refreshAuth();
+
+      success('Email updated successfully');
+      setEditingField(null);
+      setPendingEmailUpdate('');
+    } catch (err: any) {
+      console.error('Error updating email:', err);
+      error('Failed to update email');
     } finally {
       setSaving(false);
     }
@@ -1347,6 +1524,33 @@ export function UserDashboardEnhanced({ onNavigate, onCreateGame, initialTab = '
           setShowManualBookingUpload(false);
           loadUserData(); // Refresh bookings
         }}
+      />
+
+      {/* OTP Verification Modal for Phone Updates */}
+      {/* Phone OTP Verification Modal */}
+      <OTPVerificationModal
+        isOpen={showPhoneOTPModal}
+        onClose={() => {
+          setShowPhoneOTPModal(false);
+          setPendingPhoneUpdate('');
+        }}
+        phoneNumber={otpPhoneNumber}
+        onVerified={handleOTPVerified}
+        title="Verify New Phone Number"
+        description="Enter the OTP sent to your new phone number"
+      />
+
+      {/* Email OTP Verification Modal */}
+      <EmailOTPModal
+        isOpen={showEmailOTPModal}
+        onClose={() => {
+          setShowEmailOTPModal(false);
+          setPendingEmailUpdate('');
+        }}
+        email={otpEmail}
+        onVerified={handleEmailOTPVerified}
+        title="Verify New Email Address"
+        description="Enter the OTP sent to your email"
       />
     </div>
   );
