@@ -55,8 +55,9 @@ export function EmailOTPModal({
     setSending(true);
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
-      const response = await fetch(`${API_BASE_URL}/email/send-otp`, {
+      // Email OTP endpoints are Vercel serverless functions, not backend API
+      // Use relative path to call the serverless function on the same domain
+      const response = await fetch('/api/email/send-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -96,8 +97,9 @@ export function EmailOTPModal({
 
     setLoading(true);
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
-      const response = await fetch(`${API_BASE_URL}/email/verify-otp`, {
+      // Email OTP endpoints are Vercel serverless functions, not backend API
+      // Use relative path to call the serverless function on the same domain
+      const response = await fetch('/api/email/verify-otp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
