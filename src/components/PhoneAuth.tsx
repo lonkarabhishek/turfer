@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, ArrowRight, ShieldCheck, Loader2, X } from 'lucide-react';
+import { Phone, ArrowRight, ShieldCheck, Loader2, X, Lock, KeyRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { phoneAuthHelpers } from '../lib/firebase';
@@ -13,10 +13,13 @@ interface PhoneAuthProps {
   onSwitchToEmail?: () => void;
 }
 
+type AuthStep = 'phone' | 'pin' | 'otp' | 'createPin' | 'name';
+
 export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthProps) {
-  const { success, error } = useToast();
-  const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone');
+  const { success, error: showError } = useToast();
+  const [step, setStep] = useState<AuthStep>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [pin, setPin] = useState(['', '', '', '']);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -25,9 +28,16 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  const [inlineError, setInlineError] = useState(''); // Inline error message visible in modal
+  const [inlineError, setInlineError] = useState('');
+
+  // PIN-specific state
+  const [isExistingUser, setIsExistingUser] = useState(false);
+  const [isForgotPin, setIsForgotPin] = useState(false);
+  const [pinAttemptsRemaining, setPinAttemptsRemaining] = useState<number | undefined>();
+  const [lockoutUntil, setLockoutUntil] = useState<string | undefined>();
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Setup reCAPTCHA on mount
   useEffect(() => {
@@ -53,8 +63,9 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
     }
   }, [step, timer]);
 
-  const handleSendOTP = async () => {
-    setInlineError(''); // Clear previous errors
+  // Handle phone number submission - check if user exists
+  const handlePhoneSubmit = async () => {
+    setInlineError('');
 
     if (!phoneNumber || phoneNumber.length !== 10) {
       setInlineError('Please enter a valid 10-digit phone number');
@@ -63,16 +74,50 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
 
     setLoading(true);
     try {
+      // Check if phone exists and has PIN
+      const checkResult = await authManager.checkPhone(phoneNumber);
+
+      if (!checkResult.success) {
+        setInlineError(checkResult.error || 'Failed to check phone number');
+        return;
+      }
+
+      const { exists, hasPin } = checkResult.data!;
+
+      if (exists && hasPin) {
+        // Existing user with PIN - go to PIN step
+        setIsExistingUser(true);
+        setStep('pin');
+      } else if (exists && !hasPin) {
+        // Existing user without PIN (legacy) - send OTP to set PIN
+        setIsExistingUser(true);
+        setIsForgotPin(true); // Will set PIN after OTP
+        await sendOTP();
+      } else {
+        // New user - send OTP for registration
+        setIsExistingUser(false);
+        await sendOTP();
+      }
+    } catch (err: any) {
+      setInlineError(err.message || 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Send OTP via Firebase
+  const sendOTP = async () => {
+    setLoading(true);
+    try {
       const result = await phoneAuthHelpers.sendOTP(phoneNumber, recaptchaVerifier);
 
       if (result.success && result.confirmationResult) {
         setConfirmationResult(result.confirmationResult);
         setStep('otp');
-        setTimer(120); // Increased to 120 seconds to reduce rate limit issues
+        setTimer(120);
         setCanResend(false);
-        setInlineError(''); // Clear errors on success
+        setInlineError('');
       } else {
-        // Better error handling for rate limits
         const errorMsg = result.error || 'Failed to send OTP';
         if (errorMsg.includes('too-many-requests') || errorMsg.includes('quota')) {
           setInlineError('Too many attempts. Please wait 1 hour or switch to Email & Password.');
@@ -82,7 +127,6 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to send OTP';
-      // Handle Firebase rate limit errors
       if (errorMsg.includes('too-many-requests') || errorMsg.includes('quota-exceeded')) {
         setInlineError('Too many OTP requests. Please wait 1 hour or use Email & Password login.');
       } else if (errorMsg.includes('invalid-phone-number')) {
@@ -95,18 +139,71 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
     }
   };
 
-  const handleVerifyOTP = async () => {
-    setInlineError(''); // Clear previous errors
-    const otpCode = otp.join('').trim(); // Trim any whitespace
+  // Handle PIN verification for existing users
+  const handlePinVerify = async () => {
+    setInlineError('');
+    const pinCode = pin.join('');
 
-    console.log('🔐 Verifying OTP:', { otpCode, length: otpCode.length });
+    if (pinCode.length !== 4) {
+      setInlineError('Please enter your 4-digit PIN');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await authManager.loginWithPin(phoneNumber, pinCode);
+
+      if (result.success && result.data) {
+        // Login successful
+        const { user, token } = result.data;
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        success('Welcome back!');
+        onSuccess();
+      } else {
+        // Handle errors
+        if (result.lockedUntil) {
+          setLockoutUntil(result.lockedUntil);
+          const lockDate = new Date(result.lockedUntil);
+          const now = new Date();
+          const remainingMinutes = Math.ceil((lockDate.getTime() - now.getTime()) / (1000 * 60));
+          setInlineError(`Account locked. Try again in ${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}.`);
+        } else {
+          setPinAttemptsRemaining(result.attemptsRemaining);
+          if (result.attemptsRemaining !== undefined && result.attemptsRemaining > 0) {
+            setInlineError(`Invalid PIN. ${result.attemptsRemaining} attempt${result.attemptsRemaining > 1 ? 's' : ''} remaining.`);
+          } else {
+            setInlineError(result.error || 'Invalid PIN');
+          }
+        }
+        // Clear PIN input on error
+        setPin(['', '', '', '']);
+        pinInputRefs.current[0]?.focus();
+      }
+    } catch (err: any) {
+      setInlineError(err.message || 'Failed to verify PIN');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle "Forgot PIN" - send OTP to reset
+  const handleForgotPin = async () => {
+    setIsForgotPin(true);
+    setInlineError('');
+    await sendOTP();
+  };
+
+  // Handle OTP verification
+  const handleVerifyOTP = async () => {
+    setInlineError('');
+    const otpCode = otp.join('').trim();
 
     if (otpCode.length !== 6) {
       setInlineError('Please enter the complete 6-digit OTP');
       return;
     }
 
-    // Validate that OTP contains only digits
     if (!/^\d{6}$/.test(otpCode)) {
       setInlineError('OTP must be 6 digits (0-9 only)');
       return;
@@ -114,14 +211,9 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
 
     setLoading(true);
     try {
-      // Step 1: Verify OTP with Firebase
-      console.log('📞 Calling Firebase verifyOTP with code:', otpCode);
       const result = await phoneAuthHelpers.verifyOTP(confirmationResult, otpCode);
-      console.log('📞 Firebase verifyOTP result:', result);
 
       if (!result.success || !result.user) {
-        console.error('❌ OTP verification failed:', result.error);
-        // Better error messages for common Firebase OTP errors
         let errorMessage = result.error || 'Invalid OTP. Please check and try again.';
         if (errorMessage.includes('invalid-verification-code')) {
           errorMessage = 'Invalid OTP code. Please check and try again.';
@@ -134,44 +226,80 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
         return;
       }
 
-      // Step 2: Try to login (check if user exists in our database)
-      const loginResult = await authManager.loginWithFirebase(result.user.idToken);
-
-      if (loginResult.success && loginResult.data) {
-        // ✅ EXISTING USER - Account found, log them in
-        const { user, token } = loginResult.data;
-
-        // Save authentication state
-        localStorage.setItem('auth_token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-
-        success('Welcome back! Logged in successfully.');
-
-        // Trigger page refresh/redirect
-        onSuccess();
-      } else {
-        // ⭐ NEW USER - No account found, ask for details
-        console.log('New user detected, proceeding to registration');
-        setStep('name');
-        setInlineError(''); // Clear any errors before moving to name step
-      }
+      // OTP verified - go to PIN creation step
+      setStep('createPin');
+      setInlineError('');
     } catch (err: any) {
-      console.error('OTP verification error:', err);
       setInlineError(err.message || 'Failed to verify OTP. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle PIN creation
+  const handleCreatePin = async () => {
+    setInlineError('');
+    const pinCode = pin.join('');
+
+    if (pinCode.length !== 4) {
+      setInlineError('Please enter a 4-digit PIN');
+      return;
+    }
+
+    // Validate PIN
+    if (/^(\d)\1{3}$/.test(pinCode)) {
+      setInlineError('PIN cannot be all same digits (e.g., 1111)');
+      return;
+    }
+
+    const sequences = ['0123', '1234', '2345', '3456', '4567', '5678', '6789', '9876', '8765', '7654', '6543', '5432', '4321', '3210'];
+    if (sequences.includes(pinCode)) {
+      setInlineError('PIN cannot be a simple sequence (e.g., 1234)');
+      return;
+    }
+
+    if (isExistingUser) {
+      // Existing user - just set PIN and login
+      setLoading(true);
+      try {
+        const firebaseUser = phoneAuthHelpers.getCurrentUser();
+        if (!firebaseUser) {
+          setInlineError('Session expired. Please restart the process.');
+          return;
+        }
+
+        const idToken = await firebaseUser.getIdToken();
+        const result = await authManager.setPin(idToken, pinCode);
+
+        if (result.success && result.data) {
+          const { user, token } = result.data;
+          localStorage.setItem('auth_token', token);
+          localStorage.setItem('user', JSON.stringify(user));
+          success('PIN set successfully! Welcome back!');
+          onSuccess();
+        } else {
+          setInlineError(result.error || 'Failed to set PIN');
+        }
+      } catch (err: any) {
+        setInlineError(err.message || 'Failed to set PIN');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // New user - go to name step (PIN will be sent with signup)
+      setStep('name');
+    }
+  };
+
+  // Handle account creation for new users
   const handleCreateAccount = async () => {
-    setInlineError(''); // Clear previous errors
+    setInlineError('');
 
     if (!name.trim()) {
       setInlineError('Please enter your name');
       return;
     }
 
-    // Validate email format if provided
     if (email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
@@ -182,73 +310,73 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
 
     setLoading(true);
     try {
-      // Get current Firebase user
       const firebaseUser = phoneAuthHelpers.getCurrentUser();
       if (!firebaseUser) {
         setInlineError('Session expired. Please restart the signup process.');
         return;
       }
 
-      // Get Firebase ID token
       const idToken = await firebaseUser.getIdToken();
+      const pinCode = pin.join('');
 
-      // Create account in our database
-      const signupResult = await authManager.signupWithFirebase(
+      const signupResult = await authManager.signupWithFirebaseAndPin(
         name,
         firebaseUser.phoneNumber || '',
         idToken,
+        pinCode,
         email.trim() || undefined
       );
 
       if (signupResult.success && signupResult.data) {
-        // ✅ Account created successfully
         const { user, token } = signupResult.data;
-
-        // Save authentication state
         localStorage.setItem('auth_token', token);
         localStorage.setItem('user', JSON.stringify(user));
-
         success('Account created successfully! Welcome to TapTurf!');
-
-        // Trigger page refresh/redirect
         onSuccess();
       } else {
-        // Handle specific error cases
         const errorMsg = signupResult.error || 'Failed to create account';
         if (errorMsg.includes('already exists')) {
-          setInlineError('Account already exists. You were logged in successfully!');
-          // Still try to save the session if available
-          if (signupResult.data) {
-            localStorage.setItem('auth_token', signupResult.data.token);
-            localStorage.setItem('user', JSON.stringify(signupResult.data.user));
-          }
-          setTimeout(() => onSuccess(), 1500);
+          setInlineError('Account already exists. Please try logging in.');
         } else {
           setInlineError(errorMsg);
         }
       }
     } catch (err: any) {
-      console.error('Account creation error:', err);
       setInlineError(err.message || 'Failed to create account. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOTPChange = (index: number, value: string) => {
-    if (value.length > 1) {
-      value = value[0];
-    }
+  // PIN input handlers
+  const handlePinChange = (index: number, value: string) => {
+    if (value.length > 1) value = value[0];
+    if (!/^\d*$/.test(value)) return;
 
-    if (!/^\d*$/.test(value)) {
-      return;
+    const newPin = [...pin];
+    newPin[index] = value;
+    setPin(newPin);
+
+    if (value && index < 3) {
+      pinInputRefs.current[index + 1]?.focus();
     }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // OTP input handlers
+  const handleOTPChange = (index: number, value: string) => {
+    if (value.length > 1) value = value[0];
+    if (!/^\d*$/.test(value)) return;
 
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto-focus next input
     if (value && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
@@ -264,7 +392,37 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
     setOtp(['', '', '', '', '', '']);
     setTimer(60);
     setCanResend(false);
-    handleSendOTP();
+    sendOTP();
+  };
+
+  const getStepIcon = () => {
+    switch (step) {
+      case 'phone': return <Phone className="w-10 h-10 text-white" />;
+      case 'pin': return <Lock className="w-10 h-10 text-white" />;
+      case 'otp': return <ShieldCheck className="w-10 h-10 text-white" />;
+      case 'createPin': return <KeyRound className="w-10 h-10 text-white" />;
+      case 'name': return <Phone className="w-10 h-10 text-white" />;
+    }
+  };
+
+  const getStepTitle = () => {
+    switch (step) {
+      case 'phone': return 'Enter Your Phone Number';
+      case 'pin': return 'Enter Your PIN';
+      case 'otp': return 'Verify OTP';
+      case 'createPin': return 'Create Your PIN';
+      case 'name': return 'Complete Your Profile';
+    }
+  };
+
+  const getStepSubtitle = () => {
+    switch (step) {
+      case 'phone': return "We'll verify your phone number";
+      case 'pin': return `Enter your 4-digit PIN for +91${phoneNumber}`;
+      case 'otp': return `Code sent to +91${phoneNumber}`;
+      case 'createPin': return 'Create a 4-digit PIN for quick login';
+      case 'name': return 'Just one more step to get started';
+    }
   };
 
   return (
@@ -294,19 +452,13 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
               transition={{ type: "spring", duration: 0.5 }}
               className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
             >
-              {step === 'phone' && <Phone className="w-10 h-10 text-white" />}
-              {step === 'otp' && <ShieldCheck className="w-10 h-10 text-white" />}
-              {step === 'name' && <Phone className="w-10 h-10 text-white" />}
+              {getStepIcon()}
             </motion.div>
             <CardTitle className="text-2xl font-bold text-gray-900">
-              {step === 'phone' && 'Enter Your Phone Number'}
-              {step === 'otp' && 'Verify OTP'}
-              {step === 'name' && 'Complete Your Profile'}
+              {getStepTitle()}
             </CardTitle>
             <p className="text-gray-600 text-sm mt-2">
-              {step === 'phone' && 'We\'ll send you a verification code'}
-              {step === 'otp' && `Code sent to +91${phoneNumber}`}
-              {step === 'name' && 'Just one more step to get started'}
+              {getStepSubtitle()}
             </p>
           </CardHeader>
 
@@ -333,15 +485,14 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       value={phoneNumber}
                       onChange={(e) => {
                         setPhoneNumber(e.target.value.replace(/\D/g, ''));
-                        setInlineError(''); // Clear error on input change
+                        setInlineError('');
                       }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
+                      onKeyDown={(e) => e.key === 'Enter' && handlePhoneSubmit()}
                       className="w-full pl-24 pr-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
                       disabled={loading}
                     />
                   </div>
 
-                  {/* Inline Error Message */}
                   {inlineError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
                       <span className="text-red-600 text-sm font-medium">⚠️</span>
@@ -350,14 +501,14 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                   )}
 
                   <Button
-                    onClick={handleSendOTP}
+                    onClick={handlePhoneSubmit}
                     disabled={loading || phoneNumber.length !== 10}
                     className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white py-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
                   >
                     {loading ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Sending OTP...
+                        Checking...
                       </>
                     ) : (
                       <>
@@ -376,6 +527,80 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       Cancel
                     </Button>
                   )}
+                </motion.div>
+              )}
+
+              {/* PIN Entry Step (Existing Users) */}
+              {step === 'pin' && (
+                <motion.div
+                  key="pin"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-6"
+                >
+                  <div className="flex gap-3 justify-center">
+                    {pin.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => (pinInputRefs.current[index] = el)}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => {
+                          handlePinChange(index, e.target.value);
+                          setInlineError('');
+                        }}
+                        onKeyDown={(e) => handlePinKeyDown(index, e)}
+                        className="w-14 h-16 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                        disabled={loading}
+                      />
+                    ))}
+                  </div>
+
+                  {inlineError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <span className="text-red-600 text-sm font-medium">⚠️</span>
+                      <p className="text-red-700 text-sm flex-1">{inlineError}</p>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handlePinVerify}
+                    disabled={loading || pin.join('').length !== 4}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white py-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      'Login'
+                    )}
+                  </Button>
+
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={handleForgotPin}
+                      className="text-emerald-600 font-semibold hover:underline text-sm"
+                      disabled={loading}
+                    >
+                      Forgot PIN?
+                    </button>
+                    <button
+                      onClick={() => {
+                        setStep('phone');
+                        setPin(['', '', '', '']);
+                        setInlineError('');
+                      }}
+                      className="text-gray-600 hover:text-gray-900 text-sm"
+                      disabled={loading}
+                    >
+                      Change phone number
+                    </button>
+                  </div>
                 </motion.div>
               )}
 
@@ -399,7 +624,7 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                         value={digit}
                         onChange={(e) => {
                           handleOTPChange(index, e.target.value);
-                          setInlineError(''); // Clear error on input change
+                          setInlineError('');
                         }}
                         onKeyDown={(e) => handleOTPKeyDown(index, e)}
                         className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
@@ -424,7 +649,6 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                     )}
                   </div>
 
-                  {/* Inline Error Message */}
                   {inlineError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
                       <span className="text-red-600 text-sm font-medium">⚠️</span>
@@ -448,7 +672,11 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                   </Button>
 
                   <button
-                    onClick={() => setStep('phone')}
+                    onClick={() => {
+                      setStep('phone');
+                      setOtp(['', '', '', '', '', '']);
+                      setInlineError('');
+                    }}
                     className="w-full text-gray-600 hover:text-gray-900 text-sm font-medium"
                     disabled={loading}
                   >
@@ -457,7 +685,69 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                 </motion.div>
               )}
 
-              {/* Name & Email Input Step */}
+              {/* Create PIN Step */}
+              {step === 'createPin' && (
+                <motion.div
+                  key="createPin"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-6"
+                >
+                  <div className="flex gap-3 justify-center">
+                    {pin.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => (pinInputRefs.current[index] = el)}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => {
+                          handlePinChange(index, e.target.value);
+                          setInlineError('');
+                        }}
+                        onKeyDown={(e) => handlePinKeyDown(index, e)}
+                        className="w-14 h-16 text-center text-2xl font-bold border-2 border-gray-300 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                        disabled={loading}
+                      />
+                    ))}
+                  </div>
+
+                  <p className="text-center text-gray-500 text-sm">
+                    This PIN will be used for quick login next time
+                  </p>
+
+                  {inlineError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <span className="text-red-600 text-sm font-medium">⚠️</span>
+                      <p className="text-red-700 text-sm flex-1">{inlineError}</p>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleCreatePin}
+                    disabled={loading || pin.join('').length !== 4}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white py-6 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Setting PIN...
+                      </>
+                    ) : isExistingUser ? (
+                      'Set PIN & Login'
+                    ) : (
+                      <>
+                        Continue
+                        <ArrowRight className="w-5 h-5 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </motion.div>
+              )}
+
+              {/* Name & Email Input Step (New Users) */}
               {step === 'name' && (
                 <motion.div
                   key="name"
@@ -473,7 +763,7 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       value={name}
                       onChange={(e) => {
                         setName(e.target.value);
-                        setInlineError(''); // Clear error on input change
+                        setInlineError('');
                       }}
                       onKeyDown={(e) => e.key === 'Enter' && !loading && handleCreateAccount()}
                       className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
@@ -488,7 +778,7 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
-                        setInlineError(''); // Clear error on input change
+                        setInlineError('');
                       }}
                       onKeyDown={(e) => e.key === 'Enter' && !loading && handleCreateAccount()}
                       className="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
@@ -499,7 +789,6 @@ export function PhoneAuth({ onSuccess, onCancel, onSwitchToEmail }: PhoneAuthPro
                     </p>
                   </div>
 
-                  {/* Inline Error Message */}
                   {inlineError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
                       <span className="text-red-600 text-sm font-medium">⚠️</span>

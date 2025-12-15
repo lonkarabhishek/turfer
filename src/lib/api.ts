@@ -141,7 +141,7 @@ class AuthManager {
     }
   }
 
-  // Firebase Phone Auth - Signup with Firebase ID token
+  // Firebase Phone Auth - Signup with Firebase ID token (legacy - without PIN)
   async signupWithFirebase(name: string, phone: string, firebaseIdToken: string, email?: string): Promise<ApiResponse<LoginResponse>> {
     try {
       console.log('📝 Signing up with Firebase token');
@@ -160,6 +160,103 @@ class AuthManager {
       return data;
     } catch (error: any) {
       console.error('❌ Firebase signup failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Check if phone number exists and has PIN set
+  async checkPhone(phone: string): Promise<ApiResponse<{ exists: boolean; hasPin: boolean }>> {
+    try {
+      const normalizedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      console.log('📱 Checking phone:', normalizedPhone);
+
+      const response = await fetch(`${API_BASE_URL}/auth/check-phone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalizedPhone })
+      });
+
+      return response.json();
+    } catch (error: any) {
+      console.error('❌ Check phone failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // PIN-based login for existing users
+  async loginWithPin(phone: string, pin: string): Promise<ApiResponse<LoginResponse & { attemptsRemaining?: number; lockedUntil?: string }>> {
+    try {
+      const normalizedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      console.log('🔐 Logging in with PIN');
+
+      const response = await fetch(`${API_BASE_URL}/auth/verify-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalizedPhone, pin })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        this.setAuth(data.data.token, data.data.user);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('❌ PIN login failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Set or reset PIN after OTP verification
+  async setPin(firebaseIdToken: string, pin: string): Promise<ApiResponse<LoginResponse>> {
+    try {
+      console.log('🔑 Setting PIN');
+
+      const response = await fetch(`${API_BASE_URL}/auth/set-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firebaseIdToken, pin })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        this.setAuth(data.data.token, data.data.user);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('❌ Set PIN failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Firebase Phone Auth - Signup with Firebase ID token AND PIN
+  async signupWithFirebaseAndPin(
+    name: string,
+    phone: string,
+    firebaseIdToken: string,
+    pin: string,
+    email?: string
+  ): Promise<ApiResponse<LoginResponse>> {
+    try {
+      console.log('📝 Signing up with Firebase token and PIN');
+      const response = await fetch(`${API_BASE_URL}/auth/firebase-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone, firebaseIdToken, pin, email })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        this.setAuth(data.data.token, data.data.user);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('❌ Firebase signup with PIN failed:', error);
       return { success: false, error: error.message };
     }
   }

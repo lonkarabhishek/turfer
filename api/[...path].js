@@ -3,6 +3,7 @@ const url = require('url');
 
 // Import API handlers from lib/api-handlers with error handling
 let loginHandler, registerHandler, firebaseLoginHandler, firebaseSignupHandler;
+let checkPhoneHandler, verifyPinHandler, setPinHandler;
 let turfsHandler, gamesHandler, bookingsUserHandler, sitemapHandler;
 
 try {
@@ -10,6 +11,9 @@ try {
   registerHandler = require('../lib/api-handlers/auth/register.cjs');
   firebaseLoginHandler = require('../lib/api-handlers/auth/firebase-login.cjs');
   firebaseSignupHandler = require('../lib/api-handlers/auth/firebase-signup.cjs');
+  checkPhoneHandler = require('../lib/api-handlers/auth/check-phone.cjs');
+  verifyPinHandler = require('../lib/api-handlers/auth/verify-pin.cjs');
+  setPinHandler = require('../lib/api-handlers/auth/set-pin.cjs');
   turfsHandler = require('../lib/api-handlers/turfs/index.cjs');
   gamesHandler = require('../lib/api-handlers/games/index.cjs');
   bookingsUserHandler = require('../lib/api-handlers/bookings/user/[userId].cjs');
@@ -29,6 +33,9 @@ try {
   registerHandler = registerHandler || errorHandler;
   firebaseLoginHandler = firebaseLoginHandler || errorHandler;
   firebaseSignupHandler = firebaseSignupHandler || errorHandler;
+  checkPhoneHandler = checkPhoneHandler || errorHandler;
+  verifyPinHandler = verifyPinHandler || errorHandler;
+  setPinHandler = setPinHandler || errorHandler;
   turfsHandler = turfsHandler || errorHandler;
   gamesHandler = gamesHandler || errorHandler;
   bookingsUserHandler = bookingsUserHandler || errorHandler;
@@ -40,6 +47,9 @@ const routes = {
   '/api/auth/register': registerHandler,
   '/api/auth/firebase-login': firebaseLoginHandler,
   '/api/auth/firebase-signup': firebaseSignupHandler,
+  '/api/auth/check-phone': checkPhoneHandler,
+  '/api/auth/verify-pin': verifyPinHandler,
+  '/api/auth/set-pin': setPinHandler,
   '/api/turfs': turfsHandler,
   '/api/turfs/index': turfsHandler,
   '/api/games': gamesHandler,
