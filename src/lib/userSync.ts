@@ -19,12 +19,37 @@ export interface UserProfile {
 export async function ensureUserExists(): Promise<{ success: boolean; error?: string; user?: UserProfile }> {
   try {
     console.log('🔄 Ensuring user exists in users table...');
-    
-    // Get current authenticated user
+
+    // First check for our custom JWT auth (phone/PIN users)
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser.id) {
+          console.log('✅ User already authenticated via phone/PIN:', parsedUser.name);
+          // Phone/PIN users are already in the users table (created during signup)
+          return {
+            success: true,
+            user: {
+              id: parsedUser.id,
+              name: parsedUser.name,
+              email: parsedUser.email,
+              phone: parsedUser.phone,
+              role: parsedUser.role || 'user',
+              profile_image_url: parsedUser.profile_image_url
+            }
+          };
+        }
+      } catch (e) {
+        console.log('Could not parse stored user, trying Supabase Auth...');
+      }
+    }
+
+    // Fall back to Supabase Auth (for email/password or OAuth users)
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !authUser) {
-      console.log('❌ No authenticated user found');
+      console.log('❌ No authenticated user found (neither custom JWT nor Supabase Auth)');
       return { success: false, error: 'Not authenticated' };
     }
 
