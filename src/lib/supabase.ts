@@ -17,6 +17,42 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Helper to get current user from either custom JWT auth or Supabase Auth
+export async function getCurrentUser(): Promise<{ id: string; email?: string; name?: string; phone?: string } | null> {
+  // First check for custom JWT auth (phone/PIN users)
+  const authToken = localStorage.getItem('auth_token');
+  const storedUser = localStorage.getItem('user');
+
+  if (authToken && storedUser) {
+    try {
+      const parsedUser = JSON.parse(storedUser);
+      if (parsedUser.id) {
+        return {
+          id: parsedUser.id,
+          email: parsedUser.email,
+          name: parsedUser.name,
+          phone: parsedUser.phone
+        };
+      }
+    } catch (e) {
+      console.error('Error parsing stored user:', e);
+    }
+  }
+
+  // Fall back to Supabase Auth
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    return {
+      id: user.id,
+      email: user.email || undefined,
+      name: user.user_metadata?.name,
+      phone: user.user_metadata?.phone
+    };
+  }
+
+  return null;
+}
+
 // Profile photo helper functions
 export const profilePhotoHelpers = {
   // Upload profile photo
@@ -141,8 +177,8 @@ export const gameHelpers = {
     turfBooked?: boolean;
   }) {
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      // Get current user (supports both phone/PIN auth and Supabase Auth)
+      const user = await getCurrentUser();
       if (!user) {
         throw new Error('User not authenticated');
       }
@@ -267,9 +303,9 @@ export const gameHelpers = {
             end_time: gameData.endTime,
             price_per_player: gameData.costPerPerson,
             status: 'open',
-            host_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-            host_phone: user.user_metadata?.phone || user.phone || '9999999999',
-            host_profile_image_url: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || '',
+            host_name: user.name || user.email?.split('@')[0] || 'User',
+            host_phone: user.phone || '9999999999',
+            host_profile_image_url: '',
             turf_booked: gameData.turfBooked || false
           }
         ])
@@ -306,9 +342,8 @@ export const gameHelpers = {
             console.log('Current user details:', {
               id: user.id,
               email: user.email,
-              emailConfirmed: user.email_confirmed_at,
-              userMetadata: user.user_metadata,
-              appMetadata: user.app_metadata
+              name: user.name,
+              phone: user.phone
             });
 
             // Create a frontend-only game that still provides full functionality
@@ -348,17 +383,17 @@ export const gameHelpers = {
               end_time: gameData.endTime,
               price_per_player: gameData.costPerPerson,
               status: 'open',
-              host_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-              host_phone: user.user_metadata?.phone || user.phone || '9999999999',
-              host_profile_image_url: user.user_metadata?.profile_image_url || user.user_metadata?.avatar_url || '',
+              host_name: user.name || user.email?.split('@')[0] || 'User',
+              host_phone: user.phone || '9999999999',
+              host_profile_image_url: '',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
               // Add nested relations for compatibility
               turfs: turfInfo,
               users: {
                 id: user.id,
-                name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-                phone: user.user_metadata?.phone || null
+                name: user.name || user.email?.split('@')[0] || 'User',
+                phone: user.phone || null
               }
             };
 
