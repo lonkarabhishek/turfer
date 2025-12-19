@@ -495,12 +495,30 @@ export const gamesAPI = {
 
   async createGame(gameData: Record<string, unknown>): Promise<ApiResponse<unknown>> {
     try {
-      const { data, error } = await gameHelpers.createGame(gameData as any);
-      if (error) {
-        return { success: false, error };
+      // Use backend API for game creation (supports both phone/PIN and Supabase auth)
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        return { success: false, error: 'Not authenticated' };
       }
-      return { success: true, data };
+
+      const response = await fetch(`${API_BASE_URL}/games`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(gameData)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        return { success: false, error: result.error || 'Failed to create game' };
+      }
+
+      return { success: true, data: result.data };
     } catch (error: any) {
+      console.error('Create game error:', error);
       return { success: false, error: error.message };
     }
   },
