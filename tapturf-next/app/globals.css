@@ -106,3 +106,13 @@ html {
 .animate-lightbox {
   animation: fadeInOverlay 0.2s ease-out;
 }
+
+/* Slide down animation (for toasts) */
+@keyframes slideDown {
+  from { opacity: 0; transform: translate(-50%, -16px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.animate-slide-down {
+  animation: slideDown 0.3s ease-out;
+}

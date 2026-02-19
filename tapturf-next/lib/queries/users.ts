@@ -1,9 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 import type { AppUser } from "@/types/user";
 
-const supabase = createClient();
-
 export async function getUserProfile(userId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("users")
     .select("id, name, email, phone, role, profile_image_url")
@@ -14,6 +13,7 @@ export async function getUserProfile(userId: string) {
 }
 
 export async function updateUserProfile(userId: string, updates: Partial<Pick<AppUser, "name" | "phone" | "profile_image_url">>) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("users")
     .update(updates)
@@ -25,6 +25,7 @@ export async function updateUserProfile(userId: string, updates: Partial<Pick<Ap
 }
 
 export async function searchTurfs(query?: string) {
+  const supabase = createClient();
   let q = supabase
     .from("turfs")
     .select("id, name, address")

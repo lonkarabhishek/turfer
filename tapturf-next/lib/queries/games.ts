@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
-const supabase = createClient();
-
 // ── Game CRUD ──────────────────────────────────────────
 
 export async function getAvailableGames(filters?: {
@@ -10,6 +8,7 @@ export async function getAvailableGames(filters?: {
   skillLevel?: string;
   date?: string;
 }) {
+  const supabase = createClient();
   let query = supabase
     .from("games")
     .select("*")
@@ -48,6 +47,7 @@ export async function getAvailableGames(filters?: {
 }
 
 export async function getGameById(gameId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("games")
     .select("*")
@@ -70,6 +70,7 @@ export async function getGameById(gameId: string) {
 }
 
 export async function getUserGames(userId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("games")
     .select("*")
@@ -99,6 +100,7 @@ export async function getUserGames(userId: string) {
 }
 
 export async function getUserJoinedGames(userId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("game_participants")
     .select("game_id")
@@ -117,6 +119,7 @@ export async function getUserJoinedGames(userId: string) {
 }
 
 export async function createGame(gameData: CreateGameData, user: { id: string; name: string; phone?: string; profile_image_url?: string }) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("games")
     .insert([{
@@ -138,8 +141,8 @@ export async function createGame(gameData: CreateGameData, user: { id: string; n
       turf_booked: gameData.turfBooked || false,
       status: "open",
       host_name: user.name,
-      host_phone: user.phone || "",
-      host_profile_image_url: user.profile_image_url || "",
+      host_phone: user.phone || null,
+      host_profile_image_url: user.profile_image_url || null,
     }])
     .select()
     .single();
@@ -148,16 +151,20 @@ export async function createGame(gameData: CreateGameData, user: { id: string; n
 
   // Add creator as first participant
   if (data) {
-    await supabase.from("game_participants").insert([{
+    const { error: participantError } = await supabase.from("game_participants").insert([{
       game_id: data.id,
       user_id: user.id,
     }]);
+    if (participantError) {
+      console.error("Failed to add creator as participant:", participantError.message);
+    }
   }
 
   return { data: data as Game, error: null };
 }
 
 export async function deleteGame(gameId: string, userId: string) {
+  const supabase = createClient();
   // Delete in order: notifications, requests, participants, game
   await supabase.from("notifications").delete().eq("metadata->>gameId", gameId);
   await supabase.from("game_requests").delete().eq("game_id", gameId);
@@ -175,6 +182,7 @@ export async function deleteGame(gameId: string, userId: string) {
 // ── Game Requests ──────────────────────────────────────
 
 export async function sendJoinRequest(gameId: string, userId: string, note?: string, requesterName?: string) {
+  const supabase = createClient();
   // Check for existing request
   const { data: existing } = await supabase
     .from("game_requests")
@@ -226,6 +234,7 @@ export async function sendJoinRequest(gameId: string, userId: string, note?: str
 }
 
 export async function getGameRequests(gameId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("game_requests")
     .select("*")
@@ -236,6 +245,7 @@ export async function getGameRequests(gameId: string) {
 }
 
 export async function getMyRequests(userId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("game_requests")
     .select("*")
@@ -246,6 +256,7 @@ export async function getMyRequests(userId: string) {
 }
 
 export async function acceptRequest(requestId: string, gameId: string, userId: string) {
+  const supabase = createClient();
   const { data: updatedRequest, error } = await supabase
     .from("game_requests")
     .update({ status: "accepted" })
@@ -289,6 +300,7 @@ export async function acceptRequest(requestId: string, gameId: string, userId: s
 }
 
 export async function declineRequest(requestId: string, gameId: string) {
+  const supabase = createClient();
   const { data: updatedRequest, error } = await supabase
     .from("game_requests")
     .update({ status: "declined" })
@@ -312,6 +324,7 @@ export async function declineRequest(requestId: string, gameId: string) {
 }
 
 export async function cancelMyRequest(requestId: string, userId: string) {
+  const supabase = createClient();
   const { error } = await supabase
     .from("game_requests")
     .delete()
@@ -323,6 +336,7 @@ export async function cancelMyRequest(requestId: string, userId: string) {
 }
 
 export async function getGameParticipants(gameId: string) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("game_participants")
     .select("*")

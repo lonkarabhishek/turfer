@@ -1,9 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/notification";
 
-const supabase = createClient();
-
 export async function getUserNotifications(userId: string, limit = 50) {
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("notifications")
     .select("*")
@@ -15,6 +14,7 @@ export async function getUserNotifications(userId: string, limit = 50) {
 }
 
 export async function getUnreadCount(userId: string) {
+  const supabase = createClient();
   const { count, error } = await supabase
     .from("notifications")
     .select("id", { count: "exact", head: true })
@@ -25,6 +25,7 @@ export async function getUnreadCount(userId: string) {
 }
 
 export async function markAsRead(notificationId: string) {
+  const supabase = createClient();
   const { error } = await supabase
     .from("notifications")
     .update({ is_read: true })
@@ -34,6 +35,7 @@ export async function markAsRead(notificationId: string) {
 }
 
 export async function markAllAsRead(userId: string) {
+  const supabase = createClient();
   const { error } = await supabase
     .from("notifications")
     .update({ is_read: true })
@@ -50,6 +52,7 @@ export async function createNotification(data: {
   message: string;
   metadata?: Record<string, unknown>;
 }) {
+  const supabase = createClient();
   const { data: notif, error } = await supabase
     .from("notifications")
     .insert([{

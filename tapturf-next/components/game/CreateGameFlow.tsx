@@ -9,13 +9,13 @@ import { searchTurfs } from "@/lib/queries/users";
 import type { CreateGameData } from "@/types/game";
 
 const SPORT_OPTIONS = [
-  { name: "Football", icon: "⚽", defaultMax: 14, defaultFormat: "7v7" },
-  { name: "5v5 Football", icon: "⚽", defaultMax: 10, defaultFormat: "5v5" },
-  { name: "Cricket", icon: "🏏", defaultMax: 22, defaultFormat: "Full" },
-  { name: "Box Cricket", icon: "🏏", defaultMax: 12, defaultFormat: "6v6" },
-  { name: "Basketball", icon: "🏀", defaultMax: 10, defaultFormat: "5v5" },
-  { name: "Tennis", icon: "🎾", defaultMax: 4, defaultFormat: "Doubles" },
-  { name: "Pickleball", icon: "🏓", defaultMax: 4, defaultFormat: "Doubles" },
+  { name: "Football", icon: "\u26bd", defaultMax: 14, defaultFormat: "7v7" },
+  { name: "5v5 Football", icon: "\u26bd", defaultMax: 10, defaultFormat: "5v5" },
+  { name: "Cricket", icon: "\ud83c\udfd0", defaultMax: 22, defaultFormat: "Full" },
+  { name: "Box Cricket", icon: "\ud83c\udfd0", defaultMax: 12, defaultFormat: "6v6" },
+  { name: "Basketball", icon: "\ud83c\udfc0", defaultMax: 10, defaultFormat: "5v5" },
+  { name: "Tennis", icon: "\ud83c\udfbe", defaultMax: 4, defaultFormat: "Doubles" },
+  { name: "Pickleball", icon: "\ud83c\udfd3", defaultMax: 4, defaultFormat: "Doubles" },
 ];
 
 const SKILL_LEVELS = [
@@ -32,6 +32,7 @@ export function CreateGameFlow() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [createdGameId, setCreatedGameId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -53,13 +54,12 @@ export function CreateGameFlow() {
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
 
-  // Redirect if not logged in
+  // Show login modal if not logged in (don't redirect away)
   useEffect(() => {
     if (!authLoading && !user) {
       login();
-      router.push("/games");
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, login]);
 
   // Search turfs
   useEffect(() => {
@@ -86,7 +86,12 @@ export function CreateGameFlow() {
   };
 
   const handleSubmit = async () => {
-    if (!user) return;
+    if (!user) {
+      login();
+      return;
+    }
+
+    setSubmitError("");
     setSubmitting(true);
 
     const gameData: CreateGameData = {
@@ -116,6 +121,8 @@ export function CreateGameFlow() {
     if (data && !error) {
       setCreatedGameId(data.id);
       setStep(4);
+    } else {
+      setSubmitError(error || "Failed to create game. Please try again.");
     }
   };
 
@@ -134,10 +141,24 @@ export function CreateGameFlow() {
     }
   };
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
         <p className="text-sm text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16 text-center">
+        <p className="text-sm text-gray-500">Please log in to create a game.</p>
+        <button
+          onClick={login}
+          className="mt-4 bg-gray-900 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-gray-800 transition-colors"
+        >
+          Log in
+        </button>
       </div>
     );
   }
@@ -376,10 +397,16 @@ export function CreateGameFlow() {
             </div>
           </div>
 
+          {submitError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-sm text-red-700">{submitError}</p>
+            </div>
+          )}
+
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full mt-8 bg-accent-500 hover:bg-accent-600 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+            className="w-full mt-6 bg-accent-500 hover:bg-accent-600 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
           >
             {submitting ? "Creating game..." : "Create Game"}
           </button>

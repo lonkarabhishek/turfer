@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { createServerClient } from "@/lib/supabase/server";
+import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createServerClient();

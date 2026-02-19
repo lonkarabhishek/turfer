@@ -18,6 +18,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [timer, setTimer] = useState(0);
+  const [successName, setSuccessName] = useState("");
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const recaptchaRef = useRef<ReturnType<typeof phoneAuthHelpers.setupRecaptcha> | null>(null);
@@ -89,6 +90,15 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     }
   };
 
+  const finishLogin = (userName: string) => {
+    setSuccessName(userName);
+    // Brief delay to show success before closing
+    setTimeout(() => {
+      refreshUser();
+      onSuccess?.();
+    }, 800);
+  };
+
   const verifyOTP = async (otpCode: string) => {
     if (!confirmationResult) return;
 
@@ -105,7 +115,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         // Check if user already exists
         const { data: existingUser } = await supabase
           .from("users")
-          .select("id, name")
+          .select("id, name, phone, email, role, profile_image_url")
           .eq("phone", formattedPhone)
           .maybeSingle();
 
@@ -116,9 +126,11 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
             id: existingUser.id,
             name: existingUser.name,
             phone: formattedPhone,
+            email: existingUser.email,
+            role: existingUser.role || "player",
+            profile_image_url: existingUser.profile_image_url,
           }));
-          await refreshUser();
-          onSuccess?.();
+          finishLogin(existingUser.name?.split(" ")[0] || "");
         } else {
           // New user — ask for name
           setStep("name");
@@ -174,8 +186,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         role: "player",
       }));
 
-      await refreshUser();
-      onSuccess?.();
+      finishLogin(newUser.name?.split(" ")[0] || "");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -188,6 +199,21 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setError("");
     await handleSendOTP();
   };
+
+  // Success state
+  if (successName !== undefined && successName !== "") {
+    return (
+      <div className="text-center py-6">
+        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </div>
+        <p className="text-lg font-semibold text-gray-900">Welcome, {successName}!</p>
+        <p className="text-sm text-gray-500 mt-1">You&apos;re all set.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

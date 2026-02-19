@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase/server";
+import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { convertGoogleDriveUrl, convertImageUrls } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
 
