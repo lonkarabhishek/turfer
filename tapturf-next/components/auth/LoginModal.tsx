@@ -12,20 +12,27 @@ export function LoginModal() {
   const { showLoginModal, setShowLoginModal } = useAuth();
   const [tab, setTab] = useState<Tab>("phone");
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState("");
 
   if (!showLoginModal) return null;
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
+    setGoogleError("");
     try {
       const supabase = createClient();
-      await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/api/auth/callback`,
         },
       });
+      if (error) {
+        setGoogleError(error.message || "Google sign-in failed. Try again.");
+        setGoogleLoading(false);
+      }
     } catch {
+      setGoogleError("Something went wrong. Please try again.");
       setGoogleLoading(false);
     }
   };
@@ -128,6 +135,10 @@ export function LoginModal() {
                   {googleLoading ? "Redirecting..." : "Continue with Google"}
                 </span>
               </button>
+
+              {googleError && (
+                <p className="text-sm text-red-600 text-center">{googleError}</p>
+              )}
             </div>
           )}
 

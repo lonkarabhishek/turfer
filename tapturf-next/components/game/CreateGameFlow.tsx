@@ -1,21 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, MapPin, Search, Share2, Copy, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, MapPin, Search, Share2, Copy, Trophy, Clock, Calendar } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
 import { searchTurfs } from "@/lib/queries/users";
 import type { CreateGameData } from "@/types/game";
 
 const SPORT_OPTIONS = [
-  { name: "Football", icon: "\u26bd", defaultMax: 14, defaultFormat: "7v7" },
-  { name: "5v5 Football", icon: "\u26bd", defaultMax: 10, defaultFormat: "5v5" },
-  { name: "Cricket", icon: "\ud83c\udfd0", defaultMax: 22, defaultFormat: "Full" },
-  { name: "Box Cricket", icon: "\ud83c\udfd0", defaultMax: 12, defaultFormat: "6v6" },
-  { name: "Basketball", icon: "\ud83c\udfc0", defaultMax: 10, defaultFormat: "5v5" },
-  { name: "Tennis", icon: "\ud83c\udfbe", defaultMax: 4, defaultFormat: "Doubles" },
-  { name: "Pickleball", icon: "\ud83c\udfd3", defaultMax: 4, defaultFormat: "Doubles" },
+  { name: "Football", icon: "\u26bd", defaultMax: 14 },
+  { name: "5v5 Football", icon: "\u26bd", defaultMax: 10 },
+  { name: "Cricket", icon: "\ud83c\udfd0", defaultMax: 22 },
+  { name: "Box Cricket", icon: "\ud83c\udfd0", defaultMax: 12 },
+  { name: "Basketball", icon: "\ud83c\udfc0", defaultMax: 10 },
+  { name: "Tennis", icon: "\ud83c\udfbe", defaultMax: 4 },
+  { name: "Pickleball", icon: "\ud83c\udfd3", defaultMax: 4 },
+  { name: "Badminton", icon: "\ud83c\udff8", defaultMax: 4 },
 ];
 
 const SKILL_LEVELS = [
@@ -27,6 +28,22 @@ const SKILL_LEVELS = [
 
 type Step = 1 | 2 | 3 | 4;
 
+function formatSlotLabel(hour: number, min: number): string {
+  const h = hour % 12 || 12;
+  const ampm = hour < 12 ? "AM" : "PM";
+  return `${h}:${min.toString().padStart(2, "0")} ${ampm}`;
+}
+
+function formatTimeValue(hour: number, min: number): string {
+  return `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+}
+
+function addHour(timeStr: string): string {
+  const [h, m] = timeStr.split(":").map(Number);
+  const newH = Math.min(h + 1, 23);
+  return formatTimeValue(newH, m);
+}
+
 export function CreateGameFlow() {
   const { user, login, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -35,10 +52,10 @@ export function CreateGameFlow() {
   const [submitError, setSubmitError] = useState("");
   const [createdGameId, setCreatedGameId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [hasTriggeredLogin, setHasTriggeredLogin] = useState(false);
 
   // Form state
   const [sport, setSport] = useState("");
-  const [format, setFormat] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(10);
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -53,13 +70,15 @@ export function CreateGameFlow() {
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
+  const [isToday, setIsToday] = useState(true);
 
-  // Show login modal if not logged in (don't redirect away)
+  // Show login modal once if not logged in
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !hasTriggeredLogin) {
+      setHasTriggeredLogin(true);
       login();
     }
-  }, [authLoading, user, login]);
+  }, [authLoading, user, login, hasTriggeredLogin]);
 
   // Search turfs
   useEffect(() => {
@@ -76,13 +95,99 @@ export function CreateGameFlow() {
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     setDate(today);
+    setIsToday(true);
+  }, []);
+
+  // Auto-set end time when start time is selected (+1 hour)
+  useEffect(() => {
+    if (startTime) {
+      setEndTime(addHour(startTime));
+    }
+  }, [startTime]);
+
+  // Generate time slots — next 6 hours in 30-min gaps
+  const timeSlots = useMemo(() => {
+    const slots: { label: string; value: string }[] = [];
+    const now = new Date();
+
+    let startHour: number;
+    let startMin: number;
+
+    if (isToday) {
+      // Round up to the next 30-min slot
+      const currentMin = now.getMinutes();
+      startHour = now.getHours();
+      if (currentMin < 30) {
+        startMin = 30;
+      } else {
+        startMin = 0;
+        startHour += 1;
+      }
+    } else {
+      // For future dates, show from 6:00 AM
+      startHour = 6;
+      startMin = 0;
+    }
+
+    const maxSlots = isToday ? 12 : 34; // 6 hours (12 slots) for today, 6AM-11PM for future
+    const endHourLimit = isToday ? startHour + 6 : 23;
+
+    let h = startHour;
+    let m = startMin;
+    let count = 0;
+
+    while (count < maxSlots && h <= endHourLimit) {
+      if (h > 23) break;
+      slots.push({
+        label: formatSlotLabel(h, m),
+        value: formatTimeValue(h, m),
+      });
+      count++;
+      m += 30;
+      if (m >= 60) {
+        m = 0;
+        h += 1;
+      }
+    }
+
+    return slots;
+  }, [isToday]);
+
+  // Date options — today + next 6 days
+  const dateOptions = useMemo(() => {
+    const options: { label: string; sublabel: string; value: string; isToday: boolean }[] = [];
+    const now = new Date();
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      const value = d.toISOString().split("T")[0];
+      const dayName = d.toLocaleDateString("en-IN", { weekday: "short" });
+      const dateNum = d.getDate();
+      const month = d.toLocaleDateString("en-IN", { month: "short" });
+
+      options.push({
+        label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayName,
+        sublabel: `${dateNum} ${month}`,
+        value,
+        isToday: i === 0,
+      });
+    }
+
+    return options;
   }, []);
 
   const handleSportSelect = (s: typeof SPORT_OPTIONS[0]) => {
     setSport(s.name);
-    setFormat(s.defaultFormat);
     setMaxPlayers(s.defaultMax);
     setStep(2);
+  };
+
+  const handleDateSelect = (dateValue: string, today: boolean) => {
+    setDate(dateValue);
+    setIsToday(today);
+    setStartTime("");
+    setEndTime("");
   };
 
   const handleSubmit = async () => {
@@ -100,7 +205,7 @@ export function CreateGameFlow() {
       startTime,
       endTime,
       sport,
-      format,
+      format: sport,
       skillLevel,
       maxPlayers,
       costPerPerson,
@@ -144,7 +249,8 @@ export function CreateGameFlow() {
   if (authLoading) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <p className="text-sm text-gray-500">Loading...</p>
+        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto" />
+        <p className="text-sm text-gray-500 mt-3">Loading...</p>
       </div>
     );
   }
@@ -152,19 +258,23 @@ export function CreateGameFlow() {
   if (!user) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <p className="text-sm text-gray-500">Please log in to create a game.</p>
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Trophy className="w-7 h-7 text-gray-400" />
+        </div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Log in to create a game</h2>
+        <p className="text-sm text-gray-500 mb-6">You need an account to host games on TapTurf</p>
         <button
           onClick={login}
-          className="mt-4 bg-gray-900 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-gray-800 transition-colors"
+          className="bg-gray-900 text-white px-8 py-3 rounded-xl font-semibold text-sm hover:bg-gray-800 transition-colors"
         >
-          Log in
+          Log in or sign up
         </button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 sm:px-6 py-6">
+    <div className="max-w-lg mx-auto px-4 sm:px-6 py-6 pb-24">
       {/* Progress bar */}
       <div className="flex items-center gap-2 mb-6">
         {[1, 2, 3, 4].map((s) => (
@@ -194,14 +304,14 @@ export function CreateGameFlow() {
               <button
                 key={s.name}
                 onClick={() => handleSportSelect(s)}
-                className={`flex items-center gap-3 p-4 border rounded-2xl text-left transition-all hover:shadow-md ${
+                className={`flex items-center gap-3 p-4 border rounded-2xl text-left transition-all hover:shadow-md active:scale-[0.98] ${
                   sport === s.name ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-400"
                 }`}
               >
                 <span className="text-2xl">{s.icon}</span>
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{s.name}</p>
-                  <p className="text-xs text-gray-500">{s.defaultFormat} · {s.defaultMax} players</p>
+                  <p className="text-xs text-gray-500">{s.defaultMax} players</p>
                 </div>
               </button>
             ))}
@@ -213,48 +323,102 @@ export function CreateGameFlow() {
       {step === 2 && (
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">When & where</h1>
-          <p className="text-sm text-gray-500 mb-6">Set the date, time, and venue</p>
+          <p className="text-sm text-gray-500 mb-6">Pick a time slot and venue</p>
 
-          <div className="space-y-5">
-            {/* Date */}
+          <div className="space-y-6">
+            {/* Date pills */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Date</label>
-              <input
-                type="date"
-                value={date}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
+              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2.5">
+                <Calendar className="w-4 h-4" />
+                Date
+              </label>
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                {dateOptions.map((d) => (
+                  <button
+                    key={d.value}
+                    onClick={() => handleDateSelect(d.value, d.isToday)}
+                    className={`flex-shrink-0 px-4 py-2.5 rounded-xl border text-center transition-all active:scale-[0.97] ${
+                      date === d.value
+                        ? "bg-gray-900 text-white border-gray-900"
+                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    <p className={`text-xs font-semibold ${date === d.value ? "text-white" : "text-gray-900"}`}>{d.label}</p>
+                    <p className={`text-[10px] mt-0.5 ${date === d.value ? "text-gray-300" : "text-gray-500"}`}>{d.sublabel}</p>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Time */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Start time</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">End time</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
+            {/* Start time slots */}
+            <div>
+              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2.5">
+                <Clock className="w-4 h-4" />
+                Start time
+              </label>
+              {timeSlots.length === 0 ? (
+                <p className="text-sm text-gray-400 py-3">No slots available for today. Try tomorrow!</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {timeSlots.map((slot) => (
+                    <button
+                      key={slot.value}
+                      onClick={() => setStartTime(slot.value)}
+                      className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-all active:scale-[0.97] ${
+                        startTime === slot.value
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                      }`}
+                    >
+                      {slot.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* End time (auto-filled, editable) */}
+            {startTime && (
+              <div className="animate-fade-in">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  End time
+                </label>
+                <div className="flex gap-2">
+                  {[0.5, 1, 1.5, 2].map((hours) => {
+                    const [h, m] = startTime.split(":").map(Number);
+                    const totalMin = h * 60 + m + hours * 60;
+                    const endH = Math.floor(totalMin / 60);
+                    const endM = totalMin % 60;
+                    if (endH > 23) return null;
+                    const val = formatTimeValue(endH, endM);
+                    const label = hours === 0.5 ? "30 min" : hours === 1 ? "1 hr" : hours === 1.5 ? "1.5 hr" : "2 hr";
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => setEndTime(val)}
+                        className={`flex-1 py-2.5 rounded-xl border text-center transition-all active:scale-[0.97] ${
+                          endTime === val
+                            ? "bg-gray-900 text-white border-gray-900"
+                            : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                        }`}
+                      >
+                        <p className={`text-sm font-semibold ${endTime === val ? "text-white" : "text-gray-900"}`}>{label}</p>
+                        <p className={`text-[10px] mt-0.5 ${endTime === val ? "text-gray-300" : "text-gray-500"}`}>{formatSlotLabel(endH, endM)}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Turf search */}
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Venue</label>
+              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
+                <MapPin className="w-4 h-4" />
+                Venue
+              </label>
               {turfId ? (
-                <div className="flex items-center justify-between border border-gray-900 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between border border-gray-900 rounded-xl px-4 py-3 bg-gray-50">
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-primary-500" />
                     <span className="text-sm font-medium text-gray-900">{turfName}</span>
@@ -292,26 +456,6 @@ export function CreateGameFlow() {
                 </div>
               )}
             </div>
-
-            {/* Skill level */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Skill level</label>
-              <div className="flex gap-2 flex-wrap">
-                {SKILL_LEVELS.map((level) => (
-                  <button
-                    key={level.value}
-                    onClick={() => setSkillLevel(level.value)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
-                      skillLevel === level.value
-                        ? "bg-gray-900 text-white border-gray-900"
-                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
-                    }`}
-                  >
-                    {level.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           <button
@@ -325,63 +469,120 @@ export function CreateGameFlow() {
         </div>
       )}
 
-      {/* Step 3: Details */}
+      {/* Step 3: Details & Confirm */}
       {step === 3 && (
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Game details</h1>
-          <p className="text-sm text-gray-500 mb-6">Set players, cost, and other details</p>
+          <p className="text-sm text-gray-500 mb-6">Set players, cost, and create your game</p>
 
           <div className="space-y-5">
+            {/* Summary card */}
+            <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Sport</span>
+                <span className="text-sm font-semibold text-gray-900">{sport}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Date</span>
+                <span className="text-sm font-semibold text-gray-900">{new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Time</span>
+                <span className="text-sm font-semibold text-gray-900">
+                  {(() => {
+                    const [sh, sm] = startTime.split(":").map(Number);
+                    const [eh, em] = endTime.split(":").map(Number);
+                    return `${formatSlotLabel(sh, sm)} - ${formatSlotLabel(eh, em)}`;
+                  })()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Venue</span>
+                <span className="text-sm font-semibold text-gray-900 text-right max-w-[60%] truncate">{turfName}</span>
+              </div>
+            </div>
+
+            {/* Skill level */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Skill level</label>
+              <div className="flex gap-2 flex-wrap">
+                {SKILL_LEVELS.map((level) => (
+                  <button
+                    key={level.value}
+                    onClick={() => setSkillLevel(level.value)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors active:scale-[0.97] ${
+                      skillLevel === level.value
+                        ? "bg-gray-900 text-white border-gray-900"
+                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    {level.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Max players */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Max players</label>
-              <input
-                type="number"
-                min={2}
-                max={50}
-                value={maxPlayers}
-                onChange={(e) => setMaxPlayers(parseInt(e.target.value) || 2)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
+                  className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-xl text-lg font-medium hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                  -
+                </button>
+                <span className="text-lg font-bold text-gray-900 w-8 text-center">{maxPlayers}</span>
+                <button
+                  onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
+                  className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-xl text-lg font-medium hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             {/* Cost */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cost per person (₹)</label>
-              <input
-                type="number"
-                min={0}
-                step={50}
-                value={costPerPerson}
-                onChange={(e) => setCostPerPerson(parseInt(e.target.value) || 0)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cost per person</label>
+              <div className="flex gap-2 flex-wrap">
+                {[0, 50, 100, 150, 200, 300].map((price) => (
+                  <button
+                    key={price}
+                    onClick={() => setCostPerPerson(price)}
+                    className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors active:scale-[0.97] ${
+                      costPerPerson === price
+                        ? "bg-gray-900 text-white border-gray-900"
+                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    {price === 0 ? "Free" : `₹${price}`}
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min={0}
+                  step={50}
+                  value={costPerPerson}
+                  onChange={(e) => setCostPerPerson(parseInt(e.target.value) || 0)}
+                  className="w-24 border border-gray-300 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="Custom"
+                />
+              </div>
             </div>
 
             {/* Turf booked */}
-            <div className="flex items-center justify-between py-3">
+            <div className="flex items-center justify-between py-2">
               <div>
-                <p className="text-sm font-medium text-gray-900">Turf booked?</p>
-                <p className="text-xs text-gray-500">Have you already booked the turf?</p>
+                <p className="text-sm font-medium text-gray-900">Turf already booked?</p>
+                <p className="text-xs text-gray-500">Let players know</p>
               </div>
               <button
                 onClick={() => setTurfBooked(!turfBooked)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${turfBooked ? "bg-gray-900" : "bg-gray-300"}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${turfBooked ? "bg-green-500" : "bg-gray-300"}`}
               >
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${turfBooked ? "translate-x-5" : ""}`} />
               </button>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description (optional)</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Tell players about this game..."
-                rows={3}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
-              />
             </div>
 
             {/* Notes */}
@@ -391,7 +592,7 @@ export function CreateGameFlow() {
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g., Bring your own shoes"
+                placeholder="e.g., Bring your own shoes, jersey colors..."
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
               />
             </div>
@@ -406,9 +607,16 @@ export function CreateGameFlow() {
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full mt-6 bg-accent-500 hover:bg-accent-600 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+            className="w-full mt-8 bg-accent-500 hover:bg-accent-600 text-white py-3.5 rounded-xl font-semibold text-base transition-colors disabled:opacity-50 active:scale-[0.98]"
           >
-            {submitting ? "Creating game..." : "Create Game"}
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Creating...
+              </span>
+            ) : (
+              "Create Game"
+            )}
           </button>
         </div>
       )}

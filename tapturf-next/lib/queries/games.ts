@@ -127,7 +127,6 @@ export async function createGame(gameData: CreateGameData, user: { id: string; n
       turf_id: gameData.turfId,
       title: `${gameData.sport} Game`,
       sport: gameData.sport,
-      format: gameData.format,
       skill_level: gameData.skillLevel,
       date: gameData.date,
       start_time: gameData.startTime,
@@ -135,14 +134,13 @@ export async function createGame(gameData: CreateGameData, user: { id: string; n
       max_players: gameData.maxPlayers,
       current_players: 1,
       price_per_player: gameData.costPerPerson,
-      description: gameData.description || null,
+      description: gameData.description || `${gameData.sport} game`,
       notes: gameData.notes || null,
-      is_private: gameData.isPrivate || false,
       turf_booked: gameData.turfBooked || false,
       status: "open",
       host_name: user.name,
-      host_phone: user.phone || null,
-      host_profile_image_url: user.profile_image_url || null,
+      host_phone: user.phone || "",
+      host_profile_image_url: user.profile_image_url || "",
     }])
     .select()
     .single();

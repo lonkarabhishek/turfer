@@ -199,7 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for Supabase auth changes (Google OAuth)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
+      // Handle both SIGNED_IN (after OAuth redirect) and TOKEN_REFRESHED
+      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
         const supaUser = session.user;
         const profile = await fetchUserProfile(supaUser.id);
 
@@ -255,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   const refreshUser = useCallback(async () => {
-    // Try localStorage first (phone auth users)
+    // 1. Try localStorage first (phone auth users)
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
@@ -264,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const profile = await fetchUserProfile(parsed.id);
           if (profile) {
             setUser(profile);
+            setLoading(false);
             return;
           }
           // If DB fetch failed, use stored data
@@ -275,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: parsed.role || "player",
             profile_image_url: parsed.profile_image_url,
           });
+          setLoading(false);
           return;
         }
       } catch {
@@ -282,12 +285,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Fall back to current user state
-    if (user) {
-      const profile = await fetchUserProfile(user.id);
-      if (profile) setUser(profile);
+    // 2. Try Supabase session (Google users)
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
+        if (profile) {
+          setUser(profile);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Ignore
     }
-  }, [user, fetchUserProfile]);
+
+    setLoading(false);
+  }, [fetchUserProfile, supabase]);
 
   return (
     <AuthContext.Provider value={{
