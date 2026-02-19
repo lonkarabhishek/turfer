@@ -38,8 +38,9 @@ export async function GET(request: Request) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        const separator = next.includes("?") ? "&" : "?";
-        return NextResponse.redirect(`${origin}${next}${separator}welcome=true`);
+        // Just redirect — no URL params. AuthProvider detects new sign-in
+        // via onAuthStateChange SIGNED_IN event.
+        return NextResponse.redirect(`${origin}${next}`);
       }
     }
 
@@ -47,6 +48,6 @@ export async function GET(request: Request) {
     console.error("[OAuth Callback] Error:", error?.message || "No user after exchange");
   }
 
-  // Auth error — redirect home with error flag
-  return NextResponse.redirect(`${origin}/?auth_error=true`);
+  // Auth error — redirect home (no URL params, AuthProvider handles gracefully)
+  return NextResponse.redirect(`${origin}/`);
 }

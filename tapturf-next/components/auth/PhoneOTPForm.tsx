@@ -161,9 +161,12 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       const formattedPhone = `+91${phone}`;
 
       // Create user in database
+      // Generate UUID since phone users aren't in auth.users
+      const userId = crypto.randomUUID();
       const { data: newUser, error: insertError } = await supabase
         .from("users")
         .insert([{
+          id: userId,
           name: name.trim(),
           phone: formattedPhone,
           role: "player",
@@ -172,6 +175,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         .single();
 
       if (insertError || !newUser) {
+        console.error("[PhoneOTP] Create user error:", insertError?.message, insertError?.details);
         setError("Could not create account. Please try again.");
         return;
       }

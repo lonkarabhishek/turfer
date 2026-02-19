@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { auth as firebaseAuth } from "@/lib/firebase/client";
 import type { AppUser } from "@/types/user";
@@ -52,16 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
-
-  // Shows full-screen loading overlay when returning from OAuth
-  const searchParams = useSearchParams();
-  const isWelcomeReturn = searchParams.get("welcome") === "true";
-  const isAuthError = searchParams.get("auth_error") === "true";
-  const [authReturning, setAuthReturning] = useState(isWelcomeReturn);
+  const [authReturning, setAuthReturning] = useState(false);
 
   const supabaseRef = useRef(createClient());
   const initDoneRef = useRef(false);
-  const router = useRouter();
+  const userSetRef = useRef(false); // tracks if we've set user at least once
 
   const supabase = supabaseRef.current;
 
@@ -122,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await fetchUserProfile(supaUser.id);
     if (profile) {
       setUser(profile);
+      userSetRef.current = true;
       if (shouldWelcome) showWelcome(profile.name?.split(" ")[0] || "");
       return;
     }
@@ -129,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const meta = buildUserFromSupabase(supaUser);
     const dbUser = await ensureUserInDB(meta);
     setUser(dbUser);
+    userSetRef.current = true;
     if (shouldWelcome) showWelcome(dbUser.name?.split(" ")[0] || "");
   }, [fetchUserProfile, ensureUserInDB, showWelcome]);
 
@@ -153,7 +149,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const parsed = JSON.parse(storedUser);
             if (parsed.id) {
-              // Try to get fresh profile from DB
               const profile = await fetchUserProfile(parsed.id);
               if (!cancelled) {
                 setUser(profile || {
@@ -164,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   role: (parsed.role || "player") as AppUser["role"],
                   profile_image_url: parsed.profile_image_url,
                 });
+                userSetRef.current = true;
               }
               initDoneRef.current = true;
               if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); setAuthReturning(false); }
@@ -176,41 +172,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Google OAuth (Supabase session)
-        // Try getUser() first (validates JWT server-side) — most secure
-        // Fall back to getSession() (reads from local cookie) if getUser fails
+        // Try getSession() first (fast, reads from local storage)
+        // Then validate with getUser() (network call, server-side JWT check)
         let supaUser = null;
+
         try {
-          const { data, error } = await supabase.auth.getUser();
-          if (data?.user && !error) {
-            supaUser = data.user;
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            supaUser = session.user;
+            // Show loading overlay since we have a session to resolve
+            if (!cancelled) setAuthReturning(true);
           }
         } catch {
-          console.warn("[AuthProvider] getUser() failed, trying getSession()");
+          // no session
         }
 
-        // Fallback: getSession() reads from local storage/cookie — no network call
-        if (!supaUser) {
+        // Validate with getUser() if we got a session
+        if (supaUser) {
           try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-              supaUser = session.user;
+            const { data, error } = await supabase.auth.getUser();
+            if (data?.user && !error) {
+              supaUser = data.user; // use the validated user
             }
+            // If getUser fails, still use the session user — better than nothing
           } catch {
-            console.warn("[AuthProvider] getSession() also failed");
+            console.warn("[AuthProvider] getUser() validation failed, using session user");
           }
         }
 
-        if (supaUser) {
-          if (!cancelled) await resolveSupabaseUser(supaUser, isWelcomeReturn);
-        }
-
-        // 3. Clean up URL params
-        if (isWelcomeReturn || isAuthError) {
-          const url = new URL(window.location.href);
-          url.searchParams.delete("welcome");
-          url.searchParams.delete("auth_error");
-          const cleanUrl = url.pathname + (url.search || "");
-          router.replace(cleanUrl, { scroll: false });
+        if (supaUser && !cancelled) {
+          await resolveSupabaseUser(supaUser, false);
         }
       } catch (err) {
         console.error("[AuthProvider] Init error:", err);
@@ -220,25 +211,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           clearTimeout(emergencyTimeout);
           setLoading(false);
-          // Small delay before removing overlay so welcome toast appears smoothly
-          if (isWelcomeReturn) {
-            setTimeout(() => setAuthReturning(false), 300);
-          } else {
-            setAuthReturning(false);
-          }
+          setAuthReturning(false);
         }
       }
     };
 
     init();
 
-    // ── Auth state change listener (handles OAuth redirect + token refresh) ──
+    // ── Auth state change listener ──
+    // Handles: OAuth redirect return (SIGNED_IN), token refresh, sign out
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "INITIAL_SESSION") {
-        // On page refresh, if init() hasn't found a user yet and there's a session,
-        // use it as a backup to ensure we don't lose the logged-in state
-        if (session?.user && !initDoneRef.current) {
+        // On page refresh, if init() hasn't set a user yet and there's a session,
+        // use it as backup to ensure we don't lose the logged-in state
+        if (session?.user && !userSetRef.current) {
           await resolveSupabaseUser(session.user, false);
           setLoading(false);
           setAuthReturning(false);
@@ -246,13 +233,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
-        await resolveSupabaseUser(session.user, event === "SIGNED_IN" && !initDoneRef.current);
+      if (event === "SIGNED_IN" && session?.user) {
+        // This fires after OAuth redirect when session is established
+        // Show welcome for new sign-ins (not just refreshes)
+        const isNewSignIn = !userSetRef.current;
+        setAuthReturning(true);
+        await resolveSupabaseUser(session.user, isNewSignIn);
         setShowLoginModal(false);
+        setLoading(false);
+        // Brief delay so the user sees the loading screen transition smoothly
+        setTimeout(() => setAuthReturning(false), 400);
+      } else if (event === "TOKEN_REFRESHED" && session?.user) {
+        await resolveSupabaseUser(session.user, false);
         setLoading(false);
         setAuthReturning(false);
       } else if (event === "SIGNED_OUT") {
         setUser(null);
+        userSetRef.current = false;
         setLoading(false);
         setAuthReturning(false);
       }
@@ -275,6 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await firebaseAuth.signOut(); } catch { /* ignore */ }
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
+    userSetRef.current = false;
   }, [supabase]);
 
   const refreshUser = useCallback(async () => {
@@ -296,9 +294,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 2. Google auth
     try {
-      const { data: { user: supaUser } } = await supabase.auth.getUser();
-      if (supaUser) {
-        const profile = await fetchUserProfile(supaUser.id);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
         if (profile) { setUser(profile); return; }
       }
     } catch { /* ignore */ }
