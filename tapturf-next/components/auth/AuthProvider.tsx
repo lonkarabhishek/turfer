@@ -9,6 +9,7 @@ import type { AppUser } from "@/types/user";
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
+  authReturning: boolean;
   login: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -21,6 +22,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  authReturning: false,
   login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
@@ -51,9 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
+  // Shows full-screen loading overlay when returning from OAuth
+  const searchParams = useSearchParams();
+  const isWelcomeReturn = searchParams.get("welcome") === "true";
+  const isAuthError = searchParams.get("auth_error") === "true";
+  const [authReturning, setAuthReturning] = useState(isWelcomeReturn);
+
   const supabaseRef = useRef(createClient());
   const initDoneRef = useRef(false);
-  const searchParams = useSearchParams();
   const router = useRouter();
 
   const supabase = supabaseRef.current;
@@ -129,10 +136,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const emergencyTimeout = setTimeout(() => { if (!cancelled) setLoading(false); }, 5000);
-
-    const isWelcomeReturn = searchParams.get("welcome") === "true";
-    const isAuthError = searchParams.get("auth_error") === "true";
+    const emergencyTimeout = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setAuthReturning(false);
+      }
+    }, 6000);
 
     const init = async () => {
       try {
@@ -157,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 });
               }
               initDoneRef.current = true;
-              if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
+              if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); setAuthReturning(false); }
               return;
             }
           } catch {
@@ -167,7 +176,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Google OAuth (Supabase session)
-        // Use getUser() instead of getSession() — it validates the JWT server-side
         const { data: { user: supaUser }, error: userError } = await supabase.auth.getUser();
 
         if (supaUser && !userError) {
@@ -187,7 +195,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setUser(null);
       } finally {
         initDoneRef.current = true;
-        if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
+        if (!cancelled) {
+          clearTimeout(emergencyTimeout);
+          setLoading(false);
+          // Small delay before removing overlay so welcome toast appears smoothly
+          if (isWelcomeReturn) {
+            setTimeout(() => setAuthReturning(false), 300);
+          } else {
+            setAuthReturning(false);
+          }
+        }
       }
     };
 
@@ -203,9 +220,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await resolveSupabaseUser(session.user, event === "SIGNED_IN" && !initDoneRef.current);
         setShowLoginModal(false);
         setLoading(false);
+        setAuthReturning(false);
       } else if (event === "SIGNED_OUT") {
         setUser(null);
         setLoading(false);
+        setAuthReturning(false);
       }
     });
 
@@ -257,7 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, login, logout, refreshUser,
+      user, loading, authReturning, login, logout, refreshUser,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
     }}>
