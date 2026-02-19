@@ -176,9 +176,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Google OAuth (Supabase session)
-        const { data: { user: supaUser }, error: userError } = await supabase.auth.getUser();
+        // Try getUser() first (validates JWT server-side) — most secure
+        // Fall back to getSession() (reads from local cookie) if getUser fails
+        let supaUser = null;
+        try {
+          const { data, error } = await supabase.auth.getUser();
+          if (data?.user && !error) {
+            supaUser = data.user;
+          }
+        } catch {
+          console.warn("[AuthProvider] getUser() failed, trying getSession()");
+        }
 
-        if (supaUser && !userError) {
+        // Fallback: getSession() reads from local storage/cookie — no network call
+        if (!supaUser) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+              supaUser = session.user;
+            }
+          } catch {
+            console.warn("[AuthProvider] getSession() also failed");
+          }
+        }
+
+        if (supaUser) {
           if (!cancelled) await resolveSupabaseUser(supaUser, isWelcomeReturn);
         }
 
@@ -213,8 +235,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── Auth state change listener (handles OAuth redirect + token refresh) ──
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Skip INITIAL_SESSION — we handle that in init() above
-      if (event === "INITIAL_SESSION") return;
+      if (event === "INITIAL_SESSION") {
+        // On page refresh, if init() hasn't found a user yet and there's a session,
+        // use it as a backup to ensure we don't lose the logged-in state
+        if (session?.user && !initDoneRef.current) {
+          await resolveSupabaseUser(session.user, false);
+          setLoading(false);
+          setAuthReturning(false);
+        }
+        return;
+      }
 
       if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
         await resolveSupabaseUser(session.user, event === "SIGNED_IN" && !initDoneRef.current);
