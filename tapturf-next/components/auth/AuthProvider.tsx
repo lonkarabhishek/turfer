@@ -8,7 +8,6 @@ import type { AppUser } from "@/types/user";
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
-  authReturning: boolean;
   login: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -21,7 +20,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  authReturning: false,
   login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
@@ -51,11 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
-  const [authReturning, setAuthReturning] = useState(false);
 
   const supabaseRef = useRef(createClient());
   const initDoneRef = useRef(false);
-  const userSetRef = useRef(false); // tracks if we've set user at least once
+  const userSetRef = useRef(false);
 
   const supabase = supabaseRef.current;
 
@@ -83,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const ensureUserInDB = useCallback(async (userData: {
     id: string; name: string; email?: string; phone?: string; profile_image_url?: string;
   }): Promise<AppUser> => {
-    // Try to find existing
     try {
       const { data: existing } = await supabase
         .from("users")
@@ -93,7 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (existing) return existing as AppUser;
     } catch { /* not found, will insert */ }
 
-    // Insert new
     try {
       const { data: inserted } = await supabase.from("users").insert([{
         id: userData.id,
@@ -106,7 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (inserted) return inserted as AppUser;
     } catch { /* RLS may block */ }
 
-    // Fallback
     return { id: userData.id, name: userData.name, email: userData.email, phone: userData.phone, role: "player", profile_image_url: userData.profile_image_url };
   }, [supabase]);
 
@@ -133,11 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const emergencyTimeout = setTimeout(() => {
-      if (!cancelled) {
-        setLoading(false);
-        setAuthReturning(false);
-      }
-    }, 6000);
+      if (!cancelled) setLoading(false);
+    }, 5000);
 
     const init = async () => {
       try {
@@ -162,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 userSetRef.current = true;
               }
               initDoneRef.current = true;
-              if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); setAuthReturning(false); }
+              if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
               return;
             }
           } catch {
@@ -172,32 +163,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Google OAuth (Supabase session)
-        // Try getSession() first (fast, reads from local storage)
-        // Then validate with getUser() (network call, server-side JWT check)
         let supaUser = null;
 
         try {
           const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            supaUser = session.user;
-            // Show loading overlay since we have a session to resolve
-            if (!cancelled) setAuthReturning(true);
-          }
-        } catch {
-          // no session
-        }
+          if (session?.user) supaUser = session.user;
+        } catch { /* no session */ }
 
         // Validate with getUser() if we got a session
         if (supaUser) {
           try {
             const { data, error } = await supabase.auth.getUser();
-            if (data?.user && !error) {
-              supaUser = data.user; // use the validated user
-            }
-            // If getUser fails, still use the session user — better than nothing
-          } catch {
-            console.warn("[AuthProvider] getUser() validation failed, using session user");
-          }
+            if (data?.user && !error) supaUser = data.user;
+          } catch { /* use session user */ }
         }
 
         if (supaUser && !cancelled) {
@@ -208,50 +186,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setUser(null);
       } finally {
         initDoneRef.current = true;
-        if (!cancelled) {
-          clearTimeout(emergencyTimeout);
-          setLoading(false);
-          setAuthReturning(false);
-        }
+        if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
       }
     };
 
     init();
 
     // ── Auth state change listener ──
-    // Handles: OAuth redirect return (SIGNED_IN), token refresh, sign out
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "INITIAL_SESSION") {
-        // On page refresh, if init() hasn't set a user yet and there's a session,
-        // use it as backup to ensure we don't lose the logged-in state
         if (session?.user && !userSetRef.current) {
           await resolveSupabaseUser(session.user, false);
           setLoading(false);
-          setAuthReturning(false);
         }
         return;
       }
 
       if (event === "SIGNED_IN" && session?.user) {
-        // This fires after OAuth redirect when session is established
-        // Show welcome for new sign-ins (not just refreshes)
+        // Only show welcome if this is a genuinely new sign-in (user wasn't set before)
         const isNewSignIn = !userSetRef.current;
-        setAuthReturning(true);
         await resolveSupabaseUser(session.user, isNewSignIn);
         setShowLoginModal(false);
         setLoading(false);
-        // Brief delay so the user sees the loading screen transition smoothly
-        setTimeout(() => setAuthReturning(false), 400);
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
         await resolveSupabaseUser(session.user, false);
-        setLoading(false);
-        setAuthReturning(false);
       } else if (event === "SIGNED_OUT") {
         setUser(null);
         userSetRef.current = false;
         setLoading(false);
-        setAuthReturning(false);
       }
     });
 
@@ -276,7 +239,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   const refreshUser = useCallback(async () => {
-    // 1. Phone auth
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
@@ -292,7 +254,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch { /* invalid */ }
     }
 
-    // 2. Google auth
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
@@ -304,7 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, authReturning, login, logout, refreshUser,
+      user, loading, login, logout, refreshUser,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
     }}>

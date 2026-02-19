@@ -19,25 +19,23 @@ const TABS = [
 type TabKey = typeof TABS[number]["key"];
 
 export function DashboardClient() {
-  const { user, loading, authReturning, login, logout } = useAuth();
+  const { user, loading, login, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as TabKey) || "games";
   const [tab, setTab] = useState<TabKey>(initialTab);
   const redirectedRef = useRef(false);
 
-  // Only redirect to login AFTER auth is fully resolved (not loading, not returning from OAuth)
-  // and we still have no user. Use a ref to prevent double-redirects.
+  // Only redirect after loading is done and no user found
   useEffect(() => {
-    if (!loading && !authReturning && !user && !redirectedRef.current) {
+    if (!loading && !user && !redirectedRef.current) {
       redirectedRef.current = true;
       login();
       router.push("/games");
     }
-  }, [loading, authReturning, user]);
+  }, [loading, user]);
 
-  // Show loading while auth is resolving
-  if (loading || authReturning || !user) {
+  if (loading || !user) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
         <Loader2 className="w-6 h-6 text-primary-500 animate-spin mx-auto mb-3" />
