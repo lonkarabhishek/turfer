@@ -21,7 +21,7 @@ export function Header() {
   }, [user]);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5">
@@ -41,25 +41,25 @@ export function Header() {
         <nav className="hidden md:flex items-center gap-1">
           <Link
             href="/turfs"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 rounded-full hover:bg-gray-50 transition-colors"
+            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Find Turfs
           </Link>
           <Link
             href="/games"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 rounded-full hover:bg-gray-50 transition-colors"
+            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Games
           </Link>
           <Link
             href="/sport/football"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 rounded-full hover:bg-gray-50 transition-colors"
+            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Football
           </Link>
           <Link
             href="/sport/cricket"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 rounded-full hover:bg-gray-50 transition-colors"
+            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Cricket
           </Link>
@@ -76,7 +76,7 @@ export function Header() {
                   >
                     <Bell className="w-5 h-5 text-gray-600" />
                     {unread > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
                         {unread > 9 ? "9+" : unread}
                       </span>
                     )}
@@ -85,7 +85,7 @@ export function Header() {
                   {/* User avatar / dashboard link */}
                   <Link
                     href="/dashboard"
-                    className="flex items-center gap-2 border border-gray-200 rounded-full pl-3 pr-1.5 py-1 hover:shadow-md transition-shadow"
+                    className="flex items-center gap-2 border border-gray-200 rounded-full pl-3 pr-1.5 py-1 hover:shadow-md hover:border-primary-200 transition-all"
                   >
                     <span className="text-sm font-medium text-gray-700 max-w-[80px] truncate">
                       {user.name?.split(" ")[0] || "Account"}
@@ -98,7 +98,7 @@ export function Header() {
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-7 h-7 rounded-full bg-gray-900 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center">
                         <User className="w-4 h-4 text-white" />
                       </div>
                     )}
@@ -107,7 +107,7 @@ export function Header() {
               ) : (
                 <button
                   onClick={login}
-                  className="ml-3 text-sm font-semibold text-gray-900 px-4 py-2 rounded-full border border-gray-300 hover:bg-gray-50 transition-colors"
+                  className="ml-3 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 px-5 py-2 rounded-full transition-colors shadow-sm"
                 >
                   Log in
                 </button>
@@ -120,7 +120,7 @@ export function Header() {
         <div className="flex md:hidden items-center gap-2">
           <Link
             href="/turfs"
-            className="flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+            className="flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 shadow-sm hover:shadow-md hover:border-primary-200 transition-all"
           >
             <Search className="w-4 h-4 text-gray-700" />
           </Link>
@@ -132,7 +132,7 @@ export function Header() {
             >
               <Bell className="w-5 h-5 text-gray-700" />
               {unread > 0 && (
-                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
                   {unread > 9 ? "9+" : unread}
                 </span>
               )}
@@ -142,9 +142,9 @@ export function Header() {
           {!loading && !user && (
             <button
               onClick={login}
-              className="flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+              className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-500 hover:bg-primary-600 shadow-sm transition-colors"
             >
-              <User className="w-4 h-4 text-gray-700" />
+              <User className="w-4 h-4 text-white" />
             </button>
           )}
         </div>

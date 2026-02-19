@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { auth as firebaseAuth } from "@/lib/firebase/client";
@@ -34,24 +34,38 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+// Helper: build AppUser from Supabase auth user metadata
+function buildUserFromSupabase(supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }): Omit<AppUser, "role"> & { role?: string; profile_image_url?: string } {
+  return {
+    id: supaUser.id,
+    name: (supaUser.user_metadata?.name || supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User") as string,
+    email: supaUser.email,
+    phone: (supaUser.phone || supaUser.user_metadata?.phone) as string | undefined,
+    profile_image_url: (supaUser.user_metadata?.avatar_url || supaUser.user_metadata?.picture) as string | undefined,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
-  const supabase = createClient();
+
+  const supabaseRef = useRef(createClient());
+  const initDoneRef = useRef(false);
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const dismissWelcome = useCallback(() => {
-    setWelcomeMessage(null);
-  }, []);
+  const supabase = supabaseRef.current;
+
+  const dismissWelcome = useCallback(() => setWelcomeMessage(null), []);
 
   const showWelcome = useCallback((name: string) => {
     setWelcomeMessage(`Welcome${name ? `, ${name}` : ""}!`);
-    // Auto-dismiss after 4 seconds
     setTimeout(() => setWelcomeMessage(null), 4000);
   }, []);
+
+  // ── DB helpers ──
 
   const fetchUserProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
     try {
@@ -60,34 +74,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select("id, name, email, phone, role, profile_image_url")
         .eq("id", userId)
         .single();
-
-      if (data && !error) {
-        return data as AppUser;
-      }
-    } catch {
-      // Profile not found
-    }
+      if (data && !error) return data as AppUser;
+    } catch { /* not found */ }
     return null;
   }, [supabase]);
 
   const ensureUserInDB = useCallback(async (userData: {
-    id: string;
-    name: string;
-    email?: string;
-    phone?: string;
-    profile_image_url?: string;
+    id: string; name: string; email?: string; phone?: string; profile_image_url?: string;
   }): Promise<AppUser> => {
+    // Try to find existing
     try {
       const { data: existing } = await supabase
         .from("users")
         .select("id, name, email, phone, role, profile_image_url")
         .eq("id", userData.id)
         .single();
+      if (existing) return existing as AppUser;
+    } catch { /* not found, will insert */ }
 
-      if (existing) {
-        return existing as AppUser;
-      }
-
+    // Insert new
+    try {
       const { data: inserted } = await supabase.from("users").insert([{
         id: userData.id,
         name: userData.name,
@@ -96,36 +102,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: "player",
         profile_image_url: userData.profile_image_url || null,
       }]).select().single();
+      if (inserted) return inserted as AppUser;
+    } catch { /* RLS may block */ }
 
-      if (inserted) {
-        return inserted as AppUser;
-      }
-    } catch {
-      // Ignore — RLS may block, which is okay
-    }
-
-    // Fallback: return the data we have
-    return {
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      phone: userData.phone,
-      role: "player",
-      profile_image_url: userData.profile_image_url,
-    };
+    // Fallback
+    return { id: userData.id, name: userData.name, email: userData.email, phone: userData.phone, role: "player", profile_image_url: userData.profile_image_url };
   }, [supabase]);
 
-  // Check auth on mount
+  // ── Resolve a Supabase auth user into AppUser and set state ──
+
+  const resolveSupabaseUser = useCallback(async (supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }, shouldWelcome: boolean) => {
+    const profile = await fetchUserProfile(supaUser.id);
+    if (profile) {
+      setUser(profile);
+      if (shouldWelcome) showWelcome(profile.name?.split(" ")[0] || "");
+      return;
+    }
+
+    const meta = buildUserFromSupabase(supaUser);
+    const dbUser = await ensureUserInDB(meta);
+    setUser(dbUser);
+    if (shouldWelcome) showWelcome(dbUser.name?.split(" ")[0] || "");
+  }, [fetchUserProfile, ensureUserInDB, showWelcome]);
+
+  // ── Init auth on mount ──
+
   useEffect(() => {
-    const emergencyTimeout = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
+    let cancelled = false;
+    const emergencyTimeout = setTimeout(() => { if (!cancelled) setLoading(false); }, 5000);
 
     const isWelcomeReturn = searchParams.get("welcome") === "true";
+    const isAuthError = searchParams.get("auth_error") === "true";
 
     const init = async () => {
       try {
-        // 1. Check localStorage (Firebase phone auth users)
+        // 1. Phone auth (Firebase + localStorage)
         const authToken = localStorage.getItem("auth_token");
         const storedUser = localStorage.getItem("user");
 
@@ -133,18 +144,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const parsed = JSON.parse(storedUser);
             if (parsed.id) {
+              // Try to get fresh profile from DB
               const profile = await fetchUserProfile(parsed.id);
-              const resolvedUser = profile || {
-                id: parsed.id,
-                name: parsed.name || "User",
-                email: parsed.email,
-                phone: parsed.phone,
-                role: parsed.role || "player" as const,
-                profile_image_url: parsed.profile_image_url,
-              };
-              setUser(resolvedUser);
-              clearTimeout(emergencyTimeout);
-              setLoading(false);
+              if (!cancelled) {
+                setUser(profile || {
+                  id: parsed.id,
+                  name: parsed.name || "User",
+                  email: parsed.email,
+                  phone: parsed.phone,
+                  role: (parsed.role || "player") as AppUser["role"],
+                  profile_image_url: parsed.profile_image_url,
+                });
+              }
+              initDoneRef.current = true;
+              if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
               return;
             }
           } catch {
@@ -153,154 +166,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // 2. Check Supabase session (Google OAuth users)
-        const { data: { session } } = await supabase.auth.getSession();
+        // 2. Google OAuth (Supabase session)
+        // Use getUser() instead of getSession() — it validates the JWT server-side
+        const { data: { user: supaUser }, error: userError } = await supabase.auth.getUser();
 
-        if (session?.user) {
-          const supaUser = session.user;
-          const profile = await fetchUserProfile(supaUser.id);
-
-          if (profile) {
-            setUser(profile);
-            if (isWelcomeReturn) {
-              showWelcome(profile.name?.split(" ")[0] || "");
-            }
-          } else {
-            const newUserData = {
-              id: supaUser.id,
-              name: supaUser.user_metadata?.name || supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User",
-              email: supaUser.email,
-              phone: supaUser.phone || supaUser.user_metadata?.phone,
-              profile_image_url: supaUser.user_metadata?.avatar_url || supaUser.user_metadata?.picture,
-            };
-            const dbUser = await ensureUserInDB(newUserData);
-            setUser(dbUser);
-            if (isWelcomeReturn) {
-              showWelcome(dbUser.name?.split(" ")[0] || "");
-            }
-          }
+        if (supaUser && !userError) {
+          if (!cancelled) await resolveSupabaseUser(supaUser, isWelcomeReturn);
         }
 
-        // Clean up the ?welcome= param from the URL
-        if (isWelcomeReturn) {
+        // 3. Clean up URL params
+        if (isWelcomeReturn || isAuthError) {
           const url = new URL(window.location.href);
           url.searchParams.delete("welcome");
-          router.replace(url.pathname + url.search, { scroll: false });
+          url.searchParams.delete("auth_error");
+          const cleanUrl = url.pathname + (url.search || "");
+          router.replace(cleanUrl, { scroll: false });
         }
-      } catch {
-        setUser(null);
+      } catch (err) {
+        console.error("[AuthProvider] Init error:", err);
+        if (!cancelled) setUser(null);
       } finally {
-        clearTimeout(emergencyTimeout);
-        setLoading(false);
+        initDoneRef.current = true;
+        if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
       }
     };
 
     init();
 
-    // Listen for Supabase auth changes (Google OAuth)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Handle both SIGNED_IN (after OAuth redirect) and TOKEN_REFRESHED
-      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
-        const supaUser = session.user;
-        const profile = await fetchUserProfile(supaUser.id);
+    // ── Auth state change listener (handles OAuth redirect + token refresh) ──
 
-        if (profile) {
-          setUser(profile);
-        } else {
-          const newUserData = {
-            id: supaUser.id,
-            name: supaUser.user_metadata?.name || supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User",
-            email: supaUser.email,
-            phone: supaUser.phone,
-            profile_image_url: supaUser.user_metadata?.avatar_url || supaUser.user_metadata?.picture,
-          };
-          const dbUser = await ensureUserInDB(newUserData);
-          setUser(dbUser);
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Skip INITIAL_SESSION — we handle that in init() above
+      if (event === "INITIAL_SESSION") return;
+
+      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
+        await resolveSupabaseUser(session.user, event === "SIGNED_IN" && !initDoneRef.current);
         setShowLoginModal(false);
+        setLoading(false);
       } else if (event === "SIGNED_OUT") {
         setUser(null);
+        setLoading(false);
       }
     });
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
       clearTimeout(emergencyTimeout);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const login = useCallback(() => {
-    setShowLoginModal(true);
-  }, []);
+  // ── Actions ──
+
+  const login = useCallback(() => setShowLoginModal(true), []);
 
   const logout = useCallback(async () => {
-    // Clear Firebase / localStorage auth
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user");
-
-    // Sign out from Firebase
-    try {
-      await firebaseAuth.signOut();
-    } catch {
-      // Ignore
-    }
-
-    // Sign out from Supabase
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore
-    }
-
+    try { await firebaseAuth.signOut(); } catch { /* ignore */ }
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
   }, [supabase]);
 
   const refreshUser = useCallback(async () => {
-    // 1. Try localStorage first (phone auth users)
+    // 1. Phone auth
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
         const parsed = JSON.parse(storedUser);
         if (parsed.id) {
           const profile = await fetchUserProfile(parsed.id);
-          if (profile) {
-            setUser(profile);
-            setLoading(false);
-            return;
-          }
-          // If DB fetch failed, use stored data
-          setUser({
-            id: parsed.id,
-            name: parsed.name || "User",
-            email: parsed.email,
-            phone: parsed.phone,
-            role: parsed.role || "player",
-            profile_image_url: parsed.profile_image_url,
+          setUser(profile || {
+            id: parsed.id, name: parsed.name || "User", email: parsed.email,
+            phone: parsed.phone, role: parsed.role || "player", profile_image_url: parsed.profile_image_url,
           });
-          setLoading(false);
           return;
         }
-      } catch {
-        // Invalid stored data
-      }
+      } catch { /* invalid */ }
     }
 
-    // 2. Try Supabase session (Google users)
+    // 2. Google auth
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        if (profile) {
-          setUser(profile);
-          setLoading(false);
-          return;
-        }
+      const { data: { user: supaUser } } = await supabase.auth.getUser();
+      if (supaUser) {
+        const profile = await fetchUserProfile(supaUser.id);
+        if (profile) { setUser(profile); return; }
       }
-    } catch {
-      // Ignore
-    }
-
-    setLoading(false);
+    } catch { /* ignore */ }
   }, [fetchUserProfile, supabase]);
 
   return (
