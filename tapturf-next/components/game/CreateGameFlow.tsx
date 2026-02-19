@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, MapPin, Search, Share2, Copy, Trophy, Clock, Calendar } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -67,10 +67,11 @@ export function CreateGameFlow() {
   const [showTurfDropdown, setShowTurfDropdown] = useState(false);
   const [skillLevel, setSkillLevel] = useState<CreateGameData["skillLevel"]>("all");
   const [costPerPerson, setCostPerPerson] = useState(100);
-  const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
   const [isToday, setIsToday] = useState(true);
+
+  const timeScrollRef = useRef<HTMLDivElement>(null);
 
   // Show login modal once if not logged in
   useEffect(() => {
@@ -105,7 +106,7 @@ export function CreateGameFlow() {
     }
   }, [startTime]);
 
-  // Generate time slots — next 6 hours in 30-min gaps
+  // Generate time slots — 30 min gaps, next 6 hours for today
   const timeSlots = useMemo(() => {
     const slots: { label: string; value: string }[] = [];
     const now = new Date();
@@ -114,7 +115,6 @@ export function CreateGameFlow() {
     let startMin: number;
 
     if (isToday) {
-      // Round up to the next 30-min slot
       const currentMin = now.getMinutes();
       startHour = now.getHours();
       if (currentMin < 30) {
@@ -124,30 +124,24 @@ export function CreateGameFlow() {
         startHour += 1;
       }
     } else {
-      // For future dates, show from 6:00 AM
       startHour = 6;
       startMin = 0;
     }
 
-    const maxSlots = isToday ? 12 : 34; // 6 hours (12 slots) for today, 6AM-11PM for future
-    const endHourLimit = isToday ? startHour + 6 : 23;
+    // For today: only next 6 hours. For future: 6 AM to 11 PM
+    const endHourLimit = isToday ? Math.min(startHour + 6, 23) : 23;
 
     let h = startHour;
     let m = startMin;
-    let count = 0;
 
-    while (count < maxSlots && h <= endHourLimit) {
+    while (h < endHourLimit || (h === endHourLimit && m === 0)) {
       if (h > 23) break;
       slots.push({
         label: formatSlotLabel(h, m),
         value: formatTimeValue(h, m),
       });
-      count++;
       m += 30;
-      if (m >= 60) {
-        m = 0;
-        h += 1;
-      }
+      if (m >= 60) { m = 0; h += 1; }
     }
 
     return slots;
@@ -167,7 +161,7 @@ export function CreateGameFlow() {
       const month = d.toLocaleDateString("en-IN", { month: "short" });
 
       options.push({
-        label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayName,
+        label: i === 0 ? "Today" : i === 1 ? "Tmrw" : dayName,
         sublabel: `${dateNum} ${month}`,
         value,
         isToday: i === 0,
@@ -191,10 +185,7 @@ export function CreateGameFlow() {
   };
 
   const handleSubmit = async () => {
-    if (!user) {
-      login();
-      return;
-    }
+    if (!user) { login(); return; }
 
     setSubmitError("");
     setSubmitting(true);
@@ -209,7 +200,6 @@ export function CreateGameFlow() {
       skillLevel,
       maxPlayers,
       costPerPerson,
-      description: description || undefined,
       notes: notes || undefined,
       turfBooked,
     };
@@ -323,21 +313,21 @@ export function CreateGameFlow() {
       {step === 2 && (
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">When & where</h1>
-          <p className="text-sm text-gray-500 mb-6">Pick a time slot and venue</p>
+          <p className="text-sm text-gray-500 mb-6">Pick a slot and venue</p>
 
           <div className="space-y-6">
-            {/* Date pills */}
+            {/* Date — horizontal scroll */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2.5">
                 <Calendar className="w-4 h-4" />
                 Date
               </label>
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
                 {dateOptions.map((d) => (
                   <button
                     key={d.value}
                     onClick={() => handleDateSelect(d.value, d.isToday)}
-                    className={`flex-shrink-0 px-4 py-2.5 rounded-xl border text-center transition-all active:scale-[0.97] ${
+                    className={`flex-shrink-0 w-[72px] py-2.5 rounded-xl border text-center transition-all active:scale-[0.97] ${
                       date === d.value
                         ? "bg-gray-900 text-white border-gray-900"
                         : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
@@ -350,21 +340,24 @@ export function CreateGameFlow() {
               </div>
             </div>
 
-            {/* Start time slots */}
+            {/* Start time — horizontal scrollable strip */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2.5">
                 <Clock className="w-4 h-4" />
                 Start time
               </label>
               {timeSlots.length === 0 ? (
-                <p className="text-sm text-gray-400 py-3">No slots available for today. Try tomorrow!</p>
+                <p className="text-sm text-gray-400 py-3">No more slots today. Try tomorrow!</p>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div
+                  ref={timeScrollRef}
+                  className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1 snap-x"
+                >
                   {timeSlots.map((slot) => (
                     <button
                       key={slot.value}
                       onClick={() => setStartTime(slot.value)}
-                      className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-all active:scale-[0.97] ${
+                      className={`flex-shrink-0 px-5 py-2.5 rounded-xl border text-sm font-medium transition-all active:scale-[0.97] snap-start ${
                         startTime === slot.value
                           ? "bg-gray-900 text-white border-gray-900"
                           : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
@@ -377,33 +370,37 @@ export function CreateGameFlow() {
               )}
             </div>
 
-            {/* End time (auto-filled, editable) */}
+            {/* End time — duration pills (only show after start time selected) */}
             {startTime && (
               <div className="animate-fade-in">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  End time
+                  Duration
                 </label>
-                <div className="flex gap-2">
-                  {[0.5, 1, 1.5, 2].map((hours) => {
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
+                  {[
+                    { hours: 0.5, label: "30 min" },
+                    { hours: 1, label: "1 hr" },
+                    { hours: 1.5, label: "1.5 hr" },
+                    { hours: 2, label: "2 hr" },
+                  ].map(({ hours, label }) => {
                     const [h, m] = startTime.split(":").map(Number);
                     const totalMin = h * 60 + m + hours * 60;
                     const endH = Math.floor(totalMin / 60);
                     const endM = totalMin % 60;
                     if (endH > 23) return null;
                     const val = formatTimeValue(endH, endM);
-                    const label = hours === 0.5 ? "30 min" : hours === 1 ? "1 hr" : hours === 1.5 ? "1.5 hr" : "2 hr";
                     return (
                       <button
                         key={val}
                         onClick={() => setEndTime(val)}
-                        className={`flex-1 py-2.5 rounded-xl border text-center transition-all active:scale-[0.97] ${
+                        className={`flex-shrink-0 px-5 py-2.5 rounded-xl border text-center transition-all active:scale-[0.97] ${
                           endTime === val
                             ? "bg-gray-900 text-white border-gray-900"
                             : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
                         }`}
                       >
-                        <p className={`text-sm font-semibold ${endTime === val ? "text-white" : "text-gray-900"}`}>{label}</p>
-                        <p className={`text-[10px] mt-0.5 ${endTime === val ? "text-gray-300" : "text-gray-500"}`}>{formatSlotLabel(endH, endM)}</p>
+                        <span className={`text-sm font-semibold ${endTime === val ? "text-white" : "text-gray-900"}`}>{label}</span>
+                        <span className={`text-xs ml-1.5 ${endTime === val ? "text-gray-300" : "text-gray-500"}`}>({formatSlotLabel(endH, endM)})</span>
                       </button>
                     );
                   })}
@@ -419,11 +416,11 @@ export function CreateGameFlow() {
               </label>
               {turfId ? (
                 <div className="flex items-center justify-between border border-gray-900 rounded-xl px-4 py-3 bg-gray-50">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-primary-500" />
-                    <span className="text-sm font-medium text-gray-900">{turfName}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MapPin className="w-4 h-4 text-primary-500 flex-shrink-0" />
+                    <span className="text-sm font-medium text-gray-900 truncate">{turfName}</span>
                   </div>
-                  <button onClick={() => { setTurfId(""); setTurfName(""); setTurfSearch(""); }} className="text-xs text-gray-500 underline">Change</button>
+                  <button onClick={() => { setTurfId(""); setTurfName(""); setTurfSearch(""); }} className="text-xs text-gray-500 underline flex-shrink-0 ml-2">Change</button>
                 </div>
               ) : (
                 <div className="relative">
@@ -473,22 +470,22 @@ export function CreateGameFlow() {
       {step === 3 && (
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Game details</h1>
-          <p className="text-sm text-gray-500 mb-6">Set players, cost, and create your game</p>
+          <p className="text-sm text-gray-500 mb-6">Final touches before creating</p>
 
           <div className="space-y-5">
             {/* Summary card */}
-            <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Sport</span>
-                <span className="text-sm font-semibold text-gray-900">{sport}</span>
+            <div className="bg-gray-50 rounded-2xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Sport</span>
+                <span className="font-semibold text-gray-900">{sport}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Date</span>
-                <span className="text-sm font-semibold text-gray-900">{new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Date</span>
+                <span className="font-semibold text-gray-900">{new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Time</span>
-                <span className="text-sm font-semibold text-gray-900">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Time</span>
+                <span className="font-semibold text-gray-900">
                   {(() => {
                     const [sh, sm] = startTime.split(":").map(Number);
                     const [eh, em] = endTime.split(":").map(Number);
@@ -496,21 +493,21 @@ export function CreateGameFlow() {
                   })()}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Venue</span>
-                <span className="text-sm font-semibold text-gray-900 text-right max-w-[60%] truncate">{turfName}</span>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Venue</span>
+                <span className="font-semibold text-gray-900 text-right max-w-[60%] truncate">{turfName}</span>
               </div>
             </div>
 
             {/* Skill level */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Skill level</label>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
                 {SKILL_LEVELS.map((level) => (
                   <button
                     key={level.value}
                     onClick={() => setSkillLevel(level.value)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors active:scale-[0.97] ${
+                    className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium border transition-colors active:scale-[0.97] ${
                       skillLevel === level.value
                         ? "bg-gray-900 text-white border-gray-900"
                         : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
@@ -526,37 +523,27 @@ export function CreateGameFlow() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Max players</label>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
-                  className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-xl text-lg font-medium hover:bg-gray-50 active:scale-95 transition-all"
-                >
-                  -
-                </button>
+                <button onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))} className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-xl text-lg font-medium hover:bg-gray-50 active:scale-95">-</button>
                 <span className="text-lg font-bold text-gray-900 w-8 text-center">{maxPlayers}</span>
-                <button
-                  onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
-                  className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-xl text-lg font-medium hover:bg-gray-50 active:scale-95 transition-all"
-                >
-                  +
-                </button>
+                <button onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))} className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-xl text-lg font-medium hover:bg-gray-50 active:scale-95">+</button>
               </div>
             </div>
 
             {/* Cost */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Cost per person</label>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
                 {[0, 50, 100, 150, 200, 300].map((price) => (
                   <button
                     key={price}
                     onClick={() => setCostPerPerson(price)}
-                    className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors active:scale-[0.97] ${
+                    className={`flex-shrink-0 px-4 py-2 rounded-xl border text-sm font-medium transition-colors active:scale-[0.97] ${
                       costPerPerson === price
                         ? "bg-gray-900 text-white border-gray-900"
                         : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
                     }`}
                   >
-                    {price === 0 ? "Free" : `₹${price}`}
+                    {price === 0 ? "Free" : `\u20b9${price}`}
                   </button>
                 ))}
                 <input
@@ -565,8 +552,8 @@ export function CreateGameFlow() {
                   step={50}
                   value={costPerPerson}
                   onChange={(e) => setCostPerPerson(parseInt(e.target.value) || 0)}
-                  className="w-24 border border-gray-300 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"
-                  placeholder="Custom"
+                  className="flex-shrink-0 w-20 border border-gray-300 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="\u20b9"
                 />
               </div>
             </div>
@@ -592,7 +579,7 @@ export function CreateGameFlow() {
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g., Bring your own shoes, jersey colors..."
+                placeholder="e.g., Bring your own shoes"
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
               />
             </div>
