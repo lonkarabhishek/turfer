@@ -55,7 +55,8 @@ export function DashboardClient() {
         <button
           onClick={async () => {
             await logout();
-            router.push("/");
+            // Hard reload to clear all server-side cookies and cached state
+            window.location.href = "/";
           }}
           className="flex items-center gap-2 text-sm text-gray-500 hover:text-red-600 transition-colors"
         >

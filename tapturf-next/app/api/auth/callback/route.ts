@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { type NextRequest } from "next/server";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
 
+  const redirectUrl = `${origin}${next}`;
+
   if (code) {
-    const cookieStore = await cookies();
+    // Create the redirect response FIRST so we can attach cookies to it
+    const response = NextResponse.redirect(redirectUrl);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,16 +19,12 @@ export async function GET(request: Request) {
       {
         cookies: {
           getAll() {
-            return cookieStore.getAll();
+            return request.cookies.getAll();
           },
           setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
-            } catch {
-              // The `cookies()` API can only set cookies in a Server Action or Route Handler
-            }
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
           },
         },
       }
@@ -34,20 +33,18 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      // Verify the session was actually created
+      // Verify session was created
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        // Just redirect — no URL params. AuthProvider detects new sign-in
-        // via onAuthStateChange SIGNED_IN event.
-        return NextResponse.redirect(`${origin}${next}`);
+        // The response already has auth cookies attached via setAll
+        return response;
       }
     }
 
-    // Log the error for debugging (will show in Vercel logs)
     console.error("[OAuth Callback] Error:", error?.message || "No user after exchange");
   }
 
-  // Auth error — redirect home (no URL params, AuthProvider handles gracefully)
+  // Auth error — redirect home
   return NextResponse.redirect(`${origin}/`);
 }

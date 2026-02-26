@@ -160,6 +160,29 @@ export async function createGame(gameData: CreateGameData, user: { id: string; n
   return { data: data as Game, error: null };
 }
 
+export async function updateGame(gameId: string, userId: string, updates: {
+  date?: string;
+  start_time?: string;
+  end_time?: string;
+  max_players?: number;
+  price_per_player?: number;
+  description?: string;
+  turf_booked?: boolean;
+  skill_level?: string;
+}) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("games")
+    .update(updates)
+    .eq("id", gameId)
+    .eq("creator_id", userId)
+    .select()
+    .single();
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as Game, error: null };
+}
+
 export async function deleteGame(gameId: string, userId: string) {
   const supabase = createClient();
   // Delete in order: notifications, requests, participants, game

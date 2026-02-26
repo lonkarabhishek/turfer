@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Clock, Users, Trophy, User, Share2, Check, X, Loader2, Zap, IndianRupee, CalendarDays, Shield, MessageSquare, ChevronRight } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Users, Trophy, User, Share2, Check, X, Loader2, Zap, IndianRupee, CalendarDays, Shield, MessageSquare, ChevronRight, Pencil, Save } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getGameById, getGameParticipants, getGameRequests, sendJoinRequest, acceptRequest, declineRequest } from "@/lib/queries/games";
+import { getGameById, getGameParticipants, getGameRequests, sendJoinRequest, acceptRequest, declineRequest, updateGame } from "@/lib/queries/games";
 import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from "@/lib/utils/game";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { GameRequestCard } from "./GameRequestCard";
@@ -20,6 +20,19 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
   const [joinStatus, setJoinStatus] = useState<"idle" | "sent" | "error">("idle");
   const [showJoinForm, setShowJoinForm] = useState(false);
   const [shared, setShared] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editData, setEditData] = useState({
+    date: "",
+    start_time: "",
+    end_time: "",
+    max_players: 0,
+    price_per_player: 0,
+    description: "",
+    turf_booked: false,
+    skill_level: "all",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const isHost = user && game?.creator_id === user.id;
   const status = game ? getGameStatus(game) : "upcoming";
@@ -88,6 +101,45 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       await navigator.clipboard.writeText(url);
       setShared(true);
       setTimeout(() => setShared(false), 2000);
+    }
+  };
+
+  const openEditModal = () => {
+    if (!game) return;
+    setEditData({
+      date: game.date,
+      start_time: game.start_time,
+      end_time: game.end_time,
+      max_players: game.max_players,
+      price_per_player: game.price_per_player,
+      description: game.description || "",
+      turf_booked: game.turf_booked,
+      skill_level: game.skill_level || "all",
+    });
+    setSaveError("");
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!game || !user) return;
+    setSaving(true);
+    setSaveError("");
+    const { error } = await updateGame(game.id, user.id, {
+      date: editData.date,
+      start_time: editData.start_time,
+      end_time: editData.end_time,
+      max_players: editData.max_players,
+      price_per_player: editData.price_per_player,
+      description: editData.description || undefined,
+      turf_booked: editData.turf_booked,
+      skill_level: editData.skill_level,
+    });
+    setSaving(false);
+    if (error) {
+      setSaveError(error);
+    } else {
+      setShowEditModal(false);
+      await loadGame();
     }
   };
 
@@ -385,24 +437,36 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           </div>
 
           {/* Map */}
-          {game.turfs?.["Gmap Embed link"] && (
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5">
-              <div className="p-5 pb-3">
-                <h3 className="text-base font-semibold text-gray-900">Location</h3>
+          {game.turfs?.["Gmap Embed link"] && (() => {
+            const raw = game.turfs["Gmap Embed link"];
+            const srcMatch = raw.match(/src="([^"]+)"/);
+            const mapSrc = srcMatch ? srcMatch[1] : raw;
+            return (
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5">
+                <div className="p-5 pb-3">
+                  <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                    <MapPin className="w-4.5 h-4.5 text-primary-500" />
+                    Location
+                  </h3>
+                  {game.turfs?.address && (
+                    <p className="text-sm text-gray-500 mt-1">{game.turfs.address}</p>
+                  )}
+                </div>
+                <div className="h-[250px]">
+                  <iframe
+                    src={mapSrc}
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title="Game location on Google Maps"
+                  />
+                </div>
               </div>
-              <div className="h-[220px]">
-                <iframe
-                  src={game.turfs["Gmap Embed link"]}
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  allowFullScreen
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* ═══════════════════════════════════════════════════════ */}
@@ -499,9 +563,9 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       </div>
 
       {/* ═══════════════════════════════════════════════════════ */}
-      {/* MOBILE FIXED BOTTOM CTA */}
+      {/* MOBILE FIXED BOTTOM CTA — positioned above MobileNav */}
       {/* ═══════════════════════════════════════════════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 lg:hidden z-30">
+      <div className="fixed bottom-14 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 lg:hidden z-30">
         <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
           <div className="min-w-0">
             <p className="text-lg font-bold text-gray-900">
@@ -516,6 +580,14 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {isHost && (
+              <button
+                onClick={openEditModal}
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-primary-200 bg-primary-50 rounded-xl hover:bg-primary-100 transition-colors"
+              >
+                <Pencil className="w-4 h-4 text-primary-600" />
+              </button>
+            )}
             <button
               onClick={handleShare}
               className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
@@ -527,8 +599,8 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
         </div>
       </div>
 
-      {/* Mobile bottom spacer */}
-      <div className="h-20 lg:hidden" />
+      {/* Mobile bottom spacer (CTA bar + MobileNav) */}
+      <div className="h-32 lg:hidden" />
 
       {/* ═══════════════════════════════════════════════════════ */}
       {/* JOIN FORM MODAL */}
@@ -582,6 +654,145 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* EDIT GAME MODAL */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowEditModal(false)} />
+          <div className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Pencil className="w-4.5 h-4.5 text-primary-500" />
+                Edit Game
+              </h3>
+              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-full hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={editData.date}
+                  onChange={(e) => setEditData({ ...editData, date: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                />
+              </div>
+
+              {/* Time row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    value={editData.start_time}
+                    onChange={(e) => setEditData({ ...editData, start_time: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                  <input
+                    type="time"
+                    value={editData.end_time}
+                    onChange={(e) => setEditData({ ...editData, end_time: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                  />
+                </div>
+              </div>
+
+              {/* Players & Price */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Players</label>
+                  <input
+                    type="number"
+                    min={game?.current_players || 1}
+                    value={editData.max_players}
+                    onChange={(e) => setEditData({ ...editData, max_players: parseInt(e.target.value) || 0 })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Price/Person (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editData.price_per_player}
+                    onChange={(e) => setEditData({ ...editData, price_per_player: parseInt(e.target.value) || 0 })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                  />
+                </div>
+              </div>
+
+              {/* Skill Level */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Skill Level</label>
+                <select
+                  value={editData.skill_level}
+                  onChange={(e) => setEditData({ ...editData, skill_level: e.target.value })}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                >
+                  <option value="all">All Levels</option>
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={editData.description}
+                  onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                  placeholder="Describe the game..."
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-gray-50"
+                />
+              </div>
+
+              {/* Turf Booked */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editData.turf_booked}
+                  onChange={(e) => setEditData({ ...editData, turf_booked: e.target.checked })}
+                  className="w-5 h-5 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Turf booked / confirmed</span>
+              </label>
+            </div>
+
+            {saveError && (
+              <p className="text-sm text-accent-500 text-center mt-3">{saveError}</p>
+            )}
+
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving}
+              className="w-full mt-5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -589,9 +800,13 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
     if (isHost) {
       return (
         <div className="space-y-2">
-          <Link href="/dashboard" className="block w-full bg-gradient-to-r from-primary-500 to-primary-600 text-white py-3 rounded-xl font-semibold text-sm text-center hover:from-primary-600 hover:to-primary-700 transition-all">
-            Manage Game
-          </Link>
+          <button
+            onClick={openEditModal}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white py-3 rounded-xl font-semibold text-sm hover:from-primary-600 hover:to-primary-700 transition-all"
+          >
+            <Pencil className="w-4 h-4" />
+            Edit Game
+          </button>
           {pendingRequests.length > 0 && (
             <p className="text-xs text-accent-600 font-medium text-center">
               {pendingRequests.length} pending request{pendingRequests.length !== 1 ? "s" : ""}
