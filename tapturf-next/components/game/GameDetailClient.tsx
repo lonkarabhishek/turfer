@@ -80,8 +80,16 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
     }
   };
 
+  const [acceptError, setAcceptError] = useState("");
+
   const handleAccept = async (requestId: string) => {
-    await acceptRequest(requestId, gameId, user!.id);
+    setAcceptError("");
+    const { success, error } = await acceptRequest(requestId, gameId, user!.id);
+    if (!success) {
+      setAcceptError(error || "Failed to accept request");
+      setTimeout(() => setAcceptError(""), 4000);
+      return;
+    }
     await loadRequests();
     await loadGame();
     await loadParticipants();
@@ -284,6 +292,11 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                   {pendingRequests.length}
                 </span>
               </div>
+              {acceptError && (
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
+                  {acceptError}
+                </div>
+              )}
               <div className="space-y-3">
                 {pendingRequests.map((req) => (
                   <GameRequestCard
@@ -540,6 +553,11 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                   </span>
                   Pending Requests
                 </p>
+                {acceptError && (
+                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+                    {acceptError}
+                  </div>
+                )}
                 <div className="space-y-2">
                   {pendingRequests.slice(0, 3).map((req) => (
                     <GameRequestCard

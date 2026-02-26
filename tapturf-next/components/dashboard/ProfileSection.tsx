@@ -22,6 +22,16 @@ export function ProfileSection({ user }: { user: AppUser }) {
     setSaving(false);
 
     if (!error) {
+      // Update localStorage for phone users so refreshUser picks up changes
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          parsed.name = name.trim();
+          if (phone.trim()) parsed.phone = phone.trim();
+          localStorage.setItem("user", JSON.stringify(parsed));
+        } catch { /* ignore */ }
+      }
       setSaved(true);
       await refreshUser();
       setTimeout(() => setSaved(false), 2000);

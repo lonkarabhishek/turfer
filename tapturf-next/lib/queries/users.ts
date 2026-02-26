@@ -34,7 +34,11 @@ export async function searchTurfs(query?: string) {
     .limit(20);
 
   if (query) {
-    q = q.or(`name.ilike.%${query}%,address.ilike.%${query}%`);
+    // Escape special PostgREST/SQL pattern chars to prevent injection
+    const escaped = query.replace(/[%_\\(),"']/g, "");
+    if (escaped) {
+      q = q.or(`name.ilike.%${escaped}%,address.ilike.%${escaped}%`);
+    }
   }
 
   const { data, error } = await q;

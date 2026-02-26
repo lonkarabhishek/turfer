@@ -277,6 +277,17 @@ export async function getMyRequests(userId: string) {
 
 export async function acceptRequest(requestId: string, gameId: string, userId: string) {
   const supabase = createClient();
+
+  // Check if game is full before accepting
+  const { data: game } = await supabase
+    .from("games")
+    .select("current_players, max_players")
+    .eq("id", gameId)
+    .single();
+
+  if (!game) return { success: false, error: "Game not found" };
+  if (game.current_players >= game.max_players) return { success: false, error: "Game is full" };
+
   const { data: updatedRequest, error } = await supabase
     .from("game_requests")
     .update({ status: "accepted" })
@@ -287,18 +298,10 @@ export async function acceptRequest(requestId: string, gameId: string, userId: s
   if (error) return { success: false, error: error.message };
 
   // Increment player count
-  const { data: game } = await supabase
+  await supabase
     .from("games")
-    .select("current_players")
-    .eq("id", gameId)
-    .single();
-
-  if (game) {
-    await supabase
-      .from("games")
-      .update({ current_players: game.current_players + 1 })
-      .eq("id", gameId);
-  }
+    .update({ current_players: game.current_players + 1 })
+    .eq("id", gameId);
 
   // Add as participant
   await supabase.from("game_participants").insert([{
