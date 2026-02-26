@@ -51,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
   const supabaseRef = useRef(createClient());
-  const initDoneRef = useRef(false);
   const userSetRef = useRef(false);
 
   const supabase = supabaseRef.current;
@@ -128,83 +127,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const emergencyTimeout = setTimeout(() => {
       if (!cancelled) setLoading(false);
-    }, 5000);
+    }, 3000);
 
-    const init = async () => {
+    // ── 1. Phone auth: instant from localStorage (no network) ──
+    const authToken = localStorage.getItem("auth_token");
+    const storedUser = localStorage.getItem("user");
+
+    if (authToken && storedUser) {
       try {
-        // 1. Phone auth (Firebase + localStorage)
-        const authToken = localStorage.getItem("auth_token");
-        const storedUser = localStorage.getItem("user");
+        const parsed = JSON.parse(storedUser);
+        if (parsed.id) {
+          setUser({
+            id: parsed.id,
+            name: parsed.name || "User",
+            email: parsed.email,
+            phone: parsed.phone,
+            role: (parsed.role || "player") as AppUser["role"],
+            profile_image_url: parsed.profile_image_url,
+          });
+          userSetRef.current = true;
+          setLoading(false);
+          clearTimeout(emergencyTimeout);
 
-        if (authToken && storedUser) {
-          try {
-            const parsed = JSON.parse(storedUser);
-            if (parsed.id) {
-              const profile = await fetchUserProfile(parsed.id);
-              if (!cancelled) {
-                setUser(profile || {
-                  id: parsed.id,
-                  name: parsed.name || "User",
-                  email: parsed.email,
-                  phone: parsed.phone,
-                  role: (parsed.role || "player") as AppUser["role"],
-                  profile_image_url: parsed.profile_image_url,
-                });
-                userSetRef.current = true;
-              }
-              initDoneRef.current = true;
-              if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
-              return;
-            }
-          } catch {
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("user");
-          }
+          // Refresh from DB in background (non-blocking)
+          fetchUserProfile(parsed.id).then(profile => {
+            if (profile && !cancelled) setUser(profile);
+          });
         }
-
-        // 2. Google OAuth (Supabase session)
-        let supaUser = null;
-
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) supaUser = session.user;
-        } catch { /* no session */ }
-
-        // Validate with getUser() if we got a session
-        if (supaUser) {
-          try {
-            const { data, error } = await supabase.auth.getUser();
-            if (data?.user && !error) supaUser = data.user;
-          } catch { /* use session user */ }
-        }
-
-        if (supaUser && !cancelled) {
-          await resolveSupabaseUser(supaUser, false);
-        }
-      } catch (err) {
-        console.error("[AuthProvider] Init error:", err);
-        if (!cancelled) setUser(null);
-      } finally {
-        initDoneRef.current = true;
-        if (!cancelled) { clearTimeout(emergencyTimeout); setLoading(false); }
+      } catch {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
       }
-    };
+    }
 
-    init();
-
-    // ── Auth state change listener ──
-
+    // ── 2. Google OAuth: rely solely on onAuthStateChange ──
+    // INITIAL_SESSION fires immediately with the current session (if any).
+    // No manual getSession()/getUser() calls — eliminates race condition.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return;
+
       if (event === "INITIAL_SESSION") {
         if (session?.user && !userSetRef.current) {
           await resolveSupabaseUser(session.user, false);
-          setLoading(false);
         }
+        // Always end loading on INITIAL_SESSION (fast for logged-out users)
+        clearTimeout(emergencyTimeout);
+        setLoading(false);
         return;
       }
 
       if (event === "SIGNED_IN" && session?.user) {
-        // Only show welcome if this is a genuinely new sign-in (user wasn't set before)
         const isNewSignIn = !userSetRef.current;
         await resolveSupabaseUser(session.user, isNewSignIn);
         setShowLoginModal(false);

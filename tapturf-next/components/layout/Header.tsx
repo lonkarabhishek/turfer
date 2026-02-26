@@ -65,54 +65,52 @@ export function Header() {
           </Link>
 
           {/* Auth section */}
-          {!loading && (
-            <>
-              {user ? (
-                <div className="flex items-center gap-2 ml-3">
-                  {/* Notifications */}
-                  <Link
-                    href="/dashboard?tab=notifications"
-                    className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  >
-                    <Bell className="w-5 h-5 text-gray-600" />
-                    {unread > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-                        {unread > 9 ? "9+" : unread}
-                      </span>
-                    )}
-                  </Link>
+          {loading ? (
+            <div className="ml-3 w-20 h-8 bg-gray-100 rounded-full animate-pulse" />
+          ) : user ? (
+            <div className="flex items-center gap-2 ml-3">
+              {/* Notifications */}
+              <Link
+                href="/dashboard?tab=notifications"
+                className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <Bell className="w-5 h-5 text-gray-600" />
+                {unread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                )}
+              </Link>
 
-                  {/* User avatar / dashboard link */}
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center gap-2 border border-gray-200 rounded-full pl-3 pr-1.5 py-1 hover:shadow-md hover:border-primary-200 transition-all"
-                  >
-                    <span className="text-sm font-medium text-gray-700 max-w-[80px] truncate">
-                      {user.name?.split(" ")[0] || "Account"}
-                    </span>
-                    {user.profile_image_url ? (
-                      <img
-                        src={user.profile_image_url}
-                        alt=""
-                        className="w-7 h-7 rounded-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center">
-                        <User className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                  </Link>
-                </div>
-              ) : (
-                <button
-                  onClick={login}
-                  className="ml-3 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 px-5 py-2 rounded-full transition-colors shadow-sm"
-                >
-                  Log in
-                </button>
-              )}
-            </>
+              {/* User avatar / dashboard link */}
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2 border border-gray-200 rounded-full pl-3 pr-1.5 py-1 hover:shadow-md hover:border-primary-200 transition-all"
+              >
+                <span className="text-sm font-medium text-gray-700 max-w-[80px] truncate">
+                  {user.name?.split(" ")[0] || "Account"}
+                </span>
+                {user.profile_image_url ? (
+                  <img
+                    src={user.profile_image_url}
+                    alt=""
+                    className="w-7 h-7 rounded-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                )}
+              </Link>
+            </div>
+          ) : (
+            <button
+              onClick={login}
+              className="ml-3 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 px-5 py-2 rounded-full transition-colors shadow-sm"
+            >
+              Log in
+            </button>
           )}
         </nav>
 
@@ -125,7 +123,9 @@ export function Header() {
             <Search className="w-4 h-4 text-gray-700" />
           </Link>
 
-          {!loading && user && (
+          {loading ? (
+            <div className="w-10 h-10 rounded-full bg-gray-100 animate-pulse" />
+          ) : user ? (
             <Link
               href="/dashboard?tab=notifications"
               className="relative flex items-center justify-center w-10 h-10"
@@ -137,9 +137,7 @@ export function Header() {
                 </span>
               )}
             </Link>
-          )}
-
-          {!loading && !user && (
+          ) : (
             <button
               onClick={login}
               className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-500 hover:bg-primary-600 shadow-sm transition-colors"
