@@ -21,7 +21,7 @@ export function Header() {
   }, [user]);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100">
+    <header className="sticky top-0 z-40 bg-cream-100/95 backdrop-blur-md border-b border-cream-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5">
@@ -32,8 +32,8 @@ export function Header() {
             height={34}
             className="rounded-lg"
           />
-          <span className="font-bold text-xl text-gray-900 tracking-tight">
-            Tap<span className="text-primary-500">Turf</span>
+          <span className="font-bold text-xl text-primary-600 tracking-tight font-serif">
+            Tap<span className="text-accent-500">Turf</span>
           </span>
         </Link>
 
@@ -41,53 +41,51 @@ export function Header() {
         <nav className="hidden md:flex items-center gap-1">
           <Link
             href="/turfs"
-            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
+            className="text-sm font-medium text-primary-700 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Find Turfs
           </Link>
           <Link
             href="/games"
-            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
+            className="text-sm font-medium text-primary-700 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Games
           </Link>
           <Link
             href="/sport/football"
-            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
+            className="text-sm font-medium text-primary-700 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Football
           </Link>
           <Link
             href="/sport/cricket"
-            className="text-sm font-medium text-gray-600 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
+            className="text-sm font-medium text-primary-700 hover:text-primary-600 px-3 py-2 rounded-full hover:bg-primary-50 transition-colors"
           >
             Cricket
           </Link>
 
           {/* Auth section */}
           {loading ? (
-            <div className="ml-3 w-20 h-8 bg-gray-100 rounded-full animate-pulse" />
+            <div className="ml-3 w-20 h-8 bg-cream-200 rounded-full animate-pulse" />
           ) : user ? (
             <div className="flex items-center gap-2 ml-3">
-              {/* Notifications */}
               <Link
                 href="/dashboard?tab=notifications"
-                className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+                className="relative p-2 rounded-full hover:bg-cream-200 transition-colors"
               >
-                <Bell className="w-5 h-5 text-gray-600" />
+                <Bell className="w-5 h-5 text-primary-600" />
                 {unread > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {unread > 9 ? "9+" : unread}
                   </span>
                 )}
               </Link>
 
-              {/* User avatar / dashboard link */}
               <Link
                 href="/dashboard"
-                className="flex items-center gap-2 border border-gray-200 rounded-full pl-3 pr-1.5 py-1 hover:shadow-md hover:border-primary-200 transition-all"
+                className="flex items-center gap-2 border border-cream-300 rounded-full pl-3 pr-1.5 py-1 hover:shadow-soft hover:border-primary-200 bg-white transition-all"
               >
-                <span className="text-sm font-medium text-gray-700 max-w-[80px] truncate">
+                <span className="text-sm font-medium text-primary-700 max-w-[80px] truncate">
                   {user.name?.split(" ")[0] || "Account"}
                 </span>
                 {user.profile_image_url ? (
@@ -107,7 +105,7 @@ export function Header() {
           ) : (
             <button
               onClick={login}
-              className="ml-3 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 px-5 py-2 rounded-full transition-colors shadow-sm"
+              className="ml-3 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 px-5 py-2 min-h-[44px] rounded-full transition-all hover:shadow-soft shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
             >
               Log in
             </button>
@@ -118,21 +116,21 @@ export function Header() {
         <div className="flex md:hidden items-center gap-2">
           <Link
             href="/turfs"
-            className="flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 shadow-sm hover:shadow-md hover:border-primary-200 transition-all"
+            className="flex items-center justify-center w-10 h-10 rounded-full border border-cream-300 bg-white shadow-sm hover:shadow-soft hover:border-primary-200 transition-all"
           >
-            <Search className="w-4 h-4 text-gray-700" />
+            <Search className="w-4 h-4 text-primary-600" />
           </Link>
 
           {loading ? (
-            <div className="w-10 h-10 rounded-full bg-gray-100 animate-pulse" />
+            <div className="w-10 h-10 rounded-full bg-cream-200 animate-pulse" />
           ) : user ? (
             <Link
               href="/dashboard?tab=notifications"
               className="relative flex items-center justify-center w-10 h-10"
             >
-              <Bell className="w-5 h-5 text-gray-700" />
+              <Bell className="w-5 h-5 text-primary-600" />
               {unread > 0 && (
-                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-accent-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
                   {unread > 9 ? "9+" : unread}
                 </span>
               )}
@@ -140,7 +138,7 @@ export function Header() {
           ) : (
             <button
               onClick={login}
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-500 hover:bg-primary-600 shadow-sm transition-colors"
+              className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-600 hover:bg-primary-700 shadow-sm transition-colors"
             >
               <User className="w-4 h-4 text-white" />
             </button>

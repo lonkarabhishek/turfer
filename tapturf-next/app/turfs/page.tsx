@@ -26,10 +26,13 @@ export default async function TurfsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-[28px] md:text-[32px] font-semibold text-gray-900">
-          Turfs in Nashik
+        <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-2">
+          Nashik
+        </p>
+        <h1 className="text-[30px] md:text-[36px] font-bold text-primary-800 font-serif">
+          Find your turf
         </h1>
-        <p className="text-base text-gray-500 mt-1">
+        <p className="text-base text-primary-400 mt-1">
           {turfs.length} sports turfs with pricing, ratings, and directions
         </p>
       </div>

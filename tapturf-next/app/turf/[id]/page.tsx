@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, MapPin, Star, ExternalLink, Share, User } from "lucide-react";
+import { ChevronRight, MapPin, Star, ExternalLink, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { getPhone } from "@/lib/utils/seo";
@@ -13,7 +13,6 @@ import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { CTAButtons } from "@/components/ui/CTAButtons";
-import { StarRating } from "@/components/ui/StarRating";
 
 export const revalidate = 3600;
 
@@ -69,40 +68,40 @@ export default async function TurfDetailPage({
     <div className="has-bottom-cta">
       <TurfJsonLd turf={turf} />
 
-      {/* Breadcrumb — Airbnb uses subtle breadcrumbs */}
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-1.5 text-sm text-gray-500 overflow-x-auto scrollbar-hide">
-        <Link href="/" className="hover:text-gray-900 transition-colors whitespace-nowrap">
+      {/* Breadcrumb */}
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-1.5 text-sm text-primary-400 overflow-x-auto scrollbar-hide">
+        <Link href="/" className="hover:text-primary-600 transition-colors whitespace-nowrap">
           Home
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-300" />
-        <Link href="/turfs" className="hover:text-gray-900 transition-colors whitespace-nowrap">
+        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-cream-400" />
+        <Link href="/turfs" className="hover:text-primary-600 transition-colors whitespace-nowrap">
           Turfs
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-gray-300" />
-        <span className="text-gray-900 font-medium truncate">{turf.name}</span>
+        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-cream-400" />
+        <span className="text-primary-700 font-medium truncate">{turf.name}</span>
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* Title section — Airbnb-style */}
+        {/* Title section */}
         <div className="mb-6">
-          <h1 className="text-[26px] md:text-[32px] font-semibold text-gray-900 leading-tight">
+          <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
             {turf.name}
           </h1>
           <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
             <div className="flex items-center gap-1">
-              <Star className="w-4 h-4 fill-gray-900 text-gray-900" />
-              <span className="font-semibold">{Number(turf.rating).toFixed(1)}</span>
+              <Star className="w-4 h-4 fill-accent-500 text-accent-500" />
+              <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
             </div>
             {turf.total_reviews > 0 && (
               <>
-                <span className="text-gray-300">·</span>
-                <span className="text-gray-600 underline underline-offset-2">
+                <span className="text-cream-400">·</span>
+                <span className="text-primary-500 underline underline-offset-2">
                   {turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""}
                 </span>
               </>
             )}
-            <span className="text-gray-300">·</span>
-            <span className="text-gray-600 underline underline-offset-2 flex items-center gap-1">
+            <span className="text-cream-400">·</span>
+            <span className="text-primary-500 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" />
               {turf.address}
             </span>
@@ -115,7 +114,7 @@ export default async function TurfDetailPage({
                 <Link
                   key={sport}
                   href={`/sport/${sport.toLowerCase()}`}
-                  className="text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors"
+                  className="text-xs font-semibold bg-primary-50 border border-primary-100 hover:bg-primary-100 text-primary-600 px-3 py-1.5 rounded-full transition-colors"
                 >
                   {sport}
                 </Link>
@@ -128,21 +127,21 @@ export default async function TurfDetailPage({
         <TurfImageGallery images={turf.images} />
 
         {/* Main content + sidebar */}
-        <div className="mt-10 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-12">
+        <div className="mt-10 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-12">
           {/* Left content */}
           <div>
-            {/* Hosted by section — Airbnb-style */}
+            {/* Managed by section */}
             {turf.owner_name && (
-              <div className="flex items-center gap-4 pb-6 border-b border-gray-200">
-                <div className="w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center">
+              <div className="flex items-center gap-4 pb-6 border-b border-cream-300">
+                <div className="w-12 h-12 rounded-full bg-primary-600 flex items-center justify-center shrink-0">
                   <User className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-lg font-semibold text-primary-800 font-serif">
                     Managed by {turf.owner_name}
                   </h2>
                   {turf.sports.length > 0 && (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-primary-400">
                       {turf.sports.join(" · ")}
                     </p>
                   )}
@@ -153,7 +152,7 @@ export default async function TurfDetailPage({
             {/* Description */}
             {turf.description && (
               <div className="section-divider">
-                <p className="text-base text-gray-600 leading-relaxed whitespace-pre-line">
+                <p className="text-base text-primary-600 leading-relaxed whitespace-pre-line">
                   {turf.description}
                 </p>
               </div>
@@ -166,7 +165,7 @@ export default async function TurfDetailPage({
             {/* Google Maps */}
             {turf.gmap_embed_link && (
               <div className="section-divider">
-                <h2 className="text-[22px] font-semibold text-gray-900 mb-5">
+                <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">
                   Where you&apos;ll play
                 </h2>
                 <TurfMap embedLink={turf.gmap_embed_link} />
@@ -180,9 +179,9 @@ export default async function TurfDetailPage({
                   href={turf.external_review_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-base text-gray-900 font-semibold underline underline-offset-2 hover:text-gray-600 transition-colors"
+                  className="inline-flex items-center gap-2 text-base text-primary-700 font-semibold underline underline-offset-2 hover:text-primary-500 transition-colors"
                 >
-                  <Star className="w-4 h-4" />
+                  <Star className="w-4 h-4 fill-accent-500 text-accent-500" />
                   Read reviews on Google
                   <ExternalLink className="w-4 h-4" />
                 </a>
@@ -190,21 +189,21 @@ export default async function TurfDetailPage({
             )}
           </div>
 
-          {/* Right sidebar - CTA (desktop) — Airbnb-style sticky card */}
+          {/* Right sidebar — sticky booking card */}
           <div className="hidden lg:block">
-            <div className="sticky top-24 border border-gray-200 rounded-2xl p-6 shadow-elevated">
+            <div className="sticky top-24 border border-cream-300 rounded-2xl p-6 shadow-elevated bg-white">
               <div className="flex items-baseline justify-between mb-1">
                 <div>
-                  <span className="text-[22px] font-semibold">₹{minPrice}</span>
-                  <span className="text-base text-gray-500 font-normal"> /hr onwards</span>
+                  <span className="text-[26px] font-bold text-primary-800 font-serif">₹{minPrice}</span>
+                  <span className="text-base text-primary-400 font-normal"> /hr onwards</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-1 mb-6 text-sm">
-                <Star className="w-3.5 h-3.5 fill-gray-900 text-gray-900" />
-                <span className="font-semibold">{Number(turf.rating).toFixed(1)}</span>
+                <Star className="w-3.5 h-3.5 fill-accent-500 text-accent-500" />
+                <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
                 {turf.total_reviews > 0 && (
-                  <span className="text-gray-500 ml-0.5">
+                  <span className="text-primary-400 ml-0.5">
                     ({turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""})
                   </span>
                 )}
@@ -217,13 +216,13 @@ export default async function TurfDetailPage({
                   address={turf.address}
                 />
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">
+                <p className="text-sm text-primary-400 text-center py-4">
                   Contact information not available
                 </p>
               )}
 
-              <p className="text-xs text-center text-gray-400 mt-4">
-                You won&apos;t be charged. Contact turf directly to book.
+              <p className="text-xs text-center text-primary-300 mt-4">
+                No booking fee. Contact turf directly to reserve your slot.
               </p>
             </div>
           </div>

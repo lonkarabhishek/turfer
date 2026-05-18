@@ -46,35 +46,35 @@ export function LoginModal() {
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 animate-fade-in"
+        className="absolute inset-0 bg-primary-950/60 backdrop-blur-sm animate-fade-in"
         onClick={handleClose}
       />
 
       {/* Modal */}
-      <div className="relative w-full md:max-w-md bg-white rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden">
-        {/* Accent top bar */}
-        <div className="h-1 bg-gradient-to-r from-primary-400 via-primary-500 to-accent-500" />
+      <div className="relative w-full md:max-w-md bg-cream-100 rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden shadow-elevated">
+        {/* Accent top bar — gold gradient */}
+        <div className="h-1 bg-gradient-to-r from-accent-600 via-accent-400 to-accent-500" />
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-cream-300">
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-full hover:bg-cream-200 transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-primary-500" />
           </button>
-          <h2 className="text-base font-bold text-gray-900">
+          <h2 className="text-base font-bold text-primary-800 font-serif">
             Log in or sign up
           </h2>
-          <div className="w-7" /> {/* Spacer for centering */}
+          <div className="w-7" />
         </div>
 
         {/* Body */}
-        <div className="px-6 py-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-1">
-            Welcome to <span className="text-primary-500">TapTurf</span>
+        <div className="px-6 py-6 bg-white">
+          <h3 className="text-2xl font-bold text-primary-800 mb-1 font-serif">
+            Welcome to <span className="text-accent-500">TapTurf</span>
           </h3>
-          <p className="text-sm text-gray-500 mb-6">Find games, book turfs, play together</p>
+          <p className="text-sm text-primary-400 mb-6">Find games, book turfs, play together</p>
 
           {/* Tab selector */}
           <div className="flex gap-2 mb-6">
@@ -82,8 +82,8 @@ export function LoginModal() {
               onClick={() => setTab("phone")}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${
                 tab === "phone"
-                  ? "border-primary-500 bg-primary-500 text-white shadow-sm"
-                  : "border-gray-200 text-gray-600 hover:border-primary-200 hover:text-primary-600"
+                  ? "border-primary-600 bg-primary-600 text-white shadow-sm"
+                  : "border-cream-300 text-primary-600 hover:border-primary-200 bg-cream-50"
               }`}
             >
               <Phone className="w-4 h-4" />
@@ -93,8 +93,8 @@ export function LoginModal() {
               onClick={() => setTab("google")}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${
                 tab === "google"
-                  ? "border-primary-500 bg-primary-500 text-white shadow-sm"
-                  : "border-gray-200 text-gray-600 hover:border-primary-200 hover:text-primary-600"
+                  ? "border-primary-600 bg-primary-600 text-white shadow-sm"
+                  : "border-cream-300 text-primary-600 hover:border-primary-200 bg-cream-50"
               }`}
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -115,14 +115,14 @@ export function LoginModal() {
           {/* Google */}
           {tab === "google" && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600 text-center">
+              <p className="text-sm text-primary-500 text-center">
                 Sign in with your Google account to continue
               </p>
 
               <button
                 onClick={handleGoogleLogin}
                 disabled={googleLoading}
-                className="w-full flex items-center justify-center gap-3 border-2 border-gray-200 rounded-xl py-3.5 px-4 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-3 border-2 border-cream-300 rounded-xl py-3.5 px-4 hover:bg-cream-50 hover:border-primary-200 transition-all disabled:opacity-50"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -130,7 +130,7 @@ export function LoginModal() {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                 </svg>
-                <span className="text-sm font-semibold text-gray-700">
+                <span className="text-sm font-semibold text-primary-700">
                   {googleLoading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -141,20 +141,20 @@ export function LoginModal() {
               </button>
 
               {googleError && (
-                <p className="text-sm text-accent-500 text-center font-medium">{googleError}</p>
+                <p className="text-sm text-red-500 text-center font-medium">{googleError}</p>
               )}
             </div>
           )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400 font-medium">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-cream-200" />
+            <span className="text-xs text-primary-300 font-medium">or</span>
+            <div className="flex-1 h-px bg-cream-200" />
           </div>
 
           {/* Switch tab hint */}
-          <p className="text-center text-sm text-gray-500">
+          <p className="text-center text-sm text-primary-400">
             {tab === "phone" ? (
               <>
                 Prefer Google?{" "}
@@ -173,8 +173,7 @@ export function LoginModal() {
           </p>
         </div>
 
-        {/* Bottom safe area for mobile */}
-        <div className="h-4 md:hidden" />
+        <div className="h-4 md:hidden bg-white" />
       </div>
     </div>
   );

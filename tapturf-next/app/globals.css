@@ -1,48 +1,63 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Primary - Teal (Airbnb's teal) */
-  --color-primary-50: #f0fdfa;
-  --color-primary-100: #ccfbf1;
-  --color-primary-200: #99f6e4;
-  --color-primary-300: #5eead4;
-  --color-primary-400: #2dd4bf;
-  --color-primary-500: #00A699;
-  --color-primary-600: #0d9488;
-  --color-primary-700: #0f766e;
-  --color-primary-800: #115e59;
-  --color-primary-900: #134e4a;
-  --color-primary-950: #042f2e;
+  /* Primary — Deep Forest Green */
+  --color-primary-50: #f0f7f4;
+  --color-primary-100: #d9ece5;
+  --color-primary-200: #b3d9cb;
+  --color-primary-300: #7cbfab;
+  --color-primary-400: #40916C;
+  --color-primary-500: #2D6A4F;
+  --color-primary-600: #1B4332;
+  --color-primary-700: #143828;
+  --color-primary-800: #0e2a1e;
+  --color-primary-900: #091a13;
+  --color-primary-950: #040d09;
 
-  /* Accent - Airbnb Red */
-  --color-accent-50: #fff1f2;
-  --color-accent-100: #ffe4e6;
-  --color-accent-200: #fecdd3;
-  --color-accent-300: #fda4af;
-  --color-accent-400: #fb7185;
-  --color-accent-500: #FF385C;
-  --color-accent-600: #e11d48;
-  --color-accent-700: #be123c;
-  --color-accent-800: #9f1239;
-  --color-accent-900: #881337;
-  --color-accent-950: #4c0519;
+  /* Accent — Brushed Gold */
+  --color-accent-50: #fdf8ee;
+  --color-accent-100: #f9edcf;
+  --color-accent-200: #f2d99f;
+  --color-accent-300: #E8C878;
+  --color-accent-400: #DDB968;
+  --color-accent-500: #D4A853;
+  --color-accent-600: #B8912F;
+  --color-accent-700: #9A7920;
+  --color-accent-800: #7a5f18;
+  --color-accent-900: #5c4711;
+  --color-accent-950: #3a2d09;
 
-  /* Font */
+  /* Cream neutrals */
+  --color-cream-50: #fdfcfb;
+  --color-cream-100: #F8F5F0;
+  --color-cream-200: #EFE9DF;
+  --color-cream-300: #E8E0D5;
+  --color-cream-400: #D9CEBF;
+  --color-cream-500: #C4B8A6;
+
+  /* Fonts */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-playfair), 'Georgia', ui-serif, serif;
 
-  /* Shadows — soft and warm */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.1);
-  --shadow-card-hover: 0 6px 20px rgba(0, 0, 0, 0.12);
-  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-elevated: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+  /* Luxury shadows — warm-toned */
+  --shadow-card: 0 1px 3px rgba(27, 67, 50, 0.06), 0 1px 2px rgba(27, 67, 50, 0.04);
+  --shadow-card-hover: 0 8px 24px rgba(27, 67, 50, 0.12), 0 2px 8px rgba(27, 67, 50, 0.06);
+  --shadow-soft: 0 2px 8px rgba(27, 67, 50, 0.08);
+  --shadow-elevated: 0 12px 40px rgba(27, 67, 50, 0.14), 0 4px 12px rgba(27, 67, 50, 0.08);
+  --shadow-gold: 0 4px 16px rgba(212, 168, 83, 0.25);
 }
 
 body {
-  background: #ffffff;
-  color: #222222;
+  background: #F8F5F0;
+  color: #1C1C1E;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Serif headings */
+.font-serif {
+  font-family: var(--font-serif);
 }
 
 /* Bottom padding for fixed mobile CTA bar */
@@ -70,11 +85,11 @@ html {
   display: none;
 }
 
-/* Airbnb-style section dividers */
+/* Luxury section dividers */
 .section-divider {
-  border-top: 1px solid #ebebeb;
-  padding-top: 1.5rem;
-  margin-top: 1.5rem;
+  border-top: 1px solid #E8E0D5;
+  padding-top: 1.75rem;
+  margin-top: 1.75rem;
 }
 
 /* Fade in animation */
@@ -84,7 +99,7 @@ html {
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out;
+  animation: fadeIn 0.5s ease-out;
 }
 
 /* Slide up animation */
@@ -115,4 +130,24 @@ html {
 
 .animate-slide-down {
   animation: slideDown 0.3s ease-out;
+}
+
+/* Gold shimmer for premium elements */
+@keyframes goldShimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.gold-shimmer {
+  background: linear-gradient(
+    90deg,
+    #D4A853 0%,
+    #E8C878 40%,
+    #D4A853 60%,
+    #B8912F 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }

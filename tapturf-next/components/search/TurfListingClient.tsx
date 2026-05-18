@@ -81,24 +81,24 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
 
   return (
     <div>
-      {/* Search bar — Airbnb-style rounded with shadow */}
+      {/* Search bar */}
       <div className="flex gap-3 mb-6">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-300" />
           <input
             type="text"
             placeholder="Search by name, area, or sport..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 rounded-full border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent shadow-sm placeholder:text-gray-400"
+            className="w-full pl-12 pr-4 py-3.5 min-h-[44px] rounded-full border border-cream-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm placeholder:text-primary-300 text-primary-700"
           />
         </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-3 rounded-full border text-sm font-medium transition-all md:hidden ${
             showFilters
-              ? "border-gray-900 bg-gray-900 text-white"
-              : "border-gray-300 text-gray-700 hover:border-gray-900"
+              ? "border-primary-600 bg-primary-600 text-white"
+              : "border-cream-300 bg-white text-primary-600 hover:border-primary-300"
           }`}
         >
           <SlidersHorizontal className="w-4 h-4" />
@@ -106,22 +106,20 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
         </button>
       </div>
 
-      {/* Filters — Airbnb chip style */}
-      <div
-        className={`${showFilters ? "block" : "hidden"} md:block mb-6`}
-      >
-        <div className="flex items-center gap-6 flex-wrap">
+      {/* Filters */}
+      <div className={`${showFilters ? "block" : "hidden"} md:block mb-6`}>
+        <div className="flex items-center gap-4 flex-wrap">
           {/* Sport chips */}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedSport(null)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              className={`px-4 py-2 min-h-[44px] rounded-full text-sm font-medium transition-all border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
                 !selectedSport
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-700 border-gray-300 hover:border-gray-900"
+                  ? "bg-primary-600 text-white border-primary-600"
+                  : "bg-white text-primary-600 border-cream-300 hover:border-primary-300 hover:bg-primary-50"
               }`}
             >
-              All
+              All Sports
             </button>
             {availableSports.map((sport) => (
               <button
@@ -129,10 +127,10 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
                 onClick={() =>
                   setSelectedSport(selectedSport === sport ? null : sport)
                 }
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                className={`px-4 py-2 min-h-[44px] rounded-full text-sm font-medium transition-all border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
                   selectedSport === sport
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 border-gray-300 hover:border-gray-900"
+                    ? "bg-primary-600 text-white border-primary-600"
+                    : "bg-white text-primary-600 border-cream-300 hover:border-primary-300 hover:bg-primary-50"
                 }`}
               >
                 {sport}
@@ -145,7 +143,7 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="appearance-none text-sm font-medium border border-gray-300 rounded-full px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white cursor-pointer hover:border-gray-900 transition-colors"
+              className="appearance-none text-sm font-medium border border-cream-300 rounded-full px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white cursor-pointer hover:border-primary-300 transition-colors text-primary-700"
             >
               {Object.entries(SORT_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -153,18 +151,18 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary-400 pointer-events-none" />
           </div>
         </div>
       </div>
 
       {/* Results count */}
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-primary-400 mb-6">
         {filteredTurfs.length} turf{filteredTurfs.length !== 1 ? "s" : ""}{" "}
         {search || selectedSport ? "found" : "available"}
       </p>
 
-      {/* Grid — Airbnb uses generous gap */}
+      {/* Grid */}
       {filteredTurfs.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredTurfs.map((turf) => (
@@ -174,8 +172,8 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">🏟️</p>
-          <p className="text-lg font-semibold text-gray-900">No turfs found</p>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-lg font-semibold text-primary-800 font-serif">No turfs found</p>
+          <p className="text-sm text-primary-400 mt-2">
             Try adjusting your search or filters
           </p>
           {(search || selectedSport) && (
@@ -184,7 +182,7 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
                 setSearch("");
                 setSelectedSport(null);
               }}
-              className="mt-4 text-sm font-semibold text-gray-900 underline underline-offset-4 hover:text-gray-600 transition-colors"
+              className="mt-4 text-sm font-semibold text-primary-600 underline underline-offset-4 hover:text-primary-400 transition-colors"
             >
               Clear all filters
             </button>
