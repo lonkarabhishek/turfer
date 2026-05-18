@@ -13,13 +13,13 @@ export function StarRating({
   const textSize = size === "md" ? "text-sm" : "text-xs";
 
   return (
-    <div className="flex items-center gap-1">
-      <Star className={`${iconSize} fill-gray-900 text-gray-900`} />
-      <span className={`${textSize} font-semibold text-gray-900`}>
+    <div className="flex items-center gap-1 shrink-0">
+      <Star className={`${iconSize} fill-accent-500 text-accent-500`} />
+      <span className={`${textSize} font-semibold text-primary-700`}>
         {Number(rating).toFixed(1)}
       </span>
       {reviews !== undefined && (
-        <span className={`${textSize} text-gray-500`}>({reviews})</span>
+        <span className={`${textSize} text-primary-400`}>({reviews})</span>
       )}
     </div>
   );

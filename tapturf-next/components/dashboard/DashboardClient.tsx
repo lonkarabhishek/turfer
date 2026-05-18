@@ -26,7 +26,6 @@ export function DashboardClient() {
   const [tab, setTab] = useState<TabKey>(initialTab);
   const redirectedRef = useRef(false);
 
-  // Only redirect after loading is done and no user found
   useEffect(() => {
     if (!loading && !user && !redirectedRef.current) {
       redirectedRef.current = true;
@@ -39,7 +38,7 @@ export function DashboardClient() {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
         <Loader2 className="w-6 h-6 text-primary-500 animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-500">Loading your dashboard...</p>
+        <p className="text-sm text-primary-400">Loading your dashboard...</p>
       </div>
     );
   }
@@ -49,16 +48,20 @@ export function DashboardClient() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Welcome, {user.name?.split(" ")[0] || "there"}</p>
+          <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-1">
+            Your Account
+          </p>
+          <h1 className="text-2xl font-bold text-primary-800 font-serif">Dashboard</h1>
+          <p className="text-sm text-primary-400 mt-0.5">
+            Welcome back, {user.name?.split(" ")[0] || "there"}
+          </p>
         </div>
         <button
           onClick={async () => {
             await logout();
-            // Hard reload to clear all server-side cookies and cached state
             window.location.href = "/";
           }}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-red-600 transition-colors"
+          className="flex items-center gap-2 text-sm text-primary-400 hover:text-red-500 transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Log out
@@ -66,15 +69,15 @@ export function DashboardClient() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto scrollbar-hide mb-6 -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide mb-6 -mx-4 px-4 sm:mx-0 sm:px-0">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all border ${
               tab === key
-                ? "bg-primary-500 text-white"
-                : "text-gray-600 hover:bg-primary-50 hover:text-primary-600"
+                ? "bg-primary-600 text-white border-primary-600 shadow-soft"
+                : "text-primary-600 bg-white border-cream-300 hover:border-primary-200 hover:bg-primary-50"
             }`}
           >
             <Icon className="w-4 h-4" />

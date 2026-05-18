@@ -90,33 +90,36 @@ export default async function SportPage({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-8">
-        <Link href="/" className="hover:text-gray-900 transition-colors">
+      <nav className="flex items-center gap-1.5 text-sm text-primary-400 mb-8">
+        <Link href="/" className="hover:text-primary-600 transition-colors">
           Home
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
-        <Link href="/turfs" className="hover:text-gray-900 transition-colors">
+        <ChevronRight className="w-3.5 h-3.5 text-cream-400" />
+        <Link href="/turfs" className="hover:text-primary-600 transition-colors">
           Turfs
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
-        <span className="text-gray-900 font-medium">{info.name}</span>
+        <ChevronRight className="w-3.5 h-3.5 text-cream-400" />
+        <span className="text-primary-700 font-medium">{info.name}</span>
       </nav>
 
       {/* Header */}
       <div className="mb-10">
+        <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-3">
+          Sport Category
+        </p>
         <div className="flex items-center gap-4 mb-3">
           <span className="text-5xl">{info.icon}</span>
           <div>
-            <h1 className="text-[28px] md:text-[36px] font-semibold text-gray-900 leading-tight">
+            <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
               {info.name} turfs in Nashik
             </h1>
-            <p className="text-base text-gray-500 mt-1">
+            <p className="text-base text-primary-400 mt-1">
               {turfs.length} {info.name.toLowerCase()} turf
               {turfs.length !== 1 ? "s" : ""} available
             </p>
           </div>
         </div>
-        <p className="text-base text-gray-500 mt-4 max-w-2xl leading-relaxed">
+        <p className="text-base text-primary-500 mt-4 max-w-2xl leading-relaxed">
           {info.description}
         </p>
       </div>
@@ -131,12 +134,12 @@ export default async function SportPage({
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-lg font-bold text-primary-800 font-serif">
             No {info.name.toLowerCase()} turfs found
           </p>
           <Link
             href="/turfs"
-            className="mt-4 inline-flex text-sm font-semibold text-gray-900 underline underline-offset-4 hover:text-gray-600 transition-colors"
+            className="mt-4 inline-flex text-sm font-semibold text-primary-600 underline underline-offset-4 hover:text-primary-400 transition-colors"
           >
             Browse all turfs
           </Link>
