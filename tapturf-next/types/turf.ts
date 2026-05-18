@@ -49,6 +49,10 @@ export interface Turf {
   gmap_embed_link: string | null;
   nearby_landmark: string | null;
 
+  // Location
+  lat: number | null;
+  lng: number | null;
+
   // System
   is_active: boolean;
   created_at: string;

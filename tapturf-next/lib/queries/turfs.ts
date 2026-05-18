@@ -88,6 +88,8 @@ function transformTurf(raw: any): Turf {
     // Handle the DB column named "Gmap Embed link" (with space)
     gmap_embed_link: raw["Gmap Embed link"] || raw.gmap_embed_link || null,
     nearby_landmark: raw.nearby_landmark || null,
+    lat: raw.lat ?? null,
+    lng: raw.lng ?? null,
     is_active: raw.is_active ?? true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
