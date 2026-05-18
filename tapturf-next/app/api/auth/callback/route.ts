@@ -37,11 +37,10 @@ export async function GET(request: NextRequest) {
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!exchangeError) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) return response;
+      return response;
     }
 
-    console.error("[OAuth Callback] Exchange error:", exchangeError?.message || "No user after exchange");
+    console.error("[OAuth Callback] Exchange error:", exchangeError?.message);
   }
 
   return NextResponse.redirect(`${origin}/?auth_error=true`);
