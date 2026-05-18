@@ -5,13 +5,17 @@ import { type NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const error = searchParams.get("error");
   const next = searchParams.get("next") ?? "/";
 
-  const redirectUrl = `${origin}${next}`;
+  // OAuth provider returned an error (e.g. user denied, provider not configured)
+  if (error) {
+    console.error("[OAuth Callback] Provider error:", error, searchParams.get("error_description"));
+    return NextResponse.redirect(`${origin}/?auth_error=true`);
+  }
 
   if (code) {
-    // Create the redirect response FIRST so we can attach cookies to it
-    const response = NextResponse.redirect(redirectUrl);
+    const response = NextResponse.redirect(`${origin}${next}`);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,21 +34,15 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!error) {
-      // Verify session was created
+    if (!exchangeError) {
       const { data: { user } } = await supabase.auth.getUser();
-
-      if (user) {
-        // The response already has auth cookies attached via setAll
-        return response;
-      }
+      if (user) return response;
     }
 
-    console.error("[OAuth Callback] Error:", error?.message || "No user after exchange");
+    console.error("[OAuth Callback] Exchange error:", exchangeError?.message || "No user after exchange");
   }
 
-  // Auth error — redirect home
-  return NextResponse.redirect(`${origin}/`);
+  return NextResponse.redirect(`${origin}/?auth_error=true`);
 }

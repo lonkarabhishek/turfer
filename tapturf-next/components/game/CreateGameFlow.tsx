@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, Check, MapPin, Search, Share2, Copy,
+  ArrowLeft, Check, MapPin, Search, Share2, Copy,
   Trophy, Clock, Calendar, CircleDot, Target, Circle, Feather,
   Grip, Dumbbell, Minus, Plus, Loader2, Users, Sparkles,
 } from "lucide-react";
@@ -13,14 +13,14 @@ import { searchTurfs } from "@/lib/queries/users";
 import type { CreateGameData } from "@/types/game";
 
 const SPORT_OPTIONS = [
-  { name: "Football",    icon: <CircleDot className="w-6 h-6" />, defaultMax: 14, color: "from-emerald-500 to-primary-600" },
-  { name: "5v5 Football",icon: <CircleDot className="w-6 h-6" />, defaultMax: 10, color: "from-emerald-400 to-primary-500" },
-  { name: "Cricket",     icon: <Target className="w-6 h-6" />,    defaultMax: 22, color: "from-primary-500 to-primary-700" },
-  { name: "Box Cricket", icon: <Target className="w-6 h-6" />,    defaultMax: 12, color: "from-primary-400 to-primary-600" },
-  { name: "Basketball",  icon: <Circle className="w-6 h-6" />,    defaultMax: 10, color: "from-orange-400 to-orange-600"   },
-  { name: "Tennis",      icon: <Grip className="w-6 h-6" />,      defaultMax: 4,  color: "from-accent-400 to-accent-600"   },
-  { name: "Pickleball",  icon: <Dumbbell className="w-6 h-6" />,  defaultMax: 4,  color: "from-accent-500 to-primary-500"  },
-  { name: "Badminton",   icon: <Feather className="w-6 h-6" />,   defaultMax: 4,  color: "from-primary-400 to-accent-500"  },
+  { name: "Football",     icon: <CircleDot className="w-6 h-6" />, defaultMax: 14, color: "from-emerald-500 to-primary-600" },
+  { name: "5v5 Football", icon: <CircleDot className="w-6 h-6" />, defaultMax: 10, color: "from-emerald-400 to-primary-500" },
+  { name: "Cricket",      icon: <Target className="w-6 h-6" />,    defaultMax: 22, color: "from-primary-500 to-primary-700" },
+  { name: "Box Cricket",  icon: <Target className="w-6 h-6" />,    defaultMax: 12, color: "from-primary-400 to-primary-600" },
+  { name: "Basketball",   icon: <Circle className="w-6 h-6" />,    defaultMax: 10, color: "from-orange-400 to-orange-600"   },
+  { name: "Tennis",       icon: <Grip className="w-6 h-6" />,      defaultMax: 4,  color: "from-accent-400 to-accent-600"   },
+  { name: "Pickleball",   icon: <Dumbbell className="w-6 h-6" />,  defaultMax: 4,  color: "from-accent-500 to-primary-500"  },
+  { name: "Badminton",    icon: <Feather className="w-6 h-6" />,   defaultMax: 4,  color: "from-primary-400 to-accent-500"  },
 ];
 
 const SKILL_LEVELS = [
@@ -45,7 +45,6 @@ const STEPS = [
   { n: 1, label: "Sport"   },
   { n: 2, label: "When"    },
   { n: 3, label: "Details" },
-  { n: 4, label: "Done"    },
 ];
 
 function fmt(hour: number, min: number) {
@@ -56,6 +55,16 @@ function fmt(hour: number, min: number) {
 
 function tv(h: number, m: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function getEndTime(startTime: string, durationHours: number): string | null {
+  if (!startTime) return null;
+  const [h, m] = startTime.split(":").map(Number);
+  const total = h * 60 + m + durationHours * 60;
+  const endH = Math.floor(total / 60);
+  const endM = total % 60;
+  if (endH > 23) return null;
+  return tv(endH, endM);
 }
 
 export function CreateGameFlow() {
@@ -73,7 +82,7 @@ export function CreateGameFlow() {
   const [maxPlayers, setMaxPlayers] = useState(10);
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [duration, setDuration] = useState<number | null>(null);
   const [turfId, setTurfId] = useState("");
   const [turfName, setTurfName] = useState("");
   const [turfSearch, setTurfSearch] = useState("");
@@ -84,9 +93,13 @@ export function CreateGameFlow() {
   const [customCost, setCustomCost] = useState("");
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
-  const [isToday, setIsToday] = useState(true);
 
   const turfSearchRef = useRef<HTMLInputElement>(null);
+
+  const endTime = useMemo(
+    () => (duration ? getEndTime(startTime, duration) : null),
+    [startTime, duration]
+  );
 
   useEffect(() => {
     if (!authLoading && !user && !hasTriggeredLogin) {
@@ -108,37 +121,10 @@ export function CreateGameFlow() {
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     setDate(today);
-    setIsToday(true);
   }, []);
 
-  const timeSlots = useMemo(() => {
-    const slots: { label: string; value: string }[] = [];
-    const now = new Date();
-    let startHour: number, startMin: number;
-
-    if (isToday) {
-      const currentMin = now.getMinutes();
-      startHour = now.getHours();
-      startMin = currentMin < 30 ? 30 : 0;
-      if (currentMin >= 30) startHour += 1;
-    } else {
-      startHour = 6; startMin = 0;
-    }
-
-    const endHourLimit = isToday ? Math.min(startHour + 6, 23) : 23;
-    let h = startHour, m = startMin;
-
-    while (h < endHourLimit || (h === endHourLimit && m === 0)) {
-      if (h > 23) break;
-      slots.push({ label: fmt(h, m), value: tv(h, m) });
-      m += 30;
-      if (m >= 60) { m = 0; h += 1; }
-    }
-    return slots;
-  }, [isToday]);
-
   const dateOptions = useMemo(() => {
-    const options: { label: string; sublabel: string; value: string; isToday: boolean }[] = [];
+    const options: { label: string; sublabel: string; value: string }[] = [];
     const now = new Date();
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
@@ -147,7 +133,6 @@ export function CreateGameFlow() {
         label: i === 0 ? "Today" : i === 1 ? "Tmrw" : d.toLocaleDateString("en-IN", { weekday: "short" }),
         sublabel: `${d.getDate()} ${d.toLocaleDateString("en-IN", { month: "short" })}`,
         value: d.toISOString().split("T")[0],
-        isToday: i === 0,
       });
     }
     return options;
@@ -160,15 +145,9 @@ export function CreateGameFlow() {
     setTimeout(() => setStep(2), 120);
   };
 
-  const handleDateSelect = (dateValue: string, today: boolean) => {
-    setDate(dateValue);
-    setIsToday(today);
-    setStartTime("");
-    setEndTime("");
-  };
-
   const handleSubmit = async () => {
     if (!user) { login(); return; }
+    if (!endTime) return;
     setSubmitError("");
     setSubmitting(true);
 
@@ -197,7 +176,6 @@ export function CreateGameFlow() {
 
   const step2Valid = date && startTime && endTime && turfId;
 
-  // ── Auth states ──────────────────────────────────────────────────────────
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -225,12 +203,11 @@ export function CreateGameFlow() {
     );
   }
 
-  // ── Main flow ────────────────────────────────────────────────────────────
   return (
     <div className="max-w-lg mx-auto">
-      {/* Step 4 (success) — full bleed, no header chrome */}
+      {/* Step 4: success */}
       {step === 4 ? (
-        <div className="px-5 pt-12 pb-32 flex flex-col items-center text-center animate-fade-in">
+        <div className="px-5 pt-12 pb-32 flex flex-col items-center text-center">
           <div className="w-20 h-20 bg-gradient-to-br from-accent-400 to-accent-600 rounded-full flex items-center justify-center shadow-gold mb-6">
             <Check className="w-10 h-10 text-white stroke-[2.5]" aria-hidden="true" />
           </div>
@@ -248,7 +225,6 @@ export function CreateGameFlow() {
               <Share2 className="w-5 h-5" aria-hidden="true" />
               Share on WhatsApp
             </button>
-
             <button
               onClick={handleCopyLink}
               className="w-full flex items-center justify-center gap-2.5 border border-cream-300 bg-white hover:bg-cream-100 text-primary-700 py-4 min-h-[52px] rounded-2xl font-semibold text-base transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
@@ -256,7 +232,6 @@ export function CreateGameFlow() {
               <Copy className="w-5 h-5" aria-hidden="true" />
               {copied ? "Copied!" : "Copy link"}
             </button>
-
             <button
               onClick={() => router.push(`/game/${createdGameId}`)}
               className="w-full flex items-center justify-center gap-2.5 bg-primary-600 hover:bg-primary-700 text-white py-4 min-h-[52px] rounded-2xl font-semibold text-base transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
@@ -268,7 +243,7 @@ export function CreateGameFlow() {
         </div>
       ) : (
         <>
-          {/* ── Sticky header: back + step indicator ── */}
+          {/* Sticky header */}
           <div className="sticky top-0 z-20 bg-cream-100/97 backdrop-blur-sm border-b border-cream-300 px-5 py-3">
             <div className="flex items-center gap-3 mb-3">
               {step > 1 ? (
@@ -283,32 +258,27 @@ export function CreateGameFlow() {
                 <div className="w-8" />
               )}
               <div className="flex-1 flex items-center gap-1.5">
-                {STEPS.slice(0, 3).map((s) => (
+                {STEPS.map((s) => (
                   <div key={s.n} className="flex-1 flex flex-col items-center gap-1">
-                    <div className={`w-full h-1.5 rounded-full transition-all duration-300 ${
-                      step >= s.n ? "bg-primary-600" : "bg-cream-300"
-                    }`} />
-                    <span className={`text-[10px] font-medium transition-colors ${
-                      step >= s.n ? "text-primary-600" : "text-primary-300"
-                    }`}>{s.label}</span>
+                    <div className={`w-full h-1.5 rounded-full transition-all duration-300 ${step >= s.n ? "bg-primary-600" : "bg-cream-300"}`} />
+                    <span className={`text-[10px] font-medium transition-colors ${step >= s.n ? "text-primary-600" : "text-primary-300"}`}>{s.label}</span>
                   </div>
                 ))}
               </div>
               <div className="w-8 text-right">
-                <span className="text-xs font-semibold text-primary-400">{Math.min(step, 3)}/3</span>
+                <span className="text-xs font-semibold text-primary-400">{step}/3</span>
               </div>
             </div>
           </div>
 
-          {/* ── Step content ── */}
-          <div className="px-5 pt-6 pb-36 animate-fade-in">
+          {/* Step content */}
+          <div className="px-5 pt-6 pb-36">
 
-            {/* ── Step 1: Sport ── */}
+            {/* Step 1: Sport */}
             {step === 1 && (
               <div>
-                <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-1">Step 1</p>
-                <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">Choose a sport</h1>
-                <p className="text-sm text-primary-400 mb-6">What are you playing today?</p>
+                <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">What are you playing?</h1>
+                <p className="text-sm text-primary-400 mb-6">Pick a sport to get started</p>
 
                 <div className="grid grid-cols-2 gap-3">
                   {SPORT_OPTIONS.map((s) => {
@@ -345,16 +315,15 @@ export function CreateGameFlow() {
               </div>
             )}
 
-            {/* ── Step 2: When & Where ── */}
+            {/* Step 2: When & Where */}
             {step === 2 && (
-              <div className="space-y-7">
+              <div className="space-y-8">
                 <div>
-                  <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-1">Step 2</p>
-                  <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">When & where</h1>
-                  <p className="text-sm text-primary-400">Pick a date, time, and turf</p>
+                  <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">When & where?</h1>
+                  <p className="text-sm text-primary-400">Pick a date, time, and venue</p>
                 </div>
 
-                {/* ── Date strip ── */}
+                {/* Date strip */}
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
                     <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
@@ -364,10 +333,10 @@ export function CreateGameFlow() {
                     {dateOptions.map((d) => (
                       <button
                         key={d.value}
-                        onClick={() => handleDateSelect(d.value, d.isToday)}
-                        className={`flex-shrink-0 w-[72px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[64px] ${
+                        onClick={() => { setDate(d.value); setStartTime(""); setDuration(null); }}
+                        className={`flex-shrink-0 w-[68px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[60px] ${
                           date === d.value
-                            ? "bg-primary-600 text-white border-primary-600 shadow-soft"
+                            ? "bg-primary-600 text-white border-primary-600"
                             : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
                         }`}
                       >
@@ -378,61 +347,45 @@ export function CreateGameFlow() {
                   </div>
                 </div>
 
-                {/* ── Start time strip ── */}
+                {/* Start time — native picker */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3" htmlFor="start-time">
                     <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                     Start time
                   </label>
-                  {timeSlots.length === 0 ? (
-                    <div className="bg-cream-100 border border-cream-300 rounded-xl px-4 py-3 text-sm text-primary-400">
-                      No more slots today — try tomorrow!
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1 snap-x">
-                      {timeSlots.map((slot) => (
-                        <button
-                          key={slot.value}
-                          onClick={() => setStartTime(slot.value)}
-                          className={`flex-shrink-0 px-5 py-3 min-h-[44px] rounded-xl border-2 text-sm font-semibold transition-all active:scale-[0.97] snap-start cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                            startTime === slot.value
-                              ? "bg-primary-600 text-white border-primary-600 shadow-soft"
-                              : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
-                          }`}
-                        >
-                          {slot.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <input
+                    id="start-time"
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
+                    className="w-full border-2 border-cream-300 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-semibold text-primary-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer"
+                  />
                 </div>
 
-                {/* ── Duration (shown after start time) ── */}
+                {/* Duration — 2×2 grid, shown after start time selected */}
                 {startTime && (
-                  <div className="animate-fade-in">
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
+                  <div>
+                    <label className="text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3 block">
                       Duration
                     </label>
-                    <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
+                    <div className="grid grid-cols-4 gap-2">
                       {DURATION_OPTIONS.map(({ hours, label }) => {
-                        const [h, m] = startTime.split(":").map(Number);
-                        const total = h * 60 + m + hours * 60;
-                        const endH = Math.floor(total / 60);
-                        const endM = total % 60;
-                        if (endH > 23) return null;
-                        const val = tv(endH, endM);
+                        const end = getEndTime(startTime, hours);
+                        if (!end) return null;
+                        const [endH, endM] = end.split(":").map(Number);
+                        const selected = duration === hours;
                         return (
                           <button
-                            key={val}
-                            onClick={() => setEndTime(val)}
-                            className={`flex-shrink-0 flex flex-col items-center px-5 py-3 min-h-[56px] rounded-xl border-2 transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                              endTime === val
-                                ? "bg-primary-600 text-white border-primary-600 shadow-soft"
+                            key={hours}
+                            onClick={() => setDuration(hours)}
+                            className={`flex flex-col items-center py-3 rounded-xl border-2 transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[56px] ${
+                              selected
+                                ? "bg-primary-600 text-white border-primary-600"
                                 : "bg-white border-cream-300 hover:border-primary-200"
                             }`}
                           >
-                            <span className={`text-sm font-bold ${endTime === val ? "text-white" : "text-primary-800"}`}>{label}</span>
-                            <span className={`text-[11px] ${endTime === val ? "text-primary-200" : "text-primary-400"}`}>ends {fmt(endH, endM)}</span>
+                            <span className={`text-sm font-bold ${selected ? "text-white" : "text-primary-800"}`}>{label}</span>
+                            <span className={`text-[10px] mt-0.5 ${selected ? "text-primary-200" : "text-primary-400"}`}>{fmt(endH, endM)}</span>
                           </button>
                         );
                       })}
@@ -440,7 +393,7 @@ export function CreateGameFlow() {
                   </div>
                 )}
 
-                {/* ── Venue search ── */}
+                {/* Venue search */}
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
                     <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
@@ -468,7 +421,7 @@ export function CreateGameFlow() {
                         type="text"
                         value={turfSearch}
                         onChange={(e) => setTurfSearch(e.target.value)}
-                        placeholder="Search for a turf in Nashik..."
+                        placeholder="Search for a turf..."
                         className="w-full pl-10 pr-4 py-3.5 min-h-[52px] border-2 border-cream-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all placeholder:text-primary-300 text-primary-700"
                       />
                       {showTurfDropdown && turfResults.length > 0 && (
@@ -499,46 +452,31 @@ export function CreateGameFlow() {
               </div>
             )}
 
-            {/* ── Step 3: Details ── */}
+            {/* Step 3: Details */}
             {step === 3 && (
               <div className="space-y-6">
                 <div>
-                  <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-1">Step 3</p>
                   <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">Game details</h1>
-                  <p className="text-sm text-primary-400">Almost there — just a few settings</p>
+                  <p className="text-sm text-primary-400">Almost there</p>
                 </div>
 
-                {/* Summary card */}
-                <div className="bg-primary-600 rounded-2xl p-5 text-white">
-                  <div className="flex items-center gap-2.5 mb-3">
-                    {selectedSportObj && (
-                      <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                        {selectedSportObj.icon}
-                      </div>
-                    )}
-                    <span className="font-bold text-base font-serif">{sport}</span>
-                  </div>
-                  <div className="space-y-1.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-primary-200">Venue</span>
-                      <span className="font-semibold text-right max-w-[60%] truncate">{turfName}</span>
+                {/* Quick summary */}
+                <div className="flex items-center gap-3 bg-primary-50 border border-primary-100 rounded-xl px-4 py-3">
+                  {selectedSportObj && (
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br ${selectedSportObj.color} text-white shrink-0`}>
+                      {selectedSportObj.icon}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-primary-200">Date</span>
-                      <span className="font-semibold">
-                        {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-primary-200">Time</span>
-                      <span className="font-semibold">
-                        {(() => {
-                          const [sh, sm] = startTime.split(":").map(Number);
-                          const [eh, em] = endTime.split(":").map(Number);
-                          return `${fmt(sh, sm)} – ${fmt(eh, em)}`;
-                        })()}
-                      </span>
-                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-primary-800 truncate">{sport} · {turfName}</p>
+                    <p className="text-xs text-primary-400 mt-0.5">
+                      {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                      {startTime && endTime && (() => {
+                        const [sh, sm] = startTime.split(":").map(Number);
+                        const [eh, em] = endTime.split(":").map(Number);
+                        return ` · ${fmt(sh, sm)} – ${fmt(eh, em)}`;
+                      })()}
+                    </p>
                   </div>
                 </div>
 
@@ -566,22 +504,22 @@ export function CreateGameFlow() {
                 {/* Max players */}
                 <div>
                   <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">Max players</label>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 bg-white border border-cream-300 rounded-xl px-4 py-3">
                     <button
                       onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
-                      className="w-11 h-11 flex items-center justify-center border-2 border-cream-300 rounded-xl hover:border-primary-300 hover:bg-primary-50 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      aria-label="Decrease players"
+                      className="w-10 h-10 flex items-center justify-center border border-cream-300 rounded-lg hover:border-primary-300 hover:bg-primary-50 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      aria-label="Decrease"
                     >
                       <Minus className="w-4 h-4 text-primary-600" />
                     </button>
                     <div className="flex-1 text-center">
-                      <span className="text-3xl font-bold text-primary-800 font-serif">{maxPlayers}</span>
-                      <p className="text-xs text-primary-400 mt-0.5">players</p>
+                      <span className="text-2xl font-bold text-primary-800 font-serif">{maxPlayers}</span>
+                      <span className="text-sm text-primary-400 ml-2">players</span>
                     </div>
                     <button
                       onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
-                      className="w-11 h-11 flex items-center justify-center border-2 border-cream-300 rounded-xl hover:border-primary-300 hover:bg-primary-50 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      aria-label="Increase players"
+                      className="w-10 h-10 flex items-center justify-center border border-cream-300 rounded-lg hover:border-primary-300 hover:bg-primary-50 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      aria-label="Increase"
                     >
                       <Plus className="w-4 h-4 text-primary-600" />
                     </button>
@@ -591,12 +529,12 @@ export function CreateGameFlow() {
                 {/* Cost per person */}
                 <div>
                   <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">Cost per person</label>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
-                    {COST_OPTIONS.map((price) => (
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    {COST_OPTIONS.slice(0, 4).map((price) => (
                       <button
                         key={price}
                         onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
-                        className={`flex-shrink-0 px-4 py-2.5 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        className={`py-2.5 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                           costPerPerson === price && !customCost
                             ? "bg-primary-600 text-white border-primary-600"
                             : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
@@ -605,13 +543,28 @@ export function CreateGameFlow() {
                         {price === 0 ? "Free" : `₹${price}`}
                       </button>
                     ))}
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {COST_OPTIONS.slice(4).map((price) => (
+                      <button
+                        key={price}
+                        onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
+                        className={`py-2.5 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                          costPerPerson === price && !customCost
+                            ? "bg-primary-600 text-white border-primary-600"
+                            : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
+                        }`}
+                      >
+                        ₹{price}
+                      </button>
+                    ))}
                     <input
                       type="number"
                       min={0}
                       step={50}
                       value={customCost}
                       onChange={(e) => { setCustomCost(e.target.value); setCostPerPerson(parseInt(e.target.value) || 0); }}
-                      className="flex-shrink-0 w-24 border-2 border-cream-300 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-primary-700 bg-white min-h-[44px]"
+                      className="col-span-3 border-2 border-cream-300 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-primary-700 bg-white min-h-[44px]"
                       placeholder="₹ custom"
                     />
                   </div>
@@ -625,20 +578,21 @@ export function CreateGameFlow() {
                   </div>
                   <button
                     onClick={() => setTurfBooked(!turfBooked)}
-                    className={`relative w-12 h-6.5 rounded-full transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${turfBooked ? "bg-primary-600" : "bg-cream-300"}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${turfBooked ? "bg-primary-600" : "bg-cream-300"}`}
                     role="switch"
                     aria-checked={turfBooked}
                   >
-                    <span className={`absolute top-0.5 left-0.5 w-5.5 h-5.5 bg-white rounded-full shadow-sm transition-transform duration-200 ${turfBooked ? "translate-x-5" : ""}`} />
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${turfBooked ? "translate-x-6" : ""}`} />
                   </button>
                 </div>
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
+                  <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3" htmlFor="notes">
                     Notes <span className="normal-case font-normal text-primary-300">(optional)</span>
                   </label>
                   <input
+                    id="notes"
                     type="text"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -656,64 +610,33 @@ export function CreateGameFlow() {
             )}
           </div>
 
-          {/* ── Sticky bottom CTA (mobile-first) ── */}
-          <div className="fixed bottom-0 left-0 right-0 z-30 bg-cream-100/97 backdrop-blur-sm border-t border-cream-300 px-5 py-4 md:hidden">
-            {step === 2 && (
+          {/* Sticky bottom CTA */}
+          {step === 2 && (
+            <div className="fixed bottom-0 left-0 right-0 z-30 bg-cream-100/97 backdrop-blur-sm border-t border-cream-300 px-5 py-4 safe-area-pb">
               <button
                 onClick={() => setStep(3)}
                 disabled={!step2Valid}
                 className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-4 min-h-[52px] rounded-2xl font-bold text-base transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
               >
                 Continue
-                <ArrowRight className="w-5 h-5" aria-hidden="true" />
               </button>
-            )}
-            {step === 3 && (
+            </div>
+          )}
+          {step === 3 && (
+            <div className="fixed bottom-0 left-0 right-0 z-30 bg-cream-100/97 backdrop-blur-sm border-t border-cream-300 px-5 py-4 safe-area-pb">
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-400 text-primary-900 py-4 min-h-[52px] rounded-2xl font-bold text-base transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 hover:shadow-gold"
+                className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-4 min-h-[52px] rounded-2xl font-bold text-base transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
               >
                 {submitting ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                    Creating game...
-                  </>
+                  <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creating...</>
                 ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" aria-hidden="true" />
-                    Create Game
-                  </>
+                  <><Sparkles className="w-5 h-5" aria-hidden="true" /> Create Game</>
                 )}
               </button>
-            )}
-          </div>
-
-          {/* Desktop CTA (inline, no sticky) */}
-          <div className="hidden md:block px-5 pb-8">
-            {step === 2 && (
-              <button
-                onClick={() => setStep(3)}
-                disabled={!step2Valid}
-                className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-4 rounded-2xl font-bold text-base transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                Continue <ArrowRight className="w-5 h-5" />
-              </button>
-            )}
-            {step === 3 && (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-400 text-primary-900 py-4 rounded-2xl font-bold text-base transition-all disabled:opacity-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-400 hover:shadow-gold"
-              >
-                {submitting ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> Creating game...</>
-                ) : (
-                  <><Sparkles className="w-5 h-5" /> Create Game</>
-                )}
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>
