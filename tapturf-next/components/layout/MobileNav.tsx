@@ -8,7 +8,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/games", label: "Games", icon: Gamepad2 },
-  { href: "/game/create", label: "Host", icon: Plus, requiresAuth: true, isCreate: true },
+  { href: "/game/create", label: "Host", icon: Plus, requiresAuth: true },
   { href: "/dashboard", label: "Me", icon: User, requiresAuth: true },
 ];
 
@@ -17,67 +17,69 @@ export function MobileNav() {
   const { user, login } = useAuth();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-primary-200 md:hidden">
-      <div className="flex items-center justify-around h-16 px-2">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, requiresAuth, isCreate }) => {
-          const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+    <>
+      {/* Floating pill nav — centered at the bottom, doesn't touch edges. */}
+      <nav
+        className="fixed left-1/2 -translate-x-1/2 z-30 md:hidden"
+        style={{
+          bottom: "max(0.75rem, calc(env(safe-area-inset-bottom) + 0.5rem))",
+        }}
+        aria-label="Primary"
+      >
+        <ul className="flex items-center gap-1 bg-primary-800/95 backdrop-blur-md rounded-full px-1.5 py-1.5 shadow-elevated">
+          {NAV_ITEMS.map(({ href, label, icon: Icon, requiresAuth }) => {
+            const isActive =
+              pathname === href || (href !== "/" && pathname.startsWith(href));
 
-          if (requiresAuth && !user) {
-            return (
-              <button
-                key={href}
-                onClick={login}
-                className="flex flex-col items-center gap-0.5 px-3 py-1"
-              >
-                {isCreate ? (
-                  <div className="w-12 h-12 bg-accent-500 rounded-full flex items-center justify-center -mt-4 shadow-neon">
-                    <Icon className="w-5 h-5 text-white" strokeWidth={3} />
-                  </div>
-                ) : (
-                  <Icon className="w-5 h-5 text-primary-400" />
-                )}
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-primary-400 mt-0.5">
-                  {label}
-                </span>
-              </button>
-            );
-          }
-
-          return (
-            <Link
-              key={href}
-              href={href}
-              className="flex flex-col items-center gap-0.5 px-3 py-1 transition-colors"
-            >
-              {isCreate ? (
-                <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center -mt-4 transition-all ${
-                    isActive
-                      ? "bg-accent-600 shadow-neon scale-105"
-                      : "bg-accent-500 shadow-neon"
-                  }`}
-                >
-                  <Icon className="w-5 h-5 text-white" strokeWidth={3} />
-                </div>
-              ) : (
-                <Icon
-                  className={`w-5 h-5 transition-all ${
-                    isActive ? "text-accent-600 stroke-[2.5]" : "text-primary-400"
-                  }`}
-                />
-              )}
+            const inner = (
               <span
-                className={`text-[10px] font-semibold uppercase tracking-wider mt-0.5 ${
-                  isActive ? "text-accent-600" : "text-primary-400"
+                className={`flex items-center gap-1.5 rounded-full transition-all min-h-[44px] ${
+                  isActive
+                    ? "bg-accent-500 text-white px-4 py-2 shadow-neon"
+                    : "text-white/70 px-3 py-2 hover:text-white"
                 }`}
               >
-                {label}
+                <Icon
+                  className="w-[18px] h-[18px]"
+                  strokeWidth={isActive ? 2.5 : 2}
+                />
+                {isActive && (
+                  <span className="text-xs font-bold uppercase tracking-wide">
+                    {label}
+                  </span>
+                )}
               </span>
-            </Link>
-          );
-        })}
-      </div>
-      <div className="h-[env(safe-area-inset-bottom)] bg-white" />
-    </nav>
+            );
+
+            if (requiresAuth && !user) {
+              return (
+                <li key={href}>
+                  <button
+                    onClick={login}
+                    aria-label={label}
+                    className="focus-neon rounded-full"
+                  >
+                    {inner}
+                  </button>
+                </li>
+              );
+            }
+
+            return (
+              <li key={href}>
+                <Link
+                  href={href}
+                  aria-label={label}
+                  aria-current={isActive ? "page" : undefined}
+                  className="focus-neon rounded-full"
+                >
+                  {inner}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </>
   );
 }

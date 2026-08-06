@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Check, MapPin, Search, Share2, Copy,
-  Trophy, Clock, Calendar, CircleDot, Target, Circle, Feather,
-  Grip, Dumbbell, Minus, Plus, Loader2, Users, Zap,
+  Trophy, CircleDot, Target, Circle, Feather,
+  Grip, Dumbbell, Loader2, Users, Zap, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
@@ -24,10 +24,10 @@ const SPORT_OPTIONS = [
 ];
 
 const SKILL_LEVELS = [
-  { value: "all" as const,          label: "Anyone",       desc: "All welcome" },
-  { value: "beginner" as const,     label: "Beginner",     desc: "Just starting" },
-  { value: "intermediate" as const, label: "Intermediate", desc: "Solid basics" },
-  { value: "advanced" as const,     label: "Advanced",     desc: "Competitive" },
+  { value: "all" as const,          short: "Any" },
+  { value: "beginner" as const,     short: "Beginner" },
+  { value: "intermediate" as const, short: "Mid" },
+  { value: "advanced" as const,     short: "Pro" },
 ];
 
 const DURATION_OPTIONS = [
@@ -37,7 +37,7 @@ const DURATION_OPTIONS = [
   { hours: 2,   label: "2h"  },
 ];
 
-const COST_OPTIONS = [0, 50, 100, 150, 200, 300];
+const COST_OPTIONS = [0, 50, 100, 150, 200, 300, 500];
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -67,6 +67,19 @@ function getEndTime(startTime: string, durationHours: number): string | null {
   return tv(endH, endM);
 }
 
+function humanDate(dateStr: string): string {
+  if (!dateStr) return "Pick a date";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((dt.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff > 1 && diff < 7) return dt.toLocaleDateString("en-IN", { weekday: "long" });
+  return dt.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+
 export function CreateGameFlow() {
   const { user, login, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -94,7 +107,8 @@ export function CreateGameFlow() {
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
 
-  const turfSearchRef = useRef<HTMLInputElement>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const timeRef = useRef<HTMLInputElement>(null);
 
   const endTime = useMemo(
     () => (duration ? getEndTime(startTime, duration) : null),
@@ -123,26 +137,23 @@ export function CreateGameFlow() {
     setDate(today);
   }, []);
 
-  const dateOptions = useMemo(() => {
-    const options: { label: string; sublabel: string; value: string }[] = [];
-    const now = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() + i);
-      options.push({
-        label: i === 0 ? "Today" : i === 1 ? "Tmrw" : d.toLocaleDateString("en-IN", { weekday: "short" }),
-        sublabel: `${d.getDate()} ${d.toLocaleDateString("en-IN", { month: "short" })}`,
-        value: d.toISOString().split("T")[0],
-      });
-    }
-    return options;
-  }, []);
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   const handleSportSelect = (s: typeof SPORT_OPTIONS[0]) => {
     setSport(s.name);
     setSelectedSportObj(s);
     setMaxPlayers(s.defaultMax);
     setTimeout(() => setStep(2), 120);
+  };
+
+  const openPicker = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    // showPicker() is the modern iOS/Android way to open a native picker on tap
+    if (typeof el.showPicker === "function") {
+      try { el.showPicker(); return; } catch { /* fall through */ }
+    }
+    el.focus();
+    el.click();
   };
 
   const handleSubmit = async () => {
@@ -205,19 +216,13 @@ export function CreateGameFlow() {
     );
   }
 
-  const inputBase =
-    "w-full bg-white border-2 border-primary-200 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-all";
-
   return (
     <div className="max-w-lg mx-auto">
-      {/* Step 4: success */}
+      {/* ─── Step 4: Success ───────────────────────────────── */}
       {step === 4 ? (
-        <div className="px-5 pt-10 pb-24 flex flex-col items-center text-center">
+        <div className="px-5 pt-12 pb-40 flex flex-col items-center text-center">
           <div className="relative mb-6">
-            <div
-              className="absolute inset-0 blur-2xl bg-accent-400/40 rounded-full"
-              aria-hidden
-            />
+            <div className="absolute inset-0 blur-2xl bg-accent-400/40 rounded-full" aria-hidden />
             <div className="relative w-20 h-20 bg-accent-500 rounded-full flex items-center justify-center shadow-neon">
               <Check className="w-10 h-10 text-white stroke-[3]" aria-hidden="true" />
             </div>
@@ -258,7 +263,7 @@ export function CreateGameFlow() {
         </div>
       ) : (
         <>
-          {/* Sticky header — mobile-tight */}
+          {/* Sticky header */}
           <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-primary-200 px-4 py-3">
             <div className="flex items-center gap-3">
               {step > 1 ? (
@@ -292,10 +297,10 @@ export function CreateGameFlow() {
             </div>
           </div>
 
-          {/* Step content — generous bottom padding to clear sticky CTA + mobile nav */}
-          <div className="px-4 pt-6 pb-40">
+          {/* Content — extra bottom padding for sticky CTA + floating pill nav */}
+          <div className="px-4 pt-6 pb-44">
 
-            {/* Step 1: Sport */}
+            {/* ─── Step 1: Sport ───────────────────────────── */}
             {step === 1 && (
               <div>
                 <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
@@ -343,149 +348,153 @@ export function CreateGameFlow() {
               </div>
             )}
 
-            {/* Step 2: When & Where */}
+            {/* ─── Step 2: When & Where (iOS grouped list) ───── */}
             {step === 2 && (
-              <div className="space-y-7">
-                <div>
+              <div className="space-y-2">
+                <div className="mb-6">
                   <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     When &<br />
                     <span className="text-accent-500">where?</span>
                   </h1>
                   <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
-                    Date · Time · Venue
+                    Date · time · venue
                   </p>
                 </div>
 
-                {/* Date strip */}
-                <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">
-                    <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-                    Date
-                  </label>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
-                    {dateOptions.map((d) => (
-                      <button
-                        key={d.value}
-                        onClick={() => { setDate(d.value); setStartTime(""); setDuration(null); }}
-                        className={`flex-shrink-0 w-[72px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] focus-neon min-h-[68px] ${
-                          date === d.value
-                            ? "bg-accent-500 border-accent-500 shadow-neon"
-                            : "bg-white border-primary-200 hover:border-accent-400"
-                        }`}
-                      >
-                        <p className={`font-display uppercase text-sm tracking-wide ${
-                          date === d.value ? "text-white" : "text-primary-800"
-                        }`}>
-                          {d.label}
-                        </p>
-                        <p className={`text-[10px] font-mono mt-0.5 ${
-                          date === d.value ? "text-white/85" : "text-primary-500"
-                        }`}>
-                          {d.sublabel}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Start time */}
-                <div>
-                  <label
-                    htmlFor="start-time"
-                    className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3"
+                {/* SCHEDULE group */}
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-2">
+                  Schedule
+                </p>
+                <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
+                  {/* Date row — tap opens native picker */}
+                  <button
+                    onClick={() => openPicker(dateRef.current)}
+                    className="w-full flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors focus-neon"
                   >
-                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-                    Start time
-                  </label>
-                  <input
-                    id="start-time"
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
-                    className={inputBase + " font-mono tabular text-lg"}
-                  />
+                    <span className="text-[15px] font-medium text-primary-800">Date</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[15px] font-semibold text-accent-600">
+                        {humanDate(date)}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-primary-400" />
+                    </span>
+                    <input
+                      ref={dateRef}
+                      type="date"
+                      value={date}
+                      min={todayStr}
+                      onChange={(e) => { setDate(e.target.value); setStartTime(""); setDuration(null); }}
+                      className="sr-only"
+                      aria-label="Date"
+                    />
+                  </button>
+
+                  <div className="h-px bg-primary-200 ml-4" />
+
+                  {/* Start time row */}
+                  <button
+                    onClick={() => openPicker(timeRef.current)}
+                    className="w-full flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors focus-neon"
+                  >
+                    <span className="text-[15px] font-medium text-primary-800">Start time</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[15px] font-semibold text-accent-600 font-mono tabular">
+                        {startTime ? (() => {
+                          const [h, m] = startTime.split(":").map(Number);
+                          return fmt(h, m);
+                        })() : "Pick a time"}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-primary-400" />
+                    </span>
+                    <input
+                      ref={timeRef}
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
+                      className="sr-only"
+                      aria-label="Start time"
+                    />
+                  </button>
+
+                  {/* Duration row — segmented control */}
+                  {startTime && (
+                    <>
+                      <div className="h-px bg-primary-200 ml-4" />
+                      <div className="px-4 py-3.5">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[15px] font-medium text-primary-800">Duration</span>
+                          {endTime && (
+                            <span className="text-[13px] text-primary-500 font-mono tabular">
+                              → {(() => {
+                                const [h, m] = endTime.split(":").map(Number);
+                                return fmt(h, m);
+                              })()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex bg-primary-100 rounded-xl p-1 gap-0.5">
+                          {DURATION_OPTIONS.map(({ hours, label }) => {
+                            const selected = duration === hours;
+                            const end = getEndTime(startTime, hours);
+                            if (!end) return null;
+                            return (
+                              <button
+                                key={hours}
+                                onClick={() => setDuration(hours)}
+                                className={`flex-1 py-2.5 rounded-lg text-[14px] font-bold transition-all focus-neon min-h-[40px] ${
+                                  selected
+                                    ? "bg-white text-accent-600 shadow-sm"
+                                    : "text-primary-600 hover:text-primary-800"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Duration */}
-                {startTime && (
-                  <div>
-                    <label className="text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3 block">
-                      Duration
-                    </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {DURATION_OPTIONS.map(({ hours, label }) => {
-                        const end = getEndTime(startTime, hours);
-                        if (!end) return null;
-                        const [endH, endM] = end.split(":").map(Number);
-                        const selected = duration === hours;
-                        return (
-                          <button
-                            key={hours}
-                            onClick={() => setDuration(hours)}
-                            className={`flex flex-col items-center py-3 rounded-xl border-2 transition-all active:scale-[0.97] focus-neon min-h-[60px] ${
-                              selected
-                                ? "bg-accent-500 border-accent-500 shadow-neon"
-                                : "bg-white border-primary-200 hover:border-accent-400"
-                            }`}
-                          >
-                            <span className={`font-display uppercase text-base tracking-wide ${
-                              selected ? "text-white" : "text-primary-800"
-                            }`}>
-                              {label}
-                            </span>
-                            <span className={`text-[10px] font-mono mt-0.5 ${
-                              selected ? "text-white/85" : "text-primary-500"
-                            }`}>
-                              → {fmt(endH, endM)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Venue */}
-                <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">
-                    <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
-                    Venue
-                  </label>
-
+                {/* VENUE group */}
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
+                  Venue
+                </p>
+                <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
                   {turfId ? (
-                    <div className="flex items-center justify-between border-2 border-accent-500 rounded-xl px-4 py-3.5 bg-accent-50 shadow-neon">
+                    <div className="flex items-center justify-between px-4 py-3.5 min-h-[56px]">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <MapPin className="w-4 h-4 text-accent-600 shrink-0" aria-hidden="true" />
-                        <span className="text-sm font-semibold text-primary-800 truncate">{turfName}</span>
+                        <span className="text-[15px] font-semibold text-primary-800 truncate">{turfName}</span>
                       </div>
                       <button
                         onClick={() => { setTurfId(""); setTurfName(""); setTurfSearch(""); }}
-                        className="text-[10px] font-semibold uppercase tracking-widest text-accent-600 hover:text-accent-700 shrink-0 ml-3"
+                        className="text-[13px] font-semibold text-accent-600 hover:text-accent-700 shrink-0 ml-3 focus-neon rounded-md px-2 py-1"
                       >
-                        change
+                        Change
                       </button>
                     </div>
                   ) : (
                     <div className="relative">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden="true" />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" aria-hidden="true" />
                       <input
-                        ref={turfSearchRef}
                         type="text"
                         value={turfSearch}
                         onChange={(e) => setTurfSearch(e.target.value)}
-                        placeholder="Search a turf…"
-                        className={inputBase + " pl-11"}
+                        placeholder="Search a turf by name…"
+                        className="w-full pl-11 pr-4 py-3.5 min-h-[56px] text-[15px] font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
                       />
                       {showTurfDropdown && turfResults.length > 0 && (
-                        <div className="absolute z-20 top-full mt-1.5 w-full bg-white border border-primary-200 rounded-2xl shadow-elevated overflow-hidden">
+                        <div className="absolute z-20 top-full mt-2 w-full bg-white border border-primary-200 rounded-2xl shadow-elevated overflow-hidden">
                           {turfResults.map((turf) => (
                             <button
                               key={turf.id}
                               onClick={() => { setTurfId(turf.id); setTurfName(turf.name); setShowTurfDropdown(false); setTurfSearch(""); }}
-                              className="w-full text-left px-4 py-3.5 hover:bg-accent-50 border-b border-primary-200 last:border-0 transition-colors"
+                              className="w-full text-left px-4 py-3.5 hover:bg-accent-50 border-b border-primary-100 last:border-0 transition-colors"
                             >
-                              <p className="text-sm font-semibold text-primary-800">{turf.name}</p>
-                              <p className="text-xs text-primary-500 flex items-center gap-1 mt-0.5">
+                              <p className="text-[15px] font-semibold text-primary-800">{turf.name}</p>
+                              <p className="text-[13px] text-primary-500 flex items-center gap-1 mt-0.5">
                                 <MapPin className="w-3 h-3" aria-hidden="true" />
                                 {turf.address}
                               </p>
@@ -494,7 +503,7 @@ export function CreateGameFlow() {
                         </div>
                       )}
                       {turfSearch.length >= 2 && turfResults.length === 0 && (
-                        <p className="absolute z-20 top-full mt-1.5 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-sm text-primary-500">
+                        <p className="absolute z-20 top-full mt-2 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-[13px] text-primary-500">
                           No turfs found — try a different name
                         </p>
                       )}
@@ -504,10 +513,10 @@ export function CreateGameFlow() {
               </div>
             )}
 
-            {/* Step 3: Details */}
+            {/* ─── Step 3: Squad Details (iOS grouped list) ─── */}
             {step === 3 && (
-              <div className="space-y-6">
-                <div>
+              <div className="space-y-2">
+                <div className="mb-6">
                   <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     Squad<br />
                     <span className="text-accent-500">details</span>
@@ -518,7 +527,7 @@ export function CreateGameFlow() {
                 </div>
 
                 {/* Summary card */}
-                <div className="flex items-center gap-3 bg-primary-50 border border-primary-200 rounded-2xl px-4 py-3.5">
+                <div className="flex items-center gap-3 bg-accent-50 border border-accent-500/30 rounded-2xl px-4 py-3.5 mb-4">
                   {selectedSportObj && (
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-accent-500 text-white shrink-0">
                       {selectedSportObj.icon}
@@ -528,7 +537,7 @@ export function CreateGameFlow() {
                     <p className="font-display uppercase text-lg text-primary-800 truncate tracking-wide leading-tight">
                       {sport} · {turfName}
                     </p>
-                    <p className="text-[11px] font-mono text-primary-500 mt-0.5">
+                    <p className="text-[12px] font-mono text-primary-600 mt-0.5">
                       {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
                       {startTime && endTime && (() => {
                         const [sh, sm] = startTime.split(":").map(Number);
@@ -539,156 +548,158 @@ export function CreateGameFlow() {
                   </div>
                 </div>
 
-                {/* Skill level */}
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">Skill level</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {SKILL_LEVELS.map((level) => (
-                      <button
-                        key={level.value}
-                        onClick={() => setSkillLevel(level.value)}
-                        className={`flex flex-col items-start px-4 py-3 min-h-[64px] rounded-xl border-2 transition-all active:scale-[0.97] focus-neon ${
-                          skillLevel === level.value
-                            ? "bg-accent-500 border-accent-500 shadow-neon"
-                            : "bg-white border-primary-200 hover:border-accent-400"
-                        }`}
-                      >
-                        <span className={`font-display uppercase text-base tracking-wide ${
-                          skillLevel === level.value ? "text-white" : "text-primary-800"
-                        }`}>
-                          {level.label}
-                        </span>
-                        <span className={`text-[10px] font-semibold uppercase tracking-widest mt-0.5 ${
-                          skillLevel === level.value ? "text-white/85" : "text-primary-500"
-                        }`}>
-                          {level.desc}
-                        </span>
-                      </button>
-                    ))}
+                {/* GAME group */}
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-2">
+                  Game
+                </p>
+                <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
+                  {/* Skill level — iOS segmented control */}
+                  <div className="px-4 py-3.5">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[15px] font-medium text-primary-800">Skill level</span>
+                    </div>
+                    <div className="flex bg-primary-100 rounded-xl p-1 gap-0.5">
+                      {SKILL_LEVELS.map((level) => {
+                        const selected = skillLevel === level.value;
+                        return (
+                          <button
+                            key={level.value}
+                            onClick={() => setSkillLevel(level.value)}
+                            className={`flex-1 py-2.5 rounded-lg text-[13px] font-bold transition-all focus-neon min-h-[40px] ${
+                              selected
+                                ? "bg-white text-accent-600 shadow-sm"
+                                : "text-primary-600 hover:text-primary-800"
+                            }`}
+                          >
+                            {level.short}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
 
-                {/* Max players */}
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">Max players</label>
-                  <div className="flex items-center gap-4 bg-white border-2 border-primary-200 rounded-xl px-4 py-3">
-                    <button
-                      onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
-                      className="w-11 h-11 flex items-center justify-center border-2 border-primary-200 rounded-lg hover:border-accent-500 hover:bg-accent-50 active:scale-95 transition-all focus-neon"
-                      aria-label="Decrease"
-                    >
-                      <Minus className="w-4 h-4 text-primary-700" />
-                    </button>
-                    <div className="flex-1 text-center">
-                      <span className="font-display text-4xl text-accent-500 tabular tracking-tight">{maxPlayers}</span>
-                      <span className="text-xs font-semibold uppercase tracking-widest text-primary-500 ml-2">players</span>
+                  <div className="h-px bg-primary-200 ml-4" />
+
+                  {/* Max players — iOS stepper */}
+                  <div className="flex items-center justify-between px-4 py-3.5 min-h-[56px]">
+                    <span className="text-[15px] font-medium text-primary-800">Max players</span>
+                    <div className="flex items-center gap-3 bg-primary-100 rounded-xl p-1">
+                      <button
+                        onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-white text-primary-800 font-bold text-lg active:scale-95 transition-all shadow-sm focus-neon"
+                        aria-label="Decrease"
+                      >
+                        −
+                      </button>
+                      <span className="font-mono text-[16px] font-bold text-primary-800 tabular w-6 text-center">
+                        {maxPlayers}
+                      </span>
+                      <button
+                        onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-white text-primary-800 font-bold text-lg active:scale-95 transition-all shadow-sm focus-neon"
+                        aria-label="Increase"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-primary-200 ml-4" />
+
+                  {/* Turf booked toggle — iOS switch */}
+                  <div className="flex items-center justify-between px-4 py-3.5 min-h-[56px]">
+                    <div>
+                      <p className="text-[15px] font-medium text-primary-800">Turf already booked</p>
+                      <p className="text-[12px] text-primary-500 mt-0.5">Confirmed slot</p>
                     </div>
                     <button
-                      onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
-                      className="w-11 h-11 flex items-center justify-center border-2 border-primary-200 rounded-lg hover:border-accent-500 hover:bg-accent-50 active:scale-95 transition-all focus-neon"
-                      aria-label="Increase"
+                      onClick={() => setTurfBooked(!turfBooked)}
+                      className={`relative w-[51px] h-[31px] rounded-full transition-colors focus-neon shrink-0 ${
+                        turfBooked ? "bg-accent-500" : "bg-primary-300"
+                      }`}
+                      role="switch"
+                      aria-checked={turfBooked}
                     >
-                      <Plus className="w-4 h-4 text-primary-700" />
+                      <span
+                        className={`absolute top-[2px] left-[2px] w-[27px] h-[27px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                          turfBooked ? "translate-x-[20px]" : ""
+                        }`}
+                      />
                     </button>
                   </div>
                 </div>
 
-                {/* Cost per person */}
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">Cost per person</label>
-                  <div className="grid grid-cols-4 gap-2 mb-2">
-                    {COST_OPTIONS.slice(0, 4).map((price) => (
-                      <button
-                        key={price}
-                        onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
-                        className={`py-3 min-h-[48px] rounded-xl border-2 font-display text-lg tracking-tight transition-all active:scale-[0.97] focus-neon ${
-                          costPerPerson === price && !customCost
-                            ? "bg-accent-500 text-white border-accent-500 shadow-neon"
-                            : "bg-white text-primary-800 border-primary-200 hover:border-accent-400"
-                        }`}
-                      >
-                        {price === 0 ? "FREE" : `₹${price}`}
-                      </button>
-                    ))}
+                {/* COST group */}
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
+                  Cost per person
+                </p>
+                <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
+                  <div className="px-3 py-3">
+                    <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                      {COST_OPTIONS.map((price) => {
+                        const selected = costPerPerson === price && !customCost;
+                        return (
+                          <button
+                            key={price}
+                            onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
+                            className={`flex-shrink-0 min-w-[68px] px-4 py-2.5 rounded-full font-bold text-[14px] transition-all active:scale-[0.97] focus-neon border-2 ${
+                              selected
+                                ? "bg-accent-500 text-white border-accent-500 shadow-neon"
+                                : "bg-white text-primary-800 border-primary-200 hover:border-accent-400"
+                            }`}
+                          >
+                            {price === 0 ? "Free" : `₹${price}`}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {COST_OPTIONS.slice(4).map((price) => (
-                      <button
-                        key={price}
-                        onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
-                        className={`py-3 min-h-[48px] rounded-xl border-2 font-display text-lg tracking-tight transition-all active:scale-[0.97] focus-neon ${
-                          costPerPerson === price && !customCost
-                            ? "bg-accent-500 text-white border-accent-500 shadow-neon"
-                            : "bg-white text-primary-800 border-primary-200 hover:border-accent-400"
-                        }`}
-                      >
-                        ₹{price}
-                      </button>
-                    ))}
+                  <div className="h-px bg-primary-200 ml-4" />
+                  <div className="flex items-center px-4 py-3 min-h-[52px]">
+                    <span className="text-[15px] font-medium text-primary-800 mr-3">Custom</span>
+                    <span className="text-primary-500 mr-1">₹</span>
                     <input
                       type="number"
                       min={0}
                       step={50}
                       value={customCost}
                       onChange={(e) => { setCustomCost(e.target.value); setCostPerPerson(parseInt(e.target.value) || 0); }}
-                      className="col-span-3 border-2 border-primary-200 rounded-xl px-3 py-2 text-sm text-center font-mono tabular focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 bg-white text-primary-800 placeholder:text-primary-400 min-h-[48px]"
-                      placeholder="₹ custom"
+                      placeholder="0"
+                      className="flex-1 bg-transparent text-right font-mono tabular text-[15px] text-primary-800 placeholder:text-primary-300 focus:outline-none"
                     />
                   </div>
                 </div>
 
-                {/* Turf booked toggle */}
-                <div className="flex items-center justify-between bg-white border-2 border-primary-200 rounded-xl px-4 py-3.5">
-                  <div>
-                    <p className="text-sm font-semibold text-primary-800">Turf already booked?</p>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 mt-0.5">
-                      Confirmed slot
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setTurfBooked(!turfBooked)}
-                    className={`relative w-12 h-7 rounded-full transition-colors focus-neon ${
-                      turfBooked ? "bg-accent-500 shadow-neon" : "bg-primary-200"
-                    }`}
-                    role="switch"
-                    aria-checked={turfBooked}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${
-                      turfBooked ? "translate-x-5" : ""
-                    }`} />
-                  </button>
-                </div>
-
-                {/* Notes */}
-                <div>
-                  <label
-                    htmlFor="notes"
-                    className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3"
-                  >
-                    Notes <span className="text-primary-400 lowercase">(optional)</span>
-                  </label>
+                {/* NOTES group */}
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
+                  Notes <span className="normal-case font-normal text-primary-400">(optional)</span>
+                </p>
+                <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
                   <input
                     id="notes"
                     type="text"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="e.g. Bring your own shoes, red jersey"
-                    className={inputBase}
+                    className="w-full px-4 py-3.5 min-h-[56px] text-[15px] text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
                   />
                 </div>
 
                 {submitError && (
-                  <div className="p-3.5 bg-hot-500/10 border border-hot-500/40 rounded-xl">
-                    <p className="text-sm text-hot-600 font-medium">{submitError}</p>
+                  <div className="mt-4 p-3.5 bg-hot-500/10 border border-hot-500/40 rounded-2xl">
+                    <p className="text-[14px] text-hot-600 font-medium">{submitError}</p>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Sticky bottom CTA — sits above mobile bottom nav (h-16) */}
+          {/* Sticky bottom CTA — floats above the floating pill mobile nav (~90px) */}
           {step === 2 && (
-            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 safe-bottom">
+            <div
+              className="fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 md:bottom-0"
+              style={{ bottom: "max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))" }}
+            >
               <button
                 onClick={() => setStep(3)}
                 disabled={!step2Valid}
@@ -699,7 +710,10 @@ export function CreateGameFlow() {
             </div>
           )}
           {step === 3 && (
-            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 safe-bottom">
+            <div
+              className="fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 md:bottom-0"
+              style={{ bottom: "max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))" }}
+            >
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
