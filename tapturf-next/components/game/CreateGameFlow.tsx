@@ -179,8 +179,8 @@ export function CreateGameFlow() {
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <Loader2 className="w-7 h-7 text-accent-400 animate-spin" />
-        <p className="text-xs font-mono uppercase tracking-widest text-white/50">Loading…</p>
+        <Loader2 className="w-7 h-7 text-accent-500 animate-spin" />
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">Loading…</p>
       </div>
     );
   }
@@ -188,16 +188,16 @@ export function CreateGameFlow() {
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-        <div className="w-16 h-16 bg-accent-400 rounded-2xl flex items-center justify-center mb-6 shadow-neon">
-          <Zap className="w-8 h-8 text-primary-950" strokeWidth={2.75} />
+        <div className="w-16 h-16 bg-accent-500 rounded-2xl flex items-center justify-center mb-6 shadow-neon">
+          <Zap className="w-8 h-8 text-white" strokeWidth={2.75} />
         </div>
-        <h2 className="font-display uppercase text-4xl text-white mb-2 tracking-tight">Log in to host</h2>
-        <p className="text-sm text-white/50 mb-7 max-w-xs">
+        <h2 className="font-display uppercase text-4xl text-primary-800 mb-2 tracking-tight">Log in to host</h2>
+        <p className="text-sm text-primary-500 mb-7 max-w-xs">
           Sign in to create games, invite your crew, and manage your squad.
         </p>
         <button
           onClick={login}
-          className="bg-accent-400 hover:bg-accent-300 text-primary-950 px-8 py-3.5 min-h-[52px] rounded-full font-bold uppercase tracking-wide text-sm shadow-neon transition-all focus-neon"
+          className="bg-primary-800 hover:bg-primary-900 text-white px-8 py-3.5 min-h-[52px] rounded-full font-bold uppercase tracking-wide text-sm shadow-elevated transition-all focus-neon"
         >
           Log in
         </button>
@@ -205,31 +205,30 @@ export function CreateGameFlow() {
     );
   }
 
-  // Common input style
   const inputBase =
-    "w-full bg-cream-200 border border-white/10 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 transition-all";
+    "w-full bg-white border-2 border-primary-200 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-all";
 
   return (
     <div className="max-w-lg mx-auto">
       {/* Step 4: success */}
       {step === 4 ? (
-        <div className="px-5 pt-12 pb-32 flex flex-col items-center text-center">
-          <div className="relative">
+        <div className="px-5 pt-10 pb-24 flex flex-col items-center text-center">
+          <div className="relative mb-6">
             <div
-              className="absolute inset-0 blur-3xl bg-accent-400/40 rounded-full"
+              className="absolute inset-0 blur-2xl bg-accent-400/40 rounded-full"
               aria-hidden
             />
-            <div className="relative w-20 h-20 bg-accent-400 rounded-full flex items-center justify-center shadow-neon mb-6">
-              <Check className="w-10 h-10 text-primary-950 stroke-[3]" aria-hidden="true" />
+            <div className="relative w-20 h-20 bg-accent-500 rounded-full flex items-center justify-center shadow-neon">
+              <Check className="w-10 h-10 text-white stroke-[3]" aria-hidden="true" />
             </div>
           </div>
-          <h1 className="font-display uppercase text-5xl text-white mb-3 tracking-tight leading-none">
-            Game<br /><span className="text-accent-400">on.</span>
+          <h1 className="font-display uppercase text-5xl text-primary-800 mb-3 tracking-tight leading-none">
+            Game<br /><span className="text-accent-500">on.</span>
           </h1>
-          <p className="text-sm text-white/60 mb-2">
-            <span className="font-semibold text-white">{sport}</span> · {turfName}
+          <p className="text-sm text-primary-600 mb-1">
+            <span className="font-semibold text-primary-800">{sport}</span> · {turfName}
           </p>
-          <p className="text-xs font-mono uppercase tracking-widest text-white/40 mb-10">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary-500 mb-8">
             Share the link — get your squad in
           </p>
 
@@ -243,14 +242,14 @@ export function CreateGameFlow() {
             </button>
             <button
               onClick={handleCopyLink}
-              className="w-full flex items-center justify-center gap-2.5 border border-white/15 bg-cream-200 hover:bg-cream-300 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors focus-neon"
+              className="w-full flex items-center justify-center gap-2.5 border-2 border-primary-200 bg-white hover:bg-primary-50 text-primary-800 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors focus-neon"
             >
               <Copy className="w-5 h-5" aria-hidden="true" />
               {copied ? "Copied ✓" : "Copy link"}
             </button>
             <button
               onClick={() => router.push(`/game/${createdGameId}`)}
-              className="w-full flex items-center justify-center gap-2.5 bg-accent-400 hover:bg-accent-300 text-primary-950 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors shadow-neon focus-neon"
+              className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors shadow-elevated focus-neon"
             >
               <Trophy className="w-5 h-5" aria-hidden="true" />
               View my game
@@ -259,51 +258,51 @@ export function CreateGameFlow() {
         </div>
       ) : (
         <>
-          {/* Sticky header */}
-          <div className="sticky top-0 z-20 bg-primary-950/90 backdrop-blur-xl border-b border-white/5 px-5 py-4">
+          {/* Sticky header — mobile-tight */}
+          <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-primary-200 px-4 py-3">
             <div className="flex items-center gap-3">
               {step > 1 ? (
                 <button
                   onClick={() => setStep((step - 1) as Step)}
-                  className="w-9 h-9 flex items-center justify-center rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors focus-neon"
+                  className="w-9 h-9 flex items-center justify-center rounded-full border border-primary-200 bg-white hover:bg-primary-50 transition-colors focus-neon shrink-0"
                   aria-label="Go back"
                 >
-                  <ArrowLeft className="w-4 h-4 text-white/80" />
+                  <ArrowLeft className="w-4 h-4 text-primary-700" />
                 </button>
               ) : (
-                <div className="w-9" />
+                <div className="w-9 shrink-0" />
               )}
               <div className="flex-1 flex items-center gap-1.5">
                 {STEPS.map((s) => (
                   <div key={s.n} className="flex-1 flex flex-col items-center gap-1.5">
                     <div className={`w-full h-1 rounded-full transition-all duration-300 ${
-                      step >= s.n ? "bg-accent-400 shadow-neon" : "bg-white/10"
+                      step >= s.n ? "bg-accent-500" : "bg-primary-200"
                     }`} />
-                    <span className={`text-[10px] font-mono uppercase tracking-widest transition-colors ${
-                      step >= s.n ? "text-accent-400" : "text-white/30"
+                    <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                      step >= s.n ? "text-accent-600" : "text-primary-400"
                     }`}>
                       {s.label}
                     </span>
                   </div>
                 ))}
               </div>
-              <div className="w-9 text-right">
-                <span className="text-xs font-mono tabular text-white/50">{step}/3</span>
+              <div className="w-9 text-right shrink-0">
+                <span className="text-xs font-mono tabular text-primary-500">{step}/3</span>
               </div>
             </div>
           </div>
 
-          {/* Step content */}
-          <div className="px-5 pt-8 pb-40">
+          {/* Step content — generous bottom padding to clear sticky CTA + mobile nav */}
+          <div className="px-4 pt-6 pb-40">
 
             {/* Step 1: Sport */}
             {step === 1 && (
               <div>
-                <h1 className="font-display uppercase text-5xl text-white leading-[0.9] tracking-tight mb-2">
+                <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                   What are<br />
-                  <span className="text-accent-400">you playing?</span>
+                  <span className="text-accent-500">you playing?</span>
                 </h1>
-                <p className="text-sm text-white/50 mb-8 font-mono uppercase tracking-widest text-xs">
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500 mb-6">
                   Pick your sport
                 </p>
 
@@ -314,27 +313,27 @@ export function CreateGameFlow() {
                       <button
                         key={s.name}
                         onClick={() => handleSportSelect(s)}
-                        className={`relative flex flex-col items-start gap-3 p-4 min-h-[110px] rounded-2xl text-left transition-all active:scale-[0.97] focus-neon ${
+                        className={`relative flex flex-col items-start gap-3 p-4 min-h-[112px] rounded-2xl text-left transition-all active:scale-[0.97] focus-neon ${
                           active
-                            ? "bg-accent-400/15 border-2 border-accent-400 shadow-neon"
-                            : "bg-cream-200 border-2 border-white/5 hover:border-white/20"
+                            ? "bg-accent-50 border-2 border-accent-500 shadow-neon"
+                            : "bg-white border-2 border-primary-200 hover:border-accent-400"
                         }`}
                       >
                         <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
-                          active ? "bg-accent-400 text-primary-950" : "bg-white/5 text-accent-400"
+                          active ? "bg-accent-500 text-white" : "bg-primary-100 text-accent-500"
                         }`}>
                           {s.icon}
                         </div>
                         <div>
-                          <p className="font-display uppercase text-lg text-white leading-tight tracking-wide">{s.name}</p>
-                          <p className="text-[11px] text-white/40 font-mono uppercase tracking-widest mt-0.5 flex items-center gap-1">
+                          <p className="font-display uppercase text-lg text-primary-800 leading-tight tracking-wide">{s.name}</p>
+                          <p className="text-[11px] text-primary-500 font-semibold uppercase tracking-widest mt-0.5 flex items-center gap-1">
                             <Users className="w-3 h-3" aria-hidden="true" />
                             {s.defaultMax} slots
                           </p>
                         </div>
                         {active && (
-                          <span className="absolute top-3 right-3 w-6 h-6 bg-accent-400 rounded-full flex items-center justify-center">
-                            <Check className="w-3.5 h-3.5 text-primary-950 stroke-[3]" />
+                          <span className="absolute top-3 right-3 w-6 h-6 bg-accent-500 rounded-full flex items-center justify-center shadow-neon">
+                            <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
                           </span>
                         )}
                       </button>
@@ -346,41 +345,41 @@ export function CreateGameFlow() {
 
             {/* Step 2: When & Where */}
             {step === 2 && (
-              <div className="space-y-8">
+              <div className="space-y-7">
                 <div>
-                  <h1 className="font-display uppercase text-5xl text-white leading-[0.9] tracking-tight mb-2">
+                  <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     When &<br />
-                    <span className="text-accent-400">where?</span>
+                    <span className="text-accent-500">where?</span>
                   </h1>
-                  <p className="text-xs font-mono uppercase tracking-widest text-white/50">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
                     Date · Time · Venue
                   </p>
                 </div>
 
                 {/* Date strip */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">
+                  <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">
                     <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                     Date
                   </label>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
                     {dateOptions.map((d) => (
                       <button
                         key={d.value}
                         onClick={() => { setDate(d.value); setStartTime(""); setDuration(null); }}
-                        className={`flex-shrink-0 w-[76px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] focus-neon min-h-[68px] ${
+                        className={`flex-shrink-0 w-[72px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] focus-neon min-h-[68px] ${
                           date === d.value
-                            ? "bg-accent-400 text-primary-950 border-accent-400 shadow-neon"
-                            : "bg-cream-200 border-white/10 hover:border-white/25"
+                            ? "bg-accent-500 border-accent-500 shadow-neon"
+                            : "bg-white border-primary-200 hover:border-accent-400"
                         }`}
                       >
                         <p className={`font-display uppercase text-sm tracking-wide ${
-                          date === d.value ? "text-primary-950" : "text-white"
+                          date === d.value ? "text-white" : "text-primary-800"
                         }`}>
                           {d.label}
                         </p>
                         <p className={`text-[10px] font-mono mt-0.5 ${
-                          date === d.value ? "text-primary-950/70" : "text-white/40"
+                          date === d.value ? "text-white/85" : "text-primary-500"
                         }`}>
                           {d.sublabel}
                         </p>
@@ -393,7 +392,7 @@ export function CreateGameFlow() {
                 <div>
                   <label
                     htmlFor="start-time"
-                    className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3"
+                    className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3"
                   >
                     <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                     Start time
@@ -404,14 +403,13 @@ export function CreateGameFlow() {
                     value={startTime}
                     onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
                     className={inputBase + " font-mono tabular text-lg"}
-                    style={{ colorScheme: "dark" }}
                   />
                 </div>
 
                 {/* Duration */}
                 {startTime && (
                   <div>
-                    <label className="text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3 block">
+                    <label className="text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3 block">
                       Duration
                     </label>
                     <div className="grid grid-cols-4 gap-2">
@@ -426,17 +424,17 @@ export function CreateGameFlow() {
                             onClick={() => setDuration(hours)}
                             className={`flex flex-col items-center py-3 rounded-xl border-2 transition-all active:scale-[0.97] focus-neon min-h-[60px] ${
                               selected
-                                ? "bg-accent-400 border-accent-400 shadow-neon"
-                                : "bg-cream-200 border-white/10 hover:border-white/25"
+                                ? "bg-accent-500 border-accent-500 shadow-neon"
+                                : "bg-white border-primary-200 hover:border-accent-400"
                             }`}
                           >
                             <span className={`font-display uppercase text-base tracking-wide ${
-                              selected ? "text-primary-950" : "text-white"
+                              selected ? "text-white" : "text-primary-800"
                             }`}>
                               {label}
                             </span>
                             <span className={`text-[10px] font-mono mt-0.5 ${
-                              selected ? "text-primary-950/70" : "text-white/40"
+                              selected ? "text-white/85" : "text-primary-500"
                             }`}>
                               → {fmt(endH, endM)}
                             </span>
@@ -449,27 +447,27 @@ export function CreateGameFlow() {
 
                 {/* Venue */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">
+                  <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">
                     <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
                     Venue
                   </label>
 
                   {turfId ? (
-                    <div className="flex items-center justify-between border-2 border-accent-400 rounded-xl px-4 py-3.5 bg-accent-400/10 shadow-neon">
+                    <div className="flex items-center justify-between border-2 border-accent-500 rounded-xl px-4 py-3.5 bg-accent-50 shadow-neon">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <MapPin className="w-4 h-4 text-accent-400 shrink-0" aria-hidden="true" />
-                        <span className="text-sm font-semibold text-white truncate">{turfName}</span>
+                        <MapPin className="w-4 h-4 text-accent-600 shrink-0" aria-hidden="true" />
+                        <span className="text-sm font-semibold text-primary-800 truncate">{turfName}</span>
                       </div>
                       <button
                         onClick={() => { setTurfId(""); setTurfName(""); setTurfSearch(""); }}
-                        className="text-[10px] font-mono uppercase tracking-widest text-accent-400 hover:text-accent-300 shrink-0 ml-3"
+                        className="text-[10px] font-semibold uppercase tracking-widest text-accent-600 hover:text-accent-700 shrink-0 ml-3"
                       >
                         change
                       </button>
                     </div>
                   ) : (
                     <div className="relative">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" aria-hidden="true" />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden="true" />
                       <input
                         ref={turfSearchRef}
                         type="text"
@@ -479,15 +477,15 @@ export function CreateGameFlow() {
                         className={inputBase + " pl-11"}
                       />
                       {showTurfDropdown && turfResults.length > 0 && (
-                        <div className="absolute z-20 top-full mt-1.5 w-full bg-cream-200 border border-white/10 rounded-2xl shadow-elevated overflow-hidden">
+                        <div className="absolute z-20 top-full mt-1.5 w-full bg-white border border-primary-200 rounded-2xl shadow-elevated overflow-hidden">
                           {turfResults.map((turf) => (
                             <button
                               key={turf.id}
                               onClick={() => { setTurfId(turf.id); setTurfName(turf.name); setShowTurfDropdown(false); setTurfSearch(""); }}
-                              className="w-full text-left px-4 py-3.5 hover:bg-accent-400/10 border-b border-white/5 last:border-0 transition-colors"
+                              className="w-full text-left px-4 py-3.5 hover:bg-accent-50 border-b border-primary-200 last:border-0 transition-colors"
                             >
-                              <p className="text-sm font-semibold text-white">{turf.name}</p>
-                              <p className="text-xs text-white/50 flex items-center gap-1 mt-0.5">
+                              <p className="text-sm font-semibold text-primary-800">{turf.name}</p>
+                              <p className="text-xs text-primary-500 flex items-center gap-1 mt-0.5">
                                 <MapPin className="w-3 h-3" aria-hidden="true" />
                                 {turf.address}
                               </p>
@@ -496,7 +494,7 @@ export function CreateGameFlow() {
                         </div>
                       )}
                       {turfSearch.length >= 2 && turfResults.length === 0 && (
-                        <p className="absolute z-20 top-full mt-1.5 w-full bg-cream-200 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/50">
+                        <p className="absolute z-20 top-full mt-1.5 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-sm text-primary-500">
                           No turfs found — try a different name
                         </p>
                       )}
@@ -510,27 +508,27 @@ export function CreateGameFlow() {
             {step === 3 && (
               <div className="space-y-6">
                 <div>
-                  <h1 className="font-display uppercase text-5xl text-white leading-[0.9] tracking-tight mb-2">
+                  <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     Squad<br />
-                    <span className="text-accent-400">details</span>
+                    <span className="text-accent-500">details</span>
                   </h1>
-                  <p className="text-xs font-mono uppercase tracking-widest text-white/50">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
                     Almost on the pitch
                   </p>
                 </div>
 
                 {/* Summary card */}
-                <div className="flex items-center gap-3 bg-cream-200 border border-white/10 rounded-2xl px-4 py-3.5">
+                <div className="flex items-center gap-3 bg-primary-50 border border-primary-200 rounded-2xl px-4 py-3.5">
                   {selectedSportObj && (
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-accent-400 text-primary-950 shrink-0">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-accent-500 text-white shrink-0">
                       {selectedSportObj.icon}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="font-display uppercase text-lg text-white truncate tracking-wide leading-tight">
+                    <p className="font-display uppercase text-lg text-primary-800 truncate tracking-wide leading-tight">
                       {sport} · {turfName}
                     </p>
-                    <p className="text-[11px] font-mono text-white/50 mt-0.5">
+                    <p className="text-[11px] font-mono text-primary-500 mt-0.5">
                       {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
                       {startTime && endTime && (() => {
                         const [sh, sm] = startTime.split(":").map(Number);
@@ -543,7 +541,7 @@ export function CreateGameFlow() {
 
                 {/* Skill level */}
                 <div>
-                  <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">Skill level</label>
+                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">Skill level</label>
                   <div className="grid grid-cols-2 gap-2">
                     {SKILL_LEVELS.map((level) => (
                       <button
@@ -551,17 +549,17 @@ export function CreateGameFlow() {
                         onClick={() => setSkillLevel(level.value)}
                         className={`flex flex-col items-start px-4 py-3 min-h-[64px] rounded-xl border-2 transition-all active:scale-[0.97] focus-neon ${
                           skillLevel === level.value
-                            ? "bg-accent-400 border-accent-400 shadow-neon"
-                            : "bg-cream-200 border-white/10 hover:border-white/25"
+                            ? "bg-accent-500 border-accent-500 shadow-neon"
+                            : "bg-white border-primary-200 hover:border-accent-400"
                         }`}
                       >
                         <span className={`font-display uppercase text-base tracking-wide ${
-                          skillLevel === level.value ? "text-primary-950" : "text-white"
+                          skillLevel === level.value ? "text-white" : "text-primary-800"
                         }`}>
                           {level.label}
                         </span>
-                        <span className={`text-[10px] font-mono uppercase tracking-widest mt-0.5 ${
-                          skillLevel === level.value ? "text-primary-950/70" : "text-white/40"
+                        <span className={`text-[10px] font-semibold uppercase tracking-widest mt-0.5 ${
+                          skillLevel === level.value ? "text-white/85" : "text-primary-500"
                         }`}>
                           {level.desc}
                         </span>
@@ -572,32 +570,32 @@ export function CreateGameFlow() {
 
                 {/* Max players */}
                 <div>
-                  <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">Max players</label>
-                  <div className="flex items-center gap-4 bg-cream-200 border border-white/10 rounded-xl px-4 py-3">
+                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">Max players</label>
+                  <div className="flex items-center gap-4 bg-white border-2 border-primary-200 rounded-xl px-4 py-3">
                     <button
                       onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
-                      className="w-10 h-10 flex items-center justify-center border border-white/10 rounded-lg hover:border-accent-400 hover:bg-accent-400/10 active:scale-95 transition-all focus-neon"
+                      className="w-11 h-11 flex items-center justify-center border-2 border-primary-200 rounded-lg hover:border-accent-500 hover:bg-accent-50 active:scale-95 transition-all focus-neon"
                       aria-label="Decrease"
                     >
-                      <Minus className="w-4 h-4 text-white" />
+                      <Minus className="w-4 h-4 text-primary-700" />
                     </button>
                     <div className="flex-1 text-center">
-                      <span className="font-display text-4xl text-accent-400 tabular tracking-tight">{maxPlayers}</span>
-                      <span className="text-xs font-mono uppercase tracking-widest text-white/50 ml-2">players</span>
+                      <span className="font-display text-4xl text-accent-500 tabular tracking-tight">{maxPlayers}</span>
+                      <span className="text-xs font-semibold uppercase tracking-widest text-primary-500 ml-2">players</span>
                     </div>
                     <button
                       onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
-                      className="w-10 h-10 flex items-center justify-center border border-white/10 rounded-lg hover:border-accent-400 hover:bg-accent-400/10 active:scale-95 transition-all focus-neon"
+                      className="w-11 h-11 flex items-center justify-center border-2 border-primary-200 rounded-lg hover:border-accent-500 hover:bg-accent-50 active:scale-95 transition-all focus-neon"
                       aria-label="Increase"
                     >
-                      <Plus className="w-4 h-4 text-white" />
+                      <Plus className="w-4 h-4 text-primary-700" />
                     </button>
                   </div>
                 </div>
 
                 {/* Cost per person */}
                 <div>
-                  <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">Cost per person</label>
+                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3">Cost per person</label>
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     {COST_OPTIONS.slice(0, 4).map((price) => (
                       <button
@@ -605,8 +603,8 @@ export function CreateGameFlow() {
                         onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
                         className={`py-3 min-h-[48px] rounded-xl border-2 font-display text-lg tracking-tight transition-all active:scale-[0.97] focus-neon ${
                           costPerPerson === price && !customCost
-                            ? "bg-accent-400 text-primary-950 border-accent-400 shadow-neon"
-                            : "bg-cream-200 text-white border-white/10 hover:border-white/25"
+                            ? "bg-accent-500 text-white border-accent-500 shadow-neon"
+                            : "bg-white text-primary-800 border-primary-200 hover:border-accent-400"
                         }`}
                       >
                         {price === 0 ? "FREE" : `₹${price}`}
@@ -620,8 +618,8 @@ export function CreateGameFlow() {
                         onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
                         className={`py-3 min-h-[48px] rounded-xl border-2 font-display text-lg tracking-tight transition-all active:scale-[0.97] focus-neon ${
                           costPerPerson === price && !customCost
-                            ? "bg-accent-400 text-primary-950 border-accent-400 shadow-neon"
-                            : "bg-cream-200 text-white border-white/10 hover:border-white/25"
+                            ? "bg-accent-500 text-white border-accent-500 shadow-neon"
+                            : "bg-white text-primary-800 border-primary-200 hover:border-accent-400"
                         }`}
                       >
                         ₹{price}
@@ -633,30 +631,30 @@ export function CreateGameFlow() {
                       step={50}
                       value={customCost}
                       onChange={(e) => { setCustomCost(e.target.value); setCostPerPerson(parseInt(e.target.value) || 0); }}
-                      className="col-span-3 border-2 border-white/10 rounded-xl px-3 py-2 text-sm text-center font-mono tabular focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 bg-cream-200 text-white placeholder:text-white/30 min-h-[48px]"
+                      className="col-span-3 border-2 border-primary-200 rounded-xl px-3 py-2 text-sm text-center font-mono tabular focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 bg-white text-primary-800 placeholder:text-primary-400 min-h-[48px]"
                       placeholder="₹ custom"
                     />
                   </div>
                 </div>
 
                 {/* Turf booked toggle */}
-                <div className="flex items-center justify-between bg-cream-200 border border-white/10 rounded-xl px-4 py-3.5">
+                <div className="flex items-center justify-between bg-white border-2 border-primary-200 rounded-xl px-4 py-3.5">
                   <div>
-                    <p className="text-sm font-semibold text-white">Turf already booked?</p>
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-white/40 mt-0.5">
-                      Confirmed slot flag
+                    <p className="text-sm font-semibold text-primary-800">Turf already booked?</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 mt-0.5">
+                      Confirmed slot
                     </p>
                   </div>
                   <button
                     onClick={() => setTurfBooked(!turfBooked)}
                     className={`relative w-12 h-7 rounded-full transition-colors focus-neon ${
-                      turfBooked ? "bg-accent-400 shadow-neon" : "bg-white/10"
+                      turfBooked ? "bg-accent-500 shadow-neon" : "bg-primary-200"
                     }`}
                     role="switch"
                     aria-checked={turfBooked}
                   >
-                    <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full transition-transform duration-200 ${
-                      turfBooked ? "translate-x-5 bg-primary-950" : "bg-white/80"
+                    <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                      turfBooked ? "translate-x-5" : ""
                     }`} />
                   </button>
                 </div>
@@ -665,9 +663,9 @@ export function CreateGameFlow() {
                 <div>
                   <label
                     htmlFor="notes"
-                    className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3"
+                    className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-3"
                   >
-                    Notes <span className="text-white/30 lowercase">(optional)</span>
+                    Notes <span className="text-primary-400 lowercase">(optional)</span>
                   </label>
                   <input
                     id="notes"
@@ -681,31 +679,31 @@ export function CreateGameFlow() {
 
                 {submitError && (
                   <div className="p-3.5 bg-hot-500/10 border border-hot-500/40 rounded-xl">
-                    <p className="text-sm text-hot-400 font-medium">{submitError}</p>
+                    <p className="text-sm text-hot-600 font-medium">{submitError}</p>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Sticky bottom CTA — sits above the mobile bottom nav (h-16) */}
+          {/* Sticky bottom CTA — sits above mobile bottom nav (h-16) */}
           {step === 2 && (
-            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-primary-950/95 backdrop-blur-xl border-t border-white/5 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 safe-bottom">
               <button
                 onClick={() => setStep(3)}
                 disabled={!step2Valid}
-                className="w-full flex items-center justify-center gap-2 bg-accent-400 hover:bg-accent-300 text-primary-950 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] shadow-neon focus-neon"
+                className="w-full flex items-center justify-center gap-2 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] shadow-elevated focus-neon"
               >
                 Next
               </button>
             </div>
           )}
           {step === 3 && (
-            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-primary-950/95 backdrop-blur-xl border-t border-white/5 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 safe-bottom">
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-accent-400 hover:bg-accent-300 text-primary-950 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 active:scale-[0.98] shadow-neon focus-neon"
+                className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-600 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 active:scale-[0.98] shadow-neon focus-neon"
               >
                 {submitting ? (
                   <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creating…</>

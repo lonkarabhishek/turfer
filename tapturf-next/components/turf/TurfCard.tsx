@@ -28,11 +28,11 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
   return (
     <Link
       href={`/turf/${turf.id}`}
-      className="group block rounded-2xl focus-neon"
+      className="block group rounded-2xl focus-neon"
     >
-      <article className="relative overflow-hidden rounded-2xl border border-white/10 bg-cream-200 hover:border-accent-400/40 transition-all">
+      <article className="relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover transition-all">
         {/* Image */}
-        <div className="relative w-full aspect-[4/3] overflow-hidden bg-cream-300">
+        <div className="relative w-full aspect-[4/3] overflow-hidden bg-primary-100">
           {coverImage && !imgError ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
@@ -44,13 +44,13 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center">
-              <span className="font-display uppercase text-4xl text-accent-400/60">Turf</span>
+            <div className="w-full h-full bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center">
+              <span className="font-display uppercase text-4xl text-white/80">Turf</span>
             </div>
           )}
 
           {/* Bottom-fade for legibility */}
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
 
           {/* Sport badges (top-left) */}
           {sports.length > 0 && (
@@ -58,7 +58,7 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
               {sports.map((sport) => (
                 <span
                   key={sport}
-                  className="bg-black/60 backdrop-blur-md border border-white/20 text-[10px] font-bold uppercase tracking-wide text-white px-2.5 py-1 rounded-full"
+                  className="bg-white/95 backdrop-blur-md text-[10px] font-bold uppercase tracking-wide text-primary-800 px-2.5 py-1 rounded-full shadow-soft"
                 >
                   {sport}
                 </span>
@@ -68,7 +68,7 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
 
           {/* Rating pill (top-right) */}
           {turf.rating > 0 && (
-            <div className="absolute top-3 right-3 bg-accent-400 text-primary-950 text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-neon">
+            <div className="absolute top-3 right-3 bg-accent-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-neon">
               <Star className="w-3 h-3 fill-current" />
               {turf.rating.toFixed(1)}
             </div>
@@ -76,18 +76,18 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
 
           {/* Distance (bottom-right) */}
           {distanceLabel && (
-            <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full">
-              <Navigation className="w-2.5 h-2.5 text-accent-400" />
+            <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-white/95 backdrop-blur-md text-primary-800 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shadow-soft">
+              <Navigation className="w-2.5 h-2.5 text-accent-500" />
               {distanceLabel}
             </div>
           )}
 
-          {/* Turf name burned onto image (bottom-left) */}
+          {/* Turf name burned onto image */}
           <div className="absolute bottom-3 left-3 right-16">
-            <h3 className="font-display uppercase text-white text-xl leading-tight tracking-tight truncate">
+            <h3 className="font-display uppercase text-white text-xl leading-tight tracking-tight truncate drop-shadow-lg">
               {turf.name}
             </h3>
-            <p className="text-[11px] text-white/70 flex items-center gap-1 truncate mt-0.5">
+            <p className="text-[11px] text-white/85 flex items-center gap-1 truncate mt-0.5">
               <MapPin className="w-3 h-3 shrink-0" />
               {turf.address}
             </p>
@@ -95,17 +95,17 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
         </div>
 
         {/* Footer strip */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-primary-200 bg-white">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-widest text-white/40">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-primary-400">
               From
             </p>
-            <p className="font-display text-xl text-accent-400 tabular leading-none mt-0.5">
+            <p className="font-display text-xl text-primary-800 tabular leading-none mt-0.5">
               ₹{minPrice}
-              <span className="text-xs text-white/40 font-sans font-normal ml-1">/hr</span>
+              <span className="text-xs text-primary-400 font-sans font-normal ml-1">/hr</span>
             </p>
           </div>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-accent-400 border border-accent-400/40 rounded-full px-3 py-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-accent-600 border border-accent-500 rounded-full px-3 py-1.5">
             Book · Call
           </span>
         </div>

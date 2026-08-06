@@ -148,8 +148,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           name: name.trim(),
           phone: formattedPhone,
           role: "user",
-          // public.users.password is NOT NULL; phone users have no password.
-          // Use a fixed sentinel so the insert satisfies the schema.
           password: "phone-auth-no-password",
         }])
         .select()
@@ -188,29 +186,28 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
   if (successName) {
     return (
       <div className="text-center py-6">
-        <div className="w-14 h-14 bg-accent-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-neon">
-          <Check className="w-7 h-7 text-primary-950" strokeWidth={3} />
+        <div className="w-14 h-14 bg-accent-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-neon">
+          <Check className="w-7 h-7 text-white" strokeWidth={3} />
         </div>
-        <p className="font-display uppercase text-2xl text-white tracking-wide">Welcome, {successName}</p>
-        <p className="text-sm text-white/50 mt-1">You&apos;re on the pitch.</p>
+        <p className="font-display uppercase text-2xl text-primary-800 tracking-wide">Welcome, {successName}</p>
+        <p className="text-sm text-primary-500 mt-1">You&apos;re on the pitch.</p>
       </div>
     );
   }
 
   const inputClass =
-    "w-full bg-cream-300 border border-white/10 rounded-xl px-4 py-3.5 text-base font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 transition-all";
+    "w-full bg-white border-2 border-primary-200 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-all";
 
   return (
     <div className="space-y-5">
-      {/* Phone step */}
       {step === "phone" && (
         <>
           <div>
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-2">
+            <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-2">
               Phone
             </label>
             <div className="flex gap-2">
-              <span className="inline-flex items-center px-3 py-3.5 bg-cream-300 border border-white/10 rounded-xl text-white/60 text-sm font-mono">
+              <span className="inline-flex items-center px-3 py-3.5 bg-primary-100 border-2 border-primary-200 rounded-xl text-primary-700 text-sm font-mono">
                 +91
               </span>
               <input
@@ -230,23 +227,22 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={handleSendOTP}
             disabled={loading || phone.length !== 10}
-            className="w-full bg-accent-400 hover:bg-accent-300 text-primary-950 py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-neon focus-neon"
+            className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
           >
             {loading ? "Sending…" : "Send OTP"}
           </button>
         </>
       )}
 
-      {/* OTP step */}
       {step === "otp" && (
         <>
           <div className="text-center">
-            <p className="text-sm text-white/60">
-              Code sent to <span className="font-mono text-accent-400">+91 {phone}</span>
+            <p className="text-sm text-primary-600">
+              Code sent to <span className="font-mono text-accent-600">+91 {phone}</span>
             </p>
             <button
               onClick={() => { setStep("phone"); setError(""); }}
-              className="text-xs font-mono uppercase tracking-widest text-white/40 hover:text-accent-400 transition-colors mt-1"
+              className="text-xs font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors mt-1"
             >
               change number
             </button>
@@ -263,7 +259,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
                 value={digit}
                 onChange={(e) => handleOTPChange(i, e.target.value)}
                 onKeyDown={(e) => handleOTPKeyDown(i, e)}
-                className="w-11 h-13 text-center font-mono text-lg font-bold bg-cream-300 border border-white/10 rounded-lg text-white focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 transition-all"
+                className="w-11 h-13 text-center font-mono text-lg font-bold bg-white border-2 border-primary-200 rounded-lg text-primary-800 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-all"
                 autoFocus={i === 0}
               />
             ))}
@@ -271,14 +267,14 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
           <div className="text-center">
             {timer > 0 ? (
-              <p className="text-xs font-mono uppercase tracking-widest text-white/40">
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
                 Resend in {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
               </p>
             ) : (
               <button
                 onClick={handleResend}
                 disabled={loading}
-                className="text-xs font-mono uppercase tracking-widest text-accent-400 hover:text-accent-300"
+                className="text-xs font-semibold uppercase tracking-widest text-accent-600 hover:text-accent-700"
               >
                 resend code
               </button>
@@ -287,17 +283,16 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
           {loading && (
             <div className="text-center">
-              <p className="text-xs font-mono uppercase tracking-widest text-white/40">Verifying…</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">Verifying…</p>
             </div>
           )}
         </>
       )}
 
-      {/* Name step (new users) */}
       {step === "name" && (
         <>
           <div className="text-center">
-            <p className="text-sm text-white/60">Welcome — what&apos;s your name?</p>
+            <p className="text-sm text-primary-600">Welcome — what&apos;s your name?</p>
           </div>
 
           <input
@@ -313,7 +308,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={handleCreateUser}
             disabled={loading || !name.trim()}
-            className="w-full bg-accent-400 hover:bg-accent-300 text-primary-950 py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-neon focus-neon"
+            className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
           >
             {loading ? "Creating…" : "Let's play"}
           </button>
@@ -321,10 +316,9 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {error && (
-        <p className="text-sm text-hot-400 text-center">{error}</p>
+        <p className="text-sm text-hot-600 text-center font-medium">{error}</p>
       )}
 
-      {/* Hidden recaptcha */}
       <div id="recaptcha-container" />
     </div>
   );

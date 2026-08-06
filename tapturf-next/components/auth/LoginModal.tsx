@@ -42,7 +42,6 @@ export function LoginModal() {
         setGoogleError(error.message || "Google sign-in failed. Try again.");
         setGoogleLoading(false);
       }
-      // On success the browser redirects — don't reset loading
     } catch {
       setGoogleError("Something went wrong. Please try again.");
       setGoogleLoading(false);
@@ -59,36 +58,32 @@ export function LoginModal() {
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-md animate-fade-in"
+        className="absolute inset-0 bg-primary-800/50 backdrop-blur-sm animate-fade-in"
         onClick={handleClose}
       />
 
       {/* Modal */}
-      <div className="relative w-full md:max-w-md bg-cream-200 border-t border-white/10 md:border md:border-white/10 rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden shadow-elevated">
-        {/* Neon top glow */}
-        <div className="absolute -top-1/2 left-1/2 -translate-x-1/2 w-3/4 h-1/2 bg-accent-400/20 blur-3xl pointer-events-none" aria-hidden />
-
+      <div className="relative w-full md:max-w-md bg-white border-t border-primary-200 md:border md:border-primary-200 rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden shadow-elevated">
         {/* Close */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-primary-100 hover:bg-primary-200 transition-colors"
           aria-label="Close"
         >
-          <X className="w-4 h-4 text-white/70" />
+          <X className="w-4 h-4 text-primary-700" />
         </button>
 
-        {/* Body */}
-        <div className="relative px-6 pt-10 pb-8">
+        <div className="relative px-6 pt-8 pb-8 md:pt-10">
           {/* Logo mark */}
-          <div className="w-14 h-14 rounded-2xl bg-accent-400 flex items-center justify-center shadow-neon mb-6">
-            <Zap className="w-7 h-7 text-primary-950" strokeWidth={2.75} />
+          <div className="w-14 h-14 rounded-2xl bg-accent-500 flex items-center justify-center shadow-neon mb-6">
+            <Zap className="w-7 h-7 text-white" strokeWidth={2.75} />
           </div>
 
-          <h2 className="font-display uppercase text-4xl md:text-5xl text-white leading-[0.9] tracking-tight mb-2">
+          <h2 className="font-display uppercase text-4xl md:text-5xl text-primary-800 leading-[0.9] tracking-tight mb-2">
             Sign in.<br />
-            <span className="text-accent-400">Squad up.</span>
+            <span className="text-accent-500">Squad up.</span>
           </h2>
-          <p className="text-sm text-white/50 mb-8">
+          <p className="text-sm text-primary-500 mb-8">
             One tap. Book turfs, host games, join your crew.
           </p>
 
@@ -96,7 +91,7 @@ export function LoginModal() {
           <button
             onClick={handleGoogleLogin}
             disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 bg-accent-400 hover:bg-accent-300 text-primary-950 rounded-full py-4 min-h-[56px] px-6 font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 shadow-neon focus-neon"
+            className="w-full flex items-center justify-center gap-3 bg-primary-800 hover:bg-primary-900 text-white rounded-full py-4 min-h-[56px] px-6 font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 shadow-elevated focus-neon"
           >
             {googleLoading ? (
               <>
@@ -117,31 +112,31 @@ export function LoginModal() {
           </button>
 
           {googleError && (
-            <div className="flex items-start gap-2 p-3 mt-4 bg-hot-500/15 border border-hot-500/40 rounded-xl">
-              <AlertCircle className="w-4 h-4 text-hot-400 shrink-0 mt-0.5" />
-              <p className="text-sm text-hot-400">{googleError}</p>
+            <div className="flex items-start gap-2 p-3 mt-4 bg-hot-500/10 border border-hot-500/40 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-hot-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-hot-600">{googleError}</p>
             </div>
           )}
 
-          {/* Phone alternative — collapsed by default to reduce clutter */}
+          {/* Phone alternative — collapsed by default */}
           {!showPhone ? (
             <div className="mt-6 text-center">
               <button
                 onClick={() => setShowPhone(true)}
-                className="text-xs font-mono uppercase tracking-widest text-white/50 hover:text-accent-400 transition-colors"
+                className="text-xs font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors"
               >
                 or use phone number →
               </button>
             </div>
           ) : (
-            <div className="mt-6 pt-6 border-t border-white/10">
+            <div className="mt-6 pt-6 border-t border-primary-200">
               <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-mono uppercase tracking-widest text-white/40">
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
                   Phone OTP
                 </p>
                 <button
                   onClick={() => setShowPhone(false)}
-                  className="text-xs font-mono uppercase tracking-widest text-white/50 hover:text-accent-400 transition-colors"
+                  className="text-xs font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors"
                 >
                   ← back
                 </button>
@@ -150,8 +145,7 @@ export function LoginModal() {
             </div>
           )}
 
-          {/* Terms footnote */}
-          <p className="text-[10px] font-mono uppercase tracking-widest text-white/30 mt-6 text-center leading-relaxed">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-primary-400 mt-6 text-center leading-relaxed">
             By continuing you agree to our fair-play rules
           </p>
         </div>

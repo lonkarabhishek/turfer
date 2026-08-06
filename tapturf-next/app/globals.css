@@ -1,110 +1,103 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* ─── STADIUM NEON ────────────────────────────────────────
-     Dark broadcast-desk base + electric lime accent.
-     Scale kept semantically compatible with the old palette so
-     legacy classes (bg-primary-600, text-primary-800, etc.)
-     still render in-theme without a global find-and-replace.
+  /* ─── LIGHT / CLEAN — mobile-first, high-contrast ─────────
+     White base, near-black CTAs, cricket-pitch green as the
+     one accent. Scale slots kept semantically compatible with
+     legacy classes (bg-primary-600, text-accent-500, bg-cream-*)
+     so we don't have to sweep every file.
      ──────────────────────────────────────────────────────── */
 
-  /* Primary — Deep midnight ink (surface / structure) */
-  --color-primary-50:  #E4EBF0;
-  --color-primary-100: #C0CDD8;
-  --color-primary-200: #8B9EAF;
-  --color-primary-300: #5A6E82;
-  --color-primary-400: #3B4E62;
-  --color-primary-500: #26374A;
-  --color-primary-600: #17263A;
-  --color-primary-700: #0F1B2C;
-  --color-primary-800: #08111E;
-  --color-primary-900: #030811;
-  --color-primary-950: #010409;
+  /* Primary — neutral scale (whites → grays → near-black).
+     `bg-primary-600` becomes a black CTA on white; `text-primary-800`
+     is near-black body text. */
+  --color-primary-50:  #F9FAFB;
+  --color-primary-100: #F3F4F6;
+  --color-primary-200: #E5E7EB;
+  --color-primary-300: #D1D5DB;
+  --color-primary-400: #9CA3AF;
+  --color-primary-500: #6B7280;
+  --color-primary-600: #111113;   /* CTA / hero background */
+  --color-primary-700: #050506;
+  --color-primary-800: #0A0A0A;   /* body headings */
+  --color-primary-900: #000000;
+  --color-primary-950: #000000;
 
-  /* Accent — Electric lime (the neon that pops off the dark) */
-  --color-accent-50:  #F3FFC5;
-  --color-accent-100: #E5FF8F;
-  --color-accent-200: #D6FF5C;
-  --color-accent-300: #CDFF3C;
-  --color-accent-400: #C6FF00;
-  --color-accent-500: #B4EA00;
-  --color-accent-600: #97C700;
-  --color-accent-700: #789E00;
-  --color-accent-800: #557000;
-  --color-accent-900: #364700;
-  --color-accent-950: #1D2700;
+  /* Accent — cricket-pitch green. Punchy, sport-native, works on white. */
+  --color-accent-50:  #F0FDF4;
+  --color-accent-100: #DCFCE7;
+  --color-accent-200: #BBF7D0;
+  --color-accent-300: #86EFAC;
+  --color-accent-400: #22C55E;
+  --color-accent-500: #16A34A;
+  --color-accent-600: #15803D;
+  --color-accent-700: #166534;
+  --color-accent-800: #14532D;
+  --color-accent-900: #052E16;
+  --color-accent-950: #022c11;
 
-  /* "Cream" repurposed as our dark surface scale
-     (bg-cream-100 was the page bg → now near-black;
-      bg-cream-200 was subtle warm → now card surface;
-      border-cream-300 was hairline → now dark divider) */
-  --color-cream-50:  #17181C;
-  --color-cream-100: #0B0C10;
-  --color-cream-200: #16181D;
-  --color-cream-300: #23262E;
-  --color-cream-400: #363943;
-  --color-cream-500: #6C6F79;
+  /* "Cream" repurposed as light-surface scale.
+     bg-cream-100 = page bg (pure white); bg-cream-200 = subtle elevated;
+     border-cream-300 = hairline divider. */
+  --color-cream-50:  #FFFFFF;
+  --color-cream-100: #FFFFFF;
+  --color-cream-200: #F7F8FA;
+  --color-cream-300: #E5E7EB;
+  --color-cream-400: #D1D5DB;
+  --color-cream-500: #6B7280;
 
-  /* Second neon — hot pink used for danger/heat states */
-  --color-hot-400: #FF4D82;
-  --color-hot-500: #FF2B6D;
-  --color-hot-600: #E51B58;
+  /* Danger / heat */
+  --color-hot-400: #F87171;
+  --color-hot-500: #EF4444;
+  --color-hot-600: #DC2626;
 
   /* Fonts */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
+  --font-sans:    var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif:   var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
   --font-display: var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
-  --font-mono: var(--font-space-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-mono:    var(--font-space-mono), ui-monospace, SFMono-Regular, monospace;
 
-  /* Shadows — deep black + neon glow */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(198, 255, 0, 0.15);
-  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.5);
-  --shadow-elevated: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --shadow-gold: 0 0 24px rgba(198, 255, 0, 0.45), 0 4px 16px rgba(198, 255, 0, 0.25);
-  --shadow-neon: 0 0 32px rgba(198, 255, 0, 0.55);
-  --shadow-hot: 0 0 24px rgba(255, 43, 109, 0.5);
+  /* Shadows — soft, layered black at low opacity */
+  --shadow-card:         0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-card-hover:   0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-soft:         0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-elevated:     0 16px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-gold:         0 4px 16px rgba(22, 163, 74, 0.22);
+  --shadow-neon:         0 4px 18px rgba(22, 163, 74, 0.32);
+  --shadow-hot:          0 4px 14px rgba(239, 68, 68, 0.28);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
   scroll-behavior: smooth;
 }
 
 body {
-  background: #0B0C10;
-  color: #F5F6F8;
+  background: #FFFFFF;
+  color: #0A0A0A;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Subtle stadium grid — visible only on dark, doesn't affect print */
-  background-image:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(198, 255, 0, 0.08), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: auto, 48px 48px, 48px 48px;
-  background-attachment: fixed, fixed, fixed;
 }
 
-/* Selection glows lime */
+/* Selection */
 ::selection {
-  background: rgba(198, 255, 0, 0.35);
-  color: #0B0C10;
+  background: rgba(22, 163, 74, 0.22);
+  color: #0A0A0A;
 }
 
-/* Utility: display type (Bebas Neue) */
+/* Display type helper (Bebas Neue) */
 .font-serif,
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.005em;
 }
 
-/* Mono for scoreboard-style numerals */
+/* Mono for scoreboard numerals */
 .font-mono {
   font-family: var(--font-mono);
   font-feature-settings: "tnum", "zero";
 }
-
 .tabular {
   font-variant-numeric: tabular-nums;
 }
@@ -128,11 +121,16 @@ body {
   display: none;
 }
 
-/* Section dividers — hairline on dark */
+/* Section dividers — hairline on light */
 .section-divider {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
   padding-top: 1.75rem;
   margin-top: 1.75rem;
+}
+
+/* Safe-area helper (used by fixed bottom bars) */
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
 /* ─── Motion ────────────────────────────────────────────── */
@@ -141,13 +139,13 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-in { animation: fadeIn 0.5s ease-out; }
+.animate-fade-in { animation: fadeIn 0.35s ease-out; }
 
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-slide-up { animation: slideUp 0.5s ease-out; }
+.animate-slide-up { animation: slideUp 0.35s ease-out; }
 
 @keyframes fadeInOverlay {
   from { opacity: 0; }
@@ -161,56 +159,36 @@ body {
 }
 .animate-slide-down { animation: slideDown 0.3s ease-out; }
 
-/* Neon shimmer for the wordmark accent */
-@keyframes neonShimmer {
+/* Green shimmer for LIVE / accent text */
+@keyframes greenShimmer {
   0%   { background-position: -200% center; }
   100% { background-position:  200% center; }
 }
 .gold-shimmer,
 .neon-shimmer {
-  background: linear-gradient(
-    90deg,
-    #C6FF00 0%,
-    #F3FFC5 40%,
-    #C6FF00 60%,
-    #97C700 100%
-  );
+  background: linear-gradient(90deg, #16A34A 0%, #22C55E 40%, #16A34A 60%, #15803D 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   color: transparent;
-  animation: neonShimmer 6s linear infinite;
+  animation: greenShimmer 6s linear infinite;
 }
 
 /* Pulsing "LIVE" dot */
 @keyframes livePulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 43, 109, 0.6); }
-  50%      { opacity: 0.7; box-shadow: 0 0 0 8px rgba(255, 43, 109, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
 }
 .pulse-live {
   animation: livePulse 1.6s ease-in-out infinite;
 }
 
-/* Subtle scanline overlay for hero moments (opt-in with .scanline) */
-.scanline {
-  position: relative;
-}
-.scanline::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(255, 255, 255, 0.025) 0 1px,
-    transparent 1px 3px
-  );
-  mix-blend-mode: overlay;
-}
-
-/* Neon focus ring helper */
+/* Neon focus ring helper (green, high-contrast on white) */
 .focus-neon:focus-visible {
-  outline: 2px solid #C6FF00;
+  outline: 2px solid #16A34A;
   outline-offset: 2px;
 }
+
+/* Legacy .scanline no-op on light */
+.scanline { position: relative; }

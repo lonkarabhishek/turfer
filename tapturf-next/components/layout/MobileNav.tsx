@@ -17,7 +17,7 @@ export function MobileNav() {
   const { user, login } = useAuth();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-primary-950/90 backdrop-blur-xl border-t border-white/10 md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-primary-200 md:hidden">
       <div className="flex items-center justify-around h-16 px-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon, requiresAuth, isCreate }) => {
           const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -30,13 +30,13 @@ export function MobileNav() {
                 className="flex flex-col items-center gap-0.5 px-3 py-1"
               >
                 {isCreate ? (
-                  <div className="w-12 h-12 bg-accent-400 rounded-full flex items-center justify-center -mt-4 shadow-neon">
-                    <Icon className="w-5 h-5 text-primary-950" strokeWidth={3} />
+                  <div className="w-12 h-12 bg-accent-500 rounded-full flex items-center justify-center -mt-4 shadow-neon">
+                    <Icon className="w-5 h-5 text-white" strokeWidth={3} />
                   </div>
                 ) : (
-                  <Icon className="w-5 h-5 text-white/50" />
+                  <Icon className="w-5 h-5 text-primary-400" />
                 )}
-                <span className="text-[10px] font-mono uppercase tracking-wider text-white/50 mt-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-primary-400 mt-0.5">
                   {label}
                 </span>
               </button>
@@ -53,22 +53,22 @@ export function MobileNav() {
                 <div
                   className={`w-12 h-12 rounded-full flex items-center justify-center -mt-4 transition-all ${
                     isActive
-                      ? "bg-accent-300 shadow-neon scale-105"
-                      : "bg-accent-400 shadow-neon"
+                      ? "bg-accent-600 shadow-neon scale-105"
+                      : "bg-accent-500 shadow-neon"
                   }`}
                 >
-                  <Icon className="w-5 h-5 text-primary-950" strokeWidth={3} />
+                  <Icon className="w-5 h-5 text-white" strokeWidth={3} />
                 </div>
               ) : (
                 <Icon
                   className={`w-5 h-5 transition-all ${
-                    isActive ? "text-accent-400 stroke-[2.5]" : "text-white/50"
+                    isActive ? "text-accent-600 stroke-[2.5]" : "text-primary-400"
                   }`}
                 />
               )}
               <span
-                className={`text-[10px] font-mono uppercase tracking-wider mt-0.5 ${
-                  isActive ? "text-accent-400" : "text-white/50"
+                className={`text-[10px] font-semibold uppercase tracking-wider mt-0.5 ${
+                  isActive ? "text-accent-600" : "text-primary-400"
                 }`}
               >
                 {label}
@@ -77,7 +77,7 @@ export function MobileNav() {
           );
         })}
       </div>
-      <div className="h-[env(safe-area-inset-bottom)] bg-primary-950" />
+      <div className="h-[env(safe-area-inset-bottom)] bg-white" />
     </nav>
   );
 }
