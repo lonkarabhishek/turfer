@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Check, MapPin, Search, Share2, Copy,
   Trophy, Clock, Calendar, CircleDot, Target, Circle, Feather,
-  Grip, Dumbbell, Minus, Plus, Loader2, Users, Sparkles,
+  Grip, Dumbbell, Minus, Plus, Loader2, Users, Zap,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
@@ -13,28 +13,28 @@ import { searchTurfs } from "@/lib/queries/users";
 import type { CreateGameData } from "@/types/game";
 
 const SPORT_OPTIONS = [
-  { name: "Football",     icon: <CircleDot className="w-6 h-6" />, defaultMax: 14, color: "from-emerald-500 to-primary-600" },
-  { name: "5v5 Football", icon: <CircleDot className="w-6 h-6" />, defaultMax: 10, color: "from-emerald-400 to-primary-500" },
-  { name: "Cricket",      icon: <Target className="w-6 h-6" />,    defaultMax: 22, color: "from-primary-500 to-primary-700" },
-  { name: "Box Cricket",  icon: <Target className="w-6 h-6" />,    defaultMax: 12, color: "from-primary-400 to-primary-600" },
-  { name: "Basketball",   icon: <Circle className="w-6 h-6" />,    defaultMax: 10, color: "from-orange-400 to-orange-600"   },
-  { name: "Tennis",       icon: <Grip className="w-6 h-6" />,      defaultMax: 4,  color: "from-accent-400 to-accent-600"   },
-  { name: "Pickleball",   icon: <Dumbbell className="w-6 h-6" />,  defaultMax: 4,  color: "from-accent-500 to-primary-500"  },
-  { name: "Badminton",    icon: <Feather className="w-6 h-6" />,   defaultMax: 4,  color: "from-primary-400 to-accent-500"  },
+  { name: "Cricket",      icon: <Target className="w-6 h-6" />,    defaultMax: 22 },
+  { name: "Box Cricket",  icon: <Target className="w-6 h-6" />,    defaultMax: 12 },
+  { name: "Football",     icon: <CircleDot className="w-6 h-6" />, defaultMax: 14 },
+  { name: "5v5 Football", icon: <CircleDot className="w-6 h-6" />, defaultMax: 10 },
+  { name: "Basketball",   icon: <Circle className="w-6 h-6" />,    defaultMax: 10 },
+  { name: "Tennis",       icon: <Grip className="w-6 h-6" />,      defaultMax: 4  },
+  { name: "Pickleball",   icon: <Dumbbell className="w-6 h-6" />,  defaultMax: 4  },
+  { name: "Badminton",    icon: <Feather className="w-6 h-6" />,   defaultMax: 4  },
 ];
 
 const SKILL_LEVELS = [
-  { value: "all" as const,          label: "All levels",   desc: "Everyone welcome" },
-  { value: "beginner" as const,     label: "Beginner",     desc: "Just starting out" },
-  { value: "intermediate" as const, label: "Intermediate", desc: "Some experience" },
-  { value: "advanced" as const,     label: "Advanced",     desc: "Competitive play" },
+  { value: "all" as const,          label: "Anyone",       desc: "All welcome" },
+  { value: "beginner" as const,     label: "Beginner",     desc: "Just starting" },
+  { value: "intermediate" as const, label: "Intermediate", desc: "Solid basics" },
+  { value: "advanced" as const,     label: "Advanced",     desc: "Competitive" },
 ];
 
 const DURATION_OPTIONS = [
-  { hours: 0.5, label: "30 min" },
-  { hours: 1,   label: "1 hr"   },
-  { hours: 1.5, label: "1.5 hr" },
-  { hours: 2,   label: "2 hr"   },
+  { hours: 0.5, label: "30m" },
+  { hours: 1,   label: "1h"  },
+  { hours: 1.5, label: "1.5h" },
+  { hours: 2,   label: "2h"  },
 ];
 
 const COST_OPTIONS = [0, 50, 100, 150, 200, 300];
@@ -42,9 +42,9 @@ const COST_OPTIONS = [0, 50, 100, 150, 200, 300];
 type Step = 1 | 2 | 3 | 4;
 
 const STEPS = [
-  { n: 1, label: "Sport"   },
-  { n: 2, label: "When"    },
-  { n: 3, label: "Details" },
+  { n: 1, label: "Sport"  },
+  { n: 2, label: "When"   },
+  { n: 3, label: "Squad"  },
 ];
 
 function fmt(hour: number, min: number) {
@@ -179,8 +179,8 @@ export function CreateGameFlow() {
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <Loader2 className="w-7 h-7 text-primary-500 animate-spin" />
-        <p className="text-sm text-primary-400">Loading...</p>
+        <Loader2 className="w-7 h-7 text-accent-400 animate-spin" />
+        <p className="text-xs font-mono uppercase tracking-widest text-white/50">Loading…</p>
       </div>
     );
   }
@@ -188,53 +188,69 @@ export function CreateGameFlow() {
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-        <div className="w-20 h-20 bg-primary-50 border border-primary-100 rounded-full flex items-center justify-center mx-auto mb-5">
-          <Trophy className="w-9 h-9 text-primary-400" aria-hidden="true" />
+        <div className="w-16 h-16 bg-accent-400 rounded-2xl flex items-center justify-center mb-6 shadow-neon">
+          <Zap className="w-8 h-8 text-primary-950" strokeWidth={2.75} />
         </div>
-        <h2 className="text-xl font-bold text-primary-800 font-serif mb-2">Log in to host a game</h2>
-        <p className="text-sm text-primary-400 mb-7 max-w-xs">Create games, invite friends, and manage your squad on TapTurf</p>
+        <h2 className="font-display uppercase text-4xl text-white mb-2 tracking-tight">Log in to host</h2>
+        <p className="text-sm text-white/50 mb-7 max-w-xs">
+          Sign in to create games, invite your crew, and manage your squad.
+        </p>
         <button
           onClick={login}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-3.5 min-h-[44px] rounded-xl font-semibold text-sm cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+          className="bg-accent-400 hover:bg-accent-300 text-primary-950 px-8 py-3.5 min-h-[52px] rounded-full font-bold uppercase tracking-wide text-sm shadow-neon transition-all focus-neon"
         >
-          Log in or sign up
+          Log in
         </button>
       </div>
     );
   }
+
+  // Common input style
+  const inputBase =
+    "w-full bg-cream-200 border border-white/10 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 transition-all";
 
   return (
     <div className="max-w-lg mx-auto">
       {/* Step 4: success */}
       {step === 4 ? (
         <div className="px-5 pt-12 pb-32 flex flex-col items-center text-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-accent-400 to-accent-600 rounded-full flex items-center justify-center shadow-gold mb-6">
-            <Check className="w-10 h-10 text-white stroke-[2.5]" aria-hidden="true" />
+          <div className="relative">
+            <div
+              className="absolute inset-0 blur-3xl bg-accent-400/40 rounded-full"
+              aria-hidden
+            />
+            <div className="relative w-20 h-20 bg-accent-400 rounded-full flex items-center justify-center shadow-neon mb-6">
+              <Check className="w-10 h-10 text-primary-950 stroke-[3]" aria-hidden="true" />
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-primary-800 font-serif mb-2">Game created!</h1>
-          <p className="text-sm text-primary-400 mb-2">
-            <span className="font-semibold text-primary-700">{sport}</span> · {turfName}
+          <h1 className="font-display uppercase text-5xl text-white mb-3 tracking-tight leading-none">
+            Game<br /><span className="text-accent-400">on.</span>
+          </h1>
+          <p className="text-sm text-white/60 mb-2">
+            <span className="font-semibold text-white">{sport}</span> · {turfName}
           </p>
-          <p className="text-sm text-primary-400 mb-10">Share the link so friends can request to join.</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-white/40 mb-10">
+            Share the link — get your squad in
+          </p>
 
           <div className="w-full space-y-3">
             <button
               onClick={handleWhatsAppShare}
-              className="w-full flex items-center justify-center gap-2.5 bg-[#25D366] hover:bg-[#1fb855] text-white py-4 min-h-[52px] rounded-2xl font-semibold text-base transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2"
+              className="w-full flex items-center justify-center gap-2.5 bg-[#25D366] hover:bg-[#1fb855] text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors focus-neon"
             >
               <Share2 className="w-5 h-5" aria-hidden="true" />
-              Share on WhatsApp
+              WhatsApp
             </button>
             <button
               onClick={handleCopyLink}
-              className="w-full flex items-center justify-center gap-2.5 border border-cream-300 bg-white hover:bg-cream-100 text-primary-700 py-4 min-h-[52px] rounded-2xl font-semibold text-base transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
+              className="w-full flex items-center justify-center gap-2.5 border border-white/15 bg-cream-200 hover:bg-cream-300 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors focus-neon"
             >
               <Copy className="w-5 h-5" aria-hidden="true" />
-              {copied ? "Copied!" : "Copy link"}
+              {copied ? "Copied ✓" : "Copy link"}
             </button>
             <button
               onClick={() => router.push(`/game/${createdGameId}`)}
-              className="w-full flex items-center justify-center gap-2.5 bg-primary-600 hover:bg-primary-700 text-white py-4 min-h-[52px] rounded-2xl font-semibold text-base transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              className="w-full flex items-center justify-center gap-2.5 bg-accent-400 hover:bg-accent-300 text-primary-950 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors shadow-neon focus-neon"
             >
               <Trophy className="w-5 h-5" aria-hidden="true" />
               View my game
@@ -244,41 +260,52 @@ export function CreateGameFlow() {
       ) : (
         <>
           {/* Sticky header */}
-          <div className="sticky top-0 z-20 bg-cream-100/97 backdrop-blur-sm border-b border-cream-300 px-5 py-3">
-            <div className="flex items-center gap-3 mb-3">
+          <div className="sticky top-0 z-20 bg-primary-950/90 backdrop-blur-xl border-b border-white/5 px-5 py-4">
+            <div className="flex items-center gap-3">
               {step > 1 ? (
                 <button
                   onClick={() => setStep((step - 1) as Step)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-cream-200 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-9 h-9 flex items-center justify-center rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors focus-neon"
                   aria-label="Go back"
                 >
-                  <ArrowLeft className="w-4 h-4 text-primary-600" />
+                  <ArrowLeft className="w-4 h-4 text-white/80" />
                 </button>
               ) : (
-                <div className="w-8" />
+                <div className="w-9" />
               )}
               <div className="flex-1 flex items-center gap-1.5">
                 {STEPS.map((s) => (
-                  <div key={s.n} className="flex-1 flex flex-col items-center gap-1">
-                    <div className={`w-full h-1.5 rounded-full transition-all duration-300 ${step >= s.n ? "bg-primary-600" : "bg-cream-300"}`} />
-                    <span className={`text-[10px] font-medium transition-colors ${step >= s.n ? "text-primary-600" : "text-primary-300"}`}>{s.label}</span>
+                  <div key={s.n} className="flex-1 flex flex-col items-center gap-1.5">
+                    <div className={`w-full h-1 rounded-full transition-all duration-300 ${
+                      step >= s.n ? "bg-accent-400 shadow-neon" : "bg-white/10"
+                    }`} />
+                    <span className={`text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                      step >= s.n ? "text-accent-400" : "text-white/30"
+                    }`}>
+                      {s.label}
+                    </span>
                   </div>
                 ))}
               </div>
-              <div className="w-8 text-right">
-                <span className="text-xs font-semibold text-primary-400">{step}/3</span>
+              <div className="w-9 text-right">
+                <span className="text-xs font-mono tabular text-white/50">{step}/3</span>
               </div>
             </div>
           </div>
 
           {/* Step content */}
-          <div className="px-5 pt-6 pb-36">
+          <div className="px-5 pt-8 pb-40">
 
             {/* Step 1: Sport */}
             {step === 1 && (
               <div>
-                <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">What are you playing?</h1>
-                <p className="text-sm text-primary-400 mb-6">Pick a sport to get started</p>
+                <h1 className="font-display uppercase text-5xl text-white leading-[0.9] tracking-tight mb-2">
+                  What are<br />
+                  <span className="text-accent-400">you playing?</span>
+                </h1>
+                <p className="text-sm text-white/50 mb-8 font-mono uppercase tracking-widest text-xs">
+                  Pick your sport
+                </p>
 
                 <div className="grid grid-cols-2 gap-3">
                   {SPORT_OPTIONS.map((s) => {
@@ -287,25 +314,27 @@ export function CreateGameFlow() {
                       <button
                         key={s.name}
                         onClick={() => handleSportSelect(s)}
-                        className={`relative flex flex-col items-start gap-3 p-4 min-h-[96px] border-2 rounded-2xl text-left transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                        className={`relative flex flex-col items-start gap-3 p-4 min-h-[110px] rounded-2xl text-left transition-all active:scale-[0.97] focus-neon ${
                           active
-                            ? "border-primary-600 bg-primary-50 shadow-soft"
-                            : "border-cream-300 bg-white hover:border-primary-200 hover:shadow-soft"
+                            ? "bg-accent-400/15 border-2 border-accent-400 shadow-neon"
+                            : "bg-cream-200 border-2 border-white/5 hover:border-white/20"
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${s.color} text-white`}>
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                          active ? "bg-accent-400 text-primary-950" : "bg-white/5 text-accent-400"
+                        }`}>
                           {s.icon}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-primary-800">{s.name}</p>
-                          <p className="text-xs text-primary-400 flex items-center gap-1">
+                          <p className="font-display uppercase text-lg text-white leading-tight tracking-wide">{s.name}</p>
+                          <p className="text-[11px] text-white/40 font-mono uppercase tracking-widest mt-0.5 flex items-center gap-1">
                             <Users className="w-3 h-3" aria-hidden="true" />
-                            {s.defaultMax} players
+                            {s.defaultMax} slots
                           </p>
                         </div>
                         {active && (
-                          <span className="absolute top-2.5 right-2.5 w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white stroke-[2.5]" />
+                          <span className="absolute top-3 right-3 w-6 h-6 bg-accent-400 rounded-full flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5 text-primary-950 stroke-[3]" />
                           </span>
                         )}
                       </button>
@@ -319,13 +348,18 @@ export function CreateGameFlow() {
             {step === 2 && (
               <div className="space-y-8">
                 <div>
-                  <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">When & where?</h1>
-                  <p className="text-sm text-primary-400">Pick a date, time, and venue</p>
+                  <h1 className="font-display uppercase text-5xl text-white leading-[0.9] tracking-tight mb-2">
+                    When &<br />
+                    <span className="text-accent-400">where?</span>
+                  </h1>
+                  <p className="text-xs font-mono uppercase tracking-widest text-white/50">
+                    Date · Time · Venue
+                  </p>
                 </div>
 
                 {/* Date strip */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
+                  <label className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">
                     <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                     Date
                   </label>
@@ -334,22 +368,33 @@ export function CreateGameFlow() {
                       <button
                         key={d.value}
                         onClick={() => { setDate(d.value); setStartTime(""); setDuration(null); }}
-                        className={`flex-shrink-0 w-[68px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[60px] ${
+                        className={`flex-shrink-0 w-[76px] py-3 rounded-xl border-2 text-center transition-all active:scale-[0.97] focus-neon min-h-[68px] ${
                           date === d.value
-                            ? "bg-primary-600 text-white border-primary-600"
-                            : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
+                            ? "bg-accent-400 text-primary-950 border-accent-400 shadow-neon"
+                            : "bg-cream-200 border-white/10 hover:border-white/25"
                         }`}
                       >
-                        <p className={`text-xs font-bold ${date === d.value ? "text-white" : "text-primary-700"}`}>{d.label}</p>
-                        <p className={`text-[11px] mt-0.5 ${date === d.value ? "text-primary-200" : "text-primary-400"}`}>{d.sublabel}</p>
+                        <p className={`font-display uppercase text-sm tracking-wide ${
+                          date === d.value ? "text-primary-950" : "text-white"
+                        }`}>
+                          {d.label}
+                        </p>
+                        <p className={`text-[10px] font-mono mt-0.5 ${
+                          date === d.value ? "text-primary-950/70" : "text-white/40"
+                        }`}>
+                          {d.sublabel}
+                        </p>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Start time — native picker */}
+                {/* Start time */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3" htmlFor="start-time">
+                  <label
+                    htmlFor="start-time"
+                    className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3"
+                  >
                     <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                     Start time
                   </label>
@@ -358,14 +403,15 @@ export function CreateGameFlow() {
                     type="time"
                     value={startTime}
                     onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
-                    className="w-full border-2 border-cream-300 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-semibold text-primary-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all cursor-pointer"
+                    className={inputBase + " font-mono tabular text-lg"}
+                    style={{ colorScheme: "dark" }}
                   />
                 </div>
 
-                {/* Duration — 2×2 grid, shown after start time selected */}
+                {/* Duration */}
                 {startTime && (
                   <div>
-                    <label className="text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3 block">
+                    <label className="text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3 block">
                       Duration
                     </label>
                     <div className="grid grid-cols-4 gap-2">
@@ -378,14 +424,22 @@ export function CreateGameFlow() {
                           <button
                             key={hours}
                             onClick={() => setDuration(hours)}
-                            className={`flex flex-col items-center py-3 rounded-xl border-2 transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[56px] ${
+                            className={`flex flex-col items-center py-3 rounded-xl border-2 transition-all active:scale-[0.97] focus-neon min-h-[60px] ${
                               selected
-                                ? "bg-primary-600 text-white border-primary-600"
-                                : "bg-white border-cream-300 hover:border-primary-200"
+                                ? "bg-accent-400 border-accent-400 shadow-neon"
+                                : "bg-cream-200 border-white/10 hover:border-white/25"
                             }`}
                           >
-                            <span className={`text-sm font-bold ${selected ? "text-white" : "text-primary-800"}`}>{label}</span>
-                            <span className={`text-[10px] mt-0.5 ${selected ? "text-primary-200" : "text-primary-400"}`}>{fmt(endH, endM)}</span>
+                            <span className={`font-display uppercase text-base tracking-wide ${
+                              selected ? "text-primary-950" : "text-white"
+                            }`}>
+                              {label}
+                            </span>
+                            <span className={`text-[10px] font-mono mt-0.5 ${
+                              selected ? "text-primary-950/70" : "text-white/40"
+                            }`}>
+                              → {fmt(endH, endM)}
+                            </span>
                           </button>
                         );
                       })}
@@ -393,47 +447,47 @@ export function CreateGameFlow() {
                   </div>
                 )}
 
-                {/* Venue search */}
+                {/* Venue */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">
+                  <label className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">
                     <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
                     Venue
                   </label>
 
                   {turfId ? (
-                    <div className="flex items-center justify-between border-2 border-primary-600 rounded-xl px-4 py-3.5 bg-primary-50">
+                    <div className="flex items-center justify-between border-2 border-accent-400 rounded-xl px-4 py-3.5 bg-accent-400/10 shadow-neon">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <MapPin className="w-4 h-4 text-primary-500 shrink-0" aria-hidden="true" />
-                        <span className="text-sm font-semibold text-primary-800 truncate">{turfName}</span>
+                        <MapPin className="w-4 h-4 text-accent-400 shrink-0" aria-hidden="true" />
+                        <span className="text-sm font-semibold text-white truncate">{turfName}</span>
                       </div>
                       <button
                         onClick={() => { setTurfId(""); setTurfName(""); setTurfSearch(""); }}
-                        className="text-xs font-semibold text-primary-500 hover:text-primary-700 transition-colors shrink-0 ml-3 cursor-pointer"
+                        className="text-[10px] font-mono uppercase tracking-widest text-accent-400 hover:text-accent-300 shrink-0 ml-3"
                       >
-                        Change
+                        change
                       </button>
                     </div>
                   ) : (
                     <div className="relative">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-300" aria-hidden="true" />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" aria-hidden="true" />
                       <input
                         ref={turfSearchRef}
                         type="text"
                         value={turfSearch}
                         onChange={(e) => setTurfSearch(e.target.value)}
-                        placeholder="Search for a turf..."
-                        className="w-full pl-10 pr-4 py-3.5 min-h-[52px] border-2 border-cream-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all placeholder:text-primary-300 text-primary-700"
+                        placeholder="Search a turf…"
+                        className={inputBase + " pl-11"}
                       />
                       {showTurfDropdown && turfResults.length > 0 && (
-                        <div className="absolute z-20 top-full mt-1.5 w-full bg-white border border-cream-300 rounded-2xl shadow-elevated overflow-hidden">
+                        <div className="absolute z-20 top-full mt-1.5 w-full bg-cream-200 border border-white/10 rounded-2xl shadow-elevated overflow-hidden">
                           {turfResults.map((turf) => (
                             <button
                               key={turf.id}
                               onClick={() => { setTurfId(turf.id); setTurfName(turf.name); setShowTurfDropdown(false); setTurfSearch(""); }}
-                              className="w-full text-left px-4 py-3.5 hover:bg-primary-50 border-b border-cream-200 last:border-0 transition-colors cursor-pointer"
+                              className="w-full text-left px-4 py-3.5 hover:bg-accent-400/10 border-b border-white/5 last:border-0 transition-colors"
                             >
-                              <p className="text-sm font-semibold text-primary-800">{turf.name}</p>
-                              <p className="text-xs text-primary-400 flex items-center gap-1 mt-0.5">
+                              <p className="text-sm font-semibold text-white">{turf.name}</p>
+                              <p className="text-xs text-white/50 flex items-center gap-1 mt-0.5">
                                 <MapPin className="w-3 h-3" aria-hidden="true" />
                                 {turf.address}
                               </p>
@@ -442,7 +496,7 @@ export function CreateGameFlow() {
                         </div>
                       )}
                       {turfSearch.length >= 2 && turfResults.length === 0 && (
-                        <p className="absolute z-20 top-full mt-1.5 w-full bg-white border border-cream-200 rounded-xl px-4 py-3 text-sm text-primary-400 shadow-soft">
+                        <p className="absolute z-20 top-full mt-1.5 w-full bg-cream-200 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/50">
                           No turfs found — try a different name
                         </p>
                       )}
@@ -456,25 +510,32 @@ export function CreateGameFlow() {
             {step === 3 && (
               <div className="space-y-6">
                 <div>
-                  <h1 className="text-2xl font-bold text-primary-800 font-serif mb-1">Game details</h1>
-                  <p className="text-sm text-primary-400">Almost there</p>
+                  <h1 className="font-display uppercase text-5xl text-white leading-[0.9] tracking-tight mb-2">
+                    Squad<br />
+                    <span className="text-accent-400">details</span>
+                  </h1>
+                  <p className="text-xs font-mono uppercase tracking-widest text-white/50">
+                    Almost on the pitch
+                  </p>
                 </div>
 
-                {/* Quick summary */}
-                <div className="flex items-center gap-3 bg-primary-50 border border-primary-100 rounded-xl px-4 py-3">
+                {/* Summary card */}
+                <div className="flex items-center gap-3 bg-cream-200 border border-white/10 rounded-2xl px-4 py-3.5">
                   {selectedSportObj && (
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br ${selectedSportObj.color} text-white shrink-0`}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-accent-400 text-primary-950 shrink-0">
                       {selectedSportObj.icon}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-primary-800 truncate">{sport} · {turfName}</p>
-                    <p className="text-xs text-primary-400 mt-0.5">
+                    <p className="font-display uppercase text-lg text-white truncate tracking-wide leading-tight">
+                      {sport} · {turfName}
+                    </p>
+                    <p className="text-[11px] font-mono text-white/50 mt-0.5">
                       {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
                       {startTime && endTime && (() => {
                         const [sh, sm] = startTime.split(":").map(Number);
                         const [eh, em] = endTime.split(":").map(Number);
-                        return ` · ${fmt(sh, sm)} – ${fmt(eh, em)}`;
+                        return ` · ${fmt(sh, sm)} → ${fmt(eh, em)}`;
                       })()}
                     </p>
                   </div>
@@ -482,20 +543,28 @@ export function CreateGameFlow() {
 
                 {/* Skill level */}
                 <div>
-                  <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">Skill level</label>
+                  <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">Skill level</label>
                   <div className="grid grid-cols-2 gap-2">
                     {SKILL_LEVELS.map((level) => (
                       <button
                         key={level.value}
                         onClick={() => setSkillLevel(level.value)}
-                        className={`flex flex-col items-start px-4 py-3 min-h-[56px] rounded-xl border-2 transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        className={`flex flex-col items-start px-4 py-3 min-h-[64px] rounded-xl border-2 transition-all active:scale-[0.97] focus-neon ${
                           skillLevel === level.value
-                            ? "bg-primary-600 text-white border-primary-600"
-                            : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
+                            ? "bg-accent-400 border-accent-400 shadow-neon"
+                            : "bg-cream-200 border-white/10 hover:border-white/25"
                         }`}
                       >
-                        <span className={`text-sm font-bold ${skillLevel === level.value ? "text-white" : "text-primary-800"}`}>{level.label}</span>
-                        <span className={`text-[11px] ${skillLevel === level.value ? "text-primary-200" : "text-primary-400"}`}>{level.desc}</span>
+                        <span className={`font-display uppercase text-base tracking-wide ${
+                          skillLevel === level.value ? "text-primary-950" : "text-white"
+                        }`}>
+                          {level.label}
+                        </span>
+                        <span className={`text-[10px] font-mono uppercase tracking-widest mt-0.5 ${
+                          skillLevel === level.value ? "text-primary-950/70" : "text-white/40"
+                        }`}>
+                          {level.desc}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -503,44 +572,44 @@ export function CreateGameFlow() {
 
                 {/* Max players */}
                 <div>
-                  <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">Max players</label>
-                  <div className="flex items-center gap-4 bg-white border border-cream-300 rounded-xl px-4 py-3">
+                  <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">Max players</label>
+                  <div className="flex items-center gap-4 bg-cream-200 border border-white/10 rounded-xl px-4 py-3">
                     <button
                       onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
-                      className="w-10 h-10 flex items-center justify-center border border-cream-300 rounded-lg hover:border-primary-300 hover:bg-primary-50 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-10 h-10 flex items-center justify-center border border-white/10 rounded-lg hover:border-accent-400 hover:bg-accent-400/10 active:scale-95 transition-all focus-neon"
                       aria-label="Decrease"
                     >
-                      <Minus className="w-4 h-4 text-primary-600" />
+                      <Minus className="w-4 h-4 text-white" />
                     </button>
                     <div className="flex-1 text-center">
-                      <span className="text-2xl font-bold text-primary-800 font-serif">{maxPlayers}</span>
-                      <span className="text-sm text-primary-400 ml-2">players</span>
+                      <span className="font-display text-4xl text-accent-400 tabular tracking-tight">{maxPlayers}</span>
+                      <span className="text-xs font-mono uppercase tracking-widest text-white/50 ml-2">players</span>
                     </div>
                     <button
                       onClick={() => setMaxPlayers(Math.min(50, maxPlayers + 1))}
-                      className="w-10 h-10 flex items-center justify-center border border-cream-300 rounded-lg hover:border-primary-300 hover:bg-primary-50 active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-10 h-10 flex items-center justify-center border border-white/10 rounded-lg hover:border-accent-400 hover:bg-accent-400/10 active:scale-95 transition-all focus-neon"
                       aria-label="Increase"
                     >
-                      <Plus className="w-4 h-4 text-primary-600" />
+                      <Plus className="w-4 h-4 text-white" />
                     </button>
                   </div>
                 </div>
 
                 {/* Cost per person */}
                 <div>
-                  <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3">Cost per person</label>
+                  <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3">Cost per person</label>
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     {COST_OPTIONS.slice(0, 4).map((price) => (
                       <button
                         key={price}
                         onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
-                        className={`py-2.5 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        className={`py-3 min-h-[48px] rounded-xl border-2 font-display text-lg tracking-tight transition-all active:scale-[0.97] focus-neon ${
                           costPerPerson === price && !customCost
-                            ? "bg-primary-600 text-white border-primary-600"
-                            : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
+                            ? "bg-accent-400 text-primary-950 border-accent-400 shadow-neon"
+                            : "bg-cream-200 text-white border-white/10 hover:border-white/25"
                         }`}
                       >
-                        {price === 0 ? "Free" : `₹${price}`}
+                        {price === 0 ? "FREE" : `₹${price}`}
                       </button>
                     ))}
                   </div>
@@ -549,10 +618,10 @@ export function CreateGameFlow() {
                       <button
                         key={price}
                         onClick={() => { setCostPerPerson(price); setCustomCost(""); }}
-                        className={`py-2.5 min-h-[44px] rounded-xl border-2 text-sm font-bold transition-all active:scale-[0.97] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        className={`py-3 min-h-[48px] rounded-xl border-2 font-display text-lg tracking-tight transition-all active:scale-[0.97] focus-neon ${
                           costPerPerson === price && !customCost
-                            ? "bg-primary-600 text-white border-primary-600"
-                            : "bg-white text-primary-700 border-cream-300 hover:border-primary-200"
+                            ? "bg-accent-400 text-primary-950 border-accent-400 shadow-neon"
+                            : "bg-cream-200 text-white border-white/10 hover:border-white/25"
                         }`}
                       >
                         ₹{price}
@@ -564,75 +633,84 @@ export function CreateGameFlow() {
                       step={50}
                       value={customCost}
                       onChange={(e) => { setCustomCost(e.target.value); setCostPerPerson(parseInt(e.target.value) || 0); }}
-                      className="col-span-3 border-2 border-cream-300 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-primary-700 bg-white min-h-[44px]"
+                      className="col-span-3 border-2 border-white/10 rounded-xl px-3 py-2 text-sm text-center font-mono tabular focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 bg-cream-200 text-white placeholder:text-white/30 min-h-[48px]"
                       placeholder="₹ custom"
                     />
                   </div>
                 </div>
 
                 {/* Turf booked toggle */}
-                <div className="flex items-center justify-between bg-white border border-cream-300 rounded-xl px-4 py-3.5">
+                <div className="flex items-center justify-between bg-cream-200 border border-white/10 rounded-xl px-4 py-3.5">
                   <div>
-                    <p className="text-sm font-semibold text-primary-800">Turf already booked?</p>
-                    <p className="text-xs text-primary-400 mt-0.5">Let players know it&apos;s confirmed</p>
+                    <p className="text-sm font-semibold text-white">Turf already booked?</p>
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-white/40 mt-0.5">
+                      Confirmed slot flag
+                    </p>
                   </div>
                   <button
                     onClick={() => setTurfBooked(!turfBooked)}
-                    className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${turfBooked ? "bg-primary-600" : "bg-cream-300"}`}
+                    className={`relative w-12 h-7 rounded-full transition-colors focus-neon ${
+                      turfBooked ? "bg-accent-400 shadow-neon" : "bg-white/10"
+                    }`}
                     role="switch"
                     aria-checked={turfBooked}
                   >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${turfBooked ? "translate-x-6" : ""}`} />
+                    <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full transition-transform duration-200 ${
+                      turfBooked ? "translate-x-5 bg-primary-950" : "bg-white/80"
+                    }`} />
                   </button>
                 </div>
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-xs font-semibold text-primary-500 uppercase tracking-wider mb-3" htmlFor="notes">
-                    Notes <span className="normal-case font-normal text-primary-300">(optional)</span>
+                  <label
+                    htmlFor="notes"
+                    className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-3"
+                  >
+                    Notes <span className="text-white/30 lowercase">(optional)</span>
                   </label>
                   <input
                     id="notes"
                     type="text"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="e.g. Bring your own shoes, jersey colour: red"
-                    className="w-full border-2 border-cream-300 rounded-xl px-4 py-3.5 min-h-[52px] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all placeholder:text-primary-300 text-primary-700"
+                    placeholder="e.g. Bring your own shoes, red jersey"
+                    className={inputBase}
                   />
                 </div>
 
                 {submitError && (
-                  <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl">
-                    <p className="text-sm text-red-700 font-medium">{submitError}</p>
+                  <div className="p-3.5 bg-hot-500/10 border border-hot-500/40 rounded-xl">
+                    <p className="text-sm text-hot-400 font-medium">{submitError}</p>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Sticky bottom CTA */}
+          {/* Sticky bottom CTA — sits above the mobile bottom nav (h-16) */}
           {step === 2 && (
-            <div className="fixed bottom-0 left-0 right-0 z-30 bg-cream-100/97 backdrop-blur-sm border-t border-cream-300 px-5 py-4 safe-area-pb">
+            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-primary-950/95 backdrop-blur-xl border-t border-white/5 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <button
                 onClick={() => setStep(3)}
                 disabled={!step2Valid}
-                className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-4 min-h-[52px] rounded-2xl font-bold text-base transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                className="w-full flex items-center justify-center gap-2 bg-accent-400 hover:bg-accent-300 text-primary-950 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] shadow-neon focus-neon"
               >
-                Continue
+                Next
               </button>
             </div>
           )}
           {step === 3 && (
-            <div className="fixed bottom-0 left-0 right-0 z-30 bg-cream-100/97 backdrop-blur-sm border-t border-cream-300 px-5 py-4 safe-area-pb">
+            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-primary-950/95 backdrop-blur-xl border-t border-white/5 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-4 min-h-[52px] rounded-2xl font-bold text-base transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                className="w-full flex items-center justify-center gap-2 bg-accent-400 hover:bg-accent-300 text-primary-950 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 active:scale-[0.98] shadow-neon focus-neon"
               >
                 {submitting ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creating...</>
+                  <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creating…</>
                 ) : (
-                  <><Sparkles className="w-5 h-5" aria-hidden="true" /> Create Game</>
+                  <><Zap className="w-5 h-5" strokeWidth={2.75} aria-hidden="true" /> Post game</>
                 )}
               </button>
             </div>

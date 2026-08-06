@@ -1,79 +1,122 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Primary — Deep Forest Green */
-  --color-primary-50: #f0f7f4;
-  --color-primary-100: #d9ece5;
-  --color-primary-200: #b3d9cb;
-  --color-primary-300: #7cbfab;
-  --color-primary-400: #40916C;
-  --color-primary-500: #2D6A4F;
-  --color-primary-600: #1B4332;
-  --color-primary-700: #143828;
-  --color-primary-800: #0e2a1e;
-  --color-primary-900: #091a13;
-  --color-primary-950: #040d09;
+  /* ─── STADIUM NEON ────────────────────────────────────────
+     Dark broadcast-desk base + electric lime accent.
+     Scale kept semantically compatible with the old palette so
+     legacy classes (bg-primary-600, text-primary-800, etc.)
+     still render in-theme without a global find-and-replace.
+     ──────────────────────────────────────────────────────── */
 
-  /* Accent — Brushed Gold */
-  --color-accent-50: #fdf8ee;
-  --color-accent-100: #f9edcf;
-  --color-accent-200: #f2d99f;
-  --color-accent-300: #E8C878;
-  --color-accent-400: #DDB968;
-  --color-accent-500: #D4A853;
-  --color-accent-600: #B8912F;
-  --color-accent-700: #9A7920;
-  --color-accent-800: #7a5f18;
-  --color-accent-900: #5c4711;
-  --color-accent-950: #3a2d09;
+  /* Primary — Deep midnight ink (surface / structure) */
+  --color-primary-50:  #E4EBF0;
+  --color-primary-100: #C0CDD8;
+  --color-primary-200: #8B9EAF;
+  --color-primary-300: #5A6E82;
+  --color-primary-400: #3B4E62;
+  --color-primary-500: #26374A;
+  --color-primary-600: #17263A;
+  --color-primary-700: #0F1B2C;
+  --color-primary-800: #08111E;
+  --color-primary-900: #030811;
+  --color-primary-950: #010409;
 
-  /* Cream neutrals */
-  --color-cream-50: #fdfcfb;
-  --color-cream-100: #F8F5F0;
-  --color-cream-200: #EFE9DF;
-  --color-cream-300: #E8E0D5;
-  --color-cream-400: #D9CEBF;
-  --color-cream-500: #C4B8A6;
+  /* Accent — Electric lime (the neon that pops off the dark) */
+  --color-accent-50:  #F3FFC5;
+  --color-accent-100: #E5FF8F;
+  --color-accent-200: #D6FF5C;
+  --color-accent-300: #CDFF3C;
+  --color-accent-400: #C6FF00;
+  --color-accent-500: #B4EA00;
+  --color-accent-600: #97C700;
+  --color-accent-700: #789E00;
+  --color-accent-800: #557000;
+  --color-accent-900: #364700;
+  --color-accent-950: #1D2700;
+
+  /* "Cream" repurposed as our dark surface scale
+     (bg-cream-100 was the page bg → now near-black;
+      bg-cream-200 was subtle warm → now card surface;
+      border-cream-300 was hairline → now dark divider) */
+  --color-cream-50:  #17181C;
+  --color-cream-100: #0B0C10;
+  --color-cream-200: #16181D;
+  --color-cream-300: #23262E;
+  --color-cream-400: #363943;
+  --color-cream-500: #6C6F79;
+
+  /* Second neon — hot pink used for danger/heat states */
+  --color-hot-400: #FF4D82;
+  --color-hot-500: #FF2B6D;
+  --color-hot-600: #E51B58;
 
   /* Fonts */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-playfair), 'Georgia', ui-serif, serif;
+  --font-serif: var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
+  --font-display: var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, SFMono-Regular, monospace;
 
-  /* Luxury shadows — warm-toned */
-  --shadow-card: 0 1px 3px rgba(27, 67, 50, 0.06), 0 1px 2px rgba(27, 67, 50, 0.04);
-  --shadow-card-hover: 0 8px 24px rgba(27, 67, 50, 0.12), 0 2px 8px rgba(27, 67, 50, 0.06);
-  --shadow-soft: 0 2px 8px rgba(27, 67, 50, 0.08);
-  --shadow-elevated: 0 12px 40px rgba(27, 67, 50, 0.14), 0 4px 12px rgba(27, 67, 50, 0.08);
-  --shadow-gold: 0 4px 16px rgba(212, 168, 83, 0.25);
+  /* Shadows — deep black + neon glow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(198, 255, 0, 0.15);
+  --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-gold: 0 0 24px rgba(198, 255, 0, 0.45), 0 4px 16px rgba(198, 255, 0, 0.25);
+  --shadow-neon: 0 0 32px rgba(198, 255, 0, 0.55);
+  --shadow-hot: 0 0 24px rgba(255, 43, 109, 0.5);
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: #F8F5F0;
-  color: #1C1C1E;
+  background: #0B0C10;
+  color: #F5F6F8;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Subtle stadium grid — visible only on dark, doesn't affect print */
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(198, 255, 0, 0.08), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+  background-attachment: fixed, fixed, fixed;
 }
 
-/* Serif headings */
-.font-serif {
-  font-family: var(--font-serif);
+/* Selection glows lime */
+::selection {
+  background: rgba(198, 255, 0, 0.35);
+  color: #0B0C10;
+}
+
+/* Utility: display type (Bebas Neue) */
+.font-serif,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* Mono for scoreboard-style numerals */
+.font-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum", "zero";
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Bottom padding for fixed mobile CTA bar */
 .has-bottom-cta {
   padding-bottom: 5rem;
 }
-
 @media (min-width: 768px) {
   .has-bottom-cta {
     padding-bottom: 0;
   }
-}
-
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
 }
 
 /* Hide scrollbar for horizontal scroll areas */
@@ -85,69 +128,89 @@ html {
   display: none;
 }
 
-/* Luxury section dividers */
+/* Section dividers — hairline on dark */
 .section-divider {
-  border-top: 1px solid #E8E0D5;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 1.75rem;
   margin-top: 1.75rem;
 }
 
-/* Fade in animation */
+/* ─── Motion ────────────────────────────────────────────── */
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-fade-in { animation: fadeIn 0.5s ease-out; }
 
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-out;
-}
-
-/* Slide up animation */
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-slide-up { animation: slideUp 0.5s ease-out; }
 
-.animate-slide-up {
-  animation: slideUp 0.5s ease-out;
-}
-
-/* Lightbox fade */
 @keyframes fadeInOverlay {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
+.animate-lightbox { animation: fadeInOverlay 0.2s ease-out; }
 
-.animate-lightbox {
-  animation: fadeInOverlay 0.2s ease-out;
-}
-
-/* Slide down animation (for toasts) */
 @keyframes slideDown {
   from { opacity: 0; transform: translate(-50%, -16px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
+.animate-slide-down { animation: slideDown 0.3s ease-out; }
 
-.animate-slide-down {
-  animation: slideDown 0.3s ease-out;
+/* Neon shimmer for the wordmark accent */
+@keyframes neonShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
 }
-
-/* Gold shimmer for premium elements */
-@keyframes goldShimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-
-.gold-shimmer {
+.gold-shimmer,
+.neon-shimmer {
   background: linear-gradient(
     90deg,
-    #D4A853 0%,
-    #E8C878 40%,
-    #D4A853 60%,
-    #B8912F 100%
+    #C6FF00 0%,
+    #F3FFC5 40%,
+    #C6FF00 60%,
+    #97C700 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  color: transparent;
+  animation: neonShimmer 6s linear infinite;
+}
+
+/* Pulsing "LIVE" dot */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 43, 109, 0.6); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 8px rgba(255, 43, 109, 0); }
+}
+.pulse-live {
+  animation: livePulse 1.6s ease-in-out infinite;
+}
+
+/* Subtle scanline overlay for hero moments (opt-in with .scanline) */
+.scanline {
+  position: relative;
+}
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.025) 0 1px,
+    transparent 1px 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* Neon focus ring helper */
+.focus-neon:focus-visible {
+  outline: 2px solid #C6FF00;
+  outline-offset: 2px;
 }

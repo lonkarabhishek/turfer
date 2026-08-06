@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { Check } from "lucide-react";
 import { phoneAuthHelpers } from "@/lib/firebase/client";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
@@ -23,7 +24,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const recaptchaRef = useRef<ReturnType<typeof phoneAuthHelpers.setupRecaptcha> | null>(null);
 
-  // Countdown timer for resend
   useEffect(() => {
     if (timer <= 0) return;
     const interval = setInterval(() => setTimer((t) => t - 1), 1000);
@@ -35,14 +35,11 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       setError("Enter a valid 10-digit phone number");
       return;
     }
-
     setError("");
     setLoading(true);
-
     try {
       recaptchaRef.current = phoneAuthHelpers.setupRecaptcha("recaptcha-container");
       const result = await phoneAuthHelpers.sendOTP(phone, recaptchaRef.current);
-
       if (result.success && result.confirmationResult) {
         setConfirmationResult(result.confirmationResult);
         setStep("otp");
@@ -59,16 +56,10 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
   const handleOTPChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
-
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
-
-    if (value && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all 6 digits entered
+    if (value && index < 5) otpRefs.current[index + 1]?.focus();
     if (newOtp.every((d) => d) && newOtp.join("").length === 6) {
       verifyOTP(newOtp.join(""));
     }
@@ -92,7 +83,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
   const finishLogin = (userName: string) => {
     setSuccessName(userName);
-    // Brief delay to show success before closing
     setTimeout(() => {
       refreshUser();
       onSuccess?.();
@@ -101,18 +91,13 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
   const verifyOTP = async (otpCode: string) => {
     if (!confirmationResult) return;
-
     setError("");
     setLoading(true);
-
     try {
       const result = await phoneAuthHelpers.verifyOTP(confirmationResult, otpCode);
-
       if (result.success && result.user) {
         const supabase = createClient();
         const formattedPhone = `+91${phone}`;
-
-        // Check if user already exists
         const { data: existingUser } = await supabase
           .from("users")
           .select("id, name, phone, email, role, profile_image_url")
@@ -120,7 +105,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           .maybeSingle();
 
         if (existingUser) {
-          // Existing user — log them in
           localStorage.setItem("auth_token", result.user.idToken);
           localStorage.setItem("user", JSON.stringify({
             id: existingUser.id,
@@ -132,7 +116,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           }));
           finishLogin(existingUser.name?.split(" ")[0] || "");
         } else {
-          // New user — ask for name
           setStep("name");
         }
       } else {
@@ -152,16 +135,11 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       setError("Please enter your name");
       return;
     }
-
     setError("");
     setLoading(true);
-
     try {
       const supabase = createClient();
       const formattedPhone = `+91${phone}`;
-
-      // Create user in database
-      // Generate UUID since phone users aren't in auth.users
       const userId = crypto.randomUUID();
       const { data: newUser, error: insertError } = await supabase
         .from("users")
@@ -169,7 +147,10 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           id: userId,
           name: name.trim(),
           phone: formattedPhone,
-          role: "player",
+          role: "user",
+          // public.users.password is NOT NULL; phone users have no password.
+          // Use a fixed sentinel so the insert satisfies the schema.
+          password: "phone-auth-no-password",
         }])
         .select()
         .single();
@@ -180,7 +161,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         return;
       }
 
-      // Store in localStorage
       const authToken = localStorage.getItem("auth_token") || `phone_${Date.now()}`;
       localStorage.setItem("auth_token", authToken);
       localStorage.setItem("user", JSON.stringify({
@@ -204,20 +184,21 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     await handleSendOTP();
   };
 
-  // Success state
-  if (successName !== undefined && successName !== "") {
+  // Success
+  if (successName) {
     return (
       <div className="text-center py-6">
-        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-          <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
+        <div className="w-14 h-14 bg-accent-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-neon">
+          <Check className="w-7 h-7 text-primary-950" strokeWidth={3} />
         </div>
-        <p className="text-lg font-semibold text-gray-900">Welcome, {successName}!</p>
-        <p className="text-sm text-gray-500 mt-1">You&apos;re all set.</p>
+        <p className="font-display uppercase text-2xl text-white tracking-wide">Welcome, {successName}</p>
+        <p className="text-sm text-white/50 mt-1">You&apos;re on the pitch.</p>
       </div>
     );
   }
+
+  const inputClass =
+    "w-full bg-cream-300 border border-white/10 rounded-xl px-4 py-3.5 text-base font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 transition-all";
 
   return (
     <div className="space-y-5">
@@ -225,11 +206,11 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       {step === "phone" && (
         <>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Phone number
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-white/50 mb-2">
+              Phone
             </label>
-            <div className="flex">
-              <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
+            <div className="flex gap-2">
+              <span className="inline-flex items-center px-3 py-3.5 bg-cream-300 border border-white/10 rounded-xl text-white/60 text-sm font-mono">
                 +91
               </span>
               <input
@@ -237,13 +218,10 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
                 inputMode="numeric"
                 maxLength={10}
                 value={phone}
-                onChange={(e) => {
-                  setPhone(e.target.value.replace(/\D/g, ""));
-                  setError("");
-                }}
+                onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "")); setError(""); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSendOTP()}
-                placeholder="Enter 10-digit number"
-                className="flex-1 rounded-r-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                placeholder="10-digit number"
+                className={inputClass + " flex-1"}
                 autoFocus
               />
             </div>
@@ -252,9 +230,9 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={handleSendOTP}
             disabled={loading || phone.length !== 10}
-            className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-accent-400 hover:bg-accent-300 text-primary-950 py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-neon focus-neon"
           >
-            {loading ? "Sending..." : "Continue"}
+            {loading ? "Sending…" : "Send OTP"}
           </button>
         </>
       )}
@@ -263,15 +241,14 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       {step === "otp" && (
         <>
           <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Enter the 6-digit code sent to{" "}
-              <span className="font-medium text-gray-900">+91 {phone}</span>
+            <p className="text-sm text-white/60">
+              Code sent to <span className="font-mono text-accent-400">+91 {phone}</span>
             </p>
             <button
               onClick={() => { setStep("phone"); setError(""); }}
-              className="text-sm text-gray-900 underline mt-1"
+              className="text-xs font-mono uppercase tracking-widest text-white/40 hover:text-accent-400 transition-colors mt-1"
             >
-              Change number
+              change number
             </button>
           </div>
 
@@ -286,7 +263,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
                 value={digit}
                 onChange={(e) => handleOTPChange(i, e.target.value)}
                 onKeyDown={(e) => handleOTPKeyDown(i, e)}
-                className="w-11 h-13 text-center text-lg font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-11 h-13 text-center font-mono text-lg font-bold bg-cream-300 border border-white/10 rounded-lg text-white focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-400/30 transition-all"
                 autoFocus={i === 0}
               />
             ))}
@@ -294,23 +271,23 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
           <div className="text-center">
             {timer > 0 ? (
-              <p className="text-sm text-gray-500">
-                Resend code in {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
+              <p className="text-xs font-mono uppercase tracking-widest text-white/40">
+                Resend in {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
               </p>
             ) : (
               <button
                 onClick={handleResend}
                 disabled={loading}
-                className="text-sm text-gray-900 font-medium underline"
+                className="text-xs font-mono uppercase tracking-widest text-accent-400 hover:text-accent-300"
               >
-                Resend code
+                resend code
               </button>
             )}
           </div>
 
           {loading && (
             <div className="text-center">
-              <p className="text-sm text-gray-500">Verifying...</p>
+              <p className="text-xs font-mono uppercase tracking-widest text-white/40">Verifying…</p>
             </div>
           )}
         </>
@@ -320,38 +297,34 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       {step === "name" && (
         <>
           <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Welcome! What should we call you?
-            </p>
+            <p className="text-sm text-white/60">Welcome — what&apos;s your name?</p>
           </div>
 
-          <div>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && handleCreateUser()}
-              placeholder="Your name"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-              autoFocus
-            />
-          </div>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => { setName(e.target.value); setError(""); }}
+            onKeyDown={(e) => e.key === "Enter" && handleCreateUser()}
+            placeholder="Your name"
+            className={inputClass}
+            autoFocus
+          />
 
           <button
             onClick={handleCreateUser}
             disabled={loading || !name.trim()}
-            className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-accent-400 hover:bg-accent-300 text-primary-950 py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-neon focus-neon"
           >
-            {loading ? "Creating account..." : "Get started"}
+            {loading ? "Creating…" : "Let's play"}
           </button>
         </>
       )}
 
       {error && (
-        <p className="text-sm text-red-600 text-center">{error}</p>
+        <p className="text-sm text-hot-400 text-center">{error}</p>
       )}
 
-      {/* Hidden recaptcha container */}
+      {/* Hidden recaptcha */}
       <div id="recaptcha-container" />
     </div>
   );

@@ -94,8 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: userData.name,
         email: userData.email || null,
         phone: userData.phone || null,
-        role: "player",
+        role: "user",
         profile_image_url: userData.profile_image_url || null,
+        // public.users.password is NOT NULL; OAuth users have no password.
+        // Use a fixed sentinel so the insert satisfies the schema.
+        password: "oauth-no-password",
       }]).select().single();
       if (inserted) return inserted as AppUser;
     } catch { /* RLS may block */ }
