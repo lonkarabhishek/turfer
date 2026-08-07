@@ -3,19 +3,37 @@
 import Link from "next/link";
 import { Search, User, Bell, Zap } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
+import { notify } from "@/lib/notifications/browser";
 
 export function Header() {
   const { user, loading, login } = useAuth();
   const [unread, setUnread] = useState(0);
+  const prevUnreadRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!user) { setUnread(0); return; }
-    getUnreadCount(user.id).then(({ data }) => setUnread(data));
-    const interval = setInterval(() => {
-      getUnreadCount(user.id).then(({ data }) => setUnread(data));
-    }, 30000);
+    if (!user) { setUnread(0); prevUnreadRef.current = null; return; }
+
+    const poll = async () => {
+      const { data: nextCount } = await getUnreadCount(user.id);
+      const prev = prevUnreadRef.current;
+      // Only fire a browser notification when the count grew, and only
+      // after the first successful load (so we don't ping on page open).
+      if (prev !== null && nextCount > prev) {
+        const delta = nextCount - prev;
+        notify(
+          delta === 1 ? "New notification" : `${delta} new notifications`,
+          "Open TapTurf to see what's new",
+          "tapturf-unread"
+        );
+      }
+      prevUnreadRef.current = nextCount;
+      setUnread(nextCount);
+    };
+
+    poll();
+    const interval = setInterval(poll, 30000);
     return () => clearInterval(interval);
   }, [user]);
 

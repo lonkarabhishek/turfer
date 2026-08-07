@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, Check, Gamepad2, UserPlus, XCircle } from "lucide-react";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 import type { Notification } from "@/types/notification";
+import { NotificationsPrompt } from "./NotificationsPrompt";
 
 const ICON_MAP: Record<string, typeof Bell> = {
   game_request: UserPlus,
@@ -72,6 +73,7 @@ export function NotificationsList({ userId }: { userId: string }) {
 
   return (
     <div>
+      <NotificationsPrompt />
       {unreadCount > 0 && (
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-gray-500">{unreadCount} unread</p>

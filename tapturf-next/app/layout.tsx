@@ -35,6 +35,13 @@ export const metadata: Metadata = {
   description:
     "Find and book sports turfs in Nashik. Compare prices, check ratings, and book instantly.",
   metadataBase: new URL("https://www.tapturf.in"),
+  manifest: "/manifest.webmanifest",
+  themeColor: "#16A34A",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TapTurf",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "48x48" },

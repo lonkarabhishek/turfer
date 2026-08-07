@@ -278,24 +278,27 @@ export async function getMyRequests(userId: string) {
 export async function acceptRequest(requestId: string, gameId: string, userId: string) {
   const supabase = createClient();
 
-  // Check if game is full before accepting
-  const { data: game } = await supabase
+  // Check if game is full before accepting.
+  // .limit(1) instead of .single() — never crash on 0-row RLS results.
+  const { data: gameRows } = await supabase
     .from("games")
     .select("current_players, max_players")
     .eq("id", gameId)
-    .single();
+    .limit(1);
 
+  const game = gameRows?.[0];
   if (!game) return { success: false, error: "Game not found" };
   if (game.current_players >= game.max_players) return { success: false, error: "Game is full" };
 
-  const { data: updatedRequest, error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from("game_requests")
     .update({ status: "accepted" })
     .eq("id", requestId)
-    .select()
-    .single();
+    .select();
 
   if (error) return { success: false, error: error.message };
+  const updatedRequest = updatedRows?.[0];
+  if (!updatedRequest) return { success: false, error: "Couldn't update the request. Please refresh and try again." };
 
   // Increment player count
   await supabase
@@ -324,14 +327,15 @@ export async function acceptRequest(requestId: string, gameId: string, userId: s
 
 export async function declineRequest(requestId: string, gameId: string) {
   const supabase = createClient();
-  const { data: updatedRequest, error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from("game_requests")
     .update({ status: "declined" })
     .eq("id", requestId)
-    .select()
-    .single();
+    .select();
 
   if (error) return { success: false, error: error.message };
+  const updatedRequest = updatedRows?.[0];
+  if (!updatedRequest) return { success: false, error: "Couldn't update the request. Please refresh and try again." };
 
   // Notify the requester
   await supabase.from("notifications").insert([{
