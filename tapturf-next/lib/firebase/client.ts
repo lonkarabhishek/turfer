@@ -1,8 +1,12 @@
-import { initializeApp, getApps } from "firebase/app";
-import {
-  getAuth,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
+// Firebase SDK is ~330 KB gzipped and was being pulled into the main
+// client bundle for every visitor. This module now lazy-imports every
+// firebase/* symbol on first use, so anyone who doesn't touch phone
+// OTP (or ever log out) never downloads the SDK.
+
+import type {
+  Auth,
+  ConfirmationResult,
+  RecaptchaVerifier as RecaptchaVerifierType,
 } from "firebase/auth";
 
 const firebaseConfig = {
@@ -14,19 +18,35 @@ const firebaseConfig = {
   appId: "1:22698492266:web:3592ce331900ba64ea2513",
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-auth.languageCode = "en";
+// Cached promise so we only initialize once per tab.
+let _authP: Promise<Auth> | null = null;
 
-export { auth };
+async function getAuthLazy(): Promise<Auth> {
+  if (_authP) return _authP;
+  _authP = (async () => {
+    const [{ initializeApp, getApps }, { getAuth }] = await Promise.all([
+      import("firebase/app"),
+      import("firebase/auth"),
+    ]);
+    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    const a = getAuth(app);
+    a.languageCode = "en";
+    return a;
+  })();
+  return _authP;
+}
+
+/** Await-able accessor for callers that need the Auth instance (e.g. signOut). */
+export async function getFirebaseAuth(): Promise<Auth> {
+  return getAuthLazy();
+}
 
 export const phoneAuthHelpers = {
-  setupRecaptcha: (containerId: string): RecaptchaVerifier => {
+  async setupRecaptcha(containerId: string): Promise<RecaptchaVerifierType> {
+    const auth = await getAuthLazy();
+    const { RecaptchaVerifier } = await import("firebase/auth");
     const container = document.getElementById(containerId);
-    if (container) {
-      container.innerHTML = "";
-    }
-
+    if (container) container.innerHTML = "";
     return new RecaptchaVerifier(auth, containerId, {
       size: "invisible",
       callback: () => {},
@@ -34,8 +54,10 @@ export const phoneAuthHelpers = {
     });
   },
 
-  sendOTP: async (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier) => {
+  async sendOTP(phoneNumber: string, recaptchaVerifier: RecaptchaVerifierType) {
     try {
+      const auth = await getAuthLazy();
+      const { signInWithPhoneNumber } = await import("firebase/auth");
       const formattedPhone = phoneNumber.startsWith("+")
         ? phoneNumber
         : `+91${phoneNumber}`;
@@ -44,21 +66,20 @@ export const phoneAuthHelpers = {
         formattedPhone,
         recaptchaVerifier
       );
-      return { success: true, confirmationResult, error: null };
+      return { success: true as const, confirmationResult, error: null };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to send OTP";
-      return { success: false, confirmationResult: null, error: message };
+      return { success: false as const, confirmationResult: null, error: message };
     }
   },
 
-  verifyOTP: async (confirmationResult: ReturnType<typeof signInWithPhoneNumber> extends Promise<infer R> ? R : never, otp: string) => {
+  async verifyOTP(confirmationResult: ConfirmationResult, otp: string) {
     try {
       const result = await confirmationResult.confirm(otp);
       const user = result.user;
       const idToken = await user.getIdToken();
-
       return {
-        success: true,
+        success: true as const,
         user: {
           uid: user.uid,
           phoneNumber: user.phoneNumber,
@@ -68,12 +89,13 @@ export const phoneAuthHelpers = {
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Invalid OTP";
-      return { success: false, user: null, error: message };
+      return { success: false as const, user: null, error: message };
     }
   },
 
-  signOut: async () => {
+  async signOut() {
     try {
+      const auth = await getAuthLazy();
       await auth.signOut();
       return { success: true, error: null };
     } catch (error: unknown) {

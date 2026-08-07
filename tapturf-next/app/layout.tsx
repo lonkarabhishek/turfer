@@ -71,6 +71,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Turf cover images are served from Google Drive → googleusercontent
+            after a redirect. Warming the DNS + TLS handshake to both hosts
+            trims a few hundred ms off the LCP image on cold visits. */}
+        <link rel="preconnect" href="https://drive.google.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://lh3.googleusercontent.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://drive.google.com" />
+        <link rel="dns-prefetch" href="https://lh3.googleusercontent.com" />
+      </head>
       <body className={`${inter.variable} ${bebas.variable} ${spaceMono.variable} antialiased`}>
         <GoogleAnalytics />
         <AuthWrapper>

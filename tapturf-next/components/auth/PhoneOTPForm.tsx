@@ -5,7 +5,7 @@ import { Check } from "lucide-react";
 import { phoneAuthHelpers } from "@/lib/firebase/client";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
-import type { ConfirmationResult } from "firebase/auth";
+import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
 
 type Step = "phone" | "otp" | "name";
 
@@ -57,7 +57,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
   const [successName, setSuccessName] = useState("");
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const recaptchaRef = useRef<ReturnType<typeof phoneAuthHelpers.setupRecaptcha> | null>(null);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   // Rotating messages per phase
   const sendingLine = useRotatingLine(SEND_LINES, step === "phone" && loading, 1600);
@@ -78,7 +78,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setError("");
     setLoading(true);
     try {
-      recaptchaRef.current = phoneAuthHelpers.setupRecaptcha("recaptcha-container");
+      recaptchaRef.current = await phoneAuthHelpers.setupRecaptcha("recaptcha-container");
       const result = await phoneAuthHelpers.sendOTP(phone, recaptchaRef.current);
       if (result.success && result.confirmationResult) {
         setConfirmationResult(result.confirmationResult);

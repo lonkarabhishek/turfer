@@ -186,8 +186,10 @@ export default async function HomePage() {
           </Link>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-          {featuredTurfs.map((turf) => (
-            <TurfCard key={turf.id} turf={turf} />
+          {featuredTurfs.map((turf, i) => (
+            // First 3 are above-the-fold on all layouts; give them eager +
+            // fetchpriority so the LCP image doesn't wait for lazy-load.
+            <TurfCard key={turf.id} turf={turf} priority={i < 3} />
           ))}
         </div>
         <div className="mt-6 text-center sm:hidden">

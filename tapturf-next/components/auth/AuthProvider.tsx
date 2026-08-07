@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { auth as firebaseAuth } from "@/lib/firebase/client";
 import type { AppUser } from "@/types/user";
 
 interface AuthContextType {
@@ -235,7 +234,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user");
-    try { await firebaseAuth.signOut(); } catch { /* ignore */ }
+    // Dynamic import so the Firebase SDK isn't in the initial bundle
+    // just to serve the rare logout button click.
+    try {
+      const { getFirebaseAuth } = await import("@/lib/firebase/client");
+      const auth = await getFirebaseAuth();
+      await auth.signOut();
+    } catch { /* ignore */ }
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
     userSetRef.current = false;

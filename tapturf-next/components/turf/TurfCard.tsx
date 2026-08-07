@@ -9,9 +9,11 @@ import type { Turf } from "@/types/turf";
 interface TurfCardProps {
   turf: Turf;
   distanceKm?: number | null;
+  /** Set on the first ~3 above-the-fold cards so the LCP image loads eagerly + high priority. */
+  priority?: boolean;
 }
 
-export function TurfCard({ turf, distanceKm }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) {
   const coverImage = turf.cover_image || (turf.images.length > 0 ? turf.images[0] : null);
   const minPrice = getMinimumPrice(turf);
   const sports = turf.sports.slice(0, 2);
@@ -39,7 +41,10 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
               src={coverImage}
               alt={turf.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              loading="lazy"
+              loading={priority ? "eager" : "lazy"}
+              // @ts-expect-error — fetchpriority is a valid HTML attr not yet in React types
+              fetchpriority={priority ? "high" : "auto"}
+              decoding="async"
               referrerPolicy="no-referrer"
               onError={() => setImgError(true)}
             />
