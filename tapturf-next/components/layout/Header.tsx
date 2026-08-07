@@ -53,6 +53,9 @@ export function Header() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
+          <div className="mr-2">
+            <CityPicker />
+          </div>
           <Link href="/games" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
             Games
           </Link>

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, Check, X } from "lucide-react";
-import { CITIES, getCityPref, setCityPref, type CityId } from "@/lib/city";
+import { MapPin, Check, X, Loader2 } from "lucide-react";
+import { CITIES, getCityPref, setCityPref, autoDetectCity, type CityId } from "@/lib/city";
 
 /**
  * Small chip in the header that says "Nashik", "Pune", or "All cities".
@@ -14,18 +14,51 @@ export function CityPicker() {
   const [city, setCity] = useState<CityId | null>(null);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
-    setCity(getCityPref());
+    const stored = getCityPref();
+    setCity(stored);
     setMounted(true);
 
-    // Sync across tabs
+    // First-time auto-detect: if the user has no city set and
+    // we haven't asked before, try geolocation → nearest city.
+    if (!stored) {
+      setDetecting(true);
+      autoDetectCity()
+        .then((c) => {
+          if (c) {
+            setCity(c);
+            window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: c }));
+          }
+        })
+        .finally(() => setDetecting(false));
+    }
+
+    // Sync across tabs + same-tab pick events
     const onStorage = (e: StorageEvent) => {
       if (e.key === "tapturf_city_v1") setCity(getCityPref());
     };
+    const onChange = () => setCity(getCityPref());
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("tapturf:city-changed", onChange);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("tapturf:city-changed", onChange);
+    };
   }, []);
+
+  const redetect = async () => {
+    setDetecting(true);
+    // Clear the "already tried" flag so we can ask again.
+    try { localStorage.removeItem("tapturf_city_autodetect_v1"); } catch { /* ignore */ }
+    const c = await autoDetectCity();
+    if (c) {
+      setCity(c);
+      window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: c }));
+    }
+    setDetecting(false);
+  };
 
   const pick = (next: CityId | null) => {
     setCityPref(next);
@@ -47,8 +80,14 @@ export function CityPicker() {
         className="inline-flex items-center gap-1.5 h-8 pl-2 pr-3 rounded-full border border-primary-200 bg-white hover:border-accent-500 transition-colors focus-neon"
         aria-label={`Current city: ${label}. Tap to change.`}
       >
-        <MapPin className="w-3.5 h-3.5 text-accent-600" />
-        <span className="text-[12px] font-semibold text-primary-800">{label}</span>
+        {detecting ? (
+          <Loader2 className="w-3.5 h-3.5 text-accent-600 animate-spin" />
+        ) : (
+          <MapPin className="w-3.5 h-3.5 text-accent-600" />
+        )}
+        <span className="text-[12px] font-semibold text-primary-800">
+          {detecting ? "Locating…" : label}
+        </span>
       </button>
 
       {open && (
@@ -102,13 +141,33 @@ export function CityPicker() {
               <div className="h-px bg-primary-200 mx-4 my-2" />
 
               <button
-                onClick={() => pick(null)}
-                className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl hover:bg-primary-50 transition-colors focus-neon"
+                onClick={redetect}
+                disabled={detecting}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-primary-50 transition-colors focus-neon disabled:opacity-60"
               >
-                <span className="text-[14px] font-semibold text-primary-700">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-accent-700">
+                  {detecting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Getting your location…
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="w-4 h-4" />
+                      Use my location
+                    </>
+                  )}
+                </span>
+              </button>
+
+              <button
+                onClick={() => pick(null)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl hover:bg-primary-50 transition-colors focus-neon"
+              >
+                <span className="text-[13px] font-semibold text-primary-500">
                   Show all cities
                 </span>
-                {city === null && <Check className="w-5 h-5 text-accent-600" strokeWidth={2.5} />}
+                {city === null && <Check className="w-4 h-4 text-accent-600" strokeWidth={2.5} />}
               </button>
             </div>
 
