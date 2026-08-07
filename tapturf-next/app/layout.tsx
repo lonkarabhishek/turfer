@@ -3,6 +3,7 @@ import { Inter, Bebas_Neue, Space_Mono } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import "./globals.css";
 
 const inter = Inter({
@@ -71,6 +72,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${bebas.variable} ${spaceMono.variable} antialiased`}>
+        <GoogleAnalytics />
         <AuthWrapper>
           <Header />
           {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator */}
