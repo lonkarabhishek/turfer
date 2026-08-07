@@ -9,6 +9,41 @@ import type { ConfirmationResult } from "firebase/auth";
 
 type Step = "phone" | "otp" | "name";
 
+const SEND_LINES = [
+  "Asking for your OTP…",
+  "SMS gods, please deliver…",
+  "It should be here any second…",
+  "Ok, that's a six-digit code you'll get. Sorry, lol.",
+];
+
+const WAIT_TIPS = [
+  "Peek at your SMS — the code's on its way.",
+  "Fun fact: no one memorises these.",
+  "You can just paste it from your messages.",
+  "Long-press → paste. We won't tell anyone.",
+];
+
+const VERIFY_LINES = [
+  "That was quick — maybe you're a keeper?",
+  "Warming up the pitch…",
+  "Rolling out the green carpet…",
+  "Taa-daa incoming…",
+];
+
+/**
+ * Little client-side cycler for playful loading copy.
+ * Rotates through `lines` every `interval` ms while active.
+ */
+function useRotatingLine(lines: string[], active: boolean, interval = 2200): string {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (!active) { setI(0); return; }
+    const t = setInterval(() => setI((n) => (n + 1) % lines.length), interval);
+    return () => clearInterval(t);
+  }, [active, lines.length, interval]);
+  return lines[i];
+}
+
 export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
   const { refreshUser } = useAuth();
   const [step, setStep] = useState<Step>("phone");
@@ -23,6 +58,11 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const recaptchaRef = useRef<ReturnType<typeof phoneAuthHelpers.setupRecaptcha> | null>(null);
+
+  // Rotating messages per phase
+  const sendingLine = useRotatingLine(SEND_LINES, step === "phone" && loading, 1600);
+  const waitTip = useRotatingLine(WAIT_TIPS, step === "otp" && !loading, 3200);
+  const verifyLine = useRotatingLine(VERIFY_LINES, step === "otp" && loading, 1400);
 
   useEffect(() => {
     if (timer <= 0) return;
@@ -86,7 +126,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setTimeout(() => {
       refreshUser();
       onSuccess?.();
-    }, 800);
+    }, 900);
   };
 
   const verifyOTP = async (otpCode: string) => {
@@ -104,10 +144,6 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       const supabase = createClient();
       const formattedPhone = `+91${phone}`;
 
-      // Look up existing user. Match either legacy bare 10-digit format
-      // ("9876543210") or the canonical +91 E.164 form ("+919876543210").
-      // Use .limit(1) — never .maybeSingle() — so multi-row historical
-      // duplicates don't error out the whole flow.
       const { data: existingRows, error: lookupError } = await supabase
         .from("users")
         .select("id, name, phone, email, role, profile_image_url")
@@ -199,15 +235,28 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     await handleSendOTP();
   };
 
-  // Success
+  // Success (with a "TAA-DAA" beat before the modal closes)
   if (successName) {
     return (
-      <div className="text-center py-6">
-        <div className="w-14 h-14 bg-accent-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-neon">
+      <div className="text-center py-4">
+        <div className="w-14 h-14 bg-accent-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-neon animate-taada">
           <Check className="w-7 h-7 text-white" strokeWidth={3} />
         </div>
-        <p className="font-display uppercase text-2xl text-primary-800 tracking-wide">Welcome, {successName}</p>
-        <p className="text-sm text-primary-500 mt-1">You&apos;re on the pitch.</p>
+        <p className="font-display uppercase text-2xl text-primary-800 tracking-wide leading-none">
+          Taa-daa!
+        </p>
+        <p className="text-[13px] text-primary-500 mt-1">Welcome in, {successName}.</p>
+        <style jsx>{`
+          @keyframes taada {
+            0%   { transform: scale(0.5) rotate(-14deg); opacity: 0; }
+            50%  { transform: scale(1.15) rotate(6deg);  opacity: 1; }
+            75%  { transform: scale(0.95) rotate(-3deg); }
+            100% { transform: scale(1)    rotate(0);     }
+          }
+          :global(.animate-taada) {
+            animation: taada 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+        `}</style>
       </div>
     );
   }
@@ -216,7 +265,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     "w-full bg-white border-2 border-primary-200 rounded-xl px-4 py-3.5 min-h-[52px] text-base font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-all";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {step === "phone" && (
         <>
           <div>
@@ -246,20 +295,33 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
             disabled={loading || phone.length !== 10}
             className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
           >
-            {loading ? "Sending…" : "Send OTP"}
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <PitchDots />
+                Sending
+              </span>
+            ) : (
+              "Send OTP"
+            )}
           </button>
+
+          {loading && (
+            <p className="text-[12px] text-primary-500 text-center animate-fade-in">
+              {sendingLine}
+            </p>
+          )}
         </>
       )}
 
       {step === "otp" && (
         <>
           <div className="text-center">
-            <p className="text-sm text-primary-600">
-              Code sent to <span className="font-mono text-accent-600">+91 {phone}</span>
+            <p className="text-[13px] text-primary-600">
+              Six digits sent to <span className="font-mono font-semibold text-primary-800">+91 {phone}</span>
             </p>
             <button
               onClick={() => { setStep("phone"); setError(""); }}
-              className="text-xs font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors mt-1"
+              className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors mt-1"
             >
               change number
             </button>
@@ -276,40 +338,52 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
                 value={digit}
                 onChange={(e) => handleOTPChange(i, e.target.value)}
                 onKeyDown={(e) => handleOTPKeyDown(i, e)}
-                className="w-11 h-13 text-center font-mono text-lg font-bold bg-white border-2 border-primary-200 rounded-lg text-primary-800 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 transition-all"
+                className={`w-11 h-13 text-center font-mono text-lg font-bold bg-white border-2 rounded-lg text-primary-800 focus:outline-none focus:ring-2 focus:ring-accent-500/20 transition-all ${
+                  digit
+                    ? "border-accent-500 bg-accent-50"
+                    : "border-primary-200 focus:border-accent-500"
+                }`}
                 autoFocus={i === 0}
               />
             ))}
           </div>
 
+          {/* Playful rotating copy — verify state wins, else idle tip */}
+          <div className="min-h-[32px] flex items-center justify-center">
+            {loading ? (
+              <p className="inline-flex items-center gap-2 text-[13px] text-accent-700 font-semibold animate-fade-in">
+                <PitchDots color="accent" />
+                {verifyLine}
+              </p>
+            ) : (
+              <p className="text-[12px] text-primary-500 text-center animate-fade-in">
+                {waitTip}
+              </p>
+            )}
+          </div>
+
           <div className="text-center">
             {timer > 0 ? (
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+              <p className="text-[11px] font-mono uppercase tracking-widest text-primary-400">
                 Resend in {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
               </p>
             ) : (
               <button
                 onClick={handleResend}
                 disabled={loading}
-                className="text-xs font-semibold uppercase tracking-widest text-accent-600 hover:text-accent-700"
+                className="text-[11px] font-semibold uppercase tracking-widest text-accent-600 hover:text-accent-700"
               >
                 resend code
               </button>
             )}
           </div>
-
-          {loading && (
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">Verifying…</p>
-            </div>
-          )}
         </>
       )}
 
       {step === "name" && (
         <>
           <div className="text-center">
-            <p className="text-sm text-primary-600">Welcome — what&apos;s your name?</p>
+            <p className="text-[13px] text-primary-600">Welcome — what should we call you?</p>
           </div>
 
           <input
@@ -333,10 +407,31 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {error && (
-        <p className="text-sm text-hot-600 text-center font-medium">{error}</p>
+        <p className="text-[13px] text-hot-600 text-center font-medium">{error}</p>
       )}
 
       <div id="recaptcha-container" />
     </div>
+  );
+}
+
+/** Three little bouncing dots — friendlier than a spinner. */
+function PitchDots({ color = "white" }: { color?: "white" | "accent" }) {
+  const c = color === "accent" ? "bg-accent-600" : "bg-white";
+  return (
+    <span className="inline-flex items-center gap-1" aria-hidden>
+      <span className={`w-1.5 h-1.5 rounded-full ${c} animate-pitch-bounce`} style={{ animationDelay: "0ms" }} />
+      <span className={`w-1.5 h-1.5 rounded-full ${c} animate-pitch-bounce`} style={{ animationDelay: "120ms" }} />
+      <span className={`w-1.5 h-1.5 rounded-full ${c} animate-pitch-bounce`} style={{ animationDelay: "240ms" }} />
+      <style jsx>{`
+        @keyframes pitch-bounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.6; }
+          40%           { transform: translateY(-3px); opacity: 1; }
+        }
+        :global(.animate-pitch-bounce) {
+          animation: pitch-bounce 0.9s infinite ease-in-out;
+        }
+      `}</style>
+    </span>
   );
 }
