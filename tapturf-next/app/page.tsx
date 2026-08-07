@@ -70,15 +70,16 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      {/* ─── HERO — Big, clean, mobile-first ─────────────────── */}
-      <section className="relative overflow-hidden bg-white">
-        {/* Soft green wash behind the hero */}
-        <div
-          className="absolute -top-32 -right-20 w-[420px] h-[420px] rounded-full blur-3xl opacity-30"
-          style={{ background: "radial-gradient(circle, #22C55E 0%, transparent 70%)" }}
-          aria-hidden
-        />
-
+      {/* ─── HERO — Big, clean, mobile-first ───────────────────
+           No blur-3xl radial gradient: costs ~40ms/frame on entry-level
+           Snapdragon GPUs. A flat linear wash reads almost identical
+           and is free to paint. */}
+      <section
+        className="relative bg-white"
+        style={{
+          background: "linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 60%)",
+        }}
+      >
         <div className="relative max-w-6xl mx-auto px-5 sm:px-6 pt-10 pb-14 md:pt-20 md:pb-24">
           {/* LIVE chip */}
           <div className="inline-flex items-center gap-2 border border-primary-200 bg-white rounded-full pl-2 pr-3.5 py-1.5 mb-6 shadow-soft">
@@ -198,9 +199,9 @@ export default async function HomePage() {
       {/* ─── How it works ─────────────────────────────────── */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-16 md:mt-24">
         <div className="relative bg-primary-800 rounded-3xl px-6 py-12 md:px-14 md:py-16 overflow-hidden">
+          {/* Solid corner accent instead of blur-3xl radial — same read, ~0 paint cost. */}
           <div
-            className="absolute -top-32 -right-20 w-96 h-96 rounded-full blur-3xl opacity-30"
-            style={{ background: "radial-gradient(circle, #22C55E 0%, transparent 70%)" }}
+            className="absolute -top-20 -right-16 w-64 h-64 rounded-full bg-accent-500/15"
             aria-hidden
           />
 

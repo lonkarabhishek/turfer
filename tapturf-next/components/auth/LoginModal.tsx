@@ -60,9 +60,9 @@ export function LoginModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
+      {/* Backdrop — solid tint, no backdrop-filter (cheap on low-end GPUs) */}
       <div
-        className="absolute inset-0 bg-primary-800/50 backdrop-blur-[3px] animate-fade-in"
+        className="absolute inset-0 bg-primary-800/60 animate-fade-in"
         onClick={handleClose}
       />
 

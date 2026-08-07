@@ -252,8 +252,8 @@ export function CreateGameFlow() {
         </div>
       ) : (
         <>
-          {/* Sticky header */}
-          <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-primary-200 px-4 py-3">
+          {/* Sticky header — solid white, no blur (cheap on low-end) */}
+          <div className="sticky top-0 z-20 bg-white border-b border-primary-200 px-4 py-3">
             <div className="flex items-center gap-3">
               {step > 1 ? (
                 <button
@@ -680,8 +680,8 @@ export function CreateGameFlow() {
           {/* Sticky bottom CTA — floats above the floating pill mobile nav (~90px) */}
           {step === 2 && (
             <div
-              className="fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 md:bottom-0"
-              style={{ bottom: "max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))" }}
+              className="fixed left-0 right-0 z-40 bg-white border-t border-primary-200 px-4 py-3 md:bottom-0"
+              style={{ bottom: "max(3.5rem, calc(env(safe-area-inset-bottom) + 3.5rem))" }}
             >
               <button
                 onClick={() => setStep(3)}
@@ -694,8 +694,8 @@ export function CreateGameFlow() {
           )}
           {step === 3 && (
             <div
-              className="fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-primary-200 px-4 py-3 md:bottom-0"
-              style={{ bottom: "max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))" }}
+              className="fixed left-0 right-0 z-40 bg-white border-t border-primary-200 px-4 py-3 md:bottom-0"
+              style={{ bottom: "max(3.5rem, calc(env(safe-area-inset-bottom) + 3.5rem))" }}
             >
               <button
                 onClick={handleSubmit}

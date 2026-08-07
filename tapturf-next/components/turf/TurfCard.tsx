@@ -58,7 +58,7 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
               {sports.map((sport) => (
                 <span
                   key={sport}
-                  className="bg-white/95 backdrop-blur-md text-[10px] font-bold uppercase tracking-wide text-primary-800 px-2.5 py-1 rounded-full shadow-soft"
+                  className="bg-white text-[10px] font-bold uppercase tracking-wide text-primary-800 px-2.5 py-1 rounded-full shadow-soft"
                 >
                   {sport}
                 </span>
@@ -76,7 +76,7 @@ export function TurfCard({ turf, distanceKm }: TurfCardProps) {
 
           {/* Distance (bottom-right) */}
           {distanceLabel && (
-            <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-white/95 backdrop-blur-md text-primary-800 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shadow-soft">
+            <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-white text-primary-800 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shadow-soft">
               <Navigation className="w-2.5 h-2.5 text-accent-500" />
               {distanceLabel}
             </div>

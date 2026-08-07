@@ -12,74 +12,73 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Me", icon: User, requiresAuth: true },
 ];
 
+/**
+ * Full-width bottom nav. Solid white — no backdrop-blur so entry-level
+ * Androids (Snapdragon 4xx / MediaTek Helio) don't burn the GPU repainting
+ * a blurred layer under every scroll frame.
+ */
 export function MobileNav() {
   const pathname = usePathname();
   const { user, login } = useAuth();
 
   return (
-    <>
-      {/* Floating pill nav — centered at the bottom, doesn't touch edges. */}
-      <nav
-        className="fixed left-1/2 -translate-x-1/2 z-30 md:hidden"
-        style={{
-          bottom: "max(0.75rem, calc(env(safe-area-inset-bottom) + 0.5rem))",
-        }}
-        aria-label="Primary"
-      >
-        <ul className="flex items-center gap-1 bg-primary-800/95 backdrop-blur-md rounded-full px-1.5 py-1.5 shadow-elevated">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, requiresAuth }) => {
-            const isActive =
-              pathname === href || (href !== "/" && pathname.startsWith(href));
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-primary-200 md:hidden"
+      aria-label="Primary"
+    >
+      <ul className="flex items-stretch h-14">
+        {NAV_ITEMS.map(({ href, label, icon: Icon, requiresAuth }) => {
+          const isActive =
+            pathname === href || (href !== "/" && pathname.startsWith(href));
 
-            const inner = (
-              <span
-                className={`flex items-center gap-1.5 rounded-full transition-all min-h-[44px] ${
-                  isActive
-                    ? "bg-accent-500 text-white px-4 py-2 shadow-neon"
-                    : "text-white/70 px-3 py-2 hover:text-white"
-                }`}
-              >
-                <Icon
-                  className="w-[18px] h-[18px]"
-                  strokeWidth={isActive ? 2.5 : 2}
-                />
-                {isActive && (
-                  <span className="text-xs font-bold uppercase tracking-wide">
-                    {label}
-                  </span>
-                )}
+          const inner = (
+            <span
+              className={`flex flex-col items-center justify-center gap-0.5 h-full w-full ${
+                isActive ? "text-accent-600" : "text-primary-500"
+              }`}
+            >
+              <Icon
+                className="w-5 h-5"
+                strokeWidth={isActive ? 2.5 : 2}
+              />
+              <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                isActive ? "text-accent-600" : "text-primary-500"
+              }`}>
+                {label}
               </span>
-            );
+            </span>
+          );
 
-            if (requiresAuth && !user) {
-              return (
-                <li key={href}>
-                  <button
-                    onClick={login}
-                    aria-label={label}
-                    className="focus-neon rounded-full"
-                  >
-                    {inner}
-                  </button>
-                </li>
-              );
-            }
-
+          if (requiresAuth && !user) {
             return (
-              <li key={href}>
-                <Link
-                  href={href}
+              <li key={href} className="flex-1">
+                <button
+                  onClick={login}
                   aria-label={label}
-                  aria-current={isActive ? "page" : undefined}
-                  className="focus-neon rounded-full"
+                  className="w-full h-full"
                 >
                   {inner}
-                </Link>
+                </button>
               </li>
             );
-          })}
-        </ul>
-      </nav>
-    </>
+          }
+
+          return (
+            <li key={href} className="flex-1">
+              <Link
+                href={href}
+                aria-label={label}
+                aria-current={isActive ? "page" : undefined}
+                className="block w-full h-full"
+              >
+                {inner}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {/* Safe area for notched devices */}
+      <div className="h-[env(safe-area-inset-bottom)] bg-white" />
+    </nav>
   );
 }
