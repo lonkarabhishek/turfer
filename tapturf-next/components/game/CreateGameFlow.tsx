@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
 import { searchTurfs } from "@/lib/queries/users";
+import { TimeSlotSheet } from "./TimeSlotSheet";
 import type { CreateGameData } from "@/types/game";
 
 const SPORT_OPTIONS = [
@@ -55,19 +56,6 @@ function fmt(hour: number, min: number) {
 
 function tv(h: number, m: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-}
-
-// Snap any "HH:MM" to the nearest :00 or :30. Nobody books a slot at 8:23.
-function snapToHalfHour(value: string): string {
-  if (!value) return "";
-  const [h, m] = value.split(":").map(Number);
-  if (isNaN(h) || isNaN(m)) return "";
-  // Round to nearest 30-minute boundary.
-  const totalMin = h * 60 + m;
-  const snapped = Math.round(totalMin / 30) * 30;
-  const sh = Math.min(23, Math.floor(snapped / 60));
-  const sm = snapped % 60;
-  return tv(sh, sm);
 }
 
 function getEndTime(startTime: string, durationHours: number): string | null {
@@ -119,6 +107,7 @@ export function CreateGameFlow() {
   const [customCost, setCustomCost] = useState("");
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
+  const [timeSheetOpen, setTimeSheetOpen] = useState(false);
 
   const turfSearchRef = useRef<HTMLInputElement>(null);
 
@@ -220,6 +209,14 @@ export function CreateGameFlow() {
 
   return (
     <div className="max-w-lg mx-auto">
+      {/* Custom time picker — 30-min slots, no free-form iOS wheel */}
+      <TimeSlotSheet
+        open={timeSheetOpen}
+        value={startTime}
+        onClose={() => setTimeSheetOpen(false)}
+        onSelect={(s) => { setStartTime(s); setDuration(null); }}
+      />
+
       {/* ─── Step 4: Success ───────────────────────────────── */}
       {step === 4 ? (
         <div className="px-5 pt-12 pb-40 flex flex-col items-center text-center">
@@ -390,8 +387,12 @@ export function CreateGameFlow() {
 
                   <div className="h-px bg-primary-200 ml-4" />
 
-                  {/* Start time row — same invisible-native pattern */}
-                  <label className="relative flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors cursor-pointer">
+                  {/* Start time row — custom sheet so iOS can't pick 8:23 */}
+                  <button
+                    type="button"
+                    onClick={() => setTimeSheetOpen(true)}
+                    className="w-full flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors focus-neon"
+                  >
                     <span className="text-[15px] font-medium text-primary-800">Start time</span>
                     <span className="flex items-center gap-1.5">
                       <span className="text-[15px] font-semibold text-accent-600 font-mono tabular">
@@ -402,18 +403,7 @@ export function CreateGameFlow() {
                       </span>
                       <ChevronRight className="w-4 h-4 text-primary-400" />
                     </span>
-                    <input
-                      type="time"
-                      value={startTime}
-                      step={1800}
-                      onChange={(e) => {
-                        setStartTime(snapToHalfHour(e.target.value));
-                        setDuration(null);
-                      }}
-                      aria-label="Start time"
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                  </label>
+                  </button>
 
                   {/* Duration row — segmented control */}
                   {startTime && (

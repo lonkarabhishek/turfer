@@ -43,9 +43,38 @@ function buildUserFromSupabase(supaUser: { id: string; email?: string; phone?: s
   };
 }
 
+/**
+ * Read the phone-auth user out of localStorage synchronously so it's
+ * available on the very first render. Prevents the "sometimes logged
+ * in / sometimes not" flash that happens when the useEffect read races
+ * with page rendering — especially painful on slower iPhones.
+ */
+function initialUserFromStorage(): AppUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const token = localStorage.getItem("auth_token");
+    const raw = localStorage.getItem("user");
+    if (!token || !raw) return null;
+    const p = JSON.parse(raw);
+    if (!p?.id) return null;
+    return {
+      id: p.id,
+      name: p.name || "User",
+      email: p.email,
+      phone: p.phone,
+      role: (p.role || "user") as AppUser["role"],
+      profile_image_url: p.profile_image_url,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Seed from localStorage synchronously — no auth flash on hydration.
+  const initial = typeof window !== "undefined" ? initialUserFromStorage() : null;
+  const [user, setUser] = useState<AppUser | null>(initial);
+  const [loading, setLoading] = useState(initial === null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
