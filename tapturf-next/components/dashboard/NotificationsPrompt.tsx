@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Check, X, Share, MoreVertical } from "lucide-react";
+import { Bell, BellOff, Check, X, Share, MoreVertical, ChevronRight } from "lucide-react";
 import { getPermission, requestPermission, type PermissionState } from "@/lib/notifications/browser";
+import { InstallGuide, type BeforeInstallPromptEvent } from "@/components/install/InstallGuide";
 
 const DISMISS_KEY = "notif_prompt_dismissed_v1";
 const INSTALL_DISMISS_KEY = "install_prompt_dismissed_v1";
@@ -19,27 +20,20 @@ function detectDevice(): Device {
 
 function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
-  // iOS Safari uses navigator.standalone; everything else uses display-mode.
   const iosStandalone = "standalone" in window.navigator &&
     (window.navigator as unknown as { standalone: boolean }).standalone === true;
   const displayModeStandalone = window.matchMedia?.("(display-mode: standalone)").matches ?? false;
   return iosStandalone || displayModeStandalone;
 }
 
-/**
- * Inline banner for browser notifications, device-aware.
- * - iOS Safari (before install)  → "Add to Home Screen" via Share
- * - Android Chrome (before install) → "Install TapTurf" via menu
- * - iOS/Android after install    → normal permission prompt (Turn on)
- * - granted / denied             → confirmation / re-enable copy
- * - desktop unsupported          → hidden
- */
 export function NotificationsPrompt() {
   const [state, setState] = useState<PermissionState>("unsupported");
   const [dismissed, setDismissed] = useState(false);
   const [installDismissed, setInstallDismissed] = useState(false);
   const [device, setDevice] = useState<Device>("unknown");
   const [standalone, setStandalone] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     setState(getPermission());
@@ -49,6 +43,25 @@ export function NotificationsPrompt() {
       if (localStorage.getItem(DISMISS_KEY) === "1") setDismissed(true);
       if (localStorage.getItem(INSTALL_DISMISS_KEY) === "1") setInstallDismissed(true);
     } catch { /* SSR */ }
+
+    // Capture Chrome's install prompt so we can offer one-tap install
+    // in the guide. Fires once; keep the event around for later use.
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+
+    const onInstalled = () => {
+      setDeferredPrompt(null);
+      setStandalone(true);
+    };
+    window.addEventListener("appinstalled", onInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
 
   const handleDismiss = () => {
@@ -66,137 +79,152 @@ export function NotificationsPrompt() {
     setState(next);
   };
 
-  // ── granted: subtle "on" chip ──
+  const closeGuide = () => {
+    setGuideOpen(false);
+    // If we used deferredPrompt inside the guide, event is spent.
+    setDeferredPrompt(null);
+  };
+
+  // The full guided-tour modal
+  const guideModal = guideOpen && (device === "ios" || device === "android") ? (
+    <InstallGuide device={device} onClose={closeGuide} deferredPrompt={deferredPrompt} />
+  ) : null;
+
+  // ── granted ──
   if (state === "granted" && !dismissed) {
     return (
-      <div className="flex items-center gap-2 bg-accent-50 border border-accent-500/30 rounded-full pl-2 pr-3 py-1.5 mb-4 text-[12px] font-semibold text-accent-700 self-start w-fit">
-        <span className="w-5 h-5 rounded-full bg-accent-500 flex items-center justify-center">
-          <Check className="w-3 h-3 text-white" strokeWidth={3} />
-        </span>
-        Alerts are on
-        <button onClick={handleDismiss} className="ml-1 text-accent-600 hover:text-accent-800" aria-label="Dismiss">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <>
+        <div className="flex items-center gap-2 bg-accent-50 border border-accent-500/30 rounded-full pl-2 pr-3 py-1.5 mb-4 text-[12px] font-semibold text-accent-700 self-start w-fit">
+          <span className="w-5 h-5 rounded-full bg-accent-500 flex items-center justify-center">
+            <Check className="w-3 h-3 text-white" strokeWidth={3} />
+          </span>
+          Alerts are on
+          <button onClick={handleDismiss} className="ml-1 text-accent-600 hover:text-accent-800" aria-label="Dismiss">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {guideModal}
+      </>
     );
   }
 
-  // ── denied: how to unblock ──
+  // ── denied ──
   if (state === "denied" && !dismissed) {
     const settingsHint =
       device === "ios"
         ? "Tap the aA icon in Safari's URL bar → Website Settings → Notifications → Allow."
         : device === "android"
-        ? "Tap the ⋮ (three dots) menu in Chrome → Site settings → Notifications → Allow."
+        ? "Tap the ⋮ menu in Chrome → Site settings → Notifications → Allow."
         : "Click the lock/info icon left of the URL → Site settings → Notifications → Allow.";
     return (
-      <div className="flex items-start gap-3 bg-primary-50 border border-primary-200 rounded-2xl p-3.5 mb-4">
-        <div className="w-9 h-9 rounded-xl bg-primary-800 flex items-center justify-center shrink-0">
-          <BellOff className="w-5 h-5 text-white" strokeWidth={2.5} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-semibold text-primary-800 leading-tight">
-            Notifications are blocked
-          </p>
-          <p className="text-[12px] text-primary-600 mt-0.5 leading-snug">{settingsHint}</p>
-        </div>
-        <button onClick={handleDismiss} aria-label="Dismiss" className="p-1 rounded-full hover:bg-white/50 shrink-0">
-          <X className="w-4 h-4 text-primary-500" />
-        </button>
-      </div>
-    );
-  }
-
-  // ── mobile browser, not installed as PWA ──
-  //    Show install hint (iOS Safari REQUIRES install for notifications;
-  //    Android Chrome doesn't strictly require it but works better)
-  if (!standalone && (device === "ios" || device === "android") && !installDismissed) {
-    if (device === "ios") {
-      return (
-        <div className="flex items-start gap-3 bg-accent-50 border border-accent-500/30 rounded-2xl p-3.5 mb-4">
-          <div className="w-9 h-9 rounded-xl bg-accent-500 flex items-center justify-center shrink-0 shadow-neon">
-            <Share className="w-5 h-5 text-white" strokeWidth={2.5} />
+      <>
+        <div className="flex items-start gap-3 bg-primary-50 border border-primary-200 rounded-2xl p-3.5 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-primary-800 flex items-center justify-center shrink-0">
+            <BellOff className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-semibold text-primary-800 leading-tight">
-              Install TapTurf to get alerts
+              Notifications are blocked
             </p>
-            <p className="text-[12px] text-primary-600 mt-0.5 leading-snug">
-              In Safari, tap <b>Share</b> <span className="inline-flex items-center align-middle mx-0.5"><Share className="w-3 h-3 inline" /></span>
-              → <b>Add to Home Screen</b>. Open TapTurf from the icon to enable notifications.
+            <p className="text-[12px] text-primary-600 mt-0.5 leading-snug">{settingsHint}</p>
+          </div>
+          <button onClick={handleDismiss} aria-label="Dismiss" className="p-1 rounded-full hover:bg-white/50 shrink-0">
+            <X className="w-4 h-4 text-primary-500" />
+          </button>
+        </div>
+        {guideModal}
+      </>
+    );
+  }
+
+  // ── mobile browser, not installed → offer guided tour ──
+  if (!standalone && (device === "ios" || device === "android") && !installDismissed) {
+    return (
+      <>
+        <div className="flex items-start gap-3 bg-accent-50 border border-accent-500/30 rounded-2xl p-3.5 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-accent-500 flex items-center justify-center shrink-0 shadow-neon">
+            {device === "ios" ? (
+              <Share className="w-5 h-5 text-white" strokeWidth={2.5} />
+            ) : (
+              <MoreVertical className="w-5 h-5 text-white" strokeWidth={2.5} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold text-primary-800 leading-tight">
+              Install TapTurf for alerts
             </p>
+            <p className="text-[12px] text-primary-600 mt-0.5 mb-2.5 leading-snug">
+              {device === "ios"
+                ? "Add TapTurf to your home screen. Takes 3 taps."
+                : "Add TapTurf to your home screen. One tap if Chrome asks; otherwise 3 taps."}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setGuideOpen(true)}
+                className="inline-flex items-center gap-1 text-[12px] font-bold uppercase tracking-wide bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
+              >
+                Show me how
+                <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.75} />
+              </button>
+              {/* On Android we can still offer plain Turn-on without install */}
+              {device === "android" && state === "default" && (
+                <button
+                  onClick={handleEnable}
+                  className="text-[12px] font-semibold text-primary-500 hover:text-primary-700 px-2 py-1.5"
+                >
+                  Just turn on for now
+                </button>
+              )}
+            </div>
           </div>
           <button onClick={handleInstallDismiss} aria-label="Dismiss" className="p-1 rounded-full hover:bg-white/50 shrink-0">
             <X className="w-4 h-4 text-primary-500" />
           </button>
         </div>
-      );
-    }
-    // Android
-    return (
-      <div className="flex items-start gap-3 bg-accent-50 border border-accent-500/30 rounded-2xl p-3.5 mb-4">
-        <div className="w-9 h-9 rounded-xl bg-accent-500 flex items-center justify-center shrink-0 shadow-neon">
-          <MoreVertical className="w-5 h-5 text-white" strokeWidth={2.5} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-semibold text-primary-800 leading-tight">
-            Install TapTurf for reliable alerts
-          </p>
-          <p className="text-[12px] text-primary-600 mt-0.5 mb-2.5 leading-snug">
-            In Chrome, tap the <b>⋮</b> menu → <b>Install app</b> (or <b>Add to Home screen</b>). You can also just turn on notifications now.
-          </p>
-          {state === "default" && (
-            <button
-              onClick={handleEnable}
-              className="text-[12px] font-bold uppercase tracking-wide bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
-            >
-              Turn on
-            </button>
-          )}
-        </div>
-        <button onClick={handleInstallDismiss} aria-label="Dismiss" className="p-1 rounded-full hover:bg-white/50 shrink-0">
-          <X className="w-4 h-4 text-primary-500" />
-        </button>
-      </div>
+        {guideModal}
+      </>
     );
   }
 
-  // ── unsupported on desktop / other → hide silently ──
+  // ── desktop unsupported → hide ──
   if (state === "unsupported") return null;
 
-  // ── default (PWA installed, or standalone Android Chrome): main CTA ──
+  // ── default (standalone or Android Chrome): plain "Turn on" ──
   if (state === "default" && !dismissed) {
     return (
-      <div className="flex items-start gap-3 bg-accent-50 border border-accent-500/30 rounded-2xl p-3.5 mb-4">
-        <div className="w-9 h-9 rounded-xl bg-accent-500 flex items-center justify-center shrink-0 shadow-neon">
-          <Bell className="w-5 h-5 text-white" strokeWidth={2.5} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-semibold text-primary-800 leading-tight">
-            Never miss a game
-          </p>
-          <p className="text-[12px] text-primary-600 mt-0.5 mb-2.5 leading-snug">
-            Get pinged the second someone joins your game or accepts your request.
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleEnable}
-              className="text-[12px] font-bold uppercase tracking-wide bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
-            >
-              Turn on
-            </button>
-            <button
-              onClick={handleDismiss}
-              className="text-[12px] font-semibold text-primary-500 hover:text-primary-700 px-2 py-1.5"
-            >
-              Not now
-            </button>
+      <>
+        <div className="flex items-start gap-3 bg-accent-50 border border-accent-500/30 rounded-2xl p-3.5 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-accent-500 flex items-center justify-center shrink-0 shadow-neon">
+            <Bell className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold text-primary-800 leading-tight">
+              Never miss a game
+            </p>
+            <p className="text-[12px] text-primary-600 mt-0.5 mb-2.5 leading-snug">
+              Get pinged the second someone joins your game or accepts your request.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleEnable}
+                className="text-[12px] font-bold uppercase tracking-wide bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
+              >
+                Turn on
+              </button>
+              <button
+                onClick={handleDismiss}
+                className="text-[12px] font-semibold text-primary-500 hover:text-primary-700 px-2 py-1.5"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+          <button onClick={handleDismiss} aria-label="Dismiss" className="p-1 rounded-full hover:bg-white/50 shrink-0">
+            <X className="w-4 h-4 text-primary-500" />
+          </button>
         </div>
-        <button onClick={handleDismiss} aria-label="Dismiss" className="p-1 rounded-full hover:bg-white/50 shrink-0">
-          <X className="w-4 h-4 text-primary-500" />
-        </button>
-      </div>
+        {guideModal}
+      </>
     );
   }
 
