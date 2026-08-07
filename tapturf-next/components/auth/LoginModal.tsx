@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, AlertCircle } from "lucide-react";
+import { X, Loader2, AlertCircle, Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
 import { PhoneOTPForm } from "./PhoneOTPForm";
@@ -117,16 +117,17 @@ export function LoginModal() {
             </div>
           )}
 
-          {/* Phone — plain text link, super low-key */}
+          {/* Phone — equal-weight peer to Google */}
           {!showPhone ? (
             <button
               onClick={() => setShowPhone(true)}
-              className="block mx-auto mt-4 text-[13px] text-primary-500 hover:text-accent-600 transition-colors"
+              className="mt-3 w-full flex items-center justify-center gap-2.5 bg-white border border-primary-300 hover:border-primary-400 hover:bg-primary-50 text-primary-800 rounded-full py-3 min-h-[48px] px-4 text-[15px] font-semibold transition-all focus-neon"
             >
-              Use phone number instead
+              <Phone className="w-[18px] h-[18px] text-accent-600" strokeWidth={2.25} />
+              <span>Continue with phone</span>
             </button>
           ) : (
-            <div className="mt-4 pt-4 border-t border-primary-200">
+            <div className="mt-5 pt-4 border-t border-primary-200">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[13px] font-medium text-primary-700">
                   Phone number
