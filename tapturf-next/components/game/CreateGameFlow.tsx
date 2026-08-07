@@ -698,7 +698,7 @@ export function CreateGameFlow() {
           {step === 2 && (
             <div
               className="fixed left-0 right-0 z-40 bg-white border-t border-primary-200 px-4 py-3 md:bottom-0"
-              style={{ bottom: "max(3.5rem, calc(env(safe-area-inset-bottom) + 3.5rem))" }}
+              style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
             >
               <button
                 onClick={() => setStep(3)}
@@ -712,7 +712,7 @@ export function CreateGameFlow() {
           {step === 3 && (
             <div
               className="fixed left-0 right-0 z-40 bg-white border-t border-primary-200 px-4 py-3 md:bottom-0"
-              style={{ bottom: "max(3.5rem, calc(env(safe-area-inset-bottom) + 3.5rem))" }}
+              style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
             >
               <button
                 onClick={handleSubmit}

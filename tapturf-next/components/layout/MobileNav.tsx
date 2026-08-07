@@ -13,9 +13,11 @@ const NAV_ITEMS = [
 ];
 
 /**
- * Full-width bottom nav. Solid white — no backdrop-blur so entry-level
- * Androids (Snapdragon 4xx / MediaTek Helio) don't burn the GPU repainting
- * a blurred layer under every scroll frame.
+ * Full-width bottom nav. Solid white, always fixed to the bottom.
+ * Uses padding-bottom: env(safe-area-inset-bottom) so on iOS PWAs
+ * (Add to Home Screen) the nav clears the home indicator instead
+ * of stretching under it. layout viewport uses viewportFit "cover"
+ * so the env() value is populated even in standalone mode.
  */
 export function MobileNav() {
   const pathname = usePathname();
@@ -24,6 +26,7 @@ export function MobileNav() {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-primary-200 md:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label="Primary"
     >
       <ul className="flex items-stretch h-14">
@@ -77,8 +80,6 @@ export function MobileNav() {
           );
         })}
       </ul>
-      {/* Safe area for notched devices */}
-      <div className="h-[env(safe-area-inset-bottom)] bg-white" />
     </nav>
   );
 }

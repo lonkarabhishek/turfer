@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Bebas_Neue, Space_Mono } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -36,7 +36,6 @@ export const metadata: Metadata = {
     "Find and book sports turfs in Nashik. Compare prices, check ratings, and book instantly.",
   metadataBase: new URL("https://www.tapturf.in"),
   manifest: "/manifest.webmanifest",
-  themeColor: "#16A34A",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -52,6 +51,18 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * viewportFit: "cover" is the only reliable way to make iOS Safari
+ * populate env(safe-area-inset-*) in standalone / Add-to-Home-Screen
+ * mode. Without it the bottom nav stretches under the home indicator.
+ */
+export const viewport: Viewport = {
+  themeColor: "#16A34A",
+  viewportFit: "cover",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -62,7 +73,13 @@ export default function RootLayout({
       <body className={`${inter.variable} ${bebas.variable} ${spaceMono.variable} antialiased`}>
         <AuthWrapper>
           <Header />
-          <main className="min-h-screen pb-16 md:pb-0">{children}</main>
+          {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator */}
+          <main
+            className="min-h-screen md:pb-0"
+            style={{ paddingBottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
+          >
+            {children}
+          </main>
           <div className="hidden md:block">
             <Footer />
           </div>
