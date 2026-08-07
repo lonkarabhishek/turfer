@@ -156,7 +156,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
         {/* Hero skeleton */}
         <div className="animate-pulse">
-          <div className="w-24 h-6 bg-gray-200 rounded-full mb-6" />
+          <div className="w-24 h-6 bg-primary-200 rounded-full mb-6" />
           <div className="bg-gradient-to-br from-primary-50 to-primary-100/50 rounded-3xl p-6 mb-6">
             <div className="flex gap-2 mb-4">
               <div className="w-20 h-7 bg-primary-200/50 rounded-full" />
@@ -170,7 +170,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               <div className="h-16 bg-white/60 rounded-2xl" />
             </div>
           </div>
-          <div className="h-40 bg-gray-100 rounded-2xl" />
+          <div className="h-40 bg-primary-100 rounded-2xl" />
         </div>
       </div>
     );
@@ -179,11 +179,11 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
   if (!game) {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 text-center">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Trophy className="w-7 h-7 text-gray-400" />
+        <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Trophy className="w-7 h-7 text-primary-400" />
         </div>
-        <p className="text-lg font-semibold text-gray-900 mb-2">Game not found</p>
-        <p className="text-sm text-gray-500 mb-6">This game may have been removed or the link is incorrect.</p>
+        <p className="text-lg font-semibold text-primary-800 mb-2">Game not found</p>
+        <p className="text-sm text-primary-500 mb-6">This game may have been removed or the link is incorrect.</p>
         <Link href="/games" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition-colors">
           Browse Games
         </Link>
@@ -199,7 +199,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
       {/* Back link */}
-      <Link href="/games" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary-600 mb-5 transition-colors">
+      <Link href="/games" className="inline-flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-600 mb-5 transition-colors">
         <ArrowLeft className="w-4 h-4" />
         All games
       </Link>
@@ -283,10 +283,10 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                   <MessageSquare className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">
+                  <h3 className="text-base font-bold text-primary-800">
                     Join Requests
                   </h3>
-                  <p className="text-xs text-gray-500">{pendingRequests.length} pending request{pendingRequests.length !== 1 ? "s" : ""}</p>
+                  <p className="text-xs text-primary-500">{pendingRequests.length} pending request{pendingRequests.length !== 1 ? "s" : ""}</p>
                 </div>
                 <span className="ml-auto inline-flex items-center justify-center w-7 h-7 bg-accent-500 text-white text-sm font-bold rounded-full animate-pulse">
                   {pendingRequests.length}
@@ -311,20 +311,20 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           )}
 
           {isHost && pendingRequests.length === 0 && requests.length > 0 && (
-            <div className="mb-6 bg-gray-50 rounded-2xl p-4 flex items-center gap-3">
+            <div className="mb-6 bg-primary-50 rounded-2xl p-4 flex items-center gap-3">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                 <Check className="w-4 h-4 text-green-600" />
               </div>
-              <p className="text-sm text-gray-600">All join requests have been handled!</p>
+              <p className="text-sm text-primary-500">All join requests have been handled!</p>
             </div>
           )}
 
           {/* ═══════════════════════════════════════════════════════ */}
           {/* PLAYERS PROGRESS */}
           {/* ═══════════════════════════════════════════════════════ */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-5">
+          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <h3 className="text-base font-semibold text-primary-800 flex items-center gap-2">
                 <Users className="w-4.5 h-4.5 text-primary-500" />
                 Players
               </h3>
@@ -334,7 +334,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
             </div>
 
             {/* Progress bar */}
-            <div className="relative w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
+            <div className="relative w-full h-3 bg-primary-100 rounded-full overflow-hidden mb-3">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   isFull ? "bg-gradient-to-r from-accent-400 to-accent-500" :
@@ -344,7 +344,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                 style={{ width: `${Math.min(fillPercent, 100)}%` }}
               />
             </div>
-            <p className="text-xs text-gray-500 mb-4">{game.current_players} of {game.max_players} players joined</p>
+            <p className="text-xs text-primary-500 mb-4">{game.current_players} of {game.max_players} players joined</p>
 
             {/* Participant avatars */}
             <div className="flex flex-wrap gap-2">
@@ -361,7 +361,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                 </div>
               ))}
               {participants.length === 0 && (
-                <p className="text-sm text-gray-400">No confirmed players yet</p>
+                <p className="text-sm text-primary-400">No confirmed players yet</p>
               )}
             </div>
           </div>
@@ -369,31 +369,31 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           {/* ═══════════════════════════════════════════════════════ */}
           {/* GAME DETAILS GRID */}
           {/* ═══════════════════════════════════════════════════════ */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-5">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Game Details</h3>
+          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
+            <h3 className="text-base font-semibold text-primary-800 mb-4">Game Details</h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-500 mb-0.5">Sport</p>
-                <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Sport</p>
+                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
                   <Trophy className="w-3.5 h-3.5 text-primary-500" />
                   {game.sport}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-500 mb-0.5">Skill Level</p>
-                <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Skill Level</p>
+                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-primary-500" />
                   {capitalizeSkillLevel(game.skill_level)}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-500 mb-0.5">Cost per Person</p>
-                <p className="text-sm font-semibold text-gray-900">
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Cost per Person</p>
+                <p className="text-sm font-semibold text-primary-800">
                   {game.price_per_player > 0 ? `₹${game.price_per_player}` : "Free"}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-500 mb-0.5">Turf Booked</p>
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Turf Booked</p>
                 <p className={`text-sm font-semibold ${game.turf_booked ? "text-green-600" : "text-orange-500"}`}>
                   {game.turf_booked ? "✓ Confirmed" : "Not yet"}
                 </p>
@@ -403,9 +403,9 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
 
           {/* Description */}
           {game.description && (
-            <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-5">
-              <h3 className="text-base font-semibold text-gray-900 mb-2">About this Game</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">{game.description}</p>
+            <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
+              <h3 className="text-base font-semibold text-primary-800 mb-2">About this Game</h3>
+              <p className="text-sm text-primary-500 leading-relaxed">{game.description}</p>
             </div>
           )}
 
@@ -418,8 +418,8 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           )}
 
           {/* Host card */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-5">
-            <h3 className="text-base font-semibold text-gray-900 mb-3">Hosted by</h3>
+          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
+            <h3 className="text-base font-semibold text-primary-800 mb-3">Hosted by</h3>
             <div className="flex items-center gap-3">
               {game.host_profile_image_url ? (
                 <img src={game.host_profile_image_url} alt="" className="w-12 h-12 rounded-full object-cover ring-2 ring-primary-100" referrerPolicy="no-referrer" />
@@ -429,7 +429,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                 </div>
               )}
               <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-900">{game.host_name}</p>
+                <p className="text-sm font-semibold text-primary-800">{game.host_name}</p>
                 {game.host_phone && (
                   <a href={`tel:${game.host_phone}`} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
                     {game.host_phone}
@@ -455,14 +455,14 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
             const srcMatch = raw.match(/src="([^"]+)"/);
             const mapSrc = srcMatch ? srcMatch[1] : raw;
             return (
-              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5">
+              <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5">
                 <div className="p-5 pb-3">
-                  <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-primary-800 flex items-center gap-2">
                     <MapPin className="w-4.5 h-4.5 text-primary-500" />
                     Location
                   </h3>
                   {game.turfs?.address && (
-                    <p className="text-sm text-gray-500 mt-1">{game.turfs.address}</p>
+                    <p className="text-sm text-primary-500 mt-1">{game.turfs.address}</p>
                   )}
                 </div>
                 <div className="h-[250px]">
@@ -487,11 +487,11 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
         {/* ═══════════════════════════════════════════════════════ */}
         <div className="hidden lg:block">
           <div className="sticky top-24 space-y-4">
-            <div className="border border-gray-200 rounded-2xl p-6 shadow-elevated bg-white">
+            <div className="border border-primary-200 rounded-2xl p-6 shadow-elevated bg-white">
               <div className="text-center mb-5">
-                <p className="text-3xl font-bold text-gray-900">
+                <p className="text-3xl font-bold text-primary-800">
                   {game.price_per_player > 0 ? (
-                    <>₹{game.price_per_player}<span className="text-sm font-normal text-gray-500"> /person</span></>
+                    <>₹{game.price_per_player}<span className="text-sm font-normal text-primary-500"> /person</span></>
                   ) : (
                     <span className="text-primary-600">Free</span>
                   )}
@@ -500,34 +500,34 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
 
               <div className="space-y-3 mb-5">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Date</span>
-                  <span className="font-medium text-gray-900">{formatDate(game.date)}</span>
+                  <span className="text-primary-500">Date</span>
+                  <span className="font-medium text-primary-800">{formatDate(game.date)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Time</span>
-                  <span className="font-medium text-gray-900">{formatTimeSlot(game.start_time, game.end_time)}</span>
+                  <span className="text-primary-500">Time</span>
+                  <span className="font-medium text-primary-800">{formatTimeSlot(game.start_time, game.end_time)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Skill</span>
-                  <span className="font-medium text-gray-900">{capitalizeSkillLevel(game.skill_level)}</span>
+                  <span className="text-primary-500">Skill</span>
+                  <span className="font-medium text-primary-800">{capitalizeSkillLevel(game.skill_level)}</span>
                 </div>
               </div>
 
               {/* Players bar */}
               <div className="mb-5">
                 <div className="flex items-center justify-between text-sm mb-1.5">
-                  <span className="text-gray-500">Spots</span>
+                  <span className="text-primary-500">Spots</span>
                   <span className={`font-bold ${isFull ? "text-accent-500" : "text-primary-600"}`}>
                     {isFull ? "Full" : `${spotsLeft} left`}
                   </span>
                 </div>
-                <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-primary-100 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${isFull ? "bg-accent-500" : "bg-primary-500"}`}
                     style={{ width: `${Math.min(fillPercent, 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1 text-center">
+                <p className="text-xs text-primary-400 mt-1 text-center">
                   {game.current_players}/{game.max_players} players
                 </p>
               </div>
@@ -537,7 +537,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
 
               <button
                 onClick={handleShare}
-                className="w-full mt-3 flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                className="w-full mt-3 flex items-center justify-center gap-2 border border-primary-200 rounded-xl py-2.5 text-sm font-medium text-primary-500 hover:bg-primary-50 hover:border-primary-300 transition-all"
               >
                 <Share2 className="w-4 h-4" />
                 {shared ? "Link copied!" : "Share"}
@@ -547,7 +547,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
             {/* Desktop host requests panel */}
             {isHost && pendingRequests.length > 0 && (
               <div className="border-2 border-accent-200 rounded-2xl p-5 bg-accent-50/50">
-                <p className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <p className="text-sm font-bold text-primary-800 mb-3 flex items-center gap-2">
                   <span className="w-5 h-5 bg-accent-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
                     {pendingRequests.length}
                   </span>
@@ -584,19 +584,19 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       {/* MOBILE FIXED BOTTOM CTA — positioned above MobileNav */}
       {/* ═══════════════════════════════════════════════════════ */}
       <div
-        className="fixed left-0 right-0 bg-white border-t border-gray-200 p-3 lg:hidden z-30"
+        className="fixed left-0 right-0 bg-white border-t border-primary-200 p-3 lg:hidden z-30"
         style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
           <div className="min-w-0">
-            <p className="text-lg font-bold text-gray-900">
+            <p className="text-lg font-bold text-primary-800">
               {game.price_per_player > 0 ? (
-                <>₹{game.price_per_player}<span className="text-xs font-normal text-gray-500">/person</span></>
+                <>₹{game.price_per_player}<span className="text-xs font-normal text-primary-500">/person</span></>
               ) : (
                 <span className="text-primary-600">Free</span>
               )}
             </p>
-            <p className="text-xs text-gray-500 truncate">
+            <p className="text-xs text-primary-500 truncate">
               {formatDate(game.date)} · {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left` : "Full"}
             </p>
           </div>
@@ -611,9 +611,9 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
             )}
             <button
               onClick={handleShare}
-              className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors"
             >
-              <Share2 className="w-4 h-4 text-gray-600" />
+              <Share2 className="w-4 h-4 text-primary-500" />
             </button>
             {renderMobileJoinButton()}
           </div>
@@ -631,14 +631,14 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowJoinForm(false)} />
           <div className="relative w-full md:max-w-md bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Request to Join</h3>
-              <button onClick={() => setShowJoinForm(false)} className="p-1 rounded-full hover:bg-gray-100">
-                <X className="w-5 h-5 text-gray-500" />
+              <h3 className="text-lg font-bold text-primary-800">Request to Join</h3>
+              <button onClick={() => setShowJoinForm(false)} className="p-1 rounded-full hover:bg-primary-100">
+                <X className="w-5 h-5 text-primary-500" />
               </button>
             </div>
 
-            <p className="text-sm text-gray-500 mb-4">
-              Send a request to <span className="font-medium text-gray-700">{game.host_name}</span> to join this game.
+            <p className="text-sm text-primary-500 mb-4">
+              Send a request to <span className="font-medium text-primary-700">{game.host_name}</span> to join this game.
             </p>
 
             <textarea
@@ -646,7 +646,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               onChange={(e) => setJoinNote(e.target.value)}
               placeholder="Add a note to the host (optional)"
               rows={3}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-gray-50"
+              className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
             />
 
             <button
@@ -684,45 +684,45 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowEditModal(false)} />
           <div className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <h3 className="text-lg font-bold text-primary-800 flex items-center gap-2">
                 <Pencil className="w-4.5 h-4.5 text-primary-500" />
                 Edit Game
               </h3>
-              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-full hover:bg-gray-100">
-                <X className="w-5 h-5 text-gray-500" />
+              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-full hover:bg-primary-100">
+                <X className="w-5 h-5 text-primary-500" />
               </button>
             </div>
 
             <div className="space-y-4">
               {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Date</label>
                 <input
                   type="date"
                   value={editData.date}
                   onChange={(e) => setEditData({ ...editData, date: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                 />
               </div>
 
               {/* Time row */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                  <label className="block text-sm font-medium text-primary-700 mb-1">Start Time</label>
                   <input
                     type="time"
                     value={editData.start_time}
                     onChange={(e) => setEditData({ ...editData, start_time: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                  <label className="block text-sm font-medium text-primary-700 mb-1">End Time</label>
                   <input
                     type="time"
                     value={editData.end_time}
                     onChange={(e) => setEditData({ ...editData, end_time: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
               </div>
@@ -730,34 +730,34 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               {/* Players & Price */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Players</label>
+                  <label className="block text-sm font-medium text-primary-700 mb-1">Max Players</label>
                   <input
                     type="number"
                     min={game?.current_players || 1}
                     value={editData.max_players}
                     onChange={(e) => setEditData({ ...editData, max_players: parseInt(e.target.value) || 0 })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price/Person (₹)</label>
+                  <label className="block text-sm font-medium text-primary-700 mb-1">Price/Person (₹)</label>
                   <input
                     type="number"
                     min={0}
                     value={editData.price_per_player}
                     onChange={(e) => setEditData({ ...editData, price_per_player: parseInt(e.target.value) || 0 })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
               </div>
 
               {/* Skill Level */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Skill Level</label>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Skill Level</label>
                 <select
                   value={editData.skill_level}
                   onChange={(e) => setEditData({ ...editData, skill_level: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50"
+                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                 >
                   <option value="all">All Levels</option>
                   <option value="beginner">Beginner</option>
@@ -768,13 +768,13 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-primary-700 mb-1">Description</label>
                 <textarea
                   value={editData.description}
                   onChange={(e) => setEditData({ ...editData, description: e.target.value })}
                   placeholder="Describe the game..."
                   rows={3}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-gray-50"
+                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
                 />
               </div>
 
@@ -784,9 +784,9 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                   type="checkbox"
                   checked={editData.turf_booked}
                   onChange={(e) => setEditData({ ...editData, turf_booked: e.target.checked })}
-                  className="w-5 h-5 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                  className="w-5 h-5 rounded border-primary-300 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Turf booked / confirmed</span>
+                <span className="text-sm font-medium text-primary-700">Turf booked / confirmed</span>
               </label>
             </div>
 
@@ -837,10 +837,10 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       );
     }
     if (status === "expired") {
-      return <button disabled className="w-full bg-gray-100 text-gray-400 py-3 rounded-xl font-semibold text-sm cursor-not-allowed">Game Ended</button>;
+      return <button disabled className="w-full bg-primary-100 text-primary-400 py-3 rounded-xl font-semibold text-sm cursor-not-allowed">Game Ended</button>;
     }
     if (isFull) {
-      return <button disabled className="w-full bg-gray-100 text-gray-400 py-3 rounded-xl font-semibold text-sm cursor-not-allowed">Game Full</button>;
+      return <button disabled className="w-full bg-primary-100 text-primary-400 py-3 rounded-xl font-semibold text-sm cursor-not-allowed">Game Full</button>;
     }
     if (joinStatus === "sent") {
       return (
@@ -874,7 +874,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       );
     }
     if (status === "expired" || isFull) {
-      return <button disabled className="bg-gray-100 text-gray-400 px-5 py-3 rounded-xl text-sm font-semibold">{isFull ? "Full" : "Ended"}</button>;
+      return <button disabled className="bg-primary-100 text-primary-400 px-5 py-3 rounded-xl text-sm font-semibold">{isFull ? "Full" : "Ended"}</button>;
     }
     if (joinStatus === "sent") {
       return <span className="text-sm font-semibold text-green-600 flex items-center gap-1"><Check className="w-4 h-4" />Sent!</span>;

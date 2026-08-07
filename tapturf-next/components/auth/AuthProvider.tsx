@@ -220,6 +220,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (shouldWelcomeFromCallback) {
       url.searchParams.delete("welcome");
       window.history.replaceState({}, "", url.toString());
+
+      // When we just came back from Google, don't wait for
+      // onAuthStateChange (INITIAL_SESSION sometimes fires late on iOS
+      // and users end up seeing "logged out" until they refresh).
+      // Force-fetch the session immediately from the freshly-set cookies.
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (cancelled) return;
+        if (session?.user && !userSetRef.current) {
+          resolveSupabaseUser(session.user, true);
+          clearTimeout(emergencyTimeout);
+          setLoading(false);
+        }
+      });
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
