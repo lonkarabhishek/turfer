@@ -41,18 +41,18 @@ export function MyRequests({ userId }: { userId: string }) {
 
   if (requests.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="w-14 h-14 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-4">
-          <MessageSquare className="w-6 h-6 text-primary-400" />
+      <div className="text-center py-14">
+        <div className="w-14 h-14 bg-accent-50 border border-accent-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <MessageSquare className="w-6 h-6 text-accent-600" />
         </div>
-        <p className="text-sm font-medium text-gray-900 mb-1">No requests yet</p>
-        <p className="text-sm text-gray-500 mb-5">Find a game and send a join request</p>
+        <p className="text-[15px] font-semibold text-primary-800 mb-1">No requests yet</p>
+        <p className="text-[13px] text-primary-500 mb-6">Find a game near you and tap Join</p>
         <Link
           href="/games"
-          className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-bold px-5 py-2.5 rounded-full transition-colors"
+          className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold uppercase tracking-wide px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
         >
           <Gamepad2 className="w-4 h-4" />
-          Browse Games
+          Browse games
         </Link>
       </div>
     );

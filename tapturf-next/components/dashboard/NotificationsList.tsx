@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Bell, Check, Gamepad2, UserPlus, XCircle } from "lucide-react";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 import type { Notification } from "@/types/notification";
@@ -51,9 +52,18 @@ export function NotificationsList({ userId }: { userId: string }) {
 
   if (notifications.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Bell className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-        <p className="text-sm text-gray-500">No notifications yet</p>
+      <div className="text-center py-14">
+        <div className="w-14 h-14 bg-accent-50 border border-accent-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Bell className="w-6 h-6 text-accent-600" />
+        </div>
+        <p className="text-[15px] font-semibold text-primary-800 mb-1">All caught up</p>
+        <p className="text-[13px] text-primary-500 mb-6">You&apos;ll hear from us when someone joins or accepts your game</p>
+        <Link
+          href="/games"
+          className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold uppercase tracking-wide px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
+        >
+          Find a game
+        </Link>
       </div>
     );
   }

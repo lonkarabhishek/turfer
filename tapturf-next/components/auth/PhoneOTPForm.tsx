@@ -98,10 +98,14 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       if (result.success && result.user) {
         const supabase = createClient();
         const formattedPhone = `+91${phone}`;
+        // Legacy rows in the DB store the phone as bare 10 digits
+        // ("9876543210"); newer signups store the +91 prefix
+        // ("+919876543210"). Match either so returning users
+        // aren't shunted into the sign-up name step.
         const { data: existingUser } = await supabase
           .from("users")
           .select("id, name, phone, email, role, profile_image_url")
-          .eq("phone", formattedPhone)
+          .or(`phone.eq.${formattedPhone},phone.eq.${phone}`)
           .maybeSingle();
 
         if (existingUser) {

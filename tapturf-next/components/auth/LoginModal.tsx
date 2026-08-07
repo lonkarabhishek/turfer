@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, AlertCircle, Zap } from "lucide-react";
+import { X, Loader2, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
 import { PhoneOTPForm } from "./PhoneOTPForm";
@@ -16,7 +16,7 @@ export function LoginModal() {
 
   useEffect(() => {
     if (searchParams?.get("auth_error")) {
-      setGoogleError("Google sign-in failed. Try again or use phone.");
+      setGoogleError("Sign-in failed. Try again.");
       setShowLoginModal(true);
     }
   }, [searchParams, setShowLoginModal]);
@@ -29,11 +29,7 @@ export function LoginModal() {
     try {
       const supabase = createClient();
 
-      // Clear any stale/revoked session before starting a fresh OAuth
-      // flow. Fixes users left in a bad state after a previous
-      // token-reuse revocation — otherwise the callback tries to
-      // exchange a code against a dead session and lands right back
-      // on the home page unauthenticated.
+      // Clear any stale/revoked session before starting a fresh OAuth flow
       try { await supabase.auth.signOut(); } catch { /* ignore */ }
 
       const { error } = await supabase.auth.signInWithOAuth({
@@ -47,7 +43,7 @@ export function LoginModal() {
         },
       });
       if (error) {
-        setGoogleError(error.message || "Google sign-in failed. Try again.");
+        setGoogleError(error.message || "Sign-in failed. Try again.");
         setGoogleLoading(false);
       }
     } catch {
@@ -66,49 +62,49 @@ export function LoginModal() {
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-primary-800/50 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 bg-primary-800/40 backdrop-blur-[2px] animate-fade-in"
         onClick={handleClose}
       />
 
-      {/* Modal */}
-      <div className="relative w-full md:max-w-md bg-white border-t border-primary-200 md:border md:border-primary-200 rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden shadow-elevated">
-        {/* Close */}
+      {/* Sheet — small, light, iOS-native feel */}
+      <div className="relative w-full md:max-w-[380px] bg-white rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden shadow-elevated">
+        {/* Grabber handle (mobile only) */}
+        <div className="md:hidden flex justify-center pt-2.5 pb-1">
+          <div className="w-9 h-1 bg-primary-300 rounded-full" />
+        </div>
+
+        {/* Close — top-right, subtle */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-primary-100 hover:bg-primary-200 transition-colors"
+          className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-primary-100 transition-colors"
           aria-label="Close"
         >
-          <X className="w-4 h-4 text-primary-700" />
+          <X className="w-4 h-4 text-primary-500" />
         </button>
 
-        <div className="relative px-6 pt-8 pb-8 md:pt-10">
-          {/* Logo mark */}
-          <div className="w-14 h-14 rounded-2xl bg-accent-500 flex items-center justify-center shadow-neon mb-6">
-            <Zap className="w-7 h-7 text-white" strokeWidth={2.75} />
-          </div>
-
-          <h2 className="font-display uppercase text-4xl md:text-5xl text-primary-800 leading-[0.9] tracking-tight mb-2">
-            Sign in.<br />
-            <span className="text-accent-500">Squad up.</span>
+        <div className="px-6 pt-4 pb-6">
+          {/* Title — simple, one line, not shouty */}
+          <h2 className="text-[19px] font-semibold text-primary-800 text-center leading-tight">
+            Sign in to TapTurf
           </h2>
-          <p className="text-sm text-primary-500 mb-8">
-            One tap. Book turfs, host games, join your crew.
+          <p className="text-[13px] text-primary-500 text-center mt-1 mb-6">
+            Host games, join a squad, book turfs
           </p>
 
-          {/* HERO CTA — Google, big and unmissable */}
+          {/* Google — soft white pill, Google's own suggested style */}
           <button
             onClick={handleGoogleLogin}
             disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 bg-primary-800 hover:bg-primary-900 text-white rounded-full py-4 min-h-[56px] px-6 font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 shadow-elevated focus-neon"
+            className="w-full flex items-center justify-center gap-2.5 bg-white border border-primary-300 hover:border-primary-400 hover:bg-primary-50 text-primary-800 rounded-full py-3 min-h-[48px] px-4 text-[15px] font-semibold transition-all disabled:opacity-50 focus-neon"
           >
             {googleLoading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Redirecting…</span>
+                <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                <span>Opening Google…</span>
               </>
             ) : (
               <>
-                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                <svg className="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -120,31 +116,29 @@ export function LoginModal() {
           </button>
 
           {googleError && (
-            <div className="flex items-start gap-2 p-3 mt-4 bg-hot-500/10 border border-hot-500/40 rounded-xl">
+            <div className="flex items-start gap-2 p-2.5 mt-3 bg-hot-500/10 border border-hot-500/30 rounded-xl">
               <AlertCircle className="w-4 h-4 text-hot-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-hot-600">{googleError}</p>
+              <p className="text-[13px] text-hot-600">{googleError}</p>
             </div>
           )}
 
-          {/* Phone alternative — collapsed by default */}
+          {/* Phone — plain text link, super low-key */}
           {!showPhone ? (
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => setShowPhone(true)}
-                className="text-xs font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors"
-              >
-                or use phone number →
-              </button>
-            </div>
+            <button
+              onClick={() => setShowPhone(true)}
+              className="block mx-auto mt-4 text-[13px] text-primary-500 hover:text-accent-600 transition-colors"
+            >
+              Use phone number instead
+            </button>
           ) : (
-            <div className="mt-6 pt-6 border-t border-primary-200">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
-                  Phone OTP
+            <div className="mt-4 pt-4 border-t border-primary-200">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[13px] font-medium text-primary-700">
+                  Phone number
                 </p>
                 <button
                   onClick={() => setShowPhone(false)}
-                  className="text-xs font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors"
+                  className="text-[13px] text-primary-500 hover:text-accent-600 transition-colors"
                 >
                   ← back
                 </button>
@@ -152,11 +146,10 @@ export function LoginModal() {
               <PhoneOTPForm onSuccess={handleClose} />
             </div>
           )}
-
-          <p className="text-[10px] font-mono uppercase tracking-widest text-primary-400 mt-6 text-center leading-relaxed">
-            By continuing you agree to our fair-play rules
-          </p>
         </div>
+
+        {/* Safe area for iOS notch bottom */}
+        <div className="md:hidden h-[env(safe-area-inset-bottom)] bg-white" />
       </div>
     </div>
   );

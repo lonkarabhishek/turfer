@@ -64,16 +64,22 @@ export function MyGames({ userId }: { userId: string }) {
       </div>
 
       {games.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-sm text-gray-500 mb-4">
-            {view === "created" ? "You haven't created any games yet" : "You haven't joined any games yet"}
+        <div className="text-center py-14">
+          <div className="w-14 h-14 bg-accent-50 border border-accent-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Trophy className="w-6 h-6 text-accent-600" />
+          </div>
+          <p className="text-[15px] font-semibold text-primary-800 mb-1">
+            {view === "created" ? "No games yet" : "You haven't joined a game"}
+          </p>
+          <p className="text-[13px] text-primary-500 mb-6">
+            {view === "created" ? "Host your first game — invite the crew" : "Find one that fits your squad"}
           </p>
           <Link
             href={view === "created" ? "/game/create" : "/games"}
-            className="inline-flex items-center gap-2 bg-gray-900 text-white text-sm font-semibold px-5 py-2.5 rounded-full"
+            className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold uppercase tracking-wide px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
           >
-            <Plus className="w-4 h-4" />
-            {view === "created" ? "Create a Game" : "Browse Games"}
+            <Plus className="w-4 h-4" strokeWidth={2.75} />
+            {view === "created" ? "Host a game" : "Browse games"}
           </Link>
         </div>
       ) : (
