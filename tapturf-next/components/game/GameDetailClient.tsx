@@ -367,89 +367,8 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           </div>
 
           {/* ═══════════════════════════════════════════════════════ */}
-          {/* GAME DETAILS GRID */}
+          {/* LOCATION — where the game happens (was near the bottom) */}
           {/* ═══════════════════════════════════════════════════════ */}
-          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
-            <h3 className="text-base font-semibold text-primary-800 mb-4">Game Details</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Sport</p>
-                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
-                  <Trophy className="w-3.5 h-3.5 text-primary-500" />
-                  {game.sport}
-                </p>
-              </div>
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Skill Level</p>
-                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-primary-500" />
-                  {capitalizeSkillLevel(game.skill_level)}
-                </p>
-              </div>
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Cost per Person</p>
-                <p className="text-sm font-semibold text-primary-800">
-                  {game.price_per_player > 0 ? `₹${game.price_per_player}` : "Free"}
-                </p>
-              </div>
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Turf Booked</p>
-                <p className={`text-sm font-semibold ${game.turf_booked ? "text-green-600" : "text-orange-500"}`}>
-                  {game.turf_booked ? "✓ Confirmed" : "Not yet"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Description */}
-          {game.description && (
-            <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
-              <h3 className="text-base font-semibold text-primary-800 mb-2">About this Game</h3>
-              <p className="text-sm text-primary-500 leading-relaxed">{game.description}</p>
-            </div>
-          )}
-
-          {/* Notes */}
-          {game.notes && (
-            <div className="bg-primary-50 border border-primary-100 rounded-2xl p-5 mb-5">
-              <h3 className="text-base font-semibold text-primary-900 mb-2">Notes from Host</h3>
-              <p className="text-sm text-primary-700">{game.notes}</p>
-            </div>
-          )}
-
-          {/* Host card */}
-          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
-            <h3 className="text-base font-semibold text-primary-800 mb-3">Hosted by</h3>
-            <div className="flex items-center gap-3">
-              {game.host_profile_image_url ? (
-                <img src={game.host_profile_image_url} alt="" className="w-12 h-12 rounded-full object-cover ring-2 ring-primary-100" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center ring-2 ring-primary-100">
-                  <User className="w-6 h-6 text-white" />
-                </div>
-              )}
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-primary-800">{game.host_name}</p>
-                {game.host_phone && (
-                  <a href={`tel:${game.host_phone}`} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                    {game.host_phone}
-                  </a>
-                )}
-              </div>
-              {game.host_phone && (
-                <a
-                  href={`https://wa.me/${game.host_phone.replace(/[^0-9]/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fb855] text-white text-xs font-semibold px-3 py-2 rounded-full transition-colors"
-                >
-                  WhatsApp
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Map */}
           {game.turfs?.["Gmap Embed link"] && (() => {
             const raw = game.turfs["Gmap Embed link"];
             const srcMatch = raw.match(/src="([^"]+)"/);
@@ -458,14 +377,14 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5">
                 <div className="p-5 pb-3">
                   <h3 className="text-base font-semibold text-primary-800 flex items-center gap-2">
-                    <MapPin className="w-4.5 h-4.5 text-primary-500" />
-                    Location
+                    <MapPin className="w-4.5 h-4.5 text-accent-600" />
+                    Where
                   </h3>
                   {game.turfs?.address && (
                     <p className="text-sm text-primary-500 mt-1">{game.turfs.address}</p>
                   )}
                 </div>
-                <div className="h-[250px]">
+                <div className="h-[220px]">
                   <iframe
                     src={mapSrc}
                     width="100%"
@@ -480,6 +399,94 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               </div>
             );
           })()}
+
+          {/* ═══════════════════════════════════════════════════════ */}
+          {/* HOSTED BY — contact info (was middle) */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
+            <h3 className="text-base font-semibold text-primary-800 mb-3">Hosted by</h3>
+            <div className="flex items-center gap-3">
+              {game.host_profile_image_url ? (
+                <img src={game.host_profile_image_url} alt="" className="w-12 h-12 rounded-full object-cover ring-2 ring-primary-100" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-accent-500 flex items-center justify-center ring-2 ring-primary-100">
+                  <User className="w-6 h-6 text-white" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-primary-800 truncate">{game.host_name}</p>
+                {game.host_phone && (
+                  <a href={`tel:${game.host_phone}`} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                    {game.host_phone}
+                  </a>
+                )}
+              </div>
+              {game.host_phone && (
+                <a
+                  href={`https://wa.me/${game.host_phone.replace(/[^0-9]/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fb855] text-white text-xs font-bold uppercase tracking-wide px-3 py-2 rounded-full transition-colors shrink-0"
+                >
+                  WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Notes from host — short + useful, keep visible */}
+          {game.notes && (
+            <div className="bg-accent-50 border border-accent-500/30 rounded-2xl p-5 mb-5">
+              <h3 className="text-base font-semibold text-primary-800 mb-2">A note from your host</h3>
+              <p className="text-sm text-primary-700 leading-relaxed">{game.notes}</p>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════ */}
+          {/* SECONDARY: About + full details grid                    */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          {game.description && (
+            <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
+              <h3 className="text-base font-semibold text-primary-800 mb-2">About this game</h3>
+              <p className="text-sm text-primary-500 leading-relaxed">{game.description}</p>
+            </div>
+          )}
+
+          <details className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5 group">
+            <summary className="p-5 cursor-pointer flex items-center justify-between text-base font-semibold text-primary-800 list-none">
+              <span>All details</span>
+              <span className="text-xs font-mono uppercase tracking-widest text-primary-500 group-open:hidden">Show</span>
+              <span className="text-xs font-mono uppercase tracking-widest text-primary-500 hidden group-open:inline">Hide</span>
+            </summary>
+            <div className="p-5 pt-0 grid grid-cols-2 gap-3">
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Sport</p>
+                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
+                  <Trophy className="w-3.5 h-3.5 text-accent-600" />
+                  {game.sport}
+                </p>
+              </div>
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Skill level</p>
+                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-accent-600" />
+                  {capitalizeSkillLevel(game.skill_level)}
+                </p>
+              </div>
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Cost per person</p>
+                <p className="text-sm font-semibold text-primary-800">
+                  {game.price_per_player > 0 ? `₹${game.price_per_player}` : "Free"}
+                </p>
+              </div>
+              <div className="bg-primary-50 rounded-xl p-3">
+                <p className="text-xs text-primary-500 mb-0.5">Turf booked</p>
+                <p className={`text-sm font-semibold ${game.turf_booked ? "text-accent-600" : "text-hot-600"}`}>
+                  {game.turf_booked ? "✓ Confirmed" : "Not yet"}
+                </p>
+              </div>
+            </div>
+          </details>
         </div>
 
         {/* ═══════════════════════════════════════════════════════ */}
