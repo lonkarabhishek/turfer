@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { HomeUserPanel } from "@/components/home/HomeUserPanel";
 
 export const revalidate = 600;
 
@@ -142,6 +143,9 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ─── Welcome-back panel (client, logged-in only) ─────── */}
+      <HomeUserPanel />
 
       {/* ─── Sport chip rail ────────────────────────────────── */}
       <section className="border-y border-primary-200 bg-primary-50">
