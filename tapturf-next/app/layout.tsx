@@ -5,6 +5,7 @@ import { Footer } from "@/components/layout/Footer";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWALifecycle } from "@/components/pwa/PWALifecycle";
+import { RouteProgress } from "@/components/nav/RouteProgress";
 import "./globals.css";
 
 const inter = Inter({
@@ -84,6 +85,7 @@ export default function RootLayout({
       <body className={`${inter.variable} ${bebas.variable} ${spaceMono.variable} antialiased`}>
         <GoogleAnalytics />
         <PWALifecycle />
+        <RouteProgress />
         <AuthWrapper>
           <Header />
           {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator */}
