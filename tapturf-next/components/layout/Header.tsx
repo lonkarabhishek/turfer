@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
 import { notify } from "@/lib/notifications/browser";
+import { CityPicker } from "@/components/city/CityPicker";
 
 export function Header() {
   const { user, loading, login } = useAuth();
@@ -116,12 +117,13 @@ export function Header() {
 
         {/* Mobile right side */}
         <div className="flex md:hidden items-center gap-2">
+          <CityPicker />
           {/* Refresh — iOS PWA won't reload when you re-open the app,
               so give people a one-tap way to pull fresh data. */}
           <button
             onClick={() => window.location.reload()}
             aria-label="Refresh"
-            className="flex items-center justify-center w-10 h-10 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
+            className="flex items-center justify-center w-9 h-9 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
           >
             <RotateCw className="w-4 h-4 text-primary-700" />
           </button>

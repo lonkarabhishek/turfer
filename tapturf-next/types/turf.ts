@@ -52,6 +52,7 @@ export interface Turf {
   // Location
   lat: number | null;
   lng: number | null;
+  city: string | null; // 'nashik' | 'pune' (see lib/city.ts)
 
   // System
   is_active: boolean;

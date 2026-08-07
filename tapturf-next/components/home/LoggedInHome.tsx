@@ -14,6 +14,7 @@ import {
   getUserJoinedGames,
   getMyRequests,
 } from "@/lib/queries/games";
+import { getCityPref, labelFor, isCity, type CityId } from "@/lib/city";
 import {
   filterNonExpiredGames,
   sortGamesByDateTime,
@@ -36,6 +37,19 @@ export function LoggedInHome() {
   const [tonight, setTonight] = useState<Game[]>([]);
   const [requests, setRequests] = useState<GameRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [city, setCity] = useState<CityId | null>(null);
+
+  // Follow the user's city preference; refetch when it changes.
+  useEffect(() => {
+    setCity(getCityPref());
+    const onChange = () => setCity(getCityPref());
+    window.addEventListener("tapturf:city-changed", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("tapturf:city-changed", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -61,7 +75,19 @@ export function LoggedInHome() {
       );
 
       const active = sortGamesByDateTime(filterNonExpiredGames(allOpen.data ?? []));
-      const notMine = active.filter((g) => !seen.has(g.id)).slice(0, 3);
+      // City filter — falls back to guessing from turf.address for
+      // games whose turf hasn't been backfilled yet.
+      const inCity = (g: Game) => {
+        if (!city) return true;
+        const c = (g.turfs as { city?: string } | undefined)?.city
+          ?? (g.turfs?.address ? (
+            g.turfs.address.toLowerCase().includes("nashik") || g.turfs.address.toLowerCase().includes("nasik")
+              ? "nashik"
+              : g.turfs.address.toLowerCase().includes("pune") ? "pune" : null
+          ) : null);
+        return c === city;
+      };
+      const notMine = active.filter((g) => !seen.has(g.id) && inCity(g)).slice(0, 3);
 
       const pending = (reqs.data ?? []).filter((r) => r.status === "pending");
 
@@ -72,7 +98,7 @@ export function LoggedInHome() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, city]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) return null;
 
@@ -97,7 +123,7 @@ export function LoggedInHome() {
         {/* ─── Greeting ─────────────────────────────────────── */}
         <header className="mb-6">
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent-600 mb-1.5">
-            // {dayLabel} · {dateLabel}
+            // {dayLabel} · {dateLabel}{city ? ` · ${labelFor(city)}` : ""}
           </p>
           <h1 className="font-display uppercase text-4xl sm:text-6xl text-primary-800 leading-[0.9] tracking-tight">
             Hey<br className="sm:hidden" />

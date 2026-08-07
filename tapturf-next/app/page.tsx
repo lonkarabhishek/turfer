@@ -21,15 +21,15 @@ import { HomeShell } from "@/components/home/HomeShell";
 export const revalidate = 600;
 
 export const metadata: Metadata = {
-  title: "TapTurf — Cricket, Football & More in Nashik | Book a Turf",
+  title: "TapTurf — Cricket, Football & Sports Turfs in Nashik & Pune",
   description:
-    "Book turf, find your squad, run the pitch. 49+ premium sports turfs in Nashik. Cricket, football, box cricket, badminton — book instantly.",
+    "Book sports turfs across Nashik and Pune. 90+ grounds for cricket, football, box cricket, badminton and more. Find a game, host a game, run the pitch.",
   keywords:
-    "cricket turf nashik, box cricket nashik, turf booking nashik, football turf nashik, tapturf",
+    "turf booking nashik, turf booking pune, cricket turf nashik, cricket turf pune, football turf nashik, football turf pune, box cricket, sports turfs maharashtra, tapturf",
   openGraph: {
-    title: "TapTurf — Book a Turf in Nashik",
+    title: "TapTurf — Book Turfs in Nashik & Pune",
     description:
-      "Book turf, find your squad, run the pitch. 49+ turfs in Nashik.",
+      "Every sports turf across Nashik and Pune. Find a game, host a game, run the pitch.",
     url: "https://www.tapturf.in",
     siteName: "TapTurf",
     locale: "en_IN",

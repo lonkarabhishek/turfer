@@ -1,5 +1,6 @@
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { convertGoogleDriveUrl, convertImageUrls } from "@/lib/utils/images";
+import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -90,25 +91,31 @@ function transformTurf(raw: any): Turf {
     nearby_landmark: raw.nearby_landmark || null,
     lat: raw.lat ?? null,
     lng: raw.lng ?? null,
+    // Fall back to guessing from address for rows not yet backfilled.
+    city: raw.city ?? guessCityFromAddress(raw.address),
     is_active: raw.is_active ?? true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
 }
 
-export async function getAllActiveTurfs(): Promise<Turf[]> {
+export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
   const supabase = createServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("turfs")
     .select("*")
     .eq("is_active", true)
     .order("rating", { ascending: false });
 
+  if (cityFilter && isCity(cityFilter)) {
+    query = query.eq("city", cityFilter);
+  }
+
+  const { data, error } = await query;
   if (error) {
     console.error("Failed to fetch turfs:", error);
     return [];
   }
-
   return (data ?? []).map(transformTurf);
 }
 

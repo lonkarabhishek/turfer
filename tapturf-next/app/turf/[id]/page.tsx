@@ -6,6 +6,7 @@ import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { getPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
+import { labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
@@ -36,17 +37,30 @@ export async function generateMetadata({
     turf.cover_image ||
     (turf.images[0] ? convertGoogleDriveUrl(turf.images[0]) : null);
 
+  // City-aware metadata so Pune turfs don't get titled "Turf in Nashik".
+  const cityLabel = isCity(turf.city) ? labelFor(turf.city) : "Maharashtra";
+  const cityHash = isCity(turf.city) ? `#${turf.city}turf` : "";
+
   return {
-    title: `${turf.name} - Book Now | Turf in Nashik`,
-    description: `Book ${turf.name} in ${turf.address}. Starting ₹${minPrice}/hr. ${sports}. Rated ${Number(turf.rating).toFixed(1)} stars (${turf.total_reviews} reviews). Call or WhatsApp to book.`,
+    title: `${turf.name} — Book Now | Turf in ${cityLabel}`,
+    description: `Book ${turf.name}${turf.address ? ` at ${turf.address}` : ""}. Starting ₹${minPrice}/hr. ${sports || "Multi-sport"}. Rated ${Number(turf.rating).toFixed(1)} stars${turf.total_reviews > 0 ? ` (${turf.total_reviews} reviews)` : ""}. Call or WhatsApp to book.`,
+    keywords: [
+      turf.name,
+      `turf in ${cityLabel.toLowerCase()}`,
+      `${cityLabel.toLowerCase()} turf booking`,
+      ...turf.sports.map((s) => `${s.toLowerCase()} turf ${cityLabel.toLowerCase()}`),
+      cityHash,
+    ].filter(Boolean).join(", "),
     openGraph: {
-      title: `${turf.name} - Turf in Nashik`,
-      description: `${turf.address}. Starting ₹${minPrice}/hr. ${sports}.`,
+      title: `${turf.name} — Turf in ${cityLabel}`,
+      description: `${turf.address}. Starting ₹${minPrice}/hr. ${sports || "Multi-sport"}.`,
       url: `https://www.tapturf.in/turf/${turf.id}`,
       ...(firstImage && {
         images: [{ url: firstImage, width: 1200, height: 630 }],
       }),
       type: "website",
+      locale: "en_IN",
+      siteName: "TapTurf",
     },
     alternates: { canonical: `https://www.tapturf.in/turf/${turf.id}` },
   };
