@@ -95,39 +95,52 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setLoading(true);
     try {
       const result = await phoneAuthHelpers.verifyOTP(confirmationResult, otpCode);
-      if (result.success && result.user) {
-        const supabase = createClient();
-        const formattedPhone = `+91${phone}`;
-        // Legacy rows in the DB store the phone as bare 10 digits
-        // ("9876543210"); newer signups store the +91 prefix
-        // ("+919876543210"). Match either so returning users
-        // aren't shunted into the sign-up name step.
-        const { data: existingUser } = await supabase
-          .from("users")
-          .select("id, name, phone, email, role, profile_image_url")
-          .or(`phone.eq.${formattedPhone},phone.eq.${phone}`)
-          .maybeSingle();
-
-        if (existingUser) {
-          localStorage.setItem("auth_token", result.user.idToken);
-          localStorage.setItem("user", JSON.stringify({
-            id: existingUser.id,
-            name: existingUser.name,
-            phone: formattedPhone,
-            email: existingUser.email,
-            role: existingUser.role || "player",
-            profile_image_url: existingUser.profile_image_url,
-          }));
-          finishLogin(existingUser.name?.split(" ")[0] || "");
-        } else {
-          setStep("name");
-        }
-      } else {
+      if (!result.success || !result.user) {
         setError(result.error || "Invalid OTP");
         setOtp(["", "", "", "", "", ""]);
+        return;
       }
-    } catch {
-      setError("Verification failed. Please try again.");
+
+      const supabase = createClient();
+      const formattedPhone = `+91${phone}`;
+
+      // Look up existing user. Match either legacy bare 10-digit format
+      // ("9876543210") or the canonical +91 E.164 form ("+919876543210").
+      // Use .limit(1) — never .maybeSingle() — so multi-row historical
+      // duplicates don't error out the whole flow.
+      const { data: existingRows, error: lookupError } = await supabase
+        .from("users")
+        .select("id, name, phone, email, role, profile_image_url")
+        .or(`phone.eq.${formattedPhone},phone.eq.${phone}`)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (lookupError) {
+        console.error("[PhoneOTP] Lookup error:", lookupError);
+        setError("Couldn't look up your account. Try again or refresh.");
+        setOtp(["", "", "", "", "", ""]);
+        return;
+      }
+
+      const existingUser = existingRows?.[0];
+
+      if (existingUser) {
+        localStorage.setItem("auth_token", result.user.idToken);
+        localStorage.setItem("user", JSON.stringify({
+          id: existingUser.id,
+          name: existingUser.name,
+          phone: formattedPhone,
+          email: existingUser.email,
+          role: existingUser.role || "user",
+          profile_image_url: existingUser.profile_image_url,
+        }));
+        finishLogin(existingUser.name?.split(" ")[0] || "");
+      } else {
+        setStep("name");
+      }
+    } catch (e) {
+      console.error("[PhoneOTP] Verify threw:", e);
+      setError(e instanceof Error ? e.message : "Verification failed. Please try again.");
       setOtp(["", "", "", "", "", ""]);
     } finally {
       setLoading(false);

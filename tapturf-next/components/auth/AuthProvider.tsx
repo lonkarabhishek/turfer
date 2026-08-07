@@ -33,7 +33,7 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-// Helper: build AppUser from Supabase auth user metadata
+// Build minimal AppUser fields from a Supabase auth user's metadata
 function buildUserFromSupabase(supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }): Omit<AppUser, "role"> & { role?: string; profile_image_url?: string } {
   return {
     id: supaUser.id,
@@ -59,35 +59,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const showWelcome = useCallback((name: string) => {
     setWelcomeMessage(`Welcome${name ? `, ${name}` : ""}!`);
-    setTimeout(() => setWelcomeMessage(null), 4000);
+    setTimeout(() => setWelcomeMessage(null), 3500);
   }, []);
 
   // ── DB helpers ──
 
   const fetchUserProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
     try {
+      // .limit(1) instead of .single() so we never throw on 0-rows or dup rows.
       const { data, error } = await supabase
         .from("users")
         .select("id, name, email, phone, role, profile_image_url")
         .eq("id", userId)
-        .single();
-      if (data && !error) return data as AppUser;
-    } catch { /* not found */ }
+        .limit(1);
+      if (data && data.length > 0 && !error) return data[0] as AppUser;
+    } catch (e) {
+      console.warn("[Auth] fetchUserProfile failed:", e);
+    }
+    return null;
+  }, [supabase]);
+
+  const fetchUserProfileByEmail = useCallback(async (email: string): Promise<AppUser | null> => {
+    try {
+      const { data } = await supabase
+        .from("users")
+        .select("id, name, email, phone, role, profile_image_url")
+        .eq("email", email)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (data && data.length > 0) return data[0] as AppUser;
+    } catch (e) {
+      console.warn("[Auth] fetchUserProfileByEmail failed:", e);
+    }
     return null;
   }, [supabase]);
 
   const ensureUserInDB = useCallback(async (userData: {
     id: string; name: string; email?: string; phone?: string; profile_image_url?: string;
   }): Promise<AppUser> => {
-    try {
-      const { data: existing } = await supabase
-        .from("users")
-        .select("id, name, email, phone, role, profile_image_url")
-        .eq("id", userData.id)
-        .single();
-      if (existing) return existing as AppUser;
-    } catch { /* not found, will insert */ }
+    // 1. Try lookup by id (fast path for Google users whose auth.id matches public.id)
+    const byId = await fetchUserProfile(userData.id);
+    if (byId) return byId;
 
+    // 2. Try lookup by email (recovers users whose public row was seeded
+    //    with a different id — happens with historical data)
+    if (userData.email) {
+      const byEmail = await fetchUserProfileByEmail(userData.email);
+      if (byEmail) return byEmail;
+    }
+
+    // 3. Insert fresh row
     try {
       const { data: inserted } = await supabase.from("users").insert([{
         id: userData.id,
@@ -96,33 +117,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phone: userData.phone || null,
         role: "user",
         profile_image_url: userData.profile_image_url || null,
-        // public.users.password is NOT NULL; OAuth users have no password.
-        // Use a fixed sentinel so the insert satisfies the schema.
         password: "oauth-no-password",
       }]).select().single();
       if (inserted) return inserted as AppUser;
-    } catch { /* RLS may block */ }
+    } catch (e) {
+      console.warn("[Auth] ensureUserInDB insert failed (likely RLS):", e);
+    }
 
-    return { id: userData.id, name: userData.name, email: userData.email, phone: userData.phone, role: "player", profile_image_url: userData.profile_image_url };
-  }, [supabase]);
+    // 4. Fallback synthetic user so we at least render the header signed-in
+    return {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      phone: userData.phone,
+      role: "user" as AppUser["role"],
+      profile_image_url: userData.profile_image_url,
+    };
+  }, [supabase, fetchUserProfile, fetchUserProfileByEmail]);
 
   // ── Resolve a Supabase auth user into AppUser and set state ──
 
   const resolveSupabaseUser = useCallback(async (supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }, shouldWelcome: boolean) => {
-    const profile = await fetchUserProfile(supaUser.id);
-    if (profile) {
-      setUser(profile);
-      userSetRef.current = true;
-      if (shouldWelcome) showWelcome(profile.name?.split(" ")[0] || "");
-      return;
-    }
-
     const meta = buildUserFromSupabase(supaUser);
     const dbUser = await ensureUserInDB(meta);
     setUser(dbUser);
     userSetRef.current = true;
     if (shouldWelcome) showWelcome(dbUser.name?.split(" ")[0] || "");
-  }, [fetchUserProfile, ensureUserInDB, showWelcome]);
+  }, [ensureUserInDB, showWelcome]);
 
   // ── Init auth on mount ──
 
@@ -145,14 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             name: parsed.name || "User",
             email: parsed.email,
             phone: parsed.phone,
-            role: (parsed.role || "player") as AppUser["role"],
+            role: (parsed.role || "user") as AppUser["role"],
             profile_image_url: parsed.profile_image_url,
           });
           userSetRef.current = true;
           setLoading(false);
           clearTimeout(emergencyTimeout);
 
-          // Refresh from DB in background (non-blocking)
           fetchUserProfile(parsed.id).then(profile => {
             if (profile && !cancelled) setUser(profile);
           });
@@ -163,17 +183,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // ── 2. Google OAuth: rely solely on onAuthStateChange ──
-    // INITIAL_SESSION fires immediately with the current session (if any).
-    // No manual getSession()/getUser() calls — eliminates race condition.
+    // ── 2. Google OAuth: onAuthStateChange with welcome flag support ──
+    // Check for ?welcome=1 in URL — set by /api/auth/callback on success —
+    // so the very first INITIAL_SESSION after Google login triggers the
+    // welcome toast + strips the param from the URL.
+    const url = new URL(window.location.href);
+    const shouldWelcomeFromCallback = url.searchParams.get("welcome") === "1";
+    if (shouldWelcomeFromCallback) {
+      url.searchParams.delete("welcome");
+      window.history.replaceState({}, "", url.toString());
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
       if (event === "INITIAL_SESSION") {
         if (session?.user && !userSetRef.current) {
-          await resolveSupabaseUser(session.user, false);
+          await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
         }
-        // Always end loading on INITIAL_SESSION (fast for logged-out users)
         clearTimeout(emergencyTimeout);
         setLoading(false);
         return;
@@ -185,7 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setShowLoginModal(false);
         setLoading(false);
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
-        await resolveSupabaseUser(session.user, false);
+        // Don't re-welcome or re-fetch — just keep the current user object.
+        // resolveSupabaseUser would re-render everything; skip it here.
       } else if (event === "SIGNED_OUT") {
         setUser(null);
         userSetRef.current = false;
@@ -220,10 +248,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(storedUser);
         if (parsed.id) {
           const profile = await fetchUserProfile(parsed.id);
-          setUser(profile || {
+          const nextUser = profile || {
             id: parsed.id, name: parsed.name || "User", email: parsed.email,
-            phone: parsed.phone, role: parsed.role || "player", profile_image_url: parsed.profile_image_url,
-          });
+            phone: parsed.phone, role: parsed.role || "user", profile_image_url: parsed.profile_image_url,
+          };
+          setUser(nextUser);
+          userSetRef.current = true;
+          // Trigger welcome for phone-login success (called from PhoneOTPForm.finishLogin)
+          showWelcome(nextUser.name?.split(" ")[0] || "");
           return;
         }
       } catch { /* invalid */ }
@@ -236,7 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profile) { setUser(profile); return; }
       }
     } catch { /* ignore */ }
-  }, [fetchUserProfile, supabase]);
+  }, [fetchUserProfile, supabase, showWelcome]);
 
   return (
     <AuthContext.Provider value={{

@@ -8,14 +8,18 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
   const next = searchParams.get("next") ?? "/";
 
-  // OAuth provider returned an error (e.g. user denied, provider not configured)
+  // OAuth provider returned an error (user denied, provider mis-configured, ...)
   if (error) {
     console.error("[OAuth Callback] Provider error:", error, searchParams.get("error_description"));
     return NextResponse.redirect(`${origin}/?auth_error=true`);
   }
 
   if (code) {
-    const response = NextResponse.redirect(`${origin}${next}`);
+    // On success, redirect with ?welcome=1 so the client can fire the
+    // welcome animation. Home page reads and strips this param.
+    const successUrl = new URL(next, origin);
+    successUrl.searchParams.set("welcome", "1");
+    const response = NextResponse.redirect(successUrl);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

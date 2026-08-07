@@ -107,8 +107,7 @@ export function CreateGameFlow() {
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
 
-  const dateRef = useRef<HTMLInputElement>(null);
-  const timeRef = useRef<HTMLInputElement>(null);
+  const turfSearchRef = useRef<HTMLInputElement>(null);
 
   const endTime = useMemo(
     () => (duration ? getEndTime(startTime, duration) : null),
@@ -144,16 +143,6 @@ export function CreateGameFlow() {
     setSelectedSportObj(s);
     setMaxPlayers(s.defaultMax);
     setTimeout(() => setStep(2), 120);
-  };
-
-  const openPicker = (el: HTMLInputElement | null) => {
-    if (!el) return;
-    // showPicker() is the modern iOS/Android way to open a native picker on tap
-    if (typeof el.showPicker === "function") {
-      try { el.showPicker(); return; } catch { /* fall through */ }
-    }
-    el.focus();
-    el.click();
   };
 
   const handleSubmit = async () => {
@@ -366,11 +355,9 @@ export function CreateGameFlow() {
                   Schedule
                 </p>
                 <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
-                  {/* Date row — tap opens native picker */}
-                  <button
-                    onClick={() => openPicker(dateRef.current)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors focus-neon"
-                  >
+                  {/* Date row — invisible native input overlays the row so
+                      iOS Safari opens its rolling wheel on tap. */}
+                  <label className="relative flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors cursor-pointer">
                     <span className="text-[15px] font-medium text-primary-800">Date</span>
                     <span className="flex items-center gap-1.5">
                       <span className="text-[15px] font-semibold text-accent-600">
@@ -379,23 +366,19 @@ export function CreateGameFlow() {
                       <ChevronRight className="w-4 h-4 text-primary-400" />
                     </span>
                     <input
-                      ref={dateRef}
                       type="date"
                       value={date}
                       min={todayStr}
                       onChange={(e) => { setDate(e.target.value); setStartTime(""); setDuration(null); }}
-                      className="sr-only"
                       aria-label="Date"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                  </button>
+                  </label>
 
                   <div className="h-px bg-primary-200 ml-4" />
 
-                  {/* Start time row */}
-                  <button
-                    onClick={() => openPicker(timeRef.current)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors focus-neon"
-                  >
+                  {/* Start time row — same invisible-native pattern */}
+                  <label className="relative flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors cursor-pointer">
                     <span className="text-[15px] font-medium text-primary-800">Start time</span>
                     <span className="flex items-center gap-1.5">
                       <span className="text-[15px] font-semibold text-accent-600 font-mono tabular">
@@ -407,14 +390,13 @@ export function CreateGameFlow() {
                       <ChevronRight className="w-4 h-4 text-primary-400" />
                     </span>
                     <input
-                      ref={timeRef}
                       type="time"
                       value={startTime}
                       onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
-                      className="sr-only"
                       aria-label="Start time"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                  </button>
+                  </label>
 
                   {/* Duration row — segmented control */}
                   {startTime && (
@@ -457,11 +439,12 @@ export function CreateGameFlow() {
                   )}
                 </div>
 
-                {/* VENUE group */}
+                {/* VENUE group — no overflow-hidden here, otherwise the
+                    search dropdown gets clipped inside the card. */}
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
                   Venue
                 </p>
-                <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
+                <div className="relative bg-white border border-primary-200 rounded-2xl">
                   {turfId ? (
                     <div className="flex items-center justify-between px-4 py-3.5 min-h-[56px]">
                       <div className="flex items-center gap-2.5 min-w-0">

@@ -59,20 +59,15 @@ export function LoginModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-primary-800/40 backdrop-blur-[2px] animate-fade-in"
+        className="absolute inset-0 bg-primary-800/50 backdrop-blur-[3px] animate-fade-in"
         onClick={handleClose}
       />
 
-      {/* Sheet — small, light, iOS-native feel */}
-      <div className="relative w-full md:max-w-[380px] bg-white rounded-t-3xl md:rounded-3xl animate-slide-up md:mx-4 overflow-hidden shadow-elevated">
-        {/* Grabber handle (mobile only) */}
-        <div className="md:hidden flex justify-center pt-2.5 pb-1">
-          <div className="w-9 h-1 bg-primary-300 rounded-full" />
-        </div>
-
+      {/* Centered card — same on mobile + desktop, feels like a proper welcome */}
+      <div className="relative w-full max-w-[380px] bg-white rounded-3xl animate-login-in overflow-hidden shadow-elevated">
         {/* Close — top-right, subtle */}
         <button
           onClick={handleClose}
@@ -82,7 +77,7 @@ export function LoginModal() {
           <X className="w-4 h-4 text-primary-500" />
         </button>
 
-        <div className="px-6 pt-4 pb-6">
+        <div className="px-6 pt-8 pb-6">
           {/* Title — simple, one line, not shouty */}
           <h2 className="text-[19px] font-semibold text-primary-800 text-center leading-tight">
             Sign in to TapTurf
@@ -148,9 +143,19 @@ export function LoginModal() {
           )}
         </div>
 
-        {/* Safe area for iOS notch bottom */}
-        <div className="md:hidden h-[env(safe-area-inset-bottom)] bg-white" />
       </div>
+
+      {/* Entrance animation — soft bounce, feels like an iOS alert */}
+      <style jsx>{`
+        @keyframes login-in {
+          0%   { opacity: 0; transform: scale(0.94) translateY(8px); }
+          60%  { opacity: 1; transform: scale(1.01) translateY(0); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        :global(.animate-login-in) {
+          animation: login-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+      `}</style>
     </div>
   );
 }
