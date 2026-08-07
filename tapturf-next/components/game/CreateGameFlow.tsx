@@ -57,6 +57,19 @@ function tv(h: number, m: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
+// Snap any "HH:MM" to the nearest :00 or :30. Nobody books a slot at 8:23.
+function snapToHalfHour(value: string): string {
+  if (!value) return "";
+  const [h, m] = value.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return "";
+  // Round to nearest 30-minute boundary.
+  const totalMin = h * 60 + m;
+  const snapped = Math.round(totalMin / 30) * 30;
+  const sh = Math.min(23, Math.floor(snapped / 60));
+  const sm = snapped % 60;
+  return tv(sh, sm);
+}
+
 function getEndTime(startTime: string, durationHours: number): string | null {
   if (!startTime) return null;
   const [h, m] = startTime.split(":").map(Number);
@@ -392,7 +405,11 @@ export function CreateGameFlow() {
                     <input
                       type="time"
                       value={startTime}
-                      onChange={(e) => { setStartTime(e.target.value); setDuration(null); }}
+                      step={1800}
+                      onChange={(e) => {
+                        setStartTime(snapToHalfHour(e.target.value));
+                        setDuration(null);
+                      }}
                       aria-label="Start time"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -469,7 +486,7 @@ export function CreateGameFlow() {
                         className="w-full pl-11 pr-4 py-3.5 min-h-[56px] text-[15px] font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
                       />
                       {showTurfDropdown && turfResults.length > 0 && (
-                        <div className="absolute z-20 top-full mt-2 w-full bg-white border border-primary-200 rounded-2xl shadow-elevated overflow-hidden">
+                        <div className="absolute z-[60] top-full mt-2 w-full max-h-[280px] overflow-y-auto bg-white border border-primary-200 rounded-2xl shadow-elevated">
                           {turfResults.map((turf) => (
                             <button
                               key={turf.id}
@@ -486,7 +503,7 @@ export function CreateGameFlow() {
                         </div>
                       )}
                       {turfSearch.length >= 2 && turfResults.length === 0 && (
-                        <p className="absolute z-20 top-full mt-2 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-[13px] text-primary-500">
+                        <p className="absolute z-[60] top-full mt-2 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-[13px] text-primary-500 shadow-elevated">
                           No turfs found — try a different name
                         </p>
                       )}
