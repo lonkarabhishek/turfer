@@ -583,7 +583,10 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
       {/* ═══════════════════════════════════════════════════════ */}
       {/* MOBILE FIXED BOTTOM CTA — positioned above MobileNav */}
       {/* ═══════════════════════════════════════════════════════ */}
-      <div className="fixed bottom-14 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 lg:hidden z-30">
+      <div
+        className="fixed left-0 right-0 bg-white border-t border-gray-200 p-3 lg:hidden z-30"
+        style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
+      >
         <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
           <div className="min-w-0">
             <p className="text-lg font-bold text-gray-900">

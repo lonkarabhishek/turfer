@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { TurfCard } from "@/components/turf/TurfCard";
-import { HomeUserPanel } from "@/components/home/HomeUserPanel";
+import { HomeShell } from "@/components/home/HomeShell";
 
 export const revalidate = 600;
 
@@ -70,6 +70,10 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
+      {/* HomeShell renders <LoggedInHome/> for signed-in users, or the
+          marketing content below for logged-out visitors (SEO + SSG). */}
+      <HomeShell>
 
       {/* ─── HERO — Big, clean, mobile-first ───────────────────
            No blur-3xl radial gradient: costs ~40ms/frame on entry-level
@@ -143,9 +147,6 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-
-      {/* ─── Welcome-back panel (client, logged-in only) ─────── */}
-      <HomeUserPanel />
 
       {/* ─── Sport chip rail ────────────────────────────────── */}
       <section className="border-y border-primary-200 bg-primary-50">
@@ -290,6 +291,7 @@ export default async function HomePage() {
       </section>
 
       <div className="h-16 md:h-4" />
+      </HomeShell>
     </>
   );
 }

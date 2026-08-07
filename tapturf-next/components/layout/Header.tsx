@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, User, Bell, Zap } from "lucide-react";
+import { Search, User, Bell, Zap, RotateCw } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
@@ -116,6 +116,15 @@ export function Header() {
 
         {/* Mobile right side */}
         <div className="flex md:hidden items-center gap-2">
+          {/* Refresh — iOS PWA won't reload when you re-open the app,
+              so give people a one-tap way to pull fresh data. */}
+          <button
+            onClick={() => window.location.reload()}
+            aria-label="Refresh"
+            className="flex items-center justify-center w-10 h-10 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
+          >
+            <RotateCw className="w-4 h-4 text-primary-700" />
+          </button>
           <Link
             href="/turfs"
             className="flex items-center justify-center w-10 h-10 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
