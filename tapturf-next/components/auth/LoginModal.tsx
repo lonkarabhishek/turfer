@@ -28,6 +28,14 @@ export function LoginModal() {
     setGoogleError("");
     try {
       const supabase = createClient();
+
+      // Clear any stale/revoked session before starting a fresh OAuth
+      // flow. Fixes users left in a bad state after a previous
+      // token-reuse revocation — otherwise the callback tries to
+      // exchange a code against a dead session and lands right back
+      // on the home page unauthenticated.
+      try { await supabase.auth.signOut(); } catch { /* ignore */ }
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
