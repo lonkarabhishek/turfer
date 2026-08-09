@@ -223,34 +223,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sourceRef.current = null;
     }
 
-    // Belt-and-suspenders: proactively fetch the current Supabase session
-    // in addition to subscribing to onAuthStateChange. INITIAL_SESSION can
-    // fire before our subscription attaches on slow devices, and after a
-    // fresh OAuth callback the cookies may not be visible to JS on the
-    // very first attempt — retry a few times.
-    (async () => {
-      for (let attempt = 0; attempt < (shouldWelcomeFromCallback ? 4 : 1); attempt++) {
-        if (cancelled) return;
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            const alreadyOAuth = sourceRef.current === "oauth" && user?.id === session.user.id;
-            if (!alreadyOAuth) {
-              await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
-            }
-            clearTimeout(emergencyTimeout);
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.warn("[Auth] getSession attempt", attempt + 1, "failed:", e);
-        }
-        // Wait 250ms before retrying (only in welcome=1 path)
-        if (attempt < 3 && shouldWelcomeFromCallback) {
-          await new Promise((r) => setTimeout(r, 250));
-        }
-      }
-    })();
+    // Rely on onAuthStateChange for session pickup — it fires INITIAL_SESSION
+    // exactly once when the subscription attaches, with the current session
+    // (or null) already resolved. Don't ALSO call getSession() here: it
+    // acquires the same `lock:sb-…-auth-token` navigator lock the internal
+    // auto-refresh uses, and racing them causes 10-second lock timeouts
+    // that surface as "Google sign-in isn't smooth."
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;

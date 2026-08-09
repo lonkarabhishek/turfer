@@ -35,3 +35,9 @@ dist-ssr
 local-admin.html
 
 # Trigger deployment rollback
+
+# Next.js dev cache (root, in case dev server runs from here)
+.next/
+
+# Local claude preview config
+.claude/launch.json
