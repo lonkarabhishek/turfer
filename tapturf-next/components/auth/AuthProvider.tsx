@@ -204,31 +204,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    // ── 2. Google OAuth: onAuthStateChange + optional welcome flag ──
+    // ── 2. Google OAuth ──
     const url = new URL(window.location.href);
     const shouldWelcomeFromCallback = url.searchParams.get("welcome") === "1";
     if (shouldWelcomeFromCallback) {
+      // Strip the flag from the URL right away so a share/reload doesn't
+      // re-fire the welcome toast.
       url.searchParams.delete("welcome");
       window.history.replaceState({}, "", url.toString());
-      // Force-fetch the just-set cookies immediately.
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (cancelled) return;
-        if (session?.user && sourceRef.current !== "oauth") {
-          resolveSupabaseUser(session.user, true);
-          clearTimeout(emergencyTimeout);
-          setLoading(false);
-        }
-      });
+
+      // User actively chose Google — OAuth must win. Blow away any stale
+      // phone auth in localStorage so it can't out-vote the fresh session
+      // once the subscription starts firing INITIAL_SESSION.
+      try {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
+      } catch { /* ignore */ }
+      sourceRef.current = null;
     }
+
+    // Belt-and-suspenders: proactively fetch the current Supabase session
+    // in addition to subscribing to onAuthStateChange. INITIAL_SESSION can
+    // fire before our subscription attaches on slow devices, and after a
+    // fresh OAuth callback the cookies may not be visible to JS on the
+    // very first attempt — retry a few times.
+    (async () => {
+      for (let attempt = 0; attempt < (shouldWelcomeFromCallback ? 4 : 1); attempt++) {
+        if (cancelled) return;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const alreadyOAuth = sourceRef.current === "oauth" && user?.id === session.user.id;
+            if (!alreadyOAuth) {
+              await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
+            }
+            clearTimeout(emergencyTimeout);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn("[Auth] getSession attempt", attempt + 1, "failed:", e);
+        }
+        // Wait 250ms before retrying (only in welcome=1 path)
+        if (attempt < 3 && shouldWelcomeFromCallback) {
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+    })();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
       if (event === "INITIAL_SESSION") {
-        // Only take the Supabase user if we don't already have someone
-        // via phone-auth (phone wins because it's what the user chose).
-        if (session?.user && sourceRef.current !== "phone") {
-          await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
+        if (session?.user) {
+          // If we came from the OAuth callback OR there's no phone user,
+          // resolve Supabase. Otherwise phone wins (user hasn't asked for
+          // Google — they're just carrying a stale cookie).
+          const shouldResolve = shouldWelcomeFromCallback || sourceRef.current !== "phone";
+          if (shouldResolve) {
+            await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
+          }
         }
         clearTimeout(emergencyTimeout);
         setLoading(false);
