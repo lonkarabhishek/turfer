@@ -1,23 +1,27 @@
 "use client";
 
-import { type ReactNode } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { LoggedInHome } from "./LoggedInHome";
+import { MarketingHome } from "./MarketingHome";
+import type { Turf } from "@/types/turf";
 
 /**
- * Renders the marketing home (children, SSG-friendly) for logged-out
- * visitors, and the personalised LoggedInHome for signed-in users.
- * Auth is resolved almost instantly from localStorage on mount, so
- * the marketing flash is imperceptible in the common case.
+ * Home switcher — signed-in users see LoggedInHome, everyone else
+ * sees the city-scoped marketing page. Per-city turfs are provided
+ * from the server so the marketing hero paints instantly regardless
+ * of client-side auth or city-preference resolution.
  */
-export function HomeShell({ children }: { children: ReactNode }) {
+export function HomeShell({
+  nashikTurfs,
+  puneTurfs,
+}: {
+  nashikTurfs: Turf[];
+  puneTurfs: Turf[];
+}) {
   const { user, loading } = useAuth();
 
-  // While auth is resolving, show the marketing HTML that was already
-  // pre-rendered. Prevents a blank flash on cold loads.
-  if (loading) return <>{children}</>;
-
+  // While auth resolves, show marketing so the page isn't blank.
+  if (loading) return <MarketingHome nashikTurfs={nashikTurfs} puneTurfs={puneTurfs} />;
   if (user) return <LoggedInHome />;
-
-  return <>{children}</>;
+  return <MarketingHome nashikTurfs={nashikTurfs} puneTurfs={puneTurfs} />;
 }
