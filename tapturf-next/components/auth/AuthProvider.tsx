@@ -32,7 +32,10 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-// Build minimal AppUser fields from a Supabase auth user's metadata
+// Two auth paths, tracked so we can handle each independently.
+type AuthSource = "phone" | "oauth" | null;
+
+// Build AppUser fields from a Supabase auth user's metadata
 function buildUserFromSupabase(supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }): Omit<AppUser, "role"> & { role?: string; profile_image_url?: string } {
   return {
     id: supaUser.id,
@@ -45,11 +48,11 @@ function buildUserFromSupabase(supaUser: { id: string; email?: string; phone?: s
 
 /**
  * Read the phone-auth user out of localStorage synchronously so it's
- * available on the very first render. Prevents the "sometimes logged
- * in / sometimes not" flash that happens when the useEffect read races
- * with page rendering — especially painful on slower iPhones.
+ * available on the very first render (no auth flash on hydration).
+ * Silent-fails on corrupt JSON — we return null instead of nuking the
+ * keys so a transient parse hiccup can't log the user out.
  */
-function initialUserFromStorage(): AppUser | null {
+function readPhoneUser(): AppUser | null {
   if (typeof window === "undefined") return null;
   try {
     const token = localStorage.getItem("auth_token");
@@ -71,16 +74,15 @@ function initialUserFromStorage(): AppUser | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Seed from localStorage synchronously — no auth flash on hydration.
-  const initial = typeof window !== "undefined" ? initialUserFromStorage() : null;
+  // Seed from localStorage synchronously.
+  const initial = typeof window !== "undefined" ? readPhoneUser() : null;
   const [user, setUser] = useState<AppUser | null>(initial);
   const [loading, setLoading] = useState(initial === null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
   const supabaseRef = useRef(createClient());
-  const userSetRef = useRef(false);
-
+  const sourceRef = useRef<AuthSource>(initial ? "phone" : null);
   const supabase = supabaseRef.current;
 
   const dismissWelcome = useCallback(() => setWelcomeMessage(null), []);
@@ -94,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
     try {
-      // .limit(1) instead of .single() so we never throw on 0-rows or dup rows.
       const { data, error } = await supabase
         .from("users")
         .select("id, name, email, phone, role, profile_image_url")
@@ -125,18 +126,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const ensureUserInDB = useCallback(async (userData: {
     id: string; name: string; email?: string; phone?: string; profile_image_url?: string;
   }): Promise<AppUser> => {
-    // 1. Try lookup by id (fast path for Google users whose auth.id matches public.id)
     const byId = await fetchUserProfile(userData.id);
     if (byId) return byId;
 
-    // 2. Try lookup by email (recovers users whose public row was seeded
-    //    with a different id — happens with historical data)
     if (userData.email) {
       const byEmail = await fetchUserProfileByEmail(userData.email);
       if (byEmail) return byEmail;
     }
 
-    // 3. Insert fresh row
     try {
       const { data: inserted } = await supabase.from("users").insert([{
         id: userData.id,
@@ -152,7 +149,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn("[Auth] ensureUserInDB insert failed (likely RLS):", e);
     }
 
-    // 4. Fallback synthetic user so we at least render the header signed-in
     return {
       id: userData.id,
       name: userData.name,
@@ -163,13 +159,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [supabase, fetchUserProfile, fetchUserProfileByEmail]);
 
-  // ── Resolve a Supabase auth user into AppUser and set state ──
-
-  const resolveSupabaseUser = useCallback(async (supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }, shouldWelcome: boolean) => {
+  const resolveSupabaseUser = useCallback(async (
+    supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> },
+    shouldWelcome: boolean,
+  ) => {
     const meta = buildUserFromSupabase(supaUser);
     const dbUser = await ensureUserInDB(meta);
     setUser(dbUser);
-    userSetRef.current = true;
+    sourceRef.current = "oauth";
     if (shouldWelcome) showWelcome(dbUser.name?.split(" ")[0] || "");
   }, [ensureUserInDB, showWelcome]);
 
@@ -181,53 +178,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cancelled) setLoading(false);
     }, 3000);
 
-    // ── 1. Phone auth: instant from localStorage (no network) ──
-    const authToken = localStorage.getItem("auth_token");
-    const storedUser = localStorage.getItem("user");
-
-    if (authToken && storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        if (parsed.id) {
-          setUser({
-            id: parsed.id,
-            name: parsed.name || "User",
-            email: parsed.email,
-            phone: parsed.phone,
-            role: (parsed.role || "user") as AppUser["role"],
-            profile_image_url: parsed.profile_image_url,
-          });
-          userSetRef.current = true;
-          setLoading(false);
-          clearTimeout(emergencyTimeout);
-
-          fetchUserProfile(parsed.id).then(profile => {
-            if (profile && !cancelled) setUser(profile);
-          });
-        }
-      } catch {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("user");
+    // Called any time we might have lost/regained phone-auth localStorage
+    // (visibility change, storage event, or a Supabase SIGNED_OUT while
+    // there's still a phone token sitting there).
+    const rehydratePhone = () => {
+      const p = readPhoneUser();
+      if (p) {
+        setUser(p);
+        sourceRef.current = "phone";
+        setLoading(false);
+        return true;
       }
+      return false;
+    };
+
+    // ── 1. Phone auth: instant from localStorage ──
+    if (initial) {
+      sourceRef.current = "phone";
+      setLoading(false);
+      clearTimeout(emergencyTimeout);
+      // Freshen from DB in the background — non-blocking, and if it
+      // returns nothing we KEEP the localStorage user (don't nuke).
+      fetchUserProfile(initial.id).then((profile) => {
+        if (profile && !cancelled && sourceRef.current === "phone") setUser(profile);
+      });
     }
 
-    // ── 2. Google OAuth: onAuthStateChange with welcome flag support ──
-    // Check for ?welcome=1 in URL — set by /api/auth/callback on success —
-    // so the very first INITIAL_SESSION after Google login triggers the
-    // welcome toast + strips the param from the URL.
+    // ── 2. Google OAuth: onAuthStateChange + optional welcome flag ──
     const url = new URL(window.location.href);
     const shouldWelcomeFromCallback = url.searchParams.get("welcome") === "1";
     if (shouldWelcomeFromCallback) {
       url.searchParams.delete("welcome");
       window.history.replaceState({}, "", url.toString());
-
-      // When we just came back from Google, don't wait for
-      // onAuthStateChange (INITIAL_SESSION sometimes fires late on iOS
-      // and users end up seeing "logged out" until they refresh).
-      // Force-fetch the session immediately from the freshly-set cookies.
+      // Force-fetch the just-set cookies immediately.
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (cancelled) return;
-        if (session?.user && !userSetRef.current) {
+        if (session?.user && sourceRef.current !== "oauth") {
           resolveSupabaseUser(session.user, true);
           clearTimeout(emergencyTimeout);
           setLoading(false);
@@ -239,7 +225,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (event === "INITIAL_SESSION") {
-        if (session?.user && !userSetRef.current) {
+        // Only take the Supabase user if we don't already have someone
+        // via phone-auth (phone wins because it's what the user chose).
+        if (session?.user && sourceRef.current !== "phone") {
           await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
         }
         clearTimeout(emergencyTimeout);
@@ -248,24 +236,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === "SIGNED_IN" && session?.user) {
-        const isNewSignIn = !userSetRef.current;
+        const isNewSignIn = sourceRef.current === null;
         await resolveSupabaseUser(session.user, isNewSignIn);
         setShowLoginModal(false);
         setLoading(false);
-      } else if (event === "TOKEN_REFRESHED" && session?.user) {
-        // Don't re-welcome or re-fetch — just keep the current user object.
-        // resolveSupabaseUser would re-render everything; skip it here.
-      } else if (event === "SIGNED_OUT") {
+        return;
+      }
+
+      if (event === "TOKEN_REFRESHED") {
+        // No-op. Silent refresh — don't churn state.
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        // Only care about SIGNED_OUT if we were actually oauth. Phone
+        // users never had a Supabase session, so a spurious SIGNED_OUT
+        // (e.g. token-reuse detection wiping the wrong thing) must NOT
+        // log them out.
+        if (sourceRef.current !== "oauth") return;
+
+        // OAuth session gone. Before nuking user state, see if there's
+        // still a phone token sitting in localStorage we can fall back
+        // to — otherwise sign the user out.
+        if (rehydratePhone()) return;
         setUser(null);
-        userSetRef.current = false;
+        sourceRef.current = null;
         setLoading(false);
       }
     });
+
+    // ── 3. Robustness listeners ──
+    // Storage: another tab logged in/out, sync our state.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "user" && e.key !== "auth_token") return;
+      const p = readPhoneUser();
+      if (p) {
+        setUser(p);
+        sourceRef.current = "phone";
+      } else if (sourceRef.current === "phone") {
+        // Phone auth cleared in another tab. Only wipe user if we were
+        // phone — an oauth session might still be valid.
+        setUser(null);
+        sourceRef.current = null;
+      }
+    };
+
+    // Visibility: app came back into focus. Re-check localStorage in
+    // case iOS ITP or memory-pressure evicted it while we were away —
+    // if it's still there we keep the current user; if it was evicted
+    // AND we thought we were phone-auth, verify before wiping.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const p = readPhoneUser();
+      if (p) {
+        if (sourceRef.current !== "phone" || user?.id !== p.id) {
+          setUser(p);
+          sourceRef.current = "phone";
+        }
+      }
+      // If phone user is missing but we thought we had one, don't
+      // panic — the PWALifecycle full-reload will handle a stale
+      // state cleanly. Doing nothing here avoids race-y wipe loops.
+    };
+
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
       clearTimeout(emergencyTimeout);
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -274,10 +316,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(() => setShowLoginModal(true), []);
 
   const logout = useCallback(async () => {
+    // Intentional logout — clear BOTH sources.
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user");
-    // Dynamic import so the Firebase SDK isn't in the initial bundle
-    // just to serve the rare logout button click.
     try {
       const { getFirebaseAuth } = await import("@/lib/firebase/client");
       const auth = await getFirebaseAuth();
@@ -285,7 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* ignore */ }
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
-    userSetRef.current = false;
+    sourceRef.current = null;
   }, [supabase]);
 
   const refreshUser = useCallback(async () => {
@@ -300,8 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             phone: parsed.phone, role: parsed.role || "user", profile_image_url: parsed.profile_image_url,
           };
           setUser(nextUser);
-          userSetRef.current = true;
-          // Trigger welcome for phone-login success (called from PhoneOTPForm.finishLogin)
+          sourceRef.current = "phone";
           showWelcome(nextUser.name?.split(" ")[0] || "");
           return;
         }
@@ -312,7 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const profile = await fetchUserProfile(session.user.id);
-        if (profile) { setUser(profile); return; }
+        if (profile) { setUser(profile); sourceRef.current = "oauth"; return; }
       }
     } catch { /* ignore */ }
   }, [fetchUserProfile, supabase, showWelcome]);
