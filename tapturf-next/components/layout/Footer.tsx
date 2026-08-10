@@ -65,6 +65,21 @@ export function Footer() {
                   Pickleball
                 </Link>
               </li>
+              <li>
+                <Link href="/blog" className="hover:text-white transition-colors">
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link href="/nashik" className="hover:text-white transition-colors">
+                  Turfs in Nashik
+                </Link>
+              </li>
+              <li>
+                <Link href="/pune" className="hover:text-white transition-colors">
+                  Turfs in Pune
+                </Link>
+              </li>
             </ul>
           </div>
 

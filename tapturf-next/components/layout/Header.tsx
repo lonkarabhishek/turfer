@@ -68,6 +68,9 @@ export function Header() {
           <Link href="/sport/football" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
             Football
           </Link>
+          <Link href="/blog" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
+            Blog
+          </Link>
 
           {loading ? (
             <div className="ml-3 w-20 h-8 bg-primary-100 rounded-full animate-pulse" />

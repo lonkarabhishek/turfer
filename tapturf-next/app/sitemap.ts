@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { ALL_POSTS } from "@/content/blog";
 
 const BASE = "https://www.tapturf.in";
 
@@ -55,7 +56,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.9,
     },
+    {
+      url: `${BASE}/blog`,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
   ];
+
+  // Blog posts - static content, high SEO value for topical authority.
+  const blogPages: MetadataRoute.Sitemap = ALL_POSTS.map((p) => ({
+    url: `${BASE}/blog/${p.slug}`,
+    lastModified: new Date(p.updatedAt || p.publishedAt),
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
 
   const sportPages: MetadataRoute.Sitemap = sports.map((sport) => ({
     url: `${BASE}/sport/${sport}`,
@@ -85,5 +100,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     }));
 
-  return [...staticPages, ...sportPages, ...turfPages, ...gamePages];
+  return [
+    ...staticPages,
+    ...blogPages,
+    ...sportPages,
+    ...turfPages,
+    ...gamePages,
+  ];
 }
