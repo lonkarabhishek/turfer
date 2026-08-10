@@ -25,7 +25,7 @@ export function MobileNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-primary-200 md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-30 material-thin border-t border-primary-100/60 md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label="Primary"
     >

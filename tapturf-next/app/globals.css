@@ -70,6 +70,10 @@
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+  /* Optical sizing where the font supports it, gentle grade for
+     legibility. Body uses Inter which honours optical-sizing tables. */
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -78,6 +82,14 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Remove Chrome/Safari mobile's default blue tap highlight everywhere;
+   we replace it below with an instant scale-down that feels native. */
+button, a, [role="button"], summary, label[for] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Selection */
@@ -192,3 +204,162 @@ body {
 
 /* Legacy .scanline no-op on light */
 .scanline { position: relative; }
+
+/* ─── Apple-style press & hover feedback ────────────────
+   Response is the foundation of every fluid interface.
+   `.press` scales down on pointer-down (100ms) so touches
+   register instantly. Applied globally to <button> and
+   role="button" so we don't have to sprinkle it. Opt-in
+   via .press-tight for anchor tags. */
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+.press-tight {
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1),
+              filter    120ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active,
+.press-tight:active {
+  transform: scale(0.965);
+  transition-duration: 50ms;
+}
+
+/* .card-lift — subtle hover elevation for card-shaped links.
+   Skips on touch devices (no hover state) so it doesn't stick. */
+.card-lift {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .card-lift:hover {
+    transform: translateY(-3px);
+  }
+}
+.card-lift:active {
+  transform: translateY(0) scale(0.995);
+  transition-duration: 90ms;
+}
+
+/* ─── Material surfaces ────────────────────────────────
+   Translucent chrome with backdrop-filter. Content scrolls
+   under, the surface reads as a real material. Two weights:
+   `.material-thin` (headers) and `.material-thick` (sheets). */
+
+.material-thin {
+  background-color: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: saturate(1.6) blur(18px);
+          backdrop-filter: saturate(1.6) blur(18px);
+}
+.material-thick {
+  background-color: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: saturate(1.8) blur(28px);
+          backdrop-filter: saturate(1.8) blur(28px);
+}
+/* Bright top edge — reads as light catching the material. */
+.material-thin,
+.material-thick {
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Scroll-edge fade for content meeting a translucent header —
+   softer than a hard 1px divider. Apply to the scrolling area. */
+.scroll-edge-top {
+  mask-image: linear-gradient(180deg, transparent 0, black 24px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, black 24px);
+}
+
+/* ─── Type polish ──────────────────────────────────────
+   Size-specific tracking. Large text wants slightly negative
+   letter-spacing so glyphs don't feel too far apart. Body stays
+   at 0. Apply `.text-display-*` where you want the tuning. */
+
+.text-display-xl {
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+.text-display-lg {
+  font-size: clamp(2rem, 4.5vw, 3.25rem);
+  line-height: 1.0;
+  letter-spacing: -0.015em;
+}
+.text-display-md {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+/* Small labels: a tiny positive bump keeps micro caps readable. */
+.text-caps {
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+/* Body reset — Inter's own tracking is already good; just make sure
+   we don't inherit a stray letter-spacing that shouldn't apply. */
+p, li { letter-spacing: 0; }
+
+/* ─── Focus polish ─────────────────────────────────────
+   Keyboard-only focus ring, kept off pointer clicks so mice/
+   touches don't get a jarring outline every tap. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid #16A34A;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Accessibility: reduced motion & transparency ────
+   The skill is explicit: reduced-motion doesn't mean NO
+   feedback, it means gentle non-vestibular equivalents.
+   Cross-fades instead of springs; solid instead of blur. */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  .press-tight:active,
+  .card-lift:hover,
+  .card-lift:active {
+    transform: none;
+  }
+
+  /* Keep opacity fades (they aid comprehension) but drop
+     translation/spring animations. */
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-lightbox {
+    animation-duration: 180ms !important;
+    animation-timing-function: ease-out !important;
+  }
+  @keyframes fadeIn        { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes slideUp       { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes slideDown     { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes fadeInOverlay { from { opacity: 0 } to { opacity: 1 } }
+  .pulse-live, .gold-shimmer, .neon-shimmer { animation: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .material-thin,
+  .material-thick {
+    background-color: #FFFFFF;
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+    border-top-color: rgba(15, 23, 42, 0.08);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .material-thin,
+  .material-thick {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+  }
+}

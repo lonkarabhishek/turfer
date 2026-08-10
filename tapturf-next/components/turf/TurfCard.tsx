@@ -32,7 +32,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
       href={`/turf/${turf.id}`}
       className="block group rounded-2xl focus-neon"
     >
-      <article className="relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover transition-all">
+      <article className="card-lift relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover">
         {/* Image */}
         <div className="relative w-full aspect-[4/3] overflow-hidden bg-primary-100">
           {coverImage && !imgError ? (

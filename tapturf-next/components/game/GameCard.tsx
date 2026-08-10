@@ -17,7 +17,7 @@ export function GameCard({ game }: { game: Game }) {
       className="block group rounded-2xl focus-neon"
     >
       <article
-        className={`relative overflow-hidden rounded-2xl border transition-all bg-white ${
+        className={`card-lift relative overflow-hidden rounded-2xl border bg-white ${
           isFull
             ? "border-primary-200 opacity-70"
             : "border-primary-200 hover:border-accent-500 hover:shadow-card-hover"

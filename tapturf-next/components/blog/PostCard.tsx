@@ -10,7 +10,7 @@ export function PostCard({ post, featured = false }: { post: Post; featured?: bo
   return (
     <Link
       href={`/blog/${post.slug}`}
-      className={`group block rounded-3xl border border-primary-200 bg-white overflow-hidden hover:border-primary-300 hover:shadow-elevated transition-all ${
+      className={`card-lift group block rounded-3xl border border-primary-200 bg-white overflow-hidden hover:border-primary-300 hover:shadow-elevated ${
         featured ? "md:col-span-2" : ""
       }`}
     >
