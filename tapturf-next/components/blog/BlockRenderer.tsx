@@ -100,6 +100,50 @@ export function BlockRenderer({ block }: { block: Block }) {
       );
     }
 
+    case "turf":
+      return (
+        <Link
+          href={`/turf/${block.id}`}
+          className="group block my-6 rounded-2xl border border-primary-200 bg-white hover:border-accent-300 hover:shadow-elevated transition-all overflow-hidden"
+        >
+          <div className="flex items-stretch">
+            {block.rank !== undefined && (
+              <div className="flex-shrink-0 w-16 md:w-20 bg-primary-900 text-white flex items-center justify-center">
+                <span className="font-display text-3xl md:text-4xl leading-none">
+                  {block.rank}
+                </span>
+              </div>
+            )}
+            <div className="flex-1 p-5">
+              <div className="flex items-start justify-between gap-3 mb-1.5">
+                <h3 className="font-semibold text-lg md:text-xl text-primary-900 group-hover:text-accent-600 transition-colors leading-tight">
+                  {block.name}
+                </h3>
+                {block.rating !== undefined && (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-accent-50 border border-accent-200 px-2.5 py-1 text-xs font-bold text-accent-700">
+                    ★ {block.rating}
+                    {block.reviews !== undefined && (
+                      <span className="text-accent-500 font-medium">
+                        ({block.reviews})
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-primary-500 mb-2">{block.area}</p>
+              {block.note && (
+                <p className="text-[15px] leading-snug text-primary-700">
+                  {block.note}
+                </p>
+              )}
+              <p className="mt-3 text-xs font-bold uppercase tracking-widest text-accent-600 group-hover:text-accent-700">
+                View turf &rarr;
+              </p>
+            </div>
+          </div>
+        </Link>
+      );
+
     default: {
       // Exhaustiveness check.
       const _never: never = block;

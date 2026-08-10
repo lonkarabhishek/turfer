@@ -10,7 +10,18 @@ export type Block =
   | { type: "ol"; items: string[] }
   | { type: "quote"; text: string; by?: string }
   | { type: "callout"; title: string; text: string }
-  | { type: "cta"; text: string; href: string; label: string };
+  | { type: "cta"; text: string; href: string; label: string }
+  // Linked turf callout. Renders as a card, cross-links to /turf/[id].
+  | {
+      type: "turf";
+      rank?: number;
+      id: string;
+      name: string;
+      area: string;
+      rating?: string | number;
+      reviews?: number;
+      note?: string;
+    };
 
 export type PostCategory =
   | "Best Turfs"

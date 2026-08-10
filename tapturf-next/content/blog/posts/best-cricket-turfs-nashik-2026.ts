@@ -4,13 +4,13 @@ export const post: Post = {
   slug: "best-cricket-turfs-nashik-2026",
   title: "10 Best Cricket Turfs in Nashik (2026 Guide)",
   description:
-    "The 10 best cricket turfs in Nashik for 2026, pitch quality, floodlights, pricing, and which one to pick for your weekend match.",
-  hook: "Where Nashik actually plays its weekend cricket, ranked by pitch, price, and vibes.",
+    "The 10 best cricket turfs in Nashik for 2026, ranked by real Google ratings, review volume, and playability. Named venues across Panchavati, Deolali, Indira Nagar, and beyond.",
+  hook: "Every one of these picks is a real, working ground with a Google rating to back it up.",
   category: "Best Turfs",
   city: "nashik",
-  readMinutes: 8,
+  readMinutes: 9,
   publishedAt: "2026-07-14",
-  updatedAt: "2026-08-01",
+  updatedAt: "2026-08-10",
   coverEmoji: "🏏",
   keywords: [
     "best cricket turfs nashik",
@@ -19,105 +19,248 @@ export const post: Post = {
     "book turf nashik",
     "cricket turf nashik price",
     "turf near me nashik",
+    "ssk world club",
+    "champions turf nashik",
+    "home ground turf nashik",
+    "big bounce turf nashik",
   ],
   blocks: [
     {
       type: "p",
-      text: "Nashik's cricket-turf scene has quietly gone from a handful of grounds to close to 50 across the city. The upside: you can almost always find a slot. The downside: pitch quality, floodlight coverage, and pricing swing wildly, and there's no easy way to tell before you show up. We've played on most of them. Here's a straight-talking ranking of the 10 we'd book again without thinking.",
+      text: "Nashik has nearly 50 active cricket turfs across the city. That's great for availability, terrible for choosing. This shortlist is not made up. Every ground below is a real venue with a real Google rating from real players, ranked using a mix of pitch quality, review volume, and how consistently the squad we play with actually shows up.",
     },
     {
       type: "callout",
       title: "How we ranked them",
-      text: "Four things carry weight, pitch bounce and turf consistency, floodlight coverage after 7pm, ease of parking + drinking water, and honest pricing versus what you actually get on the ground.",
+      text: "We weighted Google rating, number of reviews (a 5.0 from 12 people is less trustworthy than a 4.5 from 800), pitch and floodlight quality reported by actual players, and neighbourhood spread so this list is useful whichever end of Nashik you live in.",
     },
 
-    { type: "h2", text: "1. The go-to for weekend league cricket" },
+    { type: "h2", text: "1. The SSK World Club, Pathardi Phata" },
     {
       type: "p",
-      text: "If your squad plays every weekend, you want a turf where the bounce is honest, the boundaries are marked, and you don't have to fight for a slot two weeks out. The best ones in Nashik sit around the Gangapur Road and College Road belt, proper LED floodlights, clean nets, and a rest area that doesn't feel like an afterthought. Expect to pay ₹1,200–₹1,800 an hour for prime evening slots.",
+      text: "The most-reviewed cricket turf in Nashik and it's not close. 825 Google reviews, a solid 4.5 rating, and a proper multi-sport setup. If you want the safe pick that your whole squad has probably already heard of, this is it.",
+    },
+    {
+      type: "turf",
+      rank: 1,
+      id: "a2638e0d-ef2f-4b79-a8e6-745335fc0ab7",
+      name: "The SSK World Club",
+      area: "Pathardi Phata",
+      rating: "4.5",
+      reviews: 825,
+      note: "Big multi-sport setup on Pathardi-Gaulane Road. Cricket, football, plenty of parking. The default weekend pick.",
     },
 
-    { type: "h2", text: "2. The best value box-cricket setups" },
+    { type: "h2", text: "2. Big Bounce Turf, Govind Nagar" },
     {
       type: "p",
-      text: "Box cricket rewards a smaller, quicker turf. The value picks in Nashik are the ones with proper nets on all four sides (no half-nets that force you to fetch every second ball), a synthetic pitch that doesn't skid, and honest 60x30 dimensions. Look for turfs charging ₹700–₹1,100 an hour and offering a 4-hour block discount, that's where the real value is.",
+      text: "Right in the middle of the Govind Nagar / Tidke Colony belt. 448 reviews at 4.4 is the second-highest volume in Nashik, which tells you people keep coming back. Popular for regular weekly squads because the location is easy for anyone driving from College Road or Gangapur Road.",
+    },
+    {
+      type: "turf",
+      rank: 2,
+      id: "0ee6f4dd-011c-4540-a958-1adb6a4f23a2",
+      name: "Big Bounce Turf",
+      area: "Govind Nagar",
+      rating: "4.4",
+      reviews: 448,
+      note: "On New Tidke Colony Road. Cricket, football, yoga. Consistently busy, book 4–5 days out for weekend evenings.",
     },
 
-    { type: "h2", text: "3. What to look for before you book" },
+    { type: "h2", text: "3. Galaxy Sports Club, Savarkar Nagar" },
+    {
+      type: "p",
+      text: "One of the more complete facilities on this list, with cricket, football, volleyball, pool and badminton in the same complex. 4.4 rating from 289 reviews. Weekend evening slots hover around ₹800, which is honest for what you get.",
+    },
+    {
+      type: "turf",
+      rank: 3,
+      id: "22aef796-e805-44f7-8e0c-57535ca9ba29",
+      name: "Galaxy Sports Club",
+      area: "Savarkar Nagar",
+      rating: "4.4",
+      reviews: 289,
+      note: "Behind Nandanawan Lawns. Multi-sport, weekend evening ₹800/hr, weekday evening ₹600/hr. Good value for the setup.",
+    },
+
+    { type: "h2", text: "4. The Home Ground Turf, near Asaram Bapu Bridge" },
+    {
+      type: "p",
+      text: "A 4.5 rating from 265 reviews puts this near the top on quality. Sits close to Asaram Bapu Bridge which makes it easy to reach from Panchavati, Nashik Road, and the College Road corridor. Cricket, football, and yoga on the same ground.",
+    },
+    {
+      type: "turf",
+      rank: 4,
+      id: "338a4058-9148-49db-8555-7d8fe47f926c",
+      name: "The Home Ground Turf",
+      area: "Near West Wind Meadows, Asaram Bapu Bridge",
+      rating: "4.5",
+      reviews: 265,
+      note: "Central location, opposite Hotel Bar O Bar. Reliable turf for weekend games with mixed neighbourhoods in the squad.",
+    },
+
+    { type: "h2", text: "5. Champion's Turf, Panchavati" },
+    {
+      type: "p",
+      text: "One of the best-rated venues on this list. 4.7 from 219 reviews is a serious signal. Amrutdham Road location makes it the natural pick for anyone in Panchavati or the old-city belt. Cricket, football, yoga.",
+    },
+    {
+      type: "turf",
+      rank: 5,
+      id: "30cc2746-c679-4715-a1aa-d9eef42bb64c",
+      name: "Champion's Turf",
+      area: "Amrutdham Road, Panchavati",
+      rating: "4.7",
+      reviews: 219,
+      note: "In Shiv Krupa Nagar. High rating, decent volume, best pick for Panchavati-side squads.",
+    },
+
+    { type: "h2", text: "6. Chatrapati Shivaji Maharaj Cricket Turf, Dattanagar" },
+    {
+      type: "p",
+      text: "The highest-rated cricket-first turf in Nashik with meaningful review volume: 4.9 from 177 reviews. If you're a cricket purist and don't need football on the same pitch, this is the one to visit.",
+    },
+    {
+      type: "turf",
+      rank: 6,
+      id: "d284445e-9811-420b-9d55-e6359229f7ed",
+      name: "Chatrapati Shivaji Maharaj Cricket Turf",
+      area: "Dattanagar, Naikwadipura",
+      rating: "4.9",
+      reviews: 177,
+      note: "Cricket-first turf with an almost-perfect rating. Best pick for serious weekend cricket.",
+    },
+
+    { type: "h2", text: "7. Greenfield The Multisport Turf, Gangotri Vihar" },
+    {
+      type: "p",
+      text: "Near K.K. Wagh Engineering College, so it gets a healthy student and young-professional crowd. 4.4 rating from 140 reviews. Weekend evening pricing lands around ₹600/hr which is one of the better value spots on the list.",
+    },
+    {
+      type: "turf",
+      rank: 7,
+      id: "d69fea11-51a9-4c58-bd1c-1a60bf5e03d2",
+      name: "Greenfield The Multisport Turf",
+      area: "Gangotri Vihar, near K.K. Wagh Engineering College",
+      rating: "4.4",
+      reviews: 140,
+      note: "Great value at around ₹600/hr weekend evening. Popular with student squads.",
+    },
+
+    { type: "h2", text: "8. Kridabhumi The Multisports Turf, Tigrania Road" },
+    {
+      type: "p",
+      text: "Behind Maruti Wafers on Tigrania Road, so easy access from the northern part of the city. 4.4 rating from 136 reviews. Cricket, football, yoga. Solid mid-tier pick if the top options are booked out.",
+    },
+    {
+      type: "turf",
+      rank: 8,
+      id: "7701d4fe-93bb-4ad1-ad87-bb03f4f66c63",
+      name: "Kridabhumi - The Multisports Turf",
+      area: "Tigrania Road",
+      rating: "4.4",
+      reviews: 136,
+      note: "Reliable backup when the top three are fully booked for the weekend.",
+    },
+
+    { type: "h2", text: "9. Aangan The Multisport's Turf, Deolali Camp" },
+    {
+      type: "p",
+      text: "The best-rated option on the Deolali side. 4.7 from 83 reviews. Weekend evening pricing at ₹800/hr, which is fair for the quality. If you live in Deolali or Nashik Road and want to skip the drive to the west of the city, this is the one.",
+    },
+    {
+      type: "turf",
+      rank: 9,
+      id: "a0505199-c162-425b-b546-58aec3250806",
+      name: "Aangan - The Multisport's Turf",
+      area: "Deolali Camp",
+      rating: "4.7",
+      reviews: 83,
+      note: "Deolali's top pick. Weekend evening ₹800/hr. Saves the west-Nashik drive for eastside squads.",
+    },
+
+    { type: "h2", text: "10. New Nashik Gymkhana Cricket Academy, Indira Nagar" },
+    {
+      type: "p",
+      text: "Rounding out the ten: a 4.6 rating from 38 reviews. Behind the Pethe Nagar police station in Indira Nagar. Smaller review volume than the top nine, but the actual play experience is consistently rated well and the location is convenient for the Indira Nagar / Pathardi corridor.",
+    },
+    {
+      type: "turf",
+      rank: 10,
+      id: "ca4d1da1-c844-4659-8554-9b75ac2b00b4",
+      name: "New Nashik Gymkhana Cricket Academy",
+      area: "Indira Nagar, behind Pethe Nagar police station",
+      rating: "4.6",
+      reviews: 38,
+      note: "Consistent quality, good for Indira Nagar / Pathardi corridor squads.",
+    },
+
+    { type: "h2", text: "Honourable mentions" },
+    {
+      type: "p",
+      text: "Two more worth flagging that just missed the ten. Both are highly rated but with smaller review volumes, so proof-of-quality is a bit thinner. Both are worth visiting.",
+    },
+    {
+      type: "turf",
+      id: "0d25fca4-48c3-4ce0-be43-a5f63c2111ff",
+      name: "The Royal MultiSports Turf",
+      area: "Vaiduwadi, near Northland",
+      rating: "5.0",
+      reviews: 63,
+      note: "A perfect 5-star rating (with 63 reviews so far). If the volume keeps climbing this will be top-three next year.",
+    },
+    {
+      type: "turf",
+      id: "d033ec2d-ad3a-447a-98a4-79b677ef55fb",
+      name: "Ranangan The Multisport's Best Turf in Nashik",
+      area: "Mahirawani, Trambakeshwar Road",
+      rating: "4.8",
+      reviews: 32,
+      note: "On the way to Trambakeshwar, near Sandip Foundation College. Best pick if you're on the western outskirts.",
+    },
+
+    { type: "h2", text: "How to pick between them" },
     {
       type: "ul",
       items: [
-        "Pitch material, quality astroturf with a rubber-crumb infill plays best. Cheaper mat-on-cement bounces unpredictably.",
-        "Floodlight coverage, walk the boundary, not just the pitch. Corners going dark ruin catching in the deep.",
-        "Boundary rope + safety nets, a 6ft net on the boundary saves lost balls and neighbour complaints.",
-        "Toilets + drinking water, non-negotiable for a 2-hour slot with 12 people.",
-        "Parking. Nashik weekend crowds mean 15 mins of circling if the turf shares its lot with a wedding hall.",
+        "Weekend squad in College Road / Gangapur belt: Big Bounce Turf or The Home Ground Turf.",
+        "Cricket purists who want the best-rated pitch: Chatrapati Shivaji Maharaj Cricket Turf.",
+        "Panchavati / old city: Champion's Turf.",
+        "Deolali / Nashik Road: Aangan.",
+        "Best pure-value evening slot: Greenfield or Galaxy Sports Club.",
+        "You want the safe, high-volume default: The SSK World Club.",
       ],
     },
 
-    { type: "h2", text: "4. Neighbourhoods to filter by" },
-    {
-      type: "p",
-      text: "If you're driving from Panchavati or the old city, cluster your search around Dwarka and Ashok Stambh, you'll save 20 minutes each way versus heading to College Road. Living in Indira Nagar or Gangapur? Stick to the Gangapur Road corridor. Deolali and Nashik Road have their own solid options and are usually cheaper because demand thins out after 9pm.",
-    },
-
-    { type: "h2", text: "5. Pricing you should expect in 2026" },
+    { type: "h2", text: "What we looked for on the ground" },
     {
       type: "ul",
       items: [
-        "Off-peak weekday morning (6–9am): ₹500–₹800 per hour",
-        "Weekday evening (7–10pm): ₹1,000–₹1,500 per hour",
-        "Weekend evening prime slot (6–10pm): ₹1,500–₹2,200 per hour",
-        "Late night (10pm–1am): ₹800–₹1,200 per hour, great if your squad doesn't mind the hour",
+        "Real astroturf with rubber-crumb infill, not a green mat over concrete.",
+        "Floodlights that cover the full boundary, not just the pitch.",
+        "Working toilets and drinking water on site.",
+        "Parking that fits at least 6 to 8 cars without spilling onto the road.",
+        "Boundary nets tall enough to save you from losing balls into the compound next door.",
       ],
     },
 
-    { type: "h2", text: "6. When to book" },
+    { type: "h2", text: "When to book each of these" },
     {
       type: "p",
-      text: "The good news: most Nashik turfs open bookings 7–10 days in advance. The bad news: prime weekend evening slots at the top 5 grounds are gone by Wednesday. Rule of thumb, if you want Saturday 7pm at a name turf, book by Monday. Weekday slots you can grab same-day, especially before 6pm.",
-    },
-
-    { type: "h2", text: "7. Skip these red flags" },
-    {
-      type: "ul",
-      items: [
-        "\"Astroturf\" listings that show up as a green mat over concrete, that's not turf, that's a skating rink for cricket balls.",
-        "No visible floodlight photos on the listing, probably four bulbs on poles, which is not the same as flood coverage.",
-        "Turfs that don't publish a per-hour rate and want to \"discuss on WhatsApp\", you'll always be quoted the peak rate.",
-        "Any turf that refuses to let you visit the ground before your first booking.",
-      ],
-    },
-
-    { type: "h2", text: "8. What a good weekend match looks like" },
-    {
-      type: "p",
-      text: "12 friends, 2-hour slot, 8-over-a-side, ₹100 per person for the turf, ₹80 for the wicket-keeping gloves you all forgot to bring. Total damage: under ₹200 a head for a 2-hour, floodlit, proper cricket match. That's what a properly-picked Nashik turf gets you.",
+      text: "For the top five (SSK, Big Bounce, Galaxy, Home Ground, Champion's), lock weekend evening slots at least 5 to 7 days out. Weekday evenings 3 to 4 days out. Weekend mornings and late-night slots you can often grab same-day, and you'll pay 25 to 40 percent less.",
     },
 
     {
       type: "cta",
-      text: "See every active cricket turf in Nashik, filtered by neighbourhood and price.",
+      text: "Every one of these turfs on TapTurf, with availability, amenities and honest pricing.",
       href: "/nashik",
       label: "Browse Nashik turfs",
     },
 
-    { type: "h2", text: "9. Group bookings and tournaments" },
-    {
-      type: "p",
-      text: "Planning a full-day corporate tournament or an inter-society league? Almost every top turf in Nashik will negotiate a day-rate if you're booking 6+ hours, and most throw in scoring boards, umpires, and a basic sound system for large bookings. Ask early, day rates require the turf to block other bookings, so a 2-week lead time is realistic.",
-    },
-
-    { type: "h2", text: "10. The one thing that separates a great turf from a good one" },
-    {
-      type: "p",
-      text: "Staff. A turf where someone actually greets you, hands over the equipment kit without a debate, and helps you switch off the lights when you're done is a turf you'll come back to every weekend. Cheap turfs skimp on staffing and you feel it, locked stumps, no water, floodlights that trip an hour in. Pay ₹200 more per hour for the turf with a full-time manager; you'll thank yourself.",
-    },
-
     {
       type: "callout",
-      title: "The short answer",
-      text: "For a weekend match, book a Gangapur Road or College Road corridor turf 4–5 days out. For weekday practice, any well-lit turf in Deolali or Nashik Road at half the price. For box cricket, go for a proper 60x30 with net coverage on all four sides.",
+      title: "TL;DR",
+      text: "For volume and safety, SSK World Club. For rating quality, Chatrapati Shivaji Maharaj. For neighbourhood coverage, pick from Champion's (Panchavati), Home Ground (central), Aangan (Deolali), Galaxy (Savarkar Nagar).",
     },
   ],
 };
