@@ -32,9 +32,29 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** e.g. "3d ago", "5h ago", "just now", "6mo ago". */
+function relativeTime(iso: string | null): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const s = Math.max(0, Math.floor((now - then) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  const y = Math.floor(d / 365);
+  return `${y}y ago`;
 }
 
 export default async function AdminPage() {
@@ -69,6 +89,20 @@ export default async function AdminPage() {
     getActiveUsers(7),
     getActiveUsers(30),
   ]);
+
+  // Detect batch-backfill: any created_at that appears on 2+ rows almost
+  // certainly came from a bulk migration rather than a real user signup
+  // (we ran one to backfill OAuth users into public.users). Flag those
+  // so we don't misrepresent the row-insert time as the true signup.
+  const backfillTs = new Set<string>();
+  {
+    const seen = new Map<string, number>();
+    recentUsers.forEach((u) => {
+      if (!u.created_at) return;
+      seen.set(u.created_at, (seen.get(u.created_at) || 0) + 1);
+    });
+    seen.forEach((n, ts) => { if (n > 1) backfillTs.add(ts); });
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 md:py-12">
@@ -112,12 +146,21 @@ export default async function AdminPage() {
       </div>
 
       {/* Top-line tiles */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
+        <StatTile
+          label="Unique people"
+          value={headline.uniquePeople}
+          sub={
+            headline.duplicateUsers > 0
+              ? `${headline.duplicateUsers} duplicate row${headline.duplicateUsers === 1 ? "" : "s"} merged`
+              : "No duplicates"
+          }
+          tone="accent"
+        />
         <StatTile
           label="Total users"
           value={headline.totalUsers}
-          sub={`+${headline.signups7d} this week`}
-          tone="accent"
+          sub="Raw row count"
         />
         <StatTile
           label="Total games"
@@ -125,6 +168,25 @@ export default async function AdminPage() {
           sub={`+${headline.games7d} this week`}
         />
         <StatTile label="Active turfs" value={headline.activeTurfs} />
+      </section>
+
+      {/* Signups + notifications tiles */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+        <StatTile
+          label="Unique signups (7d)"
+          value={headline.uniqueSignups7d}
+          sub={`${headline.signups7d} rows`}
+        />
+        <StatTile
+          label="Unique signups (30d)"
+          value={headline.uniqueSignups30d}
+          sub={`${headline.signups30d} rows`}
+        />
+        <StatTile
+          label="Requests"
+          value={headline.totalRequests}
+          sub="All-time"
+        />
         <StatTile
           label="Notifications"
           value={headline.totalNotifications}
@@ -150,7 +212,7 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* Activity + breakdowns */}
+      {/* Activity tiles */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         <StatTile
           label="Active users (7d)"
@@ -162,11 +224,14 @@ export default async function AdminPage() {
           value={active30}
           sub="Hosted or requested"
         />
-        <StatTile label="Signups (30d)" value={headline.signups30d} />
         <StatTile
-          label="Requests"
-          value={headline.totalRequests}
-          sub="All-time"
+          label="Games (30d)"
+          value={headline.games30d}
+          sub={`${headline.games7d} in last 7d`}
+        />
+        <StatTile
+          label="Games (all-time)"
+          value={headline.totalGames}
         />
       </section>
 
@@ -218,8 +283,26 @@ export default async function AdminPage() {
                     <td className="px-4 py-3">
                       <MethodBadge method={u.method} />
                     </td>
-                    <td className="px-4 py-3 text-right text-primary-500 font-mono text-xs">
-                      {formatDate(u.created_at)}
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className="text-primary-800 font-semibold text-xs">
+                          {relativeTime(u.created_at)}
+                        </span>
+                        <span
+                          className="font-mono text-[10px] text-primary-400"
+                          title={u.created_at || ""}
+                        >
+                          {formatDate(u.created_at)}
+                          {u.created_at && backfillTs.has(u.created_at) && (
+                            <span
+                              className="ml-1 text-hot-500"
+                              title="This timestamp is shared by multiple rows — likely a batch backfill, not the real signup"
+                            >
+                              *
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -271,8 +354,14 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      <footer className="text-xs text-primary-400 text-center mt-10 pb-8">
-        Owner-only view. Not indexed. Not linked from anywhere.
+      <footer className="text-xs text-primary-400 text-center mt-10 pb-8 space-y-1">
+        <p>
+          <span className="text-hot-500">*</span> means the joined date is a
+          bulk backfill timestamp shared across multiple rows. The real
+          signup date lives in <code>auth.users</code> and isn&apos;t
+          exposed here.
+        </p>
+        <p>Owner-only view. Not indexed. Not linked from anywhere.</p>
       </footer>
     </div>
   );

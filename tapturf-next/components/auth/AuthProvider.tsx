@@ -73,6 +73,29 @@ function readPhoneUser(): AppUser | null {
   }
 }
 
+// Mirror the current phone-auth user id to a browser cookie the server
+// can read. Phone auth lives entirely in localStorage (no Supabase auth
+// session), so without this the server has no way to identify a
+// phone-auth user for things like the owner-only /admin guard.
+//
+// - `tt_uid=<uuid>` with 30-day max-age, path=/, SameSite=Lax.
+// - Not HttpOnly on purpose (we set/clear it from JS).
+// - Only ever carries the users.id UUID, never a secret.
+function writeUidCookie(uid: string | null) {
+  if (typeof document === "undefined") return;
+  try {
+    if (uid) {
+      const maxAge = 60 * 60 * 24 * 30; // 30 days
+      const secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `tt_uid=${encodeURIComponent(uid)}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
+    } else {
+      document.cookie = "tt_uid=; path=/; max-age=0; SameSite=Lax";
+    }
+  } catch {
+    /* cookie writes can fail in odd contexts (Safari private) — ignore */
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Seed from localStorage synchronously.
   const initial = typeof window !== "undefined" ? readPhoneUser() : null;
@@ -324,14 +347,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep the server-readable `tt_uid` cookie in sync with the current
+  // user id. This is what the /admin guard reads for phone-auth users.
+  useEffect(() => {
+    writeUidCookie(user?.id ?? null);
+  }, [user?.id]);
+
   // ── Actions ──
 
   const login = useCallback(() => setShowLoginModal(true), []);
 
   const logout = useCallback(async () => {
-    // Intentional logout — clear BOTH sources.
+    // Intentional logout, clear BOTH sources.
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user");
+    writeUidCookie(null);
     try {
       const { getFirebaseAuth } = await import("@/lib/firebase/client");
       const auth = await getFirebaseAuth();

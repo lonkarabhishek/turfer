@@ -13,8 +13,12 @@ const supa = () => createReadOnlyClient();
 
 export interface AdminHeadline {
   totalUsers: number;
+  uniquePeople: number;
+  duplicateUsers: number;
   signups7d: number;
   signups30d: number;
+  uniqueSignups7d: number;
+  uniqueSignups30d: number;
   totalGames: number;
   games7d: number;
   games30d: number;
@@ -53,6 +57,76 @@ export interface TopHost {
 
 // ── Queries ──
 
+/**
+ * Reduces a raw phone string to a comparable form: digits only, drop
+ * an Indian country code if present. Matches `normalisePhone` in
+ * lib/admin/auth.ts so lookups line up.
+ */
+function normPhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const digits = raw.replace(/\D+/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+/**
+ * Group users so one real person counts once even if they signed up with
+ * both a phone and a Google account. Returns the count of unique people
+ * and, in-place, the earliest created_at per person (used for daily
+ * unique-signup charts).
+ *
+ * The rule: two rows are the same person if they share (a) email OR
+ * (b) normalised phone. Otherwise each row is its own person.
+ */
+export interface Person {
+  key: string; // stable id: email if present, else phone, else row id
+  earliestSignup: string; // ISO
+  rowCount: number;
+}
+function dedupeUsers(
+  rows: { id: string; email: string | null; phone: string | null; created_at: string | null }[]
+): Person[] {
+  // Union-find over (email) and (phone) keys.
+  const parent = new Map<string, string>();
+  const find = (k: string): string => {
+    let r = parent.get(k) || k;
+    while (r !== parent.get(r) && parent.get(r)) r = parent.get(r)!;
+    parent.set(k, r);
+    return r;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+
+  const rowKey = new Map<string, string>();
+  rows.forEach((r) => {
+    const emailKey = r.email ? `e:${r.email.toLowerCase().trim()}` : null;
+    const phoneKey = r.phone ? `p:${normPhone(r.phone)}` : null;
+    const primary = emailKey || phoneKey || `i:${r.id}`;
+    parent.set(primary, primary);
+    if (emailKey) parent.set(emailKey, parent.get(emailKey) || emailKey);
+    if (phoneKey) parent.set(phoneKey, parent.get(phoneKey) || phoneKey);
+    if (emailKey && phoneKey) union(emailKey, phoneKey);
+    rowKey.set(r.id, primary);
+  });
+
+  const byRoot = new Map<string, Person>();
+  rows.forEach((r) => {
+    const primary = rowKey.get(r.id)!;
+    const root = find(primary);
+    const existing = byRoot.get(root);
+    const created = r.created_at || "9999";
+    if (!existing) {
+      byRoot.set(root, { key: root, earliestSignup: created, rowCount: 1 });
+    } else {
+      existing.rowCount += 1;
+      if (created < existing.earliestSignup) existing.earliestSignup = created;
+    }
+  });
+  return Array.from(byRoot.values());
+}
+
 export async function getHeadline(): Promise<AdminHeadline> {
   const s = supa();
   const now = new Date();
@@ -60,9 +134,7 @@ export async function getHeadline(): Promise<AdminHeadline> {
   const iso30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
-    users,
-    signups7,
-    signups30,
+    allUsers,
     games,
     games7,
     games30,
@@ -71,9 +143,9 @@ export async function getHeadline(): Promise<AdminHeadline> {
     notif,
     unread,
   ] = await Promise.all([
-    s.from("users").select("*", { count: "exact", head: true }),
-    s.from("users").select("*", { count: "exact", head: true }).gte("created_at", iso7d),
-    s.from("users").select("*", { count: "exact", head: true }).gte("created_at", iso30d),
+    // Full user set so we can dedupe in memory. Only ~50 rows today, and
+    // even at 10k this is fine for an owner-only page.
+    s.from("users").select("id, email, phone, created_at"),
     s.from("games").select("*", { count: "exact", head: true }),
     s.from("games").select("*", { count: "exact", head: true }).gte("created_at", iso7d),
     s.from("games").select("*", { count: "exact", head: true }).gte("created_at", iso30d),
@@ -83,10 +155,26 @@ export async function getHeadline(): Promise<AdminHeadline> {
     s.from("notifications").select("*", { count: "exact", head: true }).eq("is_read", false),
   ]);
 
+  const rows = allUsers.data || [];
+  const totalUsers = rows.length;
+  const people = dedupeUsers(rows);
+  const uniquePeople = people.length;
+  const duplicateUsers = totalUsers - uniquePeople;
+
+  // Signup windows: count both raw rows AND unique people.
+  const signups7d = rows.filter((r) => r.created_at && r.created_at >= iso7d).length;
+  const signups30d = rows.filter((r) => r.created_at && r.created_at >= iso30d).length;
+  const uniqueSignups7d = people.filter((p) => p.earliestSignup >= iso7d).length;
+  const uniqueSignups30d = people.filter((p) => p.earliestSignup >= iso30d).length;
+
   return {
-    totalUsers: users.count ?? 0,
-    signups7d: signups7.count ?? 0,
-    signups30d: signups30.count ?? 0,
+    totalUsers,
+    uniquePeople,
+    duplicateUsers,
+    signups7d,
+    signups30d,
+    uniqueSignups7d,
+    uniqueSignups30d,
     totalGames: games.count ?? 0,
     games7d: games7.count ?? 0,
     games30d: games30.count ?? 0,
