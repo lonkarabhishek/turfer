@@ -14,12 +14,19 @@ interface TurfCardProps {
 }
 
 export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) {
-  const cover = turf.cover_image || (turf.images.length > 0 ? turf.images[0] : null);
+  // Reject covers that are still tiny thumbs after normalization (e.g.
+  // a non-Google URL that ends "=w32-h32-..."). We'd rather show a real
+  // photo from images[] than a 32px placeholder.
+  const isTinyThumb = (u: string | null) =>
+    !!u && /=w(?:\d{1,2}|1\d{2})-h(?:\d{1,2}|1\d{2})\b/.test(u);
+  const usableCover =
+    turf.cover_image && !isTinyThumb(turf.cover_image) ? turf.cover_image : null;
+  const cover = usableCover || (turf.images.length > 0 ? turf.images[0] : null);
   // Build the ordered photo list: cover first (dedup'd), then the rest of the images.
   const photos = (() => {
     if (turf.images.length === 0) return cover ? [cover] : [];
-    if (!turf.cover_image) return turf.images;
-    return [turf.cover_image, ...turf.images.filter((i) => i !== turf.cover_image)];
+    if (!usableCover) return turf.images;
+    return [usableCover, ...turf.images.filter((i) => i !== usableCover)];
   })();
 
   const minPrice = getMinimumPrice(turf);
