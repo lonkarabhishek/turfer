@@ -49,6 +49,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
     <Link
       href={`/turf/${turf.id}`}
       className="block group rounded-2xl focus-neon"
+      style={{ touchAction: "pan-y" }}
     >
       <article className="card-lift relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover">
         {/* Image area */}
@@ -57,8 +58,8 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
             <div
               ref={scrollRef}
               onScroll={handleScroll}
-              className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              style={{ scrollSnapType: "x mandatory" }}
+              className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              style={{ scrollSnapType: "x mandatory", touchAction: "pan-x" }}
             >
               {photos.map((src, i) => (
                 <div
