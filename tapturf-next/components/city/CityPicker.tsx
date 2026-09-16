@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { MapPin, Check, X, Loader2 } from "lucide-react";
 import { CITIES, getCityPref, setCityPref, autoDetectCity, type CityId } from "@/lib/city";
 
@@ -90,7 +91,7 @@ export function CityPicker() {
         </span>
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
           <div className="absolute inset-0 bg-primary-800/50 animate-fade-in" onClick={() => setOpen(false)} />
           <div className="relative w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-elevated animate-slide-up">
@@ -173,7 +174,8 @@ export function CityPicker() {
 
             <div className="sm:hidden h-[env(safe-area-inset-bottom)] bg-white" />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

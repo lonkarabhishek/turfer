@@ -40,13 +40,13 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 material-thin border-b border-primary-100/60">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 md:h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 md:h-16 flex items-center justify-between gap-2 min-w-0">
         {/* Wordmark */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-9 h-9 rounded-lg bg-accent-500 flex items-center justify-center shadow-neon group-hover:rotate-[-6deg] transition-transform">
-            <Zap className="w-5 h-5 text-white" strokeWidth={2.75} />
+        <Link href="/" className="flex items-center gap-2 group min-w-0 flex-shrink">
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-accent-500 flex items-center justify-center shadow-neon group-hover:rotate-[-6deg] transition-transform flex-shrink-0">
+            <Zap className="w-4 h-4 md:w-5 md:h-5 text-white" strokeWidth={2.75} />
           </div>
-          <span className="font-display uppercase text-2xl text-primary-800 tracking-wide leading-none">
+          <span className="font-display uppercase text-xl md:text-2xl text-primary-800 tracking-wide leading-none truncate">
             Tap<span className="text-accent-500">Turf</span>
           </span>
         </Link>
@@ -122,31 +122,33 @@ export function Header() {
         </nav>
 
         {/* Mobile right side */}
-        <div className="flex md:hidden items-center gap-2">
-          <CityPicker />
+        <div className="flex md:hidden items-center gap-1.5 flex-shrink-0">
+          <div className="flex-shrink-0">
+            <CityPicker />
+          </div>
           {/* Refresh — iOS PWA won't reload when you re-open the app,
               so give people a one-tap way to pull fresh data. */}
           <button
             onClick={() => window.location.reload()}
             aria-label="Refresh"
-            className="flex items-center justify-center w-9 h-9 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
+            className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
           >
             <RotateCw className="w-4 h-4 text-primary-700" />
           </button>
           <Link
             href="/turfs"
-            className="flex items-center justify-center w-10 h-10 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
+            className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
             aria-label="Search turfs"
           >
             <Search className="w-4 h-4 text-primary-700" />
           </Link>
 
           {loading ? (
-            <div className="w-10 h-10 rounded-full bg-primary-100 animate-pulse" />
+            <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary-100 animate-pulse" />
           ) : user ? (
             <Link
               href="/dashboard?tab=notifications"
-              className="relative flex items-center justify-center w-10 h-10"
+              className="flex-shrink-0 relative flex items-center justify-center w-9 h-9"
               aria-label="Notifications"
             >
               <Bell className="w-5 h-5 text-primary-700" />
@@ -159,9 +161,9 @@ export function Header() {
           ) : (
             <button
               onClick={login}
-              className="flex items-center justify-center h-10 px-4 rounded-full bg-primary-800 active:bg-primary-900 shadow-soft transition-all"
+              className="flex-shrink-0 flex items-center justify-center h-9 px-3 rounded-full bg-primary-800 active:bg-primary-900 shadow-soft transition-all"
             >
-              <span className="text-xs font-bold uppercase tracking-wide text-white">Log in</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide text-white">Log in</span>
             </button>
           )}
         </div>

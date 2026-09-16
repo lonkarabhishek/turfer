@@ -1,5 +1,5 @@
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
-import { convertGoogleDriveUrl, convertImageUrls } from "@/lib/utils/images";
+import { normalizeImageUrl, convertImageUrls } from "@/lib/utils/images";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
@@ -51,13 +51,13 @@ function transformTurf(raw: any): Turf {
     amenities,
     images,
     cover_image: raw.cover_image
-      ? convertGoogleDriveUrl(raw.cover_image)
+      ? normalizeImageUrl(raw.cover_image)
       : null,
     signboard_image: raw.signboard_image
-      ? convertGoogleDriveUrl(raw.signboard_image)
+      ? normalizeImageUrl(raw.signboard_image)
       : null,
     entry_parking_image: raw.entry_parking_image
-      ? convertGoogleDriveUrl(raw.entry_parking_image)
+      ? normalizeImageUrl(raw.entry_parking_image)
       : null,
     contact_info: contactInfo || null,
     owner_name: raw.owner_name || null,

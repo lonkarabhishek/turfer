@@ -1,26 +1,39 @@
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice, getMaximumPrice } from "./prices";
-import { convertGoogleDriveUrl } from "./images";
+import { normalizeImageUrl } from "./images";
+import { isCity, labelFor } from "@/lib/city";
+import { normalizeIndianPhone } from "./phone";
 
 export function generateTurfJsonLd(turf: Turf) {
   const minPrice = getMinimumPrice(turf);
   const maxPrice = getMaximumPrice(turf);
   const phone = getPhone(turf);
+  // City-aware locality — was hard-coded "Nashik", so Pune turfs were
+  // being served with the wrong locality in structured data.
+  const locality = isCity(turf.city) ? labelFor(turf.city) : "Nashik";
+  // Only emit aggregateRating when we actually have ratings — a null
+  // rating masquerading as 0.0 hurts SERP trust.
+  const hasRatings =
+    typeof turf.rating === "number" &&
+    turf.rating > 0 &&
+    typeof turf.total_reviews === "number" &&
+    turf.total_reviews > 0;
+  const normalizedPhone = normalizeIndianPhone(phone);
 
   return {
     "@context": "https://schema.org",
     "@type": "SportsActivityLocation",
     name: turf.name,
     description:
-      turf.description || `Book ${turf.name} for sports in Nashik.`,
+      turf.description || `Book ${turf.name} for sports in ${locality}.`,
     address: {
       "@type": "PostalAddress",
       streetAddress: turf.address,
-      addressLocality: "Nashik",
+      addressLocality: locality,
       addressRegion: "Maharashtra",
       addressCountry: "IN",
     },
-    ...(turf.total_reviews > 0 && {
+    ...(hasRatings && {
       aggregateRating: {
         "@type": "AggregateRating",
         ratingValue: turf.rating,
@@ -32,8 +45,8 @@ export function generateTurfJsonLd(turf: Turf) {
     priceRange: `₹${minPrice} - ₹${maxPrice}`,
     image: turf.images
       ?.slice(0, 5)
-      .map((img) => convertGoogleDriveUrl(img)),
-    ...(phone && { telephone: phone }),
+      .map((img) => normalizeImageUrl(img)),
+    ...(normalizedPhone && { telephone: normalizedPhone.e164 }),
     url: `https://www.tapturf.in/turf/${turf.id}`,
     openingHoursSpecification: {
       "@type": "OpeningHoursSpecification",

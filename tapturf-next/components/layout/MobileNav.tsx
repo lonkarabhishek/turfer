@@ -23,6 +23,9 @@ export function MobileNav() {
   const pathname = usePathname();
   const { user, login } = useAuth();
 
+  // Hide the bottom nav on the marketing landing page so the hero reads clean.
+  if (pathname === "/") return null;
+
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-30 material-thin border-t border-primary-100/60 md:hidden"

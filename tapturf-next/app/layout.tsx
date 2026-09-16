@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Bebas_Neue, Space_Mono } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
+import { AppMain } from "@/components/layout/AppMain";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWALifecycle } from "@/components/pwa/PWALifecycle";
@@ -88,13 +90,9 @@ export default function RootLayout({
         <RouteProgress />
         <AuthWrapper>
           <Header />
-          {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator */}
-          <main
-            className="min-h-screen md:pb-0"
-            style={{ paddingBottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
-          >
-            {children}
-          </main>
+          {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator, skipped on landing */}
+          <AppMain>{children}</AppMain>
+          <OwnerContactCTA />
           <div className="hidden md:block">
             <Footer />
           </div>

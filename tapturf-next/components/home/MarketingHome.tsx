@@ -20,7 +20,6 @@ import {
   isCity,
   type CityId,
 } from "@/lib/city";
-import type { Turf } from "@/types/turf";
 
 /**
  * Marketing home (logged-out visitors) — deliberately stripped to two
@@ -31,13 +30,7 @@ import type { Turf } from "@/types/turf";
  * Props are the per-city turf counts from the server so we can print an
  * honest "89 turfs live" number without an extra client-side fetch.
  */
-export function MarketingHome({
-  nashikTurfs,
-  puneTurfs,
-}: {
-  nashikTurfs: Turf[];
-  puneTurfs: Turf[];
-}) {
+export function MarketingHome() {
   const [city, setCity] = useState<CityId | null>(null);
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -93,26 +86,10 @@ export function MarketingHome({
     );
   };
 
-  const turfCount =
-    city === "nashik"
-      ? nashikTurfs.length
-      : city === "pune"
-        ? puneTurfs.length
-        : nashikTurfs.length + puneTurfs.length;
-  const cityLabel = isCity(city) ? labelFor(city) : "Nashik + Pune";
-
   return (
     <div className="min-h-[calc(100vh-3.5rem-3.5rem)] md:min-h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-[520px] text-center">
-          {/* Live pill — tiny credibility signal, real number */}
-          <div className="inline-flex items-center gap-2 rounded-full bg-primary-50 border border-primary-200 px-3 py-1.5 mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-hot-500 pulse-live" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-primary-700">
-              Live · {cityLabel} · {turfCount} turfs
-            </span>
-          </div>
-
           {/* Hero — short, direct, no fluff */}
           <h1 className="font-display uppercase tracking-tight text-primary-900 leading-[0.95] text-display-xl mb-4">
             Book turf.
