@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Bebas_Neue, Space_Mono } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWALifecycle } from "@/components/pwa/PWALifecycle";
@@ -95,6 +96,7 @@ export default function RootLayout({
           >
             {children}
           </main>
+          <OwnerContactCTA />
           <div className="hidden md:block">
             <Footer />
           </div>
