@@ -5,6 +5,10 @@ import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { TurfCard } from "@/components/turf/TurfCard";
 
+// City coverage in copy — kept generic ("Nashik & Pune") since these
+// pages list turfs from both cities. Was hardcoded to Nashik only.
+const CITY_LABEL = "Nashik & Pune";
+
 const sportInfo: Record<
   string,
   { name: string; icon: string; description: string }
@@ -12,38 +16,32 @@ const sportInfo: Record<
   football: {
     name: "Football",
     icon: "⚽",
-    description:
-      "Find the best football turfs in Nashik. 5-a-side, 7-a-side, and full-size turfs available.",
+    description: `Find the best football turfs in ${CITY_LABEL}. 5-a-side, 7-a-side, and full-size turfs available.`,
   },
   cricket: {
     name: "Cricket",
     icon: "🏏",
-    description:
-      "Book cricket turfs and box cricket venues in Nashik. Practice nets and match grounds.",
+    description: `Book cricket turfs and box cricket venues in ${CITY_LABEL}. Practice nets and match grounds.`,
   },
   basketball: {
     name: "Basketball",
     icon: "🏀",
-    description:
-      "Discover basketball courts in Nashik. Indoor and outdoor options with great facilities.",
+    description: `Discover basketball courts in ${CITY_LABEL}. Indoor and outdoor options with great facilities.`,
   },
   badminton: {
     name: "Badminton",
     icon: "🏸",
-    description:
-      "Find badminton courts in Nashik. Indoor courts with proper flooring and lighting.",
+    description: `Find badminton courts in ${CITY_LABEL}. Indoor courts with proper flooring and lighting.`,
   },
   tennis: {
     name: "Tennis",
     icon: "🎾",
-    description:
-      "Book tennis courts in Nashik. Well-maintained courts for practice and matches.",
+    description: `Book tennis courts in ${CITY_LABEL}. Well-maintained courts for practice and matches.`,
   },
   pickleball: {
     name: "Pickleball",
     icon: "🏓",
-    description:
-      "Discover pickleball courts in Nashik. The fastest growing sport with great venues.",
+    description: `Discover pickleball courts in ${CITY_LABEL}. The fastest growing sport with great venues.`,
   },
 };
 
@@ -60,12 +58,22 @@ export async function generateMetadata({
   const info = sportInfo[sport];
   if (!info) return { title: "Sport Not Found" };
 
+  const slug = info.name.toLowerCase();
   return {
-    title: `${info.name} Turfs in Nashik - Book Now`,
-    description: `Find ${info.name.toLowerCase()} turfs in Nashik. Compare prices, check ratings, and book instantly. Best ${info.name.toLowerCase()} facilities in Nashik.`,
-    keywords: `${info.name.toLowerCase()} turf nashik, ${info.name.toLowerCase()} ground nashik, ${info.name.toLowerCase()} court nashik, book ${info.name.toLowerCase()} nashik`,
+    title: `${info.name} Turfs in ${CITY_LABEL} — Book Now | TapTurf`,
+    description: `Find ${slug} turfs in ${CITY_LABEL}. Compare prices, check ratings, book instantly.`,
+    keywords: [
+      `${slug} turf nashik`,
+      `${slug} turf pune`,
+      `${slug} ground nashik`,
+      `${slug} ground pune`,
+      `${slug} court nashik`,
+      `${slug} court pune`,
+      `book ${slug} nashik`,
+      `book ${slug} pune`,
+    ].join(", "),
     openGraph: {
-      title: `${info.name} Turfs in Nashik | TapTurf`,
+      title: `${info.name} Turfs in ${CITY_LABEL} | TapTurf`,
       description: info.description,
       url: `https://www.tapturf.in/sport/${sport}`,
       type: "website",
@@ -111,7 +119,7 @@ export default async function SportPage({
           <span className="text-5xl">{info.icon}</span>
           <div>
             <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
-              {info.name} turfs in Nashik
+              {info.name} turfs in {CITY_LABEL}
             </h1>
             <p className="text-base text-primary-400 mt-1">
               {turfs.length} {info.name.toLowerCase()} turf

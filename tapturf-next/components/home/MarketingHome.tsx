@@ -57,11 +57,41 @@ export function MarketingHome({
           if (detected) {
             setCityPref(detected);
             setCity(detected);
+            // Notify sibling components (header CityPicker,
+            // TurfListingClient, LoggedInHome) so they resync.
+            window.dispatchEvent(
+              new CustomEvent("tapturf:city-changed", { detail: detected }),
+            );
           }
         })
         .finally(() => setAutoDetecting(false));
     }
+
+    // Keep in sync when the header CityPicker (or any other consumer)
+    // changes the city. Without this, picking Pune from the header
+    // would leave this home stuck showing Nashik.
+    const onChange = () => setCity(getCityPref());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "tapturf_city_v1") setCity(getCityPref());
+    };
+    window.addEventListener("tapturf:city-changed", onChange);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("tapturf:city-changed", onChange);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
+
+  // Central pick handler used by the sheet AND any other in-page
+  // control that wants to change city. Writes to storage AND fires the
+  // event so siblings (the header pill, listings, etc.) can react.
+  const applyCity = (next: CityId | null) => {
+    setCityPref(next);
+    setCity(next);
+    window.dispatchEvent(
+      new CustomEvent("tapturf:city-changed", { detail: next }),
+    );
+  };
 
   const turfCount =
     city === "nashik"
@@ -183,18 +213,21 @@ export function MarketingHome({
           value={city}
           onClose={() => setCityOpen(false)}
           onPick={(next) => {
-            setCityPref(next);
-            setCity(next);
+            applyCity(next);
             setCityOpen(false);
           }}
           onDetect={async () => {
             setAutoDetecting(true);
             try {
+              // autoDetectCity() short-circuits on the second call
+              // via a one-shot 'tried' flag. When the user explicitly
+              // taps "Use my location" we WANT to try again, so clear
+              // that flag first.
+              try {
+                localStorage.removeItem("tapturf_city_autodetect_v1");
+              } catch { /* ignore */ }
               const detected = await autoDetectCity();
-              if (detected) {
-                setCityPref(detected);
-                setCity(detected);
-              }
+              if (detected) applyCity(detected);
             } finally {
               setAutoDetecting(false);
               setCityOpen(false);
