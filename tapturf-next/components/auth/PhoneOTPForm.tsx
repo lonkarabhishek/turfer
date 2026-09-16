@@ -45,7 +45,7 @@ function useRotatingLine(lines: string[], active: boolean, interval = 2200): str
 }
 
 export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
-  const { refreshUser } = useAuth();
+  const { hydrateFromStorage } = useAuth();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -123,10 +123,14 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
   const finishLogin = (userName: string) => {
     setSuccessName(userName);
+    // We already wrote the exact user to localStorage; ask the
+    // AuthProvider to publish it synchronously — no DB round-trip.
+    hydrateFromStorage();
+    // Short taa-daa (was 900ms). Long enough to register the win,
+    // fast enough that the user doesn't feel a stall.
     setTimeout(() => {
-      refreshUser();
       onSuccess?.();
-    }, 900);
+    }, 350);
   };
 
   const verifyOTP = async (otpCode: string) => {

@@ -10,6 +10,13 @@ interface AuthContextType {
   login: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /**
+   * Synchronously pull the phone-auth user out of localStorage and
+   * publish them into the context. Use this right after a PhoneOTP
+   * success writes to localStorage — cheaper and faster than
+   * refreshUser() (no DB round-trip).
+   */
+  hydrateFromStorage: () => AppUser | null;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
   welcomeMessage: string | null;
@@ -22,6 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
+  hydrateFromStorage: () => null,
   showLoginModal: false,
   setShowLoginModal: () => {},
   welcomeMessage: null,
@@ -227,23 +235,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    // ── 2. Google OAuth ──
+    // ── 2. Google OAuth signal ──
+    // Two ways to know a callback just happened:
+    //   (a) legacy ?welcome=1 (kept for backwards compat)
+    //   (b) landing on /login/complete (the new post-OAuth handoff)
+    // We DON'T clear phone-auth localStorage on the mere presence of
+    // this signal — that would blow away a phone session for anyone
+    // who navigates to /login/complete directly. Instead we only clear
+    // it once INITIAL_SESSION confirms an actual Supabase session is
+    // present (see below).
     const url = new URL(window.location.href);
-    const shouldWelcomeFromCallback = url.searchParams.get("welcome") === "1";
-    if (shouldWelcomeFromCallback) {
-      // Strip the flag from the URL right away so a share/reload doesn't
-      // re-fire the welcome toast.
+    const shouldWelcomeFromCallback =
+      url.searchParams.get("welcome") === "1" ||
+      url.pathname === "/login/complete";
+    if (shouldWelcomeFromCallback && url.searchParams.has("welcome")) {
       url.searchParams.delete("welcome");
       window.history.replaceState({}, "", url.toString());
-
-      // User actively chose Google — OAuth must win. Blow away any stale
-      // phone auth in localStorage so it can't out-vote the fresh session
-      // once the subscription starts firing INITIAL_SESSION.
-      try {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("user");
-      } catch { /* ignore */ }
-      sourceRef.current = null;
     }
 
     // Rely on onAuthStateChange for session pickup — it fires INITIAL_SESSION
@@ -263,6 +270,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Google — they're just carrying a stale cookie).
           const shouldResolve = shouldWelcomeFromCallback || sourceRef.current !== "phone";
           if (shouldResolve) {
+            // Now that we KNOW there's a fresh Supabase session (not
+            // just a URL hint), it's safe to blow away any stale
+            // phone-auth localStorage so it can't out-vote the OAuth
+            // user.
+            if (shouldWelcomeFromCallback) {
+              try {
+                localStorage.removeItem("auth_token");
+                localStorage.removeItem("user");
+              } catch { /* ignore */ }
+              sourceRef.current = null;
+            }
             await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
           }
         }
@@ -355,7 +373,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Actions ──
 
-  const login = useCallback(() => setShowLoginModal(true), []);
+  // Route to the dedicated /login page instead of opening the old modal.
+  // The modal juggled mount/unmount + route changes badly; a real page
+  // is bookmarkable, survives back/forward, and settles OAuth cleanly.
+  // We keep `next` set to the current path so /login knows where to
+  // return the user after a successful sign-in.
+  const login = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const current = window.location.pathname + window.location.search;
+    if (window.location.pathname === "/login") return; // already there
+    const next = encodeURIComponent(current || "/");
+    window.location.href = `/login?next=${next}`;
+  }, []);
 
   const logout = useCallback(async () => {
     // Intentional logout, clear BOTH sources.
@@ -371,6 +400,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     sourceRef.current = null;
   }, [supabase]);
+
+  // Fast, synchronous path: read localStorage and push into context.
+  // Called right after PhoneOTP writes the user so the modal/page can
+  // navigate away without waiting on a redundant DB round-trip.
+  const hydrateFromStorage = useCallback((): AppUser | null => {
+    const p = readPhoneUser();
+    if (p) {
+      setUser(p);
+      sourceRef.current = "phone";
+      setLoading(false);
+      showWelcome(p.name?.split(" ")[0] || "");
+      return p;
+    }
+    return null;
+  }, [showWelcome]);
 
   const refreshUser = useCallback(async () => {
     const storedUser = localStorage.getItem("user");
@@ -402,7 +446,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, login, logout, refreshUser,
+      user, loading, login, logout, refreshUser, hydrateFromStorage,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
     }}>
