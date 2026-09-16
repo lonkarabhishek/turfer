@@ -1,3 +1,5 @@
+import { normalizeIndianPhone } from "./phone";
+
 export function buildWhatsAppLink({
   phone,
   text,
@@ -8,13 +10,12 @@ export function buildWhatsAppLink({
   if (!phone || !text) {
     return "#";
   }
-
-  const cleanPhone = phone.replace(/\D/g, "");
-  const formattedPhone = cleanPhone.startsWith("91")
-    ? cleanPhone
-    : `91${cleanPhone}`;
+  // Route every phone through the same normalizer as the tel: link so
+  // we can't ever double the country code again.
+  const normalized = normalizeIndianPhone(phone);
+  if (!normalized) return "#";
   const encodedText = encodeURIComponent(text);
-  return `https://wa.me/${formattedPhone}?text=${encodedText}`;
+  return `https://wa.me/${normalized.digits}?text=${encodedText}`;
 }
 
 export function generateTurfInquiryMessage(turf: {
