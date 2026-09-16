@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Search, Gamepad2, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  Search,
+  Gamepad2,
+  Loader2,
+  MapPin,
+  Check,
+  X,
+} from "lucide-react";
 import {
   CITIES,
   getCityPref,
@@ -33,6 +41,7 @@ export function MarketingHome({
   const [city, setCity] = useState<CityId | null>(null);
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [cityOpen, setCityOpen] = useState(false);
 
   useEffect(() => {
     const pref = getCityPref();
@@ -127,49 +136,23 @@ export function MarketingHome({
             </Link>
           </div>
 
-          {/* City row — quiet, secondary. Auto-detected on first visit. */}
-          <div className="mt-8 flex items-center justify-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-primary-400">
-              City
-            </span>
-            {CITIES.map((c) => {
-              const active = city === c.id;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    setCityPref(c.id);
-                    setCity(c.id);
-                  }}
-                  className={`press-tight text-[12px] font-semibold uppercase tracking-widest rounded-full px-3 py-1.5 border transition-colors ${
-                    active
-                      ? "bg-primary-900 text-white border-primary-900"
-                      : "bg-white text-primary-700 border-primary-200 hover:border-primary-300"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
+          {/* Single 'Pick your city' button (opens a sheet). Much
+              cleaner than an inline row of chips, which fought the
+              two CTAs for attention. */}
+          <div className="mt-8 flex items-center justify-center">
             <button
-              onClick={() => {
-                setCityPref(null);
-                setCity(null);
-              }}
-              className={`press-tight text-[12px] font-semibold uppercase tracking-widest rounded-full px-3 py-1.5 border transition-colors ${
-                !city && hydrated
-                  ? "bg-primary-900 text-white border-primary-900"
-                  : "bg-white text-primary-700 border-primary-200 hover:border-primary-300"
-              }`}
+              onClick={() => setCityOpen(true)}
+              className="press-tight inline-flex items-center gap-2 rounded-full bg-white border border-primary-200 hover:border-primary-300 px-4 py-2 text-[13px] font-semibold text-primary-800"
             >
-              All
-            </button>
-            {autoDetecting && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-primary-400">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Detecting…
+              <MapPin className="w-4 h-4 text-accent-500" />
+              <span>{isCity(city) ? labelFor(city) : "All cities"}</span>
+              {autoDetecting && (
+                <Loader2 className="w-3 h-3 animate-spin text-primary-400" />
+              )}
+              <span className="text-primary-400 text-[11px] font-mono uppercase tracking-widest ml-1">
+                change
               </span>
-            )}
+            </button>
           </div>
 
           {/* Ultra-quiet secondary link */}
@@ -189,6 +172,195 @@ export function MarketingHome({
               browse Pune
             </Link>
           </p>
+        </div>
+      </div>
+
+      {/* City sheet — bottom-anchored on mobile, centered on desktop.
+          Kept lightweight (no external deps) with a translucent
+          backdrop that dismisses on tap. */}
+      {cityOpen && (
+        <CitySheet
+          value={city}
+          onClose={() => setCityOpen(false)}
+          onPick={(next) => {
+            setCityPref(next);
+            setCity(next);
+            setCityOpen(false);
+          }}
+          onDetect={async () => {
+            setAutoDetecting(true);
+            try {
+              const detected = await autoDetectCity();
+              if (detected) {
+                setCityPref(detected);
+                setCity(detected);
+              }
+            } finally {
+              setAutoDetecting(false);
+              setCityOpen(false);
+            }
+          }}
+          detecting={autoDetecting}
+        />
+      )}
+    </div>
+  );
+}
+
+// Static per-city tagline. Kept out of lib/city.ts because it's just
+// display copy for this sheet, not data anyone else consumes.
+const CITY_TAGLINE: Record<string, string> = {
+  nashik: "Nashik, Maharashtra",
+  pune: "Pune, Maharashtra",
+};
+
+/**
+ * Small self-contained city picker sheet. Bottom-anchored on phones so
+ * the thumb can reach every option; centered card on desktop. Uses the
+ * same tokens/animations as the rest of the app so it feels native.
+ */
+function CitySheet({
+  value,
+  onClose,
+  onPick,
+  onDetect,
+  detecting,
+}: {
+  value: CityId | null;
+  onClose: () => void;
+  onPick: (id: CityId | null) => void;
+  onDetect: () => void;
+  detecting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+      {/* Backdrop */}
+      <button
+        aria-label="Close city picker"
+        onClick={onClose}
+        className="absolute inset-0 bg-primary-900/50 animate-fade-in"
+      />
+
+      {/* Sheet */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose your city"
+        className="relative w-full md:w-[440px] md:max-w-[calc(100vw-2rem)] bg-white rounded-t-3xl md:rounded-3xl shadow-elevated animate-slide-up overflow-hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {/* Grabber (mobile visual affordance) + close */}
+        <div className="pt-3 pb-2 flex justify-center md:hidden">
+          <div className="w-10 h-1 rounded-full bg-primary-200" />
+        </div>
+        <button
+          onClick={onClose}
+          className="press-tight absolute top-3 right-3 w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary-100"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4 text-primary-500" />
+        </button>
+
+        <div className="px-6 pt-4 pb-6">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-accent-600 mb-1">
+            Location
+          </p>
+          <h2 className="font-display uppercase text-primary-900 text-2xl leading-tight">
+            Where are you playing?
+          </h2>
+          <p className="text-sm text-primary-500 mt-1">
+            We&apos;ll show turfs and games in your city.
+          </p>
+
+          {/* Options */}
+          <div className="mt-5 space-y-2">
+            {CITIES.map((c) => {
+              const active = value === c.id;
+              const tagline = CITY_TAGLINE[c.id] || "Maharashtra, India";
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => onPick(c.id)}
+                  className={`press-tight w-full flex items-center justify-between rounded-2xl border px-4 py-4 text-left transition-colors ${
+                    active
+                      ? "border-accent-500 bg-accent-50/60"
+                      : "border-primary-200 bg-white hover:border-primary-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        active ? "bg-accent-500 text-white" : "bg-primary-100 text-primary-600"
+                      }`}
+                    >
+                      <MapPin className="w-5 h-5" />
+                    </span>
+                    <span>
+                      <span className="block font-semibold text-primary-900 text-[15px] leading-tight">
+                        {c.label}
+                      </span>
+                      <span className="block text-xs text-primary-500 mt-0.5">
+                        {tagline}
+                      </span>
+                    </span>
+                  </span>
+                  {active && (
+                    <Check className="w-5 h-5 text-accent-600" strokeWidth={2.5} />
+                  )}
+                </button>
+              );
+            })}
+
+            {/* All cities */}
+            <button
+              onClick={() => onPick(null)}
+              className={`press-tight w-full flex items-center justify-between rounded-2xl border px-4 py-4 text-left transition-colors ${
+                !value
+                  ? "border-accent-500 bg-accent-50/60"
+                  : "border-primary-200 bg-white hover:border-primary-300"
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <span
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    !value ? "bg-accent-500 text-white" : "bg-primary-100 text-primary-600"
+                  }`}
+                >
+                  <MapPin className="w-5 h-5" />
+                </span>
+                <span>
+                  <span className="block font-semibold text-primary-900 text-[15px] leading-tight">
+                    All cities
+                  </span>
+                  <span className="block text-xs text-primary-500 mt-0.5">
+                    Show turfs across Nashik + Pune
+                  </span>
+                </span>
+              </span>
+              {!value && (
+                <Check className="w-5 h-5 text-accent-600" strokeWidth={2.5} />
+              )}
+            </button>
+          </div>
+
+          {/* Use my location */}
+          <button
+            onClick={onDetect}
+            disabled={detecting}
+            className="press-tight mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-sm font-bold uppercase tracking-widest py-3 disabled:opacity-60"
+          >
+            {detecting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Detecting…
+              </>
+            ) : (
+              <>
+                <MapPin className="w-4 h-4" />
+                Use my location
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

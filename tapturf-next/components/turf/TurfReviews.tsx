@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Star, User, ExternalLink } from "lucide-react";
+import { Star, User, ExternalLink, ChevronUp } from "lucide-react";
 import {
   getReviewsForTurf,
   getReviewSummary,
   submitReview,
+  toggleReviewUpvote,
 } from "@/lib/queries/reviews";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { ReviewWithUser, ReviewSummary } from "@/types/review";
@@ -47,17 +48,71 @@ export function TurfReviews({
   const load = useCallback(async () => {
     setLoading(true);
     const [list, sum] = await Promise.all([
-      getReviewsForTurf(turfId, 20),
+      getReviewsForTurf(turfId, 20, user?.id ?? null),
       getReviewSummary(turfId),
     ]);
     setReviews(list);
     setSummary(sum);
     setLoading(false);
-  }, [turfId]);
+  }, [turfId, user?.id]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  /**
+   * Optimistic upvote toggle. Updates local state instantly, then
+   * calls the DB in the background. On failure we roll back so the UI
+   * matches server truth. Prompts login for anonymous viewers.
+   */
+  const handleUpvote = async (reviewId: string) => {
+    if (!user) return login();
+
+    // Optimistic flip
+    setReviews((prev) =>
+      prev.map((r) => {
+        if (r.id !== reviewId) return r;
+        const nowVoted = !r.viewer_has_upvoted;
+        return {
+          ...r,
+          viewer_has_upvoted: nowVoted,
+          upvotes: Math.max(0, r.upvotes + (nowVoted ? 1 : -1)),
+        };
+      }),
+    );
+
+    const { ok, upvoted } = await toggleReviewUpvote(reviewId, user.id);
+    if (!ok) {
+      // Roll back to pre-click state
+      setReviews((prev) =>
+        prev.map((r) => {
+          if (r.id !== reviewId) return r;
+          const nowVoted = !r.viewer_has_upvoted;
+          return {
+            ...r,
+            viewer_has_upvoted: nowVoted,
+            upvotes: Math.max(0, r.upvotes + (nowVoted ? 1 : -1)),
+          };
+        }),
+      );
+      return;
+    }
+    // Reconcile with server-truth in case optimistic guess drifted
+    // (e.g. we predicted up, server said already-voted).
+    setReviews((prev) =>
+      prev.map((r) => {
+        if (r.id !== reviewId) return r;
+        // If our optimistic value doesn't match the server, correct it.
+        if (r.viewer_has_upvoted === upvoted) return r;
+        const delta = upvoted ? 1 : -1;
+        return {
+          ...r,
+          viewer_has_upvoted: upvoted,
+          upvotes: Math.max(0, r.upvotes + delta),
+        };
+      }),
+    );
+  };
 
   const alreadyReviewed = user
     ? reviews.some((r) => r.user_id === user.id)
@@ -326,6 +381,40 @@ export function TurfReviews({
                   {r.comment}
                 </p>
               )}
+
+              {/* Upvote row — 'Helpful' style. Filled on viewer's own
+                  upvote. Tapping while signed-out routes to /login. */}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => handleUpvote(r.id)}
+                  aria-pressed={r.viewer_has_upvoted}
+                  aria-label={
+                    r.viewer_has_upvoted
+                      ? "Remove your upvote"
+                      : "Upvote this review"
+                  }
+                  className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-colors ${
+                    r.viewer_has_upvoted
+                      ? "bg-accent-500 border-accent-500 text-white hover:bg-accent-600"
+                      : "bg-white border-primary-200 text-primary-700 hover:border-accent-400 hover:text-accent-700"
+                  }`}
+                >
+                  <ChevronUp
+                    className="w-4 h-4"
+                    strokeWidth={r.viewer_has_upvoted ? 3 : 2.5}
+                  />
+                  <span>Helpful</span>
+                  {r.upvotes > 0 && (
+                    <span
+                      className={`font-mono tabular-nums ${
+                        r.viewer_has_upvoted ? "text-white" : "text-primary-500"
+                      }`}
+                    >
+                      · {r.upvotes}
+                    </span>
+                  )}
+                </button>
+              </div>
             </li>
           ))}
         </ul>

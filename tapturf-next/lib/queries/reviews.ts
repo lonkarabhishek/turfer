@@ -10,10 +10,14 @@ const supa = () => createClient();
  * display fields joined in-memory (no PostgREST join needed).
  * Returns [] on error so pages don't crash — a missing review list
  * is never a hard failure.
+ *
+ * When `viewerId` is passed, each row also carries whether that user
+ * has upvoted it — powers the filled/hollow upvote button state.
  */
 export async function getReviewsForTurf(
   turfId: string,
   limit = 20,
+  viewerId?: string | null,
 ): Promise<ReviewWithUser[]> {
   try {
     const s = supa();
@@ -27,11 +31,21 @@ export async function getReviewsForTurf(
     const rows = (reviews || []) as Review[];
     if (rows.length === 0) return [];
 
+    const reviewIds = rows.map((r) => r.id);
     const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
-    const { data: users } = await s
-      .from("users")
-      .select("id, name, profile_image_url")
-      .in("id", userIds);
+
+    // Fetch reviewers + vote rows in parallel. We only need the vote
+    // columns we consume; skip payload we don't render.
+    const [{ data: users }, { data: votes }] = await Promise.all([
+      s
+        .from("users")
+        .select("id, name, profile_image_url")
+        .in("id", userIds),
+      s
+        .from("review_votes")
+        .select("review_id, user_id")
+        .in("review_id", reviewIds),
+    ]);
 
     const byId = new Map<string, { name: string | null; profile_image_url: string | null }>();
     (users || []).forEach((u) =>
@@ -41,14 +55,76 @@ export async function getReviewsForTurf(
       }),
     );
 
+    // Group vote rows by review_id → count. Also mark whether the
+    // viewer has voted, if we know who they are.
+    const voteCounts = new Map<string, number>();
+    const viewerVoted = new Set<string>();
+    (votes || []).forEach((v) => {
+      voteCounts.set(v.review_id, (voteCounts.get(v.review_id) || 0) + 1);
+      if (viewerId && v.user_id === viewerId) viewerVoted.add(v.review_id);
+    });
+
     return rows.map((r) => ({
       ...r,
       user_name: byId.get(r.user_id)?.name ?? null,
       user_avatar: byId.get(r.user_id)?.profile_image_url ?? null,
+      upvotes: voteCounts.get(r.id) || 0,
+      viewer_has_upvoted: viewerVoted.has(r.id),
     }));
   } catch (e) {
     console.warn("[reviews] getReviewsForTurf failed:", e);
     return [];
+  }
+}
+
+/**
+ * Toggle an upvote. Returns the new state so the caller can update
+ * optimistically without a follow-up fetch. Idempotent: repeated
+ * calls flip between voted and not-voted.
+ *
+ * The DB has a UNIQUE(review_id, user_id) constraint so we treat any
+ * insert conflict as "already voted — remove it".
+ */
+export async function toggleReviewUpvote(
+  reviewId: string,
+  userId: string,
+): Promise<{ ok: boolean; upvoted: boolean; error?: string }> {
+  try {
+    const s = supa();
+    // Cheap existence check to decide direction. Alternative would be
+    // "insert, catch 23505, delete on catch" — one round-trip instead
+    // of two — but that trades read latency for less code and worse
+    // observability. Two calls at ~50ms each is fine here.
+    const { data: existing } = await s
+      .from("review_votes")
+      .select("id")
+      .eq("review_id", reviewId)
+      .eq("user_id", userId)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      const { error } = await s
+        .from("review_votes")
+        .delete()
+        .eq("review_id", reviewId)
+        .eq("user_id", userId);
+      if (error) return { ok: false, upvoted: true, error: error.message };
+      return { ok: true, upvoted: false };
+    }
+
+    const { error } = await s
+      .from("review_votes")
+      .insert([{ review_id: reviewId, user_id: userId }]);
+    if (error) {
+      // Race: someone else inserted between our check and insert. Treat
+      // as "already voted" success.
+      if (String(error.code) === "23505") return { ok: true, upvoted: true };
+      return { ok: false, upvoted: false, error: error.message };
+    }
+    return { ok: true, upvoted: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, upvoted: false, error: msg };
   }
 }
 

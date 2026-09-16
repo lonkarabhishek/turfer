@@ -14,9 +14,13 @@ export interface Review {
 
 // Denormalised for list rendering — carries the reviewer's public
 // display fields so we don't have to re-fetch users for a review list.
+// Also carries upvote state: total count, and whether the CURRENT
+// viewer has upvoted this review (drives the filled/hollow icon state).
 export interface ReviewWithUser extends Review {
   user_name: string | null;
   user_avatar: string | null;
+  upvotes: number;
+  viewer_has_upvoted: boolean;
 }
 
 export interface ReviewSummary {
