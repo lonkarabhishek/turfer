@@ -49,7 +49,6 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
     <Link
       href={`/turf/${turf.id}`}
       className="block group rounded-2xl focus-neon"
-      style={{ touchAction: "pan-y" }}
     >
       <article className="card-lift relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover">
         {/* Image area */}
