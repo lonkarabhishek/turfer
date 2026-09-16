@@ -1,8 +1,16 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
 const WHATSAPP_URL = "https://wa.me/message/NZ5Z6H7N2H25E1";
 
 export function OwnerContactCTA() {
+  const pathname = usePathname();
+  // Landing page only — this pitch is for first-time visitors, not
+  // for people already deep in a turf detail or a booking flow.
+  if (pathname !== "/") return null;
+
   return (
     <section className="mt-10 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto">
