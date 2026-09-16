@@ -93,13 +93,11 @@ export function MarketingHome({
     );
   };
 
-  const turfCount =
-    city === "nashik"
-      ? nashikTurfs.length
-      : city === "pune"
-        ? puneTurfs.length
-        : nashikTurfs.length + puneTurfs.length;
-  const cityLabel = isCity(city) ? labelFor(city) : "Nashik + Pune";
+  // Landing chip always reflects the full inventory across every live
+  // city — a top-of-funnel credibility signal. The per-city scoping
+  // still applies to the listing pages the visitor lands on next.
+  const turfCount = nashikTurfs.length + puneTurfs.length;
+  const cityLabel = "Nashik + Pune";
 
   return (
     <div className="min-h-[calc(100vh-3.5rem-3.5rem)] md:min-h-[calc(100vh-4rem)] flex flex-col">
