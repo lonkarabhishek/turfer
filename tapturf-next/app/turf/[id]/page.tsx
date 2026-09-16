@@ -42,9 +42,14 @@ export async function generateMetadata({
   const cityLabel = isCity(turf.city) ? labelFor(turf.city) : "Maharashtra";
   const cityHash = isCity(turf.city) ? `#${turf.city}turf` : "";
 
+  const hasRatings = turf.total_reviews > 0 && turf.rating > 0;
+  const ratingClause = hasRatings
+    ? ` Rated ${Number(turf.rating).toFixed(1)} stars (${turf.total_reviews} reviews).`
+    : "";
+
   return {
     title: `${turf.name} — Book Now | Turf in ${cityLabel}`,
-    description: `Book ${turf.name}${turf.address ? ` at ${turf.address}` : ""}. Starting ₹${minPrice}/hr. ${sports || "Multi-sport"}. Rated ${Number(turf.rating).toFixed(1)} stars${turf.total_reviews > 0 ? ` (${turf.total_reviews} reviews)` : ""}. Call or WhatsApp to book.`,
+    description: `Book ${turf.name}${turf.address ? ` at ${turf.address}` : ""}. Starting ₹${minPrice}/hr. ${sports || "Multi-sport"}.${ratingClause} Call or WhatsApp to book.`,
     keywords: [
       turf.name,
       `turf in ${cityLabel.toLowerCase()}`,
@@ -103,17 +108,19 @@ export default async function TurfDetailPage({
             {turf.name}
           </h1>
           <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
-            <div className="flex items-center gap-1">
-              <Star className="w-4 h-4 fill-accent-500 text-accent-500" />
-              <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
-            </div>
-            {turf.total_reviews > 0 && (
+            {turf.total_reviews > 0 && turf.rating > 0 ? (
               <>
+                <div className="flex items-center gap-1">
+                  <Star className="w-4 h-4 fill-accent-500 text-accent-500" />
+                  <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
+                </div>
                 <span className="text-cream-400">·</span>
                 <span className="text-primary-500 underline underline-offset-2">
                   {turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""}
                 </span>
               </>
+            ) : (
+              <span className="text-primary-400">No ratings yet</span>
             )}
             <span className="text-cream-400">·</span>
             <span className="text-primary-500 flex items-center gap-1">
@@ -177,13 +184,22 @@ export default async function TurfDetailPage({
             <TurfDetails turf={turf} />
             <TurfPricing turf={turf} />
 
-            {/* Google Maps */}
-            {turf.gmap_embed_link && (
+            {/* Google Maps — show whenever we have any locatable signal
+                (coords, an embeddable iframe, or at least an address to
+                search on). TurfMap itself returns null when it can't
+                produce a usable embed. */}
+            {(turf.gmap_embed_link || (turf.lat != null && turf.lng != null) || turf.address) && (
               <div className="section-divider">
                 <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">
                   Where you&apos;ll play
                 </h2>
-                <TurfMap embedLink={turf.gmap_embed_link} />
+                <TurfMap
+                  embedLink={turf.gmap_embed_link}
+                  lat={turf.lat}
+                  lng={turf.lng}
+                  address={turf.address}
+                  name={turf.name}
+                />
               </div>
             )}
 
@@ -209,12 +225,16 @@ export default async function TurfDetailPage({
               </div>
 
               <div className="flex items-center gap-1 mb-6 text-sm">
-                <Star className="w-3.5 h-3.5 fill-accent-500 text-accent-500" />
-                <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
-                {turf.total_reviews > 0 && (
-                  <span className="text-primary-400 ml-0.5">
-                    ({turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""})
-                  </span>
+                {turf.total_reviews > 0 && turf.rating > 0 ? (
+                  <>
+                    <Star className="w-3.5 h-3.5 fill-accent-500 text-accent-500" />
+                    <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
+                    <span className="text-primary-400 ml-0.5">
+                      ({turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""})
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-primary-400">No ratings yet</span>
                 )}
               </div>
 
