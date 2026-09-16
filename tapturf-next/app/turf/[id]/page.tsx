@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, MapPin, Star, ExternalLink, User } from "lucide-react";
+import { ChevronRight, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { getPhone } from "@/lib/utils/seo";
@@ -187,24 +187,15 @@ export default async function TurfDetailPage({
               </div>
             )}
 
-            {/* In-app reviews (from the reviews table) */}
-            <TurfReviews turfId={turf.id} />
-
-            {/* Google Reviews link */}
-            {turf.external_review_url && (
-              <div className="section-divider">
-                <a
-                  href={turf.external_review_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-base text-primary-700 font-semibold underline underline-offset-2 hover:text-primary-500 transition-colors"
-                >
-                  <Star className="w-4 h-4 fill-accent-500 text-accent-500" />
-                  Read reviews on Google
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            )}
+            {/* Reviews — Google summary card + in-app reviews + write form.
+                The old standalone "Read on Google" link is now folded
+                into TurfReviews so there's a single reviews section. */}
+            <TurfReviews
+              turfId={turf.id}
+              googleRating={turf.rating}
+              googleReviewCount={turf.total_reviews}
+              googleReviewUrl={turf.external_review_url}
+            />
           </div>
 
           {/* Right sidebar — sticky booking card */}

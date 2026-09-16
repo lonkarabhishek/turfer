@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Star, User } from "lucide-react";
+import { Star, User, ExternalLink } from "lucide-react";
 import {
   getReviewsForTurf,
   getReviewSummary,
@@ -19,7 +19,21 @@ import type { ReviewWithUser, ReviewSummary } from "@/types/review";
  *   aggregate rating from turfs.rating + turfs.total_reviews.
  * Fetches on mount, refetches after a successful post.
  */
-export function TurfReviews({ turfId }: { turfId: string }) {
+export function TurfReviews({
+  turfId,
+  googleRating,
+  googleReviewCount,
+  googleReviewUrl,
+}: {
+  turfId: string;
+  // Pass Google's public rating so the block has something to show
+  // before anyone has left an in-app review. Both values come from the
+  // turfs table (which we've backfilled from Google) and any of them
+  // can be null/0 for a brand-new turf.
+  googleRating?: number | null;
+  googleReviewCount?: number | null;
+  googleReviewUrl?: string | null;
+}) {
   const { user, login } = useAuth();
   const [reviews, setReviews] = useState<ReviewWithUser[]>([]);
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
@@ -75,28 +89,90 @@ export function TurfReviews({ turfId }: { turfId: string }) {
     load();
   };
 
+  const hasGoogle =
+    typeof googleRating === "number" &&
+    googleRating > 0 &&
+    typeof googleReviewCount === "number" &&
+    googleReviewCount > 0;
+
   return (
     <div className="section-divider">
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="text-[22px] font-bold text-primary-800 font-serif">
-          Player reviews
+          Reviews
         </h2>
         {summary && summary.count > 0 && (
           <div className="text-sm text-primary-500">
             <span className="text-primary-800 font-semibold">
               ★ {summary.average.toFixed(1)}
             </span>{" "}
-            · {summary.count} review{summary.count === 1 ? "" : "s"}
+            · {summary.count} in-app
           </div>
         )}
       </div>
 
-      {/* Empty state — the DB has 0 reviews on turfs at launch. */}
+      {/* Google summary card — shown whenever we have a public rating,
+          regardless of whether in-app reviews exist. This is the fastest
+          way to give social proof on any turf page while our own reviews
+          table fills up. */}
+      {hasGoogle && (
+        <a
+          href={googleReviewUrl || undefined}
+          target={googleReviewUrl ? "_blank" : undefined}
+          rel="noopener noreferrer"
+          className={`press-tight flex items-center gap-4 rounded-2xl border border-primary-200 bg-white p-4 mb-4 ${
+            googleReviewUrl ? "hover:border-accent-400 hover:bg-accent-50/30" : ""
+          } transition-colors`}
+        >
+          {/* Score chip */}
+          <div className="flex flex-col items-center justify-center rounded-xl bg-accent-50 border border-accent-200 px-4 py-3 min-w-[68px]">
+            <span className="font-display text-2xl leading-none text-accent-700">
+              {Number(googleRating).toFixed(1)}
+            </span>
+            <div className="flex items-center gap-0.5 mt-1">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star
+                  key={i}
+                  className={`w-3 h-3 ${
+                    i < Math.round(googleRating || 0)
+                      ? "fill-accent-500 text-accent-500"
+                      : "fill-none text-accent-300"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          {/* Label + link */}
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500">
+              Rated on Google
+            </p>
+            <p className="text-primary-800 font-semibold leading-tight">
+              {googleReviewCount!.toLocaleString("en-IN")} Google review
+              {googleReviewCount === 1 ? "" : "s"}
+            </p>
+            {googleReviewUrl && (
+              <p className="text-xs text-accent-600 font-semibold mt-0.5 inline-flex items-center gap-1">
+                Read them on Google
+                <ExternalLink className="w-3 h-3" />
+              </p>
+            )}
+          </div>
+        </a>
+      )}
+
+      {/* Empty state — the in-app reviews table is 0 rows at launch, so
+          we lean on the Google card above and invite the first player
+          to review directly. */}
       {!loading && reviews.length === 0 && (
         <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/40 p-6 text-center">
-          <p className="text-primary-700 font-semibold">No reviews yet.</p>
+          <p className="text-primary-700 font-semibold">
+            No TapTurf reviews yet
+          </p>
           <p className="text-primary-500 text-sm mt-1">
-            Played here? Be the first to leave a review.
+            {hasGoogle
+              ? "Played here? Add the first TapTurf review below the Google score."
+              : "Played here? Be the first to leave a review."}
           </p>
           {user ? (
             !showForm && (
