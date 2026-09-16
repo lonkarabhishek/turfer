@@ -13,6 +13,7 @@ import { TurfDetails } from "@/components/turf/TurfDetails";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
+import { TurfReviews } from "@/components/turf/TurfReviews";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 
 export const revalidate = 3600;
@@ -185,6 +186,9 @@ export default async function TurfDetailPage({
                 <TurfMap embedLink={turf.gmap_embed_link} />
               </div>
             )}
+
+            {/* In-app reviews (from the reviews table) */}
+            <TurfReviews turfId={turf.id} />
 
             {/* Google Reviews link */}
             {turf.external_review_url && (

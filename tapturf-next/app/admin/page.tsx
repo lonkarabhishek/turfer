@@ -170,7 +170,8 @@ export default async function AdminPage() {
         <StatTile label="Active turfs" value={headline.activeTurfs} />
       </section>
 
-      {/* Signups + notifications tiles */}
+      {/* Signup windows (requests + notifications are further down in
+          the reviews snapshot to keep the layout de-duped). */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         <StatTile
           label="Unique signups (7d)"
@@ -183,14 +184,14 @@ export default async function AdminPage() {
           sub={`${headline.signups30d} rows`}
         />
         <StatTile
-          label="Requests"
-          value={headline.totalRequests}
-          sub="All-time"
+          label="Duplicate accounts"
+          value={headline.duplicateUsers}
+          sub={headline.duplicateUsers === 0 ? "Clean" : "Same person, 2+ rows"}
         />
         <StatTile
-          label="Notifications"
-          value={headline.totalNotifications}
-          sub={`${headline.unreadNotifications} unread`}
+          label="Requests"
+          value={headline.totalRequests}
+          sub="All-time join requests"
         />
       </section>
 
@@ -225,14 +226,77 @@ export default async function AdminPage() {
           sub="Hosted or requested"
         />
         <StatTile
-          label="Games (30d)"
-          value={headline.games30d}
-          sub={`${headline.games7d} in last 7d`}
+          label="Games this week"
+          value={headline.games7d}
+          sub="New hosted matches"
         />
         <StatTile
-          label="Games (all-time)"
-          value={headline.totalGames}
+          label="Notifications unread"
+          value={headline.unreadNotifications}
+          sub={`${headline.totalNotifications} total`}
+          tone={headline.unreadNotifications > 5 ? "hot" : "default"}
         />
+      </section>
+
+      {/* Bookings + monetisation — new DB tables. Zeroes today, will
+          come alive as bookings and reviews start flowing. */}
+      <section className="mb-2">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500 mb-3">
+          Bookings & revenue
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <StatTile
+            label="Booking revenue"
+            value={`₹${headline.bookingRevenue.toLocaleString("en-IN")}`}
+            sub={`from ${headline.paidBookings} paid`}
+            tone="accent"
+          />
+          <StatTile
+            label="Total bookings"
+            value={headline.totalBookings}
+            sub={`+${headline.bookings7d} this week`}
+          />
+          <StatTile
+            label="Pending bookings"
+            value={headline.pendingBookings}
+            sub="Awaiting confirmation"
+            tone={headline.pendingBookings > 0 ? "hot" : "default"}
+          />
+          <StatTile
+            label="Verified users"
+            value={headline.verifiedUsers}
+            sub={`of ${headline.totalUsers} total`}
+          />
+        </div>
+      </section>
+
+      {/* Reviews + notifications snapshot */}
+      <section className="mb-8 mt-4">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500 mb-3">
+          Reviews & notifications
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <StatTile
+            label="Total reviews"
+            value={headline.totalReviews}
+            sub={headline.totalReviews === 0 ? "None yet" : "In-app reviews"}
+          />
+          <StatTile
+            label="Avg rating"
+            value={headline.totalReviews === 0 ? "—" : `★ ${headline.avgRating.toFixed(1)}`}
+            sub={headline.totalReviews === 0 ? "No data" : `across ${headline.totalReviews}`}
+          />
+          <StatTile
+            label="Notifications"
+            value={headline.totalNotifications}
+            sub={`${headline.unreadNotifications} unread`}
+          />
+          <StatTile
+            label="Games (all-time)"
+            value={headline.totalGames}
+            sub={`${headline.games30d} in last 30d`}
+          />
+        </div>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

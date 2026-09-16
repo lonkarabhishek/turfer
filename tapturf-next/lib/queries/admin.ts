@@ -15,6 +15,7 @@ export interface AdminHeadline {
   totalUsers: number;
   uniquePeople: number;
   duplicateUsers: number;
+  verifiedUsers: number;
   signups7d: number;
   signups30d: number;
   uniqueSignups7d: number;
@@ -26,6 +27,14 @@ export interface AdminHeadline {
   totalRequests: number;
   totalNotifications: number;
   unreadNotifications: number;
+  // Bookings + monetisation (new tables from the recent DB update)
+  totalBookings: number;
+  bookings7d: number;
+  paidBookings: number;
+  pendingBookings: number;
+  bookingRevenue: number;   // sum of total_amount across paid bookings
+  totalReviews: number;
+  avgRating: number;         // over all `reviews` rows, 0..5
 }
 
 export interface DailyPoint {
@@ -142,6 +151,9 @@ export async function getHeadline(): Promise<AdminHeadline> {
     reqs,
     notif,
     unread,
+    verified,
+    bookingRows,
+    reviewRows,
   ] = await Promise.all([
     // Full user set so we can dedupe in memory. Only ~50 rows today, and
     // even at 10k this is fine for an owner-only page.
@@ -153,6 +165,12 @@ export async function getHeadline(): Promise<AdminHeadline> {
     s.from("game_requests").select("*", { count: "exact", head: true }),
     s.from("notifications").select("*", { count: "exact", head: true }),
     s.from("notifications").select("*", { count: "exact", head: true }).eq("is_read", false),
+    s.from("users").select("*", { count: "exact", head: true }).eq("is_verified", true),
+    // Full bookings set — table has just been added, so row count is
+    // tiny. Fetching amounts inline lets us compute revenue without a
+    // second round-trip. Cheap for now, revisit at >5k rows.
+    s.from("bookings").select("total_amount, status, payment_status, created_at"),
+    s.from("reviews").select("rating"),
   ]);
 
   const rows = allUsers.data || [];
@@ -167,10 +185,34 @@ export async function getHeadline(): Promise<AdminHeadline> {
   const uniqueSignups7d = people.filter((p) => p.earliestSignup >= iso7d).length;
   const uniqueSignups30d = people.filter((p) => p.earliestSignup >= iso30d).length;
 
+  const bookings = (bookingRows.data || []) as {
+    total_amount: number | null;
+    status: string | null;
+    payment_status: string | null;
+    created_at: string | null;
+  }[];
+  const totalBookings = bookings.length;
+  const bookings7d = bookings.filter((b) => b.created_at && b.created_at >= iso7d).length;
+  const paidBookings = bookings.filter((b) => b.payment_status === "paid").length;
+  const pendingBookings = bookings.filter((b) => b.status === "pending").length;
+  const bookingRevenue = bookings
+    .filter((b) => b.payment_status === "paid" && typeof b.total_amount === "number")
+    .reduce((sum, b) => sum + (b.total_amount || 0), 0);
+
+  const reviews = (reviewRows.data || []) as { rating: number | null }[];
+  const totalReviews = reviews.length;
+  const avgRating =
+    totalReviews === 0
+      ? 0
+      : Math.round(
+          (reviews.reduce((s, r) => s + (r.rating || 0), 0) / totalReviews) * 10,
+        ) / 10;
+
   return {
     totalUsers,
     uniquePeople,
     duplicateUsers,
+    verifiedUsers: verified.count ?? 0,
     signups7d,
     signups30d,
     uniqueSignups7d,
@@ -182,6 +224,13 @@ export async function getHeadline(): Promise<AdminHeadline> {
     totalRequests: reqs.count ?? 0,
     totalNotifications: notif.count ?? 0,
     unreadNotifications: unread.count ?? 0,
+    totalBookings,
+    bookings7d,
+    paidBookings,
+    pendingBookings,
+    bookingRevenue,
+    totalReviews,
+    avgRating,
   };
 }
 
