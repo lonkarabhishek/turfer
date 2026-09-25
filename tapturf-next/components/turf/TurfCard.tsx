@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MapPin, Navigation, Star } from "lucide-react";
+import { MapPin, Star } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
+import { areaFor } from "@/lib/utils/area";
 import type { Turf } from "@/types/turf";
 
 interface TurfCardProps {
@@ -63,16 +64,23 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
     : null;
 
   const hasMultiple = photos.length > 1;
+  const area = areaFor(turf);
+  const place = area ?? turf.address;
+  const range = (min: number | null, max: number | null) => {
+    const lo = min ?? max ?? 0;
+    const hi = max ?? lo;
+    return `₹${lo.toLocaleString("en-IN")}${lo !== hi ? `–${hi.toLocaleString("en-IN")}` : ""}`;
+  };
 
   return (
     <Link
       href={`/turf/${turf.id}`}
       className="block group rounded-2xl focus-neon"
     >
-      <article className="card-lift relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover">
-        {/* Image area — a stack of images, only the active one at
-            opacity:1. Crossfades every SLIDE_MS via the effect above. */}
-        <div className="relative w-full aspect-[4/3] overflow-hidden bg-primary-100">
+      <article>
+        {/* Photo. Only the pager dots sit on top; everything else lives
+            below so the picture reads clean, App Store style. */}
+        <div className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100">
           {photos.length > 0 ? (
             photos.map((src, i) => {
               const active = i === activeIdx;
@@ -80,11 +88,11 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
                 return (
                   <div
                     key={`err-${i}`}
-                    className={`absolute inset-0 bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center transition-opacity ${active ? "opacity-100" : "opacity-0"}`}
+                    className={`absolute inset-0 bg-primary-100 flex items-center justify-center transition-opacity ${active ? "opacity-100" : "opacity-0"}`}
                     style={{ transitionDuration: `${FADE_MS}ms` }}
                     aria-hidden={!active}
                   >
-                    <span className="font-display uppercase text-4xl text-white/80">Turf</span>
+                    <MapPin className="w-8 h-8 text-primary-300" />
                   </div>
                 );
               }
@@ -94,7 +102,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
                   key={`img-${i}`}
                   src={src}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity ${active ? "opacity-100" : "opacity-0"} group-hover:scale-[1.02]`}
+                  className={`absolute inset-0 w-full h-full object-cover transition-[opacity,transform] ${active ? "opacity-100" : "opacity-0"} group-hover:scale-[1.02]`}
                   style={{ transitionDuration: `${FADE_MS}ms` }}
                   loading={priority && i === 0 ? "eager" : "lazy"}
                   // @ts-expect-error — fetchpriority is a valid HTML attr not yet in React types
@@ -108,63 +116,18 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
               );
             })
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center">
-              <span className="font-display uppercase text-4xl text-white/80">Turf</span>
+            <div className="w-full h-full bg-primary-100 flex items-center justify-center">
+              <MapPin className="w-8 h-8 text-primary-300" />
             </div>
           )}
 
-          {/* Bottom-fade for legibility */}
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-
-          {/* Sport badges (top-left) */}
-          {sports.length > 0 && (
-            <div className="absolute top-3 left-3 flex gap-1.5 pointer-events-none">
-              {sports.map((sport) => (
-                <span
-                  key={sport}
-                  className="bg-white text-[10px] font-bold uppercase tracking-wide text-primary-800 px-2.5 py-1 rounded-full shadow-soft"
-                >
-                  {sport}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Rating pill (top-right) */}
-          {turf.rating > 0 && (
-            <div className="absolute top-3 right-3 bg-accent-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-neon pointer-events-none">
-              <Star className="w-3 h-3 fill-current" />
-              {turf.rating.toFixed(1)}
-            </div>
-          )}
-
-          {/* Distance (bottom-right) */}
-          {distanceLabel && (
-            <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-white text-primary-800 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full shadow-soft pointer-events-none">
-              <Navigation className="w-2.5 h-2.5 text-accent-500" />
-              {distanceLabel}
-            </div>
-          )}
-
-          {/* Turf name burned onto image */}
-          <div className="absolute bottom-3 left-3 right-16 pointer-events-none">
-            <h3 className="font-display uppercase text-white text-xl leading-tight tracking-tight truncate drop-shadow-lg">
-              {turf.name}
-            </h3>
-            <p className="text-[11px] text-white/85 flex items-center gap-1 truncate mt-0.5">
-              <MapPin className="w-3 h-3 shrink-0" />
-              {turf.address}
-            </p>
-          </div>
-
-          {/* Photo pager dots (only when multiple photos) */}
           {hasMultiple && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 flex gap-1 pointer-events-none">
+            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex gap-1 rounded-full bg-black/25 backdrop-blur-sm px-1.5 py-1 pointer-events-none">
               {photos.map((_, i) => (
                 <span
                   key={i}
-                  className={`h-1 rounded-full transition-all duration-300 ${
-                    i === activeIdx ? "w-4 bg-white" : "w-1 bg-white/60"
+                  className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${
+                    i === activeIdx ? "bg-white" : "bg-white/50"
                   }`}
                 />
               ))}
@@ -172,37 +135,44 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
           )}
         </div>
 
-        {/* Footer strip */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-primary-200 bg-white">
-          <div className="min-w-0">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-primary-400">
-              {priceSummary.kind === "real"
-                ? "From"
-                : priceSummary.kind === "reported"
-                  ? "Reported"
-                  : "Contact"}
-            </p>
-            <p className="font-display text-lg sm:text-xl text-primary-800 tabular leading-none mt-0.5 truncate">
-              {priceSummary.kind === "unknown" ? (
-                "Price on request"
-              ) : priceSummary.kind === "real" ? (
-                <>
-                  ₹{priceSummary.min}
-                  {priceSummary.min !== priceSummary.max ? `–₹${priceSummary.max}` : ""}
-                  <span className="text-xs text-primary-400 font-sans font-normal ml-1">/hr</span>
-                </>
-              ) : (
-                <>
-                  ~₹{priceSummary.min}
-                  {priceSummary.min !== priceSummary.max ? `–₹${priceSummary.max}` : ""}
-                  <span className="text-xs text-primary-400 font-sans font-normal ml-1">/hr</span>
-                </>
-              )}
-            </p>
+        {/* Text block */}
+        <div className="pt-3 px-0.5">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-[16px] font-semibold text-primary-900 leading-snug truncate">
+              {turf.name}
+            </h3>
+            {turf.rating > 0 && (
+              <span className="flex items-center gap-1 text-[14px] text-primary-900 shrink-0">
+                <Star className="w-3.5 h-3.5 fill-current" />
+                <span className="tabular-nums">{turf.rating.toFixed(1)}</span>
+                {turf.total_reviews > 0 && (
+                  <span className="text-primary-400 tabular-nums">
+                    ({turf.total_reviews.toLocaleString("en-IN")})
+                  </span>
+                )}
+              </span>
+            )}
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-accent-600 border border-accent-500 rounded-full px-3 py-1.5 shrink-0">
-            Book · Call
-          </span>
+          <p className="mt-0.5 text-[14px] text-primary-500 truncate">
+            {[place, distanceLabel ? `${distanceLabel} away` : null, sports.join(", ") || null]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          <p className="mt-1 text-[14px] text-primary-900">
+            {priceSummary.kind === "real" ? (
+              <>
+                <span className="font-semibold tabular-nums">{range(priceSummary.min, priceSummary.max)}</span>
+                <span className="text-primary-500"> / hour</span>
+              </>
+            ) : priceSummary.kind === "reported" ? (
+              <>
+                <span className="font-semibold tabular-nums">~{range(priceSummary.min, priceSummary.max)}</span>
+                <span className="text-primary-500"> / hour, reported</span>
+              </>
+            ) : (
+              <span className="text-primary-500">Check venue for pricing</span>
+            )}
+          </p>
         </div>
       </article>
     </Link>

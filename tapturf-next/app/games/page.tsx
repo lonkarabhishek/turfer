@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Open Games in Nashik & Pune | TapTurf",
     description:
-      "Live sports games looking for players in Nashik and Pune. Cricket, football, and more — join in one tap.",
+      "Live sports games looking for players in Nashik and Pune. Cricket, football, and more. Join in one tap.",
     url: "https://www.tapturf.in/games",
     siteName: "TapTurf",
     locale: "en_IN",
@@ -82,9 +82,9 @@ export default async function GamesPage() {
             {active.map((g) => (
               <li key={g.id}>
                 <a href={`/game/${g.id}`}>
-                  {g.sport} at {g.turfs?.name || "a local turf"} — {g.date} {g.start_time}
+                  {g.sport} at {g.turfs?.name || "a local turf"}, {g.date} {g.start_time}
                   {" "}
-                  {g.turfs?.address ? `— ${g.turfs.address}` : ""}
+                  {g.turfs?.address ? `, ${g.turfs.address}` : ""}
                   {" "}
                   {g.price_per_player > 0 ? `₹${g.price_per_player} per player` : "Free"}
                 </a>

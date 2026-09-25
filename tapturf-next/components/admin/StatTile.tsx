@@ -19,7 +19,7 @@ export function StatTile({
   const subColor = tone === "default" ? "text-primary-500" : "text-white/80";
   return (
     <div className={`rounded-2xl p-5 ${bg}`}>
-      <p className={`text-[11px] font-bold uppercase tracking-widest ${labelColor}`}>
+      <p className={`text-[11px] font-bold ${labelColor}`}>
         {label}
       </p>
       <p className="font-display text-4xl md:text-5xl mt-1 leading-none">{value}</p>

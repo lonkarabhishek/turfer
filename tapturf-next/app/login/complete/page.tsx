@@ -56,7 +56,7 @@ function CompleteInner() {
             <div className="w-12 h-12 rounded-full bg-hot-500/10 flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-6 h-6 text-hot-600" />
             </div>
-            <p className="font-display uppercase text-primary-900 text-xl tracking-wide mb-1">
+            <p className="font-display text-primary-900 text-xl mb-1">
               Something got stuck
             </p>
             <p className="text-sm text-primary-500">Sending you back to try again…</p>
@@ -64,7 +64,7 @@ function CompleteInner() {
         ) : (
           <>
             <Loader2 className="w-8 h-8 text-accent-500 animate-spin mx-auto mb-4" />
-            <p className="font-display uppercase text-primary-900 text-xl tracking-wide mb-1">
+            <p className="font-display text-primary-900 text-xl mb-1">
               Signing you in
             </p>
             <p className="text-sm text-primary-500">One second, taking you home…</p>

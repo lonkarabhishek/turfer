@@ -35,13 +35,13 @@ export async function generateMetadata(): Promise<Metadata> {
     // absolute so layout's template doesn't add another "| TapTurf" —
     // the wordmark is already the first word.
     title: {
-      absolute: `TapTurf — Cricket, Football & Sports Turfs in ${cityLine}`,
+      absolute: `TapTurf: Cricket, Football & Sports Turfs in ${cityLine}`,
     },
     description: `Book sports turfs across ${cityLine}. ${rounded}+ grounds for cricket, football, box cricket, badminton and more. Find a game, host a game, run the pitch.`,
     keywords:
       "turf booking nashik, turf booking pune, turf booking mumbai, cricket turf, football turf, box cricket, sports turfs maharashtra, tapturf",
     openGraph: {
-      title: `TapTurf — Book Turfs in ${cityLine}`,
+      title: `TapTurf: Book Turfs in ${cityLine}`,
       description: `${rounded}+ sports turfs across ${cityLine}. Find a game, host a game, run the pitch.`,
       url: "https://www.tapturf.in",
       siteName: "TapTurf",
@@ -110,12 +110,12 @@ export default async function HomePage() {
           return (
             <div key={c.id}>
               <div className="flex items-end justify-between mb-4">
-                <h2 className="font-display uppercase text-2xl md:text-3xl text-primary-800 tracking-tight">
+                <h2 className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight">
                   Popular in {labelFor(c.id)}
                 </h2>
                 <Link
                   href={`/${c.id}`}
-                  className="flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700 uppercase tracking-wide"
+                  className="flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700"
                 >
                   All {all} <ArrowUpRight className="w-4 h-4" />
                 </Link>

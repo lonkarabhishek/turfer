@@ -24,7 +24,7 @@ export function BlockRenderer({ block }: { block: Block }) {
       return (
         <h2
           id={block.id ?? slugify(block.text)}
-          className="font-display uppercase tracking-wide text-2xl md:text-3xl text-primary-900 mt-10 mb-4 scroll-mt-24"
+          className="font-display text-2xl md:text-3xl text-primary-900 mt-10 mb-4 scroll-mt-24"
         >
           {block.text}
         </h2>
@@ -68,7 +68,7 @@ export function BlockRenderer({ block }: { block: Block }) {
           <p>&ldquo;{block.text}&rdquo;</p>
           {block.by && (
             <footer className="mt-2 text-sm not-italic text-primary-500">
-              — {block.by}
+              {block.by}
             </footer>
           )}
         </blockquote>
@@ -77,7 +77,7 @@ export function BlockRenderer({ block }: { block: Block }) {
     case "callout":
       return (
         <aside className="my-8 rounded-2xl border border-accent-200 bg-accent-50/60 p-5">
-          <p className="text-xs font-bold uppercase tracking-wider text-accent-600 mb-2">
+          <p className="text-xs font-bold text-accent-600 mb-2">
             {block.title}
           </p>
           <p className="text-[16px] leading-[1.65] text-primary-800">
@@ -94,14 +94,14 @@ export function BlockRenderer({ block }: { block: Block }) {
           {isExternal ? (
             <a
               href={block.href}
-              className="inline-flex items-center justify-center rounded-full bg-accent-500 hover:bg-accent-400 text-white font-semibold text-sm uppercase tracking-wide px-5 py-3 shadow-neon transition-colors whitespace-nowrap"
+              className="inline-flex items-center justify-center rounded-full bg-accent-500 hover:bg-accent-400 text-white font-semibold text-sm px-5 py-3 shadow-neon transition-colors whitespace-nowrap"
             >
               {block.label}
             </a>
           ) : (
             <Link
               href={block.href}
-              className="inline-flex items-center justify-center rounded-full bg-accent-500 hover:bg-accent-400 text-white font-semibold text-sm uppercase tracking-wide px-5 py-3 shadow-neon transition-colors whitespace-nowrap"
+              className="inline-flex items-center justify-center rounded-full bg-accent-500 hover:bg-accent-400 text-white font-semibold text-sm px-5 py-3 shadow-neon transition-colors whitespace-nowrap"
             >
               {block.label}
             </Link>
@@ -142,7 +142,7 @@ export function BlockRenderer({ block }: { block: Block }) {
               {block.note && (
                 <p className="text-[15px] leading-snug text-primary-700">{block.note}</p>
               )}
-              <p className="mt-3 text-xs font-bold uppercase tracking-widest text-accent-600 group-hover:text-accent-700">
+              <p className="mt-3 text-xs font-bold text-accent-600 group-hover:text-accent-700">
                 View turf &rarr;
               </p>
             </div>
@@ -161,7 +161,7 @@ export function BlockRenderer({ block }: { block: Block }) {
               <span className="font-display text-3xl md:text-4xl text-primary-900 leading-none tabular-nums">
                 {s.value}
               </span>
-              <span className="mt-2 text-xs font-bold uppercase tracking-widest text-accent-600">
+              <span className="mt-2 text-xs font-bold text-accent-600">
                 {s.label}
               </span>
               {s.hint && (
@@ -179,7 +179,7 @@ export function BlockRenderer({ block }: { block: Block }) {
         <figure className="not-prose my-8 rounded-2xl border border-primary-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-primary-50 text-primary-500 text-[11px] uppercase tracking-widest">
+              <thead className="bg-primary-50 text-primary-500 text-[11px]">
                 <tr>
                   {block.columns.map((c, i) => (
                     <th
@@ -251,7 +251,7 @@ export function BlockRenderer({ block }: { block: Block }) {
       return (
         <div className="not-prose my-8">
           {block.title && (
-            <h3 className="font-display uppercase tracking-wide text-primary-900 text-xl md:text-2xl mb-4">
+            <h3 className="font-display text-primary-900 text-xl md:text-2xl mb-4">
               {block.title}
             </h3>
           )}

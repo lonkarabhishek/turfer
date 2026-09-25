@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, User, Bell, Zap, RotateCw } from "lucide-react";
+import { User, Bell, Zap, RotateCw } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
@@ -43,10 +43,10 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 md:h-16 flex items-center justify-between gap-2 min-w-0">
         {/* Wordmark */}
         <Link href="/" className="flex items-center gap-2 group min-w-0 flex-shrink">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-accent-500 flex items-center justify-center shadow-neon group-hover:rotate-[-6deg] transition-transform flex-shrink-0">
+          <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-accent-500 flex items-center justify-center flex-shrink-0">
             <Zap className="w-4 h-4 md:w-5 md:h-5 text-white" strokeWidth={2.75} />
           </div>
-          <span className="font-display uppercase text-xl md:text-2xl text-primary-800 tracking-wide leading-none truncate">
+          <span className="text-[19px] md:text-xl font-semibold tracking-tight text-primary-900 leading-none truncate">
             Tap<span className="text-accent-500">Turf</span>
           </span>
         </Link>
@@ -56,19 +56,19 @@ export function Header() {
           <div className="mr-2">
             <CityPicker />
           </div>
-          <Link href="/games" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
+          <Link href="/games" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Games
           </Link>
-          <Link href="/turfs" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
+          <Link href="/turfs" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Turfs
           </Link>
-          <Link href="/sport/cricket" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
+          <Link href="/sport/cricket" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Cricket
           </Link>
-          <Link href="/sport/football" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
+          <Link href="/sport/football" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Football
           </Link>
-          <Link href="/blog" className="text-sm font-semibold uppercase tracking-wide text-primary-700 hover:text-accent-600 px-3 py-2 rounded-full transition-colors">
+          <Link href="/blog" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Blog
           </Link>
 
@@ -83,7 +83,7 @@ export function Header() {
               >
                 <Bell className="w-5 h-5 text-primary-700" />
                 {unread > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-hot-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-hot">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-hot-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {unread > 9 ? "9+" : unread}
                   </span>
                 )}
@@ -114,7 +114,7 @@ export function Header() {
           ) : (
             <button
               onClick={login}
-              className="ml-3 text-sm font-bold uppercase tracking-wide text-white bg-primary-800 hover:bg-primary-900 px-5 py-2 min-h-[40px] rounded-full transition-all shadow-soft focus-neon"
+              className="ml-3 text-sm font-semibold text-white bg-accent-500 hover:bg-accent-600 px-4 py-2 min-h-[36px] rounded-full transition-colors focus-neon"
             >
               Log in
             </button>
@@ -131,17 +131,10 @@ export function Header() {
           <button
             onClick={() => window.location.reload()}
             aria-label="Refresh"
-            className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
+            className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full active:bg-primary-100 transition-colors"
           >
-            <RotateCw className="w-4 h-4 text-primary-700" />
+            <RotateCw className="w-[18px] h-[18px] text-accent-500" />
           </button>
-          <Link
-            href="/turfs"
-            className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full border border-primary-200 bg-white active:bg-primary-50 transition-all"
-            aria-label="Search turfs"
-          >
-            <Search className="w-4 h-4 text-primary-700" />
-          </Link>
 
           {loading ? (
             <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary-100 animate-pulse" />
@@ -151,9 +144,9 @@ export function Header() {
               className="flex-shrink-0 relative flex items-center justify-center w-9 h-9"
               aria-label="Notifications"
             >
-              <Bell className="w-5 h-5 text-primary-700" />
+              <Bell className="w-5 h-5 text-accent-500" />
               {unread > 0 && (
-                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 bg-hot-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-hot">
+                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 bg-hot-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
                   {unread > 9 ? "9+" : unread}
                 </span>
               )}
@@ -161,9 +154,9 @@ export function Header() {
           ) : (
             <button
               onClick={login}
-              className="flex-shrink-0 flex items-center justify-center h-9 px-3 rounded-full bg-primary-800 active:bg-primary-900 shadow-soft transition-all"
+              className="flex-shrink-0 flex items-center justify-center h-8 px-3.5 rounded-full bg-accent-500 active:bg-accent-600 transition-colors"
             >
-              <span className="text-[11px] font-bold uppercase tracking-wide text-white">Log in</span>
+              <span className="text-[13px] font-semibold text-white">Log in</span>
             </button>
           )}
         </div>

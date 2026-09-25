@@ -100,7 +100,7 @@ export function TimeSlotSheet({
             </span>
             <div>
               <p className="text-[15px] font-bold text-primary-800 leading-none">Pick a start time</p>
-              <p className="text-[11px] font-mono uppercase tracking-widest text-primary-500 mt-0.5">
+              <p className="text-[11px] font-mono text-primary-500 mt-0.5">
                 30-min slots only
               </p>
             </div>
@@ -128,7 +128,7 @@ export function TimeSlotSheet({
           )}
           {groups.map(({ label, slots }) => (
             <section key={label} className="mb-4 last:mb-0">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-2 px-1">
+              <p className="text-[10px] font-semibold text-primary-500 mb-2 px-1">
                 {label}
               </p>
               <div className="grid grid-cols-3 gap-2">

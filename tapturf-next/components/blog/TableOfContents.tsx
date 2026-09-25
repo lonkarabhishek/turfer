@@ -19,7 +19,7 @@ export function TableOfContents({ blocks }: { blocks: Block[] }) {
       aria-label="On this page"
       className="not-prose my-6 rounded-2xl border border-primary-200 bg-primary-50/50 p-4 sm:p-5"
     >
-      <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500 mb-3">
+      <p className="text-[11px] font-bold text-primary-500 mb-3">
         On this page
       </p>
       <ol className="space-y-1.5 text-sm">

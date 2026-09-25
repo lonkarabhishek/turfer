@@ -74,7 +74,7 @@ export function MyGames({ userId }: { userId: string }) {
             <button
               key={k}
               onClick={() => setView(k)}
-              className={`text-[13px] font-bold uppercase tracking-wide px-4 py-2 rounded-full border-2 transition-all focus-neon ${
+              className={`text-[13px] font-bold px-4 py-2 rounded-full border-2 transition-all focus-neon ${
                 active
                   ? "bg-primary-800 text-white border-primary-800"
                   : "text-primary-700 border-primary-200 bg-white hover:border-primary-300"
@@ -94,7 +94,7 @@ export function MyGames({ userId }: { userId: string }) {
           {upcoming.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-accent-600">
+                <p className="text-[11px] font-semibold text-accent-600">
                   Upcoming · {upcoming.length}
                 </p>
               </div>
@@ -107,7 +107,7 @@ export function MyGames({ userId }: { userId: string }) {
           {/* ── Past — collapsed, muted ── */}
           {past.length > 0 && (
             <section>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-400 mb-3">
+              <p className="text-[11px] font-semibold text-primary-400 mb-3">
                 Past · {past.length}
               </p>
               <div className="space-y-3 opacity-80">
@@ -145,12 +145,12 @@ function GameRow({ game, highlight = false }: { game: Game; highlight?: boolean 
         <div className={highlight ? "pl-2" : ""}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
                 {game.sport}
               </span>
             </div>
             <span
-              className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+              className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
                 status === "live"
                   ? "bg-hot-500/10 text-hot-600 border border-hot-500/40"
                   : status === "expired"
@@ -162,7 +162,7 @@ function GameRow({ game, highlight = false }: { game: Game; highlight?: boolean 
             </span>
           </div>
 
-          <p className="font-display uppercase text-lg text-primary-800 leading-tight tracking-wide truncate">
+          <p className="font-display text-lg text-primary-800 leading-tight truncate">
             {game.turfs?.name || game.title}
           </p>
 
@@ -200,7 +200,7 @@ function EmptyState({ view }: { view: View }) {
       </p>
       <Link
         href={view === "created" ? "/game/create" : "/games"}
-        className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold uppercase tracking-wide px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
+        className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
       >
         <Plus className="w-4 h-4" strokeWidth={2.75} />
         {view === "created" ? "Host a game" : "Browse games"}

@@ -246,7 +246,7 @@ export function CreateGameFlow() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
         <Loader2 className="w-7 h-7 text-accent-500 animate-spin" />
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">Loading…</p>
+        <p className="text-xs font-semibold text-primary-500">Loading…</p>
       </div>
     );
   }
@@ -257,13 +257,13 @@ export function CreateGameFlow() {
         <div className="w-16 h-16 bg-accent-500 rounded-2xl flex items-center justify-center mb-6 shadow-neon">
           <Zap className="w-8 h-8 text-white" strokeWidth={2.75} />
         </div>
-        <h2 className="font-display uppercase text-4xl text-primary-800 mb-2 tracking-tight">Log in to host</h2>
+        <h2 className="font-display text-4xl text-primary-800 mb-2 tracking-tight">Log in to host</h2>
         <p className="text-sm text-primary-500 mb-7 max-w-xs">
           Sign in to create games, invite your crew, and manage your squad.
         </p>
         <button
           onClick={login}
-          className="bg-primary-800 hover:bg-primary-900 text-white px-8 py-3.5 min-h-[52px] rounded-full font-bold uppercase tracking-wide text-sm shadow-elevated transition-all focus-neon"
+          className="bg-primary-800 hover:bg-primary-900 text-white px-8 py-3.5 min-h-[52px] rounded-full font-bold text-sm shadow-elevated transition-all focus-neon"
         >
           Log in
         </button>
@@ -294,34 +294,34 @@ export function CreateGameFlow() {
               <Check className="w-10 h-10 text-white stroke-[3]" aria-hidden="true" />
             </div>
           </div>
-          <h1 className="font-display uppercase text-5xl text-primary-800 mb-3 tracking-tight leading-none">
+          <h1 className="font-display text-5xl text-primary-800 mb-3 tracking-tight leading-none">
             Game<br /><span className="text-accent-500">on.</span>
           </h1>
           <p className="text-sm text-primary-600 mb-1">
             <span className="font-semibold text-primary-800">{sport}</span> · {turfName}
           </p>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary-500 mb-8">
-            Share the link — get your squad in
+          <p className="text-xs font-semibold text-primary-500 mb-8">
+            Share the link, get your squad in
           </p>
 
           <div className="w-full space-y-3">
             <button
               onClick={handleWhatsAppShare}
-              className="w-full flex items-center justify-center gap-2.5 bg-[#25D366] hover:bg-[#1fb855] text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors focus-neon"
+              className="w-full flex items-center justify-center gap-2.5 bg-[#25D366] hover:bg-[#1fb855] text-white py-4 min-h-[56px] rounded-full font-bold text-base transition-colors focus-neon"
             >
               <Share2 className="w-5 h-5" aria-hidden="true" />
               WhatsApp
             </button>
             <button
               onClick={handleCopyLink}
-              className="w-full flex items-center justify-center gap-2.5 border-2 border-primary-200 bg-white hover:bg-primary-50 text-primary-800 py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors focus-neon"
+              className="w-full flex items-center justify-center gap-2.5 border-2 border-primary-200 bg-white hover:bg-primary-50 text-primary-800 py-4 min-h-[56px] rounded-full font-bold text-base transition-colors focus-neon"
             >
               <Copy className="w-5 h-5" aria-hidden="true" />
               {copied ? "Copied ✓" : "Copy link"}
             </button>
             <button
               onClick={() => router.push(`/game/${createdGameId}`)}
-              className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-colors shadow-elevated focus-neon"
+              className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base transition-colors shadow-elevated focus-neon"
             >
               <Trophy className="w-5 h-5" aria-hidden="true" />
               View my game
@@ -350,7 +350,7 @@ export function CreateGameFlow() {
                     <div className={`w-full h-1 rounded-full transition-all duration-300 ${
                       step >= s.n ? "bg-accent-500" : "bg-primary-200"
                     }`} />
-                    <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                    <span className={`text-[10px] font-semibold transition-colors ${
                       step >= s.n ? "text-accent-600" : "text-primary-400"
                     }`}>
                       {s.label}
@@ -370,11 +370,11 @@ export function CreateGameFlow() {
             {/* ─── Step 1: Sport ───────────────────────────── */}
             {step === 1 && (
               <div>
-                <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
+                <h1 className="font-display text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                   What are<br />
                   <span className="text-accent-500">you playing?</span>
                 </h1>
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary-500 mb-6">
+                <p className="text-xs font-semibold text-primary-500 mb-6">
                   Pick your sport
                 </p>
 
@@ -397,8 +397,8 @@ export function CreateGameFlow() {
                           {s.icon}
                         </div>
                         <div>
-                          <p className="font-display uppercase text-lg text-primary-800 leading-tight tracking-wide">{s.name}</p>
-                          <p className="text-[11px] text-primary-500 font-semibold uppercase tracking-widest mt-0.5 flex items-center gap-1">
+                          <p className="font-display text-lg text-primary-800 leading-tight">{s.name}</p>
+                          <p className="text-[11px] text-primary-500 font-semibold mt-0.5 flex items-center gap-1">
                             <Users className="w-3 h-3" aria-hidden="true" />
                             {s.defaultMax} slots
                           </p>
@@ -419,17 +419,17 @@ export function CreateGameFlow() {
             {step === 2 && (
               <div className="space-y-2">
                 <div className="mb-6">
-                  <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
+                  <h1 className="font-display text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     When &<br />
                     <span className="text-accent-500">where?</span>
                   </h1>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+                  <p className="text-xs font-semibold text-primary-500">
                     Date · time · venue
                   </p>
                 </div>
 
                 {/* SCHEDULE group */}
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-2">
+                <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-2">
                   Schedule
                 </p>
                 <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
@@ -516,7 +516,7 @@ export function CreateGameFlow() {
 
                 {/* VENUE group — no overflow-hidden here, otherwise the
                     search dropdown gets clipped inside the card. */}
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
+                <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-6">
                   Venue
                 </p>
                 <div className="relative bg-white border border-primary-200 rounded-2xl">
@@ -562,7 +562,7 @@ export function CreateGameFlow() {
                       )}
                       {turfSearch.length >= 2 && turfResults.length === 0 && (
                         <p className="absolute z-[60] top-full mt-2 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-[13px] text-primary-500 shadow-elevated">
-                          No turfs found — try a different name
+                          No turfs found. Try a different name
                         </p>
                       )}
                     </div>
@@ -575,11 +575,11 @@ export function CreateGameFlow() {
             {step === 3 && (
               <div className="space-y-2">
                 <div className="mb-6">
-                  <h1 className="font-display uppercase text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
+                  <h1 className="font-display text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     Squad<br />
                     <span className="text-accent-500">details</span>
                   </h1>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+                  <p className="text-xs font-semibold text-primary-500">
                     Almost on the pitch
                   </p>
                 </div>
@@ -592,7 +592,7 @@ export function CreateGameFlow() {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="font-display uppercase text-lg text-primary-800 truncate tracking-wide leading-tight">
+                    <p className="font-display text-lg text-primary-800 truncate leading-tight">
                       {sport} · {turfName}
                     </p>
                     <p className="text-[12px] font-mono text-primary-600 mt-0.5">
@@ -607,7 +607,7 @@ export function CreateGameFlow() {
                 </div>
 
                 {/* GAME group */}
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-2">
+                <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-2">
                   Game
                 </p>
                 <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
@@ -688,7 +688,7 @@ export function CreateGameFlow() {
                 </div>
 
                 {/* COST group */}
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
+                <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-6">
                   Cost per person
                 </p>
                 <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
@@ -729,7 +729,7 @@ export function CreateGameFlow() {
                 </div>
 
                 {/* NOTES group */}
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 px-1 pb-2 pt-6">
+                <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-6">
                   Notes <span className="normal-case font-normal text-primary-400">(optional)</span>
                 </p>
                 <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden">
@@ -761,7 +761,7 @@ export function CreateGameFlow() {
               <button
                 onClick={() => setStep(3)}
                 disabled={!step2Valid}
-                className="w-full flex items-center justify-center gap-2 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] shadow-elevated focus-neon"
+                className="w-full flex items-center justify-center gap-2 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] shadow-elevated focus-neon"
               >
                 Next
               </button>
@@ -775,7 +775,7 @@ export function CreateGameFlow() {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-600 text-white py-4 min-h-[56px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-50 active:scale-[0.98] shadow-neon focus-neon"
+                className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-600 text-white py-4 min-h-[56px] rounded-full font-bold text-base transition-all disabled:opacity-50 active:scale-[0.98] shadow-neon focus-neon"
               >
                 {submitting ? (
                   <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creating…</>

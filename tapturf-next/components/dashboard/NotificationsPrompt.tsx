@@ -161,7 +161,7 @@ export function NotificationsPrompt() {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setGuideOpen(true)}
-                className="inline-flex items-center gap-1 text-[12px] font-bold uppercase tracking-wide bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
+                className="inline-flex items-center gap-1 text-[12px] font-bold bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
               >
                 Show me how
                 <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.75} />
@@ -207,7 +207,7 @@ export function NotificationsPrompt() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleEnable}
-                className="text-[12px] font-bold uppercase tracking-wide bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
+                className="text-[12px] font-bold bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 rounded-full transition-colors focus-neon"
               >
                 Turn on
               </button>

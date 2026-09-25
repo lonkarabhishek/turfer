@@ -49,7 +49,7 @@ export function MyRequests({ userId }: { userId: string }) {
         <p className="text-[13px] text-primary-500 mb-6">Find a game near you and tap Join</p>
         <Link
           href="/games"
-          className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold uppercase tracking-wide px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
+          className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
         >
           <Gamepad2 className="w-4 h-4" />
           Browse games
@@ -66,7 +66,7 @@ export function MyRequests({ userId }: { userId: string }) {
       {/* Pending requests first */}
       {pending.length > 0 && (
         <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Pending ({pending.length})</p>
+          <p className="text-xs font-bold text-gray-500 mb-2">Pending ({pending.length})</p>
           <div className="space-y-2">
             {pending.map((req) => (
               <div key={req.id} className="border-2 border-yellow-200 bg-yellow-50/50 rounded-xl p-4">
@@ -104,7 +104,7 @@ export function MyRequests({ userId }: { userId: string }) {
       {handled.length > 0 && (
         <div>
           {pending.length > 0 && (
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Previous</p>
+            <p className="text-xs font-bold text-gray-500 mb-2">Previous</p>
           )}
           <div className="space-y-2">
             {handled.map((req) => (

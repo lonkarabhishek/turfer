@@ -118,10 +118,10 @@ export function CityPicker() {
             </button>
 
             <div className="px-5 pt-6 pb-4">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-primary-500 mb-1">
-                // Playing where?
+              <p className="text-[11px] font-mono text-primary-500 mb-1">
+                Playing where?
               </p>
-              <h2 className="font-display uppercase text-3xl text-primary-800 leading-none tracking-tight">
+              <h2 className="font-display text-3xl text-primary-800 leading-none tracking-tight">
                 Pick your city
               </h2>
             </div>
@@ -139,7 +139,7 @@ export function CityPicker() {
                       <span className="w-9 h-9 rounded-xl bg-accent-50 border border-accent-500/30 flex items-center justify-center">
                         <MapPin className="w-4 h-4 text-accent-600" />
                       </span>
-                      <span className="font-display uppercase text-xl text-primary-800 leading-none tracking-wide">
+                      <span className="font-display text-xl text-primary-800 leading-none">
                         {c.label}
                       </span>
                     </span>

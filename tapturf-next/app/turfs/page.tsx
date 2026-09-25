@@ -12,7 +12,7 @@ export const revalidate = 600;
 // Title stops at "…Book" — layout's title.template adds "| TapTurf" so
 // hard-coding it here produced "…Book | TapTurf | TapTurf" in SERPs.
 export const metadata: Metadata = {
-  title: "All Sports Turfs in Nashik & Pune — Compare Prices & Book",
+  title: "All Sports Turfs in Nashik & Pune: Compare Prices & Book",
   description:
     "Every sports turf in Nashik and Pune. Compare prices, check ratings, view photos. Cricket, football, box cricket, badminton and more. Call or WhatsApp to book.",
   keywords:
@@ -31,15 +31,12 @@ export default async function TurfsPage() {
   const turfs = await getAllActiveTurfs();
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <div className="mb-8">
-        <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-2">
-          Nashik + Pune
-        </p>
-        <h1 className="text-[30px] md:text-[36px] font-bold text-primary-800 font-serif">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
+      <div className="mb-6">
+        <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">
           Find your turf
         </h1>
-        <p className="text-base text-primary-400 mt-1">
+        <p className="text-[17px] text-primary-500 mt-1">
           {turfs.length} sports turfs with pricing, ratings, and directions
         </p>
       </div>

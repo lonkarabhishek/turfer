@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Bebas_Neue, Space_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
@@ -13,22 +13,6 @@ import "./globals.css";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
-  display: "swap",
-});
-
-// Bebas Neue = condensed sport-broadcast headline face
-const bebas = Bebas_Neue({
-  variable: "--font-bebas",
-  subsets: ["latin"],
-  weight: "400",
-  display: "swap",
-});
-
-// Space Mono = scoreboard/tabular numerals
-const spaceMono = Space_Mono({
-  variable: "--font-space-mono",
-  subsets: ["latin"],
-  weight: ["400", "700"],
   display: "swap",
 });
 
@@ -84,7 +68,7 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://drive.google.com" />
         <link rel="dns-prefetch" href="https://lh3.googleusercontent.com" />
       </head>
-      <body className={`${inter.variable} ${bebas.variable} ${spaceMono.variable} antialiased`}>
+      <body className={`${inter.variable} antialiased`}>
         <GoogleAnalytics />
         <PWALifecycle />
         <RouteProgress />

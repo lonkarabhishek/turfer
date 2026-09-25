@@ -50,11 +50,11 @@ export function DashboardClient() {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 sm:py-8">
       {/* ─── Greeting header — mobile-first, warm ─────────────────── */}
       <header className="mb-5">
-        <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent-600 mb-1.5">
-          // {new Date().toLocaleDateString("en-IN", { weekday: "long" })}
+        <p className="text-[11px] font-mono text-accent-600 mb-1.5">
+          {new Date().toLocaleDateString("en-IN", { weekday: "long" })}
         </p>
         <div className="flex items-start justify-between gap-3">
-          <h1 className="font-display uppercase text-3xl sm:text-5xl text-primary-800 leading-[0.92] tracking-tight">
+          <h1 className="font-display text-3xl sm:text-5xl text-primary-800 leading-[0.92] tracking-tight">
             Hey<br className="sm:hidden" />
             <span className="text-accent-500"> {firstName}.</span>
           </h1>
@@ -63,7 +63,7 @@ export function DashboardClient() {
               await logout();
               window.location.href = "/";
             }}
-            className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-primary-500 hover:text-hot-600 transition-colors shrink-0 border border-primary-200 rounded-full px-3 py-1.5"
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-primary-500 hover:text-hot-600 transition-colors shrink-0 border border-primary-200 rounded-full px-3 py-1.5"
             aria-label="Log out"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -88,7 +88,7 @@ export function DashboardClient() {
               role="tab"
               aria-selected={active}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-full text-[13px] font-bold uppercase tracking-wide whitespace-nowrap border-2 transition-all focus-neon ${
+              className={`flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-full text-[13px] font-bold whitespace-nowrap border-2 transition-all focus-neon ${
                 active
                   ? "bg-accent-500 text-white border-accent-500 shadow-neon"
                   : "text-primary-700 bg-white border-primary-200 hover:border-accent-500"

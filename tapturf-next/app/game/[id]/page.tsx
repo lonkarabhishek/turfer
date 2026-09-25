@@ -42,7 +42,7 @@ export async function generateMetadata(
   const turfCity = (game.turfs?.["city"] as string | undefined) ??
     (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
   const cityLabel = isCity(turfCity) ? labelFor(turfCity) : "Nashik";
-  const title = `${game.sport} at ${venue} — ${when}`;
+  const title = `${game.sport} at ${venue}, ${when}`;
   const description = `${game.sport} game at ${venue}, ${cityLabel} on ${when}. ${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left · ${price}. Join in one tap on TapTurf.`;
 
   return {

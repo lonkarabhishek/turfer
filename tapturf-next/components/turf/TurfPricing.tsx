@@ -54,14 +54,14 @@ export function TurfPricing({ turf }: { turf: Turf }) {
         <table className="w-full">
           <thead>
             <tr className="bg-primary-50 border-b border-cream-300">
-              <th className="text-left py-3.5 px-5 text-xs font-semibold text-primary-500 uppercase tracking-wider">
+              <th className="text-left py-3.5 px-5 text-xs font-semibold text-primary-500">
                 Time Slot
               </th>
-              <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500 uppercase tracking-wider">
+              <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500">
                 Weekday
               </th>
               {hasWeekendPricing && (
-                <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500 uppercase tracking-wider">
+                <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500">
                   Weekend
                 </th>
               )}

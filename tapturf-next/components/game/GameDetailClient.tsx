@@ -426,7 +426,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                   href={`https://wa.me/${game.host_phone.replace(/[^0-9]/g, "")}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fb855] text-white text-xs font-bold uppercase tracking-wide px-3 py-2 rounded-full transition-colors shrink-0"
+                  className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fb855] text-white text-xs font-bold px-3 py-2 rounded-full transition-colors shrink-0"
                 >
                   WhatsApp
                 </a>
@@ -455,8 +455,8 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           <details className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5 group">
             <summary className="p-5 cursor-pointer flex items-center justify-between text-base font-semibold text-primary-800 list-none">
               <span>All details</span>
-              <span className="text-xs font-mono uppercase tracking-widest text-primary-500 group-open:hidden">Show</span>
-              <span className="text-xs font-mono uppercase tracking-widest text-primary-500 hidden group-open:inline">Hide</span>
+              <span className="text-xs font-mono text-primary-500 group-open:hidden">Show</span>
+              <span className="text-xs font-mono text-primary-500 hidden group-open:inline">Hide</span>
             </summary>
             <div className="p-5 pt-0 grid grid-cols-2 gap-3">
               <div className="bg-primary-50 rounded-xl p-3">

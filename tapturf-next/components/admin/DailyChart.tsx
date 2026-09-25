@@ -34,7 +34,7 @@ export function DailyChart({
     <div>
       <div className="flex items-baseline justify-between mb-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary-500">
+          <p className="text-xs font-bold text-primary-500">
             {label}
           </p>
           <p className="font-display text-3xl text-primary-900 mt-0.5 leading-none">
@@ -70,7 +70,7 @@ export function DailyChart({
           );
         })}
       </svg>
-      <div className="flex justify-between mt-2 text-[10px] uppercase tracking-widest text-primary-400 font-semibold">
+      <div className="flex justify-between mt-2 text-[10px] text-primary-400 font-semibold">
         <span>{formatShort(first)}</span>
         <span>{formatShort(last)}</span>
       </div>

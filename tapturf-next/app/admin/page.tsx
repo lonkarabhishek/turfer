@@ -109,10 +109,10 @@ export default async function AdminPage() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-accent-600 mb-2">
+          <p className="text-xs font-bold text-accent-600 mb-2">
             Owner only
           </p>
-          <h1 className="font-display uppercase tracking-tight text-primary-900 text-4xl md:text-5xl leading-none">
+          <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-none">
             TapTurf Admin
           </h1>
           <p className="text-primary-500 text-sm mt-2">
@@ -132,13 +132,13 @@ export default async function AdminPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/admin"
-            className="rounded-full bg-primary-900 text-white text-xs font-bold uppercase tracking-widest px-4 py-2 hover:bg-primary-800"
+            className="rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800"
           >
             Refresh
           </Link>
           <Link
             href="/"
-            className="rounded-full border border-primary-200 text-primary-800 text-xs font-bold uppercase tracking-widest px-4 py-2 hover:bg-primary-50"
+            className="rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50"
           >
             Back to site
           </Link>
@@ -241,7 +241,7 @@ export default async function AdminPage() {
       {/* Bookings + monetisation — new DB tables. Zeroes today, will
           come alive as bookings and reviews start flowing. */}
       <section className="mb-2">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500 mb-3">
+        <p className="text-[11px] font-bold text-primary-500 mb-3">
           Bookings & revenue
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -272,7 +272,7 @@ export default async function AdminPage() {
 
       {/* Reviews + notifications snapshot */}
       <section className="mb-8 mt-4">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500 mb-3">
+        <p className="text-[11px] font-bold text-primary-500 mb-3">
           Reviews & notifications
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -311,14 +311,14 @@ export default async function AdminPage() {
         {/* Recent users */}
         <div className="lg:col-span-2 rounded-2xl bg-white border border-primary-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-primary-100 flex items-baseline justify-between">
-            <p className="text-xs font-bold uppercase tracking-widest text-primary-500">
+            <p className="text-xs font-bold text-primary-500">
               Latest signups
             </p>
             <p className="text-xs text-primary-400">Showing {recentUsers.length}</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-primary-50 text-[11px] uppercase tracking-widest text-primary-500 font-semibold">
+              <thead className="bg-primary-50 text-[11px] text-primary-500 font-semibold">
                 <tr>
                   <th className="text-left px-4 py-2.5">Name</th>
                   <th className="text-left px-4 py-2.5">Contact</th>
@@ -378,7 +378,7 @@ export default async function AdminPage() {
         {/* Top hosts */}
         <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-primary-100">
-            <p className="text-xs font-bold uppercase tracking-widest text-primary-500">
+            <p className="text-xs font-bold text-primary-500">
               Top hosts
             </p>
           </div>
@@ -408,7 +408,7 @@ export default async function AdminPage() {
                   <p className="font-display text-xl text-primary-900 leading-none">
                     {h.games}
                   </p>
-                  <p className="text-[10px] uppercase tracking-widest text-primary-400 mt-0.5">
+                  <p className="text-[10px] text-primary-400 mt-0.5">
                     games
                   </p>
                 </div>
@@ -441,7 +441,7 @@ function MethodBadge({ method }: { method: "google" | "phone" | "unknown" }) {
   const label = method === "google" ? "Google" : method === "phone" ? "Phone" : "?";
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${cls}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${cls}`}
     >
       {label}
     </span>

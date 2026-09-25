@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowRight,
+  ChevronDown,
   Search,
   Gamepad2,
   Loader2,
@@ -90,56 +90,30 @@ export function MarketingHome() {
     <div className="min-h-[calc(100vh-3.5rem-3.5rem)] md:min-h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-[520px] text-center">
-          {/* Hero — short, direct, no fluff */}
-          <h1 className="font-display uppercase tracking-tight text-primary-900 leading-[0.95] text-display-xl mb-4">
+          {/* Hero: one headline, one line of support, two actions. */}
+          <h1 className="font-display text-primary-900 text-display-xl mb-4">
             Book turf.
             <br />
             <span className="text-accent-500">Find your squad.</span>
           </h1>
-          <p className="text-primary-600 text-base md:text-lg leading-snug max-w-[420px] mx-auto mb-10">
-            The fastest way to book a sports turf or join an open match near you.
+          <p className="text-primary-500 text-[17px] md:text-xl leading-snug max-w-[420px] mx-auto mb-9">
+            The easiest way to find a sports turf or join an open match near you.
           </p>
 
-          {/* Two primary CTAs — nothing else competes for attention */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/turfs"
-              className="press-tight group flex items-center justify-between rounded-2xl bg-primary-900 hover:bg-primary-800 text-white px-6 py-5 shadow-elevated"
+              className="press-tight inline-flex items-center justify-center gap-2 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[17px] font-semibold px-7 py-3.5 transition-colors"
             >
-              <span className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                  <Search className="w-5 h-5" strokeWidth={2.5} />
-                </span>
-                <span className="text-left">
-                  <span className="block text-[11px] font-bold uppercase tracking-widest text-white/70">
-                    I need a
-                  </span>
-                  <span className="block text-lg font-display uppercase tracking-wide leading-none mt-0.5">
-                    Turf
-                  </span>
-                </span>
-              </span>
-              <ArrowRight className="w-5 h-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+              <Search className="w-[18px] h-[18px]" strokeWidth={2.25} />
+              Find a turf
             </Link>
-
             <Link
               href="/games"
-              className="press-tight group flex items-center justify-between rounded-2xl bg-accent-500 hover:bg-accent-600 text-white px-6 py-5 shadow-neon"
+              className="press-tight inline-flex items-center justify-center gap-2 rounded-full bg-primary-100 hover:bg-primary-200 text-primary-900 text-[17px] font-semibold px-7 py-3.5 transition-colors"
             >
-              <span className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
-                  <Gamepad2 className="w-5 h-5" strokeWidth={2.5} />
-                </span>
-                <span className="text-left">
-                  <span className="block text-[11px] font-bold uppercase tracking-widest text-white/80">
-                    I want a
-                  </span>
-                  <span className="block text-lg font-display uppercase tracking-wide leading-none mt-0.5">
-                    Game
-                  </span>
-                </span>
-              </span>
-              <ArrowRight className="w-5 h-5 opacity-90 group-hover:translate-x-1 transition-transform" />
+              <Gamepad2 className="w-[18px] h-[18px]" strokeWidth={2.25} />
+              Join a game
             </Link>
           </div>
 
@@ -149,16 +123,14 @@ export function MarketingHome() {
           <div className="mt-8 flex items-center justify-center">
             <button
               onClick={() => setCityOpen(true)}
-              className="press-tight inline-flex items-center gap-2 rounded-full bg-white border border-primary-200 hover:border-primary-300 px-4 py-2 text-[13px] font-semibold text-primary-800"
+              className="press-tight inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[15px] text-accent-600 hover:text-accent-700"
             >
-              <MapPin className="w-4 h-4 text-accent-500" />
+              <MapPin className="w-4 h-4" />
               <span>{isCity(city) ? labelFor(city) : "All cities"}</span>
               {autoDetecting && (
                 <Loader2 className="w-3 h-3 animate-spin text-primary-400" />
               )}
-              <span className="text-primary-400 text-[11px] font-mono uppercase tracking-widest ml-1">
-                change
-              </span>
+              <ChevronDown className="w-4 h-4" />
             </button>
           </div>
 
@@ -272,10 +244,10 @@ function CitySheet({
         </button>
 
         <div className="px-6 pt-4 pb-6">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-accent-600 mb-1">
+          <p className="text-[11px] font-bold text-accent-600 mb-1">
             Location
           </p>
-          <h2 className="font-display uppercase text-primary-900 text-2xl leading-tight">
+          <h2 className="font-display text-primary-900 text-2xl leading-tight">
             Where are you playing?
           </h2>
           <p className="text-sm text-primary-500 mt-1">
@@ -357,7 +329,7 @@ function CitySheet({
           <button
             onClick={onDetect}
             disabled={detecting}
-            className="press-tight mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-sm font-bold uppercase tracking-widest py-3 disabled:opacity-60"
+            className="press-tight mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-sm font-bold py-3 disabled:opacity-60"
           >
             {detecting ? (
               <>

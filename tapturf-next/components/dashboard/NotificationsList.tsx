@@ -71,7 +71,7 @@ export function NotificationsList({ userId }: { userId: string }) {
         <p className="text-[13px] text-primary-500 mb-6">You&apos;ll hear from us when someone joins or accepts your game</p>
         <Link
           href="/games"
-          className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold uppercase tracking-wide px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
+          className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
         >
           Find a game
         </Link>
@@ -90,7 +90,7 @@ export function NotificationsList({ userId }: { userId: string }) {
           </p>
           <button
             onClick={handleMarkAllRead}
-            className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors"
+            className="text-[11px] font-semibold text-primary-500 hover:text-accent-600 transition-colors"
           >
             Mark all read
           </button>

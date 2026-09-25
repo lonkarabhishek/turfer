@@ -57,10 +57,10 @@ export default function BlogIndexPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 md:py-14">
         {/* Hero */}
         <section className="mb-10 md:mb-14">
-          <p className="text-xs font-bold uppercase tracking-widest text-accent-600 mb-3">
+          <p className="text-xs font-bold text-accent-600 mb-3">
             The TapTurf Blog
           </p>
-          <h1 className="font-display uppercase tracking-tight text-primary-900 text-4xl sm:text-5xl md:text-6xl leading-[0.95] mb-4">
+          <h1 className="font-display tracking-tight text-primary-900 text-4xl sm:text-5xl md:text-6xl leading-[0.95] mb-4">
             Play smarter.
             <br />
             <span className="text-accent-500">Book better.</span>
@@ -75,7 +75,7 @@ export default function BlogIndexPage() {
             {categories.map((c) => (
               <span
                 key={c}
-                className="text-[11px] font-bold uppercase tracking-widest text-primary-700 bg-primary-100 rounded-full px-3 py-1.5"
+                className="text-[11px] font-bold text-primary-700 bg-primary-100 rounded-full px-3 py-1.5"
               >
                 {c}
               </span>
@@ -98,17 +98,17 @@ export default function BlogIndexPage() {
 
         {/* Nudge back to the app */}
         <section className="mt-14 rounded-3xl bg-gradient-to-br from-primary-900 to-primary-800 text-white p-8 md:p-10 text-center">
-          <p className="text-xs font-bold uppercase tracking-widest text-accent-400 mb-3">
+          <p className="text-xs font-bold text-accent-400 mb-3">
             Ready to play?
           </p>
-          <h2 className="font-display uppercase text-3xl md:text-4xl leading-tight mb-3">
+          <h2 className="font-display text-3xl md:text-4xl leading-tight mb-3">
             Every turf in Nashik & Pune,
             <br />
             one search.
           </h2>
           <Link
             href="/turfs"
-            className="inline-block mt-4 rounded-full bg-accent-500 hover:bg-accent-400 text-white font-bold uppercase tracking-wide text-sm px-6 py-3 shadow-neon transition-colors"
+            className="inline-block mt-4 rounded-full bg-accent-500 hover:bg-accent-400 text-white font-bold text-sm px-6 py-3 shadow-neon transition-colors"
           >
             Browse turfs
           </Link>

@@ -38,16 +38,16 @@ export function HomeUserPanel() {
           {/* Greeting row */}
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent-600 mb-1">
-                // Welcome back
+              <p className="text-[11px] font-mono text-accent-600 mb-1">
+                Welcome back
               </p>
-              <p className="font-display uppercase text-3xl sm:text-4xl text-primary-800 leading-none tracking-tight">
+              <p className="font-display text-3xl sm:text-4xl text-primary-800 leading-none tracking-tight">
                 Hey {firstName}.
               </p>
             </div>
             <Link
               href="/dashboard"
-              className="hidden sm:inline-flex items-center gap-1 text-[12px] font-bold uppercase tracking-wide text-accent-600 hover:text-accent-700"
+              className="hidden sm:inline-flex items-center gap-1 text-[12px] font-bold text-accent-600 hover:text-accent-700"
             >
               Dashboard <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
@@ -87,7 +87,7 @@ export function HomeUserPanel() {
           {/* Mobile-only dashboard link */}
           <Link
             href="/dashboard"
-            className="sm:hidden mt-4 flex items-center justify-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-accent-600"
+            className="sm:hidden mt-4 flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent-600"
           >
             View dashboard <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
@@ -109,15 +109,15 @@ function NextGameCard({ stats }: { stats: UserStats }) {
     >
       <div className="relative overflow-hidden rounded-2xl border border-accent-500/30 bg-accent-50 p-4 hover:border-accent-500 transition-colors">
         <div className="flex items-center justify-between mb-2">
-          <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+          <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
             <CircleDot className="w-3 h-3" />
             Next up
           </span>
-          <span className="text-[11px] font-mono tabular uppercase tracking-widest text-accent-700 font-bold">
+          <span className="text-[11px] font-mono tabular text-accent-700 font-bold">
             {countdown}
           </span>
         </div>
-        <p className="font-display uppercase text-xl text-primary-800 leading-tight tracking-wide truncate">
+        <p className="font-display text-xl text-primary-800 leading-tight truncate">
           {g.sport} · {g.turfs?.name || g.title}
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[12px] text-primary-600">
@@ -137,7 +137,7 @@ function NextGameCard({ stats }: { stats: UserStats }) {
           )}
         </div>
         {stats.upcomingCount > 1 && (
-          <p className="text-[11px] font-mono uppercase tracking-widest text-accent-700 mt-2">
+          <p className="text-[11px] font-mono text-accent-700 mt-2">
             + {stats.upcomingCount - 1} more upcoming
           </p>
         )}
@@ -178,7 +178,7 @@ function StatTile({
       <span className="font-display text-2xl sm:text-3xl text-primary-800 tabular leading-none">
         {loading ? "—" : value}
       </span>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-primary-500">
+      <span className="text-[10px] font-semibold text-primary-500">
         {label}
       </span>
     </div>

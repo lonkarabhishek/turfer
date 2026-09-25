@@ -39,18 +39,18 @@ export function GameCard({ game }: { game: Game }) {
           {/* Top row: Sport pill + Spots badge */}
           <div className="flex items-start justify-between mb-3 gap-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
                 <Zap className="w-3 h-3" strokeWidth={2.75} />
                 {game.sport}
               </span>
               {game.skill_level && game.skill_level !== "all" && (
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-primary-600 bg-primary-100 border border-primary-200 px-2 py-1 rounded-full">
+                <span className="text-[10px] font-semibold text-primary-600 bg-primary-100 border border-primary-200 px-2 py-1 rounded-full">
                   {capitalizeSkillLevel(game.skill_level)}
                 </span>
               )}
             </div>
             <span
-              className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full whitespace-nowrap ${
+              className={`text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
                 isFull
                   ? "bg-primary-100 text-primary-400"
                   : isTight
@@ -64,7 +64,7 @@ export function GameCard({ game }: { game: Game }) {
 
           {/* Turf name & address */}
           <div className="mb-3">
-            <h3 className="font-display uppercase text-lg sm:text-xl text-primary-800 group-hover:text-accent-600 transition-colors leading-tight tracking-wide">
+            <h3 className="font-display text-lg sm:text-xl text-primary-800 group-hover:text-accent-600 transition-colors leading-tight">
               {game.turfs?.name || game.title}
             </h3>
             {game.turfs?.address && (
@@ -77,10 +77,10 @@ export function GameCard({ game }: { game: Game }) {
 
           {/* Date + time chips */}
           <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center text-[11px] font-semibold uppercase tracking-widest text-accent-700 bg-accent-50 border border-accent-500/30 px-2.5 py-1.5 rounded-lg">
+            <span className="inline-flex items-center text-[11px] font-semibold text-accent-700 bg-accent-50 border border-accent-500/30 px-2.5 py-1.5 rounded-lg">
               {formatDate(game.date)}
             </span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-widest text-primary-700 bg-primary-100 border border-primary-200 px-2.5 py-1.5 rounded-lg">
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-primary-700 bg-primary-100 border border-primary-200 px-2.5 py-1.5 rounded-lg">
               <Clock className="w-3 h-3 text-primary-500" />
               {formatTimeSlot(game.start_time, game.end_time)}
             </span>
@@ -89,7 +89,7 @@ export function GameCard({ game }: { game: Game }) {
           {/* Players progress bar */}
           <div className="mb-3">
             <div className="flex items-center justify-between text-[11px] mb-1.5">
-              <span className="flex items-center gap-1 text-primary-500 font-semibold uppercase tracking-widest">
+              <span className="flex items-center gap-1 text-primary-500 font-semibold">
                 <Users className="w-3 h-3 text-primary-400" />
                 <span className="tabular text-primary-800">{game.current_players}/{game.max_players}</span>
               </span>
@@ -133,10 +133,10 @@ export function GameCard({ game }: { game: Game }) {
             {game.price_per_player > 0 ? (
               <span className="font-display text-xl text-primary-800 tabular tracking-tight">
                 ₹{game.price_per_player}
-                <span className="text-[10px] font-mono text-primary-500 ml-1 uppercase">/pp</span>
+                <span className="text-[10px] font-mono text-primary-500 ml-1">/pp</span>
               </span>
             ) : (
-              <span className="text-[10px] font-bold uppercase tracking-widest text-accent-700 bg-accent-50 border border-accent-500/40 px-2 py-1 rounded-full">
+              <span className="text-[10px] font-bold text-accent-700 bg-accent-50 border border-accent-500/40 px-2 py-1 rounded-full">
                 Free
               </span>
             )}

@@ -122,10 +122,10 @@ export function LoggedInHome() {
       <div className="max-w-3xl mx-auto px-5 sm:px-6 pt-6 sm:pt-10">
         {/* ─── Greeting ─────────────────────────────────────── */}
         <header className="mb-6">
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent-600 mb-1.5">
-            // {dayLabel} · {dateLabel}{city ? ` · ${labelFor(city)}` : ""}
+          <p className="text-[11px] font-mono text-accent-600 mb-1.5">
+            {dayLabel} · {dateLabel}{city ? ` · ${labelFor(city)}` : ""}
           </p>
-          <h1 className="font-display uppercase text-4xl sm:text-6xl text-primary-800 leading-[0.9] tracking-tight">
+          <h1 className="font-display text-4xl sm:text-6xl text-primary-800 leading-[0.9] tracking-tight">
             Hey<br className="sm:hidden" />
             <span className="text-accent-500"> {firstName}.</span>
           </h1>
@@ -237,7 +237,7 @@ export function LoggedInHome() {
           </div>
           <button
             onClick={async () => { await logout(); window.location.href = "/"; }}
-            className="inline-flex items-center gap-1 text-[12px] font-semibold uppercase tracking-wide text-primary-500 hover:text-hot-600 border border-primary-200 rounded-full px-3 py-1.5"
+            className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary-500 hover:text-hot-600 border border-primary-200 rounded-full px-3 py-1.5"
           >
             <LogOut className="w-3.5 h-3.5" />
             Log out
@@ -258,12 +258,12 @@ function Section({ title, caption, icon, children }: { title: string; caption?: 
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {icon && <span className="text-accent-600">{icon}</span>}
-          <p className="font-display uppercase text-lg text-primary-800 tracking-wide leading-none">
+          <p className="font-display text-lg text-primary-800 leading-none">
             {title}
           </p>
         </div>
         {caption && (
-          <p className="text-[11px] font-mono uppercase tracking-widest text-primary-500">
+          <p className="text-[11px] font-mono text-primary-500">
             {caption}
           </p>
         )}
@@ -291,7 +291,7 @@ function NextGameHero({ stats }: { stats: UserStats | null }) {
     return (
       <Link href="/games" className="block group focus-neon rounded-2xl mb-6">
         <div className="rounded-2xl border-2 border-dashed border-primary-200 hover:border-accent-500 bg-primary-50 p-5 transition-colors">
-          <p className="text-[11px] font-mono uppercase tracking-widest text-primary-500 mb-1">
+          <p className="text-[11px] font-mono text-primary-500 mb-1">
             No games on your schedule
           </p>
           <p className="text-[15px] text-primary-800">
@@ -311,15 +311,15 @@ function NextGameHero({ stats }: { stats: UserStats | null }) {
       <div className="relative overflow-hidden rounded-2xl border border-accent-500/40 bg-accent-50 p-5 hover:border-accent-500 hover:shadow-card-hover transition-all">
         <div className={`absolute left-0 top-0 bottom-0 w-1 ${status === "live" ? "bg-hot-500" : "bg-accent-500"}`} aria-hidden />
         <div className="flex items-center justify-between mb-2">
-          <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+          <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
             <Zap className="w-3 h-3" strokeWidth={2.75} />
             Next up
           </span>
-          <span className="text-[12px] font-mono uppercase tracking-widest text-accent-700 font-bold tabular">
+          <span className="text-[12px] font-mono text-accent-700 font-bold tabular">
             {countdown}
           </span>
         </div>
-        <p className="font-display uppercase text-2xl text-primary-800 leading-tight tracking-wide truncate">
+        <p className="font-display text-2xl text-primary-800 leading-tight truncate">
           {g.sport} · {g.turfs?.name || g.title}
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[12px] text-primary-600">
@@ -339,7 +339,7 @@ function NextGameHero({ stats }: { stats: UserStats | null }) {
           )}
         </div>
         {stats && stats.upcomingCount > 1 && (
-          <p className="text-[11px] font-mono uppercase tracking-widest text-accent-700 mt-2">
+          <p className="text-[11px] font-mono text-accent-700 mt-2">
             + {stats.upcomingCount - 1} more scheduled
           </p>
         )}
@@ -379,18 +379,18 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
           {/* Top row: sport + status pill */}
           <div className="flex items-center justify-between mb-2 gap-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
                 <Zap className="w-3 h-3" strokeWidth={2.75} />
                 {game.sport}
               </span>
               {owned && (
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-primary-600 bg-primary-100 border border-primary-200 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-semibold text-primary-600 bg-primary-100 border border-primary-200 px-2 py-0.5 rounded-full">
                   Yours
                 </span>
               )}
             </div>
             <span
-              className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full whitespace-nowrap ${
+              className={`text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
                 status === "live"
                   ? "bg-hot-500 text-white shadow-hot"
                   : isFull
@@ -405,7 +405,7 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
           </div>
 
           {/* Turf name — big display type for that classy feel */}
-          <h3 className="font-display uppercase text-xl sm:text-2xl text-primary-800 leading-tight tracking-wide truncate group-hover:text-accent-600 transition-colors">
+          <h3 className="font-display text-xl sm:text-2xl text-primary-800 leading-tight truncate group-hover:text-accent-600 transition-colors">
             {game.turfs?.name || game.title}
           </h3>
 
@@ -464,7 +464,7 @@ function StatTile({ icon, value, label }: { icon: React.ReactNode; value: number
       <span className="font-display text-2xl sm:text-3xl text-primary-800 tabular leading-none">
         {value}
       </span>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-primary-500">
+      <span className="text-[10px] font-semibold text-primary-500">
         {label}
       </span>
     </div>
@@ -482,7 +482,7 @@ function QuickAction({ href, icon, label, primary = false }: { href: string; ico
       }`}
     >
       <span>{icon}</span>
-      <span className={`text-[12px] font-bold uppercase tracking-wide ${primary ? "text-white" : "text-primary-800"}`}>
+      <span className={`text-[12px] font-bold ${primary ? "text-white" : "text-primary-800"}`}>
         {label}
       </span>
     </Link>
@@ -497,10 +497,10 @@ function StartExploring({ firstName, city }: { firstName: string; city: CityId |
   return (
     <>
       <div className="rounded-3xl border border-accent-500/30 bg-accent-50 p-6 sm:p-8 mb-6">
-        <p className="text-[11px] font-mono uppercase tracking-widest text-accent-700 mb-2">
-          // Fresh account
+        <p className="text-[11px] font-mono text-accent-700 mb-2">
+          Fresh account
         </p>
-        <h2 className="font-display uppercase text-3xl sm:text-4xl text-primary-800 leading-[0.9] tracking-tight mb-3">
+        <h2 className="font-display text-3xl sm:text-4xl text-primary-800 leading-[0.9] tracking-tight mb-3">
           Let&apos;s find you<br />
           <span className="text-accent-600">your first game.</span>
         </h2>
@@ -511,14 +511,14 @@ function StartExploring({ firstName, city }: { firstName: string; city: CityId |
         <div className="flex flex-col sm:flex-row gap-2">
           <Link
             href="/games"
-            className="inline-flex items-center justify-center gap-2 bg-primary-800 hover:bg-primary-900 text-white font-bold uppercase tracking-wide text-sm px-5 py-3 rounded-full transition-colors focus-neon"
+            className="inline-flex items-center justify-center gap-2 bg-primary-800 hover:bg-primary-900 text-white font-bold text-sm px-5 py-3 rounded-full transition-colors focus-neon"
           >
             <Gamepad2 className="w-4 h-4" strokeWidth={2.5} />
             Find a game
           </Link>
           <Link
             href="/game/create"
-            className="inline-flex items-center justify-center gap-2 bg-white border border-primary-300 hover:border-primary-800 text-primary-800 font-bold uppercase tracking-wide text-sm px-5 py-3 rounded-full transition-colors focus-neon"
+            className="inline-flex items-center justify-center gap-2 bg-white border border-primary-300 hover:border-primary-800 text-primary-800 font-bold text-sm px-5 py-3 rounded-full transition-colors focus-neon"
           >
             <Plus className="w-4 h-4" strokeWidth={2.75} />
             Host a game

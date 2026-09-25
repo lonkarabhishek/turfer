@@ -48,7 +48,7 @@ export function PostCard({ post, featured = false }: { post: Post; featured?: bo
         )}
       </div>
       <div className="p-5 md:p-6">
-        <div className="flex items-center gap-2 mb-3 text-[11px] uppercase font-bold tracking-widest">
+        <div className="flex items-center gap-2 mb-3 text-[11px] font-bold">
           <span className="text-accent-600">{post.category}</span>
           {post.city && (
             <>
@@ -60,7 +60,7 @@ export function PostCard({ post, featured = false }: { post: Post; featured?: bo
           <span className="text-primary-500">{post.readMinutes} min read</span>
         </div>
         <h2
-          className={`font-display uppercase tracking-wide text-primary-900 leading-tight mb-2 group-hover:text-accent-600 transition-colors ${
+          className={`font-display text-primary-900 leading-tight mb-2 group-hover:text-accent-600 transition-colors ${
             featured ? "text-2xl md:text-3xl" : "text-xl"
           }`}
         >

@@ -90,7 +90,7 @@ export function LoginModal() {
           {!showPhone ? (
             <button
               onClick={() => setShowPhone(true)}
-              className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white rounded-full py-3 min-h-[48px] px-4 text-[15px] font-bold uppercase tracking-wide transition-all focus-neon shadow-elevated"
+              className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white rounded-full py-3 min-h-[48px] px-4 text-[15px] font-bold transition-all focus-neon shadow-elevated"
             >
               <Phone className="w-[18px] h-[18px]" strokeWidth={2.5} />
               <span>Continue with phone</span>
@@ -116,7 +116,7 @@ export function LoginModal() {
           {!showPhone && (
             <div className="flex items-center gap-3 my-4">
               <div className="flex-1 h-px bg-primary-200" />
-              <span className="text-[11px] font-mono uppercase tracking-widest text-primary-400">or</span>
+              <span className="text-[11px] font-mono text-primary-400">or</span>
               <div className="flex-1 h-px bg-primary-200" />
             </div>
           )}

@@ -17,14 +17,14 @@ const SEND_LINES = [
 ];
 
 const WAIT_TIPS = [
-  "Peek at your SMS — the code's on its way.",
+  "Peek at your SMS. The code's on its way.",
   "Fun fact: no one memorises these.",
   "You can just paste it from your messages.",
   "Long-press → paste. We won't tell anyone.",
 ];
 
 const VERIFY_LINES = [
-  "That was quick — maybe you're a keeper?",
+  "That was quick. Maybe you're a keeper?",
   "Warming up the pitch…",
   "Rolling out the green carpet…",
   "Taa-daa incoming…",
@@ -246,7 +246,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         <div className="w-14 h-14 bg-accent-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-neon animate-taada">
           <Check className="w-7 h-7 text-white" strokeWidth={3} />
         </div>
-        <p className="font-display uppercase text-2xl text-primary-800 tracking-wide leading-none">
+        <p className="font-display text-2xl text-primary-800 leading-none">
           Taa-daa!
         </p>
         <p className="text-[13px] text-primary-500 mt-1">Welcome in, {successName}.</p>
@@ -273,7 +273,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       {step === "phone" && (
         <>
           <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-2">
+            <label className="block text-[10px] font-semibold text-primary-500 mb-2">
               Phone
             </label>
             <div className="flex gap-2">
@@ -297,7 +297,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={handleSendOTP}
             disabled={loading || phone.length !== 10}
-            className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
+            className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
@@ -325,7 +325,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
             </p>
             <button
               onClick={() => { setStep("phone"); setError(""); }}
-              className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 hover:text-accent-600 transition-colors mt-1"
+              className="text-[11px] font-semibold text-primary-500 hover:text-accent-600 transition-colors mt-1"
             >
               change number
             </button>
@@ -368,14 +368,14 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
           <div className="text-center">
             {timer > 0 ? (
-              <p className="text-[11px] font-mono uppercase tracking-widest text-primary-400">
+              <p className="text-[11px] font-mono text-primary-400">
                 Resend in {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
               </p>
             ) : (
               <button
                 onClick={handleResend}
                 disabled={loading}
-                className="text-[11px] font-semibold uppercase tracking-widest text-accent-600 hover:text-accent-700"
+                className="text-[11px] font-semibold text-accent-600 hover:text-accent-700"
               >
                 resend code
               </button>
@@ -387,7 +387,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       {step === "name" && (
         <>
           <div className="text-center">
-            <p className="text-[13px] text-primary-600">Welcome — what should we call you?</p>
+            <p className="text-[13px] text-primary-600">Welcome! What should we call you?</p>
           </div>
 
           <input
@@ -403,7 +403,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={handleCreateUser}
             disabled={loading || !name.trim()}
-            className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
+            className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
           >
             {loading ? "Creating…" : "Let's play"}
           </button>

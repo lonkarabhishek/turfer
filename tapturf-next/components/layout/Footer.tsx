@@ -22,7 +22,7 @@ export function Footer() {
 
           {/* Sports */}
           <div>
-            <h4 className="font-semibold text-sm text-accent-400 mb-4 uppercase tracking-widest">
+            <h4 className="font-semibold text-sm text-accent-400 mb-4">
               Sports
             </h4>
             <ul className="space-y-2.5 text-sm text-primary-200">
@@ -41,7 +41,7 @@ export function Footer() {
 
           {/* Explore */}
           <div>
-            <h4 className="font-semibold text-sm text-accent-400 mb-4 uppercase tracking-widest">
+            <h4 className="font-semibold text-sm text-accent-400 mb-4">
               Explore
             </h4>
             <ul className="space-y-2.5 text-sm text-primary-200">
@@ -85,7 +85,7 @@ export function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="font-semibold text-sm text-accent-400 mb-4 uppercase tracking-widest">
+            <h4 className="font-semibold text-sm text-accent-400 mb-4">
               Contact
             </h4>
             <ul className="space-y-2.5 text-sm text-primary-200">

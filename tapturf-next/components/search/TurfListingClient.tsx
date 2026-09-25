@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, SlidersHorizontal, ChevronDown, Navigation, Loader2, MapPin, X } from "lucide-react";
+import { Search, ChevronDown, Navigation, Loader2, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice } from "@/lib/utils/prices";
@@ -39,7 +39,6 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
   const [search, setSearch] = useState("");
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("rating");
-  const [showFilters, setShowFilters] = useState(false);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
@@ -193,145 +192,76 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
 
   return (
     <div>
-      {/* Search + filter toggle row */}
-      <div className="flex gap-3 mb-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-300" />
-          <input
-            type="text"
-            placeholder="Search by name, area, or sport..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 min-h-[44px] rounded-full border border-cream-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm placeholder:text-primary-300 text-primary-700"
-          />
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-2 px-4 py-3 rounded-full border text-sm font-medium transition-all md:hidden ${
-            showFilters ? "border-primary-600 bg-primary-600 text-white" : "border-cream-300 bg-white text-primary-600 hover:border-primary-300"
-          }`}
-        >
-          <SlidersHorizontal className="w-4 h-4" />
-          Filters
-        </button>
+      {/* Search field, iOS style: filled, borderless. */}
+      <div className="relative mb-3">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-primary-400" />
+        <input
+          type="search"
+          placeholder="Search by name, area, or sport"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-10 pr-4 h-11 rounded-xl bg-primary-100 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+        />
       </div>
 
-      {/* City scope banner — visible when a picked city is narrowing the
-          list; lets the visitor widen back to both cities without
-          clearing their header pill. */}
-      {pickedCity && (
-        <div className="mb-4 flex items-center gap-3 bg-white border border-primary-100 rounded-2xl px-4 py-2.5">
-          <MapPin className="w-4 h-4 text-accent-600 shrink-0" />
-          <p className="text-sm text-primary-700 flex-1 min-w-0">
-            {showAllCities ? (
-              <>Showing turfs across <span className="font-semibold">Nashik + Pune</span></>
-            ) : (
-              <>Showing turfs in <span className="font-semibold">{labelFor(pickedCity)}</span></>
-            )}
-            <span className="text-primary-400 ml-2 tabular-nums">
-              {cityScoped.length} listed
-            </span>
-          </p>
-          <button
-            onClick={() => setShowAllCities((v) => !v)}
-            className="text-xs font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap"
-          >
-            {showAllCities ? `Only ${labelFor(pickedCity)}` : "Show all cities"}
-          </button>
-        </div>
-      )}
+      {/* Sport chips: always visible, scroll sideways on phones. */}
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-4 flex gap-2 overflow-x-auto scrollbar-hide">
+        {[null, ...availableSports].map((sport) => {
+          const active = selectedSport === sport;
+          return (
+            <button
+              key={sport ?? "all"}
+              onClick={() => setSelectedSport(sport && selectedSport === sport ? null : sport)}
+              className={`shrink-0 h-9 px-4 rounded-full text-[14px] font-medium transition-colors ${
+                active ? "bg-primary-900 text-white" : "bg-primary-100 text-primary-900 hover:bg-primary-200"
+              }`}
+            >
+              {sport ?? "All"}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Location banner */}
-      {!userLocation ? (
-        <div className="mb-4 flex items-center gap-3 bg-primary-50 border border-primary-100 rounded-2xl px-4 py-3">
-          <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center shrink-0">
-            <Navigation className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-primary-800">Find turfs near you</p>
-            <p className="text-xs text-primary-400 truncate">See distance and sort by closest</p>
-          </div>
-          <button
-            onClick={handleLocate}
-            disabled={locating}
-            className="flex items-center gap-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 shrink-0"
-          >
-            {locating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />}
-            {locating ? "Locating..." : "Use my location"}
-          </button>
-        </div>
-      ) : (
-        <div className="mb-4 flex items-center gap-2 text-xs text-primary-500 px-1">
-          <MapPin className="w-3.5 h-3.5 text-primary-400" />
-          <span>Showing distances from your location</span>
-          {nearbyCount > 0 && (
-            <span className="ml-1 bg-primary-100 text-primary-700 font-semibold px-2 py-0.5 rounded-full">
-              {nearbyCount} within 5 km
-            </span>
+      {/* One quiet row: count + scope on the left, location + sort on the right. */}
+      <div className="mb-5 flex items-center gap-3 text-[14px]">
+        <p className="text-primary-500 min-w-0 truncate">
+          <span className="tabular-nums">{filtered.length}</span> turf{filtered.length !== 1 ? "s" : ""}
+          {pickedCity && !showAllCities && <> in {labelFor(pickedCity)}</>}
+          {pickedCity && (
+            <button
+              onClick={() => setShowAllCities((v) => !v)}
+              className="ml-2 text-accent-600 hover:text-accent-700"
+            >
+              {showAllCities ? `Only ${labelFor(pickedCity)}` : "All cities"}
+            </button>
           )}
-          <button
-            onClick={() => { setUserLocation(null); if (sortBy === "nearby") setSortBy("rating"); }}
-            className="ml-auto text-primary-400 hover:text-primary-600 underline underline-offset-2 cursor-pointer"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {locError && (
-        <div className="mb-4 flex items-start gap-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-          <span className="flex-1">{locError}</span>
-          {locErrorKind !== "denied" && (
+        </p>
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          {!userLocation ? (
             <button
               onClick={handleLocate}
               disabled={locating}
-              className="font-semibold text-red-700 hover:text-red-800 underline underline-offset-2 whitespace-nowrap disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-accent-600 hover:bg-accent-50 disabled:opacity-60"
             >
-              {locating ? "…" : "Retry"}
+              {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+              {locating ? "Locating" : "Near me"}
+            </button>
+          ) : (
+            <button
+              onClick={() => { setUserLocation(null); if (sortBy === "nearby") setSortBy("rating"); }}
+              className="inline-flex items-center gap-1 h-9 px-3 rounded-full text-accent-600 hover:bg-accent-50"
+              aria-label="Stop using my location"
+            >
+              <Navigation className="w-4 h-4 fill-current" />
+              {nearbyCount > 0 ? `${nearbyCount} within 5 km` : "Near me"}
             </button>
           )}
-          <button
-            onClick={() => { setLocError(""); setLocErrorKind(null); }}
-            aria-label="Dismiss"
-            className="text-red-500 hover:text-red-700"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className={`${showFilters ? "block" : "hidden"} md:block mb-6`}>
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* Sport chips */}
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setSelectedSport(null)}
-              className={`px-4 py-2 min-h-[44px] rounded-full text-sm font-medium transition-all border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-                !selectedSport ? "bg-primary-600 text-white border-primary-600" : "bg-white text-primary-600 border-cream-300 hover:border-primary-300 hover:bg-primary-50"
-              }`}
-            >
-              All Sports
-            </button>
-            {availableSports.map((sport) => (
-              <button
-                key={sport}
-                onClick={() => setSelectedSport(selectedSport === sport ? null : sport)}
-                className={`px-4 py-2 min-h-[44px] rounded-full text-sm font-medium transition-all border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-                  selectedSport === sport ? "bg-primary-600 text-white border-primary-600" : "bg-white text-primary-600 border-cream-300 hover:border-primary-300 hover:bg-primary-50"
-                }`}
-              >
-                {sport}
-              </button>
-            ))}
-          </div>
-
-          {/* Sort dropdown */}
-          <div className="relative ml-auto">
+          <div className="relative">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="appearance-none text-sm font-medium border border-cream-300 rounded-full px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white cursor-pointer hover:border-primary-300 transition-colors text-primary-700"
+              aria-label="Sort"
+              className="appearance-none h-9 pl-3 pr-7 rounded-full bg-transparent text-primary-900 hover:bg-primary-100 cursor-pointer focus:outline-none"
             >
               {userLocation && <option value="nearby">{SORT_LABELS.nearby}</option>}
               {(Object.entries(SORT_LABELS) as [SortOption, string][])
@@ -340,21 +270,36 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
                   <option key={key} value={key}>{label}</option>
                 ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary-400 pointer-events-none" />
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary-400 pointer-events-none" />
           </div>
         </div>
       </div>
 
-      {/* Results count */}
-      <p className="text-sm text-primary-400 mb-6">
-        {filtered.length} turf{filtered.length !== 1 ? "s" : ""}{" "}
-        {search || selectedSport ? "found" : "available"}
-        {userLocation && sortBy === "nearby" && " · sorted by distance"}
-      </p>
+      {locError && (
+        <div className="mb-4 flex items-start gap-3 text-[14px] text-primary-900 bg-primary-100 rounded-xl px-4 py-3">
+          <span className="flex-1">{locError}</span>
+          {locErrorKind !== "denied" && (
+            <button
+              onClick={handleLocate}
+              disabled={locating}
+              className="font-medium text-accent-600 whitespace-nowrap disabled:opacity-60"
+            >
+              {locating ? "…" : "Retry"}
+            </button>
+          )}
+          <button
+            onClick={() => { setLocError(""); setLocErrorKind(null); }}
+            aria-label="Dismiss"
+            className="text-primary-400 hover:text-primary-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Grid */}
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
           {filtered.map(({ turf, distanceKm }) => (
             <TurfCard key={turf.id} turf={turf} distanceKm={distanceKm} />
           ))}
@@ -362,12 +307,12 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">🏟️</p>
-          <p className="text-lg font-semibold text-primary-800 font-serif">No turfs found</p>
+          <p className="text-lg font-semibold text-primary-900">No turfs found</p>
           <p className="text-sm text-primary-400 mt-2">Try adjusting your search or filters</p>
           {(search || selectedSport) && (
             <button
               onClick={() => { setSearch(""); setSelectedSport(null); }}
-              className="mt-4 text-sm font-semibold text-primary-600 underline underline-offset-4 hover:text-primary-400 transition-colors"
+              className="mt-4 text-[15px] text-accent-600 hover:text-accent-700"
             >
               Clear all filters
             </button>

@@ -99,7 +99,7 @@ export async function generateMetadata({
       cityHash,
     ].filter(Boolean).join(", "),
     openGraph: {
-      title: `${turf.name} — ${cityAndArea}`,
+      title: `${turf.name}, ${cityAndArea}`,
       description: `${sports || "Multi-sport"}${locationClause}.${priceClause}${ratingClause}`,
       url: `https://www.tapturf.in/turf/${turf.id}`,
       ...(firstImage && {

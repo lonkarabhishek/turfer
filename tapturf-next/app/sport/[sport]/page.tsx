@@ -60,7 +60,7 @@ export async function generateMetadata({
 
   const slug = info.name.toLowerCase();
   return {
-    title: `${info.name} Turfs in ${CITY_LABEL} — Book Now | TapTurf`,
+    title: `${info.name} Turfs in ${CITY_LABEL}: Book Now | TapTurf`,
     description: `Find ${slug} turfs in ${CITY_LABEL}. Compare prices, check ratings, book instantly.`,
     keywords: [
       `${slug} turf nashik`,
@@ -112,7 +112,7 @@ export default async function SportPage({
 
       {/* Header */}
       <div className="mb-10">
-        <p className="text-xs font-semibold text-accent-600 uppercase tracking-widest mb-3">
+        <p className="text-xs font-semibold text-accent-600 mb-3">
           Sport Category
         </p>
         <div className="flex items-center gap-4 mb-3">

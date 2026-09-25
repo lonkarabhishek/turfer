@@ -199,7 +199,7 @@ export function TurfReviews({
           </div>
           {/* Label + link */}
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500">
+            <p className="text-[11px] font-bold text-primary-500">
               Rated on Google
             </p>
             <p className="text-primary-800 font-semibold leading-tight">
@@ -233,7 +233,7 @@ export function TurfReviews({
             !showForm && (
               <button
                 onClick={() => setShowForm(true)}
-                className="press-tight mt-4 inline-flex items-center rounded-full bg-primary-800 text-white text-sm font-bold uppercase tracking-widest px-4 py-2 hover:bg-primary-900"
+                className="press-tight mt-4 inline-flex items-center rounded-full bg-primary-800 text-white text-sm font-bold px-4 py-2 hover:bg-primary-900"
               >
                 Write a review
               </button>
@@ -241,7 +241,7 @@ export function TurfReviews({
           ) : (
             <button
               onClick={login}
-              className="press-tight mt-4 inline-flex items-center rounded-full bg-primary-800 text-white text-sm font-bold uppercase tracking-widest px-4 py-2 hover:bg-primary-900"
+              className="press-tight mt-4 inline-flex items-center rounded-full bg-primary-800 text-white text-sm font-bold px-4 py-2 hover:bg-primary-900"
             >
               Log in to review
             </button>
@@ -273,7 +273,7 @@ export function TurfReviews({
           onSubmit={handleSubmit}
           className="rounded-2xl border border-primary-200 bg-white p-5 mb-6"
         >
-          <p className="text-xs font-bold uppercase tracking-widest text-primary-500 mb-3">
+          <p className="text-xs font-bold text-primary-500 mb-3">
             Your rating
           </p>
           <div className="flex items-center gap-1 mb-4">
@@ -323,7 +323,7 @@ export function TurfReviews({
             <button
               type="submit"
               disabled={posting || rating < 1}
-              className="press-tight rounded-full bg-primary-800 text-white text-sm font-bold uppercase tracking-widest px-5 py-2 hover:bg-primary-900 disabled:opacity-50"
+              className="press-tight rounded-full bg-primary-800 text-white text-sm font-bold px-5 py-2 hover:bg-primary-900 disabled:opacity-50"
             >
               {posting ? "Posting…" : "Post review"}
             </button>
@@ -393,7 +393,7 @@ export function TurfReviews({
                       ? "Remove your upvote"
                       : "Upvote this review"
                   }
-                  className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-colors ${
+                  className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
                     r.viewer_has_upvoted
                       ? "bg-accent-500 border-accent-500 text-white hover:bg-accent-600"
                       : "bg-white border-primary-200 text-primary-700 hover:border-accent-400 hover:text-accent-700"

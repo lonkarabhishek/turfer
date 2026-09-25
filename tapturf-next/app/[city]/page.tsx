@@ -23,7 +23,7 @@ export async function generateMetadata(
 
   return {
     title: `Sports Turfs in ${label} | Book Cricket, Football & More`,
-    description: `Every sports turf in ${label}, one place. Compare prices, ratings, and photos. Cricket, football, box cricket, badminton — call or WhatsApp to book instantly. No booking fee.`,
+    description: `Every sports turf in ${label}, one place. Compare prices, ratings, and photos. Cricket, football, box cricket, badminton. Call or WhatsApp to book instantly. No booking fee.`,
     keywords: [
       `turfs in ${label.toLowerCase()}`,
       `turf booking ${label.toLowerCase()}`,
@@ -94,16 +94,16 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         style={{ background: "linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 60%)" }}
       >
         <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-10 pb-10 md:pt-16 md:pb-14">
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent-600 mb-2">
-            // {turfs.length} grounds
+          <p className="text-[11px] font-mono text-accent-600 mb-2">
+            {turfs.length} grounds
           </p>
-          <h1 className="font-display uppercase text-primary-800 leading-[0.88] tracking-tight text-[48px] sm:text-[80px] md:text-[120px]">
+          <h1 className="font-display text-primary-800 leading-[0.88] tracking-tight text-[48px] sm:text-[80px] md:text-[120px]">
             Turfs in<br />
             <span className="text-accent-500">{label}.</span>
           </h1>
           <p className="mt-4 max-w-xl text-base text-primary-500">
-            Every cricket, football, box-cricket and multi-sport turf in {label}
-            — compare, contact, and book without a booking fee.
+            Every cricket, football, box-cricket and multi-sport turf in {label}.
+            Compare, contact, and book without a booking fee.
           </p>
 
           {/* Sr-only for crawlers */}
@@ -111,7 +111,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             {turfs.map((t) => (
               <li key={t.id}>
                 <Link href={`/turf/${t.id}`}>
-                  {t.name} — {t.address}
+                  {t.name}, {t.address}
                 </Link>
               </li>
             ))}
@@ -124,16 +124,16 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-10">
           <div className="flex items-end justify-between mb-6">
             <div>
-              <p className="text-[11px] font-mono text-accent-500 uppercase tracking-[0.2em] mb-2">
-                // Top-rated
+              <p className="text-[11px] font-mono text-accent-500 mb-2">
+                Top-rated
               </p>
-              <h2 className="font-display uppercase text-3xl md:text-4xl text-primary-800 leading-[0.92] tracking-tight">
+              <h2 className="font-display text-3xl md:text-4xl text-primary-800 leading-[0.92] tracking-tight">
                 Popular in {label}
               </h2>
             </div>
             <Link
               href="/turfs"
-              className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700 uppercase tracking-wide"
+              className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
             >
               All {turfs.length} <ArrowUpRight className="w-4 h-4" />
             </Link>
@@ -149,7 +149,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       {/* Full crawlable list (visible) */}
       {turfs.length > 6 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-14">
-          <h2 className="font-display uppercase text-2xl text-primary-800 tracking-tight mb-4">
+          <h2 className="font-display text-2xl text-primary-800 tracking-tight mb-4">
             All {turfs.length} turfs in {label}
           </h2>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">

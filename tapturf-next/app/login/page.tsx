@@ -88,13 +88,13 @@ function LoginInner() {
           <div className="w-9 h-9 rounded-lg bg-accent-500 flex items-center justify-center shadow-neon">
             <Zap className="w-5 h-5 text-white" strokeWidth={2.75} />
           </div>
-          <span className="font-display uppercase text-2xl text-primary-800 tracking-wide leading-none">
+          <span className="font-display text-2xl text-primary-800 leading-none">
             Tap<span className="text-accent-500">Turf</span>
           </span>
         </Link>
 
         {/* Title */}
-        <h1 className="font-display uppercase tracking-tight text-primary-900 text-4xl md:text-5xl leading-[0.95] mb-2">
+        <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-[0.95] mb-2">
           Sign in
         </h1>
         <p className="text-primary-600 text-[15px] mb-8">
@@ -112,7 +112,7 @@ function LoginInner() {
         {/* Phone-first. Rendered directly (not gated behind a "show phone"
             click) because that extra tap was itself a friction point. */}
         <section className="rounded-3xl border border-primary-200 bg-white p-5 mb-5">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-primary-500 mb-3">
+          <p className="text-[11px] font-bold text-primary-500 mb-3">
             Sign in with phone
           </p>
           <PhoneOTPForm
@@ -122,7 +122,7 @@ function LoginInner() {
 
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 h-px bg-primary-200" />
-          <span className="text-[11px] font-mono uppercase tracking-widest text-primary-400">
+          <span className="text-[11px] font-mono text-primary-400">
             or
           </span>
           <div className="flex-1 h-px bg-primary-200" />

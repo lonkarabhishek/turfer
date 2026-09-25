@@ -21,7 +21,7 @@ export function BreakdownList({
   return (
     <div className="rounded-2xl bg-white border border-primary-200 p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <p className="text-xs font-bold uppercase tracking-widest text-primary-500">
+        <p className="text-xs font-bold text-primary-500">
           {title}
         </p>
         <p className="text-xs text-primary-400">{total} total</p>

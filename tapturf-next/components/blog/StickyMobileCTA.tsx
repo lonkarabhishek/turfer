@@ -43,7 +43,7 @@ export function StickyMobileCTA({
         href={href}
         className="pointer-events-auto flex items-center justify-between gap-3 rounded-full bg-accent-500 hover:bg-accent-600 text-white font-bold text-sm px-5 py-3 shadow-neon transition-colors"
       >
-        <span className="uppercase tracking-wide">{label}</span>
+        <span>{label}</span>
         <ArrowRight className="w-4 h-4" />
       </Link>
     </div>

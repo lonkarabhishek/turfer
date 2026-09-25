@@ -174,7 +174,7 @@ export default async function BlogPostPage({
         </nav>
 
         {/* Meta chips */}
-        <div className="flex items-center gap-2 mb-4 text-[11px] uppercase font-bold tracking-widest">
+        <div className="flex items-center gap-2 mb-4 text-[11px] font-bold">
           <span className="text-accent-600">{post.category}</span>
           {post.city && (
             <>
@@ -195,7 +195,7 @@ export default async function BlogPostPage({
         </div>
 
         {/* Title + deck */}
-        <h1 className="font-display uppercase tracking-tight text-primary-900 text-3xl sm:text-4xl md:text-5xl leading-[1.05] mb-4">
+        <h1 className="font-display tracking-tight text-primary-900 text-3xl sm:text-4xl md:text-5xl leading-[1.05] mb-4">
           {post.title}
         </h1>
         <p className="text-primary-600 text-lg leading-snug mb-8">{post.hook}</p>
@@ -263,7 +263,7 @@ export default async function BlogPostPage({
               </>
             )}
           </div>
-          <div className="font-semibold uppercase tracking-wide text-primary-700">
+          <div className="font-semibold text-primary-700">
             The TapTurf team
           </div>
         </div>
@@ -273,7 +273,7 @@ export default async function BlogPostPage({
       {related.length > 0 && (
         <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-14">
           <div className="section-divider mb-8" />
-          <h2 className="font-display uppercase tracking-wide text-primary-900 text-2xl md:text-3xl mb-6">
+          <h2 className="font-display text-primary-900 text-2xl md:text-3xl mb-6">
             Keep playing
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

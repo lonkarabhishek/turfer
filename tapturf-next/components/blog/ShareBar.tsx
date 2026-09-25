@@ -33,11 +33,11 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
     }
   };
 
-  const waHref = `https://wa.me/?text=${encodeURIComponent(`${title} — ${url}`)}`;
+  const waHref = `https://wa.me/?text=${encodeURIComponent(`${title} ${url}`)}`;
 
   return (
     <div className="not-prose flex flex-wrap items-center gap-2 my-8">
-      <span className="text-[11px] font-semibold uppercase tracking-widest text-primary-400 mr-1">
+      <span className="text-[11px] font-semibold text-primary-400 mr-1">
         Share
       </span>
       <button

@@ -16,11 +16,11 @@
   --color-primary-200: #E5E7EB;
   --color-primary-300: #D1D5DB;
   --color-primary-400: #9CA3AF;
-  --color-primary-500: #6B7280;
+  --color-primary-500: #6E6E73;
   --color-primary-600: #111113;   /* CTA / hero background */
   --color-primary-700: #050506;
-  --color-primary-800: #0A0A0A;   /* body headings */
-  --color-primary-900: #000000;
+  --color-primary-800: #1D1D1F;   /* body headings */
+  --color-primary-900: #1D1D1F;
   --color-primary-950: #000000;
 
   /* Accent — cricket-pitch green. Punchy, sport-native, works on white. */
@@ -52,19 +52,24 @@
   --color-hot-600: #DC2626;
 
   /* Fonts */
-  --font-sans:    var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif:   var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
-  --font-display: var(--font-bebas), "Bebas Neue", "Impact", ui-sans-serif, sans-serif;
-  --font-mono:    var(--font-space-mono), ui-monospace, SFMono-Regular, monospace;
+  /* SF on Apple devices, Inter everywhere else. */
+  --font-sans:    -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  /* One family everywhere, the way Apple uses SF: headlines are the
+     same face as body, just heavier and tighter. */
+  --font-serif:   -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    -apple-system, BlinkMacSystemFont, var(--font-inter), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 
   /* Shadows — soft, layered black at low opacity */
   --shadow-card:         0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow-card-hover:   0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow-soft:         0 2px 8px rgba(15, 23, 42, 0.05);
   --shadow-elevated:     0 16px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.06);
-  --shadow-gold:         0 4px 16px rgba(22, 163, 74, 0.22);
-  --shadow-neon:         0 4px 18px rgba(22, 163, 74, 0.32);
-  --shadow-hot:          0 4px 14px rgba(239, 68, 68, 0.28);
+  /* Legacy "glow" names kept so markup doesn't break, but they now
+     render as quiet neutral depth instead of coloured halos. */
+  --shadow-gold:         0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-neon:         0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-hot:          0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 html {
@@ -78,7 +83,7 @@ html {
 
 body {
   background: #FFFFFF;
-  color: #0A0A0A;
+  color: #1D1D1F;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -98,17 +103,20 @@ button, a, [role="button"], summary, label[for] {
   color: #0A0A0A;
 }
 
-/* Display type helper (Bebas Neue) */
+/* Display type: same family as body, bolder + tighter (SF Pro
+   Display-style). Bebas' condensed caps read as "sports bar"; this
+   reads as calm and confident. */
 .font-serif,
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: 0.005em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
-/* Mono for scoreboard numerals */
+/* Former "scoreboard" mono — now just aligned numerals in the body face. */
 .font-mono {
   font-family: var(--font-mono);
-  font-feature-settings: "tnum", "zero";
+  font-variant-numeric: tabular-nums;
 }
 .tabular {
   font-variant-numeric: tabular-nums;
@@ -178,13 +186,8 @@ button, a, [role="button"], summary, label[for] {
 }
 .gold-shimmer,
 .neon-shimmer {
-  background: linear-gradient(90deg, #16A34A 0%, #22C55E 40%, #16A34A 60%, #15803D 100%);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: transparent;
-  animation: greenShimmer 6s linear infinite;
+  /* Solid accent now: a moving gradient on text isn't calm. */
+  color: #16A34A;
 }
 
 /* Pulsing "LIVE" dot */
@@ -276,26 +279,24 @@ button:not(:disabled):active,
    at 0. Apply `.text-display-*` where you want the tuning. */
 
 .text-display-xl {
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
-  line-height: 0.95;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.25rem, 5.5vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
 }
 .text-display-lg {
   font-size: clamp(2rem, 4.5vw, 3.25rem);
-  line-height: 1.0;
-  letter-spacing: -0.015em;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
 }
 .text-display-md {
   font-size: clamp(1.5rem, 3vw, 2.25rem);
   line-height: 1.1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
 }
 /* Small labels: a tiny positive bump keeps micro caps readable. */
 .text-caps {
-  text-transform: uppercase;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  font-size: 11px;
+  font-weight: 600;
+  font-size: 12px;
 }
 
 /* Body reset — Inter's own tracking is already good; just make sure

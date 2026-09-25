@@ -28,7 +28,7 @@ export function PriceCalculator({
   return (
     <div className="my-8 rounded-3xl border border-primary-200 bg-gradient-to-br from-primary-50 via-white to-accent-50/40 p-5 sm:p-6 not-prose">
       {caption && (
-        <p className="text-xs font-bold uppercase tracking-widest text-accent-600 mb-3">
+        <p className="text-xs font-bold text-accent-600 mb-3">
           {caption}
         </p>
       )}
@@ -61,7 +61,7 @@ export function PriceCalculator({
       </div>
       <div className="rounded-2xl bg-white border border-primary-100 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-500 mb-1">
+          <p className="text-[11px] font-semibold text-primary-500 mb-1">
             Per player
           </p>
           <p className="font-display text-4xl sm:text-5xl text-primary-900 tabular-nums leading-none">
@@ -104,7 +104,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-semibold uppercase tracking-widest text-primary-500">
+      <span className="text-[11px] font-semibold text-primary-500">
         {label}
       </span>
       <div className="flex items-center rounded-xl border border-primary-200 bg-white overflow-hidden focus-within:border-accent-500 transition-colors">

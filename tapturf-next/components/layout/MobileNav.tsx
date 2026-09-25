@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Gamepad2, Plus, User } from "lucide-react";
+import { Home, MapPin, Gamepad2, PlusCircle, User } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/turfs", label: "Turfs", icon: MapPin },
   { href: "/games", label: "Games", icon: Gamepad2 },
-  { href: "/game/create", label: "Host", icon: Plus, requiresAuth: true },
+  { href: "/game/create", label: "Host", icon: PlusCircle, requiresAuth: true },
   { href: "/dashboard", label: "Me", icon: User, requiresAuth: true },
 ];
 
@@ -35,21 +36,21 @@ export function MobileNav() {
       <ul className="flex items-stretch h-14">
         {NAV_ITEMS.map(({ href, label, icon: Icon, requiresAuth }) => {
           const isActive =
-            pathname === href || (href !== "/" && pathname.startsWith(href));
+            pathname === href ||
+            (href !== "/" && pathname.startsWith(href)) ||
+            (href === "/turfs" && pathname.startsWith("/turf/"));
 
           const inner = (
             <span
               className={`flex flex-col items-center justify-center gap-0.5 h-full w-full ${
-                isActive ? "text-accent-600" : "text-primary-500"
+                isActive ? "text-accent-500" : "text-primary-400"
               }`}
             >
               <Icon
-                className="w-5 h-5"
-                strokeWidth={isActive ? 2.5 : 2}
+                className="w-6 h-6"
+                strokeWidth={isActive ? 2.25 : 1.75}
               />
-              <span className={`text-[10px] font-semibold uppercase tracking-wide ${
-                isActive ? "text-accent-600" : "text-primary-500"
-              }`}>
+              <span className="text-[10px] font-medium">
                 {label}
               </span>
             </span>

@@ -93,7 +93,7 @@ export function TurfDetails({ turf }: { turf: Turf }) {
             <div key={i} className="flex items-start gap-4">
               <div className="mt-0.5 shrink-0">{item.icon}</div>
               <div>
-                <p className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
+                <p className="text-xs font-semibold text-primary-400">
                   {item.label}
                 </p>
                 <p className="text-base font-medium text-primary-800 mt-0.5">
@@ -109,7 +109,7 @@ export function TurfDetails({ turf }: { turf: Turf }) {
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-5 h-5 text-primary-400" />
-            <h3 className="text-xs font-semibold text-primary-400 uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-primary-400">
               Opening hours
             </h3>
           </div>
@@ -130,7 +130,7 @@ export function TurfDetails({ turf }: { turf: Turf }) {
                   >
                     {row.day}
                     {isToday && (
-                      <span className="ml-2 text-[10px] uppercase tracking-widest text-accent-600">
+                      <span className="ml-2 text-[10px] text-accent-600">
                         Today
                       </span>
                     )}
