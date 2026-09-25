@@ -30,7 +30,7 @@ export async function getAvailableGames(filters?: {
   if (turfIds.length > 0) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, name, address, "Gmap Embed link"')
+      .select('id, name, address, city, "Gmap Embed link"')
       .in("id", turfIds);
 
     if (turfs) {
@@ -60,7 +60,7 @@ export async function getGameById(gameId: string) {
   if (data.turf_id) {
     const { data: turf } = await supabase
       .from("turfs")
-      .select('id, name, address, "Gmap Embed link"')
+      .select('id, name, address, city, "Gmap Embed link"')
       .eq("id", data.turf_id)
       .single();
     if (turf) (data as Record<string, unknown>).turfs = turf;
@@ -84,7 +84,7 @@ export async function getUserGames(userId: string) {
   if (turfIds.length > 0) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, name, address, "Gmap Embed link"')
+      .select('id, name, address, city, "Gmap Embed link"')
       .in("id", turfIds);
     if (turfs) {
       const turfsMap = Object.fromEntries(turfs.map((t) => [t.id, t]));

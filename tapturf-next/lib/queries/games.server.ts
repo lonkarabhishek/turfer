@@ -21,7 +21,7 @@ export async function getAvailableGamesServer(): Promise<Game[]> {
   if (turfIds.length > 0) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, name, address, "Gmap Embed link"')
+      .select('id, name, address, city, "Gmap Embed link"')
       .in("id", turfIds);
     if (turfs) {
       const map = Object.fromEntries(turfs.map((t) => [t.id, t]));
@@ -47,7 +47,7 @@ export async function getGameByIdServer(gameId: string): Promise<Game | null> {
   if (g.turf_id) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, name, address, "Gmap Embed link"')
+      .select('id, name, address, city, "Gmap Embed link"')
       .eq("id", g.turf_id)
       .limit(1);
     if (turfs?.[0]) (g as Record<string, unknown>).turfs = turfs[0];

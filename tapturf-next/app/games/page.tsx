@@ -7,16 +7,18 @@ import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 // without paying a per-request DB cost.
 export const revalidate = 60;
 
+// Games span Nashik + Pune now (parallel to the /sport pages and the
+// city-agnostic listing). The old copy claimed "in Nashik" only.
 export const metadata: Metadata = {
-  title: "Open Cricket, Football & Sports Games in Nashik | Join Free",
+  title: "Open Cricket, Football & Sports Games in Nashik & Pune",
   description:
-    "Find and join live sports games in Nashik. Open cricket, football, box-cricket, basketball games near you. Filter by sport, skill level. No booking fee.",
+    "Find and join live sports games in Nashik and Pune. Open cricket, football, box-cricket, basketball games near you. Filter by sport, skill level. No booking fee.",
   keywords:
-    "cricket games nashik, football games nashik, box cricket nashik, join a game nashik, open games nashik, sports meetup nashik",
+    "cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
   openGraph: {
-    title: "Open Games in Nashik | TapTurf",
+    title: "Open Games in Nashik & Pune | TapTurf",
     description:
-      "Live sports games looking for players in Nashik. Cricket, football, and more — join in one tap.",
+      "Live sports games looking for players in Nashik and Pune. Cricket, football, and more — join in one tap.",
     url: "https://www.tapturf.in/games",
     siteName: "TapTurf",
     locale: "en_IN",
@@ -39,7 +41,7 @@ export default async function GamesPage() {
       item: {
         "@type": "SportsEvent",
         "@id": `https://www.tapturf.in/game/${g.id}`,
-        name: `${g.sport} at ${g.turfs?.name || "Nashik turf"}`,
+        name: `${g.sport} at ${g.turfs?.name || "a local turf"}`,
         startDate: `${g.date}T${g.start_time}`,
         endDate: `${g.date}T${g.end_time}`,
         sport: g.sport,
@@ -75,12 +77,12 @@ export default async function GamesPage() {
           below. The client fetches its own state, so both coexist happily. */}
       {active.length > 0 && (
         <div className="sr-only" aria-hidden>
-          <h1>Open sports games in Nashik</h1>
+          <h1>Open sports games in Nashik &amp; Pune</h1>
           <ul>
             {active.map((g) => (
               <li key={g.id}>
                 <a href={`/game/${g.id}`}>
-                  {g.sport} at {g.turfs?.name || "Nashik turf"} — {g.date} {g.start_time}
+                  {g.sport} at {g.turfs?.name || "a local turf"} — {g.date} {g.start_time}
                   {" "}
                   {g.turfs?.address ? `— ${g.turfs.address}` : ""}
                   {" "}

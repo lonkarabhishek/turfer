@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GameDetailClient } from "@/components/game/GameDetailClient";
 import { getGameByIdServer } from "@/lib/queries/games.server";
+import { guessCityFromAddress, isCity, labelFor } from "@/lib/city";
 
 export const revalidate = 60;
 
@@ -36,8 +37,13 @@ export async function generateMetadata(
   const spotsLeft = Math.max(0, game.max_players - game.current_players);
   const price = game.price_per_player > 0 ? `₹${game.price_per_player}/player` : "Free";
 
+  // Locality follows the turf's own city instead of a Nashik default —
+  // Pune games were being served with the wrong locality in meta.
+  const turfCity = (game.turfs?.["city"] as string | undefined) ??
+    (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
+  const cityLabel = isCity(turfCity) ? labelFor(turfCity) : "Nashik";
   const title = `${game.sport} at ${venue} — ${when}`;
-  const description = `${game.sport} game at ${venue}, Nashik on ${when}. ${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left · ${price}. Join in one tap on TapTurf.`;
+  const description = `${game.sport} game at ${venue}, ${cityLabel} on ${when}. ${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left · ${price}. Join in one tap on TapTurf.`;
 
   return {
     title,
@@ -58,30 +64,35 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const game = await getGameByIdServer(id);
 
-  const jsonLd = game ? {
-    "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    "@id": `https://www.tapturf.in/game/${id}`,
-    name: `${game.sport} at ${game.turfs?.name || "Nashik turf"}`,
-    description: `Join a ${game.sport} game at ${game.turfs?.name || "a Nashik turf"} on TapTurf.`,
-    startDate: `${game.date}T${game.start_time}`,
-    endDate: `${game.date}T${game.end_time}`,
-    sport: game.sport,
-    eventStatus: "https://schema.org/EventScheduled",
-    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
-    location: game.turfs
-      ? {
-          "@type": "Place",
-          name: game.turfs.name,
-          address: {
-            "@type": "PostalAddress",
-            streetAddress: game.turfs.address,
-            addressLocality: "Nashik",
-            addressRegion: "Maharashtra",
-            addressCountry: "IN",
-          },
-        }
-      : undefined,
+  const jsonLd = game ? (() => {
+    const gTurfCity = (game.turfs?.["city"] as string | undefined) ??
+      (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
+    const gCityLabel = isCity(gTurfCity) ? labelFor(gTurfCity) : "Nashik";
+    const venueName = game.turfs?.name;
+    return {
+      "@context": "https://schema.org",
+      "@type": "SportsEvent",
+      "@id": `https://www.tapturf.in/game/${id}`,
+      name: `${game.sport} at ${venueName ?? `a ${gCityLabel} turf`}`,
+      description: `Join a ${game.sport} game at ${venueName ?? `a ${gCityLabel} turf`} on TapTurf.`,
+      startDate: `${game.date}T${game.start_time}`,
+      endDate: `${game.date}T${game.end_time}`,
+      sport: game.sport,
+      eventStatus: "https://schema.org/EventScheduled",
+      eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+      location: game.turfs
+        ? {
+            "@type": "Place",
+            name: game.turfs.name,
+            address: {
+              "@type": "PostalAddress",
+              streetAddress: game.turfs.address,
+              addressLocality: gCityLabel,
+              addressRegion: "Maharashtra",
+              addressCountry: "IN",
+            },
+          }
+        : undefined,
     organizer: {
       "@type": "Person",
       name: game.host_name || "TapTurf host",
@@ -96,9 +107,10 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
         : "https://schema.org/SoldOut",
       validFrom: new Date().toISOString(),
     },
-    maximumAttendeeCapacity: game.max_players,
-    remainingAttendeeCapacity: Math.max(0, game.max_players - game.current_players),
-  } : null;
+      maximumAttendeeCapacity: game.max_players,
+      remainingAttendeeCapacity: Math.max(0, game.max_players - game.current_players),
+    };
+  })() : null;
 
   return (
     <>

@@ -26,6 +26,7 @@ export interface Game {
     id: string;
     name: string;
     address: string;
+    city?: string | null;
     "Gmap Embed link"?: string;
   };
 }

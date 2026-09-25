@@ -34,11 +34,11 @@ const spaceMono = Space_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "TapTurf - Find & Book Turf in Nashik",
+    default: "TapTurf - Find & Book Turf in Nashik & Pune",
     template: "%s | TapTurf",
   },
   description:
-    "Find and book sports turfs in Nashik. Compare prices, check ratings, and book instantly.",
+    "Find and book sports turfs in Nashik and Pune. Compare prices, check ratings, and book instantly.",
   metadataBase: new URL("https://www.tapturf.in"),
   manifest: "/manifest.webmanifest",
   appleWebApp: {

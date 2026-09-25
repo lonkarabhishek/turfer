@@ -214,7 +214,7 @@ export function LoggedInHome() {
           </>
         ) : (
           /* ─── First-timer empty state ──────────────────── */
-          <StartExploring firstName={firstName} />
+          <StartExploring firstName={firstName} city={city} />
         )}
 
         {/* ─── Profile / logout chip ────────────────────────── */}
@@ -493,7 +493,7 @@ function QuickAction({ href, icon, label, primary = false }: { href: string; ico
 // Start exploring (new user empty state)
 // ────────────────────────────────────────────────────────────
 
-function StartExploring({ firstName }: { firstName: string }) {
+function StartExploring({ firstName, city }: { firstName: string; city: CityId | null }) {
   return (
     <>
       <div className="rounded-3xl border border-accent-500/30 bg-accent-50 p-6 sm:p-8 mb-6">
@@ -528,7 +528,12 @@ function StartExploring({ firstName }: { firstName: string }) {
 
       <Section title="Explore">
         <div className="grid grid-cols-2 gap-3">
-          <ExploreCard href="/turfs" label="All turfs in Nashik" sublabel="49+ grounds to book" icon={<Search className="w-5 h-5" />} />
+          <ExploreCard
+            href="/turfs"
+            label={city ? `All turfs in ${labelFor(city)}` : "All turfs"}
+            sublabel="Compare & book"
+            icon={<Search className="w-5 h-5" />}
+          />
           <ExploreCard href="/sport/cricket" label="Cricket" sublabel="Box + full-pitch" icon={<Target className="w-5 h-5" />} />
           <ExploreCard href="/sport/football" label="Football" sublabel="5v5 + 7v7" icon={<Compass className="w-5 h-5" />} />
           <ExploreCard href="/games" label="Open games" sublabel="Join or watch" icon={<Zap className="w-5 h-5" />} />
