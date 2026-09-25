@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, SlidersHorizontal, Gamepad2, Zap } from "lucide-react";
+import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, MapPin } from "lucide-react";
 import Link from "next/link";
 import { GameCard } from "./GameCard";
 import { getAvailableGames } from "@/lib/queries/games";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { getCityPref, guessCityFromAddress, isCity, labelFor, type CityId } from "@/lib/city";
 import type { Game } from "@/types/game";
 
 const SPORTS = ["All", "Cricket", "Box Cricket", "Football", "Basketball", "Tennis", "Pickleball"];
@@ -20,6 +21,23 @@ export function GamesListingClient() {
   const [skillLevel, setSkillLevel] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+
+  // Same city-scoping pattern as /turfs — the header CityPicker
+  // publishes tapturf:city-changed events and this list obeys them.
+  const [pickedCity, setPickedCity] = useState<CityId | null>(null);
+  const [showAllCities, setShowAllCities] = useState(false);
+  useEffect(() => {
+    const load = () => setPickedCity(getCityPref());
+    load();
+    const onChange = () => load();
+    window.addEventListener("tapturf:city-changed", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("tapturf:city-changed", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  const activeCity = pickedCity && !showAllCities ? pickedCity : null;
 
   useEffect(() => {
     const load = async () => {
@@ -37,13 +55,22 @@ export function GamesListingClient() {
     load();
   }, [sport, skillLevel]);
 
+  const cityScopedGames = activeCity
+    ? games.filter((g) => {
+        // Prefer the turf's stored city; fall back to guessing from the
+        // address (for game rows whose turf hasn't been backfilled).
+        const c = g.turfs?.city ?? guessCityFromAddress(g.turfs?.address ?? null);
+        return c === activeCity;
+      })
+    : games;
+
   const filteredGames = searchQuery
-    ? games.filter((g) =>
+    ? cityScopedGames.filter((g) =>
         [g.turfs?.name, g.turfs?.address, g.sport, g.host_name]
           .filter(Boolean)
           .some((field) => field!.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    : games;
+    : cityScopedGames;
 
   const handleHostClick = (e: React.MouseEvent) => {
     if (!user) {
@@ -76,6 +103,27 @@ export function GamesListingClient() {
           Host game
         </Link>
       </div>
+
+      {/* City scope banner — same treatment as /turfs so switching city
+          in the header narrows this list too, with a toggle to widen. */}
+      {pickedCity && (
+        <div className="mb-3 flex items-center gap-3 bg-white border border-primary-100 rounded-2xl px-4 py-2.5">
+          <MapPin className="w-4 h-4 text-accent-600 shrink-0" />
+          <p className="text-sm text-primary-700 flex-1 min-w-0">
+            {showAllCities ? (
+              <>Games across <span className="font-semibold">Nashik + Pune</span></>
+            ) : (
+              <>Games in <span className="font-semibold">{labelFor(pickedCity)}</span></>
+            )}
+          </p>
+          <button
+            onClick={() => setShowAllCities((v) => !v)}
+            className="text-xs font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap"
+          >
+            {showAllCities ? `Only ${labelFor(pickedCity)}` : "Show all cities"}
+          </button>
+        </div>
+      )}
 
       {/* Search bar */}
       <div className="relative mb-3">
