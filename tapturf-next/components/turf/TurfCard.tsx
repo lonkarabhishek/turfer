@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MapPin, Navigation, Star } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
@@ -12,6 +12,12 @@ interface TurfCardProps {
   /** Set on the first ~3 above-the-fold cards so the LCP image loads eagerly + high priority. */
   priority?: boolean;
 }
+
+// How long each photo stays on screen before crossfading to the next.
+const SLIDE_MS = 2000;
+// Crossfade duration — long enough to feel gentle, short enough to
+// not overlap the next tick.
+const FADE_MS = 500;
 
 export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) {
   // Reject covers that are still tiny thumbs after normalization (e.g.
@@ -33,22 +39,28 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
   const sports = turf.sports.slice(0, 2);
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
   const [activeIdx, setActiveIdx] = useState(0);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const distanceLabel = distanceKm != null
+  // Auto-slideshow. The manual scroll-snap carousel felt fine on
+  // desktop but glitched on iOS Safari — a swipe on the card would
+  // sometimes trigger the parent Link's navigation before the
+  // scroll-snap kicked in, and sometimes stall between snap points.
+  // Replaced with a plain interval so users always see every photo
+  // without touching anything, and tapping the card just navigates.
+  useEffect(() => {
+    if (photos.length <= 1) return;
+    const id = window.setInterval(() => {
+      setActiveIdx((i) => (i + 1) % photos.length);
+    }, SLIDE_MS);
+    return () => window.clearInterval(id);
+  }, [photos.length]);
+
+  const distanceLabel = distanceKm != null && Number.isFinite(distanceKm)
     ? distanceKm < 1
       ? `${Math.round(distanceKm * 1000)} m`
       : distanceKm < 10
         ? `${distanceKm.toFixed(1)} km`
         : `${Math.round(distanceKm)} km`
     : null;
-
-  const handleScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    if (idx !== activeIdx) setActiveIdx(idx);
-  };
 
   const hasMultiple = photos.length > 1;
 
@@ -58,50 +70,50 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
       className="block group rounded-2xl focus-neon"
     >
       <article className="card-lift relative overflow-hidden rounded-2xl border border-primary-200 bg-white hover:border-accent-500 hover:shadow-card-hover">
-        {/* Image area */}
+        {/* Image area — a stack of images, only the active one at
+            opacity:1. Crossfades every SLIDE_MS via the effect above. */}
         <div className="relative w-full aspect-[4/3] overflow-hidden bg-primary-100">
           {photos.length > 0 ? (
-            <div
-              ref={scrollRef}
-              onScroll={handleScroll}
-              className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              style={{ scrollSnapType: "x mandatory", touchAction: "pan-x" }}
-            >
-              {photos.map((src, i) => (
-                <div
-                  key={`${src}-${i}`}
-                  className="flex-none w-full h-full snap-start snap-always relative"
-                >
-                  {imgErrors[i] ? (
-                    <div className="w-full h-full bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center">
-                      <span className="font-display uppercase text-4xl text-white/80">Turf</span>
-                    </div>
-                  ) : (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={src}
-                      alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading={priority && i === 0 ? "eager" : "lazy"}
-                      // @ts-expect-error — fetchpriority is a valid HTML attr not yet in React types
-                      fetchpriority={priority && i === 0 ? "high" : "auto"}
-                      decoding="async"
-                      referrerPolicy="no-referrer"
-                      onError={() =>
-                        setImgErrors((prev) => ({ ...prev, [i]: true }))
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
+            photos.map((src, i) => {
+              const active = i === activeIdx;
+              if (imgErrors[i]) {
+                return (
+                  <div
+                    key={`err-${i}`}
+                    className={`absolute inset-0 bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center transition-opacity ${active ? "opacity-100" : "opacity-0"}`}
+                    style={{ transitionDuration: `${FADE_MS}ms` }}
+                    aria-hidden={!active}
+                  >
+                    <span className="font-display uppercase text-4xl text-white/80">Turf</span>
+                  </div>
+                );
+              }
+              return (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  key={`img-${i}`}
+                  src={src}
+                  alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity ${active ? "opacity-100" : "opacity-0"} group-hover:scale-[1.02]`}
+                  style={{ transitionDuration: `${FADE_MS}ms` }}
+                  loading={priority && i === 0 ? "eager" : "lazy"}
+                  // @ts-expect-error — fetchpriority is a valid HTML attr not yet in React types
+                  fetchpriority={priority && i === 0 ? "high" : "auto"}
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  onError={() => setImgErrors((prev) => ({ ...prev, [i]: true }))}
+                  draggable={false}
+                  aria-hidden={!active}
+                />
+              );
+            })
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center">
               <span className="font-display uppercase text-4xl text-white/80">Turf</span>
             </div>
           )}
 
-          {/* Bottom-fade for legibility — must not block swipe */}
+          {/* Bottom-fade for legibility */}
           <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
 
           {/* Sport badges (top-left) */}
