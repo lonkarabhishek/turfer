@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { CreateGameFlow } from "@/components/game/CreateGameFlow";
 
 export const metadata: Metadata = {
@@ -7,5 +8,13 @@ export const metadata: Metadata = {
 };
 
 export default function CreateGamePage() {
-  return <CreateGameFlow />;
+  // CreateGameFlow calls useSearchParams() to prefill the turf when
+  // someone lands here from a "Create a game here" button on a turf
+  // profile. That hook requires a Suspense boundary above it or the
+  // whole route opts into CSR.
+  return (
+    <Suspense fallback={null}>
+      <CreateGameFlow />
+    </Suspense>
+  );
 }

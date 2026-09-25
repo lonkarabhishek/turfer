@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Check, MapPin, Search, Share2, Copy,
   Trophy, CircleDot, Target, Circle, Feather,
@@ -84,6 +84,12 @@ function humanDate(dateStr: string): string {
 export function CreateGameFlow() {
   const { user, login, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Prefill turf when the visitor arrived via "Create a game here" on
+  // a turf profile — query params carry the picked turf so they don't
+  // have to search for it again inside the wizard.
+  const preselectedTurfId = searchParams?.get("turf") ?? "";
+  const preselectedTurfName = searchParams?.get("turfName") ?? "";
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -97,8 +103,8 @@ export function CreateGameFlow() {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [duration, setDuration] = useState<number | null>(null);
-  const [turfId, setTurfId] = useState("");
-  const [turfName, setTurfName] = useState("");
+  const [turfId, setTurfId] = useState(preselectedTurfId);
+  const [turfName, setTurfName] = useState(preselectedTurfName);
   const [turfSearch, setTurfSearch] = useState("");
   const [turfResults, setTurfResults] = useState<{ id: string; name: string; address: string }[]>([]);
   const [showTurfDropdown, setShowTurfDropdown] = useState(false);

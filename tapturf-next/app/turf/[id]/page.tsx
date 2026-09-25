@@ -16,6 +16,7 @@ import { TurfMap } from "@/components/turf/TurfMap";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { TurfReviews } from "@/components/turf/TurfReviews";
 import { CTAButtons } from "@/components/ui/CTAButtons";
+import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 
 export const revalidate = 3600;
 
@@ -315,11 +316,27 @@ export default async function TurfDetailPage({
                 </p>
               )}
 
+              {/* Host their own game at this turf — jumps into the
+                  create-game wizard with this turf pre-selected. */}
+              <CreateGameHereButton turfId={turf.id} turfName={turf.name} />
+
               <p className="text-xs text-center text-primary-300 mt-4">
                 No booking fee. Contact turf directly to reserve your slot.
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Mobile / tablet: same host CTA lives inline below the main
+            content so people who never reach the desktop sidebar still
+            see it. The fixed-bottom Call/WhatsApp CTA below covers
+            booking; this one covers hosting. */}
+        <div className="lg:hidden mt-8 mb-24">
+          <CreateGameHereButton
+            turfId={turf.id}
+            turfName={turf.name}
+            variant="inline"
+          />
         </div>
       </div>
 
