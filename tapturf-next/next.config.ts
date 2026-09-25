@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     return [
       { source: "/turf-in-nashik", destination: "/nashik", permanent: true },
       { source: "/turf-in-pune",   destination: "/pune",   permanent: true },
+      { source: "/turf-in-mumbai", destination: "/mumbai", permanent: true },
     ];
   },
   images: {
@@ -32,6 +33,13 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "kridabhumi.com",
         pathname: "/**",
+      },
+      // Some turf covers are hosted on Yappe (open India business directory).
+      // Not decorative — they're real venue photos, e.g. Turf 10 Wakad.
+      {
+        protocol: "https",
+        hostname: "files.yappe.in",
+        pathname: "/place/**",
       },
     ],
   },

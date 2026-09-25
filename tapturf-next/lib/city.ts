@@ -3,7 +3,7 @@
  * pages, sitemap) and client (city picker, filters) consume this.
  */
 
-export type CityId = "nashik" | "pune";
+export type CityId = "nashik" | "pune" | "mumbai";
 
 export const CITIES: {
   id: CityId;
@@ -12,12 +12,13 @@ export const CITIES: {
 }[] = [
   { id: "nashik", label: "Nashik", labelUpper: "NASHIK" },
   { id: "pune",   label: "Pune",   labelUpper: "PUNE" },
+  { id: "mumbai", label: "Mumbai", labelUpper: "MUMBAI" },
 ];
 
 export const CITY_IDS: readonly CityId[] = CITIES.map((c) => c.id);
 
 export function isCity(value: string | null | undefined): value is CityId {
-  return value === "nashik" || value === "pune";
+  return value === "nashik" || value === "pune" || value === "mumbai";
 }
 
 export function labelFor(id: CityId): string {
@@ -33,6 +34,7 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   const a = address.toLowerCase();
   if (a.includes("nashik") || a.includes("nasik")) return "nashik";
   if (a.includes("pune")) return "pune";
+  if (a.includes("mumbai") || a.includes("bombay") || a.includes("thane") || a.includes("navi mumbai")) return "mumbai";
   return null;
 }
 
@@ -64,6 +66,7 @@ export function setCityPref(city: CityId | null): void {
 const CITY_COORDS: Record<CityId, { lat: number; lng: number }> = {
   nashik: { lat: 19.9975, lng: 73.7898 },
   pune:   { lat: 18.5204, lng: 73.8567 },
+  mumbai: { lat: 19.0760, lng: 72.8777 },
 };
 
 // Haversine — km between two lat/lng points.
