@@ -9,8 +9,10 @@ export const revalidate = 600;
 // way that stays accurate as the number grows ("Every sports turf in
 // Nashik & Pune"). If we want the exact number in <title>, we'd have
 // to switch this to a `generateMetadata()` async function.
+// Title stops at "…Book" — layout's title.template adds "| TapTurf" so
+// hard-coding it here produced "…Book | TapTurf | TapTurf" in SERPs.
 export const metadata: Metadata = {
-  title: "All Sports Turfs in Nashik & Pune — Compare Prices & Book | TapTurf",
+  title: "All Sports Turfs in Nashik & Pune — Compare Prices & Book",
   description:
     "Every sports turf in Nashik and Pune. Compare prices, check ratings, view photos. Cricket, football, box cricket, badminton and more. Call or WhatsApp to book.",
   keywords:

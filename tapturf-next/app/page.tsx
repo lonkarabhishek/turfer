@@ -19,7 +19,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const rounded = Math.max(50, Math.floor(total / 5) * 5);
 
   return {
-    title: "TapTurf — Cricket, Football & Sports Turfs in Nashik & Pune",
+    // absolute so layout's template doesn't add another "| TapTurf" —
+    // the wordmark is already the first word.
+    title: {
+      absolute: "TapTurf — Cricket, Football & Sports Turfs in Nashik & Pune",
+    },
     description: `Book sports turfs across Nashik and Pune. ${rounded}+ grounds for cricket, football, box cricket, badminton and more. Find a game, host a game, run the pitch.`,
     keywords:
       "turf booking nashik, turf booking pune, cricket turf nashik, cricket turf pune, football turf nashik, football turf pune, box cricket, sports turfs maharashtra, tapturf",

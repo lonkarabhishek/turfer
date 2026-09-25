@@ -6,6 +6,7 @@ import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { summarisePrice } from "@/lib/utils/prices";
 import { getPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
+import { areaFor } from "@/lib/utils/area";
 import { labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing } from "@/components/turf/TurfPricing";
@@ -34,6 +35,7 @@ export async function generateMetadata({
 
   const priceSummary = summarisePrice(turf);
   const sports = turf.sports.join(", ");
+  const primarySport = turf.sports[0]?.trim();
   const firstImage =
     turf.cover_image ||
     (turf.images[0] ? convertGoogleDriveUrl(turf.images[0]) : null);
@@ -41,30 +43,63 @@ export async function generateMetadata({
   // City-aware metadata so Pune turfs don't get titled "Turf in Nashik".
   const cityLabel = isCity(turf.city) ? labelFor(turf.city) : "Maharashtra";
   const cityHash = isCity(turf.city) ? `#${turf.city}turf` : "";
+  const area = areaFor(turf);
+  const cityAndArea = area ? `${area}, ${cityLabel}` : cityLabel;
 
   const hasRatings = turf.total_reviews > 0 && turf.rating > 0;
   const ratingClause = hasRatings
-    ? ` Rated ${Number(turf.rating).toFixed(1)} stars (${turf.total_reviews} reviews).`
+    ? ` Rated ${Number(turf.rating).toFixed(1)} (${turf.total_reviews} Google reviews).`
     : "";
-  // Only surface a price in meta when it's a real DB price. Reported
-  // (reviewer-mentioned) prices stay out of meta — they belong on the
-  // page with an "unverified" label, not in the SERP description.
   const priceClause =
     priceSummary.kind === "real" ? ` Starting ${priceSummary.label}.` : "";
+  // USP for the title, priority per brief:
+  //   real price → "₹X/hr"
+  //   covered {sport} → "Covered {Sport}"
+  //   ground_format {sport} → "{Format} {Sport}"
+  //   fallback → "Timings & Photos"
+  const usp = (() => {
+    if (priceSummary.kind === "real" && priceSummary.min != null) {
+      return `₹${priceSummary.min}/hr`;
+    }
+    if (turf.is_covered && primarySport) return `Covered ${primarySport}`;
+    if (turf.ground_format && primarySport) return `${turf.ground_format} ${primarySport}`;
+    if (primarySport) return `${primarySport} Timings & Photos`;
+    return "Timings & Photos";
+  })();
+
+  // Layout's title.template adds " | TapTurf" for us — never bake it
+  // into the raw title or it appears twice. Target ≤55 chars here so
+  // the SERP-visible "title | TapTurf" stays under Google's ~65-char
+  // truncation ceiling.
+  const fullTitle = `${turf.name} ${cityAndArea} – ${usp}`;
+  const titleNoUsp = `${turf.name} ${cityAndArea}`;
+  const titleShort = `${turf.name}, ${cityLabel}`;
+  const title = fullTitle.length <= 55 ? fullTitle : titleNoUsp.length <= 55 ? titleNoUsp : titleShort;
+
+  const photoCount = turf.images?.length ?? 0;
+  const photoClause = photoCount > 0 ? ` ${photoCount} photos.` : "";
+  const locationClause = area
+    ? ` in ${area}, ${cityLabel}`
+    : cityLabel
+      ? ` in ${cityLabel}`
+      : "";
 
   return {
-    title: `${turf.name} — Book Now | Turf in ${cityLabel}`,
-    description: `Book ${turf.name}${turf.address ? ` at ${turf.address}` : ""}.${priceClause} ${sports || "Multi-sport"}.${ratingClause} Call or WhatsApp to book.`,
+    title,
+    description:
+      `${sports || "Sports turf"}${locationClause}.` +
+      `${priceClause}${ratingClause}${photoClause} Call or WhatsApp to book.`,
     keywords: [
       turf.name,
+      area ? `turf in ${area.toLowerCase()}` : null,
       `turf in ${cityLabel.toLowerCase()}`,
       `${cityLabel.toLowerCase()} turf booking`,
       ...turf.sports.map((s) => `${s.toLowerCase()} turf ${cityLabel.toLowerCase()}`),
       cityHash,
     ].filter(Boolean).join(", "),
     openGraph: {
-      title: `${turf.name} — Turf in ${cityLabel}`,
-      description: `${turf.address}.${priceClause} ${sports || "Multi-sport"}.`,
+      title: `${turf.name} — ${cityAndArea}`,
+      description: `${sports || "Multi-sport"}${locationClause}.${priceClause}${ratingClause}`,
       url: `https://www.tapturf.in/turf/${turf.id}`,
       ...(firstImage && {
         images: [{ url: firstImage, width: 1200, height: 630 }],
