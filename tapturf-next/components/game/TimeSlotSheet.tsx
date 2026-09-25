@@ -36,13 +36,17 @@ export function TimeSlotSheet({
   value,
   onSelect,
   onClose,
+  minTime,
 }: {
   open: boolean;
   value: string;
   onSelect: (hhmm: string) => void;
   onClose: () => void;
+  /** Only show slots at or after this HH:MM. Used to hide past slots on today's date. */
+  minTime?: string;
 }) {
   const selectedRef = useRef<HTMLButtonElement>(null);
+  const noSlotsLeft = !!minTime && minTime > "23:30";
 
   // Center the selected slot when the sheet opens
   useEffect(() => {
@@ -61,27 +65,18 @@ export function TimeSlotSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Split into rough day parts so it doesn't feel like a wall of numbers
+  // Split into rough day parts so it doesn't feel like a wall of
+  // numbers. Slots strictly before minTime are dropped entirely — a
+  // "disabled but visible" past slot is more clutter than help.
   const groups = useMemo(() => {
+    const available = minTime ? SLOTS.filter((s) => s >= minTime) : SLOTS;
     return [
-      { label: "Morning", slots: SLOTS.filter((s) => {
-        const h = parseInt(s, 10);
-        return h < 12;
-      }) },
-      { label: "Afternoon", slots: SLOTS.filter((s) => {
-        const h = parseInt(s, 10);
-        return h >= 12 && h < 17;
-      }) },
-      { label: "Evening", slots: SLOTS.filter((s) => {
-        const h = parseInt(s, 10);
-        return h >= 17 && h < 21;
-      }) },
-      { label: "Night", slots: SLOTS.filter((s) => {
-        const h = parseInt(s, 10);
-        return h >= 21;
-      }) },
-    ];
-  }, []);
+      { label: "Morning",   slots: available.filter((s) => parseInt(s, 10) < 12) },
+      { label: "Afternoon", slots: available.filter((s) => { const h = parseInt(s, 10); return h >= 12 && h < 17; }) },
+      { label: "Evening",   slots: available.filter((s) => { const h = parseInt(s, 10); return h >= 17 && h < 21; }) },
+      { label: "Night",     slots: available.filter((s) => parseInt(s, 10) >= 21) },
+    ].filter((g) => g.slots.length > 0);
+  }, [minTime]);
 
   if (!open) return null;
 
@@ -121,6 +116,16 @@ export function TimeSlotSheet({
 
         {/* Slots */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
+          {(groups.length === 0 || noSlotsLeft) && (
+            <div className="px-4 py-10 text-center">
+              <p className="text-[15px] font-semibold text-primary-800 mb-1">
+                No slots left today
+              </p>
+              <p className="text-[13px] text-primary-500 leading-snug">
+                Pick a future date to see start times. TapTurf slots run 6 AM to 11:30 PM.
+              </p>
+            </div>
+          )}
           {groups.map(({ label, slots }) => (
             <section key={label} className="mb-4 last:mb-0">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-primary-500 mb-2 px-1">

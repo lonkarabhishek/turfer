@@ -68,6 +68,44 @@ function getEndTime(startTime: string, durationHours: number): string | null {
   return tv(endH, endM);
 }
 
+/**
+ * Local IST date as YYYY-MM-DD. Using toISOString on the raw Date
+ * returns UTC — which for the Indian audience means "today" flips at
+ * 5:30am, cutting off legitimate late-night bookings. `en-CA` returns
+ * YYYY-MM-DD ordering; `timeZone: 'Asia/Kolkata'` anchors it right.
+ */
+function istDateISO(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** Current IST wall-clock as HH:MM (24-hour). */
+function istTimeHM(d: Date): string {
+  return d.toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/**
+ * Round an HH:MM string up to the next 30-minute boundary. If the
+ * input lands past 23:30 we return "23:30" — the picker's last slot;
+ * callers that see an empty picker after that should nudge the user
+ * onto tomorrow's date instead.
+ */
+function roundUpToNextSlot(hhmm: string): string {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (Number.isNaN(h) || Number.isNaN(m)) return "23:30";
+  let hh = h;
+  let mm = m <= 0 ? 0 : m <= 30 ? 30 : 60;
+  if (mm === 60) { hh += 1; mm = 0; }
+  if (hh > 23 || (hh === 23 && mm > 30)) return "23:30";
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 function humanDate(dateStr: string): string {
   if (!dateStr) return "Pick a date";
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -140,11 +178,31 @@ export function CreateGameFlow() {
   }, [turfSearch]);
 
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    setDate(today);
+    // Default the date picker to today (IST).
+    setDate(istDateISO(new Date()));
   }, []);
 
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  // IST-anchored so a 1am IST reload doesn't offer "today = yesterday
+  // UTC" as a bookable date. Same helper drives minTime below.
+  const todayStr = useMemo(() => istDateISO(new Date()), []);
+  // Only enforce a future-time floor when the picked date IS today.
+  // For any date after today, all 06:00→23:30 slots are valid.
+  const minTime = useMemo(() => {
+    if (!date || date !== todayStr) return undefined;
+    return roundUpToNextSlot(istTimeHM(new Date()));
+  }, [date, todayStr]);
+
+  // If the current startTime falls before minTime (e.g. the visitor
+  // picked 6:30 PM at 6:15 PM and stayed on the page till 6:45 PM
+  // without submitting), clear it so they can't submit a past slot.
+  useEffect(() => {
+    if (!minTime || !startTime) return;
+    if (startTime < minTime) {
+      setStartTime("");
+      setDuration(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minTime]);
 
   const handleSportSelect = (s: typeof SPORT_OPTIONS[0]) => {
     setSport(s.name);
@@ -215,10 +273,14 @@ export function CreateGameFlow() {
 
   return (
     <div className="max-w-lg mx-auto">
-      {/* Custom time picker — 30-min slots, no free-form iOS wheel */}
+      {/* Custom time picker — 30-min slots, no free-form iOS wheel.
+          When the picked date is today, minTime hides slots before
+          "now" so nobody can create a game for a slot that's already
+          started. Future dates pass minTime={undefined} → all slots. */}
       <TimeSlotSheet
         open={timeSheetOpen}
         value={startTime}
+        minTime={minTime}
         onClose={() => setTimeSheetOpen(false)}
         onSelect={(s) => { setStartTime(s); setDuration(null); }}
       />
