@@ -3,6 +3,7 @@ import { getMinimumPrice, getMaximumPrice } from "./prices";
 import { normalizeImageUrl } from "./images";
 import { isCity, labelFor } from "@/lib/city";
 import { normalizeIndianPhone } from "./phone";
+import { openingHoursJsonLd } from "./hours";
 
 export function generateTurfJsonLd(turf: Turf) {
   const minPrice = getMinimumPrice(turf);
@@ -62,20 +63,16 @@ export function generateTurfJsonLd(turf: Turf) {
     ...(normalizedPhone && { telephone: normalizedPhone.e164 }),
     ...(turf.external_review_url && { sameAs: [turf.external_review_url] }),
     url: `https://www.tapturf.in/turf/${turf.id}`,
-    openingHoursSpecification: {
-      "@type": "OpeningHoursSpecification",
-      dayOfWeek: [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ],
-      opens: turf.start_time || "06:00",
-      closes: turf.end_time || "23:00",
-    },
+    // Prefer per-day opening_hours (jsonb) so Sunday-closed turfs and
+    // split shifts get their own spec entries; fall back to the old
+    // single-window start_time / end_time.
+    ...(() => {
+      const spec = openingHoursJsonLd(turf.opening_hours, {
+        start_time: turf.start_time,
+        end_time: turf.end_time,
+      });
+      return spec ? { openingHoursSpecification: spec } : {};
+    })(),
   };
 }
 
