@@ -2,6 +2,12 @@ import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ALL_POSTS } from "@/content/blog";
 
+// Sitemap was being served with age ~8.8 days from the Vercel cache
+// even though DB rows changed within the hour. Cap it to an hour so
+// Googlebot always sees fresh lastmod, and let the future revalidate
+// webhook (P0-2) blow it away sooner on writes.
+export const revalidate = 3600;
+
 const BASE = "https://www.tapturf.in";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
