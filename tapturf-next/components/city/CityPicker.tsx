@@ -24,16 +24,25 @@ export function CityPicker() {
 
     // First-time auto-detect: if the user has no city set and
     // we haven't asked before, try geolocation → nearest city.
+    // Check the "already tried" flag BEFORE flipping detecting=true,
+    // otherwise the pill flashes "Locating…" on every page reload
+    // (autoDetectCity() would resolve instantly to null in that case).
     if (!stored) {
-      setDetecting(true);
-      autoDetectCity()
-        .then((c) => {
-          if (c) {
-            setCity(c);
-            window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: c }));
-          }
-        })
-        .finally(() => setDetecting(false));
+      let alreadyTried = false;
+      try {
+        alreadyTried = localStorage.getItem("tapturf_city_autodetect_v1") === "1";
+      } catch { /* ignore */ }
+      if (!alreadyTried) {
+        setDetecting(true);
+        autoDetectCity()
+          .then((c) => {
+            if (c) {
+              setCity(c);
+              window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: c }));
+            }
+          })
+          .finally(() => setDetecting(false));
+      }
     }
 
     // Sync across tabs + same-tab pick events

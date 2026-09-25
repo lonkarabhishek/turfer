@@ -8,7 +8,22 @@ import { getMinimumPrice } from "@/lib/utils/prices";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
 import { getCityPref, isCity, labelFor, type CityId } from "@/lib/city";
 
-const SPORTS = ["Football", "Cricket", "Basketball", "Badminton", "Tennis", "Pickleball", "Volleyball", "Yoga"];
+// Order by frequency in the current DB — Football (166) and Box
+// Cricket (103) dominate, so they're first. Box Cricket was missing
+// entirely from the old list, hiding 103 venues behind an unclickable
+// chip. Cricket Nets is a subset of Cricket for filtering purposes
+// (the substring match already picks it up under "Cricket").
+const SPORTS = [
+  "Football",
+  "Box Cricket",
+  "Cricket",
+  "Badminton",
+  "Volleyball",
+  "Yoga",
+  "Pickleball",
+  "Basketball",
+  "Tennis",
+];
 
 type SortOption = "nearby" | "rating" | "price-low" | "price-high" | "reviews";
 
