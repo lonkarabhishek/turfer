@@ -1,7 +1,6 @@
-"use client";
-
 import Link from "next/link";
 import type { Block } from "@/content/blog";
+import { slugify } from "@/lib/utils/slugify";
 
 /**
  * Table of contents built from the article's h2 (and optional h3)
@@ -40,13 +39,4 @@ export function TableOfContents({ blocks }: { blocks: Block[] }) {
       </ol>
     </nav>
   );
-}
-
-export function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 }

@@ -3,7 +3,7 @@ import Image from "next/image";
 import { Star } from "lucide-react";
 import type { Block } from "@/content/blog/types";
 import { getBlogTurf } from "@/content/blog/data/turfs";
-import { slugify } from "./TableOfContents";
+import { slugify } from "@/lib/utils/slugify";
 import { PriceCalculator } from "./PriceCalculator";
 
 /**
