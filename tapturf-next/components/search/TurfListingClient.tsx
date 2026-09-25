@@ -78,8 +78,17 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
           if (a.distanceKm == null) return 1;
           if (b.distanceKm == null) return -1;
           return a.distanceKm - b.distanceKm;
-        case "price-low":  return getMinimumPrice(a.turf) - getMinimumPrice(b.turf);
-        case "price-high": return getMinimumPrice(b.turf) - getMinimumPrice(a.turf);
+        case "price-low":
+        case "price-high": {
+          // Sort turfs without a real price to the end regardless of direction —
+          // never coalesce them to 500 so they don't jumble ahead of cheap real listings.
+          const ap = getMinimumPrice(a.turf);
+          const bp = getMinimumPrice(b.turf);
+          if (ap == null && bp == null) return 0;
+          if (ap == null) return 1;
+          if (bp == null) return -1;
+          return sortBy === "price-low" ? ap - bp : bp - ap;
+        }
         case "reviews":    return b.turf.total_reviews - a.turf.total_reviews;
         case "rating":
         default:           return b.turf.rating - a.turf.rating;

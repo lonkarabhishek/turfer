@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { MapPin, Navigation, Star } from "lucide-react";
-import { getMinimumPrice } from "@/lib/utils/prices";
+import { summarisePrice } from "@/lib/utils/prices";
 import type { Turf } from "@/types/turf";
 
 interface TurfCardProps {
@@ -29,7 +29,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
     return [usableCover, ...turf.images.filter((i) => i !== usableCover)];
   })();
 
-  const minPrice = getMinimumPrice(turf);
+  const priceSummary = summarisePrice(turf);
   const sports = turf.sports.slice(0, 2);
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
   const [activeIdx, setActiveIdx] = useState(0);
@@ -162,16 +162,33 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
 
         {/* Footer strip */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-primary-200 bg-white">
-          <div>
+          <div className="min-w-0">
             <p className="text-[10px] font-mono uppercase tracking-widest text-primary-400">
-              From
+              {priceSummary.kind === "real"
+                ? "From"
+                : priceSummary.kind === "reported"
+                  ? "Reported"
+                  : "Contact"}
             </p>
-            <p className="font-display text-xl text-primary-800 tabular leading-none mt-0.5">
-              ₹{minPrice}
-              <span className="text-xs text-primary-400 font-sans font-normal ml-1">/hr</span>
+            <p className="font-display text-lg sm:text-xl text-primary-800 tabular leading-none mt-0.5 truncate">
+              {priceSummary.kind === "unknown" ? (
+                "Price on request"
+              ) : priceSummary.kind === "real" ? (
+                <>
+                  ₹{priceSummary.min}
+                  {priceSummary.min !== priceSummary.max ? `–₹${priceSummary.max}` : ""}
+                  <span className="text-xs text-primary-400 font-sans font-normal ml-1">/hr</span>
+                </>
+              ) : (
+                <>
+                  ~₹{priceSummary.min}
+                  {priceSummary.min !== priceSummary.max ? `–₹${priceSummary.max}` : ""}
+                  <span className="text-xs text-primary-400 font-sans font-normal ml-1">/hr</span>
+                </>
+              )}
             </p>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-accent-600 border border-accent-500 rounded-full px-3 py-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-accent-600 border border-accent-500 rounded-full px-3 py-1.5 shrink-0">
             Book · Call
           </span>
         </div>

@@ -19,10 +19,14 @@ export function generateTurfJsonLd(turf: Turf) {
     typeof turf.total_reviews === "number" &&
     turf.total_reviews > 0;
   const normalizedPhone = normalizeIndianPhone(phone);
+  // Real prices only — reviewer-reported price_mentions must never
+  // land in JSON-LD priceRange (Google treats it as our price).
+  const hasRealPriceRange = minPrice != null && maxPrice != null;
 
   return {
     "@context": "https://schema.org",
     "@type": "SportsActivityLocation",
+    "@id": `https://www.tapturf.in/turf/${turf.id}`,
     name: turf.name,
     description:
       turf.description || `Book ${turf.name} for sports in ${locality}.`,
@@ -33,6 +37,13 @@ export function generateTurfJsonLd(turf: Turf) {
       addressRegion: "Maharashtra",
       addressCountry: "IN",
     },
+    ...(turf.lat != null && turf.lng != null && {
+      geo: {
+        "@type": "GeoCoordinates",
+        latitude: turf.lat,
+        longitude: turf.lng,
+      },
+    }),
     ...(hasRatings && {
       aggregateRating: {
         "@type": "AggregateRating",
@@ -42,11 +53,14 @@ export function generateTurfJsonLd(turf: Turf) {
         worstRating: 1,
       },
     }),
-    priceRange: `₹${minPrice} - ₹${maxPrice}`,
+    ...(hasRealPriceRange && {
+      priceRange: minPrice === maxPrice ? `₹${minPrice}` : `₹${minPrice}–₹${maxPrice}`,
+    }),
     image: turf.images
       ?.slice(0, 5)
       .map((img) => normalizeImageUrl(img)),
     ...(normalizedPhone && { telephone: normalizedPhone.e164 }),
+    ...(turf.external_review_url && { sameAs: [turf.external_review_url] }),
     url: `https://www.tapturf.in/turf/${turf.id}`,
     openingHoursSpecification: {
       "@type": "OpeningHoursSpecification",

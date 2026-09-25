@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
-import { getMinimumPrice } from "@/lib/utils/prices";
+import { summarisePrice } from "@/lib/utils/prices";
 import { getPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
 import { labelFor, isCity } from "@/lib/city";
@@ -32,7 +32,7 @@ export async function generateMetadata({
   const turf = await getTurfById(id);
   if (!turf) return { title: "Turf Not Found" };
 
-  const minPrice = getMinimumPrice(turf);
+  const priceSummary = summarisePrice(turf);
   const sports = turf.sports.join(", ");
   const firstImage =
     turf.cover_image ||
@@ -46,10 +46,15 @@ export async function generateMetadata({
   const ratingClause = hasRatings
     ? ` Rated ${Number(turf.rating).toFixed(1)} stars (${turf.total_reviews} reviews).`
     : "";
+  // Only surface a price in meta when it's a real DB price. Reported
+  // (reviewer-mentioned) prices stay out of meta — they belong on the
+  // page with an "unverified" label, not in the SERP description.
+  const priceClause =
+    priceSummary.kind === "real" ? ` Starting ${priceSummary.label}.` : "";
 
   return {
     title: `${turf.name} — Book Now | Turf in ${cityLabel}`,
-    description: `Book ${turf.name}${turf.address ? ` at ${turf.address}` : ""}. Starting ₹${minPrice}/hr. ${sports || "Multi-sport"}.${ratingClause} Call or WhatsApp to book.`,
+    description: `Book ${turf.name}${turf.address ? ` at ${turf.address}` : ""}.${priceClause} ${sports || "Multi-sport"}.${ratingClause} Call or WhatsApp to book.`,
     keywords: [
       turf.name,
       `turf in ${cityLabel.toLowerCase()}`,
@@ -59,7 +64,7 @@ export async function generateMetadata({
     ].filter(Boolean).join(", "),
     openGraph: {
       title: `${turf.name} — Turf in ${cityLabel}`,
-      description: `${turf.address}. Starting ₹${minPrice}/hr. ${sports || "Multi-sport"}.`,
+      description: `${turf.address}.${priceClause} ${sports || "Multi-sport"}.`,
       url: `https://www.tapturf.in/turf/${turf.id}`,
       ...(firstImage && {
         images: [{ url: firstImage, width: 1200, height: 630 }],
@@ -82,7 +87,7 @@ export default async function TurfDetailPage({
   if (!turf) notFound();
 
   const phone = getPhone(turf);
-  const minPrice = getMinimumPrice(turf);
+  const sidebarPrice = summarisePrice(turf);
 
   return (
     <div className="has-bottom-cta">
@@ -217,11 +222,36 @@ export default async function TurfDetailPage({
           {/* Right sidebar — sticky booking card */}
           <div className="hidden lg:block">
             <div className="sticky top-24 border border-cream-300 rounded-2xl p-6 shadow-elevated bg-white">
-              <div className="flex items-baseline justify-between mb-1">
-                <div>
-                  <span className="text-[26px] font-bold text-primary-800 font-serif">₹{minPrice}</span>
-                  <span className="text-base text-primary-400 font-normal"> /hr onwards</span>
-                </div>
+              <div className="mb-1">
+                {sidebarPrice.kind === "real" ? (
+                  <div>
+                    <span className="text-[26px] font-bold text-primary-800 font-serif">
+                      ₹{sidebarPrice.min}
+                      {sidebarPrice.min !== sidebarPrice.max ? `–₹${sidebarPrice.max}` : ""}
+                    </span>
+                    <span className="text-base text-primary-400 font-normal"> /hr</span>
+                  </div>
+                ) : sidebarPrice.kind === "reported" ? (
+                  <div>
+                    <span className="text-[22px] font-bold text-primary-800 font-serif">
+                      ~₹{sidebarPrice.min}
+                      {sidebarPrice.min !== sidebarPrice.max ? `–₹${sidebarPrice.max}` : ""}
+                    </span>
+                    <span className="text-sm text-primary-400 font-normal"> /hr</span>
+                    <p className="text-[11px] text-primary-400 mt-1">
+                      Reported by players · unverified
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-[22px] font-bold text-primary-800 font-serif">
+                      Price on request
+                    </span>
+                    <p className="text-[13px] text-primary-500 mt-1">
+                      Call or WhatsApp for slot rates
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-1 mb-6 text-sm">
