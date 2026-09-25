@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { Search, SlidersHorizontal, ChevronDown, Navigation, Loader2, MapPin } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { Search, SlidersHorizontal, ChevronDown, Navigation, Loader2, MapPin, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
+import { getCityPref, isCity, labelFor, type CityId } from "@/lib/city";
 
 const SPORTS = ["Football", "Cricket", "Basketball", "Badminton", "Tennis", "Pickleball", "Volleyball", "Yoga"];
 
@@ -27,30 +28,78 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
+  const [locErrorKind, setLocErrorKind] = useState<"denied" | "unavailable" | "timeout" | "other" | null>(null);
+
+  // City scoping: the /turfs page is server-rendered with turfs from
+  // both cities so search engines see everything, but visitors who
+  // picked Nashik (or Pune) in the header expect this page to obey.
+  // Read the pref on mount and re-read on the tapturf:city-changed
+  // event dispatched by CityPicker so switching city updates the list
+  // without a page reload. `showAllCities` lets a picked-city visitor
+  // widen back to every city without clearing the header pill.
+  const [pickedCity, setPickedCity] = useState<CityId | null>(null);
+  const [showAllCities, setShowAllCities] = useState(false);
+  useEffect(() => {
+    const load = () => setPickedCity(getCityPref());
+    load();
+    const onChange = () => load();
+    window.addEventListener("tapturf:city-changed", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("tapturf:city-changed", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  const activeCity = pickedCity && !showAllCities ? pickedCity : null;
 
   const handleLocate = useCallback(async () => {
     setLocating(true);
     setLocError("");
+    setLocErrorKind(null);
     try {
       const coords = await getUserLocation();
       setUserLocation(coords);
       setSortBy("nearby");
-    } catch {
-      setLocError("Couldn't get location. Please allow access and try again.");
+    } catch (err: unknown) {
+      // Distinguish the three real geolocation error paths so the user
+      // can act on the right one — the old generic message asked people
+      // who'd already denied permission to "try again" pointlessly.
+      const e = err as { code?: number; message?: string };
+      if (e?.code === 1) {
+        setLocErrorKind("denied");
+        setLocError(
+          "Location access is blocked. Enable it in your browser's site settings (address-bar 🔒 → Location → Allow), then reload.",
+        );
+      } else if (e?.code === 2) {
+        setLocErrorKind("unavailable");
+        setLocError("Your device couldn't determine location right now. Try again outdoors or with GPS on.");
+      } else if (e?.code === 3) {
+        setLocErrorKind("timeout");
+        setLocError("Location request timed out. Please try again.");
+      } else {
+        setLocErrorKind("other");
+        setLocError("Couldn't get location. Please try again.");
+      }
     } finally {
       setLocating(false);
     }
   }, []);
 
+  // Scope to picked city FIRST so distance/sort work on the visible set.
+  const cityScoped = useMemo(() => {
+    if (!activeCity) return turfs;
+    return turfs.filter((t) => t.city === activeCity);
+  }, [turfs, activeCity]);
+
   const turfsWithDistance = useMemo(() => {
-    return turfs.map((t) => ({
+    return cityScoped.map((t) => ({
       turf: t,
       distanceKm:
         userLocation && t.lat != null && t.lng != null
           ? haversineKm(userLocation, { lat: t.lat, lng: t.lng })
           : null,
     }));
-  }, [turfs, userLocation]);
+  }, [cityScoped, userLocation]);
 
   const filtered = useMemo(() => {
     let result = turfsWithDistance;
@@ -99,12 +148,23 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
   }, [turfsWithDistance, search, selectedSport, sortBy]);
 
   const availableSports = useMemo(() => {
+    // Sport chips reflect the city-scoped turf set — if Nashik has no
+    // Pickleball venues, don't dangle a dead chip for a Nashik visitor.
     const sportSet = new Set<string>();
-    turfs.forEach((t) => t.sports.forEach((s) => sportSet.add(s)));
+    cityScoped.forEach((t) => t.sports.forEach((s) => sportSet.add(s)));
     return SPORTS.filter((s) =>
       Array.from(sportSet).some((ts) => ts.toLowerCase().includes(s.toLowerCase()))
     );
-  }, [turfs]);
+  }, [cityScoped]);
+
+  // When the visitor switches city and the sport they had selected
+  // isn't offered in the new city, clear it so the "0 results" empty
+  // state doesn't lie about their filter.
+  useEffect(() => {
+    if (selectedSport && !availableSports.includes(selectedSport)) {
+      setSelectedSport(null);
+    }
+  }, [availableSports, selectedSport]);
 
   const nearbyCount = filtered.filter(({ distanceKm }) => distanceKm != null && distanceKm <= 5).length;
 
@@ -132,6 +192,31 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
           Filters
         </button>
       </div>
+
+      {/* City scope banner — visible when a picked city is narrowing the
+          list; lets the visitor widen back to both cities without
+          clearing their header pill. */}
+      {pickedCity && (
+        <div className="mb-4 flex items-center gap-3 bg-white border border-primary-100 rounded-2xl px-4 py-2.5">
+          <MapPin className="w-4 h-4 text-accent-600 shrink-0" />
+          <p className="text-sm text-primary-700 flex-1 min-w-0">
+            {showAllCities ? (
+              <>Showing turfs across <span className="font-semibold">Nashik + Pune</span></>
+            ) : (
+              <>Showing turfs in <span className="font-semibold">{labelFor(pickedCity)}</span></>
+            )}
+            <span className="text-primary-400 ml-2 tabular-nums">
+              {cityScoped.length} listed
+            </span>
+          </p>
+          <button
+            onClick={() => setShowAllCities((v) => !v)}
+            className="text-xs font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap"
+          >
+            {showAllCities ? `Only ${labelFor(pickedCity)}` : "Show all cities"}
+          </button>
+        </div>
+      )}
 
       {/* Location banner */}
       {!userLocation ? (
@@ -171,7 +256,25 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
       )}
 
       {locError && (
-        <p className="mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{locError}</p>
+        <div className="mb-4 flex items-start gap-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+          <span className="flex-1">{locError}</span>
+          {locErrorKind !== "denied" && (
+            <button
+              onClick={handleLocate}
+              disabled={locating}
+              className="font-semibold text-red-700 hover:text-red-800 underline underline-offset-2 whitespace-nowrap disabled:opacity-60"
+            >
+              {locating ? "…" : "Retry"}
+            </button>
+          )}
+          <button
+            onClick={() => { setLocError(""); setLocErrorKind(null); }}
+            aria-label="Dismiss"
+            className="text-red-500 hover:text-red-700"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
       {/* Filters */}
