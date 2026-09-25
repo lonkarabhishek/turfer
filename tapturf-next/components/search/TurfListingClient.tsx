@@ -73,6 +73,12 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
     setLocErrorKind(null);
     try {
       const coords = await getUserLocation();
+      // Guard: a garbage-in position (some cordova wrappers hand back
+      // non-numeric coords in edge cases) would silently corrupt every
+      // sort key downstream and could crash the render. Reject early.
+      if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) {
+        throw new Error("Received invalid coordinates from the browser.");
+      }
       setUserLocation(coords);
       setSortBy("nearby");
     } catch (err: unknown) {
@@ -107,13 +113,15 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
   }, [turfs, activeCity]);
 
   const turfsWithDistance = useMemo(() => {
-    return cityScoped.map((t) => ({
-      turf: t,
-      distanceKm:
-        userLocation && t.lat != null && t.lng != null
-          ? haversineKm(userLocation, { lat: t.lat, lng: t.lng })
-          : null,
-    }));
+    return cityScoped.map((t) => {
+      let distanceKm: number | null = null;
+      if (userLocation && Number.isFinite(t.lat) && Number.isFinite(t.lng)) {
+        const d = haversineKm(userLocation, { lat: t.lat as number, lng: t.lng as number });
+        // NaN → null, so sort comparators never see a poisoned value.
+        distanceKm = Number.isFinite(d) ? d : null;
+      }
+      return { turf: t, distanceKm };
+    });
   }, [cityScoped, userLocation]);
 
   const filtered = useMemo(() => {

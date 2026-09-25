@@ -3,16 +3,32 @@ export interface Coords {
   lng: number;
 }
 
+/**
+ * Great-circle distance in km between two lat/lng points.
+ * Returns NaN when either coord is missing or non-finite — callers
+ * should filter with Number.isFinite before sorting so a stray null
+ * doesn't poison the comparator.
+ */
 export function haversineKm(a: Coords, b: Coords): number {
+  const aLat = Number(a?.lat);
+  const aLng = Number(a?.lng);
+  const bLat = Number(b?.lat);
+  const bLng = Number(b?.lng);
+  if (!Number.isFinite(aLat) || !Number.isFinite(aLng) || !Number.isFinite(bLat) || !Number.isFinite(bLng)) {
+    return NaN;
+  }
   const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
   const sin2 =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) *
-      Math.cos((b.lat * Math.PI) / 180) *
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.asin(Math.sqrt(sin2));
+  // Clamp to [0,1] so floating-point error can't push it out of range
+  // (Math.asin returns NaN when its input is even 1.0000000001).
+  const clamped = Math.min(1, Math.max(0, sin2));
+  return R * 2 * Math.asin(Math.sqrt(clamped));
 }
 
 export function formatDistance(km: number): string {
