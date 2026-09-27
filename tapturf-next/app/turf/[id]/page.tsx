@@ -17,6 +17,7 @@ import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { TurfReviews } from "@/components/turf/TurfReviews";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
+import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 
 export const revalidate = 3600;
 
@@ -225,6 +226,10 @@ export default async function TurfDetailPage({
             <TurfDetails turf={turf} />
             <TurfPricing turf={turf} />
 
+            {/* Player-suggested info (contact, prices, hours, facilities).
+                Fetched client-side so a fresh suggestion shows at once. */}
+            <TurfSuggestions turfId={turf.id} turfName={turf.name} hasPhone={!!phone} />
+
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to
                 search on). TurfMap itself returns null when it can't
@@ -311,9 +316,7 @@ export default async function TurfDetailPage({
                   address={turf.address}
                 />
               ) : (
-                <p className="text-sm text-primary-400 text-center py-4">
-                  Contact information not available
-                </p>
+                <NoContactNotice />
               )}
 
               {/* Host their own game at this turf — jumps into the
@@ -340,14 +343,17 @@ export default async function TurfDetailPage({
         </div>
       </div>
 
-      {/* Mobile fixed CTA */}
-      {phone && (
+      {/* Mobile fixed CTA: Call / WhatsApp, or the "we don't have
+          the number yet" bar that opens the suggest form. */}
+      {phone ? (
         <CTAButtons
           phone={phone}
           turfName={turf.name}
           address={turf.address}
           variant="fixed-bottom"
         />
+      ) : (
+        <NoContactNotice variant="fixed-bottom" />
       )}
     </div>
   );
