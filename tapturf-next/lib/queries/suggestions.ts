@@ -69,8 +69,13 @@ export async function submitTurfSuggestion(
     const t = v?.trim();
     return t ? t : null;
   };
+  // Never leave the Send button spinning: if the request hasn't come
+  // back in 20s, tell the user instead of waiting forever.
+  const timeout = new Promise<{ error: { message: string } }>((resolve) =>
+    setTimeout(() => resolve({ error: { message: "__timeout__" } }), 20000),
+  );
   try {
-    const { error } = await createClient()
+    const request = createClient()
       .from("turf_suggestions")
       .insert([
         {
@@ -88,8 +93,13 @@ export async function submitTurfSuggestion(
           amenities: input.amenities,
           notes: trim(input.notes),
         },
-      ]);
+      ])
+      .then(({ error }) => ({ error }));
+    const { error } = await Promise.race([request, timeout]);
     if (error) {
+      if (error.message === "__timeout__") {
+        return { ok: false, error: "This is taking too long. Check your connection, refresh the page and try again." };
+      }
       if (error.message?.includes("Too many suggestions")) {
         return { ok: false, error: "You've shared a lot today. Please try again tomorrow." };
       }

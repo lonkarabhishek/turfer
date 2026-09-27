@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AppUser } from "@/types/user";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
   user: AppUser | null;
@@ -260,7 +261,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // auto-refresh uses, and racing them causes 10-second lock timeouts
     // that surface as "Google sign-in isn't smooth."
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // IMPORTANT: supabase-js runs onAuthStateChange callbacks while it
+    // still holds its auth lock (e.g. the SIGNED_IN it emits when a tab
+    // comes back to the foreground). Any Supabase query awaited inside
+    // the callback needs that same lock to attach the access token, so
+    // it waits forever and every later request in the tab hangs too
+    // (seen as "Send" spinning on iOS after switching apps). So the
+    // callback only schedules the work; it runs after the lock is free.
+    const handleAuthEvent = async (event: AuthChangeEvent, session: Session | null) => {
       if (cancelled) return;
 
       if (event === "INITIAL_SESSION") {
@@ -317,6 +325,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sourceRef.current = null;
         setLoading(false);
       }
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setTimeout(() => {
+        void handleAuthEvent(event, session);
+      }, 0);
     });
 
     // ── 3. Robustness listeners ──
