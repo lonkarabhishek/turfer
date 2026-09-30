@@ -133,24 +133,6 @@ export function MarketingHome() {
               <ChevronDown className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Ultra-quiet secondary link */}
-          <p className="mt-10 text-[13px] text-primary-500">
-            or{" "}
-            <Link
-              href="/nashik"
-              className="text-primary-800 underline underline-offset-2 hover:text-accent-600"
-            >
-              browse Nashik
-            </Link>{" "}
-            ·{" "}
-            <Link
-              href="/pune"
-              className="text-primary-800 underline underline-offset-2 hover:text-accent-600"
-            >
-              browse Pune
-            </Link>
-          </p>
         </div>
       </div>
 
