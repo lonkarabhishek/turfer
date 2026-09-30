@@ -41,10 +41,10 @@ export function CreateGameHereButton({
       <button
         type="button"
         onClick={onClick}
-        className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary-300 bg-white text-primary-800 hover:border-primary-500 hover:bg-primary-50 text-sm font-semibold py-3 transition-colors"
+        className="w-full flex items-center justify-center gap-2 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[16px] font-semibold h-12 transition-colors"
       >
-        <Plus className="w-4 h-4" strokeWidth={2.5} />
-        Create a game here
+        <Plus className="w-5 h-5" strokeWidth={2.5} />
+        Host a game here
       </button>
     );
   }
@@ -53,10 +53,10 @@ export function CreateGameHereButton({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-800 hover:border-primary-300 font-semibold py-3 mt-3 transition-colors"
+      className="w-full flex items-center justify-center gap-2 rounded-full bg-primary-100 hover:bg-primary-200 text-primary-900 text-[17px] font-semibold h-12 mt-3 transition-colors"
     >
-      <Plus className="w-4 h-4" strokeWidth={2.5} />
-      Create a game here
+      <Plus className="w-5 h-5" strokeWidth={2.5} />
+      Host a game here
     </button>
   );
 }

@@ -30,7 +30,7 @@ export async function getAvailableGames(filters?: {
   if (turfIds.length > 0) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, name, address, city, "Gmap Embed link"')
+      .select('id, name, address, city, lat, lng, "Gmap Embed link"')
       .in("id", turfIds);
 
     if (turfs) {
@@ -44,6 +44,27 @@ export async function getAvailableGames(filters?: {
   }
 
   return { data: data as Game[], error: null };
+}
+
+/**
+ * Upcoming games at one turf (soonest first). Past games are dropped
+ * by date here and by start time via filterNonExpiredGames in the UI,
+ * since stored status stays "open" after a game ends.
+ */
+export async function getUpcomingGamesForTurf(turfId: string) {
+  const supabase = createClient();
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const { data, error } = await supabase
+    .from("games")
+    .select("*")
+    .eq("turf_id", turfId)
+    .in("status", ["open", "upcoming", "active"])
+    .gte("date", today)
+    .order("date", { ascending: true })
+    .order("start_time", { ascending: true })
+    .limit(20);
+  if (error || !data) return [] as Game[];
+  return data as Game[];
 }
 
 export async function getGameById(gameId: string) {
@@ -60,7 +81,7 @@ export async function getGameById(gameId: string) {
   if (data.turf_id) {
     const { data: turf } = await supabase
       .from("turfs")
-      .select('id, name, address, city, "Gmap Embed link"')
+      .select('id, name, address, city, lat, lng, "Gmap Embed link"')
       .eq("id", data.turf_id)
       .single();
     if (turf) (data as Record<string, unknown>).turfs = turf;
@@ -84,7 +105,7 @@ export async function getUserGames(userId: string) {
   if (turfIds.length > 0) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, name, address, city, "Gmap Embed link"')
+      .select('id, name, address, city, lat, lng, "Gmap Embed link"')
       .in("id", turfIds);
     if (turfs) {
       const turfsMap = Object.fromEntries(turfs.map((t) => [t.id, t]));

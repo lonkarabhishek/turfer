@@ -5,7 +5,11 @@ import { MapPin, Clock, Users, User, Zap } from "lucide-react";
 import type { Game } from "@/types/game";
 import { formatDate, formatTimeSlot, capitalizeSkillLevel } from "@/lib/utils/game";
 
-export function GameCard({ game }: { game: Game }) {
+export function GameCard({ game, hideVenue = false }: {
+  game: Game;
+  /** On a turf's own page the venue is obvious; show the game title instead. */
+  hideVenue?: boolean;
+}) {
   const spotsLeft = game.max_players - game.current_players;
   const fillPercent = (game.current_players / game.max_players) * 100;
   const isFull = spotsLeft <= 0;
@@ -62,7 +66,14 @@ export function GameCard({ game }: { game: Game }) {
             </span>
           </div>
 
-          {/* Turf name & address */}
+          {/* Turf name & address (or just the game title on a turf page) */}
+          {hideVenue ? (
+            game.title ? (
+              <h3 className="mb-3 text-[16px] font-semibold text-primary-900 group-hover:text-accent-600 transition-colors leading-snug truncate">
+                {game.title}
+              </h3>
+            ) : null
+          ) : (
           <div className="mb-3">
             <h3 className="font-display text-lg sm:text-xl text-primary-800 group-hover:text-accent-600 transition-colors leading-tight">
               {game.turfs?.name || game.title}
@@ -74,6 +85,7 @@ export function GameCard({ game }: { game: Game }) {
               </p>
             )}
           </div>
+          )}
 
           {/* Date + time chips */}
           <div className="flex items-center gap-2 mb-3">

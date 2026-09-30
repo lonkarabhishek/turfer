@@ -8,6 +8,7 @@ import { getGameById, getGameParticipants, getGameRequests, sendJoinRequest, acc
 import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from "@/lib/utils/game";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { GameRequestCard } from "./GameRequestCard";
+import { GameDistance } from "./GameDistance";
 
 export function GameDetailClient({ gameId }: { gameId: string }) {
   const { user, login } = useAuth();
@@ -237,15 +238,33 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           )}
         </div>
 
-        {/* Title & address */}
+        {/* Title & address. The turf name links to its turf page. */}
         <h1 className="relative text-2xl sm:text-3xl font-bold mb-1.5">
-          {game.turfs?.name || game.title}
+          {game.turfs?.id ? (
+            <Link href={`/turf/${game.turfs.id}`} className="hover:underline underline-offset-4 decoration-white/40">
+              {game.turfs.name}
+            </Link>
+          ) : (
+            game.turfs?.name || game.title
+          )}
         </h1>
         {game.turfs?.address && (
-          <p className="relative flex items-center gap-1.5 text-sm text-white/80 mb-5">
+          <p className="relative flex items-center gap-1.5 text-sm text-white/80 mb-3">
             <MapPin className="w-4 h-4 flex-shrink-0" />
             {game.turfs.address}
           </p>
+        )}
+        {game.turfs?.id && (
+          <div className="relative flex items-center gap-2 flex-wrap mb-5">
+            <Link
+              href={`/turf/${game.turfs.id}`}
+              className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold bg-white text-primary-900 hover:bg-white/90"
+            >
+              View turf
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+            <GameDistance lat={game.turfs.lat} lng={game.turfs.lng} />
+          </div>
         )}
 
         {/* Quick stats row */}
@@ -369,10 +388,10 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
           {/* ═══════════════════════════════════════════════════════ */}
           {/* LOCATION — where the game happens (was near the bottom) */}
           {/* ═══════════════════════════════════════════════════════ */}
-          {game.turfs?.["Gmap Embed link"] && (() => {
-            const raw = game.turfs["Gmap Embed link"];
+          {game.turfs?.id && (() => {
+            const raw = game.turfs["Gmap Embed link"] ?? "";
             const srcMatch = raw.match(/src="([^"]+)"/);
-            const mapSrc = srcMatch ? srcMatch[1] : raw;
+            const mapSrc = raw ? (srcMatch ? srcMatch[1] : raw) : null;
             return (
               <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5">
                 <div className="p-5 pb-3">
@@ -384,6 +403,17 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                     <p className="text-sm text-primary-500 mt-1">{game.turfs.address}</p>
                   )}
                 </div>
+                <Link
+                  href={`/turf/${game.turfs.id}`}
+                  className="flex items-center gap-3 px-5 py-3 border-t border-primary-100 hover:bg-primary-50 transition-colors"
+                >
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[15px] font-semibold text-primary-900 truncate">{game.turfs.name}</span>
+                    <span className="block text-[13px] text-primary-500">Photos, prices, reviews and other games here</span>
+                  </span>
+                  <ChevronRight className="w-5 h-5 text-primary-300 shrink-0" />
+                </Link>
+                {mapSrc && (
                 <div className="h-[220px]">
                   <iframe
                     src={mapSrc}
@@ -396,6 +426,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                     title="Game location on Google Maps"
                   />
                 </div>
+                )}
               </div>
             );
           })()}
