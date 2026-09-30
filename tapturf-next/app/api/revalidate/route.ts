@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { createReadOnlyClient } from "@/lib/supabase/server";
 
 /**
  * On-demand cache invalidation for turf writes.
@@ -8,19 +9,30 @@ import { NextResponse } from "next/server";
  * UPDATE / DELETE) so a data-ops row change reflects on prod within
  * ~10s instead of after the 10-min revalidate window naturally ticks.
  *
- * Auth: shared secret in the x-revalidate-secret header, matched
- * against process.env.REVALIDATE_SECRET (Vercel env var, never in
- * client code). Anything else 401s.
+ * Auth: shared secret in the x-revalidate-secret header. If
+ * REVALIDATE_SECRET is set in Vercel it's matched directly; otherwise
+ * the header is checked by Supabase (check_revalidate_secret), which
+ * holds the same secret the notify_turf_change() trigger sends. Until
+ * this fallback existed, a missing env var meant every webhook 500'd
+ * and data changes waited for the time-based cache instead.
+ * Anything else 401s.
  */
-export async function POST(req: Request) {
+async function isAuthorized(header: string | null): Promise<boolean> {
+  if (!header) return false;
   const secret = process.env.REVALIDATE_SECRET;
-  if (!secret) {
-    return NextResponse.json(
-      { ok: false, error: "REVALIDATE_SECRET not configured" },
-      { status: 500 },
-    );
+  if (secret) return header === secret;
+  try {
+    const { data, error } = await createReadOnlyClient().rpc("check_revalidate_secret", {
+      p_secret: header,
+    });
+    return !error && data === true;
+  } catch {
+    return false;
   }
-  if (req.headers.get("x-revalidate-secret") !== secret) {
+}
+
+export async function POST(req: Request) {
+  if (!(await isAuthorized(req.headers.get("x-revalidate-secret")))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
@@ -56,6 +68,13 @@ export async function POST(req: Request) {
   // bust that city too so the old listing drops.
   if (b.old_record?.city && b.old_record.city !== row?.city) {
     paths.add(`/${b.old_record.city}`);
+  }
+
+  // Sport listing pages show turf cards too; refresh all of them.
+  try {
+    revalidatePath("/sport/[sport]", "page");
+  } catch (e) {
+    console.warn("revalidatePath(/sport/[sport]) failed", e);
   }
 
   for (const p of paths) {

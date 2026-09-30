@@ -38,8 +38,12 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
 
   const priceSummary = summarisePrice(turf);
   const sports = turf.sports.slice(0, 2);
-  const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
-  const [activeIdx, setActiveIdx] = useState(0);
+  // Photos that failed to load drop out of the slideshow instead of
+  // showing a blank frame; the placeholder appears only if all fail.
+  const [broken, setBroken] = useState<string[]>([]);
+  const shown = photos.filter((p) => !broken.includes(p));
+  const [tick, setTick] = useState(0);
+  const activeIdx = shown.length ? tick % shown.length : 0;
 
   // Auto-slideshow. The manual scroll-snap carousel felt fine on
   // desktop but glitched on iOS Safari — a swipe on the card would
@@ -48,12 +52,10 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
   // Replaced with a plain interval so users always see every photo
   // without touching anything, and tapping the card just navigates.
   useEffect(() => {
-    if (photos.length <= 1) return;
-    const id = window.setInterval(() => {
-      setActiveIdx((i) => (i + 1) % photos.length);
-    }, SLIDE_MS);
+    if (shown.length <= 1) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), SLIDE_MS);
     return () => window.clearInterval(id);
-  }, [photos.length]);
+  }, [shown.length]);
 
   const distanceLabel = distanceKm != null && Number.isFinite(distanceKm)
     ? distanceKm < 1
@@ -63,7 +65,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
         : `${Math.round(distanceKm)} km`
     : null;
 
-  const hasMultiple = photos.length > 1;
+  const hasMultiple = shown.length > 1;
   const area = areaFor(turf);
   const place = area ?? turf.address;
   const range = (min: number | null, max: number | null) => {
@@ -81,25 +83,13 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
         {/* Photo. Only the pager dots sit on top; everything else lives
             below so the picture reads clean, App Store style. */}
         <div className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100">
-          {photos.length > 0 ? (
-            photos.map((src, i) => {
+          {shown.length > 0 ? (
+            shown.map((src, i) => {
               const active = i === activeIdx;
-              if (imgErrors[i]) {
-                return (
-                  <div
-                    key={`err-${i}`}
-                    className={`absolute inset-0 bg-primary-100 flex items-center justify-center transition-opacity ${active ? "opacity-100" : "opacity-0"}`}
-                    style={{ transitionDuration: `${FADE_MS}ms` }}
-                    aria-hidden={!active}
-                  >
-                    <MapPin className="w-8 h-8 text-primary-300" />
-                  </div>
-                );
-              }
               return (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
-                  key={`img-${i}`}
+                  key={src}
                   src={src}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
                   className={`absolute inset-0 w-full h-full object-cover transition-[opacity,transform] ${active ? "opacity-100" : "opacity-0"} group-hover:scale-[1.02]`}
@@ -109,7 +99,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
                   fetchpriority={priority && i === 0 ? "high" : "auto"}
                   decoding="async"
                   referrerPolicy="no-referrer"
-                  onError={() => setImgErrors((prev) => ({ ...prev, [i]: true }))}
+                  onError={() => setBroken((b) => (b.includes(src) ? b : [...b, src]))}
                   draggable={false}
                   aria-hidden={!active}
                 />
@@ -123,7 +113,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
 
           {hasMultiple && (
             <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex gap-1 rounded-full bg-black/25 backdrop-blur-sm px-1.5 py-1 pointer-events-none">
-              {photos.map((_, i) => (
+              {shown.map((_, i) => (
                 <span
                   key={i}
                   className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${

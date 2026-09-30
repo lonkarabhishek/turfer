@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, X, Camera, Maximize2 } from "lucide-react";
 
 function GalleryImage({
@@ -9,12 +9,15 @@ function GalleryImage({
   className = "",
   priority = false,
   onClick,
+  onBroken,
 }: {
   src: string;
   alt: string;
   className?: string;
   priority?: boolean;
   onClick?: () => void;
+  /** Called when the photo fails to load; the gallery then drops it. */
+  onBroken?: (src: string) => void;
 }) {
   const [error, setError] = useState(false);
 
@@ -38,12 +41,23 @@ function GalleryImage({
       loading={priority ? "eager" : "lazy"}
       referrerPolicy="no-referrer"
       onClick={onClick}
-      onError={() => setError(true)}
+      onError={() => {
+        setError(true);
+        onBroken?.(src);
+      }}
     />
   );
 }
 
-export function TurfImageGallery({ images }: { images: string[] }) {
+export function TurfImageGallery({ images: allImages }: { images: string[] }) {
+  // A photo that fails to load (expired / rate-limited Google link) is
+  // removed from the gallery instead of leaving a blank box.
+  const [broken, setBroken] = useState<string[]>([]);
+  const markBroken = useCallback(
+    (src: string) => setBroken((b) => (b.includes(src) ? b : [...b, src])),
+    [],
+  );
+  const images = useMemo(() => allImages.filter((u) => !broken.includes(u)), [allImages, broken]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mobileIdx, setMobileIdx] = useState(0);
@@ -108,6 +122,8 @@ export function TurfImageGallery({ images }: { images: string[] }) {
   }
 
   const hasMultiple = images.length > 1;
+  // Indices can point past the end after a broken photo is dropped.
+  const safeIdx = Math.min(currentIndex, images.length - 1);
 
   return (
     <>
@@ -128,6 +144,7 @@ export function TurfImageGallery({ images }: { images: string[] }) {
               aria-label={`Photo ${idx + 1} of ${images.length}`}
             >
               <GalleryImage
+                onBroken={markBroken}
                 src={img}
                 alt={`Turf photo ${idx + 1}`}
                 className="w-full h-full object-cover"
@@ -141,7 +158,7 @@ export function TurfImageGallery({ images }: { images: string[] }) {
           <>
             <div className="absolute top-3 right-6 bg-black/65 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-medium tabular-nums flex items-center gap-1 pointer-events-none">
               <Camera className="w-3 h-3" />
-              {mobileIdx + 1} / {images.length}
+              {Math.min(mobileIdx, images.length - 1) + 1} / {images.length}
             </div>
             <div className="flex justify-center gap-1.5 mt-3 px-4">
               {images.map((_, i) => (
@@ -174,6 +191,7 @@ export function TurfImageGallery({ images }: { images: string[] }) {
           onClick={() => openLightbox(0)}
         >
           <GalleryImage
+                onBroken={markBroken}
             src={images[0]}
             alt="Turf main photo"
             className="w-full h-full object-cover transition-transform duration-500 group-hover/gallery:scale-[1.02] min-h-[240px] md:min-h-full"
@@ -192,6 +210,7 @@ export function TurfImageGallery({ images }: { images: string[] }) {
             >
               {img ? (
                 <GalleryImage
+                onBroken={markBroken}
                   src={img}
                   alt={`Turf photo ${slot + 1}`}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover/gallery:scale-[1.02] cursor-pointer"
@@ -226,7 +245,7 @@ export function TurfImageGallery({ images }: { images: string[] }) {
           <div className="flex items-center justify-between px-4 sm:px-6 py-3 text-white">
             <div className="flex items-center gap-2 text-sm font-medium tabular-nums bg-white/10 backdrop-blur px-3 py-1.5 rounded-full">
               <Camera className="w-4 h-4" />
-              {currentIndex + 1} / {images.length}
+              {safeIdx + 1} / {images.length}
             </div>
             <button
               onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
@@ -261,10 +280,11 @@ export function TurfImageGallery({ images }: { images: string[] }) {
 
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={images[currentIndex]}
-              alt={`Photo ${currentIndex + 1}`}
+              src={images[safeIdx]}
+              alt={`Photo ${safeIdx + 1}`}
               className="max-w-full max-h-full object-contain select-none"
               referrerPolicy="no-referrer"
+              onError={() => markBroken(images[safeIdx])}
               onClick={(e) => e.stopPropagation()}
               draggable={false}
             />
@@ -308,6 +328,7 @@ export function TurfImageGallery({ images }: { images: string[] }) {
                     className="w-full h-full object-cover"
                     loading="lazy"
                     referrerPolicy="no-referrer"
+                    onError={() => markBroken(img)}
                   />
                 </button>
               ))}

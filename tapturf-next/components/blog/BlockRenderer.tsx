@@ -5,6 +5,7 @@ import type { Block } from "@/content/blog/types";
 import { getBlogTurf } from "@/content/blog/data/turfs";
 import { slugify } from "@/lib/utils/slugify";
 import { PriceCalculator } from "./PriceCalculator";
+import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 
 /**
  * Renders a single content block. Server component (except where a
@@ -264,13 +265,11 @@ export function BlockRenderer({ block }: { block: Block }) {
               >
                 <div className="relative w-28 h-28 shrink-0 bg-primary-100">
                   {t.coverImage ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
+                    <HideOnErrorImg
                       src={t.coverImage}
                       alt={`${t.name} turf photo`}
                       className="w-full h-full object-cover"
                       loading="lazy"
-                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-accent-300 to-accent-500 flex items-center justify-center">

@@ -1,22 +1,31 @@
 /**
- * Rewrite tiny Google user-content thumbnails (e.g. Google Maps photo
- * URLs ending in `=w32-h32-p-k-no`) up to a real display size.
+ * Ask Google user-content (lh3/lh4/... .googleusercontent.com) for a
+ * real display size.
  *
- * Bluebird's cover_image in Supabase is `...=w32-h32-p-k-no`, which
- * renders as a 32px placeholder on the turf card. Any URL from
- * lh3.googleusercontent.com / lh4.../lh5... / ...gstatic.com uses the
- * `=wWIDTH-hHEIGHT-...` suffix to control the served size, so we can
- * safely rewrite it up. Leaves non-Google URLs untouched.
+ * Those hosts take sizing options after the first "=" in the last path
+ * segment: `TOKEN=w32-h32-p-k-no`, `TOKEN=s96`, `TOKEN=w1600`, ... We
+ * drop EVERYTHING from that "=" on and append exactly one suffix.
+ *
+ * The old version only stripped `=wN-hN…` / `=sN…`, so a bare
+ * `TOKEN=w1600` survived and became `TOKEN=w1600=w1600-h1200`, which
+ * Google answers with a 400 (blank photos across ~1,200 images).
+ *
+ * Only googleusercontent is touched: gstatic and other hosts use query
+ * strings, and appending "=w…" to them breaks them.
  */
+const GOOGLE_USER_CONTENT = /^https?:\/\/lh\d+\.googleusercontent\.com\//i;
+
 export function upsizeGoogleUserContent(url: string, width = 1600, height = 1200): string {
   if (!url || typeof url !== "string") return url;
-  if (!/(?:lh\d+\.googleusercontent|gstatic)\.com/i.test(url)) return url;
-  // Case: existing size suffix like =w32-h32-p-k-no or =s96 — rewrite it.
-  if (/=(?:w\d+-h\d+|s\d+)(?:-[^/?#]*)?$/i.test(url)) {
-    return url.replace(/=(?:w\d+-h\d+|s\d+)(?:-[^/?#]*)?$/i, `=w${width}-h${height}`);
-  }
-  // Case: no size suffix — append one so we ask for a real image.
-  return `${url}=w${width}-h${height}`;
+  if (!GOOGLE_USER_CONTENT.test(url)) return url;
+  // Keep any query / hash aside; the size options live in the path.
+  const cut = url.search(/[?#]/);
+  let path = cut === -1 ? url : url.slice(0, cut);
+  const tail = cut === -1 ? "" : url.slice(cut);
+  const lastSlash = path.lastIndexOf("/");
+  const eq = path.indexOf("=", lastSlash + 1);
+  if (eq !== -1) path = path.slice(0, eq);
+  return `${path}=w${width}-h${height}${tail}`;
 }
 
 /**
@@ -71,16 +80,46 @@ export function normalizeImageUrl(url: string): string {
 }
 
 /**
- * Converts an array of image URLs, handling Google Drive links
+ * Split a stored value into individual links. Some rows hold several
+ * URLs joined with commas in one string ("a.jpg, b.jpg, c.jpg,").
+ */
+export function splitImageUrls(value: string): string[] {
+  return value
+    .split(/,\s*(?=https?:\/\/)|,\s*$/)
+    .map((u) => u.trim())
+    .filter(Boolean);
+}
+
+/** Not a turf photo: Google's generic avatar placeholder. */
+function isPlaceholderImage(url: string): boolean {
+  return /googleusercontent\.com\/ogw\/default-user/i.test(url);
+}
+
+/**
+ * Cleans an image list for display: splits comma-joined entries, drops
+ * placeholders and duplicates, and normalizes each URL.
  */
 export function convertImageUrls(urls: string[]): string[] {
   if (!Array.isArray(urls)) {
     return [];
   }
 
-  return urls
-    .filter((url) => url && typeof url === "string" && url.trim() !== "")
-    .map((url) => normalizeImageUrl(url.trim()));
+  const out: string[] = [];
+  for (const raw of urls) {
+    if (!raw || typeof raw !== "string") continue;
+    for (const u of splitImageUrls(raw)) {
+      if (isPlaceholderImage(u)) continue;
+      const n = normalizeImageUrl(u);
+      if (n && !out.includes(n)) out.push(n);
+    }
+  }
+  return out;
+}
+
+/** Single-image version of convertImageUrls: first usable link or null. */
+export function firstImageUrl(value: string | null | undefined): string | null {
+  if (!value || typeof value !== "string") return null;
+  return convertImageUrls([value])[0] ?? null;
 }
 
 /**

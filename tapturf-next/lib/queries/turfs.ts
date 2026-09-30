@@ -1,5 +1,5 @@
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
-import { normalizeImageUrl, convertImageUrls } from "@/lib/utils/images";
+import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
@@ -24,13 +24,9 @@ function transformTurf(raw: any): Turf {
 
   // Parse images
   const rawImages = Array.isArray(raw.images) ? raw.images : [];
-  const images = convertImageUrls(
-    rawImages.flatMap((img: string) =>
-      typeof img === "string"
-        ? img.split(",").map((u) => u.trim()).filter(Boolean)
-        : []
-    )
-  );
+  // convertImageUrls splits comma-joined entries, drops placeholders
+  // and duplicates, and normalizes Google / Drive links.
+  const images = convertImageUrls(rawImages);
 
   // Parse contact_info - can be string or object
   let contactInfo = raw.contact_info;
@@ -50,15 +46,9 @@ function transformTurf(raw: any): Turf {
     sports,
     amenities,
     images,
-    cover_image: raw.cover_image
-      ? normalizeImageUrl(raw.cover_image)
-      : null,
-    signboard_image: raw.signboard_image
-      ? normalizeImageUrl(raw.signboard_image)
-      : null,
-    entry_parking_image: raw.entry_parking_image
-      ? normalizeImageUrl(raw.entry_parking_image)
-      : null,
+    cover_image: firstImageUrl(raw.cover_image),
+    signboard_image: firstImageUrl(raw.signboard_image),
+    entry_parking_image: firstImageUrl(raw.entry_parking_image),
     contact_info: contactInfo || null,
     owner_name: raw.owner_name || null,
     owner_phone: raw.owner_phone || null,
