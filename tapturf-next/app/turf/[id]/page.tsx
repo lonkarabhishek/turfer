@@ -315,6 +315,7 @@ export default async function TurfDetailPage({
 
               {phone ? (
                 <CTAButtons
+                  turfId={turf.id}
                   phone={phone}
                   turfName={turf.name}
                   address={turf.address}
@@ -341,6 +342,7 @@ export default async function TurfDetailPage({
           the number yet" bar that opens the suggest form. */}
       {phone ? (
         <CTAButtons
+                  turfId={turf.id}
           phone={phone}
           turfName={turf.name}
           address={turf.address}

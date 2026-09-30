@@ -440,3 +440,26 @@ export async function getActiveUsers(days = 7): Promise<number> {
   (r || []).forEach((row) => row.user_id && set.add(row.user_id));
   return set.size;
 }
+
+// ── Turf contact taps (Call / WhatsApp) ─────────────────
+
+export interface ContactClickStats {
+  days: number;
+  calls: number;
+  whatsapps: number;
+  login_prompts: number;
+  unique_users: number;
+  turfs: number;
+  top: { id: string; name: string; city: string | null; calls: number; whatsapps: number; login_prompts: number }[];
+}
+
+/** Aggregated Call / WhatsApp taps over the last `days` days. */
+export async function getContactClickStats(days = 30): Promise<ContactClickStats | null> {
+  try {
+    const { data, error } = await supa().rpc("get_contact_click_stats", { p_days: days });
+    if (error || !data) return null;
+    return data as ContactClickStats;
+  } catch {
+    return null;
+  }
+}

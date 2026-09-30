@@ -18,20 +18,25 @@ export function buildWhatsAppLink({
   return `https://wa.me/${normalized.digits}?text=${encodedText}`;
 }
 
+/**
+ * The enquiry a player sends to a turf on WhatsApp. Includes the
+ * turf's own TapTurf page so the owner sees exactly which listing the
+ * player came from (and can check what we show about them).
+ */
 export function generateTurfInquiryMessage(turf: {
   name: string;
   address?: string;
+  url?: string;
 }): string {
-  return `Hi! I'm interested in booking *${turf.name}*.
-
-📍 ${turf.address || "Your venue"}
-
-Found your venue via TapTurf - https://tapturf.in
-
-Could you please share:
-✅ Available time slots
-💰 Pricing details
-📋 Booking process
-
-Thanks!`;
+  const lines = [
+    `Hi! I'm interested in booking *${turf.name}*.`,
+    "",
+    ...(turf.address ? [`📍 ${turf.address}`, ""] : []),
+    `Found you on TapTurf: ${turf.url ?? "https://www.tapturf.in"}`,
+    "",
+    "Could you share available slots and pricing?",
+    "",
+    "Thanks!",
+  ];
+  return lines.join("\n");
 }

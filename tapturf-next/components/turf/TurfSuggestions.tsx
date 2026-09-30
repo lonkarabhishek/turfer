@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
+import { generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
+import { logContactClick, turfPageUrl, type ContactKind } from "@/lib/analytics/contactClicks";
 import {
   getMyTurfSuggestion,
   getTurfSuggestions,
@@ -255,7 +257,9 @@ export function TurfSuggestions({
   }, [items]);
 
   // Same rule as the main Call / WhatsApp buttons: quick login first.
-  const guard = (e: React.MouseEvent) => {
+  // Counted like the main buttons, tagged as a player-suggested number.
+  const guard = (kind: ContactKind) => (e: React.MouseEvent) => {
+    logContactClick({ turfId, kind, source: "suggested_number", signedIn: !!user, userId: user?.id });
     if (user) return;
     e.preventDefault();
     login();
@@ -324,7 +328,7 @@ export function TurfSuggestions({
                         {p.call && (
                           <a
                             href={`tel:${n.e164}`}
-                            onClick={guard}
+                            onClick={guard("call")}
                             aria-label="Call"
                             className="w-9 h-9 inline-flex items-center justify-center rounded-full bg-accent-500 text-white"
                           >
@@ -333,8 +337,10 @@ export function TurfSuggestions({
                         )}
                         {waN && (
                           <a
-                            href={`https://wa.me/${waN.digits}`}
-                            onClick={guard}
+                            href={`https://wa.me/${waN.digits}?text=${encodeURIComponent(
+                              generateTurfInquiryMessage({ name: turfName, url: turfPageUrl(turfId) }),
+                            )}`}
+                            onClick={guard("whatsapp")}
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label="WhatsApp"

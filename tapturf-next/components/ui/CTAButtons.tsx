@@ -1,11 +1,13 @@
 "use client";
 
 import { Phone, MessageCircle } from "lucide-react";
-import { buildWhatsAppLink } from "@/lib/utils/whatsapp";
+import { buildWhatsAppLink, generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
+import { logContactClick, turfPageUrl, type ContactKind } from "@/lib/analytics/contactClicks";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 interface CTAButtonsProps {
+  turfId: string;
   phone: string;
   turfName: string;
   address: string;
@@ -20,6 +22,7 @@ interface CTAButtonsProps {
  * but we don't force auth to *read* the page either.
  */
 export function CTAButtons({
+  turfId,
   phone,
   turfName,
   address,
@@ -32,7 +35,7 @@ export function CTAButtons({
   const telHref = `tel:${normalized.e164}`;
   const whatsappUrl = buildWhatsAppLink({
     phone: normalized.digits,
-    text: `Hi! I'm interested in booking *${turfName}*.\n\n📍 ${address}\n\nFound via TapTurf - https://tapturf.in\n\nCould you share available slots and pricing?\n\nThanks!`,
+    text: generateTurfInquiryMessage({ name: turfName, address, url: turfPageUrl(turfId) }),
   });
 
   // Intercept the click when signed out. We preventDefault first so
@@ -40,7 +43,10 @@ export function CTAButtons({
   // modal. After a successful sign-in the user just clicks again — a
   // shorter path than trying to buffer + replay a system link across
   // a modal transition.
-  const guard = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const source = variant === "fixed-bottom" ? "turf_bar" : "turf_sidebar";
+  const guard = (kind: ContactKind) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Count every tap; signed_in=false marks the ones that hit login.
+    logContactClick({ turfId, kind, source, signedIn: !!user, userId: user?.id });
     if (user) return; // signed-in: let the link fire naturally
     e.preventDefault();
     login();
@@ -52,7 +58,7 @@ export function CTAButtons({
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
         <a
           href={telHref}
-          onClick={guard}
+          onClick={guard("call")}
           className="flex-1 flex items-center justify-center gap-2 bg-primary-100 active:bg-primary-200 text-primary-900 text-[17px] font-semibold h-12 rounded-full transition-colors cursor-pointer"
         >
           <Phone className="w-5 h-5" />
@@ -62,7 +68,7 @@ export function CTAButtons({
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={guard}
+          onClick={guard("whatsapp")}
           className="flex-1 flex items-center justify-center gap-2 bg-accent-500 active:bg-accent-600 text-white text-[17px] font-semibold h-12 rounded-full transition-colors cursor-pointer"
         >
           <MessageCircle className="w-5 h-5" />
@@ -76,7 +82,7 @@ export function CTAButtons({
     <div className="space-y-3">
       <a
         href={telHref}
-        onClick={guard}
+        onClick={guard("call")}
         className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-600 text-white font-semibold h-12 rounded-full transition-colors text-[17px]"
       >
         <Phone className="w-5 h-5" />
@@ -86,7 +92,7 @@ export function CTAButtons({
         href={whatsappUrl}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={guard}
+        onClick={guard("whatsapp")}
         className="w-full flex items-center justify-center gap-2 bg-primary-100 hover:bg-primary-200 text-primary-900 font-semibold h-12 rounded-full transition-colors text-[17px]"
       >
         <MessageCircle className="w-5 h-5" />

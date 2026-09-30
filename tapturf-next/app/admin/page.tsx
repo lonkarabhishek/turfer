@@ -13,6 +13,7 @@ import {
   getTurfsByCity,
   getTopHosts,
   getActiveUsers,
+  getContactClickStats,
 } from "@/lib/queries/admin";
 import { StatTile } from "@/components/admin/StatTile";
 import { DailyChart } from "@/components/admin/DailyChart";
@@ -76,6 +77,8 @@ export default async function AdminPage() {
     topHosts,
     active7,
     active30,
+    contact7,
+    contact30,
   ] = await Promise.all([
     getHeadline(),
     getDailySignups(30),
@@ -88,6 +91,8 @@ export default async function AdminPage() {
     getTopHosts(10),
     getActiveUsers(7),
     getActiveUsers(30),
+    getContactClickStats(7),
+    getContactClickStats(30),
   ]);
 
   // Detect batch-backfill: any created_at that appears on 2+ rows almost
@@ -296,6 +301,75 @@ export default async function AdminPage() {
             value={headline.totalGames}
             sub={`${headline.games30d} in last 30d`}
           />
+        </div>
+      </section>
+
+      {/* Turf contact taps: how many players reached out to turfs. */}
+      <section className="mb-8">
+        <p className="text-xs font-bold text-primary-500 mb-3">
+          Turf contacts (Call and WhatsApp taps)
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
+          <StatTile
+            label="Calls, 7 days"
+            value={contact7?.calls ?? 0}
+            sub={`${contact30?.calls ?? 0} in 30 days`}
+            tone="accent"
+          />
+          <StatTile
+            label="WhatsApps, 7 days"
+            value={contact7?.whatsapps ?? 0}
+            sub={`${contact30?.whatsapps ?? 0} in 30 days`}
+            tone="accent"
+          />
+          <StatTile
+            label="Players who reached out, 30d"
+            value={contact30?.unique_users ?? 0}
+            sub={`across ${contact30?.turfs ?? 0} turfs`}
+          />
+          <StatTile
+            label="Hit login first, 30d"
+            value={contact30?.login_prompts ?? 0}
+            sub="tapped while signed out"
+          />
+        </div>
+        <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-primary-100 flex items-baseline justify-between">
+            <p className="text-xs font-bold text-primary-500">Most contacted turfs, 30 days</p>
+            <p className="text-xs text-primary-400">Signed-in taps</p>
+          </div>
+          {!contact30 || contact30.top.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-primary-400">No taps recorded yet. Counting started with this release.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-primary-50 text-[11px] text-primary-500 font-semibold">
+                  <tr>
+                    <th className="text-left px-4 py-2.5">Turf</th>
+                    <th className="text-left px-4 py-2.5">City</th>
+                    <th className="text-right px-4 py-2.5">Calls</th>
+                    <th className="text-right px-4 py-2.5">WhatsApp</th>
+                    <th className="text-right px-4 py-2.5">Login prompts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contact30.top.map((t) => (
+                    <tr key={t.id} className="border-t border-primary-100">
+                      <td className="px-4 py-2.5">
+                        <Link href={`/turf/${t.id}`} className="font-medium text-primary-900 hover:text-accent-600">
+                          {t.name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5 text-primary-500 capitalize">{t.city ?? "-"}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{t.calls}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{t.whatsapps}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-primary-400">{t.login_prompts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
 
