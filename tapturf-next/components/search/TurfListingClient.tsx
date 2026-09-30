@@ -5,6 +5,7 @@ import { Search, ChevronDown, Navigation, Loader2, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice } from "@/lib/utils/prices";
+import { compareTopRated } from "@/lib/utils/ranking";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
 import { getCityPref, isCity, labelFor, type CityId } from "@/lib/city";
 
@@ -151,7 +152,7 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
     result = [...result].sort((a, b) => {
       switch (sortBy) {
         case "nearby":
-          if (a.distanceKm == null && b.distanceKm == null) return b.turf.rating - a.turf.rating;
+          if (a.distanceKm == null && b.distanceKm == null) return compareTopRated(a.turf, b.turf);
           if (a.distanceKm == null) return 1;
           if (b.distanceKm == null) return -1;
           return a.distanceKm - b.distanceKm;
@@ -168,7 +169,7 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
         }
         case "reviews":    return b.turf.total_reviews - a.turf.total_reviews;
         case "rating":
-        default:           return b.turf.rating - a.turf.rating;
+        default:           return compareTopRated(a.turf, b.turf);
       }
     });
 

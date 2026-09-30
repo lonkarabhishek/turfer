@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
@@ -51,7 +52,8 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const label = labelFor(cityId);
 
   const turfs = await getAllActiveTurfs(cityId);
-  const featured = turfs.slice(0, 6);
+  // "Top-rated" block: only turfs with enough reviews to trust the score.
+  const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
 
   // JSON-LD: ItemList of turfs + LocalBusiness per turf for rich results
   const jsonLd = {

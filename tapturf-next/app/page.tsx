@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { HomeShell } from "@/components/home/HomeShell";
 import { PopularByCity } from "@/components/home/PopularByCity";
+import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
 import { CITIES, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
@@ -58,12 +59,8 @@ export async function generateMetadata(): Promise<Metadata> {
  */
 function topTurfsFor(all: Turf[]) {
   return [...all]
-    .filter((t) => t.rating > 0 && t.total_reviews > 0)
-    .sort((a, b) => {
-      const sa = a.rating * Math.log10(a.total_reviews + 1);
-      const sb = b.rating * Math.log10(b.total_reviews + 1);
-      return sb - sa;
-    })
+    .filter(hasEnoughReviews)
+    .sort(compareTopRated)
     .slice(0, 8);
 }
 

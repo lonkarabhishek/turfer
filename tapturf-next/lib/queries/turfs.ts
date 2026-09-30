@@ -1,5 +1,6 @@
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
+import { compareTopRated } from "@/lib/utils/ranking";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
@@ -119,7 +120,9 @@ export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Tur
     console.error("Failed to fetch turfs:", error);
     return [];
   }
-  return (data ?? []).map(transformTurf);
+  // Default order is "top rated" with the minimum-review rule, so a
+  // 5.0 from a handful of reviews doesn't lead city / listing pages.
+  return (data ?? []).map(transformTurf).sort(compareTopRated);
 }
 
 export async function getTurfById(id: string): Promise<Turf | null> {
@@ -149,7 +152,7 @@ export async function getTurfsBySport(sport: string): Promise<Turf[]> {
     return [];
   }
 
-  const turfs = (data ?? []).map(transformTurf);
+  const turfs = (data ?? []).map(transformTurf).sort(compareTopRated);
   const sportLower = sport.toLowerCase();
 
   return turfs.filter((turf) =>
