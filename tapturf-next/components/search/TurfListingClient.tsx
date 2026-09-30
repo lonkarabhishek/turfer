@@ -6,6 +6,7 @@ import { TurfCard } from "@/components/turf/TurfCard";
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
+import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
 import { getCityPref, isCity, labelFor, type CityId } from "@/lib/city";
 
@@ -36,7 +37,15 @@ const SORT_LABELS: Record<SortOption, string> = {
   "price-high":"Price: High to Low",
 };
 
-export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
+export function TurfListingClient({
+  turfs,
+  spotlights = [],
+}: {
+  turfs: Turf[];
+  /** Live "Most Trending Turf" picks, one per city. */
+  spotlights?: SpotlightTurf[];
+}) {
+  const trendingIds = useMemo(() => new Set(spotlights.map((s) => s.turfId)), [spotlights]);
   const [search, setSearch] = useState("");
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("rating");
@@ -169,12 +178,26 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
         }
         case "reviews":    return b.turf.total_reviews - a.turf.total_reviews;
         case "rating":
-        default:           return compareTopRated(a.turf, b.turf);
+        default: {
+          // The week's trending pick leads the default sort.
+          const ta = trendingIds.has(a.turf.id);
+          const tb = trendingIds.has(b.turf.id);
+          if (ta !== tb) return ta ? -1 : 1;
+          return compareTopRated(a.turf, b.turf);
+        }
       }
     });
 
     return result;
-  }, [turfsWithDistance, search, selectedSport, sortBy]);
+  }, [turfsWithDistance, search, selectedSport, sortBy, trendingIds]);
+
+  // Spotlight card for the city in scope (or the first pick when
+  // showing all cities).
+  const spotlightPicks = useMemo(() => {
+    if (!prefReady || spotlights.length === 0) return [];
+    const pick = activeCity ? spotlights.find((s) => s.city === activeCity) : spotlights[0];
+    return pick ? [pick] : [];
+  }, [prefReady, spotlights, activeCity]);
 
   const availableSports = useMemo(() => {
     // Sport chips reflect the city-scoped turf set — if Nashik has no
@@ -321,11 +344,17 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
         </div>
       )}
 
+      {/* This week's Most Trending Turf for the city in view. Hidden
+          while searching or filtering so it doesn't fight the results. */}
+      {!search && !selectedSport && (
+        <TrendingSpotlight picks={spotlightPicks} mode="fixed" className="mb-8" />
+      )}
+
       {/* Grid */}
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
           {filtered.map(({ turf, distanceKm }) => (
-            <TurfCard key={turf.id} turf={turf} distanceKm={distanceKm} />
+            <TurfCard key={turf.id} turf={turf} distanceKm={distanceKm} trending={trendingIds.has(turf.id)} />
           ))}
         </div>
       ) : (

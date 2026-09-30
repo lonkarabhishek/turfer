@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MapPin, Star } from "lucide-react";
+import { Flame, MapPin, Star } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import type { Turf } from "@/types/turf";
@@ -12,6 +12,8 @@ interface TurfCardProps {
   distanceKm?: number | null;
   /** Set on the first ~3 above-the-fold cards so the LCP image loads eagerly + high priority. */
   priority?: boolean;
+  /** This week's Most Trending Turf in its city: gold frame + badge. */
+  trending?: boolean;
 }
 
 // How long each photo stays on screen before crossfading to the next.
@@ -20,7 +22,7 @@ const SLIDE_MS = 2000;
 // not overlap the next tick.
 const FADE_MS = 500;
 
-export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false, trending = false }: TurfCardProps) {
   // Reject covers that are still tiny thumbs after normalization (e.g.
   // a non-Google URL that ends "=w32-h32-..."). We'd rather show a real
   // photo from images[] than a 32px placeholder.
@@ -81,8 +83,16 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
     >
       <article>
         {/* Photo. Only the pager dots sit on top; everything else lives
-            below so the picture reads clean, App Store style. */}
+            below so the picture reads clean, App Store style. The
+            trending pick gets a thin gold frame and one badge. */}
+        <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
         <div className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100">
+          {trending && (
+            <span className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 rounded-full spotlight-badge px-2.5 py-1 text-[11px] font-semibold shadow-soft pointer-events-none">
+              <Flame className="w-3 h-3 fill-[#e0a92e] text-[#b9851f]" />
+              Trending this week
+            </span>
+          )}
           {shown.length > 0 ? (
             shown.map((src, i) => {
               const active = i === activeIdx;
@@ -123,6 +133,7 @@ export function TurfCard({ turf, distanceKm, priority = false }: TurfCardProps) 
               ))}
             </div>
           )}
+        </div>
         </div>
 
         {/* Text block */}

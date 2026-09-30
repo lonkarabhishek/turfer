@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
+import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
 
 // One page per city — hard SEO landing so /nashik and /pune both rank
@@ -51,7 +53,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const cityId = city as CityId;
   const label = labelFor(cityId);
 
-  const turfs = await getAllActiveTurfs(cityId);
+  const [turfs, trendingPick] = await Promise.all([
+    getAllActiveTurfs(cityId),
+    getTrendingPick(cityId),
+  ]);
+  const spotlight = trendingPick ? toSpotlights({ [cityId]: trendingPick }, turfs) : [];
+  const trendingId = spotlight[0]?.turfId ?? null;
   // "Top-rated" block: only turfs with enough reviews to trust the score.
   const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
 
@@ -121,6 +128,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         </div>
       </section>
 
+      {/* This week's Most Trending Turf in this city */}
+      <TrendingSpotlight picks={spotlight} mode="fixed" className="max-w-7xl mx-auto px-4 sm:px-6 mt-10" />
+
       {/* Featured grid */}
       {featured.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-10">
@@ -142,7 +152,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
             {featured.map((turf, i) => (
-              <TurfCard key={turf.id} turf={turf} priority={i < 3} />
+              <TurfCard key={turf.id} turf={turf} priority={i < 3} trending={turf.id === trendingId} />
             ))}
           </div>
         </section>

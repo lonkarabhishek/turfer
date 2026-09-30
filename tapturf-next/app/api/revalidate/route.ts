@@ -45,10 +45,13 @@ export async function POST(req: Request) {
 
   // Supabase DB webhook payload shape: { type, table, record, old_record, schema }
   const b = body as {
-    record?: { id?: string; city?: string; is_active?: boolean };
-    old_record?: { id?: string; city?: string };
+    table?: string;
+    record?: { id?: string; city?: string; is_active?: boolean; turf_id?: string };
+    old_record?: { id?: string; city?: string; turf_id?: string };
   };
   const row = b.record ?? b.old_record;
+  // trending_turfs rows point at a turf via turf_id, not their own id.
+  const isTrending = b.table === "trending_turfs";
 
   const paths = new Set<string>();
   // Always kick the landing surfaces + sitemap so counts stay honest
@@ -57,7 +60,12 @@ export async function POST(req: Request) {
   paths.add("/turfs");
   paths.add("/sitemap.xml");
 
-  if (row?.id) paths.add(`/turf/${row.id}`);
+  if (isTrending) {
+    if (b.record?.turf_id) paths.add(`/turf/${b.record.turf_id}`);
+    if (b.old_record?.turf_id) paths.add(`/turf/${b.old_record.turf_id}`);
+  } else if (row?.id) {
+    paths.add(`/turf/${row.id}`);
+  }
   if (row?.city) {
     paths.add(`/${row.city}`);
     // Old marketing URLs still 301 to /<city>, but Next needs the

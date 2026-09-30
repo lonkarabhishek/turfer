@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
+import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 
 export const revalidate = 600;
 
@@ -28,7 +29,8 @@ export const metadata: Metadata = {
 };
 
 export default async function TurfsPage() {
-  const turfs = await getAllActiveTurfs();
+  const [turfs, trendingPicks] = await Promise.all([getAllActiveTurfs(), getTrendingPicks()]);
+  const spotlights = toSpotlights(trendingPicks, turfs);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
@@ -37,7 +39,7 @@ export default async function TurfsPage() {
       </h1>
       {/* The count line lives in the client: it follows the visitor's
           picked city, which only the browser knows. */}
-      <TurfListingClient turfs={turfs} />
+      <TurfListingClient turfs={turfs} spotlights={spotlights} />
     </div>
   );
 }

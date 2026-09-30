@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, MapPin, Star, User } from "lucide-react";
+import { ChevronRight, Flame, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { summarisePrice } from "@/lib/utils/prices";
 import { getPhone } from "@/lib/utils/seo";
@@ -18,6 +18,7 @@ import { TurfReviews } from "@/components/turf/TurfReviews";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
+import { getTrendingPick } from "@/lib/queries/trending";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 
 export const revalidate = 3600;
@@ -126,6 +127,10 @@ export default async function TurfDetailPage({
 
   const phone = getPhone(turf);
   const sidebarPrice = summarisePrice(turf);
+  // Is this turf its city's Most Trending Turf this week?
+  const trending =
+    turf.city && isCity(turf.city) ? await getTrendingPick(turf.city) : null;
+  const isTrending = trending?.turfId === turf.id;
 
   return (
     <div className="has-bottom-cta">
@@ -147,6 +152,21 @@ export default async function TurfDetailPage({
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {/* Title section */}
         <div className="mb-6">
+          {isTrending && trending && (
+            <div className="mb-4 rounded-2xl spotlight-ring px-4 py-3 flex items-center gap-3">
+              <span className="w-9 h-9 rounded-full spotlight-badge flex items-center justify-center shrink-0">
+                <Flame className="w-4.5 h-4.5 fill-[#e0a92e] text-[#b9851f]" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold spotlight-text leading-tight">
+                  Most trending turf in {labelFor(trending.city)} this week
+                </p>
+                {trending.tagline && (
+                  <p className="text-[13px] text-primary-500 leading-snug mt-0.5">{trending.tagline}</p>
+                )}
+              </div>
+            </div>
+          )}
           <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
             {turf.name}
           </h1>

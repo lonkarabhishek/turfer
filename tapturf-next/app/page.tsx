@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { HomeShell } from "@/components/home/HomeShell";
 import { PopularByCity } from "@/components/home/PopularByCity";
+import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
+import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
 import { CITIES, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
@@ -65,7 +67,8 @@ function topTurfsFor(all: Turf[]) {
 }
 
 export default async function HomePage() {
-  const byCity = await fetchAllCities();
+  const [byCity, trendingPicks] = await Promise.all([fetchAllCities(), getTrendingPicks()]);
+  const spotlights = toSpotlights(trendingPicks, Object.values(byCity).flat());
   const total = Object.values(byCity).reduce((n, list) => n + list.length, 0);
   // HomeShell still takes nashik/pune explicitly for now — its child
   // MarketingHome shows a "Browse Nashik / Browse Pune" pair; when
@@ -93,6 +96,9 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <HomeShell nashikTurfs={nashikTurfs} puneTurfs={puneTurfs} />
+
+      {/* This week's "Most Trending Turf" for the visitor's city. */}
+      <TrendingSpotlight picks={spotlights} className="max-w-6xl mx-auto px-4 sm:px-6 mt-14" />
 
       {/* Top-turf strips. Server-rendered for every city (crawlers see
           all the /turf links); the client then narrows to the visitor's
