@@ -4,11 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
+  ChevronDown,
   ChevronRight,
   Clock,
+  History,
   IndianRupee,
   Loader2,
   MessageCircle,
+  Pencil,
   Phone,
   PhoneOff,
   ShieldCheck,
@@ -18,8 +21,11 @@ import {
 import { useAuth } from "@/components/auth/AuthProvider";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
 import {
+  getMyTurfSuggestion,
   getTurfSuggestions,
   submitTurfSuggestion,
+  type MyTurfSuggestion,
+  type SaveResult,
   type SuggestionRelationship,
   type TurfSuggestion,
 } from "@/lib/queries/suggestions";
@@ -176,12 +182,28 @@ export function TurfSuggestions({
 }) {
   const { user, login } = useAuth();
   const [items, setItems] = useState<TurfSuggestion[] | null>(null);
+  // The viewer's own suggestion (one per person per turf). When set,
+  // "Suggest" becomes "Edit" and the form opens prefilled.
+  const [mine, setMine] = useState<MyTurfSuggestion | null>(null);
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const userId = user?.id ?? null;
 
   const load = useCallback(() => {
     getTurfSuggestions(turfId).then(setItems);
-  }, [turfId]);
+    if (userId) getMyTurfSuggestion(turfId, userId).then(setMine);
+  }, [turfId, userId]);
+
+  useEffect(() => {
+    let alive = true;
+    const req = userId ? getMyTurfSuggestion(turfId, userId) : Promise.resolve(null);
+    req.then((row) => {
+      if (alive) setMine(row);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [turfId, userId]);
 
   useEffect(() => {
     let alive = true;
@@ -259,7 +281,7 @@ export function TurfSuggestions({
             onClick={openSuggestSheet}
             className="text-[15px] text-accent-600 hover:text-accent-700 shrink-0"
           >
-            Suggest info
+            {mine ? "Edit yours" : "Suggest info"}
           </button>
         )}
       </div>
@@ -362,7 +384,7 @@ export function TurfSuggestions({
           {/* Individual contributions */}
           <ul className="space-y-3">
             {visible.map((s) => (
-              <SuggestionItem key={s.id} s={s} />
+              <SuggestionItem key={s.id} s={s} isMine={mine?.id === s.id} />
             ))}
           </ul>
 
@@ -383,6 +405,7 @@ export function TurfSuggestions({
           turfName={turfName}
           userId={user.id}
           userName={user.name}
+          initial={mine}
           askPhoneFirst={!hasPhone}
           onClose={() => setOpen(false)}
           onSubmitted={load}
@@ -444,7 +467,56 @@ function Count({ n }: { n: number }) {
   return <span className="text-[13px] text-primary-400"> · {n} players</span>;
 }
 
-function SuggestionItem({ s }: { s: TurfSuggestion }) {
+const CHANGE_LABEL: Record<string, string> = {
+  relationship: "Role",
+  contact_phone: "Phone",
+  whatsapp_phone: "WhatsApp",
+  price: "Price",
+  price_notes: "Price note",
+  opening_hours: "Hours",
+  sports: "Sports",
+  amenities: "Facilities",
+  notes: "Note",
+};
+
+function fmtChange(field: string, v: unknown): string {
+  if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return "none";
+  if (Array.isArray(v)) return v.join(", ");
+  if (field === "contact_phone" || field === "whatsapp_phone") return prettyPhone(String(v));
+  if (field === "relationship") return RELATIONSHIP_LABEL[v as SuggestionRelationship] ?? String(v);
+  const t = String(v);
+  return t.length > 90 ? `${t.slice(0, 90)}…` : t;
+}
+
+/** Turn the raw { field: { from, to } } log into display rows. */
+function changeRows(s: TurfSuggestion): { label: string; from: string; to: string }[] {
+  const c = s.last_changes;
+  if (!c) return [];
+  const rows: { label: string; from: string; to: string }[] = [];
+  const order = ["contact_phone", "whatsapp_phone", "price", "price_notes", "opening_hours", "sports", "amenities", "notes", "relationship"];
+  for (const field of order) {
+    if (field === "price") {
+      if (!c.price_min && !c.price_max) continue;
+      const fromMin = (c.price_min ? c.price_min.from : s.price_min) as number | null;
+      const fromMax = (c.price_max ? c.price_max.from : s.price_max) as number | null;
+      const toMin = (c.price_min ? c.price_min.to : s.price_min) as number | null;
+      const toMax = (c.price_max ? c.price_max.to : s.price_max) as number | null;
+      rows.push({
+        label: CHANGE_LABEL.price,
+        from: priceText(fromMin, fromMax) ?? "none",
+        to: priceText(toMin, toMax) ?? "none",
+      });
+      continue;
+    }
+    const ch = c[field];
+    if (!ch) continue;
+    rows.push({ label: CHANGE_LABEL[field] ?? field, from: fmtChange(field, ch.from), to: fmtChange(field, ch.to) });
+  }
+  return rows;
+}
+
+function SuggestionItem({ s, isMine }: { s: TurfSuggestion; isMine: boolean }) {
+  const [showChanges, setShowChanges] = useState(false);
   const price = priceText(s.price_min, s.price_max);
   const facts: { icon: React.ReactNode; text: string }[] = [];
   if (s.opening_hours) facts.push({ icon: <Clock className="w-3.5 h-3.5" />, text: s.opening_hours });
@@ -459,28 +531,45 @@ function SuggestionItem({ s }: { s: TurfSuggestion }) {
     facts.push({ icon: <Phone className="w-3.5 h-3.5" />, text: "Shared a number (being checked)" });
   }
   const tags = [...s.sports, ...s.amenities];
+  const edited = s.edit_count > 0 && s.updated_at;
+  const changes = edited ? changeRows(s) : [];
 
   return (
-    <li className="rounded-2xl border border-primary-200/80 p-4">
+    <li className={`rounded-2xl border p-4 ${isMine ? "border-accent-200 bg-accent-50/30" : "border-primary-200/80"}`}>
       <div className="flex items-center gap-3">
         <span className="w-9 h-9 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center text-[15px] font-semibold shrink-0">
           {s.submitter_name.slice(0, 1).toUpperCase()}
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-[15px] font-semibold text-primary-900 truncate">
-            {s.submitter_name}
+            {isMine ? "You" : s.submitter_name}
             {s.relationship !== "player" && (
               <span className="ml-1.5 align-middle inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-medium text-primary-600">
                 {RELATIONSHIP_LABEL[s.relationship]}
               </span>
             )}
           </p>
-          <p className="text-[13px] text-primary-400">{timeAgo(s.created_at)}</p>
+          <p className="text-[13px] text-primary-400">
+            {edited ? (
+              <>Edited {timeAgo(s.updated_at!)}</>
+            ) : (
+              timeAgo(s.created_at)
+            )}
+          </p>
         </div>
-        {s.status === "approved" && (
-          <span className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-600 shrink-0">
-            <ShieldCheck className="w-4 h-4" /> Checked
-          </span>
+        {isMine ? (
+          <button
+            onClick={openSuggestSheet}
+            className="h-8 px-3.5 inline-flex items-center gap-1 rounded-full bg-white text-accent-600 text-[13px] font-semibold shadow-soft shrink-0"
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit
+          </button>
+        ) : (
+          s.status === "approved" && (
+            <span className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-600 shrink-0">
+              <ShieldCheck className="w-4 h-4" /> Checked
+            </span>
+          )
         )}
       </div>
 
@@ -510,6 +599,33 @@ function SuggestionItem({ s }: { s: TurfSuggestion }) {
           {s.notes}
         </p>
       )}
+
+      {/* The latest edit, shown openly so readers can see what moved. */}
+      {changes.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-primary-200/70">
+          <button
+            onClick={() => setShowChanges((v) => !v)}
+            aria-expanded={showChanges}
+            className="inline-flex items-center gap-1 text-[13px] text-primary-500 hover:text-primary-800"
+          >
+            <History className="w-3.5 h-3.5" />
+            {showChanges ? "Hide changes" : `What changed (${changes.length})`}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showChanges ? "rotate-180" : ""}`} />
+          </button>
+          {showChanges && (
+            <ul className="mt-2 space-y-2">
+              {changes.map((c) => (
+                <li key={c.label} className="text-[13px] leading-snug">
+                  <span className="block text-primary-500">{c.label}</span>
+                  <span className="text-primary-400 line-through decoration-primary-300 break-words">{c.from}</span>
+                  <span className="mx-1.5 text-primary-300">→</span>
+                  <span className="text-primary-900 break-words">{c.to}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -521,6 +637,7 @@ function SuggestSheet({
   turfName,
   userId,
   userName,
+  initial,
   askPhoneFirst,
   onClose,
   onSubmitted,
@@ -529,24 +646,32 @@ function SuggestSheet({
   turfName: string;
   userId: string;
   userName: string;
+  initial: MyTurfSuggestion | null;
   askPhoneFirst: boolean;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
-  const [relationship, setRelationship] = useState<SuggestionRelationship>("player");
-  const [phone, setPhone] = useState("");
-  const [waSame, setWaSame] = useState(true);
-  const [wa, setWa] = useState("");
-  const [priceMin, setPriceMin] = useState("");
-  const [priceMax, setPriceMax] = useState("");
-  const [priceNotes, setPriceNotes] = useState("");
-  const [hours, setHours] = useState("");
-  const [sports, setSports] = useState<string[]>([]);
-  const [amenities, setAmenities] = useState<string[]>([]);
-  const [notes, setNotes] = useState("");
+  // Editing = the form opens with what they shared last time.
+  const isEdit = !!initial;
+  const local = (v: string | null | undefined) => (v ? normalizeIndianPhone(v)?.local ?? v : "");
+  const [relationship, setRelationship] = useState<SuggestionRelationship>(initial?.relationship ?? "player");
+  const [phone, setPhone] = useState(local(initial?.contact_phone));
+  const [waSame, setWaSame] = useState(
+    !initial || !initial.whatsapp_phone || initial.whatsapp_phone === initial.contact_phone,
+  );
+  const [wa, setWa] = useState(
+    initial?.whatsapp_phone && initial.whatsapp_phone !== initial.contact_phone ? local(initial.whatsapp_phone) : "",
+  );
+  const [priceMin, setPriceMin] = useState(initial?.price_min != null ? String(initial.price_min) : "");
+  const [priceMax, setPriceMax] = useState(initial?.price_max != null ? String(initial.price_max) : "");
+  const [priceNotes, setPriceNotes] = useState(initial?.price_notes ?? "");
+  const [hours, setHours] = useState(initial?.opening_hours ?? "");
+  const [sports, setSports] = useState<string[]>(initial?.sports ?? []);
+  const [amenities, setAmenities] = useState<string[]>(initial?.amenities ?? []);
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<SaveResult | null>(null);
 
   // Lock the page behind the sheet; Esc closes.
   useEffect(() => {
@@ -616,7 +741,7 @@ function SuggestSheet({
       setError(res.error);
       return;
     }
-    setDone(true);
+    setDone(res.result);
     onSubmitted();
   };
 
@@ -636,13 +761,13 @@ function SuggestSheet({
           <button onClick={onClose} className="text-[17px] text-accent-600 min-w-[64px] text-left">
             {done ? "" : "Cancel"}
           </button>
-          <p className="text-[17px] font-semibold text-primary-900">Suggest info</p>
+          <p className="text-[17px] font-semibold text-primary-900">{isEdit ? "Edit your info" : "Suggest info"}</p>
           <button
             onClick={done ? onClose : submit}
             disabled={submitting}
             className="text-[17px] font-semibold text-accent-600 min-w-[64px] text-right disabled:opacity-50"
           >
-            {done ? "Done" : submitting ? <Loader2 className="w-5 h-5 animate-spin ml-auto" /> : "Send"}
+            {done ? "Done" : submitting ? <Loader2 className="w-5 h-5 animate-spin ml-auto" /> : isEdit ? "Save" : "Send"}
           </button>
         </div>
 
@@ -651,9 +776,15 @@ function SuggestSheet({
             <div className="mx-auto w-14 h-14 rounded-full bg-accent-500 text-white flex items-center justify-center">
               <Check className="w-7 h-7" strokeWidth={2.5} />
             </div>
-            <p className="mt-4 text-[20px] font-semibold text-primary-900">Thank you!</p>
+            <p className="mt-4 text-[20px] font-semibold text-primary-900">
+              {done === "created" ? "Thank you!" : done === "updated" ? "Updated" : "Nothing changed"}
+            </p>
             <p className="mt-1 text-[15px] text-primary-500 max-w-xs mx-auto">
-              Your info is now on the page. Phone numbers show up after a quick check.
+              {done === "created"
+                ? "Your info is now on the page. Phone numbers show up after a quick check."
+                : done === "updated"
+                  ? "Your changes are on the page, marked as edited. A new phone number shows up after a quick check."
+                  : "Your info is already up to date."}
             </p>
             <button
               onClick={onClose}
@@ -665,8 +796,17 @@ function SuggestSheet({
         ) : (
           <div className="overflow-y-auto overscroll-contain px-5 pb-6" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
             <p className="text-[14px] text-primary-500 mb-5">
-              Help other players with <span className="text-primary-900 font-medium">{turfName}</span>.
-              Fill in only what you know.
+              {isEdit ? (
+                <>
+                  You already shared info about <span className="text-primary-900 font-medium">{turfName}</span>.
+                  Change anything that&apos;s different now. Other players will see it as edited.
+                </>
+              ) : (
+                <>
+                  Help other players with <span className="text-primary-900 font-medium">{turfName}</span>.
+                  Fill in only what you know.
+                </>
+              )}
             </p>
 
             <Field label="How do you know this turf?">
@@ -771,7 +911,7 @@ function SuggestSheet({
               className="w-full h-12 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[17px] font-semibold disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 className="w-5 h-5 animate-spin" />}
-              Send suggestion
+              {isEdit ? "Save changes" : "Send suggestion"}
             </button>
             <p className="mt-3 text-center text-[12px] text-primary-400">
               Shared as {userName?.split(" ")[0] || "a player"}. Other players will see this.
