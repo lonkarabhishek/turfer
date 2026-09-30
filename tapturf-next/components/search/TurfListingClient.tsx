@@ -53,8 +53,14 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
   // widen back to every city without clearing the header pill.
   const [pickedCity, setPickedCity] = useState<CityId | null>(null);
   const [showAllCities, setShowAllCities] = useState(false);
+  // False until we've read the city pref; the count stays hidden until
+  // then so we never flash the all-cities total to a Nashik visitor.
+  const [prefReady, setPrefReady] = useState(false);
   useEffect(() => {
-    const load = () => setPickedCity(getCityPref());
+    const load = () => {
+      setPickedCity(getCityPref());
+      setPrefReady(true);
+    };
     load();
     const onChange = () => load();
     window.addEventListener("tapturf:city-changed", onChange);
@@ -192,6 +198,23 @@ export function TurfListingClient({ turfs }: { turfs: Turf[] }) {
 
   return (
     <div>
+      {/* Subtitle under the page h1: count follows the picked city. */}
+      <p className="text-[17px] text-primary-500 mt-1 mb-6">
+        {!prefReady ? (
+          "Sports turfs with pricing, ratings, and directions"
+        ) : activeCity ? (
+          <>
+            <span className="tabular-nums">{cityScoped.length}</span> sports turf{cityScoped.length !== 1 ? "s" : ""} in{" "}
+            {labelFor(activeCity)} with pricing, ratings, and directions
+          </>
+        ) : (
+          <>
+            <span className="tabular-nums">{cityScoped.length}</span> sports turfs across all cities with pricing,
+            ratings, and directions
+          </>
+        )}
+      </p>
+
       {/* Search field, iOS style: filled, borderless. */}
       <div className="relative mb-3">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-primary-400" />

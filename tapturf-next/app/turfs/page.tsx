@@ -32,15 +32,11 @@ export default async function TurfsPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
-      <div className="mb-6">
-        <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">
-          Find your turf
-        </h1>
-        <p className="text-[17px] text-primary-500 mt-1">
-          {turfs.length} sports turfs with pricing, ratings, and directions
-        </p>
-      </div>
-
+      <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">
+        Find your turf
+      </h1>
+      {/* The count line lives in the client: it follows the visitor's
+          picked city, which only the browser knows. */}
       <TurfListingClient turfs={turfs} />
     </div>
   );

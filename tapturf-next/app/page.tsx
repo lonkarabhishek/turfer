@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { HomeShell } from "@/components/home/HomeShell";
-import { ArrowUpRight } from "lucide-react";
-import { CITIES, labelFor, type CityId } from "@/lib/city";
+import { PopularByCity } from "@/components/home/PopularByCity";
+import { CITIES, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
 export const revalidate = 600;
@@ -98,54 +97,23 @@ export default async function HomePage() {
       />
       <HomeShell nashikTurfs={nashikTurfs} puneTurfs={puneTurfs} />
 
-      {/* Server-rendered top-turf strips so crawlers see /turf/<id> links on
-          the homepage even though the interactive marketing hero above is
-          client-rendered. Iterates CITIES so a new city (Mumbai next)
-          auto-appears once it has real turfs — no code change needed. */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-14 space-y-10">
-        {CITIES.map((c) => {
-          const list = topTurfsFor(byCity[c.id] ?? []);
-          const all = (byCity[c.id] ?? []).length;
-          if (list.length === 0) return null;
-          return (
-            <div key={c.id}>
-              <div className="flex items-end justify-between mb-4">
-                <h2 className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight">
-                  Popular in {labelFor(c.id)}
-                </h2>
-                <Link
-                  href={`/${c.id}`}
-                  className="flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700"
-                >
-                  All {all} <ArrowUpRight className="w-4 h-4" />
-                </Link>
-              </div>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {list.map((t) => (
-                  <li key={t.id}>
-                    <Link
-                      href={`/turf/${t.id}`}
-                      className="flex items-start gap-2 rounded-xl border border-primary-200 bg-white p-3 hover:border-accent-500 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[14px] font-semibold text-primary-800 truncate">
-                          {t.name}
-                        </p>
-                        <p className="text-[12px] text-primary-500 truncate">{t.address}</p>
-                      </div>
-                      {t.rating > 0 && t.total_reviews > 0 && (
-                        <span className="text-[11px] font-semibold text-primary-800 shrink-0">
-                          ★ {t.rating.toFixed(1)}
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </section>
+      {/* Top-turf strips. Server-rendered for every city (crawlers see
+          all the /turf links); the client then narrows to the visitor's
+          picked or detected city. Iterates CITIES so a new city appears
+          once it has rated turfs. */}
+      <PopularByCity
+        cities={CITIES.map((c) => ({
+          id: c.id,
+          total: (byCity[c.id] ?? []).length,
+          turfs: topTurfsFor(byCity[c.id] ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            address: t.address,
+            rating: t.rating,
+            reviews: t.total_reviews,
+          })),
+        })).filter((c) => c.turfs.length > 0)}
+      />
       <div className="h-16" />
     </>
   );
