@@ -41,10 +41,84 @@ export async function getFirebaseAuth(): Promise<Auth> {
   return getAuthLazy();
 }
 
+/**
+ * Firebase error code -> what we tell the player. Codes come from
+ * FirebaseError.code ("auth/quota-exceeded" etc).
+ */
+export function friendlyOtpError(code: string | null | undefined, fallback: string): string {
+  switch (code) {
+    case "auth/invalid-phone-number":
+    case "auth/missing-phone-number":
+      return "That phone number doesn't look right. Check it and try again.";
+    case "auth/too-many-requests":
+      return "Too many attempts from this device. Wait a few minutes, or continue with Google.";
+    case "auth/quota-exceeded":
+      return "We've hit today's SMS limit. Please continue with Google for now.";
+    case "auth/captcha-check-failed":
+    case "auth/invalid-app-credential":
+    case "auth/missing-app-credential":
+      return "Security check failed. Refresh the page and try again.";
+    case "auth/network-request-failed":
+      return "Network problem. Check your connection and try again.";
+    case "auth/operation-not-allowed":
+    case "auth/billing-not-enabled":
+    case "auth/unauthorized-domain":
+      return "Phone login is temporarily unavailable. Please continue with Google.";
+    case "auth/invalid-verification-code":
+      return "That code is incorrect. Check the SMS and try again.";
+    case "auth/code-expired":
+      return "That code has expired. Tap resend to get a new one.";
+    default:
+      return fallback;
+  }
+}
+
+function errorCode(error: unknown): string | null {
+  const c = (error as { code?: unknown })?.code;
+  return typeof c === "string" ? c : null;
+}
+
+/**
+ * Record a send attempt (outcome + Firebase code only; last 2 digits
+ * of the number, never the full number) so "OTP not coming" reports
+ * can be diagnosed from the otp_send_log table. Fire-and-forget.
+ */
+function logOtpSend(ok: boolean, code: string | null, phone: string) {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    void fetch(`${url}/rest/v1/rpc/log_otp_send`, {
+      method: "POST",
+      keepalive: true,
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_ok: ok,
+        p_error_code: code,
+        p_phone_tail: phone.replace(/\D/g, "").slice(-2),
+        p_host: window.location.host,
+      }),
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
 export const phoneAuthHelpers = {
-  async setupRecaptcha(containerId: string): Promise<RecaptchaVerifierType> {
+  async setupRecaptcha(
+    containerId: string,
+    previous?: RecaptchaVerifierType | null,
+  ): Promise<RecaptchaVerifierType> {
     const auth = await getAuthLazy();
     const { RecaptchaVerifier } = await import("firebase/auth");
+    // A reCAPTCHA token is single-use. Tear down the old verifier
+    // before making a new one, otherwise a retry / resend fails with
+    // "reCAPTCHA has already been rendered in this element".
+    try {
+      previous?.clear();
+    } catch {
+      /* already cleared */
+    }
     const container = document.getElementById(containerId);
     if (container) container.innerHTML = "";
     return new RecaptchaVerifier(auth, containerId, {
@@ -66,10 +140,17 @@ export const phoneAuthHelpers = {
         formattedPhone,
         recaptchaVerifier
       );
-      return { success: true as const, confirmationResult, error: null };
+      logOtpSend(true, null, phoneNumber);
+      return { success: true as const, confirmationResult, error: null, code: null };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to send OTP";
-      return { success: false as const, confirmationResult: null, error: message };
+      const code = errorCode(error);
+      logOtpSend(false, code ?? (error instanceof Error ? error.message.slice(0, 80) : "unknown"), phoneNumber);
+      return {
+        success: false as const,
+        confirmationResult: null,
+        error: friendlyOtpError(code, "Couldn't send the OTP. Please try again, or continue with Google."),
+        code,
+      };
     }
   },
 
@@ -88,8 +169,11 @@ export const phoneAuthHelpers = {
         error: null,
       };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Invalid OTP";
-      return { success: false as const, user: null, error: message };
+      return {
+        success: false as const,
+        user: null,
+        error: friendlyOtpError(errorCode(error), "That code didn't work. Please try again."),
+      };
     }
   },
 

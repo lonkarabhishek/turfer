@@ -78,7 +78,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setError("");
     setLoading(true);
     try {
-      recaptchaRef.current = await phoneAuthHelpers.setupRecaptcha("recaptcha-container");
+      recaptchaRef.current = await phoneAuthHelpers.setupRecaptcha("recaptcha-container", recaptchaRef.current);
       const result = await phoneAuthHelpers.sendOTP(phone, recaptchaRef.current);
       if (result.success && result.confirmationResult) {
         setConfirmationResult(result.confirmationResult);
