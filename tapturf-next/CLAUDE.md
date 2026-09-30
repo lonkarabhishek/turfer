@@ -20,7 +20,7 @@ Airbnb-inspired: clean whitespace, `rounded-2xl` cards, `shadow-elevated`, frost
 - `/` — Home page (SSG, 10min revalidation)
 - `/turfs` — Turf listing with client-side filtering
 - `/turf/[id]` — 49 individual turf pages (SSG with `generateStaticParams`)
-- `/sport/[sport]` — 6 sport category pages (football, cricket, basketball, tennis, pickleball, badminton)
+- `/sport/[sport]` — sport pages from `lib/sports.ts` (football, box-cricket, cricket, badminton, pickleball, volleyball, basketball, tennis); exact label match, add new sports there
 - `/games` — Games listing with sport/skill filters
 - `/game/[id]` — Game detail with join request flow
 - `/game/create` — 4-step game creation wizard (protected)

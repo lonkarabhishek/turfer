@@ -534,7 +534,7 @@ function StartExploring({ firstName, city }: { firstName: string; city: CityId |
             sublabel="Compare & book"
             icon={<Search className="w-5 h-5" />}
           />
-          <ExploreCard href="/sport/cricket" label="Cricket" sublabel="Box + full-pitch" icon={<Target className="w-5 h-5" />} />
+          <ExploreCard href="/sport/box-cricket" label="Box Cricket" sublabel="6 to 8 a side" icon={<Target className="w-5 h-5" />} />
           <ExploreCard href="/sport/football" label="Football" sublabel="5v5 + 7v7" icon={<Compass className="w-5 h-5" />} />
           <ExploreCard href="/games" label="Open games" sublabel="Join or watch" icon={<Zap className="w-5 h-5" />} />
         </div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SPORT_PAGES } from "@/lib/sports";
 
 export function Footer() {
   return (
@@ -11,12 +12,12 @@ export function Footer() {
               Tap<span className="text-accent-400">Turf</span>
             </h3>
             <p className="mt-3 text-sm text-primary-200 leading-relaxed">
-              Nashik&apos;s premier turf discovery platform. Find, compare, and
-              book sports turfs instantly.
+              Find, compare and book sports turfs across Nashik, Pune and
+              Mumbai.
             </p>
             <div className="mt-4 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />
-              <span className="text-xs text-primary-300">Nashik, Maharashtra</span>
+              <span className="text-xs text-primary-300">Nashik · Pune · Mumbai</span>
             </div>
           </div>
 
@@ -26,13 +27,13 @@ export function Footer() {
               Sports
             </h4>
             <ul className="space-y-2.5 text-sm text-primary-200">
-              {["football", "cricket", "basketball", "badminton"].map((sport) => (
-                <li key={sport}>
+              {SPORT_PAGES.slice(0, 6).map((sport) => (
+                <li key={sport.slug}>
                   <Link
-                    href={`/sport/${sport}`}
-                    className="hover:text-white transition-colors capitalize"
+                    href={`/sport/${sport.slug}`}
+                    className="hover:text-white transition-colors"
                   >
-                    {sport}
+                    {sport.name}
                   </Link>
                 </li>
               ))}
@@ -56,16 +57,6 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/sport/tennis" className="hover:text-white transition-colors">
-                  Tennis
-                </Link>
-              </li>
-              <li>
-                <Link href="/sport/pickleball" className="hover:text-white transition-colors">
-                  Pickleball
-                </Link>
-              </li>
-              <li>
                 <Link href="/blog" className="hover:text-white transition-colors">
                   Blog
                 </Link>
@@ -78,6 +69,11 @@ export function Footer() {
               <li>
                 <Link href="/pune" className="hover:text-white transition-colors">
                   Turfs in Pune
+                </Link>
+              </li>
+              <li>
+                <Link href="/mumbai" className="hover:text-white transition-colors">
+                  Turfs in Mumbai
                 </Link>
               </li>
             </ul>

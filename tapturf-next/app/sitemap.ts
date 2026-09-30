@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ALL_POSTS } from "@/content/blog";
+import { SPORT_PAGES } from "@/lib/sports";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -21,14 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .in("status", ["open", "upcoming", "active"]),
   ]);
 
-  const sports = [
-    "football",
-    "cricket",
-    "basketball",
-    "badminton",
-    "tennis",
-    "pickleball",
-  ];
+  const sports = SPORT_PAGES.map((sp) => sp.slug);
 
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -58,6 +52,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
     {
       url: `${BASE}/pune`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.9,
+    },
+    {
+      url: `${BASE}/mumbai`,
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 0.9,

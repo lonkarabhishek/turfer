@@ -1,6 +1,7 @@
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { compareTopRated } from "@/lib/utils/ranking";
+import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
@@ -137,10 +138,10 @@ export async function getTurfById(id: string): Promise<Turf | null> {
   return transformTurf(data);
 }
 
-export async function getTurfsBySport(sport: string): Promise<Turf[]> {
+export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
   const supabase = createServerClient();
-  // Fetch all active turfs and filter client-side because the sports field
-  // stores comma-separated values inside array elements
+  // Fetch all active turfs and filter here because the sports field
+  // stores comma-separated values inside array elements.
   const { data, error } = await supabase
     .from("turfs")
     .select("*")
@@ -152,12 +153,11 @@ export async function getTurfsBySport(sport: string): Promise<Turf[]> {
     return [];
   }
 
-  const turfs = (data ?? []).map(transformTurf).sort(compareTopRated);
-  const sportLower = sport.toLowerCase();
-
-  return turfs.filter((turf) =>
-    turf.sports.some((s) => s.toLowerCase().includes(sportLower))
-  );
+  // Exact label match: "Cricket" must not pull in "Box Cricket".
+  return (data ?? [])
+    .map(transformTurf)
+    .filter((t) => turfPlaysSport(t.sports, sport))
+    .sort(compareTopRated);
 }
 
 export async function getAllTurfIds(): Promise<string[]> {

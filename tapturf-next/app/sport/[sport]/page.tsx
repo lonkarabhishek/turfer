@@ -4,49 +4,16 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { SPORT_PAGES, sportBySlug } from "@/lib/sports";
+import { CITIES, labelFor } from "@/lib/city";
 
-// City coverage in copy — kept generic ("Nashik & Pune") since these
-// pages list turfs from both cities. Was hardcoded to Nashik only.
-const CITY_LABEL = "Nashik & Pune";
+export const revalidate = 3600;
 
-const sportInfo: Record<
-  string,
-  { name: string; icon: string; description: string }
-> = {
-  football: {
-    name: "Football",
-    icon: "⚽",
-    description: `Find the best football turfs in ${CITY_LABEL}. 5-a-side, 7-a-side, and full-size turfs available.`,
-  },
-  cricket: {
-    name: "Cricket",
-    icon: "🏏",
-    description: `Book cricket turfs and box cricket venues in ${CITY_LABEL}. Practice nets and match grounds.`,
-  },
-  basketball: {
-    name: "Basketball",
-    icon: "🏀",
-    description: `Discover basketball courts in ${CITY_LABEL}. Indoor and outdoor options with great facilities.`,
-  },
-  badminton: {
-    name: "Badminton",
-    icon: "🏸",
-    description: `Find badminton courts in ${CITY_LABEL}. Indoor courts with proper flooring and lighting.`,
-  },
-  tennis: {
-    name: "Tennis",
-    icon: "🎾",
-    description: `Book tennis courts in ${CITY_LABEL}. Well-maintained courts for practice and matches.`,
-  },
-  pickleball: {
-    name: "Pickleball",
-    icon: "🏓",
-    description: `Discover pickleball courts in ${CITY_LABEL}. The fastest growing sport with great venues.`,
-  },
-};
+// Pages list turfs from every city.
+const CITY_LABEL = "Nashik, Pune & Mumbai";
 
 export async function generateStaticParams() {
-  return Object.keys(sportInfo).map((sport) => ({ sport }));
+  return SPORT_PAGES.map((s) => ({ sport: s.slug }));
 }
 
 export async function generateMetadata({
@@ -55,32 +22,26 @@ export async function generateMetadata({
   params: Promise<{ sport: string }>;
 }): Promise<Metadata> {
   const { sport } = await params;
-  const info = sportInfo[sport];
-  if (!info) return { title: "Sport Not Found" };
+  const info = sportBySlug(sport);
+  if (!info) return { title: "Sport not found", robots: { index: false } };
 
-  const slug = info.name.toLowerCase();
+  const lower = info.name.toLowerCase();
   return {
-    title: `${info.name} Turfs in ${CITY_LABEL}: Book Now | TapTurf`,
-    description: `Find ${slug} turfs in ${CITY_LABEL}. Compare prices, check ratings, book instantly.`,
-    keywords: [
-      `${slug} turf nashik`,
-      `${slug} turf pune`,
-      `${slug} ground nashik`,
-      `${slug} ground pune`,
-      `${slug} court nashik`,
-      `${slug} court pune`,
-      `book ${slug} nashik`,
-      `book ${slug} pune`,
-    ].join(", "),
+    // Layout's title template appends "| TapTurf".
+    title: `${info.name} Turfs in ${CITY_LABEL}: Compare & Book`,
+    description: `${info.blurb} Compare ${lower} turfs across ${CITY_LABEL} by price, rating and photos. Call or WhatsApp to book.`,
+    keywords: CITIES.flatMap((c) => [
+      `${lower} turf ${c.label.toLowerCase()}`,
+      `${lower} ${c.label.toLowerCase()}`,
+      `book ${lower} ${c.label.toLowerCase()}`,
+    ]).join(", "),
     openGraph: {
       title: `${info.name} Turfs in ${CITY_LABEL} | TapTurf`,
-      description: info.description,
-      url: `https://www.tapturf.in/sport/${sport}`,
+      description: info.blurb,
+      url: `https://www.tapturf.in/sport/${info.slug}`,
       type: "website",
     },
-    alternates: {
-      canonical: `https://www.tapturf.in/sport/${sport}`,
-    },
+    alternates: { canonical: `https://www.tapturf.in/sport/${info.slug}` },
   };
 }
 
@@ -90,10 +51,14 @@ export default async function SportPage({
   params: Promise<{ sport: string }>;
 }) {
   const { sport } = await params;
-  const info = sportInfo[sport];
+  const info = sportBySlug(sport);
   if (!info) notFound();
 
-  const turfs = await getTurfsBySport(info.name);
+  const turfs = await getTurfsBySport(info);
+  const perCity = CITIES.map((c) => ({
+    id: c.id,
+    count: turfs.filter((t) => t.city === c.id).length,
+  })).filter((c) => c.count > 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -111,30 +76,45 @@ export default async function SportPage({
       </nav>
 
       {/* Header */}
-      <div className="mb-10">
-        <p className="text-xs font-semibold text-accent-600 mb-3">
-          Sport Category
-        </p>
+      <div className="mb-8">
         <div className="flex items-center gap-4 mb-3">
           <span className="text-5xl">{info.icon}</span>
           <div>
-            <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
+            <h1 className="text-[28px] md:text-[36px] text-primary-900 leading-tight font-display">
               {info.name} turfs in {CITY_LABEL}
             </h1>
-            <p className="text-base text-primary-400 mt-1">
-              {turfs.length} {info.name.toLowerCase()} turf
-              {turfs.length !== 1 ? "s" : ""} available
+            <p className="text-[15px] text-primary-500 mt-1">
+              {turfs.length} {info.name.toLowerCase()} turf{turfs.length !== 1 ? "s" : ""}
+              {perCity.length > 0 && (
+                <> · {perCity.map((c) => `${c.count} in ${labelFor(c.id)}`).join(", ")}</>
+              )}
             </p>
           </div>
         </div>
-        <p className="text-base text-primary-500 mt-4 max-w-2xl leading-relaxed">
-          {info.description}
-        </p>
+        <p className="text-[16px] text-primary-600 mt-4 max-w-2xl leading-relaxed">{info.blurb}</p>
+
+        {/* Other sports: crawlable links between the sport pages. */}
+        <div className="mt-5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+          {SPORT_PAGES.map((s) => (
+            <Link
+              key={s.slug}
+              href={`/sport/${s.slug}`}
+              aria-current={s.slug === info.slug ? "page" : undefined}
+              className={`shrink-0 h-9 px-4 inline-flex items-center rounded-full text-[14px] font-medium transition-colors ${
+                s.slug === info.slug
+                  ? "bg-primary-900 text-white"
+                  : "bg-primary-100 text-primary-900 hover:bg-primary-200"
+              }`}
+            >
+              {s.name}
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* Grid */}
       {turfs.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
           {turfs.map((turf) => (
             <TurfCard key={turf.id} turf={turf} />
           ))}
@@ -142,13 +122,10 @@ export default async function SportPage({
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
-          <p className="text-lg font-bold text-primary-800 font-serif">
-            No {info.name.toLowerCase()} turfs found
+          <p className="text-lg font-semibold text-primary-900">
+            No {info.name.toLowerCase()} turfs listed yet
           </p>
-          <Link
-            href="/turfs"
-            className="mt-4 inline-flex text-sm font-semibold text-primary-600 underline underline-offset-4 hover:text-primary-400 transition-colors"
-          >
+          <Link href="/turfs" className="mt-4 inline-flex text-[15px] text-accent-600 hover:text-accent-700">
             Browse all turfs
           </Link>
         </div>

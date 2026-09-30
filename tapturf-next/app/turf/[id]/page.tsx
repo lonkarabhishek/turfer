@@ -19,6 +19,7 @@ import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
 import { getTrendingPick } from "@/lib/queries/trending";
+import { sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 
 export const revalidate = 3600;
@@ -195,15 +196,19 @@ export default async function TurfDetailPage({
           {/* Sport tags */}
           {turf.sports.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
-              {turf.sports.map((sport) => (
-                <Link
-                  key={sport}
-                  href={`/sport/${sport.toLowerCase()}`}
-                  className="text-xs font-semibold bg-primary-50 border border-primary-100 hover:bg-primary-100 text-primary-600 px-3 py-1.5 rounded-full transition-colors"
-                >
-                  {sport}
-                </Link>
-              ))}
+              {turf.sports.map((sport) => {
+                // Only link sports that have a page ("Box Cricket" ->
+                // /sport/box-cricket); others render as plain tags.
+                const page = sportPageForLabel(sport);
+                const cls = "text-xs font-semibold bg-primary-50 border border-primary-100 text-primary-600 px-3 py-1.5 rounded-full";
+                return page ? (
+                  <Link key={sport} href={`/sport/${page.slug}`} className={`${cls} hover:bg-primary-100 transition-colors`}>
+                    {sport}
+                  </Link>
+                ) : (
+                  <span key={sport} className={cls}>{sport}</span>
+                );
+              })}
             </div>
           )}
         </div>

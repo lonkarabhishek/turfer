@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { HomeShell } from "@/components/home/HomeShell";
+import Link from "next/link";
 import { PopularByCity } from "@/components/home/PopularByCity";
+import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
@@ -69,6 +71,11 @@ function topTurfsFor(all: Turf[]) {
 export default async function HomePage() {
   const [byCity, trendingPicks] = await Promise.all([fetchAllCities(), getTrendingPicks()]);
   const spotlights = toSpotlights(trendingPicks, Object.values(byCity).flat());
+  const allTurfs = Object.values(byCity).flat();
+  const sportCounts = SPORT_PAGES.map((sp) => ({
+    ...sp,
+    count: allTurfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
+  })).filter((sp) => sp.count > 0);
   const total = Object.values(byCity).reduce((n, list) => n + list.length, 0);
   // HomeShell still takes nashik/pune explicitly for now — its child
   // MarketingHome shows a "Browse Nashik / Browse Pune" pair; when
@@ -117,6 +124,31 @@ export default async function HomePage() {
           })),
         })).filter((c) => c.turfs.length > 0)}
       />
+      {/* Browse by sport: server-rendered links to every sport page,
+          with live counts. Also what Google uses to pick sitelinks. */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-12">
+        <h2 className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight mb-4">
+          Browse by sport
+        </h2>
+        <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {sportCounts.map((s) => (
+            <li key={s.slug}>
+              <Link
+                href={`/sport/${s.slug}`}
+                className="flex items-center gap-3 rounded-2xl bg-primary-50 hover:bg-primary-100 px-4 py-3 transition-colors"
+              >
+                <span className="text-2xl" aria-hidden>{s.icon}</span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-semibold text-primary-900 truncate">{s.name}</span>
+                  <span className="block text-[13px] text-primary-500 tabular-nums">
+                    {s.count} turf{s.count !== 1 ? "s" : ""}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
       <div className="h-16" />
     </>
   );
