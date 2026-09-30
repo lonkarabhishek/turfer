@@ -119,9 +119,20 @@ export const phoneAuthHelpers = {
     } catch {
       /* already cleared */
     }
+    // grecaptcha remembers every element it has rendered into, and
+    // emptying the element isn't enough to forget it ("reCAPTCHA has
+    // already been rendered in this element" on the 2nd send, e.g.
+    // after changing the number). Render into a brand-new child
+    // element every time instead.
     const container = document.getElementById(containerId);
-    if (container) container.innerHTML = "";
-    return new RecaptchaVerifier(auth, containerId, {
+    let target: HTMLElement | string = containerId;
+    if (container) {
+      container.innerHTML = "";
+      const fresh = document.createElement("div");
+      container.appendChild(fresh);
+      target = fresh;
+    }
+    return new RecaptchaVerifier(auth, target, {
       size: "invisible",
       callback: () => {},
       "expired-callback": () => {},

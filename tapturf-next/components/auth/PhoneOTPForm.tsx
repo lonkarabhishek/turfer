@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { Check } from "lucide-react";
 import { phoneAuthHelpers } from "@/lib/firebase/client";
 import { createClient } from "@/lib/supabase/client";
@@ -58,6 +58,9 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  // Unique per form instance, so two mounted forms never share one
+  // reCAPTCHA container.
+  const recaptchaId = `recaptcha-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // Rotating messages per phase
   const sendingLine = useRotatingLine(SEND_LINES, step === "phone" && loading, 1600);
@@ -78,7 +81,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setError("");
     setLoading(true);
     try {
-      recaptchaRef.current = await phoneAuthHelpers.setupRecaptcha("recaptcha-container", recaptchaRef.current);
+      recaptchaRef.current = await phoneAuthHelpers.setupRecaptcha(recaptchaId, recaptchaRef.current);
       const result = await phoneAuthHelpers.sendOTP(phone, recaptchaRef.current);
       if (result.success && result.confirmationResult) {
         setConfirmationResult(result.confirmationResult);
@@ -414,7 +417,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         <p className="text-[13px] text-hot-600 text-center font-medium">{error}</p>
       )}
 
-      <div id="recaptcha-container" />
+      <div id={recaptchaId} />
     </div>
   );
 }
