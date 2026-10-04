@@ -62,6 +62,9 @@ export function Header() {
           <Link href="/turfs" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Turfs
           </Link>
+          <Link href="/turf-near-me" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+            Near me
+          </Link>
           <Link href="/sport/box-cricket" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Box Cricket
           </Link>

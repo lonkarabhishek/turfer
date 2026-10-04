@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
@@ -37,6 +38,9 @@ export default async function TurfsPage() {
       <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">
         Find your turf
       </h1>
+      <Link href="/turf-near-me" className="inline-block mt-1 text-[15px] font-medium text-accent-600 hover:text-accent-700">
+        Turfs near me, sorted by distance
+      </Link>
       {/* The count line lives in the client: it follows the visitor's
           picked city, which only the browser knows. */}
       <TurfListingClient turfs={turfs} spotlights={spotlights} />

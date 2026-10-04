@@ -11,38 +11,64 @@ import type { Turf } from "@/types/turf";
  * Multi-token areas are listed with common alternates ("Pathardi
  * Phata" also matches bare "Pathardi").
  */
-const AREAS_PUNE = [
+// An area is its display name, or [display name, ...other spellings
+// seen in addresses]. Every name here comes from real turf addresses.
+type Area = string | readonly [string, ...string[]];
+
+const AREAS_PUNE: Area[] = [
   "Kothrud",
   "Chinchwad",
   "Pimpri-Chinchwad",
   "Pimpri",
+  "Pimple Gurav",
   "Undri",
-  "Hinjewadi",
+  ["Hinjewadi", "Hinjawadi"],
   "Baner",
+  "Balewadi",
   "Ravet",
   "Aundh",
   "Punawale",
-  "Hadapsar",
+  ["Hadapsar", "Bhekrai Nagar"],
+  "Amanora",
   "Kharadi",
   "Mundhwa",
   "Pashan",
   "Tathawade",
+  "Thergaon",
   "Bavdhan",
+  "Bhugaon",
   "Viman Nagar",
+  "Vadgaon Sheri",
   "Wakad",
+  "Gahunje",
   "Dhanori",
   "Bibwewadi",
-  "Sinhagad Road",
-  "Sinhagad",
+  ["Sinhagad Road", "Sinhgad Road", "Sinhgad Rd"],
+  ["Sinhagad", "Sinhgad"],
+  "Anand Nagar",
+  "Narhe",
+  "Warje",
+  ["Ambegaon", "Ambegao"],
+  "Katraj",
   "Wagholi",
   "Wanowrie",
-  "Karve Nagar",
+  ["Karve Nagar", "Karvenagar"],
   "Kondhwa",
+  ["Mohammed Wadi", "Mohammadwadi"],
+  "NIBM",
   "Koregaon Park",
+  "Keshav Nagar",
   "Erandwane",
+  "Yerawada",
+  ["Shivaji Nagar", "Shivajinagar"],
+  ["Senapati Bapat Road", "Senapati Bapat Rd", "SB Road"],
+  "Narayan Peth",
+  ["Market Yard", "Marketyard"],
+  ["Manik Baug", "Manikbaug"],
+  "Chincholi",
 ];
 
-const AREAS_NASHIK = [
+const AREAS_NASHIK: Area[] = [
   "Nashik Road",
   "Deolali",
   "Gangapur Road",
@@ -55,29 +81,84 @@ const AREAS_NASHIK = [
   "Anandvalli",
   "Rane Nagar",
   "Indira Nagar",
-  "Panchavati",
+  ["Panchavati", "Panchvati", "Pachwati"],
   "College Road",
   "CIDCO",
+  "Mumbai Naka",
+  "Nandur Naka",
+  "Savarkar Nagar",
+  "Jagtap Nagar",
+  "Patil Nagar",
+  "Amrutdham",
+  ["Rasbihari Road", "Rasbihari"],
+  ["Trimbak Road", "Trambakeshwar Rd", "Trimbakeshwar Road", "Trimbak Rd"],
+  ["Pakhal Road", "Pakhal Rd"],
+  "Pipeline Road",
+  "Kalpataru Nagar",
+  "Talathi Colony",
+  "Pramod Nagar",
+  "Wavre Nagar",
+  "Jalapur",
+  ["Datta Nagar", "Dattanagar"],
+  "Bhagur",
 ];
 
-function orderBySpecificity(a: string, b: string): number {
-  // Longer, multi-token names first so "Nashik Road" wins over "Nashik".
-  if (b.length !== a.length) return b.length - a.length;
-  return a.localeCompare(b);
+const AREAS_MUMBAI: Area[] = [
+  ["Mira Road", "Mira Bhayandar"],
+  "Lower Parel",
+  "Dadar",
+  ["Bandra", "Bandra West"],
+  "Mulund",
+  "Ghatkopar",
+  "Panvel",
+  "Kharghar",
+  "Thane",
+  "Malad",
+  "Kandivali",
+  "Vashi",
+  "Airoli",
+  "Nerul",
+  ["Andheri East", "Marol"],
+  "Andheri West",
+  ["Churchgate", "Marine Lines"],
+  "Powai",
+  "Chandivali",
+  "Saki Naka",
+  "Goregaon",
+  "Chembur",
+  "Wadala",
+  "Borivali",
+  "Dahisar",
+  "Santacruz",
+  "Juhu",
+  "Kurla",
+  "Vikhroli",
+  "Bhandup",
+];
+
+/** [spelling, display name], longest spelling first so "Nashik Road" wins over "Nashik". */
+function matchers(pool: Area[]): [string, string][] {
+  return pool
+    .flatMap((a): [string, string][] =>
+      typeof a === "string" ? [[a.toLowerCase(), a]] : a.map((alt): [string, string] => [alt.toLowerCase(), a[0]]),
+    )
+    .sort((x, y) => y[0].length - x[0].length || x[0].localeCompare(y[0]));
 }
+
+const MATCH = {
+  nashik: matchers(AREAS_NASHIK),
+  pune: matchers(AREAS_PUNE),
+  mumbai: matchers(AREAS_MUMBAI),
+  any: matchers([...AREAS_NASHIK, ...AREAS_PUNE, ...AREAS_MUMBAI]),
+};
 
 export function areaFor(turf: Pick<Turf, "address" | "city">): string | null {
   const addr = (turf.address ?? "").toLowerCase();
   if (!addr) return null;
-  const pool =
-    turf.city === "nashik"
-      ? AREAS_NASHIK
-      : turf.city === "pune"
-        ? AREAS_PUNE
-        : [...AREAS_NASHIK, ...AREAS_PUNE];
-  const sorted = [...pool].sort(orderBySpecificity);
-  for (const name of sorted) {
-    if (addr.includes(name.toLowerCase())) return name;
+  const list =
+    turf.city === "nashik" || turf.city === "pune" || turf.city === "mumbai" ? MATCH[turf.city] : MATCH.any;
+  for (const [spelling, name] of list) {
+    if (addr.includes(spelling)) return name;
   }
   return null;
 }

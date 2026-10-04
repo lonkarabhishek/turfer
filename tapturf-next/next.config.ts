@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
       { source: "/turf-in-nashik", destination: "/nashik", permanent: true },
       { source: "/turf-in-pune",   destination: "/pune",   permanent: true },
       { source: "/turf-in-mumbai", destination: "/mumbai", permanent: true },
+      // Common spellings of the "turf near me" page.
+      { source: "/turfs-near-me", destination: "/turf-near-me", permanent: true },
+      { source: "/near-me",       destination: "/turf-near-me", permanent: true },
     ];
   },
   images: {

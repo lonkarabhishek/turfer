@@ -19,7 +19,7 @@ export const post: Post = {
     "box cricket near me",
     "book turf online",
   ],
-  cta: { href: "/turfs", label: "Find a turf near you" },
+  cta: { href: "/turf-near-me", label: "Find a turf near you" },
   blocks: [
     {
       type: "p",

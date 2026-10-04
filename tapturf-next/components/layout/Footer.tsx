@@ -52,6 +52,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/turf-near-me" className="hover:text-white transition-colors">
+                  Turf Near Me
+                </Link>
+              </li>
+              <li>
                 <Link href="/games" className="hover:text-white transition-colors">
                   Open Games
                 </Link>
