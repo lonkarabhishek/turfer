@@ -7,6 +7,7 @@ import { SPORT_PAGES, sportBySlug, turfPlaysSport } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
 import { slugify } from "@/lib/utils/slugify";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { forCard } from "@/lib/utils/cardTurf";
 import { NearMeFinder } from "@/components/near/NearMeFinder";
 import type { Turf } from "@/types/turf";
 
@@ -34,27 +35,6 @@ type CityBlock = {
   sports: { slug: string; name: string; icon: string; count: number }[];
 };
 
-/** Only what TurfCard reads, so the page doesn't ship descriptions etc. twice. */
-function forCard(t: Turf): Turf {
-  return {
-    id: t.id,
-    name: t.name,
-    address: t.address,
-    city: t.city,
-    rating: t.rating,
-    total_reviews: t.total_reviews,
-    cover_image: t.cover_image,
-    images: t.images.slice(0, 4),
-    sports: t.sports,
-    morning_price: t.morning_price,
-    afternoon_price: t.afternoon_price,
-    evening_price: t.evening_price,
-    weekend_morning_price: t.weekend_morning_price,
-    weekend_afternoon_price: t.weekend_afternoon_price,
-    weekend_evening_price: t.weekend_evening_price,
-    price_mentions: t.price_mentions,
-  } as Turf;
-}
 
 async function load() {
   const blocks: CityBlock[] = (

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { haversineKm } from "@/lib/utils/location";
+import { forCard } from "@/lib/utils/cardTurf";
 
 // Nearest turfs to a point, for /turf-near-me. Sorting happens here so
 // the page doesn't ship every turf to the phone. The location is used
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json(
     {
-      turfs: ranked.slice(0, limit).map((r) => ({ ...r.turf, distanceKm: r.km })),
+      turfs: ranked.slice(0, limit).map((r) => ({ ...forCard(r.turf), distanceKm: r.km })),
       within5: ranked.filter((r) => r.km <= 5).length,
       within10: ranked.filter((r) => r.km <= 10).length,
     },
