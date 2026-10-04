@@ -18,7 +18,7 @@ export async function updateUserProfile(userId: string, updates: Partial<Pick<Ap
     .from("users")
     .update(updates)
     .eq("id", userId)
-    .select()
+    .select("id, name, email, phone, role, profile_image_url")
     .single();
 
   return { data: data as AppUser | null, error: error?.message || null };

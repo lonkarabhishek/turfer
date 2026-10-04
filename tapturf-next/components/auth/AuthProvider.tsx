@@ -84,8 +84,8 @@ function readPhoneUser(): AppUser | null {
 
 // Mirror the current phone-auth user id to a browser cookie the server
 // can read. Phone auth lives entirely in localStorage (no Supabase auth
-// session), so without this the server has no way to identify a
-// phone-auth user for things like the owner-only /admin guard.
+// session). It is only a hint: anyone can set it, so never use it to
+// grant access (/admin verifies a Firebase ID token instead).
 //
 // - `tt_uid=<uuid>` with 30-day max-age, path=/, SameSite=Lax.
 // - Not HttpOnly on purpose (we set/clear it from JS).
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: "user",
         profile_image_url: userData.profile_image_url || null,
         password: "oauth-no-password",
-      }]).select().single();
+      }]).select("id, name, email, phone, role, profile_image_url").single();
       if (inserted) return inserted as AppUser;
     } catch (e) {
       console.warn("[Auth] ensureUserInDB insert failed (likely RLS):", e);
@@ -380,7 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the server-readable `tt_uid` cookie in sync with the current
-  // user id. This is what the /admin guard reads for phone-auth users.
+  // user id.
   useEffect(() => {
     writeUidCookie(user?.id ?? null);
   }, [user?.id]);

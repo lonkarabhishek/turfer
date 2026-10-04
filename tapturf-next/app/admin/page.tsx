@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import Link from "next/link";
 import { isAdmin } from "@/lib/admin/auth";
+import { AdminGate } from "@/components/admin/AdminGate";
 import {
   getHeadline,
   getDailySignups,
@@ -60,11 +60,10 @@ function relativeTime(iso: string | null): string {
 }
 
 export default async function AdminPage() {
-  // Owner-only guard. Any non-admin sees a 404. We deliberately don't
-  // redirect or flash a "you're not allowed" message — the page just
-  // doesn't exist as far as anyone else is concerned.
+  // Owner-only guard. Non-admins end on a "Page not found" screen;
+  // AdminGate first lets a phone-OTP owner hand over their Firebase token.
   const allowed = await isAdmin();
-  if (!allowed) notFound();
+  if (!allowed) return <AdminGate />;
 
   const [
     headline,

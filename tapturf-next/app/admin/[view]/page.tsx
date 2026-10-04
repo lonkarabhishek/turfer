@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ExternalLink } from "lucide-react";
 import { isAdmin } from "@/lib/admin/auth";
+import { AdminGate } from "@/components/admin/AdminGate";
 import { labelFor, isCity } from "@/lib/city";
 import {
   BOOKING_FILTERS,
@@ -109,7 +110,7 @@ export default async function AdminDetailPage({
   params: Promise<{ view: string }>;
   searchParams: Promise<{ f?: string }>;
 }) {
-  if (!(await isAdmin())) notFound();
+  if (!(await isAdmin())) return <AdminGate />;
   const { view } = await params;
   if (!(view in VIEWS)) notFound();
   const v = view as View;

@@ -165,7 +165,7 @@ export async function getHeadline(): Promise<AdminHeadline> {
     s.from("game_requests").select("*", { count: "exact", head: true }),
     s.from("notifications").select("*", { count: "exact", head: true }),
     s.from("notifications").select("*", { count: "exact", head: true }).eq("is_read", false),
-    s.from("users").select("*", { count: "exact", head: true }).eq("is_verified", true),
+    s.from("users").select("id", { count: "exact", head: true }).eq("is_verified", true),
     // Full bookings set — table has just been added, so row count is
     // tiny. Fetching amounts inline lets us compute revenue without a
     // second round-trip. Cheap for now, revisit at >5k rows.

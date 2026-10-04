@@ -210,7 +210,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           role: "user",
           password: "phone-auth-no-password",
         }])
-        .select()
+        .select("id, name, email, phone, role, profile_image_url")
         .single();
 
       if (insertError || !newUser) {
