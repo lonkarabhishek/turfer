@@ -43,7 +43,9 @@ export async function generateMetadata({
   const bits = [
     `Compare ${stats.count} ${lower} turf${stats.count !== 1 ? "s" : ""} in ${cityLabel} by area, rating and price.`,
     stats.floodlit > 0 ? `${stats.floodlit} with floodlights.` : null,
-    stats.priceMin != null ? `From ${"₹" + stats.priceMin.toLocaleString("en-IN")}/hr.` : null,
+    // No price in the search snippet: some listed rates look per-player
+    // rather than per-hour (data team checking), and a misleading
+    // "From ₹200/hr" in Google results does more harm than good.
     "Call or WhatsApp to book, no booking fee.",
   ].filter(Boolean);
 
