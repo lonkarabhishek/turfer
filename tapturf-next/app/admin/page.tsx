@@ -15,6 +15,7 @@ import {
   getActiveUsers,
   getContactClickStats,
 } from "@/lib/queries/admin";
+import { getAdminGames } from "@/lib/queries/adminDetail";
 import { StatTile } from "@/components/admin/StatTile";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
@@ -79,6 +80,7 @@ export default async function AdminPage() {
     active30,
     contact7,
     contact30,
+    adminGames,
   ] = await Promise.all([
     getHeadline(),
     getDailySignups(30),
@@ -93,7 +95,15 @@ export default async function AdminPage() {
     getActiveUsers(30),
     getContactClickStats(7),
     getContactClickStats(30),
+    getAdminGames("all", 200),
   ]);
+  // Games snapshot: everything upcoming / live, then the latest past ones.
+  const gameCounts = adminGames.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});
+  const gamesShown = [
+    ...adminGames.filter((g) => g.state === "live"),
+    ...adminGames.filter((g) => g.state === "upcoming").reverse(),
+    ...adminGames.filter((g) => g.state === "expired" || g.state === "cancelled"),
+  ].slice(0, 12);
 
   // Detect batch-backfill: any created_at that appears on 2+ rows almost
   // certainly came from a bulk migration rather than a real user signup
@@ -154,6 +164,7 @@ export default async function AdminPage() {
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
         <StatTile
           label="Unique people"
+          href="/admin/users"
           value={headline.uniquePeople}
           sub={
             headline.duplicateUsers > 0
@@ -164,15 +175,18 @@ export default async function AdminPage() {
         />
         <StatTile
           label="Total users"
+          href="/admin/users"
           value={headline.totalUsers}
           sub="Raw row count"
         />
         <StatTile
           label="Total games"
+          href="/admin/games"
           value={headline.totalGames}
           sub={`+${headline.games7d} this week`}
         />
-        <StatTile label="Active turfs" value={headline.activeTurfs} />
+        <StatTile label="Active turfs"
+          href="/admin/turfs" value={headline.activeTurfs} />
       </section>
 
       {/* Signup windows (requests + notifications are further down in
@@ -180,21 +194,25 @@ export default async function AdminPage() {
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         <StatTile
           label="Unique signups (7d)"
+          href="/admin/users?f=new7"
           value={headline.uniqueSignups7d}
           sub={`${headline.signups7d} rows`}
         />
         <StatTile
           label="Unique signups (30d)"
+          href="/admin/users?f=new30"
           value={headline.uniqueSignups30d}
           sub={`${headline.signups30d} rows`}
         />
         <StatTile
           label="Duplicate accounts"
+          href="/admin/users?f=duplicates"
           value={headline.duplicateUsers}
           sub={headline.duplicateUsers === 0 ? "Clean" : "Same person, 2+ rows"}
         />
         <StatTile
           label="Requests"
+          href="/admin/requests"
           value={headline.totalRequests}
           sub="All-time join requests"
         />
@@ -222,21 +240,25 @@ export default async function AdminPage() {
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         <StatTile
           label="Active users (7d)"
+          href="/admin/users?f=active7"
           value={active7}
           sub="Hosted or requested"
         />
         <StatTile
           label="Active users (30d)"
+          href="/admin/users?f=active30"
           value={active30}
           sub="Hosted or requested"
         />
         <StatTile
           label="Games this week"
+          href="/admin/games?f=week"
           value={headline.games7d}
           sub="New hosted matches"
         />
         <StatTile
           label="Notifications unread"
+          href="/admin/notifications?f=unread"
           value={headline.unreadNotifications}
           sub={`${headline.totalNotifications} total`}
           tone={headline.unreadNotifications > 5 ? "hot" : "default"}
@@ -252,23 +274,27 @@ export default async function AdminPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatTile
             label="Booking revenue"
+          href="/admin/bookings?f=paid"
             value={`₹${headline.bookingRevenue.toLocaleString("en-IN")}`}
             sub={`from ${headline.paidBookings} paid`}
             tone="accent"
           />
           <StatTile
             label="Total bookings"
+          href="/admin/bookings"
             value={headline.totalBookings}
             sub={`+${headline.bookings7d} this week`}
           />
           <StatTile
             label="Pending bookings"
+          href="/admin/bookings?f=pending"
             value={headline.pendingBookings}
             sub="Awaiting confirmation"
             tone={headline.pendingBookings > 0 ? "hot" : "default"}
           />
           <StatTile
             label="Verified users"
+          href="/admin/users?f=verified"
             value={headline.verifiedUsers}
             sub={`of ${headline.totalUsers} total`}
           />
@@ -283,24 +309,87 @@ export default async function AdminPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <StatTile
             label="Total reviews"
+          href="/admin/reviews"
             value={headline.totalReviews}
             sub={headline.totalReviews === 0 ? "None yet" : "In-app reviews"}
           />
           <StatTile
             label="Avg rating"
+          href="/admin/reviews"
             value={headline.totalReviews === 0 ? "—" : `★ ${headline.avgRating.toFixed(1)}`}
             sub={headline.totalReviews === 0 ? "No data" : `across ${headline.totalReviews}`}
           />
           <StatTile
             label="Notifications"
+          href="/admin/notifications"
             value={headline.totalNotifications}
             sub={`${headline.unreadNotifications} unread`}
           />
           <StatTile
             label="Games (all-time)"
+          href="/admin/games"
             value={headline.totalGames}
             sub={`${headline.games30d} in last 30d`}
           />
+        </div>
+      </section>
+
+      {/* Games: upcoming / live first, then the latest past games. */}
+      <section className="mb-8">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+          <p className="text-xs font-bold text-primary-500">
+            Games · {(["upcoming", "live", "expired", "cancelled"] as const)
+              .filter((k) => gameCounts[k])
+              .map((k) => `${gameCounts[k]} ${k}`)
+              .join(" · ") || "none yet"}
+          </p>
+          <div className="flex gap-3 text-xs font-semibold">
+            <Link href="/admin/games?f=upcoming" className="text-accent-600 hover:text-accent-700">Upcoming</Link>
+            <Link href="/admin/games?f=expired" className="text-accent-600 hover:text-accent-700">Expired</Link>
+            <Link href="/admin/games" className="text-accent-600 hover:text-accent-700">All games</Link>
+          </div>
+        </div>
+        <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
+          {gamesShown.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-primary-400">No games hosted yet.</p>
+          ) : (
+            <ul className="divide-y divide-primary-100">
+              {gamesShown.map((g) => (
+                <li key={g.id}>
+                  <Link href={`/game/${g.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-50">
+                    <span
+                      className={`shrink-0 w-20 text-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        g.state === "upcoming"
+                          ? "bg-accent-50 text-accent-700"
+                          : g.state === "live"
+                            ? "bg-amber-100 text-amber-800"
+                            : g.state === "cancelled"
+                              ? "bg-hot-500/10 text-hot-600"
+                              : "bg-primary-100 text-primary-500"
+                      }`}
+                    >
+                      {g.state}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-primary-900 truncate">
+                        {g.sport}{g.turf ? ` at ${g.turf.name}` : ""}
+                      </span>
+                      <span className="block text-[12px] text-primary-500 truncate">
+                        {new Date(`${g.date}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" })}
+                        {" · "}{g.start_time?.slice(0, 5)} · host {g.host_name || "-"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm tabular-nums text-primary-700">
+                      {g.current_players}/{g.max_players}
+                    </span>
+                    {g.requests.pending > 0 && (
+                      <span className="shrink-0 text-[11px] font-semibold text-amber-700">{g.requests.pending} pending</span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
 
