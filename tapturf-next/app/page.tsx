@@ -39,11 +39,11 @@ export async function generateMetadata(): Promise<Metadata> {
     // absolute so layout's template doesn't add another "| TapTurf" —
     // the wordmark is already the first word.
     title: {
-      absolute: `TapTurf: Cricket, Football & Sports Turfs in ${cityLine}`,
+      absolute: `TapTurf: Football & Box Cricket Turfs in ${cityLine}`,
     },
-    description: `Book sports turfs across ${cityLine}. ${rounded}+ grounds for cricket, football, box cricket, badminton and more. Find a game, host a game, run the pitch.`,
+    description: `Find and book football, box cricket and sports turfs across ${cityLine}. ${rounded}+ grounds with photos, ratings and prices. Call or WhatsApp the turf, no booking fee.`,
     keywords:
-      "turf booking nashik, turf booking pune, turf booking mumbai, cricket turf, football turf, box cricket, sports turfs maharashtra, tapturf",
+      "football turf, football turf near me, football turf nashik, football turf pune, football turf mumbai, box cricket, turf booking nashik, turf booking pune, turf booking mumbai, tapturf",
     openGraph: {
       title: `TapTurf: Book Turfs in ${cityLine}`,
       description: `${rounded}+ sports turfs across ${cityLine}. Find a game, host a game, run the pitch.`,

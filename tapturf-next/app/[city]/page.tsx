@@ -7,6 +7,7 @@ import { TurfCard } from "@/components/turf/TurfCard";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
+import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
 
 // One page per city — hard SEO landing so /nashik and /pune both rank
@@ -25,10 +26,13 @@ export async function generateMetadata(
   const label = labelFor(city);
 
   return {
-    title: `Sports Turfs in ${label} | Book Cricket, Football & More`,
-    description: `Every sports turf in ${label}, one place. Compare prices, ratings, and photos. Cricket, football, box cricket, badminton. Call or WhatsApp to book instantly. No booking fee.`,
+    // Football and box cricket are what most turfs here are for.
+    title: `Football & Box Cricket Turfs in ${label}: Compare & Book`,
+    description: `Every football, box cricket and sports turf in ${label} in one place. Compare prices, ratings and photos, then call or WhatsApp to book. No booking fee.`,
     keywords: [
       `turfs in ${label.toLowerCase()}`,
+      `football turf in ${label.toLowerCase()}`,
+      `box cricket in ${label.toLowerCase()}`,
       `turf booking ${label.toLowerCase()}`,
       `cricket turf ${label.toLowerCase()}`,
       `football turf ${label.toLowerCase()}`,
@@ -59,6 +63,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   ]);
   const spotlight = trendingPick ? toSpotlights({ [cityId]: trendingPick }, turfs) : [];
   const trendingId = spotlight[0]?.turfId ?? null;
+  const sportCounts = SPORT_PAGES.map((sp) => ({
+    ...sp,
+    count: turfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
+  })).filter((sp) => sp.count > 0);
   // "Top-rated" block: only turfs with enough reviews to trust the score.
   const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
 
@@ -127,6 +135,31 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           </ul>
         </div>
       </section>
+
+      {/* Turfs by sport in this city -> /<city>/<sport> pages */}
+      {sportCounts.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-8">
+          <h2 className="text-[18px] font-semibold text-primary-900 mb-3">Turfs by sport in {label}</h2>
+          <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {sportCounts.map((sp) => (
+              <li key={sp.slug}>
+                <Link
+                  href={`/${cityId}/${sp.slug}`}
+                  className="flex items-center gap-3 rounded-2xl bg-primary-50 hover:bg-primary-100 px-4 py-3 transition-colors"
+                >
+                  <span className="text-2xl" aria-hidden>{sp.icon}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-semibold text-primary-900 truncate">{sp.name}</span>
+                    <span className="block text-[13px] text-primary-500 tabular-nums">
+                      {sp.count} turf{sp.count !== 1 ? "s" : ""}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* This week's Most Trending Turf in this city */}
       <TrendingSpotlight picks={spotlight} mode="fixed" className="max-w-7xl mx-auto px-4 sm:px-6 mt-10" />

@@ -1,7 +1,9 @@
 import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ALL_POSTS } from "@/content/blog";
-import { SPORT_PAGES } from "@/lib/sports";
+import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
+import { CITIES } from "@/lib/city";
+import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -15,7 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createReadOnlyClient();
 
   const [{ data: turfs }, { data: games }] = await Promise.all([
-    supabase.from("turfs").select("id, updated_at").eq("is_active", true),
+    supabase.from("turfs").select("id, updated_at, city, sports").eq("is_active", true),
     supabase
       .from("games")
       .select("id, updated_at, date, start_time, status")
@@ -85,6 +87,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
+  // "<sport> turfs in <city>" pages, only where there are enough turfs
+  // to be indexable (same threshold the page uses for noindex).
+  const splitSports = (raw: unknown): string[] =>
+    (Array.isArray(raw) ? raw : [])
+      .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
+      .map((x) => x.trim())
+      .filter(Boolean);
+  const citySportPages: MetadataRoute.Sitemap = CITIES.flatMap((c) =>
+    SPORT_PAGES.filter(
+      (sp) =>
+        (turfs ?? []).filter((t) => t.city === c.id && turfPlaysSport(splitSports(t.sports), sp)).length >=
+        MIN_TURFS_TO_INDEX,
+    ).map((sp) => ({
+      url: `${BASE}/${c.id}/${sp.slug}`,
+      lastModified: new Date(),
+      changeFrequency: "daily" as const,
+      priority: sp.slug === "football" || sp.slug === "box-cricket" ? 0.9 : 0.8,
+    })),
+  );
+
   const turfPages: MetadataRoute.Sitemap = (turfs ?? []).map((turf) => ({
     url: `${BASE}/turf/${turf.id}`,
     lastModified: turf.updated_at ? new Date(turf.updated_at) : new Date(),
@@ -110,6 +132,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticPages,
     ...blogPages,
     ...sportPages,
+    ...citySportPages,
     ...turfPages,
     ...gamePages,
   ];

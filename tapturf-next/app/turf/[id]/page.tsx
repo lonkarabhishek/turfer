@@ -62,11 +62,28 @@ export async function generateMetadata({
   //   covered {sport} → "Covered {Sport}"
   //   ground_format {sport} → "{Format} {Sport}"
   //   fallback → "Timings & Photos"
+  //
+  // Most listings are football (231 of 245) and/or box cricket turfs,
+  // and that's how people search ("football turf in Baner"), so name
+  // the turf type when there's no price to lead with.
+  const has = (label: string) => turf.sports.some((x) => x.trim().toLowerCase() === label);
+  const turfType =
+    has("football") && has("box cricket")
+      ? "Football & Box Cricket Turf"
+      : has("football")
+        ? "Football Turf"
+        : has("box cricket")
+          ? "Box Cricket Turf"
+          : has("cricket")
+            ? "Cricket Turf"
+            : null;
   const usp = (() => {
     if (priceSummary.kind === "real" && priceSummary.min != null) {
       return `₹${priceSummary.min}/hr`;
     }
+    if (turf.is_covered && turfType) return `Covered ${turfType}`;
     if (turf.is_covered && primarySport) return `Covered ${primarySport}`;
+    if (turfType) return turfType;
     if (turf.ground_format && primarySport) return `${turf.ground_format} ${primarySport}`;
     if (primarySport) return `${primarySport} Timings & Photos`;
     return "Timings & Photos";
@@ -77,9 +94,13 @@ export async function generateMetadata({
   // the SERP-visible "title | TapTurf" stays under Google's ~65-char
   // truncation ceiling.
   const fullTitle = `${turf.name} ${cityAndArea} – ${usp}`;
+  // If area + USP is too long, keep the turf type with just the city.
+  const cityUsp = `${turf.name} ${cityLabel} – ${usp}`;
+  const cityType = turfType ? `${turf.name} ${cityLabel} – ${turfType.replace(" & Box Cricket", "")}` : null;
   const titleNoUsp = `${turf.name} ${cityAndArea}`;
   const titleShort = `${turf.name}, ${cityLabel}`;
-  const title = fullTitle.length <= 55 ? fullTitle : titleNoUsp.length <= 55 ? titleNoUsp : titleShort;
+  const title =
+    [fullTitle, cityUsp, cityType, titleNoUsp].find((t): t is string => !!t && t.length <= 55) ?? titleShort;
 
   const photoCount = turf.images?.length ?? 0;
   const photoClause = photoCount > 0 ? ` ${photoCount} photos.` : "";
@@ -92,7 +113,8 @@ export async function generateMetadata({
   return {
     title,
     description:
-      `${sports || "Sports turf"}${locationClause}.` +
+      `${turfType ?? (sports || "Sports turf")}${locationClause}.` +
+      (turfType && sports ? ` Sports: ${sports}.` : "") +
       `${priceClause}${ratingClause}${photoClause} Call or WhatsApp to book.`,
     keywords: [
       turf.name,

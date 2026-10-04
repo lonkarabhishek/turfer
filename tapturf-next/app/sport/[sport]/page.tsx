@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
-import { TurfCard } from "@/components/turf/TurfCard";
+import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, sportBySlug } from "@/lib/sports";
 import { CITIES, labelFor } from "@/lib/city";
 
@@ -93,6 +93,22 @@ export default async function SportPage({
         </div>
         <p className="text-[16px] text-primary-600 mt-4 max-w-2xl leading-relaxed">{info.blurb}</p>
 
+        {/* By city: the "<sport> turfs in <city>" pages. */}
+        {perCity.length > 0 && (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {perCity.map((c) => (
+              <Link
+                key={c.id}
+                href={`/${c.id}/${info.slug}`}
+                className="h-10 px-4 inline-flex items-center gap-1.5 rounded-full bg-accent-50 hover:bg-accent-100 text-[14px] font-medium text-accent-700"
+              >
+                {info.name} turfs in {labelFor(c.id)}
+                <span className="text-accent-600/70 tabular-nums">{c.count}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
         {/* Other sports: crawlable links between the sport pages. */}
         <div className="mt-5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
           {SPORT_PAGES.map((s) => (
@@ -112,13 +128,9 @@ export default async function SportPage({
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Top 24 as cards, the rest as a light list */}
       {turfs.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-          {turfs.map((turf) => (
-            <TurfCard key={turf.id} turf={turf} />
-          ))}
-        </div>
+        <SportTurfList turfs={turfs} sportName={info.name} placeLabel={CITY_LABEL} showCity />
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
