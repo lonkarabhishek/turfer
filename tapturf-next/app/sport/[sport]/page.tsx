@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { SportTurfList } from "@/components/sport/SportTurfList";
-import { SPORT_PAGES, sportBySlug } from "@/lib/sports";
+import { SPORT_PAGES, sportBySlug, sportVenues, venueWord } from "@/lib/sports";
 import { CITIES, labelFor } from "@/lib/city";
 
 export const revalidate = 3600;
@@ -26,17 +26,18 @@ export async function generateMetadata({
   if (!info) return { title: "Sport not found", robots: { index: false } };
 
   const lower = info.name.toLowerCase();
+  const word = venueWord(info, 1);
   return {
     // Layout's title template appends "| TapTurf".
-    title: `${info.name} Turfs in ${CITY_LABEL}: Compare & Book`,
-    description: `${info.blurb} Compare ${lower} turfs across ${CITY_LABEL} by price, rating and photos. Call or WhatsApp to book.`,
+    title: `${sportVenues(info, { title: true })} in ${CITY_LABEL}: Compare & Book`,
+    description: `${info.blurb} Compare ${lower} ${venueWord(info)} across ${CITY_LABEL} by price, rating and photos. Call or WhatsApp to book.`,
     keywords: CITIES.flatMap((c) => [
-      `${lower} turf ${c.label.toLowerCase()}`,
+      `${lower} ${word} ${c.label.toLowerCase()}`,
       `${lower} ${c.label.toLowerCase()}`,
       `book ${lower} ${c.label.toLowerCase()}`,
     ]).join(", "),
     openGraph: {
-      title: `${info.name} Turfs in ${CITY_LABEL} | TapTurf`,
+      title: `${sportVenues(info, { title: true })} in ${CITY_LABEL} | TapTurf`,
       description: info.blurb,
       url: `https://www.tapturf.in/sport/${info.slug}`,
       type: "website",
@@ -81,10 +82,10 @@ export default async function SportPage({
           <span className="text-5xl">{info.icon}</span>
           <div>
             <h1 className="text-[28px] md:text-[36px] text-primary-900 leading-tight font-display">
-              {info.name} turfs in {CITY_LABEL}
+              {sportVenues(info)} in {CITY_LABEL}
             </h1>
             <p className="text-[15px] text-primary-500 mt-1">
-              {turfs.length} {info.name.toLowerCase()} turf{turfs.length !== 1 ? "s" : ""}
+              {turfs.length} {info.name.toLowerCase()} {venueWord(info, turfs.length)}
               {perCity.length > 0 && (
                 <> · {perCity.map((c) => `${c.count} in ${labelFor(c.id)}`).join(", ")}</>
               )}
@@ -93,7 +94,7 @@ export default async function SportPage({
         </div>
         <p className="text-[16px] text-primary-600 mt-4 max-w-2xl leading-relaxed">{info.blurb}</p>
 
-        {/* By city: the "<sport> turfs in <city>" pages. */}
+        {/* By city: the "<sport> turfs/courts in <city>" pages. */}
         {perCity.length > 0 && (
           <div className="mt-5 flex flex-wrap gap-2">
             {perCity.map((c) => (
@@ -102,7 +103,7 @@ export default async function SportPage({
                 href={`/${c.id}/${info.slug}`}
                 className="h-10 px-4 inline-flex items-center gap-1.5 rounded-full bg-accent-50 hover:bg-accent-100 text-[14px] font-medium text-accent-700"
               >
-                {info.name} turfs in {labelFor(c.id)}
+                {sportVenues(info)} in {labelFor(c.id)}
                 <span className="text-accent-600/70 tabular-nums">{c.count}</span>
               </Link>
             ))}
@@ -130,12 +131,12 @@ export default async function SportPage({
 
       {/* Top 24 as cards, the rest as a light list */}
       {turfs.length > 0 ? (
-        <SportTurfList turfs={turfs} sportName={info.name} placeLabel={CITY_LABEL} showCity />
+        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={CITY_LABEL} showCity />
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
           <p className="text-lg font-semibold text-primary-900">
-            No {info.name.toLowerCase()} turfs listed yet
+            No {sportVenues(info).toLowerCase()} listed yet
           </p>
           <Link href="/turfs" className="mt-4 inline-flex text-[15px] text-accent-600 hover:text-accent-700">
             Browse all turfs

@@ -14,11 +14,14 @@ export interface SportPage {
   icon: string;
   labels: string[];
   blurb: string;
+  /** What people call the place they play it: a turf (football, cricket) or a court (racquet and ball-court sports). */
+  venue: "turf" | "court";
 }
 
 export const SPORT_PAGES: SportPage[] = [
   {
     slug: "football",
+    venue: "turf",
     name: "Football",
     icon: "⚽",
     labels: ["Football"],
@@ -26,6 +29,7 @@ export const SPORT_PAGES: SportPage[] = [
   },
   {
     slug: "box-cricket",
+    venue: "turf",
     name: "Box Cricket",
     icon: "🏏",
     labels: ["Box Cricket"],
@@ -33,6 +37,7 @@ export const SPORT_PAGES: SportPage[] = [
   },
   {
     slug: "cricket",
+    venue: "turf",
     name: "Cricket",
     icon: "🏏",
     labels: ["Cricket", "Cricket Nets"],
@@ -40,6 +45,7 @@ export const SPORT_PAGES: SportPage[] = [
   },
   {
     slug: "badminton",
+    venue: "court",
     name: "Badminton",
     icon: "🏸",
     labels: ["Badminton"],
@@ -47,6 +53,7 @@ export const SPORT_PAGES: SportPage[] = [
   },
   {
     slug: "pickleball",
+    venue: "court",
     name: "Pickleball",
     icon: "🏓",
     labels: ["Pickleball"],
@@ -54,13 +61,15 @@ export const SPORT_PAGES: SportPage[] = [
   },
   {
     slug: "volleyball",
+    venue: "court",
     name: "Volleyball",
     icon: "🏐",
     labels: ["Volleyball"],
-    blurb: "Volleyball courts at multi-sport turfs and arenas.",
+    blurb: "Volleyball courts at multi-sport arenas, indoor and outdoor.",
   },
   {
     slug: "basketball",
+    venue: "court",
     name: "Basketball",
     icon: "🏀",
     labels: ["Basketball"],
@@ -68,6 +77,7 @@ export const SPORT_PAGES: SportPage[] = [
   },
   {
     slug: "tennis",
+    venue: "court",
     name: "Tennis",
     icon: "🎾",
     labels: ["Tennis"],
@@ -92,4 +102,27 @@ export function sportPageForLabel(label: string): SportPage | undefined {
 export function turfPlaysSport(turfSports: string[], sport: SportPage): boolean {
   const wanted = new Set(sport.labels.map((l) => l.toLowerCase()));
   return turfSports.some((s) => wanted.has(s.trim().toLowerCase()));
+}
+
+/** "turf" / "turfs" or "court" / "courts" for this sport. */
+export function venueWord(sport: SportPage, count = 2): string {
+  return count === 1 ? sport.venue : `${sport.venue}s`;
+}
+
+/** "Football turfs", "Pickleball courts". Pass `title` for "Pickleball Courts". */
+export function sportVenues(sport: SportPage, opts: { title?: boolean } = {}): string {
+  const word = venueWord(sport);
+  return `${sport.name} ${opts.title ? word[0].toUpperCase() + word.slice(1) : word}`;
+}
+
+/**
+ * "Badminton Court" or "Badminton & Pickleball Courts" for a venue
+ * whose listed sports with a page are all court sports; null if it
+ * lists a turf sport (or nothing we have a page for).
+ */
+export function courtType(labels: string[]): string | null {
+  const pages = [...new Set(labels.map((l) => sportPageForLabel(l)).filter((p): p is SportPage => !!p))];
+  if (pages.length === 0 || pages.some((p) => p.venue === "turf")) return null;
+  const names = pages.slice(0, 2).map((p) => p.name);
+  return names.length === 1 ? `${names[0]} Court` : `${names.join(" & ")} Courts`;
 }

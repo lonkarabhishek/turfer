@@ -7,7 +7,7 @@ import { TurfCard } from "@/components/turf/TurfCard";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
-import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
+import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
 
 // One page per city — hard SEO landing so /nashik and /pune both rank
@@ -136,10 +136,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         </div>
       </section>
 
-      {/* Turfs by sport in this city -> /<city>/<sport> pages */}
+      {/* By sport in this city -> /<city>/<sport> pages */}
       {sportCounts.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-8">
-          <h2 className="text-[18px] font-semibold text-primary-900 mb-3">Turfs by sport in {label}</h2>
+          <h2 className="text-[18px] font-semibold text-primary-900 mb-3">Turfs and courts by sport in {label}</h2>
           <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {sportCounts.map((sp) => (
               <li key={sp.slug}>
@@ -151,7 +151,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                   <span className="min-w-0">
                     <span className="block text-[15px] font-semibold text-primary-900 truncate">{sp.name}</span>
                     <span className="block text-[13px] text-primary-500 tabular-nums">
-                      {sp.count} turf{sp.count !== 1 ? "s" : ""}
+                      {sp.count} {venueWord(sp, sp.count)}
                     </span>
                   </span>
                 </Link>

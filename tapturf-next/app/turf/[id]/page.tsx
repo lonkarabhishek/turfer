@@ -19,7 +19,7 @@ import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
 import { getTrendingPick } from "@/lib/queries/trending";
-import { sportPageForLabel } from "@/lib/sports";
+import { courtType, sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 
 export const revalidate = 3600;
@@ -76,7 +76,7 @@ export async function generateMetadata({
           ? "Box Cricket Turf"
           : has("cricket")
             ? "Cricket Turf"
-            : null;
+            : courtType(turf.sports);
   const usp = (() => {
     if (priceSummary.kind === "real" && priceSummary.min != null) {
       return `₹${priceSummary.min}/hr`;
@@ -121,7 +121,7 @@ export async function generateMetadata({
       area ? `turf in ${area.toLowerCase()}` : null,
       `turf in ${cityLabel.toLowerCase()}`,
       `${cityLabel.toLowerCase()} turf booking`,
-      ...turf.sports.map((s) => `${s.toLowerCase()} turf ${cityLabel.toLowerCase()}`),
+      ...turf.sports.map((s) => `${s.toLowerCase()} ${sportPageForLabel(s)?.venue ?? "turf"} ${cityLabel.toLowerCase()}`),
       cityHash,
     ].filter(Boolean).join(", "),
     openGraph: {

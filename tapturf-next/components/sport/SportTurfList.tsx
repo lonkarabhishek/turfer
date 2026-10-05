@@ -16,12 +16,13 @@ const CARD_LIMIT = 24;
  */
 export function SportTurfList({
   turfs,
-  sportName,
+  venues,
   placeLabel,
   showCity = false,
 }: {
   turfs: Turf[];
-  sportName: string;
+  /** Lowercase plural, e.g. "football turfs" or "pickleball courts". */
+  venues: string;
   placeLabel: string;
   /** Show the city next to each name (all-cities pages). */
   showCity?: boolean;
@@ -40,7 +41,7 @@ export function SportTurfList({
       {rest.length > 0 && (
         <section className="mt-12">
           <h2 className="text-[20px] font-display text-primary-900 mb-4">
-            {rest.length} more {sportName.toLowerCase()} turf{rest.length !== 1 ? "s" : ""} in {placeLabel}
+            {rest.length} more {rest.length === 1 ? venues.replace(/s$/, "") : venues} in {placeLabel}
           </h2>
           <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 divide-y divide-primary-100 sm:divide-y-0">
             {rest.map((t) => {

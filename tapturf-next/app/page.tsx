@@ -3,7 +3,7 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { HomeShell } from "@/components/home/HomeShell";
 import Link from "next/link";
 import { PopularByCity } from "@/components/home/PopularByCity";
-import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
+import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
@@ -158,7 +158,7 @@ export default async function HomePage() {
                 <span className="min-w-0">
                   <span className="block text-[15px] font-semibold text-primary-900 truncate">{s.name}</span>
                   <span className="block text-[13px] text-primary-500 tabular-nums">
-                    {s.count} turf{s.count !== 1 ? "s" : ""}
+                    {s.count} {venueWord(s, s.count)}
                   </span>
                 </span>
               </Link>

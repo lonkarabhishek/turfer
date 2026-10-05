@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronRight, MapPin } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { CITIES, type CityId } from "@/lib/city";
-import { SPORT_PAGES, sportBySlug, turfPlaysSport } from "@/lib/sports";
+import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
 import { slugify } from "@/lib/utils/slugify";
 import { TurfCard } from "@/components/turf/TurfCard";
@@ -32,7 +32,7 @@ type CityBlock = {
   areas: { area: string; turfs: Turf[] }[];
   /** Turfs in one-turf areas or with no known area. */
   more: { turf: Turf; area: string | null }[];
-  sports: { slug: string; name: string; icon: string; count: number }[];
+  sports: { slug: string; label: string; icon: string; count: number }[];
 };
 
 
@@ -61,7 +61,7 @@ async function load() {
         ];
         const sports = SPORT_PAGES.map((sp) => ({
           slug: sp.slug,
-          name: sp.name,
+          label: sportVenues(sp),
           icon: sp.icon,
           count: turfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
         })).filter((s) => s.count > 0);
@@ -334,7 +334,7 @@ export default async function TurfNearMePage() {
                   className="h-10 px-4 inline-flex items-center gap-2 rounded-full ring-1 ring-primary-200 hover:bg-primary-50 text-[14px] text-primary-900"
                 >
                   <span aria-hidden>{s.icon}</span>
-                  {s.name} turfs in {b.label}
+                  {s.label} in {b.label}
                   <span className="text-primary-500 tabular-nums">{s.count}</span>
                 </Link>
               ))}

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
-import { SPORT_PAGES, sportBySlug, turfPlaysSport } from "@/lib/sports";
+import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 
@@ -38,10 +38,11 @@ export async function generateMetadata({
   const cityLabel = labelFor(data.city);
   const stats = sportCityStats(turfs);
   const lower = s.name.toLowerCase();
+  const word = venueWord(s, 1);
   const url = `https://www.tapturf.in/${data.city}/${s.slug}`;
 
   const bits = [
-    `Compare ${stats.count} ${lower} turf${stats.count !== 1 ? "s" : ""} in ${cityLabel} by area, rating and price.`,
+    `Compare ${stats.count} ${lower} ${venueWord(s, stats.count)} in ${cityLabel} by area, rating and price.`,
     stats.floodlit > 0 ? `${stats.floodlit} with floodlights.` : null,
     // No price in the search snippet: some listed rates look per-player
     // rather than per-hour (data team checking), and a misleading
@@ -51,20 +52,20 @@ export async function generateMetadata({
 
   return {
     // Layout's template appends "| TapTurf".
-    title: `${s.name} Turfs in ${cityLabel}: ${stats.count} Grounds, Compare & Book`,
+    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${s.venue === "court" ? "Venues" : "Grounds"}, Compare & Book`,
     description: bits.join(" "),
     keywords: [
-      `${lower} turf in ${cityLabel.toLowerCase()}`,
-      `${lower} turf ${cityLabel.toLowerCase()}`,
-      `${lower} ground ${cityLabel.toLowerCase()}`,
-      `${lower} turf near me`,
-      `book ${lower} turf ${cityLabel.toLowerCase()}`,
-      ...stats.topAreas.slice(0, 4).map((a) => `${lower} turf ${a.area.toLowerCase()}`),
+      `${lower} ${word} in ${cityLabel.toLowerCase()}`,
+      `${lower} ${word} ${cityLabel.toLowerCase()}`,
+      `${lower} ${s.venue === "court" ? "court booking" : "ground"} ${cityLabel.toLowerCase()}`,
+      `${lower} ${word} near me`,
+      `book ${lower} ${word} ${cityLabel.toLowerCase()}`,
+      ...stats.topAreas.slice(0, 4).map((a) => `${lower} ${word} ${a.area.toLowerCase()}`),
     ].join(", "),
     // Thin pages (1-2 turfs) stay out of the index.
     robots: stats.count >= MIN_TURFS_TO_INDEX ? undefined : { index: false, follow: true },
     openGraph: {
-      title: `${s.name} Turfs in ${cityLabel} | TapTurf`,
+      title: `${sportVenues(s, { title: true })} in ${cityLabel} | TapTurf`,
       description: bits.join(" "),
       url,
       type: "website",
@@ -90,6 +91,7 @@ export default async function CitySportPage({
   const faq = sportCityFaq(s, cityId, stats);
   const posts = relatedPosts(s, cityId);
   const lower = s.name.toLowerCase();
+  const venues = sportVenues(s);
   const pageUrl = `https://www.tapturf.in/${cityId}/${s.slug}`;
 
   // Same sport in other cities, and other sports in this city, for
@@ -106,13 +108,13 @@ export default async function CitySportPage({
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: "https://www.tapturf.in" },
         { "@type": "ListItem", position: 2, name: cityLabel, item: `https://www.tapturf.in/${cityId}` },
-        { "@type": "ListItem", position: 3, name: `${s.name} turfs`, item: pageUrl },
+        { "@type": "ListItem", position: 3, name: venues, item: pageUrl },
       ],
     },
     {
       "@context": "https://schema.org",
       "@type": "ItemList",
-      name: `${s.name} turfs in ${cityLabel}`,
+      name: `${venues} in ${cityLabel}`,
       numberOfItems: turfs.length,
       itemListElement: turfs.slice(0, 30).map((t, i) => ({
         "@type": "ListItem",
@@ -151,10 +153,10 @@ export default async function CitySportPage({
           <span className="text-5xl" aria-hidden>{s.icon}</span>
           <div>
             <h1 className="text-[28px] md:text-[40px] text-primary-900 leading-tight font-display">
-              {s.name} turfs in {cityLabel}
+              {venues} in {cityLabel}
             </h1>
             <p className="text-[15px] text-primary-500 mt-1">
-              {stats.count} turf{stats.count !== 1 ? "s" : ""}
+              {stats.count} {venueWord(s, stats.count)}
               {stats.floodlit > 0 && <> · {stats.floodlit} with floodlights</>}
               {stats.priceMin != null && stats.priceMax != null && (
                 <> · ₹{stats.priceMin.toLocaleString("en-IN")} to ₹{stats.priceMax.toLocaleString("en-IN")}/hr listed</>
@@ -163,8 +165,8 @@ export default async function CitySportPage({
           </div>
         </div>
         <p className="text-[16px] text-primary-600 mt-4 max-w-2xl leading-relaxed">
-          {s.blurb} Every {lower} turf in {cityLabel} we know of, ranked by Google rating
-          (turfs with at least 15 reviews first). Call or WhatsApp to book, no booking fee.
+          {s.blurb} Every {lower} {venueWord(s, 1)} in {cityLabel} we know of, ranked by Google rating
+          (places with at least 15 reviews first). Call or WhatsApp to book, no booking fee.
         </p>
 
         {stats.topAreas.length > 0 && (
@@ -174,12 +176,12 @@ export default async function CitySportPage({
         )}
       </header>
 
-      <SportTurfList turfs={turfs} sportName={s.name} placeLabel={cityLabel} />
+      <SportTurfList turfs={turfs} venues={venues.toLowerCase()} placeLabel={cityLabel} />
 
       {/* FAQ: visible text matches the FAQPage JSON-LD */}
       <section className="mt-14 max-w-3xl">
         <h2 className="text-[22px] font-display text-primary-900 mb-4">
-          {s.name} turfs in {cityLabel}: quick answers
+          {venues} in {cityLabel}: quick answers
         </h2>
         <div className="space-y-2">
           {faq.map((f) => (
@@ -221,7 +223,7 @@ export default async function CitySportPage({
                 href={`/${c.id}/${s.slug}`}
                 className="h-9 px-4 inline-flex items-center rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] text-primary-900"
               >
-                {s.name} turfs in {c.label}
+                {venues} in {c.label}
               </Link>
             ))}
           </div>
