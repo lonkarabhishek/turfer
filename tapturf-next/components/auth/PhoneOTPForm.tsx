@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useId } from "react";
 import { Check } from "lucide-react";
 import { phoneAuthHelpers } from "@/lib/firebase/client";
 import { createClient } from "@/lib/supabase/client";
+import { logPhoneLogin } from "@/lib/analytics/logins";
 import { useAuth } from "./AuthProvider";
 import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
 
@@ -177,6 +178,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
           role: existingUser.role || "user",
           profile_image_url: existingUser.profile_image_url,
         }));
+        logPhoneLogin(existingUser.id);
         finishLogin(existingUser.name?.split(" ")[0] || "");
       } else {
         setStep("name");
@@ -228,6 +230,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         role: "player",
       }));
 
+      logPhoneLogin(newUser.id);
       finishLogin(newUser.name?.split(" ")[0] || "");
     } catch {
       setError("Something went wrong. Please try again.");

@@ -7,6 +7,7 @@ export function StatTile({
   sub,
   tone = "default",
   href,
+  compact = false,
 }: {
   label: string;
   value: string | number;
@@ -14,6 +15,8 @@ export function StatTile({
   tone?: "default" | "accent" | "hot";
   /** Where the number's underlying records are listed (/admin/<view>). */
   href?: string;
+  /** Smaller value text, for words (a name) rather than a number. */
+  compact?: boolean;
 }) {
   const bg =
     tone === "accent"
@@ -29,7 +32,7 @@ export function StatTile({
         {label}
         {href && <ChevronRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 shrink-0" />}
       </p>
-      <p className="font-display text-4xl md:text-5xl mt-1 leading-none">{value}</p>
+      <p className={`font-display mt-1 leading-none truncate ${compact ? "text-2xl md:text-3xl py-1" : "text-4xl md:text-5xl"}`}>{value}</p>
       {sub && <p className={`text-xs mt-2 font-medium ${subColor}`}>{sub}</p>}
     </>
   );

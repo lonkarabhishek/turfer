@@ -28,6 +28,7 @@ import {
   type TurfFilter,
   type UserFilter,
 } from "@/lib/queries/adminDetail";
+import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
@@ -35,6 +36,7 @@ export const metadata: Metadata = { title: "Admin", robots: { index: false, foll
 const VIEWS = {
   games: { title: "Games", filters: GAME_FILTERS },
   users: { title: "Users", filters: USER_FILTERS },
+  logins: { title: "Latest logins", filters: LOGIN_FILTERS },
   requests: { title: "Join requests", filters: REQUEST_FILTERS },
   turfs: { title: "Turfs", filters: TURF_FILTERS },
   bookings: { title: "Bookings", filters: BOOKING_FILTERS },
@@ -209,6 +211,51 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                     <Link href={`/game/${g.id}`} className="text-primary-400 hover:text-accent-600" aria-label="Open game">
                       <ExternalLink className="w-4 h-4" />
                     </Link>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </>
+        ),
+      };
+    }
+
+    case "logins": {
+      const res = await getRecentLogins(1000);
+      if (!res.ok) {
+        const msg =
+          res.reason === "not_set_up"
+            ? "The login log isn't set up in the database yet."
+            : res.reason === "not_allowed"
+              ? "Couldn't confirm it's you. Sign in with your Google account (the owner email), then reload."
+              : "Couldn't load logins. Try again in a minute.";
+        return { count: 0, node: <p className="text-primary-500 py-10 text-center">{msg}</p> };
+      }
+      const rows = filterLogins(res.rows, filter as LoginFilter);
+      const people = new Set(rows.map((r) => r.user_id)).size;
+      return {
+        count: rows.length,
+        node: (
+          <>
+            <p className="text-sm text-primary-500 mb-3">
+              {people} {people === 1 ? "person" : "people"}
+              <span className="text-primary-400">
+                {" "}(one entry per person per 10 minutes; phone sign-ins are logged from 6 Oct 2026, Google ones include each account&apos;s last sign-in from before that)
+              </span>
+            </p>
+            <Table head={["When", "Name", "Phone", "Email", "Via"]} empty={rows.length === 0}>
+              {rows.map((r, i) => (
+                <tr key={`${r.user_id}-${r.logged_in_at}-${i}`}>
+                  <td className="px-4 py-3 text-primary-900 whitespace-nowrap">{fmtDateTime(r.logged_in_at)}</td>
+                  <td className="px-4 py-3 text-primary-900">{r.name || <span className="text-primary-400">-</span>}</td>
+                  <td className="px-4 py-3 text-primary-700 whitespace-nowrap">
+                    {r.phone ? <a href={`tel:${r.phone}`} className="hover:text-accent-600">{r.phone}</a> : <span className="text-primary-400">-</span>}
+                  </td>
+                  <td className="px-4 py-3 text-primary-700">{r.email || <span className="text-primary-400">-</span>}</td>
+                  <td className="px-4 py-3">
+                    <Badge className={r.method === "google" ? "bg-blue-50 text-blue-700" : "bg-accent-50 text-accent-700"}>
+                      {r.method === "google" ? "Google" : "Phone"}
+                    </Badge>
                   </td>
                 </tr>
               ))}

@@ -45,9 +45,18 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    const { data: exchanged, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!exchangeError) {
+      // Admin "Latest logins". Runs with the new session, so the DB can
+      // check it's really this user. Never blocks the sign-in.
+      if (exchanged.user) {
+        try {
+          await supabase.rpc("log_user_login", { p_user_id: exchanged.user.id, p_method: "google" });
+        } catch {
+          /* ignore */
+        }
+      }
       return response;
     }
 

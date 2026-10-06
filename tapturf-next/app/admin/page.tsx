@@ -17,6 +17,7 @@ import {
 } from "@/lib/queries/admin";
 import { getAdminGames } from "@/lib/queries/adminDetail";
 import { StatTile } from "@/components/admin/StatTile";
+import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
 
@@ -59,6 +60,22 @@ function relativeTime(iso: string | null): string {
   return `${y}y ago`;
 }
 
+function loginsUnavailable(reason: "not_set_up" | "not_allowed" | "error"): string {
+  if (reason === "not_set_up") return "Login log not set up yet";
+  if (reason === "not_allowed") return "Sign in with Google to view";
+  return "Couldn't load";
+}
+
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 export default async function AdminPage() {
   // Owner-only guard. Non-admins end on a "Page not found" screen;
   // AdminGate first lets a phone-OTP owner hand over their Firebase token.
@@ -80,6 +97,7 @@ export default async function AdminPage() {
     contact7,
     contact30,
     adminGames,
+    logins,
   ] = await Promise.all([
     getHeadline(),
     getDailySignups(30),
@@ -95,7 +113,10 @@ export default async function AdminPage() {
     getContactClickStats(7),
     getContactClickStats(30),
     getAdminGames("all", 200),
+    getRecentLogins(300),
   ]);
+  const loginNums = logins.ok ? loginStats(logins.rows) : null;
+  const lastLogin = loginNums?.latest;
   // Games snapshot: everything upcoming / live, then the latest past ones.
   const gameCounts = adminGames.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});
   const gamesShown = [
@@ -186,6 +207,31 @@ export default async function AdminPage() {
         />
         <StatTile label="Active turfs"
           href="/admin/turfs" value={headline.activeTurfs} />
+      </section>
+
+      {/* Sign-ins */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
+        <StatTile
+          label="Logins (24h)"
+          href="/admin/logins?f=today"
+          value={loginNums ? loginNums.today : "-"}
+          sub={loginNums ? "Phone + Google sign-ins" : logins.ok ? "" : loginsUnavailable(logins.reason)}
+        />
+        <StatTile
+          label="Logins (7d)"
+          href="/admin/logins?f=week"
+          value={loginNums ? loginNums.week : "-"}
+          sub={loginNums ? `${loginNums.peopleWeek} ${loginNums.peopleWeek === 1 ? "person" : "people"}` : undefined}
+        />
+        <div className="col-span-2">
+          <StatTile
+            label="Latest login"
+            href="/admin/logins"
+            compact
+            value={lastLogin ? lastLogin.name || lastLogin.phone || lastLogin.email || "Unknown" : "-"}
+            sub={lastLogin ? `${timeAgo(lastLogin.logged_in_at)} · ${lastLogin.method === "google" ? "Google" : "Phone"}` : "Tap to see every sign-in"}
+          />
+        </div>
       </section>
 
       {/* Signup windows (requests + notifications are further down in
