@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
+import { forCard } from "@/lib/utils/cardTurf";
 
 export const revalidate = 600;
 
@@ -43,7 +44,7 @@ export default async function TurfsPage() {
       </Link>
       {/* The count line lives in the client: it follows the visitor's
           picked city, which only the browser knows. */}
-      <TurfListingClient turfs={turfs} spotlights={spotlights} />
+      <TurfListingClient turfs={turfs.map(forCard)} spotlights={spotlights} />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+const subscribeNoop = () => () => {};
 import Link from "next/link";
 import { Flame, MapPin, Star } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
@@ -47,6 +49,10 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
   const shown = photos.filter((p) => !broken.includes(p));
   const [tick, setTick] = useState(0);
   const activeIdx = shown.length ? tick % shown.length : 0;
+  // Server HTML carries only the first photo per card (240 cards x 9
+  // photos was 2,000 <img> tags on /turfs); the rest mount on the client.
+  const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false);
+  const rendered = hydrated ? shown : shown.slice(0, 1);
 
   // Auto-slideshow. The manual scroll-snap carousel felt fine on
   // desktop but glitched on iOS Safari — a swipe on the card would
@@ -94,8 +100,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
               Trending this week
             </span>
           )}
-          {shown.length > 0 ? (
-            shown.map((src, i) => {
+          {rendered.length > 0 ? (
+            rendered.map((src, i) => {
               const active = i === activeIdx;
               return (
                 /* eslint-disable-next-line @next/next/no-img-element */

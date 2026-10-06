@@ -6,6 +6,7 @@ import { ArrowUpRight, MapPin } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
+import { forCard } from "@/lib/utils/cardTurf";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
@@ -185,7 +186,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
             {featured.map((turf, i) => (
-              <TurfCard key={turf.id} turf={turf} priority={i < 3} trending={turf.id === trendingId} />
+              <TurfCard key={turf.id} turf={forCard(turf)} priority={i < 3} trending={turf.id === trendingId} />
             ))}
           </div>
         </section>

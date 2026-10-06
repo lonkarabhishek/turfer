@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { forCard } from "@/lib/utils/cardTurf";
 import { areaFor } from "@/lib/utils/area";
 import { labelFor, isCity } from "@/lib/city";
 import type { Turf } from "@/types/turf";
@@ -34,7 +35,7 @@ export function SportTurfList({
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
         {cards.map((turf, i) => (
-          <TurfCard key={turf.id} turf={turf} priority={i < 3} />
+          <TurfCard key={turf.id} turf={forCard(turf)} priority={i < 3} />
         ))}
       </div>
 
