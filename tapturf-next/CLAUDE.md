@@ -72,6 +72,10 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 - Game queries fetch turfs separately (no JOINs) to avoid RLS issues
 - Dual auth: localStorage for phone users, Supabase session for Google users
 
+## Commits & Deploys
+- Batch the work: commit to the working branch as you go, but merge into `main` (which deploys to production) once per batch, not after every commit.
+- Pushing the working branch only makes a Vercel preview; only `main` goes live.
+
 ## Build & Run
 ```bash
 npm run dev          # Dev server (Turbopack)
