@@ -7,12 +7,13 @@ import {
   Users,
 } from "lucide-react";
 import type { Turf } from "@/types/turf";
-import { normaliseOpeningHours, istWeekdayName, formatClock } from "@/lib/utils/hours";
+import { normaliseOpeningHours, istWeekdayName, formatSpan } from "@/lib/utils/hours";
 
 export function TurfDetails({ turf }: { turf: Turf }) {
   const hoursRows = normaliseOpeningHours(turf.opening_hours, {
     start_time: turf.start_time,
     end_time: turf.end_time,
+    is_24x7: turf.is_24x7,
   });
   const today = istWeekdayName();
 
@@ -143,9 +144,7 @@ export function TurfDetails({ turf }: { turf: Turf }) {
                     {row.closed
                       ? "Closed"
                       : row.spans.length
-                        ? row.spans
-                            .map((s) => `${formatClock(s.opens)} – ${formatClock(s.closes)}`)
-                            .join(", ")
+                        ? row.spans.map(formatSpan).join(", ")
                         : row.raw}
                   </span>
                 </li>

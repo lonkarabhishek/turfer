@@ -70,6 +70,7 @@ export function generateTurfJsonLd(turf: Turf) {
       const spec = openingHoursJsonLd(turf.opening_hours, {
         start_time: turf.start_time,
         end_time: turf.end_time,
+        is_24x7: turf.is_24x7,
       });
       return spec ? { openingHoursSpecification: spec } : {};
     })(),

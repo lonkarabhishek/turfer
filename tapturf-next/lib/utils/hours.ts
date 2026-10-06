@@ -86,9 +86,16 @@ function to24h(hStr: string, minStr: string | undefined, mer: string | undefined
  */
 export function normaliseOpeningHours(
   oh: OpeningHours | null | undefined,
-  fallback?: { start_time: string | null; end_time: string | null },
+  fallback?: { start_time: string | null; end_time: string | null; is_24x7?: boolean | null },
 ): DayHours[] {
   const rows: DayHours[] = [];
+
+  // Explicit flag beats whatever the hour columns say.
+  if (fallback?.is_24x7) {
+    for (const day of DAYS)
+      rows.push({ day, raw: "Open 24 hours", closed: false, spans: [{ opens: "00:00", closes: "23:59" }] });
+    return rows;
+  }
 
   if (oh && typeof oh === "object" && "daily" in oh && typeof (oh as { daily?: unknown }).daily === "string") {
     const raw = (oh as { daily: string }).daily;
@@ -137,7 +144,7 @@ function trimSeconds(t: string): string {
  */
 export function openingHoursJsonLd(
   oh: OpeningHours | null | undefined,
-  fallback?: { start_time: string | null; end_time: string | null },
+  fallback?: { start_time: string | null; end_time: string | null; is_24x7?: boolean | null },
 ) {
   const rows = normaliseOpeningHours(oh, fallback);
   const specs: Array<{
@@ -181,6 +188,22 @@ export function istWeekdayName(now: Date = new Date()): DayName {
     weekday: "short",
   }).format(now);
   return nameByShort[short] ?? "Monday";
+}
+
+/**
+ * A span that covers the whole day. 42 turfs store 00:00-23:59 and
+ * one stores 00:00-00:00; both should read "Open 24 hours".
+ */
+export function isAllDaySpan(span: HourSpan): boolean {
+  const o = span.opens.slice(0, 5);
+  const c = span.closes.slice(0, 5);
+  return o === "00:00" && (c === "23:59" || c === "00:00" || c === "24:00");
+}
+
+/** "6:00 AM – 11:00 PM", or "Open 24 hours" for an all-day span. */
+export function formatSpan(span: HourSpan): string {
+  if (isAllDaySpan(span)) return "Open 24 hours";
+  return `${formatClock(span.opens)} – ${formatClock(span.closes)}`;
 }
 
 /**
