@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Flame, MapPin, Star, User } from "lucide-react";
+import { ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
@@ -151,6 +151,8 @@ export default async function TurfDetailPage({
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);
   const sidebarPrice = summarisePrice(turf);
+  // Members-only clubs (NIWEC): no "Call to Book", show how to get in.
+  const membersOnly = turf.membership_required === true;
   // Is this turf its city's Most Trending Turf this week?
   const trending =
     turf.city && isCity(turf.city) ? await getTrendingPick(turf.city) : null;
@@ -215,6 +217,21 @@ export default async function TurfDetailPage({
               {turf.address}
             </span>
           </div>
+
+          {/* Members-only clubs: say so up front, with the access rules. */}
+          {(membersOnly || turf.access_notes) && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-200/70 px-4 py-3">
+              <KeyRound className="w-4.5 h-4.5 text-amber-700 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                {membersOnly && (
+                  <p className="text-[14px] font-semibold text-amber-900">Members&apos; club</p>
+                )}
+                {turf.access_notes && (
+                  <p className="text-[14px] text-amber-900/85 leading-snug">{turf.access_notes}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Sport tags */}
           {turf.sports.length > 0 && (
@@ -370,6 +387,14 @@ export default async function TurfDetailPage({
                 )}
               </div>
 
+              {membersOnly && (
+                <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200/70 px-3.5 py-2.5">
+                  <p className="text-[13px] font-semibold text-amber-900">Members&apos; club</p>
+                  <p className="text-[13px] text-amber-900/80 leading-snug mt-0.5">
+                    {turf.access_notes || "Booking is for members. Call to ask about guest access."}
+                  </p>
+                </div>
+              )}
               {phone ? (
                 <CTAButtons
                   turfId={turf.id}
@@ -377,6 +402,7 @@ export default async function TurfDetailPage({
                   whatsappPhone={whatsappPhone}
                   turfName={turf.name}
                   address={turf.address}
+                  callLabel={membersOnly ? "Call to ask" : "Call to Book"}
                 />
               ) : (
                 <NoContactNotice />
@@ -386,9 +412,11 @@ export default async function TurfDetailPage({
                   create-game wizard with this turf pre-selected. */}
               <CreateGameHereButton turfId={turf.id} turfName={turf.name} />
 
-              <p className="text-xs text-center text-primary-300 mt-4">
-                No booking fee. Contact turf directly to reserve your slot.
-              </p>
+              {!membersOnly && (
+                <p className="text-xs text-center text-primary-300 mt-4">
+                  No booking fee. Contact turf directly to reserve your slot.
+                </p>
+              )}
             </div>
           </div>
         </div>
