@@ -197,16 +197,21 @@ export default async function TurfDetailPage({
             {turf.name}
           </h1>
           <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
-            {turf.total_reviews > 0 && turf.rating > 0 ? (
+            {turf.rating > 0 ? (
               <>
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 fill-accent-500 text-accent-500" />
                   <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
+                  <span className="text-primary-400">on Google</span>
                 </div>
-                <span className="text-cream-400">·</span>
-                <span className="text-primary-500 underline underline-offset-2">
-                  {turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""}
-                </span>
+                {turf.total_reviews > 0 && (
+                  <>
+                    <span className="text-cream-400">·</span>
+                    <span className="text-primary-500 underline underline-offset-2">
+                      {turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""}
+                    </span>
+                  </>
+                )}
               </>
             ) : (
               <span className="text-primary-400">No ratings yet</span>
@@ -374,12 +379,14 @@ export default async function TurfDetailPage({
               </div>
 
               <div className="flex items-center gap-1 mb-6 text-sm">
-                {turf.total_reviews > 0 && turf.rating > 0 ? (
+                {turf.rating > 0 ? (
                   <>
                     <Star className="w-3.5 h-3.5 fill-accent-500 text-accent-500" />
                     <span className="font-semibold text-primary-700">{Number(turf.rating).toFixed(1)}</span>
                     <span className="text-primary-400 ml-0.5">
-                      ({turf.total_reviews} review{turf.total_reviews !== 1 ? "s" : ""})
+                      {turf.total_reviews > 0
+                        ? `(${turf.total_reviews} review${turf.total_reviews !== 1 ? "s" : ""})`
+                        : "on Google"}
                     </span>
                   </>
                 ) : (

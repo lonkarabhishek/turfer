@@ -144,11 +144,10 @@ export function TurfReviews({
     load();
   };
 
-  const hasGoogle =
-    typeof googleRating === "number" &&
-    googleRating > 0 &&
-    typeof googleReviewCount === "number" &&
-    googleReviewCount > 0;
+  // A Google score without a review count is still a score (14 Pune
+  // turfs); only the count line is hidden then.
+  const hasGoogle = typeof googleRating === "number" && googleRating > 0;
+  const hasGoogleCount = typeof googleReviewCount === "number" && googleReviewCount > 0;
 
   return (
     <div className="section-divider">
@@ -203,8 +202,9 @@ export function TurfReviews({
               Rated on Google
             </p>
             <p className="text-primary-800 font-semibold leading-tight">
-              {googleReviewCount!.toLocaleString("en-IN")} Google review
-              {googleReviewCount === 1 ? "" : "s"}
+              {hasGoogleCount
+                ? `${googleReviewCount!.toLocaleString("en-IN")} Google review${googleReviewCount === 1 ? "" : "s"}`
+                : "Google rating"}
             </p>
             {googleReviewUrl && (
               <p className="text-xs text-accent-600 font-semibold mt-0.5 inline-flex items-center gap-1">

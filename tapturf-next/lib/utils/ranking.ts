@@ -8,8 +8,12 @@ export const MIN_REVIEWS_FOR_TOP_RATED = 15;
 
 type Rated = Pick<Turf, "rating" | "total_reviews">;
 
+// total_reviews can be null in the DB; treat it as 0 so sorts never see NaN.
+const reviews = (t: Rated) => t.total_reviews ?? 0;
+const rating = (t: Rated) => t.rating ?? 0;
+
 export function hasEnoughReviews(t: Rated): boolean {
-  return t.rating > 0 && t.total_reviews >= MIN_REVIEWS_FOR_TOP_RATED;
+  return rating(t) > 0 && reviews(t) >= MIN_REVIEWS_FOR_TOP_RATED;
 }
 
 /**
@@ -23,9 +27,9 @@ export function compareTopRated(a: Rated, b: Rated): number {
   const qb = hasEnoughReviews(b);
   if (qa !== qb) return qa ? -1 : 1;
   if (qa) {
-    if (b.rating !== a.rating) return b.rating - a.rating;
-    return b.total_reviews - a.total_reviews;
+    if (rating(b) !== rating(a)) return rating(b) - rating(a);
+    return reviews(b) - reviews(a);
   }
-  if (b.total_reviews !== a.total_reviews) return b.total_reviews - a.total_reviews;
-  return b.rating - a.rating;
+  if (reviews(b) !== reviews(a)) return reviews(b) - reviews(a);
+  return rating(b) - rating(a);
 }
