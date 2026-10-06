@@ -322,7 +322,7 @@ export default async function TurfDetailPage({
                       ₹{sidebarPrice.min}
                       {sidebarPrice.min !== sidebarPrice.max ? `–₹${sidebarPrice.max}` : ""}
                     </span>
-                    <span className="text-base text-primary-400 font-normal"> /hr</span>
+                    <span className="text-base text-primary-400 font-normal"> {sidebarPrice.unit}</span>
                   </div>
                 ) : sidebarPrice.kind === "reported" ? (
                   <div>
@@ -330,9 +330,18 @@ export default async function TurfDetailPage({
                       ~₹{sidebarPrice.min}
                       {sidebarPrice.min !== sidebarPrice.max ? `–₹${sidebarPrice.max}` : ""}
                     </span>
-                    <span className="text-sm text-primary-400 font-normal"> /hr</span>
+                    <span className="text-sm text-primary-400 font-normal"> {sidebarPrice.unit}</span>
                     <p className="text-[11px] text-primary-400 mt-1">
                       Reported by players · unverified
+                    </p>
+                  </div>
+                ) : sidebarPrice.kind === "reported_text" ? (
+                  <div>
+                    <span className="text-[22px] font-bold text-primary-800 font-serif">
+                      Reported prices
+                    </span>
+                    <p className="text-[13px] text-primary-500 mt-1">
+                      See Pricing below. Unverified, confirm with the turf.
                     </p>
                   </div>
                 ) : (

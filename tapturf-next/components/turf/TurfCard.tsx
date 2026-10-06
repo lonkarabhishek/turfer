@@ -164,12 +164,12 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
             {priceSummary.kind === "real" ? (
               <>
                 <span className="font-semibold tabular-nums">{range(priceSummary.min, priceSummary.max)}</span>
-                <span className="text-primary-500"> / hour</span>
+                <span className="text-primary-500"> {priceSummary.unit}</span>
               </>
             ) : priceSummary.kind === "reported" ? (
               <>
                 <span className="font-semibold tabular-nums">~{range(priceSummary.min, priceSummary.max)}</span>
-                <span className="text-primary-500"> / hour, reported</span>
+                <span className="text-primary-500"> {priceSummary.unit}, reported</span>
               </>
             ) : (
               <span className="text-primary-500">Check venue for pricing</span>

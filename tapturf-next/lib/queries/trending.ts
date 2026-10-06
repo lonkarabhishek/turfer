@@ -71,7 +71,7 @@ export function toSpotlights(
       reviews: t.total_reviews,
       photo: t.cover_image ?? t.images[0] ?? null,
       sports: t.sports,
-      priceLabel: price.kind === "unknown" ? null : price.label,
+      priceLabel: price.kind === "unknown" || price.kind === "reported_text" ? null : price.label,
     });
   }
   // Nashik first: it's where the spotlight started.

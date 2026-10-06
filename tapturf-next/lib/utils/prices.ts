@@ -65,6 +65,29 @@ export function getReportedPriceRange(
 }
 
 /**
+ * "/hr", "/90-min slot" or "/person": what the listed prices are per.
+ * Defaults to per hour, which is what the price columns always meant.
+ */
+export function priceUnitSuffix(turf: Pick<Turf, "price_unit" | "slot_minutes">, opts: { long?: boolean } = {}): string {
+  switch (turf.price_unit) {
+    case "per_slot":
+      return turf.slot_minutes ? `/${turf.slot_minutes}-min slot` : "/slot";
+    case "per_person":
+      return opts.long ? "/person" : "/person";
+    default:
+      return opts.long ? "/hour" : "/hr";
+  }
+}
+
+/**
+ * Research notes about prices (free text with a source). Shown as
+ * "Reported" lines with an unverified label; never numbers we claim.
+ */
+export function getTextPriceMentions(turf: Turf): PriceMention[] {
+  return (turf.price_mentions ?? []).filter((m) => !!m && typeof m.text === "string" && m.text.trim().length > 0);
+}
+
+/**
  * Human-friendly per-slot price. Returns "N/A" for null so table
  * cells with a missing slot stay obvious. Real display code should
  * usually branch on hasRealPrices() first.
@@ -78,32 +101,41 @@ export function formatPrice(price: number | null | undefined): string {
  * Short label for a turf card. Priority:
  *   1. real range        → "₹600 – ₹800/hr" (or "₹600/hr" if min==max)
  *   2. reported range    → "~₹1,000/hr (reported)"
- *   3. neither           → "Price on request"
- * Weekend prices, if any, are still included in min/max.
+ *   3. reported text     → "See reported prices" (research notes only)
+ *   4. nothing           → "Price on request"
+ * Weekend prices, if any, are still included in min/max. The suffix
+ * follows price_unit ("/hr", "/slot", "/person").
  */
 export function summarisePrice(turf: Turf): {
   label: string;
-  kind: "real" | "reported" | "unknown";
+  kind: "real" | "reported" | "reported_text" | "unknown";
   min: number | null;
   max: number | null;
+  /** "/hr", "/90-min slot", "/person" */
+  unit: string;
 } {
+  const unit = priceUnitSuffix(turf);
   const min = getMinimumPrice(turf);
   const max = getMaximumPrice(turf);
   if (min != null && max != null) {
     return {
-      label: min === max ? `₹${min}/hr` : `₹${min} – ₹${max}/hr`,
+      label: min === max ? `₹${min}${unit}` : `₹${min} – ₹${max}${unit}`,
       kind: "real",
       min,
       max,
+      unit,
     };
   }
   const reported = getReportedPriceRange(turf);
   if (reported) {
     const label =
       reported.min === reported.max
-        ? `~₹${reported.min}/hr (reported)`
-        : `~₹${reported.min}–${reported.max}/hr (reported)`;
-    return { label, kind: "reported", min: reported.min, max: reported.max };
+        ? `~₹${reported.min}${unit} (reported)`
+        : `~₹${reported.min}–${reported.max}${unit} (reported)`;
+    return { label, kind: "reported", min: reported.min, max: reported.max, unit };
   }
-  return { label: "Price on request", kind: "unknown", min: null, max: null };
+  if (getTextPriceMentions(turf).length > 0) {
+    return { label: "See reported prices", kind: "reported_text", min: null, max: null, unit };
+  }
+  return { label: "Price on request", kind: "unknown", min: null, max: null, unit };
 }
