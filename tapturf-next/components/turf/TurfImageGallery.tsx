@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, X, Camera, Maximize2 } from "lucide-react";
+import { imageUrlForCard } from "@/lib/utils/images";
 
 function GalleryImage({
   src,
@@ -32,13 +33,19 @@ function GalleryImage({
     );
   }
 
+  // Inline photos never render wider than ~900px, so ask for 800x600;
+  // the lightbox shows the full-size original. `src` stays the stored
+  // URL so broken-photo tracking matches the images array.
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
-      src={src}
+      src={imageUrlForCard(src)}
       alt={alt}
       className={className}
       loading={priority ? "eager" : "lazy"}
+      // @ts-expect-error fetchpriority is a valid attribute not yet in React's types
+      fetchpriority={priority ? "high" : "auto"}
+      decoding="async"
       referrerPolicy="no-referrer"
       onClick={onClick}
       onError={() => {
@@ -323,7 +330,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={img}
+                    src={imageUrlForCard(img)}
                     alt=""
                     className="w-full h-full object-cover"
                     loading="lazy"

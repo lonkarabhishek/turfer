@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Flame, MapPin, Star } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
+import { imageUrlForCard } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
 
 interface TurfCardProps {
@@ -100,7 +101,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   key={src}
-                  src={src}
+                  src={imageUrlForCard(src)}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
                   className={`absolute inset-0 w-full h-full object-cover transition-[opacity,transform] ${active ? "opacity-100" : "opacity-0"} group-hover:scale-[1.02]`}
                   style={{ transitionDuration: `${FADE_MS}ms` }}

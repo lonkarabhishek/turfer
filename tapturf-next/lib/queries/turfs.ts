@@ -7,6 +7,21 @@ import type { Turf } from "@/types/turf";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+/**
+ * Columns for list pages (cards, search, sort, near-me). select("*")
+ * shipped descriptions, data_sources and field_confidence for 240+
+ * turfs on every listing: /turfs was 3.4 MB of HTML. Detail pages
+ * still use "*" via getTurfById().
+ */
+const CARD_COLUMNS = [
+  "id", "name", "address", "area", "city", "sports", "images", "cover_image",
+  "rating", "total_reviews", "lat", "lng",
+  "morning_price", "afternoon_price", "evening_price",
+  "weekend_morning_price", "weekend_afternoon_price", "weekend_evening_price",
+  "price_mentions", "price_unit", "slot_minutes", "is_covered", "has_floodlights",
+  "start_time", "end_time", "is_24x7", "membership_required", "is_active",
+].join(", ");
+
 function transformTurf(raw: any): Turf {
   // Parse sports - handle both ["Cricket, Football"] and ["Cricket", "Football"]
   let sports: string[] = [];
@@ -124,7 +139,7 @@ export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Tur
   const supabase = createServerClient();
   let query = supabase
     .from("turfs")
-    .select("*")
+    .select(CARD_COLUMNS)
     .eq("is_active", true)
     .order("rating", { ascending: false });
 
@@ -160,7 +175,7 @@ export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
   // stores comma-separated values inside array elements.
   const { data, error } = await supabase
     .from("turfs")
-    .select("*")
+    .select(CARD_COLUMNS)
     .eq("is_active", true)
     .order("rating", { ascending: false });
 

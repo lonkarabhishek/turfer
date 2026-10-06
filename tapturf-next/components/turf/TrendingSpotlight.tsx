@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { imageUrlForCard } from "@/lib/utils/images";
 import { ChevronRight, Flame, MapPin, Star } from "lucide-react";
 import { getCityPref, labelFor, type CityId } from "@/lib/city";
 
@@ -83,7 +84,7 @@ function SpotlightCard({ pick }: { pick: SpotlightTurf }) {
           {pick.photo && photoOk ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
-              src={pick.photo}
+              src={imageUrlForCard(pick.photo)}
               alt={`${pick.name}, most trending turf in ${cityLabel}`}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               referrerPolicy="no-referrer"
