@@ -63,20 +63,11 @@ export async function generateMetadata({
   //   ground_format {sport} → "{Format} {Sport}"
   //   fallback → "Timings & Photos"
   //
-  // Most listings are football (231 of 245) and/or box cricket turfs,
-  // and that's how people search ("football turf in Baner"), so name
-  // the turf type when there's no price to lead with.
-  const has = (label: string) => turf.sports.some((x) => x.trim().toLowerCase() === label);
-  const turfType =
-    has("football") && has("box cricket")
-      ? "Football & Box Cricket Turf"
-      : has("football")
-        ? "Football Turf"
-        : has("box cricket")
-          ? "Box Cricket Turf"
-          : has("cricket")
-            ? "Cricket Turf"
-            : courtType(turf.sports);
+  // The type follows the MAIN sport (sports[0]): a cricket-first turf
+  // that also hosts football is a "Cricket Turf", not a "Football
+  // Turf". A second turf sport is added when the title still fits.
+  const { turfType, turfTypeShort } = describeTurfType(turf.sports);
+  const displayName = cleanTurfName(turf.name);
   const usp = (() => {
     if (priceSummary.kind === "real" && priceSummary.min != null) {
       return `₹${priceSummary.min}/hr`;
@@ -93,17 +84,24 @@ export async function generateMetadata({
   // into the raw title or it appears twice. Target ≤55 chars here so
   // the SERP-visible "title | TapTurf" stays under Google's ~65-char
   // truncation ceiling.
-  const fullTitle = `${turf.name} ${cityAndArea} – ${usp}`;
-  // If area + USP is too long, keep the turf type with just the city.
-  const cityUsp = `${turf.name} ${cityLabel} – ${usp}`;
-  const cityType = turfType ? `${turf.name} ${cityLabel} – ${turfType.replace(" & Box Cricket", "")}` : null;
-  const titleNoUsp = `${turf.name} ${cityAndArea}`;
-  const titleShort = `${turf.name}, ${cityLabel}`;
+  // Layout adds " | TapTurf" (10 chars); Google shows about 60, so the
+  // raw title must fit in 50. Try the richest form first, then drop
+  // the area, then the second sport, then the USP; finally shorten
+  // the name itself at a word boundary.
+  const MAX = 50;
+  const candidates = [
+    `${displayName} ${cityAndArea} – ${usp}`,
+    `${displayName} ${cityLabel} – ${usp}`,
+    turfTypeShort && turfTypeShort !== usp ? `${displayName} ${cityLabel} – ${turfTypeShort}` : null,
+    `${displayName} ${cityAndArea}`,
+    `${displayName}, ${cityLabel}`,
+  ];
   const title =
-    [fullTitle, cityUsp, cityType, titleNoUsp].find((t): t is string => !!t && t.length <= 55) ?? titleShort;
+    candidates.find((t): t is string => !!t && t.length <= MAX) ??
+    `${truncateWords(displayName, MAX - cityLabel.length - 2)}, ${cityLabel}`;
 
   const photoCount = turf.images?.length ?? 0;
-  const photoClause = photoCount > 0 ? ` ${photoCount} photos.` : "";
+  const photoClause = photoCount > 0 ? ` ${photoCount} photo${photoCount === 1 ? "" : "s"}.` : "";
   const locationClause = area
     ? ` in ${area}, ${cityLabel}`
     : cityLabel
@@ -447,4 +445,52 @@ export default async function TurfDetailPage({
       )}
     </div>
   );
+}
+
+// ── title helpers ──
+
+/**
+ * "Football Turf", "Cricket & Football Turf", "Badminton Court" from the
+ * sports list, main sport first. `turfTypeShort` is the one-sport form
+ * used when the full one makes the title too long.
+ */
+function describeTurfType(sports: string[]): { turfType: string | null; turfTypeShort: string | null } {
+  const norm = sports.map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const label = (s: string): string | null =>
+    s === "box cricket" ? "Box Cricket" : s === "cricket" || s === "cricket nets" ? "Cricket" : s === "football" ? "Football" : null;
+  const main = norm[0] ? label(norm[0]) : null;
+  if (!main) {
+    const court = courtType(sports);
+    return { turfType: court, turfTypeShort: court };
+  }
+  const second = norm.slice(1).map(label).find((l): l is string => !!l && l !== main);
+  return {
+    turfType: second ? `${main} & ${second} Turf` : `${main} Turf`,
+    turfTypeShort: `${main} Turf`,
+  };
+}
+
+/**
+ * Display form of a stored name: drop bracketed asides, anything after
+ * "/" or "|", and "Best Turf in …" style padding. The DB keeps the
+ * original; the data team cleans names separately.
+ */
+function cleanTurfName(name: string): string {
+  return name
+    .replace(/\s*\([^)]*\)/g, "")
+    .split(/\s*[|/]\s*/)[0]
+    .replace(/\s*(?:-|–|,)?\s*best turf.*$/i, "")
+    // "… Turf Cricket, Football Etc": a bare sport list tacked on the end
+    .replace(/(\bturf)\s+(?:box cricket|cricket|football)(?:[,\s]+(?:box cricket|cricket|football|etc\.?))*$/i, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim() || name;
+}
+
+/** Cut at a word boundary to at most `max` chars, without a trailing ellipsis. */
+function truncateWords(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max + 1);
+  const at = cut.lastIndexOf(" ");
+  return (at > max * 0.5 ? cut.slice(0, at) : s.slice(0, max))
+    .replace(/(?:\s+(?:and|&|the|of|in|at))?[\s,–-]*$/i, "");
 }

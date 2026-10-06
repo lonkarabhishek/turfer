@@ -18,11 +18,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "TapTurf - Find & Book Turf in Nashik & Pune",
+    default: "TapTurf: Find & Book Turfs in Nashik, Mumbai & Pune",
     template: "%s | TapTurf",
   },
   description:
-    "Find and book sports turfs in Nashik and Pune. Compare prices, check ratings, and book instantly.",
+    "Find and book football, box cricket and sports turfs in Nashik, Mumbai and Pune. Compare prices, check ratings, call or WhatsApp to book.",
   metadataBase: new URL("https://www.tapturf.in"),
   manifest: "/manifest.webmanifest",
   appleWebApp: {

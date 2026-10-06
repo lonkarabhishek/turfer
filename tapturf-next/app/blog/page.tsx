@@ -6,15 +6,15 @@ import { PostCard } from "@/components/blog/PostCard";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "TapTurf Blog: Turf Guides, Rules & City Playbooks (Nashik + Pune)",
+  title: "TapTurf Blog: Turf Guides, Rules & City Playbooks",
   description:
-    "Guides, playbooks and honest reviews for cricket, football and box-cricket turfs across Nashik and Pune. Learn how to book smarter, host better, and play more.",
+    "Guides, playbooks and honest reviews for cricket, football and box-cricket turfs across Nashik, Mumbai and Pune. Learn how to book smarter, host better, and play more.",
   keywords:
     "turf blog, cricket turf guide, football turf guide, box cricket rules, best turfs nashik, best turfs pune, turf booking guide, tapturf blog",
   openGraph: {
-    title: "TapTurf Blog: Turf Guides for Nashik & Pune",
+    title: "TapTurf Blog: Turf Guides for Nashik, Mumbai & Pune",
     description:
-      "The playbook for booking, hosting and playing on sports turfs in Nashik and Pune.",
+      "The playbook for booking, hosting and playing on sports turfs in Nashik, Mumbai and Pune.",
     url: "https://www.tapturf.in/blog",
     siteName: "TapTurf",
     type: "website",
@@ -33,7 +33,7 @@ export default function BlogIndexPage() {
     name: "TapTurf Blog",
     url: "https://www.tapturf.in/blog",
     description:
-      "Turf guides, rules and playbooks for cricket, football and box-cricket across Nashik and Pune.",
+      "Turf guides, rules and playbooks for cricket, football and box-cricket across Nashik, Mumbai and Pune.",
     blogPost: posts.map((p) => ({
       "@type": "BlogPosting",
       headline: p.title,
@@ -67,7 +67,7 @@ export default function BlogIndexPage() {
           </h1>
           <p className="text-primary-600 text-lg max-w-2xl leading-snug">
             Guides, playbooks and honest reviews for anyone who plays cricket,
-            football or box cricket on the turfs of Nashik and Pune.
+            football or box cricket on the turfs of Nashik, Mumbai and Pune.
           </p>
 
           {/* Category chips */}
@@ -102,7 +102,7 @@ export default function BlogIndexPage() {
             Ready to play?
           </p>
           <h2 className="font-display text-3xl md:text-4xl leading-tight mb-3">
-            Every turf in Nashik & Pune,
+            Every turf in Nashik, Mumbai & Pune,
             <br />
             one search.
           </h2>

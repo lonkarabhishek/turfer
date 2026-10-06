@@ -9,20 +9,20 @@ export const revalidate = 600;
 // Static metadata used for the initial paint / social share. We can't
 // put the live turf count in a static export, so we phrase it in a
 // way that stays accurate as the number grows ("Every sports turf in
-// Nashik & Pune"). If we want the exact number in <title>, we'd have
+// Nashik, Mumbai & Pune"). If we want the exact number in <title>, we'd have
 // to switch this to a `generateMetadata()` async function.
 // Title stops at "…Book" — layout's title.template adds "| TapTurf" so
 // hard-coding it here produced "…Book | TapTurf | TapTurf" in SERPs.
 export const metadata: Metadata = {
-  title: "All Sports Turfs in Nashik & Pune: Compare Prices & Book",
+  title: "All Sports Turfs in Nashik, Mumbai & Pune",
   description:
-    "Every sports turf in Nashik and Pune. Compare prices, check ratings, view photos. Cricket, football, box cricket, badminton and more. Call or WhatsApp to book.",
+    "Every sports turf in Nashik, Mumbai and Pune. Compare prices, check ratings, view photos. Football, box cricket, cricket, badminton and more. Call or WhatsApp to book, no booking fee.",
   keywords:
-    "turf in nashik, turf in pune, sports turf nashik pune, football turf nashik, football turf pune, cricket turf nashik, cricket turf pune, turf booking maharashtra, box cricket",
+    "turf in nashik, turf in pune, turf in mumbai, sports turf nashik pune mumbai, football turf nashik, football turf pune, football turf mumbai, cricket turf nashik, cricket turf pune, turf booking maharashtra, box cricket",
   openGraph: {
-    title: "All Sports Turfs in Nashik & Pune | TapTurf",
+    title: "All Sports Turfs in Nashik, Mumbai & Pune | TapTurf",
     description:
-      "Every sports turf across Nashik and Pune. Compare prices, check ratings, book instantly.",
+      "Every sports turf across Nashik, Mumbai and Pune. Compare prices, check ratings, call or WhatsApp to book.",
     url: "https://www.tapturf.in/turfs",
     type: "website",
   },
