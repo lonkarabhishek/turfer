@@ -156,7 +156,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
             )}
           </div>
           <p className="mt-0.5 text-[14px] text-primary-500 truncate">
-            {[place, distanceLabel ? `${distanceLabel} away` : null, sports.join(", ") || null]
+            {[place, distanceLabel ? `${distanceLabel} away` : null, turf.is_24x7 ? "Open 24 hours" : null, sports.join(", ") || null]
               .filter(Boolean)
               .join(" · ")}
           </p>

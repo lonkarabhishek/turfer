@@ -20,5 +20,8 @@ export function forCard(t: Turf): Turf {
     weekend_afternoon_price: t.weekend_afternoon_price,
     weekend_evening_price: t.weekend_evening_price,
     price_mentions: t.price_mentions,
+    price_unit: t.price_unit,
+    slot_minutes: t.slot_minutes,
+    is_24x7: t.is_24x7,
   } as Turf;
 }

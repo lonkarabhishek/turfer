@@ -5,6 +5,9 @@ import {
   Landmark,
   Square,
   Users,
+  Globe,
+  Instagram,
+  ExternalLink,
 } from "lucide-react";
 import type { Turf } from "@/types/turf";
 import { normaliseOpeningHours, istWeekdayName, formatSpan } from "@/lib/utils/hours";
@@ -77,7 +80,20 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     });
   }
 
-  const hasFacts = details.length > 0;
+  // Public links from research. nofollow: these are venue pages, not endorsements.
+  const links: { href: string; label: string; icon: React.ReactNode; text: string }[] = [];
+  if (turf.website_url) {
+    links.push({ href: turf.website_url, label: "Website", icon: <Globe className="w-5 h-5 text-primary-400" />, text: hostOf(turf.website_url) });
+  }
+  if (turf.instagram_url) {
+    links.push({ href: turf.instagram_url, label: "Instagram", icon: <Instagram className="w-5 h-5 text-primary-400" />, text: handleOf(turf.instagram_url) });
+  }
+
+  // "Closed Mondays": mark that day in the table too.
+  const closedDays = turf.closed_days?.trim() || null;
+  const isClosedDay = (day: string) => !!closedDays && new RegExp(`\\b${day}`, "i").test(closedDays);
+
+  const hasFacts = details.length > 0 || links.length > 0;
   const hasHours = hoursRows.length > 0;
 
   if (!hasFacts && !hasHours) return null;
@@ -103,6 +119,23 @@ export function TurfDetails({ turf }: { turf: Turf }) {
               </div>
             </div>
           ))}
+          {links.map((l) => (
+            <div key={l.label} className="flex items-start gap-4">
+              <div className="mt-0.5 shrink-0">{l.icon}</div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-primary-400">{l.label}</p>
+                <a
+                  href={l.href}
+                  target="_blank"
+                  rel="noopener nofollow"
+                  className="inline-flex items-center gap-1 text-base font-medium text-accent-600 hover:text-accent-700 mt-0.5 max-w-full"
+                >
+                  <span className="truncate">{l.text}</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                </a>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -113,10 +146,14 @@ export function TurfDetails({ turf }: { turf: Turf }) {
             <h3 className="text-xs font-semibold text-primary-400">
               Opening hours
             </h3>
+            {closedDays && (
+              <span className="ml-auto text-xs font-medium text-hot-600">Closed {closedDays}</span>
+            )}
           </div>
           <ul className="rounded-2xl border border-cream-300 divide-y divide-cream-200 overflow-hidden">
             {hoursRows.map((row) => {
               const isToday = row.day === today;
+              const closed = row.closed || isClosedDay(row.day);
               return (
                 <li
                   key={row.day}
@@ -138,10 +175,10 @@ export function TurfDetails({ turf }: { turf: Turf }) {
                   </span>
                   <span
                     className={`tabular-nums ${
-                      row.closed ? "text-primary-400 italic" : "text-primary-800"
+                      closed ? "text-primary-400 italic" : "text-primary-800"
                     }`}
                   >
-                    {row.closed
+                    {closed
                       ? "Closed"
                       : row.spans.length
                         ? row.spans.map(formatSpan).join(", ")
@@ -155,6 +192,21 @@ export function TurfDetails({ turf }: { turf: Turf }) {
       )}
     </div>
   );
+}
+
+/** "https://www.niwec.org/sport-fees/" -> "niwec.org" */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** "https://instagram.com/niwecclub/" -> "@niwecclub" */
+function handleOf(url: string): string {
+  const m = /instagram\.com\/([^/?#]+)/i.exec(url);
+  return m ? `@${m[1]}` : hostOf(url);
 }
 
 function titleCase(s: string): string {

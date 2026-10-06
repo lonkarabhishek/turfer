@@ -61,7 +61,12 @@ export function generateTurfJsonLd(turf: Turf) {
       ?.slice(0, 5)
       .map((img) => normalizeImageUrl(img)),
     ...(normalizedPhone && { telephone: normalizedPhone.e164 }),
-    ...(turf.external_review_url && { sameAs: [turf.external_review_url] }),
+    ...(() => {
+      const sameAs = [turf.external_review_url, turf.website_url, turf.instagram_url].filter(
+        (u): u is string => typeof u === "string" && /^https?:\/\//.test(u),
+      );
+      return sameAs.length ? { sameAs } : {};
+    })(),
     url: `https://www.tapturf.in/turf/${turf.id}`,
     // Prefer per-day opening_hours (jsonb) so Sunday-closed turfs and
     // split shifts get their own spec entries; fall back to the old
