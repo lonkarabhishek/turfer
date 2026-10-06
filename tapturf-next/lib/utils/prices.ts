@@ -68,14 +68,14 @@ export function getReportedPriceRange(
  * "/hr", "/90-min slot" or "/person": what the listed prices are per.
  * Defaults to per hour, which is what the price columns always meant.
  */
-export function priceUnitSuffix(turf: Pick<Turf, "price_unit" | "slot_minutes">, opts: { long?: boolean } = {}): string {
+export function priceUnitSuffix(turf: Pick<Turf, "price_unit" | "slot_minutes">, opts: { short?: boolean } = {}): string {
   switch (turf.price_unit) {
     case "per_slot":
-      return turf.slot_minutes ? `/${turf.slot_minutes}-min slot` : "/slot";
+      return turf.slot_minutes && !opts.short ? `/${turf.slot_minutes}-min slot` : "/slot";
     case "per_person":
-      return opts.long ? "/person" : "/person";
+      return "/person";
     default:
-      return opts.long ? "/hour" : "/hr";
+      return "/hr";
   }
 }
 

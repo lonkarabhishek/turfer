@@ -52,9 +52,9 @@ export function parseHoursString(input: string): { closed: boolean; spans: HourS
   const spans: HourSpan[] = [];
   let m: RegExpExecArray | null;
   while ((m = rangeRe.exec(n)) !== null) {
-    let [, h1, min1, mer1, h2, min2, mer2] = m;
+    const [, h1, min1, startMer, h2, min2, mer2] = m;
     // Shared meridiem: "3-10 PM" → start also PM
-    if (!mer1 && mer2) mer1 = mer2;
+    const mer1 = startMer || mer2;
     // No meridiem at all — assume 24-hour clock as-is.
     const opens = to24h(h1, min1, mer1);
     const closes = to24h(h2, min2, mer2);

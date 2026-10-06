@@ -119,7 +119,7 @@ export function CTAButtons({
         </a>
       ) : (
         <p className="text-[12px] text-primary-400 text-center">
-          Landline, so no WhatsApp. {normalized.local.replace(/^(\d{3,4})(\d+)$/, "$1 $2")}
+          Landline, so no WhatsApp. +91 {normalized.local}
         </p>
       )}
       {!user && (

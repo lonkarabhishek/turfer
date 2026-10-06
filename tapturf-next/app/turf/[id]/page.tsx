@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
-import { summarisePrice } from "@/lib/utils/prices";
+import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
 import { areaFor } from "@/lib/utils/area";
@@ -70,7 +70,7 @@ export async function generateMetadata({
   const displayName = cleanTurfName(turf.name);
   const usp = (() => {
     if (priceSummary.kind === "real" && priceSummary.min != null) {
-      return `₹${priceSummary.min}/hr`;
+      return `₹${priceSummary.min}${priceUnitSuffix(turf, { short: true })}`;
     }
     if (turf.is_covered && turfType) return `Covered ${turfType}`;
     if (turf.is_covered && primarySport) return `Covered ${primarySport}`;
