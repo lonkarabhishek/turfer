@@ -6,6 +6,7 @@ export function forCard(t: Turf): Turf {
     id: t.id,
     name: t.name,
     address: t.address,
+    area: t.area,
     city: t.city,
     rating: t.rating,
     total_reviews: t.total_reviews,

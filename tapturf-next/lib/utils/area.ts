@@ -152,7 +152,9 @@ const MATCH = {
   any: matchers([...AREAS_NASHIK, ...AREAS_PUNE, ...AREAS_MUMBAI]),
 };
 
-export function areaFor(turf: Pick<Turf, "address" | "city">): string | null {
+export function areaFor(turf: Pick<Turf, "address" | "city"> & { area?: string | null }): string | null {
+  // Data ops now set turfs.area directly; the address scan is the fallback.
+  if (turf.area) return turf.area;
   const addr = (turf.address ?? "").toLowerCase();
   if (!addr) return null;
   const list =

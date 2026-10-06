@@ -52,7 +52,8 @@ export interface Turf {
   // Location
   lat: number | null;
   lng: number | null;
-  city: string | null; // 'nashik' | 'pune' (see lib/city.ts)
+  city: string | null; // 'nashik' | 'pune' | 'mumbai' (see lib/city.ts)
+  area: string | null; // neighbourhood set by data ops; areaFor() falls back to the address
 
   // Enrichment added by data ops on 2026-09-25
   // (migration add_turf_trust_provenance_fields_20260925). All nullable.
@@ -69,6 +70,22 @@ export interface Turf {
   field_confidence: FieldConfidence | null;       // "high" | "low", with _default fallback
   data_verified_at: string | null;                // ISO timestamp, IST via toIST()
 
+  // Added 2026-10-06, filled from research over time. All nullable.
+  price_unit: PriceUnit | null;                   // what the listed prices are per
+  slot_minutes: number | null;                    // slot length when price_unit is per_slot
+  day_night_cutoff: string | null;                // "HH:MM:SS", when night rates start
+  is_24x7: boolean | null;
+  closed_days: string | null;                     // e.g. "Monday"
+  membership_required: boolean | null;            // members-only club
+  access_notes: string | null;                    // how non-members get in, guest rules
+  landline_phone: string | null;                  // STD number, call only
+  whatsapp_phone: string | null;                  // preferred for the WhatsApp button
+  website_url: string | null;
+  instagram_url: string | null;
+  google_place_id: string | null;
+  description_source: string | null;
+  description_updated_at: string | null;
+
   // System
   is_active: boolean;
   created_at: string;
@@ -84,12 +101,20 @@ type DayName =
   | "Saturday"
   | "Sunday";
 export type OpeningHours = { daily: string } | Partial<Record<DayName, string>>;
+export type PriceUnit = "per_hour" | "per_slot" | "per_person";
+/**
+ * Reviewer- or web-reported price. Two shapes in the data: the older
+ * numeric form (price_inr + context) and the research form (free text
+ * + source_url). Both are unverified and never go into JSON-LD.
+ */
 export type PriceMention = {
-  price_inr: number;
-  context: string;
-  date: string;
-  source: string;
-  confidence: "low" | "high";
+  price_inr?: number | null;
+  context?: string | null;
+  text?: string | null;
+  date?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  confidence?: "low" | "high" | null;
 };
 export type FieldConfidence = { _default: "high" | "low" } & Record<
   string,

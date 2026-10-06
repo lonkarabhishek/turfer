@@ -1,5 +1,7 @@
 import type { Turf, PriceMention } from "@/types/turf";
 
+type NumericMention = PriceMention & { price_inr: number };
+
 const PRICE_FIELDS = [
   "morning_price",
   "afternoon_price",
@@ -49,9 +51,9 @@ export function getMaximumPrice(turf: Turf): number | null {
  */
 export function getReportedPriceRange(
   turf: Turf,
-): { min: number; max: number; mentions: PriceMention[] } | null {
+): { min: number; max: number; mentions: NumericMention[] } | null {
   const mentions = (turf.price_mentions ?? []).filter(
-    (m): m is PriceMention => !!m && typeof m.price_inr === "number" && m.price_inr > 0,
+    (m): m is NumericMention => !!m && typeof m.price_inr === "number" && m.price_inr > 0,
   );
   if (mentions.length === 0) return null;
   const values = mentions.map((m) => m.price_inr);
