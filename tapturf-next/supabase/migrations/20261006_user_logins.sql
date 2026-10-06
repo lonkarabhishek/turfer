@@ -59,7 +59,6 @@ grant execute on function public.log_user_login(uuid, text) to anon, authenticat
 create or replace function public._is_site_owner(p_firebase_token text default null)
 returns boolean
 language plpgsql
-stable
 security definer
 set search_path = public
 as $$
@@ -106,6 +105,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 begin
   if not public._is_site_owner(p_firebase_token) then
     raise exception 'not allowed' using errcode = '42501';
