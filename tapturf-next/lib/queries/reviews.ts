@@ -23,12 +23,15 @@ export async function getReviewsForTurf(
     const s = supa();
     const { data: reviews } = await s
       .from("reviews")
-      .select("id, user_id, turf_id, booking_id, rating, comment, created_at, updated_at")
+      .select(
+        "id, user_id, turf_id, booking_id, rating, comment, created_at, updated_at, source, author_name, author_url, source_url, source_date_label",
+      )
       .eq("turf_id", turfId)
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    const rows = (reviews || []) as Review[];
+    // Players' own reviews first, then the imported Google ones.
+    const rows = [...((reviews || []) as Review[])].sort((a, b) => Number(!!a.source) - Number(!!b.source));
     if (rows.length === 0) return [];
 
     const reviewIds = rows.map((r) => r.id);
@@ -66,8 +69,10 @@ export async function getReviewsForTurf(
 
     return rows.map((r) => ({
       ...r,
-      user_name: byId.get(r.user_id)?.name ?? null,
-      user_avatar: byId.get(r.user_id)?.profile_image_url ?? null,
+      // Imported rows hang off a placeholder user ("Google reviewer");
+      // the real name is author_name.
+      user_name: r.source ? r.author_name ?? null : byId.get(r.user_id)?.name ?? null,
+      user_avatar: r.source ? null : byId.get(r.user_id)?.profile_image_url ?? null,
       upvotes: voteCounts.get(r.id) || 0,
       viewer_has_upvoted: viewerVoted.has(r.id),
     }));
@@ -129,9 +134,10 @@ export async function toggleReviewUpvote(
 }
 
 /**
- * Aggregate stats for a turf's reviews. Computed in-memory rather than
- * with a stored function so we don't need any new DB objects. Cheap
- * even at 10k reviews per turf, which we won't hit for a long time.
+ * Aggregate stats for a turf's in-app reviews. Imported Google rows are
+ * left out: their score is already on the turf as rating/total_reviews,
+ * and mixing 5 imported rows into "N in-app" misread as our own.
+ * Computed in-memory; cheap at this volume.
  */
 export async function getReviewSummary(turfId: string): Promise<ReviewSummary> {
   try {
@@ -139,7 +145,8 @@ export async function getReviewSummary(turfId: string): Promise<ReviewSummary> {
     const { data } = await s
       .from("reviews")
       .select("rating")
-      .eq("turf_id", turfId);
+      .eq("turf_id", turfId)
+      .is("source", null);
     const rows = (data || []) as { rating: number }[];
     if (rows.length === 0) return zeroSummary();
 

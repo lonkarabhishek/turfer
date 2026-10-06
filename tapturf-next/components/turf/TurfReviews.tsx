@@ -219,7 +219,7 @@ export function TurfReviews({
       {/* Empty state — the in-app reviews table is 0 rows at launch, so
           we lean on the Google card above and invite the first player
           to review directly. */}
-      {!loading && reviews.length === 0 && (
+      {!loading && !reviews.some((r) => !r.source) && (
         <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/40 p-6 text-center">
           <p className="text-primary-700 font-semibold">
             No TapTurf reviews yet
@@ -249,8 +249,8 @@ export function TurfReviews({
         </div>
       )}
 
-      {/* Post-a-review CTA (when reviews DO exist and user hasn't reviewed) */}
-      {!loading && reviews.length > 0 && user && !alreadyReviewed && !showForm && (
+      {/* Post-a-review CTA (when in-app reviews exist and user hasn't reviewed) */}
+      {!loading && reviews.some((r) => !r.source) && user && !alreadyReviewed && !showForm && (
         <button
           onClick={() => setShowForm(true)}
           className="press-tight w-full rounded-2xl border border-primary-200 bg-white hover:border-accent-400 hover:bg-accent-50/40 py-3 mb-4 text-sm font-semibold text-primary-800 transition-colors"
@@ -258,7 +258,7 @@ export function TurfReviews({
           + Add your review
         </button>
       )}
-      {!loading && reviews.length > 0 && !user && (
+      {!loading && reviews.some((r) => !r.source) && !user && (
         <button
           onClick={login}
           className="press-tight w-full rounded-2xl border border-primary-200 bg-white hover:border-accent-400 hover:bg-accent-50/40 py-3 mb-4 text-sm font-semibold text-primary-800 transition-colors"
@@ -356,11 +356,16 @@ export function TurfReviews({
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-primary-800 truncate">
-                    {r.user_name || "TapTurf player"}
+                  <p className="text-sm font-semibold text-primary-800 truncate flex items-center gap-1.5">
+                    <span className="truncate">
+                      {r.source ? r.author_name || "Google user" : r.user_name || "TapTurf player"}
+                    </span>
+                    {r.source === "google" && (
+                      <GoogleBadge href={r.author_url || r.source_url} />
+                    )}
                   </p>
                   <p className="text-[11px] text-primary-400">
-                    {formatDate(r.created_at)}
+                    {r.source ? r.source_date_label || "on Google" : formatDate(r.created_at)}
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5 text-accent-500">
@@ -383,7 +388,9 @@ export function TurfReviews({
               )}
 
               {/* Upvote row — 'Helpful' style. Filled on viewer's own
-                  upvote. Tapping while signed-out routes to /login. */}
+                  upvote. Tapping while signed-out routes to /login.
+                  Not shown on imported reviews. */}
+              {!r.source && (
               <div className="mt-3 flex items-center gap-2">
                 <button
                   onClick={() => handleUpvote(r.id)}
@@ -415,11 +422,30 @@ export function TurfReviews({
                   )}
                 </button>
               </div>
+              )}
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** Small "Google" tag next to an imported reviewer's name, linking out when we have a URL. */
+function GoogleBadge({ href }: { href: string | null | undefined }) {
+  const cls =
+    "shrink-0 inline-flex items-center gap-0.5 rounded-full border border-primary-200 bg-primary-50 px-1.5 py-px text-[10px] font-semibold text-primary-500";
+  if (!href) return <span className={cls}>Google</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener nofollow"
+      className={`${cls} hover:border-accent-400 hover:text-accent-700`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      Google <ExternalLink className="w-2.5 h-2.5" />
+    </a>
   );
 }
 

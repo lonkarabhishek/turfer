@@ -10,6 +10,14 @@ export interface Review {
   comment: string | null;
   created_at: string | null;
   updated_at: string | null;
+  // Imported reviews (source = "google") carry the reviewer's public
+  // name and links; created_at is the import time, so the display date
+  // comes from source_date_label ("3 years ago"). All null for native.
+  source?: string | null;
+  author_name?: string | null;
+  author_url?: string | null;
+  source_url?: string | null;
+  source_date_label?: string | null;
 }
 
 // Denormalised for list rendering — carries the reviewer's public
