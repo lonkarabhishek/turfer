@@ -17,10 +17,14 @@
  *   "  "              → null
  *   "12345"           → null (too short to be a real Indian mobile)
  *   "44 20 7946 0958" → null (foreign — we don't try to guess)
+ *   "0253 235 0977"   → landline 2532350977, e164 +912532350977
+ *   "+91 22 2437 9284"→ landline 2224379284, e164 +912224379284
  */
 
 export interface NormalizedIndianPhone {
-  /** 10-digit local number, e.g. "8446611191" */
+  /** Mobiles can take WhatsApp; landlines (STD code + number) are call only. */
+  type: "mobile" | "landline";
+  /** 10-digit national number, e.g. "8446611191" or "2532350977" */
   local: string;
   /** wa.me-friendly digits with country code, no plus, e.g. "918446611191" */
   digits: string;
@@ -49,14 +53,24 @@ export function normalizeIndianPhone(
     d = d.slice(2);
   }
 
-  // What's left must be a 10-digit Indian mobile starting 6/7/8/9.
-  if (d.length !== 10 || !/^[6-9]\d{9}$/.test(d)) return null;
+  // What's left must be 10 digits: a mobile (6-9) or a landline with
+  // its STD code (2-5), e.g. "0253 235 0977" -> 2532350977 (Nashik).
+  if (d.length !== 10) return null;
+  const type = /^[6-9]\d{9}$/.test(d) ? "mobile" : /^[2-5]\d{9}$/.test(d) ? "landline" : null;
+  if (!type) return null;
 
   return {
+    type,
     local: d,
     digits: `91${d}`,
     e164: `+91${d}`,
   };
+}
+
+/** Mobile numbers only (for WhatsApp); null for landlines and junk. */
+export function normalizeIndianMobile(raw: string | null | undefined): NormalizedIndianPhone | null {
+  const n = normalizeIndianPhone(raw);
+  return n?.type === "mobile" ? n : null;
 }
 
 /** Build a tel: href, or null when the input can't be normalised. */

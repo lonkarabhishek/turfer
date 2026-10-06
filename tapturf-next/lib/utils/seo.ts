@@ -2,7 +2,7 @@ import type { Turf } from "@/types/turf";
 import { getMinimumPrice, getMaximumPrice } from "./prices";
 import { normalizeImageUrl } from "./images";
 import { isCity, labelFor } from "@/lib/city";
-import { normalizeIndianPhone } from "./phone";
+import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
 
 export function generateTurfJsonLd(turf: Turf) {
@@ -104,10 +104,20 @@ export function generateBreadcrumbJsonLd(turf: Turf) {
 }
 
 /**
- * Extracts the best available phone number from a turf
+ * The first phone number on the turf that is actually dialable
+ * (mobile or STD landline). A column holding junk counts as no phone,
+ * so the page shows "Suggest contact" instead of an empty button bar.
  */
 export function getPhone(turf: Turf): string | null {
-  if (turf.owner_phone) return turf.owner_phone;
-  if (turf.contact_info?.phone) return turf.contact_info.phone;
-  return null;
+  return (
+    [turf.owner_phone, turf.contact_info?.phone, turf.landline_phone].find((p) => normalizeIndianPhone(p)) ??
+    null
+  );
+}
+
+/** Number for the WhatsApp button: whatsapp_phone if set, else the call number when it is a mobile. */
+export function getWhatsAppPhone(turf: Turf): string | null {
+  return (
+    [turf.whatsapp_phone, turf.owner_phone, turf.contact_info?.phone].find((p) => normalizeIndianMobile(p)) ?? null
+  );
 }

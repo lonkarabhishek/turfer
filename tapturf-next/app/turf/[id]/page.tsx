@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, Flame, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { summarisePrice } from "@/lib/utils/prices";
-import { getPhone } from "@/lib/utils/seo";
+import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
 import { areaFor } from "@/lib/utils/area";
 import { labelFor, isCity } from "@/lib/city";
@@ -149,6 +149,7 @@ export default async function TurfDetailPage({
   if (!turf) notFound();
 
   const phone = getPhone(turf);
+  const whatsappPhone = getWhatsAppPhone(turf);
   const sidebarPrice = summarisePrice(turf);
   // Is this turf its city's Most Trending Turf this week?
   const trending =
@@ -364,6 +365,7 @@ export default async function TurfDetailPage({
                 <CTAButtons
                   turfId={turf.id}
                   phone={phone}
+                  whatsappPhone={whatsappPhone}
                   turfName={turf.name}
                   address={turf.address}
                 />
@@ -389,8 +391,9 @@ export default async function TurfDetailPage({
           the number yet" bar that opens the suggest form. */}
       {phone ? (
         <CTAButtons
-                  turfId={turf.id}
+          turfId={turf.id}
           phone={phone}
+          whatsappPhone={whatsappPhone}
           turfName={turf.name}
           address={turf.address}
           variant="fixed-bottom"
