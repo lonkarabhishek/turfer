@@ -1,5 +1,6 @@
 "use client";
 
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -167,6 +168,12 @@ export function NoContactNotice({ variant = "card" }: { variant?: "card" | "fixe
       >
         Suggest info for this turf
       </button>
+      <p className="mt-3 text-[12px] text-primary-400">
+        Or email{" "}
+        <a href={CONTACT_MAILTO} className="underline underline-offset-2 hover:text-primary-600">
+          {CONTACT_EMAIL}
+        </a>
+      </p>
     </div>
   );
 }

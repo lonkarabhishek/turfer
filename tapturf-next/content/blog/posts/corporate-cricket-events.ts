@@ -118,7 +118,7 @@ export const post: Post = {
     {
       type: "cta",
       text: "Planning a corporate event? Get in touch, we can help you shortlist venues in Nashik and Pune.",
-      href: "mailto:hello@tapturf.in",
+      href: "mailto:info@tapturf.in",
       label: "Talk to us",
     },
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CITIES, CITY_LIST_AND } from "@/lib/city";
 import { SPORT_PAGES } from "@/lib/sports";
+import { CONTACT_EMAIL, CONTACT_MAILTO, WHATSAPP_URL } from "@/lib/contact";
 
 export function Footer() {
   return (
@@ -83,11 +84,18 @@ export function Footer() {
             </h4>
             <ul className="space-y-2.5 text-sm text-primary-200">
               <li>
+                <a href={CONTACT_MAILTO} className="hover:text-white transition-colors">
+                  {CONTACT_EMAIL}
+                </a>
+              </li>
+              <li>
                 <a
-                  href="mailto:support@tapturf.in"
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="hover:text-white transition-colors"
                 >
-                  support@tapturf.in
+                  WhatsApp us
                 </a>
               </li>
               <li>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
@@ -422,6 +423,12 @@ export default async function TurfDetailPage({
                   No booking fee. Contact turf directly to reserve your slot.
                 </p>
               )}
+              <p className="text-xs text-center text-primary-300 mt-2">
+                Own this turf or spotted a mistake?{" "}
+                <a href={CONTACT_MAILTO} className="underline underline-offset-2 hover:text-primary-500">
+                  {CONTACT_EMAIL}
+                </a>
+              </p>
             </div>
           </div>
         </div>

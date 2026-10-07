@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -99,6 +100,8 @@ export default async function BlogPostPage({
     publisher: {
       "@type": "Organization",
       name: "TapTurf",
+      url: "https://www.tapturf.in",
+      email: CONTACT_EMAIL,
       logo: {
         "@type": "ImageObject",
         url: "https://www.tapturf.in/icon-512.png",

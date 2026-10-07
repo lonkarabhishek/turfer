@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { HomeShell } from "@/components/home/HomeShell";
 import Link from "next/link";
@@ -92,6 +93,13 @@ export default async function HomePage() {
     name: "TapTurf",
     url: "https://www.tapturf.in",
     description: `Find and book sports turfs across ${CITY_LIST_AND} (${total}+ grounds).`,
+    publisher: {
+      "@type": "Organization",
+      name: "TapTurf",
+      url: "https://www.tapturf.in",
+      email: CONTACT_EMAIL,
+      logo: "https://www.tapturf.in/icon-512.png",
+    },
     potentialAction: {
       "@type": "SearchAction",
       target: "https://www.tapturf.in/turfs?q={search_term_string}",
