@@ -51,25 +51,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 0.9,
     },
-    // City landing pages — key for local SEO
-    {
-      url: `${BASE}/nashik`,
+    // City landing pages, one per entry in lib/city.ts. Key for local SEO.
+    ...CITIES.map((c) => ({
+      url: `${BASE}/${c.id}`,
       lastModified: new Date(),
-      changeFrequency: "daily",
+      changeFrequency: "daily" as const,
       priority: 0.9,
-    },
-    {
-      url: `${BASE}/pune`,
-      lastModified: new Date(),
-      changeFrequency: "daily",
-      priority: 0.9,
-    },
-    {
-      url: `${BASE}/mumbai`,
-      lastModified: new Date(),
-      changeFrequency: "daily",
-      priority: 0.9,
-    },
+    })),
     {
       url: `${BASE}/blog`,
       lastModified: new Date(),

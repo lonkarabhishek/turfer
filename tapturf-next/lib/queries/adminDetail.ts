@@ -1,4 +1,5 @@
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { isCity } from "@/lib/city";
 
 /**
  * Row-level lists behind the /admin number tiles (server-only).
@@ -232,7 +233,7 @@ export async function getAdminRequests(filter: RequestFilter = "all") {
 
 // ── Turfs ───────────────────────────────────────────────
 
-export const TURF_FILTERS = { all: "All active", nashik: "Nashik", pune: "Pune", mumbai: "Mumbai", nophone: "No phone" } as const;
+export const TURF_FILTERS = { all: "All active", nashik: "Nashik", pune: "Pune", mumbai: "Mumbai", nagpur: "Nagpur", nophone: "No phone" } as const;
 export type TurfFilter = keyof typeof TURF_FILTERS;
 
 export async function getAdminTurfs(filter: TurfFilter = "all") {
@@ -241,7 +242,7 @@ export async function getAdminTurfs(filter: TurfFilter = "all") {
     .select("id, name, city, address, rating, total_reviews, owner_phone, contact_info, images, updated_at")
     .eq("is_active", true)
     .order("name", { ascending: true });
-  if (filter === "nashik" || filter === "pune" || filter === "mumbai") q = q.eq("city", filter);
+  if (isCity(filter)) q = q.eq("city", filter);
   const { data } = await q;
   let rows = (data ?? []).map((t) => ({
     ...t,

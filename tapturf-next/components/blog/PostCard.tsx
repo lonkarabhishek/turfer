@@ -5,6 +5,7 @@ const CITY_LABEL: Record<string, string> = {
   nashik: "Nashik",
   pune: "Pune",
   mumbai: "Mumbai",
+  nagpur: "Nagpur",
 };
 
 export function PostCard({ post, featured = false }: { post: Post; featured?: boolean }) {

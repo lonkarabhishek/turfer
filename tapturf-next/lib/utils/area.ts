@@ -157,8 +157,8 @@ export function areaFor(turf: Pick<Turf, "address" | "city"> & { area?: string |
   if (turf.area) return turf.area;
   const addr = (turf.address ?? "").toLowerCase();
   if (!addr) return null;
-  const list =
-    turf.city === "nashik" || turf.city === "pune" || turf.city === "mumbai" ? MATCH[turf.city] : MATCH.any;
+  // Cities without a curated list (Nagpur) rely on turfs.area, set on every row.
+  const list = (turf.city && (MATCH as Record<string, [string, string][]>)[turf.city]) || MATCH.any;
   for (const [spelling, name] of list) {
     if (addr.includes(spelling)) return name;
   }

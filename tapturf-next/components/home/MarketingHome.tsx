@@ -176,6 +176,8 @@ export function MarketingHome() {
 const CITY_TAGLINE: Record<string, string> = {
   nashik: "Nashik, Maharashtra",
   pune: "Pune, Maharashtra",
+  mumbai: "Mumbai, Maharashtra",
+  nagpur: "Nagpur, Maharashtra",
 };
 
 /**
@@ -297,7 +299,7 @@ function CitySheet({
                     All cities
                   </span>
                   <span className="block text-xs text-primary-500 mt-0.5">
-                    Show turfs across Nashik + Pune
+                    Show turfs across every city
                   </span>
                 </span>
               </span>

@@ -7,7 +7,7 @@ import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
-import { CITIES, type CityId } from "@/lib/city";
+import { CITIES, CITY_LIST_AND, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
 export const revalidate = 600;
@@ -89,7 +89,7 @@ export default async function HomePage() {
     "@type": "WebSite",
     name: "TapTurf",
     url: "https://www.tapturf.in",
-    description: `Find and book sports turfs across Nashik, Pune and Mumbai (${total}+ grounds).`,
+    description: `Find and book sports turfs across ${CITY_LIST_AND} (${total}+ grounds).`,
     potentialAction: {
       "@type": "SearchAction",
       target: "https://www.tapturf.in/turfs?q={search_term_string}",

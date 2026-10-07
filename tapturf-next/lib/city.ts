@@ -3,7 +3,7 @@
  * pages, sitemap) and client (city picker, filters) consume this.
  */
 
-export type CityId = "nashik" | "pune" | "mumbai";
+export type CityId = "nashik" | "pune" | "mumbai" | "nagpur";
 
 export const CITIES: {
   id: CityId;
@@ -13,12 +13,17 @@ export const CITIES: {
   { id: "nashik", label: "Nashik", labelUpper: "NASHIK" },
   { id: "pune",   label: "Pune",   labelUpper: "PUNE" },
   { id: "mumbai", label: "Mumbai", labelUpper: "MUMBAI" },
+  { id: "nagpur", label: "Nagpur", labelUpper: "NAGPUR" },
 ];
+
+/** "Nashik, Pune, Mumbai & Nagpur" for titles; the "and" form for prose. */
+export const CITY_LIST = CITIES.map((c) => c.label).slice(0, -1).join(", ") + " & " + CITIES.at(-1)!.label;
+export const CITY_LIST_AND = CITIES.map((c) => c.label).slice(0, -1).join(", ") + " and " + CITIES.at(-1)!.label;
 
 export const CITY_IDS: readonly CityId[] = CITIES.map((c) => c.id);
 
 export function isCity(value: string | null | undefined): value is CityId {
-  return value === "nashik" || value === "pune" || value === "mumbai";
+  return value === "nashik" || value === "pune" || value === "mumbai" || value === "nagpur";
 }
 
 export function labelFor(id: CityId): string {
@@ -35,6 +40,7 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   if (a.includes("nashik") || a.includes("nasik")) return "nashik";
   if (a.includes("pune")) return "pune";
   if (a.includes("mumbai") || a.includes("bombay") || a.includes("thane") || a.includes("navi mumbai")) return "mumbai";
+  if (a.includes("nagpur") || a.includes("kamptee") || a.includes("hingna")) return "nagpur";
   return null;
 }
 
@@ -67,6 +73,7 @@ const CITY_COORDS: Record<CityId, { lat: number; lng: number }> = {
   nashik: { lat: 19.9975, lng: 73.7898 },
   pune:   { lat: 18.5204, lng: 73.8567 },
   mumbai: { lat: 19.0760, lng: 72.8777 },
+  nagpur: { lat: 21.1458, lng: 79.0882 },
 };
 
 // Haversine — km between two lat/lng points.

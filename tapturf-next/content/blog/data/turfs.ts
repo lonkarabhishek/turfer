@@ -1,3 +1,5 @@
+import type { CityId } from "@/lib/city";
+
 // Real turf snapshot used by blog articles' related-turfs blocks.
 // Sourced live from Supabase `public.turfs` on 2026-09-25; every id
 // links to /turf/[id] on tapturf.in. Do NOT invent rows. If you need
@@ -13,7 +15,7 @@ export interface BlogTurf {
   id: string;
   name: string;
   area: string;   // human area label ("Kothrud", "Aundh, Baner Link Rd")
-  city: "nashik" | "pune" | "mumbai";
+  city: CityId;
   rating: number | null;
   reviews: number | null;
   coverImage: string | null;

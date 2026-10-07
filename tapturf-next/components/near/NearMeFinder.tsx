@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Loader2, LocateFixed, Navigation, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { getUserLocation } from "@/lib/utils/location";
-import { CITIES, guessCityFromAddress, isCity, labelFor } from "@/lib/city";
+import { CITIES, CITY_LIST_AND, guessCityFromAddress, isCity, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
 type NearTurf = Turf & { distanceKm: number };
@@ -131,7 +131,7 @@ export function NearMeFinder({ total }: { total: number }) {
               </h2>
               {far && (
                 <p className="text-[15px] text-primary-500 mt-1">
-                  We list turfs in Nashik, Pune and Mumbai. Here are the closest ones.
+                  We list turfs in {CITY_LIST_AND}. Here are the closest ones.
                 </p>
               )}
             </div>

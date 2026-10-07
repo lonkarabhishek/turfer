@@ -5,12 +5,12 @@ import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, sportBySlug, sportVenues, venueWord } from "@/lib/sports";
-import { CITIES, labelFor } from "@/lib/city";
+import { CITIES, CITY_LIST, labelFor } from "@/lib/city";
 
 export const revalidate = 3600;
 
 // Pages list turfs from every city.
-const CITY_LABEL = "Nashik, Pune & Mumbai";
+const CITY_LABEL = CITY_LIST;
 
 export async function generateStaticParams() {
   return SPORT_PAGES.map((s) => ({ sport: s.slug }));

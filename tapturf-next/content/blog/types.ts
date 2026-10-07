@@ -1,3 +1,5 @@
+import type { CityId } from "@/lib/city";
+
 // Content blocks for a blog post. Kept structured (not raw HTML/MD) so we
 // can style them consistently with the rest of TapTurf without pulling in
 // a markdown dep + sanitizer. Add new block types here as we need them.
@@ -58,9 +60,10 @@ export type PostCategory =
   | "Playbook"
   | "Nashik"
   | "Pune"
-  | "Mumbai";
+  | "Mumbai"
+  | "Nagpur";
 
-export type PostCity = "nashik" | "pune" | "mumbai" | null;
+export type PostCity = CityId | null;
 
 export interface Post {
   slug: string;

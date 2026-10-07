@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
+import { CITY_LIST, CITY_LIST_AND } from "@/lib/city";
 import { AwardsBanner } from "@/components/layout/AwardsBanner";
 import { Footer } from "@/components/layout/Footer";
 import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
@@ -19,11 +20,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "TapTurf: Find & Book Turfs in Nashik, Mumbai & Pune",
+    default: `TapTurf: Find & Book Turfs in ${CITY_LIST}`,
     template: "%s | TapTurf",
   },
   description:
-    "Find and book football, box cricket and sports turfs in Nashik, Mumbai and Pune. Compare prices, check ratings, call or WhatsApp to book.",
+    `Find and book football, box cricket and sports turfs in ${CITY_LIST_AND}. Compare prices, check ratings, call or WhatsApp to book.`,
   metadataBase: new URL("https://www.tapturf.in"),
   // Default share image for pages that don't set their own.
   openGraph: {

@@ -14,7 +14,7 @@ import {
   getUserJoinedGames,
   getMyRequests,
 } from "@/lib/queries/games";
-import { getCityPref, labelFor, isCity, type CityId } from "@/lib/city";
+import { getCityPref, labelFor, isCity, type CityId, guessCityFromAddress } from "@/lib/city";
 import {
   filterNonExpiredGames,
   sortGamesByDateTime,
@@ -79,12 +79,7 @@ export function LoggedInHome() {
       // games whose turf hasn't been backfilled yet.
       const inCity = (g: Game) => {
         if (!city) return true;
-        const c = (g.turfs as { city?: string } | undefined)?.city
-          ?? (g.turfs?.address ? (
-            g.turfs.address.toLowerCase().includes("nashik") || g.turfs.address.toLowerCase().includes("nasik")
-              ? "nashik"
-              : g.turfs.address.toLowerCase().includes("pune") ? "pune" : null
-          ) : null);
+        const c = (g.turfs as { city?: string } | undefined)?.city ?? guessCityFromAddress(g.turfs?.address);
         return c === city;
       };
       const notMine = active.filter((g) => !seen.has(g.id) && inCity(g)).slice(0, 3);
@@ -505,7 +500,7 @@ function StartExploring({ firstName, city }: { firstName: string; city: CityId |
           <span className="text-accent-600">your first game.</span>
         </h2>
         <p className="text-[14px] text-primary-700 mb-5 max-w-md">
-          {firstName}, you&apos;re one tap away from your Nashik squad.
+          {firstName}, you&apos;re one tap away from your squad.
           Host a game if you already have friends, or join one to meet new players.
         </p>
         <div className="flex flex-col sm:flex-row gap-2">

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CITY_LIST, CITY_LIST_AND } from "@/lib/city";
 import Link from "next/link";
 import { getSortedPosts } from "@/content/blog";
 import { PostCard } from "@/components/blog/PostCard";
@@ -8,14 +9,14 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "TapTurf Blog: Turf Guides, Rules & City Playbooks",
   description:
-    "Guides, playbooks and honest reviews for cricket, football and box-cricket turfs across Nashik, Mumbai and Pune. Learn how to book smarter, host better, and play more.",
+    `Guides, playbooks and honest reviews for cricket, football and box-cricket turfs across ${CITY_LIST_AND}. Learn how to book smarter, host better, and play more.`,
   keywords:
     "turf blog, cricket turf guide, football turf guide, box cricket rules, best turfs nashik, best turfs pune, turf booking guide, tapturf blog",
   openGraph: {
     images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: "TapTurf Blog: Turf Guides for Nashik, Mumbai & Pune",
+    title: `TapTurf Blog: Turf Guides for ${CITY_LIST}`,
     description:
-      "The playbook for booking, hosting and playing on sports turfs in Nashik, Mumbai and Pune.",
+      `The playbook for booking, hosting and playing on sports turfs in ${CITY_LIST_AND}.`,
     url: "https://www.tapturf.in/blog",
     siteName: "TapTurf",
     type: "website",
@@ -34,7 +35,7 @@ export default function BlogIndexPage() {
     name: "TapTurf Blog",
     url: "https://www.tapturf.in/blog",
     description:
-      "Turf guides, rules and playbooks for cricket, football and box-cricket across Nashik, Mumbai and Pune.",
+      `Turf guides, rules and playbooks for cricket, football and box-cricket across ${CITY_LIST_AND}.`,
     blogPost: posts.map((p) => ({
       "@type": "BlogPosting",
       headline: p.title,
@@ -68,7 +69,7 @@ export default function BlogIndexPage() {
           </h1>
           <p className="text-primary-600 text-lg max-w-2xl leading-snug">
             Guides, playbooks and honest reviews for anyone who plays cricket,
-            football or box cricket on the turfs of Nashik, Mumbai and Pune.
+            football or box cricket on the turfs of {CITY_LIST_AND}.
           </p>
 
           {/* Category chips */}
@@ -103,7 +104,7 @@ export default function BlogIndexPage() {
             Ready to play?
           </p>
           <h2 className="font-display text-3xl md:text-4xl leading-tight mb-3">
-            Every turf in Nashik, Mumbai & Pune,
+            Every turf in {CITY_LIST},
             <br />
             one search.
           </h2>

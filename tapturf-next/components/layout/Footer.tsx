@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CITIES, CITY_LIST_AND } from "@/lib/city";
 import { SPORT_PAGES } from "@/lib/sports";
 
 export function Footer() {
@@ -12,12 +13,11 @@ export function Footer() {
               Tap<span className="text-accent-400">Turf</span>
             </h3>
             <p className="mt-3 text-sm text-primary-200 leading-relaxed">
-              Find, compare and book sports turfs across Nashik, Pune and
-              Mumbai.
+              Find, compare and book sports turfs across {CITY_LIST_AND}.
             </p>
             <div className="mt-4 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />
-              <span className="text-xs text-primary-300">Nashik · Pune · Mumbai</span>
+              <span className="text-xs text-primary-300">{CITIES.map((c) => c.label).join(" · ")}</span>
             </div>
           </div>
 
@@ -66,21 +66,13 @@ export function Footer() {
                   Blog
                 </Link>
               </li>
-              <li>
-                <Link href="/nashik" className="hover:text-white transition-colors">
-                  Turfs in Nashik
-                </Link>
-              </li>
-              <li>
-                <Link href="/pune" className="hover:text-white transition-colors">
-                  Turfs in Pune
-                </Link>
-              </li>
-              <li>
-                <Link href="/mumbai" className="hover:text-white transition-colors">
-                  Turfs in Mumbai
-                </Link>
-              </li>
+              {CITIES.map((c) => (
+                <li key={c.id}>
+                  <Link href={`/${c.id}`} className="hover:text-white transition-colors">
+                    Turfs in {c.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 

@@ -9,6 +9,8 @@ import { getCityPref, isCity, labelFor } from "@/lib/city";
 // One banner per awards edition: bump both when the October post goes up.
 const POST = "/blog/september-2026-turf-awards";
 const DISMISS_KEY = "tapturf_awards_banner_2026_09";
+// Cities with a section in this edition. Others (Nagpur joined in October) get the general line.
+const POST_CITIES = new Set(["nashik", "pune", "mumbai"]);
 
 const subscribe = (cb: () => void) => {
   window.addEventListener("tapturf:city-changed", cb);
@@ -46,7 +48,7 @@ export function AwardsBanner() {
   if (dismissed === "1") return null;
   if (pathname.startsWith(POST) || pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
 
-  const city = isCity(cityRaw) ? cityRaw : null;
+  const city = isCity(cityRaw) && POST_CITIES.has(cityRaw) ? cityRaw : null;
   const href = city ? `${POST}#${city}` : POST;
   const where = city ? labelFor(city) : "Nashik, Pune and Mumbai";
   // Phones get about 45 characters before the cross; keep the city visible.
