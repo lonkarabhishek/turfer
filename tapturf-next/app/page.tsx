@@ -34,12 +34,14 @@ export async function generateMetadata(): Promise<Metadata> {
     activeCityLabels.length <= 1
       ? activeCityLabels[0] ?? "Nashik"
       : activeCityLabels.slice(0, -1).join(", ") + " & " + activeCityLabels.at(-1)!;
+  // Five cities overflow a <title>; name three and say "& more".
+  const titleLine = activeCityLabels.length > 3 ? activeCityLabels.slice(0, 3).join(", ") + " & more" : cityLine;
 
   return {
     // absolute so layout's template doesn't add another "| TapTurf" —
     // the wordmark is already the first word.
     title: {
-      absolute: `TapTurf: Football & Box Cricket Turfs in ${cityLine}`,
+      absolute: `TapTurf: Football & Box Cricket Turfs in ${titleLine}`,
     },
     description: `Find and book football, box cricket and sports turfs across ${cityLine}. ${rounded}+ grounds with photos, ratings and prices. Call or WhatsApp the turf, no booking fee.`,
     keywords:

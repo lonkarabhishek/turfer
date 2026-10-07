@@ -3,27 +3,38 @@
  * pages, sitemap) and client (city picker, filters) consume this.
  */
 
-export type CityId = "nashik" | "pune" | "mumbai" | "nagpur";
+export type CityId = "nashik" | "pune" | "mumbai" | "nagpur" | "hyderabad";
+export type CityState = "Maharashtra" | "Telangana";
 
 export const CITIES: {
   id: CityId;
   label: string;
   labelUpper: string;
+  state: CityState;
 }[] = [
-  { id: "nashik", label: "Nashik", labelUpper: "NASHIK" },
-  { id: "pune",   label: "Pune",   labelUpper: "PUNE" },
-  { id: "mumbai", label: "Mumbai", labelUpper: "MUMBAI" },
-  { id: "nagpur", label: "Nagpur", labelUpper: "NAGPUR" },
+  { id: "nashik",    label: "Nashik",    labelUpper: "NASHIK",    state: "Maharashtra" },
+  { id: "pune",      label: "Pune",      labelUpper: "PUNE",      state: "Maharashtra" },
+  { id: "mumbai",    label: "Mumbai",    labelUpper: "MUMBAI",    state: "Maharashtra" },
+  { id: "nagpur",    label: "Nagpur",    labelUpper: "NAGPUR",    state: "Maharashtra" },
+  { id: "hyderabad", label: "Hyderabad", labelUpper: "HYDERABAD", state: "Telangana" },
 ];
 
-/** "Nashik, Pune, Mumbai & Nagpur" for titles; the "and" form for prose. */
+/** Every city: "Nashik, Pune, Mumbai, Nagpur & Hyderabad"; the "and" form for prose. */
 export const CITY_LIST = CITIES.map((c) => c.label).slice(0, -1).join(", ") + " & " + CITIES.at(-1)!.label;
 export const CITY_LIST_AND = CITIES.map((c) => c.label).slice(0, -1).join(", ") + " and " + CITIES.at(-1)!.label;
+/** For <title> tags, which run long past three cities: "Nashik, Pune, Mumbai & more". */
+export const CITY_LIST_SHORT =
+  CITIES.length > 3 ? CITIES.slice(0, 3).map((c) => c.label).join(", ") + " & more" : CITY_LIST;
+
+/** State for structured data; Hyderabad is in Telangana, the rest in Maharashtra. */
+export function stateFor(id: CityId | string | null | undefined): CityState {
+  return CITIES.find((c) => c.id === id)?.state ?? "Maharashtra";
+}
 
 export const CITY_IDS: readonly CityId[] = CITIES.map((c) => c.id);
 
 export function isCity(value: string | null | undefined): value is CityId {
-  return value === "nashik" || value === "pune" || value === "mumbai" || value === "nagpur";
+  return CITIES.some((c) => c.id === value);
 }
 
 export function labelFor(id: CityId): string {
@@ -41,6 +52,7 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   if (a.includes("pune")) return "pune";
   if (a.includes("mumbai") || a.includes("bombay") || a.includes("thane") || a.includes("navi mumbai")) return "mumbai";
   if (a.includes("nagpur") || a.includes("kamptee") || a.includes("hingna")) return "nagpur";
+  if (a.includes("hyderabad") || a.includes("secunderabad") || a.includes("telangana")) return "hyderabad";
   return null;
 }
 
@@ -74,6 +86,7 @@ const CITY_COORDS: Record<CityId, { lat: number; lng: number }> = {
   pune:   { lat: 18.5204, lng: 73.8567 },
   mumbai: { lat: 19.0760, lng: 72.8777 },
   nagpur: { lat: 21.1458, lng: 79.0882 },
+  hyderabad: { lat: 17.3850, lng: 78.4867 },
 };
 
 // Haversine — km between two lat/lng points.
@@ -90,7 +103,7 @@ function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: numb
 
 /**
  * Guess the closest city from a lat/lng. If the point is > 200km from
- * either (user isn't in Maharashtra), return null so we don't force
+ * all of them (user isn't near any city we list), return null so we don't force
  * them into a city that isn't theirs.
  */
 export function nearestCity(lat: number, lng: number): CityId | null {

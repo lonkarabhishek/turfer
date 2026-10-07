@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { GameDetailClient } from "@/components/game/GameDetailClient";
 import { getGameByIdServer } from "@/lib/queries/games.server";
-import { guessCityFromAddress, isCity, labelFor } from "@/lib/city";
+import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 
 export const revalidate = 60;
 
@@ -89,7 +89,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               "@type": "PostalAddress",
               streetAddress: game.turfs.address,
               addressLocality: gCityLabel,
-              addressRegion: "Maharashtra",
+              addressRegion: stateFor(game.turfs.city),
               addressCountry: "IN",
             },
           }

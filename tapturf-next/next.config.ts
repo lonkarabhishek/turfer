@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       { source: "/turf-in-pune",   destination: "/pune",   permanent: true },
       { source: "/turf-in-mumbai", destination: "/mumbai", permanent: true },
       { source: "/turf-in-nagpur", destination: "/nagpur", permanent: true },
+      { source: "/turf-in-hyderabad", destination: "/hyderabad", permanent: true },
       // Common spellings of the "turf near me" page.
       { source: "/turfs-near-me", destination: "/turf-near-me", permanent: true },
       { source: "/near-me",       destination: "/turf-near-me", permanent: true },

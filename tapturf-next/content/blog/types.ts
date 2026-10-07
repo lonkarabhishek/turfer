@@ -61,7 +61,8 @@ export type PostCategory =
   | "Nashik"
   | "Pune"
   | "Mumbai"
-  | "Nagpur";
+  | "Nagpur"
+  | "Hyderabad";
 
 export type PostCity = CityId | null;
 

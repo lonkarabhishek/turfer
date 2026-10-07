@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CITY_LIST, CITY_LIST_AND } from "@/lib/city";
+import { CITY_LIST, CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
 import { GamesListingClient } from "@/components/game/GamesListingClient";
 import { getAvailableGamesServer } from "@/lib/queries/games.server";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
@@ -11,14 +11,14 @@ export const revalidate = 60;
 // Games span Nashik + Pune now (parallel to the /sport pages and the
 // city-agnostic listing). The old copy claimed "in Nashik" only.
 export const metadata: Metadata = {
-  title: `Open Cricket, Football & Sports Games in ${CITY_LIST}`,
+  title: `Open Cricket, Football & Sports Games in ${CITY_LIST_SHORT}`,
   description:
     `Find and join live sports games in ${CITY_LIST_AND}. Open cricket, football, box-cricket, basketball games near you. Filter by sport, skill level. No booking fee.`,
   keywords:
     "cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
   openGraph: {
     images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: `Open Games in ${CITY_LIST} | TapTurf`,
+    title: `Open Games in ${CITY_LIST_SHORT} | TapTurf`,
     description:
       `Live sports games looking for players in ${CITY_LIST_AND}. Cricket, football, and more. Join in one tap.`,
     url: "https://www.tapturf.in/games",

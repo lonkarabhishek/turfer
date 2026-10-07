@@ -1,7 +1,7 @@
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice, getMaximumPrice } from "./prices";
 import { normalizeImageUrl } from "./images";
-import { isCity, labelFor } from "@/lib/city";
+import { isCity, labelFor, stateFor } from "@/lib/city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
 
@@ -35,7 +35,7 @@ export function generateTurfJsonLd(turf: Turf) {
       "@type": "PostalAddress",
       streetAddress: turf.address,
       addressLocality: locality,
-      addressRegion: "Maharashtra",
+      addressRegion: stateFor(turf.city),
       addressCountry: "IN",
     },
     ...(turf.lat != null && turf.lng != null && {

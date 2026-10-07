@@ -75,6 +75,6 @@ export function toSpotlights(
     });
   }
   // Nashik first: it's where the spotlight started.
-  const order: CityId[] = ["nashik", "pune", "mumbai", "nagpur"];
+  const order: CityId[] = ["nashik", "pune", "mumbai", "nagpur", "hyderabad"];
   return out.sort((a, b) => order.indexOf(a.city) - order.indexOf(b.city));
 }

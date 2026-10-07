@@ -171,14 +171,6 @@ export function MarketingHome() {
   );
 }
 
-// Static per-city tagline. Kept out of lib/city.ts because it's just
-// display copy for this sheet, not data anyone else consumes.
-const CITY_TAGLINE: Record<string, string> = {
-  nashik: "Nashik, Maharashtra",
-  pune: "Pune, Maharashtra",
-  mumbai: "Mumbai, Maharashtra",
-  nagpur: "Nagpur, Maharashtra",
-};
 
 /**
  * Small self-contained city picker sheet. Bottom-anchored on phones so
@@ -242,7 +234,7 @@ function CitySheet({
           <div className="mt-5 space-y-2">
             {CITIES.map((c) => {
               const active = value === c.id;
-              const tagline = CITY_TAGLINE[c.id] || "Maharashtra, India";
+              const tagline = `${c.label}, ${c.state}`;
               return (
                 <button
                   key={c.id}

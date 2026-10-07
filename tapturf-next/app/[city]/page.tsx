@@ -9,7 +9,7 @@ import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
 import { forCard } from "@/lib/utils/cardTurf";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
-import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
+import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 
 // One page per city — hard SEO landing so /nashik and /pune both rank
 // for their own local queries.
@@ -88,7 +88,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           "@type": "PostalAddress",
           streetAddress: t.address,
           addressLocality: label,
-          addressRegion: "Maharashtra",
+          addressRegion: stateFor(cityId),
           addressCountry: "IN",
         },
         aggregateRating: t.rating > 0 && t.total_reviews > 0 ? {

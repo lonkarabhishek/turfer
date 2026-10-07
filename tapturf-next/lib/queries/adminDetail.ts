@@ -233,7 +233,7 @@ export async function getAdminRequests(filter: RequestFilter = "all") {
 
 // ── Turfs ───────────────────────────────────────────────
 
-export const TURF_FILTERS = { all: "All active", nashik: "Nashik", pune: "Pune", mumbai: "Mumbai", nagpur: "Nagpur", nophone: "No phone" } as const;
+export const TURF_FILTERS = { all: "All active", nashik: "Nashik", pune: "Pune", mumbai: "Mumbai", nagpur: "Nagpur", hyderabad: "Hyderabad", nophone: "No phone" } as const;
 export type TurfFilter = keyof typeof TURF_FILTERS;
 
 export async function getAdminTurfs(filter: TurfFilter = "all") {

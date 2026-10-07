@@ -5,12 +5,12 @@ import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, sportBySlug, sportVenues, venueWord } from "@/lib/sports";
-import { CITIES, CITY_LIST, labelFor } from "@/lib/city";
+import { CITIES, CITY_LIST_SHORT, labelFor } from "@/lib/city";
 
 export const revalidate = 3600;
 
 // Pages list turfs from every city.
-const CITY_LABEL = CITY_LIST;
+const CITY_LABEL = CITY_LIST_SHORT;
 
 export async function generateStaticParams() {
   return SPORT_PAGES.map((s) => ({ sport: s.slug }));
@@ -29,7 +29,8 @@ export async function generateMetadata({
   const word = venueWord(info, 1);
   return {
     // Layout's title template appends "| TapTurf".
-    title: `${sportVenues(info, { title: true })} in ${CITY_LABEL}: Compare & Book`,
+    // "Football Turfs across 5 Cities: Compare & Book" stays under 60 with the suffix.
+    title: `${sportVenues(info, { title: true })} across ${CITIES.length} Cities: Compare & Book`,
     description: `${info.blurb} Compare ${lower} ${venueWord(info)} across ${CITY_LABEL} by price, rating and photos. Call or WhatsApp to book.`,
     keywords: CITIES.flatMap((c) => [
       `${lower} ${word} ${c.label.toLowerCase()}`,
@@ -38,7 +39,7 @@ export async function generateMetadata({
     ]).join(", "),
     openGraph: {
       images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `${sportVenues(info, { title: true })} in ${CITY_LABEL} | TapTurf`,
+      title: `${sportVenues(info, { title: true })} across ${CITIES.length} Cities | TapTurf`,
       description: info.blurb,
       url: `https://www.tapturf.in/sport/${info.slug}`,
       type: "website",

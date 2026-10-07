@@ -4,7 +4,7 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { forCard } from "@/lib/utils/cardTurf";
-import { CITY_LIST, CITY_LIST_AND } from "@/lib/city";
+import { CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
 
 export const revalidate = 600;
 
@@ -16,13 +16,13 @@ export const revalidate = 600;
 // Title stops at "…Book" — layout's title.template adds "| TapTurf" so
 // hard-coding it here produced "…Book | TapTurf | TapTurf" in SERPs.
 export const metadata: Metadata = {
-  title: `All Sports Turfs in ${CITY_LIST}`,
+  title: `All Sports Turfs in ${CITY_LIST_SHORT}`,
   description: `Every sports turf in ${CITY_LIST_AND}. Compare prices, check ratings, view photos. Football, box cricket, cricket, badminton and more. Call or WhatsApp to book, no booking fee.`,
   keywords:
-    "turf in nashik, turf in pune, turf in mumbai, turf in nagpur, sports turf nashik pune mumbai nagpur, football turf nashik, football turf pune, football turf mumbai, football turf nagpur, cricket turf nashik, cricket turf pune, box cricket nagpur, turf booking maharashtra, box cricket",
+    "turf in nashik, turf in pune, turf in mumbai, turf in nagpur, turf in hyderabad, box cricket hyderabad, football turf nashik, football turf pune, football turf mumbai, football turf nagpur, football turf hyderabad, cricket turf nashik, cricket turf pune, box cricket nagpur, turf booking maharashtra, turf booking telangana, box cricket",
   openGraph: {
     images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: `All Sports Turfs in ${CITY_LIST} | TapTurf`,
+    title: `All Sports Turfs in ${CITY_LIST_SHORT} | TapTurf`,
     description: `Every sports turf across ${CITY_LIST_AND}. Compare prices, check ratings, call or WhatsApp to book.`,
     url: "https://www.tapturf.in/turfs",
     type: "website",

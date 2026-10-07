@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CITY_LIST, CITY_LIST_AND } from "@/lib/city";
+import { CITY_LIST, CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
 import Link from "next/link";
 import { getSortedPosts } from "@/content/blog";
 import { PostCard } from "@/components/blog/PostCard";
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     "turf blog, cricket turf guide, football turf guide, box cricket rules, best turfs nashik, best turfs pune, turf booking guide, tapturf blog",
   openGraph: {
     images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: `TapTurf Blog: Turf Guides for ${CITY_LIST}`,
+    title: `TapTurf Blog: Turf Guides for ${CITY_LIST_SHORT}`,
     description:
       `The playbook for booking, hosting and playing on sports turfs in ${CITY_LIST_AND}.`,
     url: "https://www.tapturf.in/blog",

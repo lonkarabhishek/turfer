@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
-import { CITY_LIST, CITY_LIST_AND } from "@/lib/city";
+import { CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
 import { AwardsBanner } from "@/components/layout/AwardsBanner";
 import { Footer } from "@/components/layout/Footer";
 import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
@@ -20,7 +20,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: `TapTurf: Find & Book Turfs in ${CITY_LIST}`,
+    default: `TapTurf: Find & Book Turfs in ${CITY_LIST_SHORT}`,
     template: "%s | TapTurf",
   },
   description:
