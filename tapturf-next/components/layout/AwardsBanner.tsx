@@ -49,6 +49,8 @@ export function AwardsBanner() {
   const city = isCity(cityRaw) ? cityRaw : null;
   const href = city ? `${POST}#${city}` : POST;
   const where = city ? labelFor(city) : "Nashik, Pune and Mumbai";
+  // Phones get about 45 characters before the cross; keep the city visible.
+  const short = city ? `best turfs in ${labelFor(city)}` : "best turfs in each city";
 
   const dismiss = () => {
     try {
@@ -64,7 +66,12 @@ export function AwardsBanner() {
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-10 flex items-center gap-2">
         <Link href={href} className="group flex items-center gap-2 min-w-0 flex-1 text-[13px] sm:text-[14px]">
           <Trophy className="w-4 h-4 shrink-0 text-[#e0a92e]" strokeWidth={2.25} />
-          <span className="truncate">
+          <span className="truncate sm:hidden">
+            <span className="font-semibold">September Awards:</span>{" "}
+            <span className="text-white/80">{short}</span>
+            <span aria-hidden className="ml-1 inline-block">→</span>
+          </span>
+          <span className="truncate hidden sm:inline">
             <span className="font-semibold">September Awards are out.</span>{" "}
             <span className="text-white/80">See the best turfs in {where}</span>
             <span aria-hidden className="ml-1 inline-block transition-transform group-hover:translate-x-0.5">→</span>
