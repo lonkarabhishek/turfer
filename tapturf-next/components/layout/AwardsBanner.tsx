@@ -6,9 +6,13 @@ import { usePathname } from "next/navigation";
 import { Trophy, X } from "lucide-react";
 import { getCityPref, isCity, labelFor } from "@/lib/city";
 
-// One banner per awards edition: bump both when the October post goes up.
+// One banner per awards edition: bump POST, DISMISS_KEY and ENDS_AT when
+// the October post goes up. Changing DISMISS_KEY brings the strip back
+// once for people who closed the previous one.
 const POST = "/blog/september-2026-turf-awards";
-const DISMISS_KEY = "tapturf_awards_banner_2026_09";
+const DISMISS_KEY = "tapturf_awards_banner_2026_09b";
+// Shown until the end of 15 October 2026 in India (18:30 UTC).
+const ENDS_AT = Date.UTC(2026, 9, 15, 18, 30);
 // Cities with a section in this edition. Others (Nagpur joined in October) get the general line.
 const POST_CITIES = new Set(["nashik", "pune", "mumbai"]);
 
@@ -22,15 +26,16 @@ const subscribe = (cb: () => void) => {
     window.removeEventListener("tapturf:awards-banner", cb);
   };
 };
-// "city|dismissed" so one store covers both; a string keeps snapshots stable.
+// "city|hidden" so one store covers both; a string keeps snapshots stable.
+// Hidden once dismissed or after ENDS_AT (read here, outside render).
 const snapshot = () => {
-  let dismissed = "0";
+  let hidden = Date.now() > ENDS_AT ? "1" : "0";
   try {
-    dismissed = localStorage.getItem(DISMISS_KEY) ? "1" : "0";
+    if (localStorage.getItem(DISMISS_KEY)) hidden = "1";
   } catch {
     /* private mode */
   }
-  return `${getCityPref() ?? ""}|${dismissed}`;
+  return `${getCityPref() ?? ""}|${hidden}`;
 };
 const serverSnapshot = () => null;
 
@@ -44,8 +49,8 @@ export function AwardsBanner() {
   const pathname = usePathname();
   const state = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   if (state == null) return null;
-  const [cityRaw, dismissed] = state.split("|");
-  if (dismissed === "1") return null;
+  const [cityRaw, hidden] = state.split("|");
+  if (hidden === "1") return null;
   if (pathname.startsWith(POST) || pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
 
   const city = isCity(cityRaw) && POST_CITIES.has(cityRaw) ? cityRaw : null;
