@@ -51,7 +51,14 @@ export function AwardsBanner() {
   if (state == null) return null;
   const [cityRaw, hidden] = state.split("|");
   if (hidden === "1") return null;
-  if (pathname.startsWith(POST) || pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
+  if (
+    pathname.startsWith(POST) ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/login") ||
+    pathname === "/privacy" ||
+    pathname === "/terms"
+  )
+    return null;
 
   const city = isCity(cityRaw) && POST_CITIES.has(cityRaw) ? cityRaw : null;
   const href = city ? `${POST}#${city}` : POST;
