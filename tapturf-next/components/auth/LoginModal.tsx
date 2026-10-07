@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { X, Loader2, AlertCircle, Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -153,6 +154,18 @@ export function LoginModal() {
               <p className="text-[13px] text-hot-600">{googleError}</p>
             </div>
           )}
+
+          <p className="mt-4 text-center text-[12px] text-primary-400 leading-snug">
+            By continuing you agree to our{" "}
+            <Link href="/terms" onClick={() => setShowLoginModal(false)} className="underline underline-offset-2 hover:text-primary-600">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" onClick={() => setShowLoginModal(false)} className="underline underline-offset-2 hover:text-primary-600">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
 
       </div>

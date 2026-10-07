@@ -111,9 +111,11 @@ export function Footer() {
           <p className="text-sm text-primary-400">
             &copy; {new Date().getFullYear()} TapTurf. All rights reserved.
           </p>
-          <p className="text-xs text-primary-500">
-            Made with care in Nashik 🇮🇳
-          </p>
+          <div className="flex items-center gap-4 text-xs text-primary-400">
+            <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+            <span className="text-primary-500">Made with care in Nashik 🇮🇳</span>
+          </div>
         </div>
       </div>
     </footer>
