@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   keywords:
     "turf blog, cricket turf guide, football turf guide, box cricket rules, best turfs nashik, best turfs pune, turf booking guide, tapturf blog",
   openGraph: {
+    images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
     title: "TapTurf Blog: Turf Guides for Nashik, Mumbai & Pune",
     description:
       "The playbook for booking, hosting and playing on sports turfs in Nashik, Mumbai and Pune.",

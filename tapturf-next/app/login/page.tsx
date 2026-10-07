@@ -3,7 +3,8 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Loader2, Zap } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PhoneOTPForm } from "@/components/auth/PhoneOTPForm";
@@ -85,12 +86,7 @@ function LoginInner() {
           href="/"
           className="press-tight inline-flex items-center gap-2 mb-8"
         >
-          <div className="w-9 h-9 rounded-lg bg-accent-500 flex items-center justify-center shadow-neon">
-            <Zap className="w-5 h-5 text-white" strokeWidth={2.75} />
-          </div>
-          <span className="font-display text-2xl text-primary-800 leading-none">
-            Tap<span className="text-accent-500">Turf</span>
-          </span>
+          <Logo height={72} priority />
         </Link>
 
         {/* Title */}

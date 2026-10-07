@@ -49,6 +49,7 @@ export async function generateMetadata(
     title,
     description,
     openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title,
       description,
       url: `https://www.tapturf.in/game/${id}`,

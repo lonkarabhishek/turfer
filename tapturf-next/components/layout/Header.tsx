@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { User, Bell, Zap, RotateCw } from "lucide-react";
+import { User, Bell, RotateCw } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
@@ -41,14 +42,10 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 material-thin border-b border-primary-100/60">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 md:h-16 flex items-center justify-between gap-2 min-w-0">
-        {/* Wordmark */}
-        <Link href="/" className="flex items-center gap-2 group min-w-0 flex-shrink">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-accent-500 flex items-center justify-center flex-shrink-0">
-            <Zap className="w-4 h-4 md:w-5 md:h-5 text-white" strokeWidth={2.75} />
-          </div>
-          <span className="text-[19px] md:text-xl font-semibold tracking-tight text-primary-900 leading-none truncate">
-            Tap<span className="text-accent-500">Turf</span>
-          </span>
+        {/* Logo. The artwork carries the wordmark, so no text beside it. */}
+        <Link href="/" className="flex items-center group min-w-0 flex-shrink" aria-label="TapTurf home">
+          <Logo height={46} priority className="md:hidden" />
+          <Logo height={54} priority className="hidden md:block" />
         </Link>
 
         {/* Desktop nav */}

@@ -45,6 +45,7 @@ export async function generateMetadata(): Promise<Metadata> {
     keywords:
       "football turf, football turf near me, football turf nashik, football turf pune, football turf mumbai, box cricket, turf booking nashik, turf booking pune, turf booking mumbai, tapturf",
     openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title: `TapTurf: Book Turfs in ${cityLine}`,
       description: `${rounded}+ sports turfs across ${cityLine}. Find a game, host a game, run the pitch.`,
       url: "https://www.tapturf.in",

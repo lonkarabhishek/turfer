@@ -65,6 +65,7 @@ export async function generateMetadata({
     // Thin pages (1-2 turfs) stay out of the index.
     robots: stats.count >= MIN_TURFS_TO_INDEX ? undefined : { index: false, follow: true },
     openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title: `${sportVenues(s, { title: true })} in ${cityLabel} | TapTurf`,
       description: bits.join(" "),
       url,

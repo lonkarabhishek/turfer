@@ -21,6 +21,7 @@ export const metadata: Metadata = {
   keywords:
     "turf in nashik, turf in pune, turf in mumbai, sports turf nashik pune mumbai, football turf nashik, football turf pune, football turf mumbai, cricket turf nashik, cricket turf pune, turf booking maharashtra, box cricket",
   openGraph: {
+    images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
     title: "All Sports Turfs in Nashik, Mumbai & Pune | TapTurf",
     description:
       "Every sports turf across Nashik, Mumbai and Pune. Compare prices, check ratings, call or WhatsApp to book.",

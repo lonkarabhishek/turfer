@@ -41,6 +41,7 @@ export async function generateMetadata(
       `sports ${label.toLowerCase()}`,
     ].join(", "),
     openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title: `Sports Turfs in ${label} | TapTurf`,
       description: `Every turf in ${label}, one tap away. Compare & book instantly.`,
       url: `https://www.tapturf.in/${city}`,

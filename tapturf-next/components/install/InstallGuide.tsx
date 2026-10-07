@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X, Share, MoreVertical, Plus, Check, ChevronRight, Zap } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
+import { X, Share, MoreVertical, Plus, Check, ChevronRight } from "lucide-react";
 
 type Device = "ios" | "android" | "desktop";
 
@@ -140,9 +141,7 @@ export function InstallGuide({
         <div className="px-6 pt-6 sm:pt-8 pb-6">
           {/* Header row */}
           <div className="flex items-center gap-2.5 mb-1">
-            <span className="w-8 h-8 rounded-lg bg-accent-500 flex items-center justify-center shadow-neon shrink-0">
-              <Zap className="w-4 h-4 text-white" strokeWidth={2.75} />
-            </span>
+            <Logo height={32} />
             <p className="text-[11px] font-mono text-accent-600">
               Install TapTurf · {device === "ios" ? "iPhone" : device === "android" ? "Android" : "Web"}
             </p>

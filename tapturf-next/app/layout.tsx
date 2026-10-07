@@ -24,6 +24,13 @@ export const metadata: Metadata = {
   description:
     "Find and book football, box cricket and sports turfs in Nashik, Mumbai and Pune. Compare prices, check ratings, call or WhatsApp to book.",
   metadataBase: new URL("https://www.tapturf.in"),
+  // Default share image for pages that don't set their own.
+  openGraph: {
+    siteName: "TapTurf",
+    locale: "en_IN",
+    type: "website",
+    images: [{ url: "/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

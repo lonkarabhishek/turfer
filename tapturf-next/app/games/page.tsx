@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   keywords:
     "cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
   openGraph: {
+    images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
     title: "Open Games in Nashik & Pune | TapTurf",
     description:
       "Live sports games looking for players in Nashik and Pune. Cricket, football, and more. Join in one tap.",

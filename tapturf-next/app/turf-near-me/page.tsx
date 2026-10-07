@@ -105,6 +105,7 @@ export async function generateMetadata(): Promise<Metadata> {
       ...blocks.map((b) => `turf near me ${b.label.toLowerCase()}`),
     ].join(", "),
     openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title: "Find a Turf Near You | TapTurf",
       description,
       url: PAGE_URL,

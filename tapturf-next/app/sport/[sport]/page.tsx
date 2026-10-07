@@ -37,6 +37,7 @@ export async function generateMetadata({
       `book ${lower} ${c.label.toLowerCase()}`,
     ]).join(", "),
     openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title: `${sportVenues(info, { title: true })} in ${CITY_LABEL} | TapTurf`,
       description: info.blurb,
       url: `https://www.tapturf.in/sport/${info.slug}`,
