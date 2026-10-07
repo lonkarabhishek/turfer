@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
+import { AwardsBanner } from "@/components/layout/AwardsBanner";
 import { Footer } from "@/components/layout/Footer";
 import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
 import { AppMain } from "@/components/layout/AppMain";
@@ -81,6 +82,7 @@ export default function RootLayout({
         <RouteProgress />
         <AuthWrapper>
           <Header />
+          <AwardsBanner />
           {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator, skipped on landing */}
           <AppMain>{children}</AppMain>
           <OwnerContactCTA />
