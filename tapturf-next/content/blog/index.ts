@@ -21,6 +21,7 @@ import { post as corporateCricketEvents } from "./posts/corporate-cricket-events
 import { post as turfBookingMistakes } from "./posts/turf-booking-mistakes";
 // 2026-09-26 batch: 6 SEO-first pieces that push readers into the
 // TapTurf discovery layer instead of ending in dead-end reading.
+import { post as september2026TurfAwards } from "./posts/september-2026-turf-awards";
 import { post as bestFootballTurfsPune2026 } from "./posts/best-football-turfs-pune-2026";
 import { post as boxCricketNashikGuide } from "./posts/box-cricket-nashik-guide";
 import { post as turfNearMe } from "./posts/turf-near-me";
@@ -30,6 +31,7 @@ import { post as pickleballPuneBeginnersGuide } from "./posts/pickleball-pune-be
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  september2026TurfAwards,
   bestFootballTurfsPune2026,
   boxCricketNashikGuide,
   turfNearMe,

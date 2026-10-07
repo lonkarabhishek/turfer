@@ -289,6 +289,71 @@ export const BLOG_TURFS: Record<string, BlogTurf> = {
     coverImage:
       "https://lh3.googleusercontent.com/p/AF1QipNk6jly_fTa4U5NQTOZSvMtyh24haU8qMYTE934=s1360-w1360-h1020-rw",
   },
+
+  // ── September 2026 Awards (snapshot 2026-10-07) ──────────────
+  "30cc2746-c679-4715-a1aa-d9eef42bb64c": {
+    id: "30cc2746-c679-4715-a1aa-d9eef42bb64c",
+    name: "Champion's Turf",
+    area: "Amrutdham",
+    city: "nashik",
+    rating: 4.7,
+    reviews: 219,
+    coverImage: "https://lh3.googleusercontent.com/p/AF1QipOAUIBdUisPe2GNVT3OcVIdmX83AIBHaiAe8W-l=w1600-h1200",
+  },
+  "7d3ad87f-ec32-446d-8c19-566c2d9e4528": {
+    id: "7d3ad87f-ec32-446d-8c19-566c2d9e4528",
+    name: "SK Sports Club",
+    area: "Bhagur",
+    city: "nashik",
+    rating: 4.9,
+    reviews: 27,
+    coverImage: "https://lh3.googleusercontent.com/p/AF1QipNHmek2PRVTuqKnwZaitX49ZF53dQ84bKdoRU_X=w1600-h1200",
+  },
+  "27841faf-6fe3-4e9b-9699-847f40f2db77": {
+    id: "27841faf-6fe3-4e9b-9699-847f40f2db77",
+    name: "Vedant Sports Academy",
+    area: "Tathawade",
+    city: "pune",
+    rating: 4.8,
+    reviews: 134,
+    coverImage: "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWmNAIcZbL6KBsevunNKvBH5bVfRkm_Z91EJIflBUGh9KsaGiU4J_x-OMYIK1pUvxsroV5MxPLn0t9dB2gf2ZRyEFce9u5pHmEMog48Ld8GO6_rXauEIhsC9hRPiugqjd9TGn8C8PvaXAnE=w1600-h1200",
+  },
+  "ea68a33f-aa9f-4a23-a40b-0591bf336880": {
+    id: "ea68a33f-aa9f-4a23-a40b-0591bf336880",
+    name: "The Paddock Turf",
+    area: "Erandwane",
+    city: "pune",
+    rating: 5.0,
+    reviews: 42,
+    coverImage: "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWkiCwkWHYxO45WnUaJASYgp8OkWjGsST8m558rbJPDNbcIb6rsl1n5-bRC9HAofUB46ShPF0MTAdpDhh7CgPsJ5lQgM5KCQbUh1lfIRVSxv2Ln8SxTWwVg2GeFgPloDZtOfun0qigH19ZJs=w1600-h1200",
+  },
+  "5205ba6f-9e9b-468d-89f6-e420f2b1a5cc": {
+    id: "5205ba6f-9e9b-468d-89f6-e420f2b1a5cc",
+    name: "Huddle Arena",
+    area: "Chembur",
+    city: "mumbai",
+    rating: 4.8,
+    reviews: 510,
+    coverImage: "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWlg9D1RkTcvBujT5nsv_IeoJS58SMhef5t4aoVqA5h4y70J-_Hgt3D1pD-knkdrclkZH-rxhbcGNtk_eGmyT-ScoHTCSEC13LMNqrgwIJTgkIi243LvrTRCaGB7g1GMS66xDldT=w1600-h1200",
+  },
+  "500ce1a8-4766-417c-865f-8e259d1a445c": {
+    id: "500ce1a8-4766-417c-865f-8e259d1a445c",
+    name: "Goalster at St. Joseph's Sports Complex",
+    area: "Bandra West",
+    city: "mumbai",
+    rating: 4.7,
+    reviews: 237,
+    coverImage: "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWnJ0gGrFsDcW1xrxRm1EIDJgjxHCAH0tbJsXLls22W41bKSq7_6NJDRQSI1VVhOQWHY1y2Y7DcO9qoC6ziU65JiQLoDobxMs218cDL_QhuK056tg4nHECQplNEtNWZzAGCz9WjD=w1600-h1200",
+  },
+  "488e5b3c-f4e5-44d4-9df1-1847619a2c48": {
+    id: "488e5b3c-f4e5-44d4-9df1-1847619a2c48",
+    name: "Turfstation Juhu",
+    area: "Juhu",
+    city: "mumbai",
+    rating: 4.2,
+    reviews: 1685,
+    coverImage: "https://lh3.googleusercontent.com/gps-cs-s/AHRPTWmFNrJlkDxDYNGHdqaiK1T4g8LRhynzvzmfB9EnJMoZvh39jECg1BUYuLKqOeRb8uadsyriAZ6eNLGMkuJ-9v-Scw9-ph7Hd6uEeqRWS0dJdlJvzsFojOjIcz54PCRueXzJSFh6Pw=w1600-h1200",
+  },
 };
 
 export function getBlogTurf(id: string): BlogTurf | undefined {
