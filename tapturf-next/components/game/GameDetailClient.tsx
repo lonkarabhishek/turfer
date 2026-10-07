@@ -446,13 +446,17 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-primary-800 truncate">{game.host_name}</p>
-                {game.host_phone && (
+                {/* The host's number is for players, not for anyone who finds
+                    the page: shown only after sign-in. */}
+                {game.host_phone && user ? (
                   <a href={`tel:${game.host_phone}`} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
                     {game.host_phone}
                   </a>
-                )}
+                ) : game.host_phone ? (
+                  <p className="text-xs text-primary-400">Sign in to see the host&apos;s number</p>
+                ) : null}
               </div>
-              {game.host_phone && (
+              {game.host_phone && (user ? (
                 <a
                   href={`https://wa.me/${game.host_phone.replace(/[^0-9]/g, "")}`}
                   target="_blank"
@@ -461,7 +465,15 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                 >
                   WhatsApp
                 </a>
-              )}
+              ) : (
+                <button
+                  type="button"
+                  onClick={login}
+                  className="flex items-center gap-1.5 bg-primary-900 hover:bg-primary-800 text-white text-xs font-bold px-3 py-2 rounded-full transition-colors shrink-0"
+                >
+                  Sign in to contact
+                </button>
+              ))}
             </div>
           </div>
 
