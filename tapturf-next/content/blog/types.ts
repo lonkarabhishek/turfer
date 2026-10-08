@@ -78,7 +78,13 @@ export interface Post {
   updatedAt?: string;
   coverEmoji: string;  // fallback + card accent
   /** Optional hero photo (used on the article page + OG image). */
-  heroImage?: { url: string; alt: string; credit?: string };
+  heroImage?: {
+    url: string;
+    alt: string;
+    credit?: string;
+    /** Raster (PNG/JPG) version for social cards when url is an SVG. */
+    og?: string;
+  };
   keywords: string[];
   blocks: Block[];
   /** Optional pinned CTA for the sticky mobile bar. */

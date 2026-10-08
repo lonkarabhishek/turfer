@@ -41,7 +41,7 @@ export async function generateMetadata({
   }
 
   const url = `https://www.tapturf.in/blog/${post.slug}`;
-  const ogImage = post.heroImage?.url;
+  const ogImage = post.heroImage?.og ?? post.heroImage?.url;
   return {
     title: `${post.title} | TapTurf Blog`,
     description: post.description,
@@ -91,7 +91,7 @@ export default async function BlogPostPage({
     url,
     datePublished: post.publishedAt,
     dateModified: post.updatedAt || post.publishedAt,
-    ...(post.heroImage && { image: post.heroImage.url }),
+    ...(post.heroImage && { image: post.heroImage.og ?? post.heroImage.url }),
     author: {
       "@type": "Organization",
       name: "TapTurf",
@@ -215,6 +215,7 @@ export default async function BlogPostPage({
                 priority
                 sizes="(max-width: 768px) 100vw, 800px"
                 className="object-cover"
+                unoptimized={post.heroImage.url.endsWith(".svg")}
               />
             </div>
             {post.heroImage.credit && (

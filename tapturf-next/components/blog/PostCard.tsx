@@ -29,7 +29,9 @@ export function PostCard({ post, featured = false }: { post: Post; featured?: bo
             <img
               src={post.heroImage!.url}
               alt={post.heroImage!.alt}
-              className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
+              className={`w-full h-full group-hover:scale-[1.03] transition-transform duration-500 ${
+                post.heroImage!.url.endsWith(".svg") ? "object-contain bg-[#1D1D1F]" : "object-cover"
+              }`}
               loading="lazy"
               referrerPolicy="no-referrer"
             />
