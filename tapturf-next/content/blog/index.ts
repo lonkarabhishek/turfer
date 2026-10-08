@@ -28,9 +28,21 @@ import { post as turfNearMe } from "./posts/turf-near-me";
 import { post as footballTurfShoesGuide } from "./posts/football-turf-shoes-guide";
 import { post as turfPricesPune } from "./posts/turf-prices-pune";
 import { post as pickleballPuneBeginnersGuide } from "./posts/pickleball-pune-beginners-guide";
+// 2026-10-08 batch: box cricket city guides, prices and tactics, with
+// vector hero art in public/blog/art.
+import { post as bestBoxCricketTurfsHyderabad } from "./posts/best-box-cricket-turfs-hyderabad";
+import { post as bestBoxCricketTurfsMumbai } from "./posts/best-box-cricket-turfs-mumbai";
+import { post as bestBoxCricketTurfsNagpur } from "./posts/best-box-cricket-turfs-nagpur";
+import { post as boxCricketPricesIndia } from "./posts/box-cricket-prices-india";
+import { post as howToWinAtBoxCricket } from "./posts/how-to-win-at-box-cricket";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  howToWinAtBoxCricket,
+  boxCricketPricesIndia,
+  bestBoxCricketTurfsHyderabad,
+  bestBoxCricketTurfsMumbai,
+  bestBoxCricketTurfsNagpur,
   september2026TurfAwards,
   bestFootballTurfsPune2026,
   boxCricketNashikGuide,
