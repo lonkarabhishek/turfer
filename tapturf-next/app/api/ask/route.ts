@@ -14,6 +14,7 @@ import {
   relaxedLabel,
   resolveTurfNames,
   type AskFilters,
+  type AskTurn,
 } from "@/lib/ai/ask";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
@@ -33,6 +34,26 @@ function ipHash(req: Request): string {
 
 const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.distanceKm != null ? { distanceKm: t.distanceKm } : {}) });
 
+/** Last three turns from the client, trimmed so a hostile client can't pad the prompt. */
+function parseHistory(raw: string | null): AskTurn[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(-3).flatMap((h) => {
+      if (!h || typeof h.user !== "string") return [];
+      const f = (h.filters && typeof h.filters === "object" ? h.filters : {}) as Record<string, unknown>;
+      const keep: Record<string, unknown> = {};
+      for (const k of ["intent", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort"]) {
+        if (f[k] != null && f[k] !== false && !(Array.isArray(f[k]) && (f[k] as unknown[]).length === 0)) keep[k] = f[k];
+      }
+      return [{ user: String(h.user).slice(0, MAX_Q), reply: String(h.reply ?? "").slice(0, 200), filters: keep as AskTurn["filters"] }];
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_Q);
@@ -42,6 +63,7 @@ export async function GET(req: Request) {
   const lat = Number(searchParams.get("lat") || NaN);
   const lng = Number(searchParams.get("lng") || NaN);
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  const history = parseHistory(searchParams.get("h"));
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
@@ -61,7 +83,7 @@ export async function GET(req: Request) {
   let source: "claude" | "keywords" = "keywords";
   if (isAskConfigured()) {
     try {
-      const parsed = await parseAsk(q, areasFromTurfs(turfs));
+      const parsed = await parseAsk(q, areasFromTurfs(turfs), history);
       if (parsed) {
         filters = parsed.filters;
         source = "claude";
@@ -80,6 +102,7 @@ export async function GET(req: Request) {
     query: q,
     intent: filters.intent,
     summary: filters.summary,
+    reply: filters.reply,
     source,
     filters: {
       city: filters.city,
@@ -96,6 +119,22 @@ export async function GET(req: Request) {
       sort: filters.sort,
     },
     needsLocation: filters.wants_nearby && !loc,
+    /** Sent back on the next turn so follow-ups can refine this one. */
+    memo: {
+      intent: filters.intent,
+      city: filters.city,
+      sport: filters.sport,
+      areas: filters.areas,
+      turf_names: filters.turf_names,
+      max_price_per_hour: filters.max_price_per_hour,
+      time: filters.time,
+      when: filters.when,
+      skill: filters.skill,
+      open_24x7: filters.open_24x7,
+      wants_nearby: filters.wants_nearby,
+      needs: filters.needs,
+      sort: filters.sort,
+    },
   };
   let body: Record<string, unknown> = { ...base, relaxed: [], total: 0 };
 

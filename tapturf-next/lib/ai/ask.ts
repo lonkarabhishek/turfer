@@ -50,8 +50,13 @@ export const AskFilters = z.object({
   sort: z.enum(["rating", "price_low", "reviews", "nearby"]),
   free_text: z.string().nullable(),
   summary: z.string(),
+  /** One or two friendly sentences in TapTurf's voice, shown as the chat reply. */
+  reply: z.string(),
 });
 export type AskFilters = z.infer<typeof AskFilters>;
+
+/** A previous exchange, sent back so follow-ups can build on it. */
+export type AskTurn = { user: string; reply: string; filters: Partial<AskFilters> };
 
 export function isAskConfigured(): boolean {
   return !!process.env.ANTHROPIC_API_KEY;
@@ -66,12 +71,16 @@ function systemPrompt(areasByCity: Record<string, string[]>): string {
     .join("\n");
   return `You read what a player typed into the search box of TapTurf, an Indian sports venue directory with pickup games, and return the intent and filters as JSON. Reply only with the JSON object.
 
+You are also the voice of the box: friendly, short, Indian English, like a mate who knows every ground in town. No emoji, no exclamation marks in a row, no "I'm an AI".
+
 Intents:
 - find_turf: looking for a venue, ground, turf, court or cage to play at. The default when unsure.
 - find_game: looking for a match, game or squad to join ("games near me", "football match this weekend", "anyone playing").
 - compare: two or more venue names with "vs", "or", "compare", "which is better".
 - question: a question about one named venue ("does X have parking", "what time does Y open", "how much is Z").
-- other: not about sports venues or games at all.
+- other: greetings, small talk, thanks, or anything not about sports venues or games.
+
+Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football"), keep the earlier intent and filters and change only what the player changed. A new topic resets them.
 
 Cities: ${cities}. "Nasik" is nashik. "Bombay", Thane, Navi Mumbai, Panvel are mumbai. Secunderabad is hyderabad.
 Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice" mean cricket; "futsal", "5-a-side", "7-a-side" mean football.
@@ -94,7 +103,8 @@ Rules:
 - players: the number of people, if given.
 - sort: price_low when the player cares about cost, reviews for "popular", nearby when wants_nearby, else rating.
 - free_text: for find_turf, a single venue name or words you could not map ("rooftop"). Else null.
-- summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a short polite note that TapTurf finds turfs and games.`;
+- summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a 3 to 6 word label like "Just saying hi".
+- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For compare or question: a lead-in ("Let me put those two side by side."). For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.`;
 }
 
 let client: Anthropic | null = null;
@@ -106,13 +116,18 @@ export function getAnthropic(): Anthropic {
 export type AskParse = { filters: AskFilters; usage?: { input: number; output: number; cached: number } };
 
 /** Sentence to intent and filters. Throws on API failure; returns null when the model declined. */
-export async function parseAsk(query: string, areasByCity: Record<string, string[]>): Promise<AskParse | null> {
+export async function parseAsk(query: string, areasByCity: Record<string, string[]>, history: AskTurn[] = []): Promise<AskParse | null> {
+  const context = history.length
+    ? `Earlier in this conversation (oldest first):\n${history
+        .map((h) => `Player: ${h.user}\nBox: ${h.reply}\nFilters then: ${JSON.stringify(h.filters)}`)
+        .join("\n\n")}\n\nNow the player says: ${query}`
+    : query;
   const response = await getAnthropic().messages.parse({
     model: ROUTER_MODEL,
-    max_tokens: 500,
+    max_tokens: 600,
     output_config: { effort: "low", format: zodOutputFormat(AskFilters) },
     system: [{ type: "text", text: systemPrompt(areasByCity), cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: query }],
+    messages: [{ role: "user", content: context }],
   });
   if (response.stop_reason === "refusal" || !response.parsed_output) return null;
   return {
@@ -158,6 +173,7 @@ export function keywordFilters(query: string): AskFilters {
     // With a sport or city recognised, the rest of the words are noise.
     free_text: known || game ? null : query,
     summary,
+    reply: game ? "Here are the open games that match." : "Here is what matches on TapTurf.",
   };
 }
 
