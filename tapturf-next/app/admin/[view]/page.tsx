@@ -450,7 +450,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
               {threads.map((t) => (
                 <li key={t.key} className="rounded-2xl bg-white border border-primary-200 p-4 sm:p-5">
                   <p className="text-[12px] text-primary-400 mb-3">
-                    {fmtDateTime(t.started)} · visitor {t.ip_hash.slice(0, 6)} · {t.rows.length} message{t.rows.length === 1 ? "" : "s"}
+                    {fmtDateTime(t.started)} · {t.rows[0].user_name ? <span className="text-primary-700 font-medium">{t.rows[0].user_name}</span> : `visitor ${t.ip_hash.slice(0, 6)}`} · {t.rows.length} message{t.rows.length === 1 ? "" : "s"}
                   </p>
                   <div className="space-y-3">
                     {t.rows.map((r) => (

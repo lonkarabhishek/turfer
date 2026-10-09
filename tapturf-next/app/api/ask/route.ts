@@ -80,6 +80,13 @@ export async function GET(req: Request) {
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
   const history = parseHistory(searchParams.get("h"));
   const ctx = parseContext(searchParams.get("ctx"));
+  // Answers are for signed-in players. Phone users have no server
+  // session, so this is the account id the client holds; the per-IP
+  // budget below is what actually caps abuse.
+  const uid = searchParams.get("uid") ?? "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid)) {
+    return NextResponse.json({ error: "sign_in" }, { status: 401 });
+  }
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
@@ -87,7 +94,7 @@ export async function GET(req: Request) {
   // Per-IP budget: ask_begin returns null when this IP has asked too often lately.
   let logId: number | null = null;
   try {
-    const { data } = await supabase.rpc("ask_begin", { p_ip_hash: ipHash(req), p_query: q });
+    const { data } = await supabase.rpc("ask_begin", { p_ip_hash: ipHash(req), p_query: q, p_user_id: uid });
     if (data === null) return NextResponse.json({ error: "Too many searches, try again in a few minutes" }, { status: 429 });
     logId = typeof data === "number" ? data : null;
   } catch {

@@ -13,6 +13,8 @@ export type AskRow = {
   ms: number | null;
   source: "claude" | "keywords" | null;
   created_at: string;
+  user_id: string | null;
+  user_name: string | null;
 };
 
 /** Rows from one visitor within 30 minutes of each other, oldest first. */
@@ -34,7 +36,7 @@ export async function getAskTranscripts(days = 7): Promise<AsksResult> {
   try {
     const supabase = await createServerClient();
     const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-    const { data, error } = await supabase.rpc("get_ask_transcripts", { p_days: days, p_limit: 1000, p_firebase_token: token });
+    const { data, error } = await supabase.rpc("get_ask_transcripts_v2", { p_days: days, p_limit: 1000, p_firebase_token: token });
     if (error) {
       if (error.code === "42501") return { ok: false, reason: "not_allowed" };
       if (error.code === "PGRST202" || error.code === "42883") return { ok: false, reason: "not_set_up" };
@@ -73,13 +75,14 @@ export function threadAsks(rows: AskRow[]): AskThread[] {
   const out: AskThread[] = [];
   for (const r of asc) {
     const t = new Date(r.created_at).getTime();
-    const cur = open.get(r.ip_hash);
+    const who = r.user_id ?? r.ip_hash;
+    const cur = open.get(who);
     if (cur && t - new Date(cur.ended).getTime() <= GAP_MS) {
       cur.rows.push(r);
       cur.ended = r.created_at;
     } else {
-      const th: AskThread = { key: `${r.ip_hash}-${r.id}`, ip_hash: r.ip_hash, started: r.created_at, ended: r.created_at, rows: [r] };
-      open.set(r.ip_hash, th);
+      const th: AskThread = { key: `${who}-${r.id}`, ip_hash: r.ip_hash, started: r.created_at, ended: r.created_at, rows: [r] };
+      open.set(who, th);
       out.push(th);
     }
   }
@@ -89,7 +92,7 @@ export function threadAsks(rows: AskRow[]): AskThread[] {
 export function askStats(rows: AskRow[]) {
   const claude = rows.filter((r) => r.source === "claude").length;
   const empty = rows.filter((r) => r.results === 0 && r.intent !== "other").length;
-  const visitors = new Set(rows.map((r) => r.ip_hash)).size;
+  const visitors = new Set(rows.map((r) => r.user_id ?? r.ip_hash)).size;
   const ms = rows.map((r) => r.ms).filter((x): x is number => x != null).sort((a, b) => a - b);
   const p50 = ms.length ? ms[Math.floor(ms.length / 2)] : null;
   const byIntent = rows.reduce<Record<string, number>>((m, r) => ((m[r.intent ?? "?"] = (m[r.intent ?? "?"] ?? 0) + 1), m), {});
