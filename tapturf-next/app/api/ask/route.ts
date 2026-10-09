@@ -203,7 +203,15 @@ export async function GET(req: Request) {
 
   if (logId != null) {
     void supabase
-      .rpc("ask_finish", { p_id: logId, p_filters: filters, p_results: Number(body.total) || 0, p_ms: Date.now() - started, p_source: source })
+      .rpc("ask_finish", {
+        p_id: logId,
+        p_filters: filters,
+        p_results: Number(body.total) || 0,
+        p_ms: Date.now() - started,
+        p_source: source,
+        p_reply: filters.reply,
+        p_intent: filters.intent,
+      })
       .then(() => {}, () => {});
   }
 
