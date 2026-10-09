@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AskPageContext } from "@/components/ask/AskPageContext";
+import { AskAboutButton } from "@/components/ask/AskAboutButton";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -221,6 +222,10 @@ export default async function TurfDetailPage({
               <MapPin className="w-3.5 h-3.5" />
               {turf.address}
             </span>
+          </div>
+
+          <div className="mt-3 md:hidden">
+            <AskAboutButton />
           </div>
 
           {/* Members-only clubs: say so up front, with the access rules. */}

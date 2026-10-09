@@ -13,13 +13,19 @@ export function AskLauncher() {
   const { open, openPanel, turns } = useAsk();
   const pathname = usePathname();
   if (open || pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
+  // Turf and game pages own the bottom edge on phones (Call / WhatsApp
+  // bar, Join bar, create-game footer), so the pill is desktop-only there
+  // and those pages offer an in-page button instead.
+  const barPages = pathname.startsWith("/turf/") || pathname.startsWith("/game/");
   const count = turns.filter((t) => t.res).length;
   return (
     <button
       type="button"
       onClick={() => openPanel()}
       aria-label="Ask TapTurf"
-      className="press-tight fixed right-4 bottom-[4.75rem] md:right-6 md:bottom-6 z-30 inline-flex items-center gap-2 h-12 pl-3.5 pr-4 rounded-full bg-primary-900 text-white shadow-elevated hover:bg-accent-600 transition-colors cursor-pointer"
+      className={`press-tight fixed right-4 bottom-[4.75rem] md:right-6 md:bottom-6 z-30 items-center gap-2 h-12 pl-3.5 pr-4 rounded-full bg-primary-900 text-white shadow-elevated hover:bg-accent-600 transition-colors cursor-pointer ${
+        barPages ? "hidden md:inline-flex" : "inline-flex"
+      }`}
     >
       <span className="relative inline-flex">
         <Sparkles className="w-5 h-5 text-accent-400" strokeWidth={2.25} />
