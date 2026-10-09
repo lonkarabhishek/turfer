@@ -1,8 +1,7 @@
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
 import { parseHoursString } from "@/lib/utils/hours";
-import { getAnthropic, ROUTER_MODEL } from "./ask";
+import { ROUTER_MODEL, structured } from "./ask";
 
 /**
  * Suggestion checker. A player (or owner) has suggested a phone,
@@ -132,15 +131,17 @@ export async function reviewSuggestion(s: PendingSuggestion): Promise<Suggestion
       amenities: s.current.amenities,
     },
   };
-  const response = await getAnthropic().messages.parse({
-    model: ROUTER_MODEL,
-    max_tokens: 700,
-    output_config: { effort: "low", format: zodOutputFormat(SuggestionReview) },
-    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: JSON.stringify(input) }],
-  });
-  if (response.stop_reason === "refusal" || !response.parsed_output) return null;
-  return sanitise(response.parsed_output, s);
+  const out = await structured(
+    SuggestionReview,
+    {
+      model: ROUTER_MODEL,
+      max_tokens: 700,
+      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: JSON.stringify(input) }],
+    },
+    "suggestion",
+  );
+  return out ? sanitise(out, s) : null;
 }
 
 /** Code is the last word: phones must normalise, prices must be sane, hours must parse. */

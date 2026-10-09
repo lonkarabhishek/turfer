@@ -1,4 +1,3 @@
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { getTurfById } from "@/lib/queries/turfs";
@@ -8,7 +7,7 @@ import { getPhone } from "@/lib/utils/seo";
 import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
 import { priceUnitSuffix } from "@/lib/utils/prices";
 import type { Turf } from "@/types/turf";
-import { getAnthropic, ROUTER_MODEL } from "./ask";
+import { ROUTER_MODEL, structured } from "./ask";
 
 /**
  * Compare and question answering. Both run on a fact sheet built from
@@ -114,15 +113,16 @@ Rules:
 - Currency is ₹. Spell Indian place names as given. No hedging language and no marketing adjectives.`;
 
 export async function compareTurfs(sheets: TurfFacts[]): Promise<CompareOut | null> {
-  const response = await getAnthropic().messages.parse({
-    model: COMPARE_MODEL,
-    max_tokens: 1200,
-    output_config: { effort: "low", format: zodOutputFormat(CompareOut) },
-    system: [{ type: "text", text: COMPARE_SYSTEM, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: `Fact sheets, in order:\n${JSON.stringify(sheets)}` }],
-  });
-  if (response.stop_reason === "refusal" || !response.parsed_output) return null;
-  return response.parsed_output;
+  return structured(
+    CompareOut,
+    {
+      model: COMPARE_MODEL,
+      max_tokens: 1200,
+      system: [{ type: "text", text: COMPARE_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: `Fact sheets, in order:\n${JSON.stringify(sheets)}` }],
+    },
+    "compare",
+  );
 }
 
 export const AnswerOut = z.object({
@@ -143,13 +143,14 @@ Rules:
 - No preamble, no restating the question.`;
 
 export async function answerQuestion(question: string, sheet: TurfFacts): Promise<AnswerOut | null> {
-  const response = await getAnthropic().messages.parse({
-    model: ROUTER_MODEL,
-    max_tokens: 300,
-    output_config: { effort: "low", format: zodOutputFormat(AnswerOut) },
-    system: [{ type: "text", text: ANSWER_SYSTEM, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: `Question: ${question}\n\nFact sheet:\n${JSON.stringify(sheet)}` }],
-  });
-  if (response.stop_reason === "refusal" || !response.parsed_output) return null;
-  return response.parsed_output;
+  return structured(
+    AnswerOut,
+    {
+      model: ROUTER_MODEL,
+      max_tokens: 300,
+      system: [{ type: "text", text: ANSWER_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: `Question: ${question}\n\nFact sheet:\n${JSON.stringify(sheet)}` }],
+    },
+    "answer",
+  );
 }

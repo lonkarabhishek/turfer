@@ -120,6 +120,58 @@ export function getAnthropic(): Anthropic {
   return client;
 }
 
+type StructuredParams = Omit<Anthropic.MessageCreateParamsNonStreaming, "output_config">;
+
+/**
+ * messages.create with a JSON schema, parsed by hand. The SDK's .parse()
+ * runs JSON.parse on every text block and throws on the first bad one.
+ * In production Haiku now and then returned a block with a raw newline
+ * inside a string, or the object split over two blocks, which surfaced
+ * as "Unterminated string in JSON" and a dead answer. So: join the
+ * blocks, scrub control characters, cut to the outer braces, validate
+ * with zod, and try once more when it still does not parse. Null means
+ * the model declined or both attempts came back unusable.
+ */
+export async function structured<T extends z.ZodType>(schema: T, params: StructuredParams, tag: string): Promise<z.output<T> | null> {
+  const format = zodOutputFormat(schema);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await getAnthropic().messages.create({ ...params, output_config: { effort: "low", format } });
+    if (res.stop_reason === "refusal") return null;
+    const text = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    const parsed = parseJsonObject(text);
+    const out = parsed === undefined ? null : schema.safeParse(parsed);
+    if (out?.success) return out.data as z.output<T>;
+    console.error(`ai ${tag}: unusable structured output`, {
+      attempt,
+      stop: res.stop_reason,
+      blocks: res.content.map((b) => b.type).join(","),
+      issues: out && !out.success ? out.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`) : "not json",
+      text: text.slice(0, 400),
+    });
+  }
+  return null;
+}
+
+/** JSON.parse with two repairs: control characters inside strings, and text around the object. */
+function parseJsonObject(text: string): unknown {
+  const scrub = (t: string) => t.replace(/[\u0000-\u001f]+/g, " ");
+  const tries = [text, scrub(text)];
+  const a = text.indexOf("{");
+  const b = text.lastIndexOf("}");
+  if (a >= 0 && b > a) tries.push(scrub(text.slice(a, b + 1)));
+  for (const t of tries) {
+    try {
+      return JSON.parse(t);
+    } catch {
+      /* next repair */
+    }
+  }
+  return undefined;
+}
+
 export type AskParse = { filters: AskFilters; usage?: { input: number; output: number; cached: number } };
 
 /** Sentence to intent and filters. Throws on API failure; returns null when the model declined. */
@@ -144,22 +196,17 @@ export async function parseAsk(
     );
   }
   const context = parts.length ? `${parts.join("\n\n")}\n\nNow the player says: ${query}` : query;
-  const response = await getAnthropic().messages.parse({
-    model: ROUTER_MODEL,
-    max_tokens: 600,
-    output_config: { effort: "low", format: zodOutputFormat(AskFilters) },
-    system: [{ type: "text", text: systemPrompt(areasByCity), cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: context }],
-  });
-  if (response.stop_reason === "refusal" || !response.parsed_output) return null;
-  return {
-    filters: response.parsed_output,
-    usage: {
-      input: response.usage.input_tokens,
-      output: response.usage.output_tokens,
-      cached: response.usage.cache_read_input_tokens ?? 0,
+  const filters = await structured(
+    AskFilters,
+    {
+      model: ROUTER_MODEL,
+      max_tokens: 600,
+      system: [{ type: "text", text: systemPrompt(areasByCity), cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: context }],
     },
-  };
+    "router",
+  );
+  return filters ? { filters } : null;
 }
 
 /** Plain keyword fallback when the API is unavailable. */

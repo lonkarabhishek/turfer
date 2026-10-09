@@ -1,7 +1,6 @@
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { imageUrlForCard } from "@/lib/utils/images";
-import { getAnthropic, ROUTER_MODEL } from "./ask";
+import { ROUTER_MODEL, structured } from "./ask";
 
 /**
  * Cover photo pass: Claude Haiku looks at a turf's photos (downsized
@@ -76,14 +75,16 @@ export async function pickCover(images: string[]): Promise<CoverResult> {
   });
   content.push({ type: "text", text: `Judge the ${fetched.length} images above.` });
 
-  const response = await getAnthropic().messages.parse({
-    model: ROUTER_MODEL,
-    max_tokens: 800,
-    output_config: { effort: "low", format: zodOutputFormat(CoverPick) },
-    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content }],
-  });
-  const out = response.stop_reason === "refusal" ? null : response.parsed_output;
+  const out = await structured(
+    CoverPick,
+    {
+      model: ROUTER_MODEL,
+      max_tokens: 800,
+      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content }],
+    },
+    "cover",
+  );
 
   const review: CoverResult["review"] = fetched.map((f, i) => {
     const r = out?.images.find((x) => x.index === i);
