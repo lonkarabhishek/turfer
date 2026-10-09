@@ -1,5 +1,6 @@
 "use client";
 
+import { AskTurf } from "@/components/search/AskTurf";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Search, ChevronDown, Navigation, Loader2, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
@@ -239,12 +240,14 @@ export function TurfListingClient({
         )}
       </p>
 
+      <AskTurf variant="listing" />
+
       {/* Search field, iOS style: filled, borderless. */}
       <div className="relative mb-3">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-primary-400" />
         <input
           type="search"
-          placeholder="Search by name, area, or sport"
+          placeholder="Filter by name, area, or sport"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 h-11 rounded-xl bg-primary-100 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
