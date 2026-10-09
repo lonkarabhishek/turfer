@@ -60,7 +60,7 @@ export function LoginModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       {/* Backdrop — solid tint, no backdrop-filter (cheap on low-end GPUs) */}
       <div
         className="absolute inset-0 bg-primary-800/60 animate-fade-in"

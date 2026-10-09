@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { getCityPref, type CityId } from "@/lib/city";
 import { getUserLocation, type Coords } from "@/lib/utils/location";
 import type { Turf } from "@/types/turf";
@@ -57,10 +58,13 @@ type Ctx = {
   setPageContext: (c: PageContext) => void;
   draft: string;
   setDraft: (v: string) => void;
+  signedIn: boolean;
+  pending: string | null;
 };
 
 const AskCtx = createContext<Ctx | null>(null);
 const STORE = "tapturf_ask_thread_v1";
+const PENDING = "tapturf_ask_pending";
 const MAX_TURNS = 30;
 
 /**
@@ -76,6 +80,9 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const [locating, setLocating] = useState(false);
   const [draft, setDraft] = useState("");
   const [pageContext, setPageContext] = useState<PageContext>({});
+  const { user, login } = useAuth();
+  // A message typed while signed out waits here and goes once they're in.
+  const [pending, setPending] = useState<string | null>(null);
   const locRef = useRef<Coords | null>(null);
   const [hasLocation, setHasLocation] = useState(false);
   const hydrated = useRef(false);
@@ -90,10 +97,25 @@ export function AskProvider({ children }: { children: ReactNode }) {
         const saved = JSON.parse(raw) as Turn[];
         if (Array.isArray(saved)) setTurns(saved.filter((t) => t.res).slice(-MAX_TURNS));
       }
+      // Google sign-in is a full page round trip; the message they typed
+      // before it comes back with them.
+      const p = sessionStorage.getItem(PENDING);
+      if (p) {
+        setPending(p);
+        setOpen(true);
+      }
     } catch {
       /* ignore */
     }
   }, []);
+  useEffect(() => {
+    try {
+      if (pending) sessionStorage.setItem(PENDING, pending);
+      else sessionStorage.removeItem(PENDING);
+    } catch {
+      /* ignore */
+    }
+  }, [pending]);
   useEffect(() => {
     try {
       sessionStorage.setItem(STORE, JSON.stringify(turns.filter((t) => t.res).slice(-MAX_TURNS)));
@@ -106,6 +128,12 @@ export function AskProvider({ children }: { children: ReactNode }) {
     async (text: string, loc?: Coords | null) => {
       const q = text.trim();
       if (q.length < 1 || busy) return;
+      if (!user) {
+        setPending(q);
+        setDraft("");
+        login();
+        return;
+      }
       setBusy(true);
       setDraft("");
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -115,7 +143,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
         .map((t) => ({ user: t.user, reply: t.res!.reply, filters: t.res!.memo }));
       setTurns((prev) => [...prev, { id, user: q, res: null, at: Date.now() }].slice(-MAX_TURNS));
       try {
-        const params = new URLSearchParams({ q });
+        const params = new URLSearchParams({ q, uid: user.id });
         const city = pageContext.city ?? getCityPref();
         if (city) params.set("city", city);
         const at = loc ?? locRef.current;
@@ -127,6 +155,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
         if (pageContext.turf || pageContext.city) params.set("ctx", JSON.stringify({ turf: pageContext.turf?.name ?? null, city: pageContext.city ?? null }));
         const r = await fetch(`/api/ask?${params}`);
         if (r.status === 429) throw new Error("That's a lot of questions in a row. Give it a few minutes.");
+        if (r.status === 401) throw new Error("Sign in to keep chatting.");
         if (!r.ok) throw new Error("I'm having trouble right now. Try again in a moment.");
         const data = (await r.json()) as AskResponse;
         setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, res: data } : t)));
@@ -137,8 +166,17 @@ export function AskProvider({ children }: { children: ReactNode }) {
         setBusy(false);
       }
     },
-    [busy, turns, pageContext],
+    [busy, turns, pageContext, user, login],
   );
+
+  // Signed in with a message waiting: send it now.
+  useEffect(() => {
+    if (user && pending && !busy) {
+      const q = pending;
+      setPending(null);
+      void send(q);
+    }
+  }, [user, pending, busy, send]);
 
   const requestLocation = useCallback(async () => {
     setLocating(true);
@@ -177,8 +215,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Ctx>(
-    () => ({ open, openPanel, closePanel, turns, busy, send: (t) => send(t), reset, requestLocation, locating, hasLocation, pageContext, setPageContext, draft, setDraft }),
-    [open, openPanel, closePanel, turns, busy, send, reset, requestLocation, locating, hasLocation, pageContext, draft],
+    () => ({ open, openPanel, closePanel, turns, busy, send: (t) => send(t), reset, requestLocation, locating, hasLocation, pageContext, setPageContext, draft, setDraft, signedIn: !!user, pending }),
+    [open, openPanel, closePanel, turns, busy, send, reset, requestLocation, locating, hasLocation, pageContext, draft, user, pending],
   );
   return <AskCtx.Provider value={value}>{children}</AskCtx.Provider>;
 }
