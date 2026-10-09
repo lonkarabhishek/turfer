@@ -38,7 +38,7 @@ export function AskPanel() {
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: "end", behavior: turns.length > 1 ? "smooth" : "auto" });
-  }, [open, turns, busy]);
+  }, [open, turns, busy, freeLeft, pending]);
 
   // Close when navigating away from the page the chat was opened on? No:
   // the thread follows the player. Only hide on admin and login.
@@ -93,11 +93,11 @@ export function AskPanel() {
 
         {/* Thread */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4" aria-live="polite">
-          {turns.length === 0 && <Welcome where={where} signedIn={signedIn} />}
-          {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
+          {turns.length === 0 && <Welcome where={where} />}
           {turns.map((t, i) => (
             <TurnView key={t.id} turn={t} isLast={i === turns.length - 1} onUseLocation={() => void requestLocation()} locating={locating} />
           ))}
+          {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
           <div ref={endRef} />
         </div>
 
@@ -165,7 +165,7 @@ export function Orb({ size = 40 }: { size?: number }) {
   );
 }
 
-function Welcome({ where, signedIn }: { where: string | null; signedIn: boolean }) {
+function Welcome({ where }: { where: string | null }) {
   return (
     <div className="ask-message-in">
       <div className="flex items-end gap-2">
@@ -178,7 +178,7 @@ function Welcome({ where, signedIn }: { where: string | null; signedIn: boolean 
           ) : (
             <>Hey. I know every turf and open game on TapTurf. Tell me a sport, an area and a budget, or just ask.</>
           )}
-          {!signedIn && <span className="block mt-2 text-[13px] text-primary-500">Three answers on the house, then a quick sign-in.</span>}
+
         </div>
       </div>
     </div>
@@ -191,7 +191,7 @@ function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: (
     <div className="ask-message-in flex items-end gap-2">
       <Orb size={28} />
       <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-primary-900 text-white px-4 py-3.5 shadow-elevated">
-        <p className="text-[15px] leading-snug">That&rsquo;s three on the house. Sign in and I&rsquo;ll keep going, it takes ten seconds and it&rsquo;s free.</p>
+        <p className="text-[15px] leading-snug">Sign in to keep chatting. It&rsquo;s free and takes ten seconds, and I&rsquo;ll pick up right where we are.</p>
         {pending && <p className="mt-1.5 text-[13px] text-white/70">Next up: &ldquo;{pending}&rdquo;</p>}
         <button
           type="button"
