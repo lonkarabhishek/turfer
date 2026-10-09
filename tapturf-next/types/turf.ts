@@ -85,6 +85,8 @@ export interface Turf {
   google_place_id: string | null;
   description_source: string | null;
   description_updated_at: string | null;
+  /** AI cover pass verdicts; unusable photos are filtered out of images. */
+  image_review?: { url: string; usable: boolean; quality: number; shows: string; note: string }[] | null;
 
   // System
   is_active: boolean;

@@ -22,6 +22,8 @@ const CARD_COLUMNS = [
   "start_time", "end_time", "is_24x7", "membership_required", "is_active",
   // Ask TapTurf filters on these; forCard() drops them before pages ship them.
   "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria",
+  // AI cover pass: photos judged unusable are dropped from images below.
+  "image_review",
 ].join(", ");
 
 function transformTurf(raw: any): Turf {
@@ -45,7 +47,20 @@ function transformTurf(raw: any): Turf {
   const rawImages = Array.isArray(raw.images) ? raw.images : [];
   // convertImageUrls splits comma-joined entries, drops placeholders
   // and duplicates, and normalizes Google / Drive links.
-  const images = convertImageUrls(rawImages);
+  let images = convertImageUrls(rawImages);
+  // Photos the cover pass flagged (logos, screenshots, blur) stay in the
+  // row but never reach a card or gallery.
+  if (Array.isArray(raw.image_review)) {
+    const bad = new Set(
+      (raw.image_review as { url?: string; usable?: boolean }[])
+        .filter((r) => r && r.usable === false && typeof r.url === "string")
+        .map((r) => r.url as string),
+    );
+    if (bad.size) {
+      const kept = images.filter((u) => !bad.has(u));
+      if (kept.length) images = kept;
+    }
+  }
 
   // Parse contact_info - can be string or object
   let contactInfo = raw.contact_info;
