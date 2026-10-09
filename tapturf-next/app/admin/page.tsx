@@ -19,6 +19,7 @@ import { getAdminGames } from "@/lib/queries/adminDetail";
 import { StatTile } from "@/components/admin/StatTile";
 import { CoverPhotoTool } from "@/components/admin/CoverPhotoTool";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
+import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
@@ -86,6 +87,9 @@ export default async function AdminPage() {
 
   const suggestions = await getPendingSuggestions(500);
   const pendingSuggestions = suggestions.ok ? suggestions.rows.length : 0;
+  const asks = await getAskTranscripts(7);
+  const asks7d = asks.ok ? asks.rows.length : 0;
+  const askVisitors = asks.ok ? new Set(asks.rows.map((r) => r.ip_hash)).size : 0;
 
   const [
     headline,
@@ -259,6 +263,12 @@ export default async function AdminPage() {
           href="/admin/users?f=duplicates"
           value={headline.duplicateUsers}
           sub={headline.duplicateUsers === 0 ? "Clean" : "Same person, 2+ rows"}
+        />
+        <StatTile
+          label="Ask TapTurf (7d)"
+          href="/admin/asks"
+          value={asks7d}
+          sub={asks7d === 0 ? "No chats yet" : `${askVisitors} visitor${askVisitors === 1 ? "" : "s"}`}
         />
         <StatTile
           label="Player suggestions"

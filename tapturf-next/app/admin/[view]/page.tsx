@@ -30,6 +30,7 @@ import {
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
+import { ASK_FILTERS, askStats, filterAsks, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 
 export const revalidate = 0;
@@ -45,6 +46,7 @@ const VIEWS = {
   reviews: { title: "Reviews", filters: { all: "All" } },
   notifications: { title: "Notifications", filters: NOTIFICATION_FILTERS },
   suggestions: { title: "Player suggestions", filters: { all: "Pending" } },
+  asks: { title: "Ask TapTurf chats", filters: ASK_FILTERS },
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -408,6 +410,72 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
               </tr>
             ))}
           </Table>
+        ),
+      };
+    }
+
+    case "asks": {
+      const f = filter as AskFilter;
+      const res = await getAskTranscripts(f === "month" ? 30 : 7);
+      if (!res.ok) {
+        return {
+          count: 0,
+          node: <p className="text-primary-500 text-sm">{res.reason === "not_set_up" ? "The transcript function is not installed yet." : "Couldn't load chats."}</p>,
+        };
+      }
+      const rows = filterAsks(res.rows, f);
+      const threads = threadAsks(rows);
+      const st = askStats(rows);
+      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", other: "Chit-chat" };
+      return {
+        count: rows.length,
+        node: (
+          <div>
+            <div className="flex flex-wrap gap-2 mb-5 text-[13px]">
+              <Badge className="bg-primary-100 text-primary-700">{st.visitors} visitor{st.visitors === 1 ? "" : "s"}</Badge>
+              <Badge className="bg-primary-100 text-primary-700">{threads.length} conversation{threads.length === 1 ? "" : "s"}</Badge>
+              <Badge className="bg-accent-100 text-accent-800">{st.claude} via Claude</Badge>
+              {st.empty > 0 && <Badge className="bg-amber-100 text-amber-800">{st.empty} with no results</Badge>}
+              {st.p50 != null && <Badge className="bg-primary-100 text-primary-700">{(st.p50 / 1000).toFixed(1)}s typical</Badge>}
+              {Object.entries(st.byIntent)
+                .sort((a, b) => b[1] - a[1])
+                .map(([k, n]) => (
+                  <Badge key={k} className="bg-white border border-primary-200 text-primary-700">
+                    {intentLabel[k] ?? k} {n}
+                  </Badge>
+                ))}
+            </div>
+            {threads.length === 0 && <p className="text-primary-500 text-sm">No chats in this window.</p>}
+            <ul className="space-y-4">
+              {threads.map((t) => (
+                <li key={t.key} className="rounded-2xl bg-white border border-primary-200 p-4 sm:p-5">
+                  <p className="text-[12px] text-primary-400 mb-3">
+                    {fmtDateTime(t.started)} · visitor {t.ip_hash.slice(0, 6)} · {t.rows.length} message{t.rows.length === 1 ? "" : "s"}
+                  </p>
+                  <div className="space-y-3">
+                    {t.rows.map((r) => (
+                      <div key={r.id} className="space-y-1.5">
+                        <div className="flex justify-end">
+                          <p className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-900 text-white text-[14px] px-3.5 py-2 leading-snug">{r.query}</p>
+                        </div>
+                        <div className="flex justify-start">
+                          <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-primary-50 text-primary-900 text-[14px] px-3.5 py-2 leading-snug">
+                            {r.reply || <span className="text-primary-400">(no reply stored)</span>}
+                            <p className="mt-1 text-[11px] text-primary-400">
+                              {intentLabel[r.intent ?? ""] ?? r.intent ?? "?"}
+                              {r.results != null && r.intent !== "other" ? ` · ${r.results} result${r.results === 1 ? "" : "s"}` : ""}
+                              {r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}
+                              {r.source === "keywords" ? " · keyword fallback" : ""}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         ),
       };
     }
