@@ -62,6 +62,7 @@ function parseHistory(raw: string | null): AskTurn[] {
       for (const k of ["intent", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort"]) {
         if (f[k] != null && f[k] !== false && !(Array.isArray(f[k]) && (f[k] as unknown[]).length === 0)) keep[k] = f[k];
       }
+      if (Array.isArray(f.top)) keep.top = (f.top as unknown[]).filter((x) => typeof x === "string").slice(0, 5).map((x) => String(x).slice(0, 80));
       return [{ user: String(h.user).slice(0, MAX_Q), reply: String(h.reply ?? "").slice(0, 200), filters: keep as AskTurn["filters"] }];
     });
   } catch {
@@ -179,7 +180,10 @@ export async function GET(req: Request) {
         break;
       }
       case "compare": {
-        const cmpNames = ctx.turf && filters.turf_names.length === 1 ? [ctx.turf, ...filters.turf_names] : filters.turf_names;
+        // "Compare the top two" with no names: fall back to what was shown last.
+        const lastTop = [...history].reverse().find((h) => h.filters.top?.length)?.filters.top ?? [];
+        const named = filters.turf_names.length ? filters.turf_names : lastTop.slice(0, 2);
+        const cmpNames = ctx.turf && named.length === 1 ? [ctx.turf, ...named] : named;
         const resolved = resolveTurfNames(turfs, cmpNames.slice(0, 3), prefCity);
         const found = resolved.filter((r) => r.turf) as { name: string; turf: Turf }[];
         const missing = resolved.filter((r) => !r.turf).map((r) => r.name);
@@ -216,6 +220,10 @@ export async function GET(req: Request) {
     console.error("ask: intent handler failed", filters.intent, e);
     body = { ...base, relaxed: [], total: 0, failed: true };
   }
+
+  // Names shown this turn, so the next message can say "the first one".
+  const shown = (body.turfs as { name: string }[] | undefined)?.map((t) => t.name) ?? (body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? [];
+  body.memo = { ...(body.memo as Record<string, unknown>), top: shown.slice(0, 5) };
 
   if (logId != null) {
     void supabase

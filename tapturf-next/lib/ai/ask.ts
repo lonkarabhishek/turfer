@@ -58,7 +58,7 @@ export const AskFilters = z.object({
 export type AskFilters = z.infer<typeof AskFilters>;
 
 /** A previous exchange, sent back so follow-ups can build on it. */
-export type AskTurn = { user: string; reply: string; filters: Partial<AskFilters> };
+export type AskTurn = { user: string; reply: string; filters: Partial<AskFilters> & { top?: string[] } };
 /** What the player is looking at when they ask (a turf page, a city page). */
 export type AskContext = { turf?: string | null; city?: CityId | null };
 
@@ -86,7 +86,7 @@ Intents:
 
 Page context: the message may say what the player is looking at right now (a venue page or a city page). Then "this turf", "this place", "here", "it" mean that venue: put its name in turf_names for question and compare, and use its city when none is stated.
 
-Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football"), keep the earlier intent and filters and change only what the player changed. A new topic resets them.
+Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football"), keep the earlier intent and filters and change only what the player changed. A new topic resets them. Each earlier turn lists "top": the venues that were shown, in order. "The top two", "the first one", "the second", "compare those", "that one" refer to those names: copy the exact names into turf_names (two for compare, one for question).
 
 Cities: ${cities}. "Nasik" is nashik. "Bombay", Thane, Navi Mumbai, Panvel are mumbai. Secunderabad is hyderabad.
 Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice" mean cricket; "futsal", "5-a-side", "7-a-side" mean football.
@@ -136,7 +136,10 @@ export async function parseAsk(
   if (history.length) {
     parts.push(
       `Earlier in this conversation (oldest first):\n${history
-        .map((h) => `Player: ${h.user}\nBox: ${h.reply}\nFilters then: ${JSON.stringify(h.filters)}`)
+        .map((h) => {
+          const { top, ...filters } = h.filters;
+          return `Player: ${h.user}\nBox: ${h.reply}\nFilters then: ${JSON.stringify(filters)}${top?.length ? `\nShown then (top): ${top.join(" | ")}` : ""}`;
+        })
         .join("\n\n")}`,
     );
   }
