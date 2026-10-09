@@ -13,6 +13,7 @@ import {
   parseAsk,
   relaxedLabel,
   resolveTurfNames,
+  type AskContext,
   type AskFilters,
   type AskTurn,
 } from "@/lib/ai/ask";
@@ -33,6 +34,20 @@ function ipHash(req: Request): string {
 }
 
 const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.distanceKm != null ? { distanceKm: t.distanceKm } : {}) });
+
+/** What page the player is on, trimmed. */
+function parseContext(raw: string | null): AskContext {
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw) as { turf?: unknown; city?: unknown };
+    return {
+      turf: typeof o.turf === "string" ? o.turf.slice(0, 80) : null,
+      city: isCity(typeof o.city === "string" ? o.city : null) ? (o.city as AskContext["city"]) : null,
+    };
+  } catch {
+    return {};
+  }
+}
 
 /** Last three turns from the client, trimmed so a hostile client can't pad the prompt. */
 function parseHistory(raw: string | null): AskTurn[] {
@@ -64,6 +79,7 @@ export async function GET(req: Request) {
   const lng = Number(searchParams.get("lng") || NaN);
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
   const history = parseHistory(searchParams.get("h"));
+  const ctx = parseContext(searchParams.get("ctx"));
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
@@ -83,7 +99,7 @@ export async function GET(req: Request) {
   let source: "claude" | "keywords" = "keywords";
   if (isAskConfigured()) {
     try {
-      const parsed = await parseAsk(q, areasFromTurfs(turfs), history);
+      const parsed = await parseAsk(q, areasFromTurfs(turfs), history, ctx);
       if (parsed) {
         filters = parsed.filters;
         source = "claude";
@@ -103,6 +119,7 @@ export async function GET(req: Request) {
     intent: filters.intent,
     summary: filters.summary,
     reply: filters.reply,
+    followups: filters.followups.slice(0, 3),
     source,
     filters: {
       city: filters.city,
@@ -146,7 +163,8 @@ export async function GET(req: Request) {
         break;
       }
       case "compare": {
-        const resolved = resolveTurfNames(turfs, filters.turf_names.slice(0, 3), prefCity);
+        const cmpNames = ctx.turf && filters.turf_names.length === 1 ? [ctx.turf, ...filters.turf_names] : filters.turf_names;
+        const resolved = resolveTurfNames(turfs, cmpNames.slice(0, 3), prefCity);
         const found = resolved.filter((r) => r.turf) as { name: string; turf: Turf }[];
         const missing = resolved.filter((r) => !r.turf).map((r) => r.name);
         if (found.length < 2 || !source.startsWith("claude")) {
@@ -159,7 +177,8 @@ export async function GET(req: Request) {
         break;
       }
       case "question": {
-        const [hit] = resolveTurfNames(turfs, filters.turf_names.slice(0, 1), prefCity);
+        const names = filters.turf_names.length ? filters.turf_names : ctx.turf ? [ctx.turf] : [];
+        const [hit] = resolveTurfNames(turfs, names.slice(0, 1), prefCity);
         if (!hit?.turf || !source.startsWith("claude")) {
           body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
           break;
