@@ -80,23 +80,30 @@ export async function GET(req: Request) {
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
   const history = parseHistory(searchParams.get("h"));
   const ctx = parseContext(searchParams.get("ctx"));
-  // Answers are for signed-in players. Phone users have no server
-  // session, so this is the account id the client holds; the per-IP
-  // budget below is what actually caps abuse.
+  // Signed-in players send their account id; visitors a browser id and
+  // get three answers a day before sign-in. Phone users have no server
+  // session, so both are trusted ids; the per-IP budget caps abuse.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const uid = searchParams.get("uid") ?? "";
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid)) {
-    return NextResponse.json({ error: "sign_in" }, { status: 401 });
-  }
+  const aid = searchParams.get("aid") ?? "";
+  const userId = UUID.test(uid) ? uid : null;
+  const anonId = !userId && UUID.test(aid) ? aid : null;
+  if (!userId && !anonId) return NextResponse.json({ error: "sign_in" }, { status: 401 });
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
 
-  // Per-IP budget: ask_begin returns null when this IP has asked too often lately.
+  // Budgets: null id means this IP has asked too often; free_left -1
+  // means the visitor has used today's free answers.
   let logId: number | null = null;
+  let freeLeft: number | null = null;
   try {
-    const { data } = await supabase.rpc("ask_begin", { p_ip_hash: ipHash(req), p_query: q, p_user_id: uid });
-    if (data === null) return NextResponse.json({ error: "Too many searches, try again in a few minutes" }, { status: 429 });
-    logId = typeof data === "number" ? data : null;
+    const { data } = await supabase.rpc("ask_begin_v2", { p_ip_hash: ipHash(req), p_query: q, p_user_id: userId, p_anon_id: anonId });
+    const row = (Array.isArray(data) ? data[0] : data) as { id: number | null; free_left: number | null } | null;
+    if (row?.free_left === -1) return NextResponse.json({ error: "sign_in", freeLeft: 0 }, { status: 401 });
+    if (row && row.id === null) return NextResponse.json({ error: "Too many searches, try again in a few minutes" }, { status: 429 });
+    logId = row?.id ?? null;
+    freeLeft = row?.free_left ?? null;
   } catch {
     /* logging is best effort */
   }
@@ -143,6 +150,8 @@ export async function GET(req: Request) {
       sort: filters.sort,
     },
     needsLocation: filters.wants_nearby && !loc,
+    /** Free answers left today for a signed-out visitor; null when signed in. */
+    freeLeft,
     /** Sent back on the next turn so follow-ups can refine this one. */
     memo: {
       intent: filters.intent,
