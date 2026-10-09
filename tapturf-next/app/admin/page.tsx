@@ -17,6 +17,7 @@ import {
 } from "@/lib/queries/admin";
 import { getAdminGames } from "@/lib/queries/adminDetail";
 import { StatTile } from "@/components/admin/StatTile";
+import { CoverPhotoTool } from "@/components/admin/CoverPhotoTool";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
@@ -261,6 +262,11 @@ export default async function AdminPage() {
           value={headline.totalRequests}
           sub="All-time join requests"
         />
+      </section>
+
+      {/* AI tools */}
+      <section className="mb-8">
+        <CoverPhotoTool />
       </section>
 
       {/* Charts */}
