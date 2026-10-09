@@ -129,14 +129,24 @@ type StructuredParams = Omit<Anthropic.MessageCreateParamsNonStreaming, "output_
  * inside a string, or the object split over two blocks, which surfaced
  * as "Unterminated string in JSON" and a dead answer. So: join the
  * blocks, scrub control characters, cut to the outer braces, validate
- * with zod, and try once more when it still does not parse. Null means
- * the model declined or both attempts came back unusable.
+ * with zod, and try once more (with a doubled budget if it was cut off)
+ * when it still does not parse. Null means the model declined or both
+ * attempts came back unusable.
  */
 export async function structured<T extends z.ZodType>(schema: T, params: StructuredParams, tag: string): Promise<z.output<T> | null> {
   const format = zodOutputFormat(schema);
+  let maxTokens = params.max_tokens;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await getAnthropic().messages.create({ ...params, output_config: { effort: "low", format } });
+    // Thinking off: in production Haiku spent the whole budget on a
+    // thinking block and the JSON came back cut at max_tokens.
+    const res = await getAnthropic().messages.create({
+      ...params,
+      max_tokens: maxTokens,
+      thinking: { type: "disabled" },
+      output_config: { effort: "low", format },
+    });
     if (res.stop_reason === "refusal") return null;
+    if (res.stop_reason === "max_tokens") maxTokens *= 2;
     const text = res.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
