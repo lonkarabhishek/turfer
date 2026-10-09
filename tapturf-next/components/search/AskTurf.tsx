@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Loader2, LocateFixed, Sparkles, X } from "lucide-react";
+import { ArrowRight, Loader2, LocateFixed, RotateCcw, Sparkles } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { GameCard } from "@/components/game/GameCard";
 import { getCityPref, labelFor, isCity } from "@/lib/city";
@@ -15,6 +15,7 @@ type AskResponse = {
   query: string;
   intent: "find_turf" | "find_game" | "compare" | "question" | "other";
   summary: string;
+  reply: string;
   source: "claude" | "keywords";
   filters: {
     city: string | null;
@@ -30,6 +31,7 @@ type AskResponse = {
     players: number | null;
     sort: string;
   };
+  memo: Record<string, unknown>;
   needsLocation: boolean;
   relaxed: string[];
   total: number;
@@ -41,6 +43,8 @@ type AskResponse = {
   answer?: { answer: string; covered: boolean } | null;
 };
 
+type Turn = { user: string; res: AskResponse | null; error?: string };
+
 const EXAMPLES = [
   "Box cricket in Kothrud under ₹1,000",
   "Football games near me this weekend",
@@ -50,70 +54,121 @@ const EXAMPLES = [
 ];
 
 /**
- * Ask TapTurf: one box for finding turfs, finding games, comparing
- * two venues, or asking about one. The server reads the sentence,
- * then answers from our own listings. On the home page it sits under
- * the two main buttons; on /turfs above the filters.
+ * Ask TapTurf: a small chat for finding turfs, finding games,
+ * comparing two venues, or asking about one. The server reads each
+ * message with the last few turns for context, then answers from our
+ * own listings. Results for the latest turn render under the thread.
  */
 export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [res, setRes] = useState<AskResponse | null>(null);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [locating, setLocating] = useState(false);
   const locRef = useRef<Coords | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
 
-  const run = useCallback(async (query: string, loc?: Coords | null) => {
-    const text = query.trim();
-    if (text.length < 2) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ q: text });
-      const city = getCityPref();
-      if (city) params.set("city", city);
-      const at = loc ?? locRef.current;
-      if (at) {
-        params.set("lat", at.lat.toFixed(4));
-        params.set("lng", at.lng.toFixed(4));
+  const last = turns.length ? turns[turns.length - 1] : null;
+  const res = last?.res ?? null;
+
+  const run = useCallback(
+    async (query: string, loc?: Coords | null) => {
+      const text = query.trim();
+      if (text.length < 2) return;
+      setBusy(true);
+      setQ("");
+      // Previous completed turns go back as context for follow-ups.
+      const history = turns
+        .filter((t) => t.res)
+        .slice(-3)
+        .map((t) => ({ user: t.user, reply: t.res!.reply, filters: t.res!.memo }));
+      setTurns((prev) => [...prev, { user: text, res: null }]);
+      try {
+        const params = new URLSearchParams({ q: text });
+        const city = getCityPref();
+        if (city) params.set("city", city);
+        const at = loc ?? locRef.current;
+        if (at) {
+          params.set("lat", at.lat.toFixed(4));
+          params.set("lng", at.lng.toFixed(4));
+        }
+        if (history.length) params.set("h", JSON.stringify(history));
+        const r = await fetch(`/api/ask?${params}`);
+        if (r.status === 429) throw new Error("That's a lot of questions in a row. Give it a few minutes.");
+        if (!r.ok) throw new Error("I'm having trouble right now. The filters below still work.");
+        const data = (await r.json()) as AskResponse;
+        setTurns((prev) => prev.map((t, i) => (i === prev.length - 1 ? { ...t, res: data } : t)));
+      } catch (e) {
+        const msg = (e as Error).message || "Something went wrong.";
+        setTurns((prev) => prev.map((t, i) => (i === prev.length - 1 ? { ...t, error: msg } : t)));
+      } finally {
+        setBusy(false);
       }
-      const r = await fetch(`/api/ask?${params}`);
-      if (r.status === 429) throw new Error("That's a lot of searches. Give it a few minutes.");
-      if (!r.ok) throw new Error("Search is taking a break. Try the filters below.");
-      setRes((await r.json()) as AskResponse);
-    } catch (e) {
-      setError((e as Error).message || "Something went wrong.");
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+    },
+    [turns],
+  );
+
+  // Keep the newest exchange in view on phones.
+  useEffect(() => {
+    if (turns.length > 1) threadRef.current?.lastElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [turns.length]);
 
   const useLocation = async () => {
     setLocating(true);
     try {
       const me = await getUserLocation();
       locRef.current = me;
-      await run(res?.query ?? q, me);
+      // Re-ask the same thing with a location, replacing the last turn.
+      const again = last?.user ?? q;
+      setTurns((prev) => prev.slice(0, -1));
+      await run(again, me);
     } catch {
-      setError("Couldn't get your location. Add an area to your search instead.");
+      setTurns((prev) => prev.map((t, i) => (i === prev.length - 1 ? { ...t, error: "Couldn't get your location. Add an area instead." } : t)));
     } finally {
       setLocating(false);
     }
   };
 
-  const clear = () => {
-    setRes(null);
-    setError(null);
+  const reset = () => {
+    setTurns([]);
     setQ("");
     inputRef.current?.focus();
   };
 
   const wide = variant === "home";
-  const grid = `mt-5 grid grid-cols-1 sm:grid-cols-2 ${wide ? "" : "md:grid-cols-3 lg:grid-cols-4"} gap-x-5 gap-y-7`;
+  const grid = `mt-4 grid grid-cols-1 sm:grid-cols-2 ${wide ? "" : "md:grid-cols-3 lg:grid-cols-4"} gap-x-5 gap-y-7`;
+  const started = turns.length > 0;
 
   return (
     <section className={wide ? "mt-7 text-left" : "mb-4"} aria-label="Ask TapTurf">
+      {started && (
+        <div ref={threadRef} className="mb-3 space-y-2.5">
+          {turns.map((t, i) => (
+            <div key={i} className="space-y-2.5">
+              <div className="flex justify-end">
+                <p className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-900 text-white text-[15px] px-4 py-2.5 leading-snug">{t.user}</p>
+              </div>
+              <div className="flex justify-start">
+                <p className="max-w-[90%] rounded-2xl rounded-bl-md bg-primary-100 text-primary-900 text-[15px] px-4 py-2.5 leading-snug">
+                  {t.error ? (
+                    <span className="text-hot-600">{t.error}</span>
+                  ) : t.res ? (
+                    <>
+                      {t.res.reply}
+                      {i === turns.length - 1 && <Subline res={t.res} />}
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-primary-500">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -128,8 +183,8 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
           value={q}
           onChange={(e) => setQ(e.target.value)}
           maxLength={160}
-          enterKeyHint="search"
-          placeholder="Ask for a turf, a game, or compare two"
+          enterKeyHint="send"
+          placeholder={started ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
           className="w-full h-12 pl-11 pr-24 rounded-full bg-white border border-primary-200 shadow-soft text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
         />
         <button
@@ -137,20 +192,17 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
           disabled={busy || q.trim().length < 2}
           className="absolute right-1.5 top-1/2 -translate-y-1/2 h-9 px-4 rounded-full bg-primary-900 hover:bg-primary-800 disabled:opacity-40 text-white text-[14px] font-semibold inline-flex items-center gap-1.5 transition-colors"
         >
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ask"}
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : started ? "Send" : "Ask"}
         </button>
       </form>
 
-      {!res && !busy && (
+      {!started && (
         <div className="mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
           {EXAMPLES.map((ex) => (
             <button
               key={ex}
               type="button"
-              onClick={() => {
-                setQ(ex);
-                void run(ex);
-              }}
+              onClick={() => void run(ex)}
               className="shrink-0 h-8 px-3 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] text-primary-700 whitespace-nowrap"
             >
               {ex}
@@ -159,10 +211,20 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
         </div>
       )}
 
-      {error && <p className="mt-3 text-[14px] text-hot-600">{error}</p>}
+      {started && (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-medium text-primary-500 hover:text-primary-800 hover:bg-primary-100"
+          >
+            <RotateCcw className="w-3 h-3" /> Start over
+          </button>
+        </div>
+      )}
 
-      {busy && (
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5" aria-hidden>
+      {busy && !res && turns.length === 1 && (
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-5" aria-hidden>
           {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="animate-pulse">
               <div className="aspect-[4/3] rounded-2xl bg-primary-100" />
@@ -173,21 +235,7 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
       )}
 
       {res && !busy && (
-        <div className="mt-5" aria-live="polite">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-display text-[20px] md:text-[22px] text-primary-900 leading-tight">{headline(res)}</p>
-              <p className="text-[13px] text-primary-500 mt-1">{subline(res)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={clear}
-              className="shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] font-medium text-primary-700"
-            >
-              <X className="w-3.5 h-3.5" /> Clear
-            </button>
-          </div>
-
+        <div className="mt-2" aria-live="polite">
           {(res.intent === "find_turf" || res.intent === "find_game") && <Chips res={res} />}
 
           {res.needsLocation && (
@@ -215,15 +263,15 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
 
           {res.intent === "find_game" && (
             <>
-              <div className={`mt-5 grid grid-cols-1 ${wide ? "" : "md:grid-cols-2"} gap-4`}>
+              <div className={`mt-4 grid grid-cols-1 ${wide ? "" : "md:grid-cols-2"} gap-4`}>
                 {(res.games ?? []).map((g) => (
                   <GameCard key={g.id} game={g} />
                 ))}
               </div>
               {res.total === 0 ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <More href="/games" label="See all open games" />
-                  <More href="/game/create" label="Host one" tone="light" />
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <More href="/games" label="See all open games" inline />
+                  <More href="/game/create" label="Host one" tone="light" inline />
                 </div>
               ) : (
                 <More href="/games" label={res.total > (res.games?.length ?? 0) ? `See all ${res.total} games` : "All open games"} />
@@ -235,14 +283,8 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
 
           {res.intent === "question" && (
             <>
-              {res.answer ? (
+              {res.answer && (
                 <p className="mt-3 text-[16px] text-primary-800 leading-relaxed rounded-2xl bg-accent-50 px-4 py-3">{res.answer.answer}</p>
-              ) : (
-                <p className="mt-3 text-[15px] text-primary-600">
-                  {res.missing?.length
-                    ? `We couldn't find "${res.missing[0]}" in our listings. Check the spelling, or search for it first.`
-                    : "Couldn't answer that right now. The turf page has the details and a Call button."}
-                </p>
               )}
               {res.turfs?.length ? (
                 <div className={grid}>
@@ -253,39 +295,41 @@ export function AskTurf({ variant = "home" }: { variant?: "home" | "listing" }) 
               ) : null}
             </>
           )}
-
-          {res.intent === "other" && (
-            <p className="mt-3 text-[15px] text-primary-600">Try a sport and an area, &ldquo;games near me&rdquo;, or two venue names with &ldquo;vs&rdquo;.</p>
-          )}
         </div>
       )}
     </section>
   );
 }
 
-function headline(r: AskResponse): string {
-  if (r.intent === "other") return "That one's not about turfs";
-  return r.summary;
-}
-
-function subline(r: AskResponse): string {
-  if (r.failed) return "Something went wrong on our side. Try again in a moment.";
-  switch (r.intent) {
-    case "find_turf":
-      return r.total === 0
-        ? "Nothing matched. Try fewer conditions."
-        : `${r.total} match${r.total === 1 ? "" : "es"}${r.relaxed.length ? `, after widening ${r.relaxed.join(" and ")}` : ""}`;
-    case "find_game":
-      return r.total === 0
-        ? "No open games match yet. Host one and we'll list it."
-        : `${r.total} open game${r.total === 1 ? "" : "s"}${r.relaxed.length ? `, after widening ${r.relaxed.join(" and ")}` : ""}`;
-    case "compare":
-      return r.missing?.length ? `Couldn't find ${r.missing.map((m) => `"${m}"`).join(" or ")} in our listings.` : "From listed rates, hours, facilities and recent reviews.";
-    case "question":
-      return r.answer?.covered === false ? "Not listed on TapTurf yet." : r.turfs?.[0] ? `About ${r.turfs[0].name}.` : "";
-    default:
-      return "";
-  }
+/** Second line inside the reply bubble: counts and what was widened. */
+function Subline({ res }: { res: AskResponse }) {
+  let text = "";
+  if (res.failed) text = "Something went wrong on our side. Try again in a moment.";
+  else
+    switch (res.intent) {
+      case "find_turf":
+        text =
+          res.total === 0
+            ? "Nothing matched that. Try fewer conditions."
+            : `${res.total} match${res.total === 1 ? "" : "es"}${res.relaxed.length ? `, after widening ${res.relaxed.join(" and ")}.` : "."}`;
+        break;
+      case "find_game":
+        text =
+          res.total === 0
+            ? "No open games match yet. You could host one and I'll list it."
+            : `${res.total} open game${res.total === 1 ? "" : "s"}${res.relaxed.length ? `, after widening ${res.relaxed.join(" and ")}.` : "."}`;
+        break;
+      case "compare":
+        if (res.missing?.length) text = `I couldn't find ${res.missing.map((m) => `"${m}"`).join(" or ")} in our listings. Check the spelling?`;
+        else if ((res.turfs?.length ?? 0) < 2) text = "Name two venues we list and I'll put them side by side.";
+        break;
+      case "question":
+        if (res.missing?.length) text = `I couldn't find "${res.missing[0]}" in our listings. Check the spelling, or search for it first.`;
+        else if (!res.answer) text = "Couldn't answer that right now. The turf page has the details and a Call button.";
+        break;
+    }
+  if (!text) return null;
+  return <span className="block mt-1 text-[13px] text-primary-500">{text}</span>;
 }
 
 function Chips({ res }: { res: AskResponse }) {
@@ -304,7 +348,7 @@ function Chips({ res }: { res: AskResponse }) {
   if (f.players) out.push(`${f.players} players`);
   if (!out.length) return null;
   return (
-    <div className="mt-2.5 flex flex-wrap gap-1.5">
+    <div className="mt-1 flex flex-wrap gap-1.5">
       {out.map((c) => (
         <span key={c} className="h-7 px-2.5 inline-flex items-center rounded-full bg-accent-50 text-accent-700 text-[12px] font-medium">
           {c}
@@ -318,14 +362,16 @@ function Compare({ res, wide }: { res: AskResponse; wide: boolean }) {
   const turfs = res.turfs ?? [];
   const c = res.compare;
   if (turfs.length < 2) {
-    return (
-      <p className="mt-3 text-[15px] text-primary-600">
-        {turfs.length === 1 ? "Found one of them. Add the second venue\u2019s name and try again." : "Name two venues we list, for example two turfs from the same city."}
-      </p>
-    );
+    return turfs.length ? (
+      <div className={`mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-7`}>
+        {turfs.map((t) => (
+          <TurfCard key={t.id} turf={t} />
+        ))}
+      </div>
+    ) : null;
   }
   return (
-    <div className="mt-4">
+    <div className="mt-3">
       {c ? (
         <>
           <p className="text-[16px] text-primary-800 leading-relaxed rounded-2xl bg-accent-50 px-4 py-3">{c.verdict}</p>
@@ -379,19 +425,18 @@ function Compare({ res, wide }: { res: AskResponse; wide: boolean }) {
   );
 }
 
-function More({ href, label, tone = "dark" }: { href: string; label: string; tone?: "dark" | "light" }) {
-  return (
-    <div className="mt-6 text-center">
-      <Link
-        href={href}
-        className={`inline-flex items-center gap-1.5 h-11 px-6 rounded-full text-[15px] font-semibold ${
-          tone === "dark" ? "bg-primary-900 hover:bg-primary-800 text-white" : "bg-primary-100 hover:bg-primary-200 text-primary-900"
-        }`}
-      >
-        {label} <ArrowRight className="w-4 h-4" />
-      </Link>
-    </div>
+function More({ href, label, tone = "dark", inline = false }: { href: string; label: string; tone?: "dark" | "light"; inline?: boolean }) {
+  const link = (
+    <Link
+      href={href}
+      className={`inline-flex items-center gap-1.5 h-11 px-6 rounded-full text-[15px] font-semibold ${
+        tone === "dark" ? "bg-primary-900 hover:bg-primary-800 text-white" : "bg-primary-100 hover:bg-primary-200 text-primary-900"
+      }`}
+    >
+      {label} <ArrowRight className="w-4 h-4" />
+    </Link>
   );
+  return inline ? link : <div className="mt-6 text-center">{link}</div>;
 }
 
 function moreLink(r: AskResponse): string {
