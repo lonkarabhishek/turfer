@@ -18,6 +18,7 @@ import {
 import { getAdminGames } from "@/lib/queries/adminDetail";
 import { StatTile } from "@/components/admin/StatTile";
 import { CoverPhotoTool } from "@/components/admin/CoverPhotoTool";
+import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
@@ -82,6 +83,9 @@ export default async function AdminPage() {
   // AdminGate first lets a phone-OTP owner hand over their Firebase token.
   const allowed = await isAdmin();
   if (!allowed) return <AdminGate />;
+
+  const suggestions = await getPendingSuggestions(500);
+  const pendingSuggestions = suggestions.ok ? suggestions.rows.length : 0;
 
   const [
     headline,
@@ -257,10 +261,11 @@ export default async function AdminPage() {
           sub={headline.duplicateUsers === 0 ? "Clean" : "Same person, 2+ rows"}
         />
         <StatTile
-          label="Requests"
-          href="/admin/requests"
-          value={headline.totalRequests}
-          sub="All-time join requests"
+          label="Player suggestions"
+          href="/admin/suggestions"
+          value={pendingSuggestions}
+          sub={pendingSuggestions === 0 ? "Queue is clear" : "Pending your approval"}
+          tone={pendingSuggestions > 0 ? "accent" : "default"}
         />
       </section>
 

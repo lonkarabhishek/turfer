@@ -29,6 +29,8 @@ import {
   type UserFilter,
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
+import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
+import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
@@ -42,6 +44,7 @@ const VIEWS = {
   bookings: { title: "Bookings", filters: BOOKING_FILTERS },
   reviews: { title: "Reviews", filters: { all: "All" } },
   notifications: { title: "Notifications", filters: NOTIFICATION_FILTERS },
+  suggestions: { title: "Player suggestions", filters: { all: "Pending" } },
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -407,6 +410,21 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
           </Table>
         ),
       };
+    }
+
+    case "suggestions": {
+      const res = await getPendingSuggestions(300);
+      if (!res.ok) {
+        return {
+          count: 0,
+          node: (
+            <p className="text-primary-500 text-sm">
+              {res.reason === "not_set_up" ? "The suggestion review functions are not installed yet." : "Couldn't load suggestions."}
+            </p>
+          ),
+        };
+      }
+      return { count: res.rows.length, node: <SuggestionQueue initial={res.rows} /> };
     }
 
     case "notifications": {
