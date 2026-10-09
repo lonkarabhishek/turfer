@@ -12,11 +12,16 @@ import {
   keywordFilters,
   parseAsk,
   relaxedLabel,
+  resolveTurfNames,
   type AskFilters,
 } from "@/lib/ai/ask";
+import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
+import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
+import type { Turf } from "@/types/turf";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
-// Sentence in, matching turfs out. See lib/ai/ask.ts for the shape.
+// One box, four intents: find a turf, find a game, compare venues,
+// ask about one venue. See lib/ai/ask.ts for how the sentence is read.
 
 const allTurfs = unstable_cache(() => getAllActiveTurfs(), ["ask-all-turfs"], { revalidate: 600 });
 const MAX_Q = 160;
@@ -25,6 +30,8 @@ function ipHash(req: Request): string {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
   return createHash("sha256").update(`${process.env.ASK_SALT ?? "tapturf"}|${ip}`).digest("hex").slice(0, 32);
 }
+
+const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.distanceKm != null ? { distanceKm: t.distanceKm } : {}) });
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -69,39 +76,78 @@ export async function GET(req: Request) {
     filters = keywordFilters(q);
   }
 
-  const result = filters.off_topic
-    ? { turfs: [], total: 0, relaxed: [] as string[] }
-    : applyAskFilters(turfs, filters, { prefCity, loc, limit: 12 });
+  const base = {
+    query: q,
+    intent: filters.intent,
+    summary: filters.summary,
+    source,
+    filters: {
+      city: filters.city,
+      sport: filters.sport,
+      areas: filters.areas,
+      maxPrice: filters.max_price_per_hour,
+      time: filters.time,
+      when: filters.when,
+      skill: filters.skill,
+      open24x7: filters.open_24x7,
+      wantsNearby: filters.wants_nearby,
+      needs: filters.needs,
+      players: filters.players,
+      sort: filters.sort,
+    },
+    needsLocation: filters.wants_nearby && !loc,
+  };
+  let body: Record<string, unknown> = { ...base, relaxed: [], total: 0 };
+
+  try {
+    switch (filters.intent) {
+      case "find_game": {
+        const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10 });
+        body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, games: r.games };
+        break;
+      }
+      case "compare": {
+        const resolved = resolveTurfNames(turfs, filters.turf_names.slice(0, 3), prefCity);
+        const found = resolved.filter((r) => r.turf) as { name: string; turf: Turf }[];
+        const missing = resolved.filter((r) => !r.turf).map((r) => r.name);
+        if (found.length < 2 || !source.startsWith("claude")) {
+          body = { ...base, relaxed: [], total: found.length, missing, turfs: found.map((r) => card(r.turf)), compare: null };
+          break;
+        }
+        const sheets = (await Promise.all(found.map((r) => loadFacts(r.turf.id)))).filter((s) => s) as { turf: Turf; facts: Record<string, unknown> }[];
+        const out = await compareTurfs(sheets.map((s) => s.facts));
+        body = { ...base, relaxed: [], total: sheets.length, missing, turfs: sheets.map((s) => card(s.turf)), compare: out };
+        break;
+      }
+      case "question": {
+        const [hit] = resolveTurfNames(turfs, filters.turf_names.slice(0, 1), prefCity);
+        if (!hit?.turf || !source.startsWith("claude")) {
+          body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
+          break;
+        }
+        const sheet = await loadFacts(hit.turf.id);
+        const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts) : null;
+        body = { ...base, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
+        break;
+      }
+      case "other":
+        body = { ...base, relaxed: [], total: 0 };
+        break;
+      default: {
+        const r = applyAskFilters(turfs, filters, { prefCity, loc, limit: 12 });
+        body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, turfs: r.turfs.map(card) };
+      }
+    }
+  } catch (e) {
+    console.error("ask: intent handler failed", filters.intent, e);
+    body = { ...base, relaxed: [], total: 0, failed: true };
+  }
 
   if (logId != null) {
     void supabase
-      .rpc("ask_finish", { p_id: logId, p_filters: filters, p_results: result.total, p_ms: Date.now() - started, p_source: source })
+      .rpc("ask_finish", { p_id: logId, p_filters: filters, p_results: Number(body.total) || 0, p_ms: Date.now() - started, p_source: source })
       .then(() => {}, () => {});
   }
 
-  return NextResponse.json(
-    {
-      query: q,
-      summary: filters.summary,
-      offTopic: filters.off_topic,
-      source,
-      filters: {
-        city: filters.city,
-        sport: filters.sport,
-        areas: filters.areas,
-        maxPrice: filters.max_price_per_hour,
-        time: filters.time,
-        open24x7: filters.open_24x7,
-        wantsNearby: filters.wants_nearby,
-        needs: filters.needs,
-        players: filters.players,
-        sort: filters.sort,
-      },
-      needsLocation: filters.wants_nearby && !loc,
-      relaxed: result.relaxed.map(relaxedLabel),
-      total: result.total,
-      turfs: result.turfs.map((t) => ({ ...forCard(t), ...(t.distanceKm != null ? { distanceKm: t.distanceKm } : {}) })),
-    },
-    { headers: { "Cache-Control": "private, no-store" } },
-  );
+  return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store" } });
 }

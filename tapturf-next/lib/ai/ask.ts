@@ -10,16 +10,18 @@ import { haversineKm, type Coords } from "@/lib/utils/location";
 import type { Turf } from "@/types/turf";
 
 /**
- * "Ask TapTurf": a sentence in, a list of real turfs out.
+ * "Ask TapTurf": a sentence in, something real out.
  *
- * Claude only turns the sentence into filters (city, sport, areas,
- * budget, time, needs). The search itself runs over our own turf
- * rows, so a result is always a venue we list. Haiku 5.5, low effort:
- * a few paise per query. Without ANTHROPIC_API_KEY the caller falls
- * back to plain keyword matching, so the box still works.
+ * Claude Haiku 5.5 reads the sentence once and returns an intent plus
+ * filters (structured output, low effort, a few paise). The route then
+ * does the work itself: finds turfs or games in our rows, resolves
+ * venue names for a comparison or a question. Nothing Claude says here
+ * reaches the screen except the one-line summary, so it cannot invent
+ * a venue. Without ANTHROPIC_API_KEY the caller falls back to keyword
+ * matching and the box still works.
  */
 
-const MODEL = "claude-haiku-5-5";
+export const ROUTER_MODEL = "claude-haiku-5-5";
 
 export const NEEDS = ["floodlights", "parking", "washroom", "changing_room", "cafeteria", "covered"] as const;
 export type Need = (typeof NEEDS)[number];
@@ -27,12 +29,20 @@ export type Need = (typeof NEEDS)[number];
 const SPORT_SLUGS = SPORT_PAGES.map((s) => s.slug) as [string, ...string[]];
 
 export const AskFilters = z.object({
+  intent: z.enum(["find_turf", "find_game", "compare", "question", "other"]),
   city: z.enum(CITY_IDS as [CityId, ...CityId[]]).nullable(),
   sport: z.enum(SPORT_SLUGS).nullable(),
   areas: z.array(z.string()),
+  /** Venue names the player typed, for compare and question. */
+  turf_names: z.array(z.string()),
+  /** The question itself, for question intent, in the player's words. */
+  question: z.string().nullable(),
   max_price_per_hour: z.number().nullable(),
   min_rating: z.number().nullable(),
   time: z.enum(["morning", "afternoon", "evening", "late_night"]).nullable(),
+  /** For games: when. */
+  when: z.enum(["today", "tomorrow", "weekend", "this_week"]).nullable(),
+  skill: z.enum(["beginner", "intermediate", "advanced"]).nullable(),
   open_24x7: z.boolean(),
   wants_nearby: z.boolean(),
   players: z.number().nullable(),
@@ -40,7 +50,6 @@ export const AskFilters = z.object({
   sort: z.enum(["rating", "price_low", "reviews", "nearby"]),
   free_text: z.string().nullable(),
   summary: z.string(),
-  off_topic: z.boolean(),
 });
 export type AskFilters = z.infer<typeof AskFilters>;
 
@@ -55,7 +64,14 @@ function systemPrompt(areasByCity: Record<string, string[]>): string {
   const areas = Object.entries(areasByCity)
     .map(([city, list]) => `${city}: ${list.join(", ")}`)
     .join("\n");
-  return `You turn a player's search for a sports venue in India into filters for a venue directory. Reply only with the JSON object.
+  return `You read what a player typed into the search box of TapTurf, an Indian sports venue directory with pickup games, and return the intent and filters as JSON. Reply only with the JSON object.
+
+Intents:
+- find_turf: looking for a venue, ground, turf, court or cage to play at. The default when unsure.
+- find_game: looking for a match, game or squad to join ("games near me", "football match this weekend", "anyone playing").
+- compare: two or more venue names with "vs", "or", "compare", "which is better".
+- question: a question about one named venue ("does X have parking", "what time does Y open", "how much is Z").
+- other: not about sports venues or games at all.
 
 Cities: ${cities}. "Nasik" is nashik. "Bombay", Thane, Navi Mumbai, Panvel are mumbai. Secunderabad is hyderabad.
 Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice" mean cricket; "futsal", "5-a-side", "7-a-side" mean football.
@@ -64,33 +80,36 @@ Known areas by city:
 ${areas}
 
 Rules:
-- areas: neighbourhoods the player names, using the known spelling when one matches. Empty when none. Do not put a city in areas.
+- turf_names: venue names exactly as typed, one per entry, for compare and question. Empty otherwise.
+- question: the player's question in their words, for question intent. Else null.
+- areas: neighbourhoods the player names, using the known spelling when one matches. Empty when none. Never a city, never a venue name.
 - city: when stated, or when every area named belongs to one city. Otherwise null.
 - wants_nearby: true for "near me", "nearby", "close by", "around here". Then leave areas empty.
 - max_price_per_hour: only when a budget is given. "cheap", "budget", "affordable" alone mean 800.
 - time: morning (before 12), afternoon, evening (after 5pm, "tonight"), late_night (after 11pm, "midnight", "2am").
+- when: for games. today, tomorrow, weekend (Saturday or Sunday), this_week. Null when not said.
+- skill: for games, only if the player says beginner, intermediate, advanced, pro, casual (casual = beginner).
 - open_24x7: true for "24 hours", "all night", "open late", "after midnight".
 - needs: only features the player asks for. "lights" or "night match" means floodlights. "rain" or "indoor" means covered.
 - players: the number of people, if given.
 - sort: price_low when the player cares about cost, reviews for "popular", nearby when wants_nearby, else rating.
-- free_text: a venue name or words you could not map ("CC Turf", "rooftop"). Else null.
-- summary: at most 12 words restating the search in plain words, sentence case, no quotes. Example: Box cricket in Kothrud under ₹1,000 an hour.
-- off_topic: true when the message is not about finding a sports venue, court, turf or game. Then still fill summary with a short polite note.`;
+- free_text: for find_turf, a single venue name or words you could not map ("rooftop"). Else null.
+- summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a short polite note that TapTurf finds turfs and games.`;
 }
 
 let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ timeout: 8_000, maxRetries: 1 });
+export function getAnthropic(): Anthropic {
+  if (!client) client = new Anthropic({ timeout: 20_000, maxRetries: 1 });
   return client;
 }
 
 export type AskParse = { filters: AskFilters; usage?: { input: number; output: number; cached: number } };
 
-/** Sentence to filters. Throws on API failure; returns null when the model declined. */
+/** Sentence to intent and filters. Throws on API failure; returns null when the model declined. */
 export async function parseAsk(query: string, areasByCity: Record<string, string[]>): Promise<AskParse | null> {
-  const response = await getClient().messages.parse({
-    model: MODEL,
-    max_tokens: 400,
+  const response = await getAnthropic().messages.parse({
+    model: ROUTER_MODEL,
+    max_tokens: 500,
     output_config: { effort: "low", format: zodOutputFormat(AskFilters) },
     system: [{ type: "text", text: systemPrompt(areasByCity), cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: query }],
@@ -112,26 +131,33 @@ export function keywordFilters(query: string): AskFilters {
   const city = CITIES.find((c) => q.includes(c.id)) ?? null;
   const sportPage = SPORT_PAGES.find((s) => s.labels.some((l) => q.includes(l.toLowerCase()))) ?? null;
   const sport = sportPage?.slug ?? null;
+  const game = /\b(game|games|match|matches|squad|anyone playing)\b/.test(q);
   const known = !!(city || sportPage);
-  const summary = known
-    ? `${sportPage ? sportPage.name : "Turfs"}${city ? ` in ${city.label}` : ""}`
-    : `Turfs matching "${query}"`;
+  const summary = game
+    ? `${sportPage ? sportPage.name : "Open"} games${city ? ` in ${city.label}` : ""}`
+    : known
+      ? `${sportPage ? sportPage.name : "Turfs"}${city ? ` in ${city.label}` : ""}`
+      : `Turfs matching "${query}"`;
   return {
+    intent: game ? "find_game" : "find_turf",
     city: city?.id ?? null,
     sport,
     areas: [],
+    turf_names: [],
+    question: null,
     max_price_per_hour: null,
     min_rating: null,
     time: null,
+    when: /\btoday|tonight\b/.test(q) ? "today" : /\btomorrow\b/.test(q) ? "tomorrow" : /\bweekend|saturday|sunday\b/.test(q) ? "weekend" : null,
+    skill: null,
     open_24x7: /24 ?(hour|hr|x7)|all night|midnight/.test(q),
     wants_nearby: /near me|nearby|close by/.test(q),
     players: null,
     needs: [],
     sort: /near me|nearby/.test(q) ? "nearby" : "rating",
     // With a sport or city recognised, the rest of the words are noise.
-    free_text: known ? null : query,
+    free_text: known || game ? null : query,
     summary,
-    off_topic: false,
   };
 }
 
@@ -150,7 +176,37 @@ export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
   );
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const STOP = new Set(["turf", "turfs", "ground", "grounds", "sports", "sport", "arena", "academy", "club", "the", "and", "box", "cricket", "football", "complex", "hub"]);
+
+/**
+ * Match typed venue names against our rows. Generic words (turf,
+ * arena, sports) don't count, so "Vedant" finds Vedant Sports Academy
+ * and "CC Turf Pardi" needs both "cc" and "pardi". One result per
+ * typed name, best match first, same city preferred.
+ */
+export function resolveTurfNames(all: Turf[], names: string[], prefCity?: CityId | null): { name: string; turf: Turf | null }[] {
+  return names.map((name) => {
+    const words = norm(name).split(" ").filter((w) => w.length >= 2);
+    const strong = words.filter((w) => !STOP.has(w));
+    const use = strong.length ? strong : words;
+    if (!use.length) return { name, turf: null };
+    let best: { t: Turf; score: number } | null = null;
+    for (const t of all) {
+      const hay = norm(`${t.name} ${areaFor(t) ?? ""}`);
+      const hits = use.filter((w) => hay.includes(w)).length;
+      if (hits === 0) continue;
+      const score =
+        hits / use.length +
+        (hits === use.length ? 0.5 : 0) +
+        (prefCity && t.city === prefCity ? 0.1 : 0) +
+        Math.min(t.total_reviews, 1000) / 20000;
+      if (!best || score > best.score) best = { t, score };
+    }
+    return { name, turf: best && best.score >= 0.75 ? best.t : null };
+  });
+}
 
 function hasNeed(t: Turf, need: Need): boolean {
   const am = (t.amenities ?? []).map(norm).join(" ");
@@ -303,6 +359,9 @@ export function relaxedLabel(key: string): string {
       price: "the budget",
       pref_city: "your city",
       area: "the area",
+      when: "the date",
+      skill: "the skill level",
+      sport: "the sport",
     } as Record<string, string>
   )[key] ?? key;
 }
