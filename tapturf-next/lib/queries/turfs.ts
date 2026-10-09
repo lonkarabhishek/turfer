@@ -20,6 +20,8 @@ const CARD_COLUMNS = [
   "weekend_morning_price", "weekend_afternoon_price", "weekend_evening_price",
   "price_mentions", "price_unit", "slot_minutes", "is_covered", "has_floodlights",
   "start_time", "end_time", "is_24x7", "membership_required", "is_active",
+  // Ask TapTurf filters on these; forCard() drops them before pages ship them.
+  "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria",
 ].join(", ");
 
 function transformTurf(raw: any): Turf {
