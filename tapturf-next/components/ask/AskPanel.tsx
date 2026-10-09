@@ -14,7 +14,7 @@ const WELCOME_CHIPS = ["Box cricket near me tonight", "Football games this weeke
  * closes. Only the latest reply shows follow-up chips.
  */
 export function AskPanel() {
-  const { open, closePanel, turns, busy, send, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending } = useAsk();
+  const { open, closePanel, turns, busy, send, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending, freeLeft, signIn } = useAsk();
   const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -94,9 +94,7 @@ export function AskPanel() {
         {/* Thread */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4" aria-live="polite">
           {turns.length === 0 && <Welcome where={where} signedIn={signedIn} />}
-          {pending && !signedIn && (
-            <p className="text-center text-[12px] text-primary-500">Sign in and I&rsquo;ll answer &ldquo;{pending}&rdquo; right away.</p>
-          )}
+          {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
           {turns.map((t, i) => (
             <TurnView key={t.id} turn={t} isLast={i === turns.length - 1} onUseLocation={() => void requestLocation()} locating={locating} />
           ))}
@@ -138,7 +136,7 @@ export function AskPanel() {
               maxLength={160}
               enterKeyHint="send"
               autoComplete="off"
-              placeholder={!signedIn ? "Sign in to ask" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
+              placeholder={!signedIn && freeLeft === 0 ? "Sign in to keep going" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
               className="flex-1 h-12 px-4 rounded-full bg-primary-100 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:bg-white transition-colors"
             />
             <button
@@ -180,8 +178,28 @@ function Welcome({ where, signedIn }: { where: string | null; signedIn: boolean 
           ) : (
             <>Hey. I know every turf and open game on TapTurf. Tell me a sport, an area and a budget, or just ask.</>
           )}
-          {!signedIn && <span className="block mt-2 text-[13px] text-primary-500">Free, but I&rsquo;ll ask you to sign in before I answer.</span>}
+          {!signedIn && <span className="block mt-2 text-[13px] text-primary-500">Three answers on the house, then a quick sign-in.</span>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Inline sign-in step: the thread stays, the parked message goes once they're in. */
+function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: () => void }) {
+  return (
+    <div className="ask-message-in flex items-end gap-2">
+      <Orb size={28} />
+      <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-primary-900 text-white px-4 py-3.5 shadow-elevated">
+        <p className="text-[15px] leading-snug">That&rsquo;s three on the house. Sign in and I&rsquo;ll keep going, it takes ten seconds and it&rsquo;s free.</p>
+        {pending && <p className="mt-1.5 text-[13px] text-white/70">Next up: &ldquo;{pending}&rdquo;</p>}
+        <button
+          type="button"
+          onClick={onSignIn}
+          className="mt-3 inline-flex items-center justify-center h-11 px-5 rounded-full bg-accent-500 hover:bg-accent-400 text-white text-[14px] font-semibold cursor-pointer transition-colors"
+        >
+          Sign in to continue
+        </button>
       </div>
     </div>
   );

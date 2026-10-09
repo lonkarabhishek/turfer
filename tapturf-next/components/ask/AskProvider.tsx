@@ -30,6 +30,7 @@ export type AskResponse = {
   };
   memo: Record<string, unknown>;
   needsLocation: boolean;
+  freeLeft: number | null;
   relaxed: string[];
   total: number;
   failed?: boolean;
@@ -60,11 +61,28 @@ type Ctx = {
   setDraft: (v: string) => void;
   signedIn: boolean;
   pending: string | null;
+  freeLeft: number | null;
+  signIn: () => void;
 };
 
 const AskCtx = createContext<Ctx | null>(null);
 const STORE = "tapturf_ask_thread_v1";
 const PENDING = "tapturf_ask_pending";
+const ANON = "tapturf_ask_anon";
+
+/** Browser id for the free-answer allowance; survives reloads. */
+function anonId(): string {
+  try {
+    let v = localStorage.getItem(ANON);
+    if (!v) {
+      v = crypto.randomUUID();
+      localStorage.setItem(ANON, v);
+    }
+    return v;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
 const MAX_TURNS = 30;
 
 /**
@@ -83,6 +101,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const { user, login } = useAuth();
   // A message typed while signed out waits here and goes once they're in.
   const [pending, setPending] = useState<string | null>(null);
+  /** Free answers left today while signed out; null until the first reply or when signed in. */
+  const [freeLeft, setFreeLeft] = useState<number | null>(null);
   const locRef = useRef<Coords | null>(null);
   const [hasLocation, setHasLocation] = useState(false);
   const hydrated = useRef(false);
@@ -128,10 +148,10 @@ export function AskProvider({ children }: { children: ReactNode }) {
     async (text: string, loc?: Coords | null) => {
       const q = text.trim();
       if (q.length < 1 || busy) return;
-      if (!user) {
+      if (!user && freeLeft === 0) {
+        // Out of free answers: park the message, show the sign-in card.
         setPending(q);
         setDraft("");
-        login();
         return;
       }
       setBusy(true);
@@ -143,7 +163,9 @@ export function AskProvider({ children }: { children: ReactNode }) {
         .map((t) => ({ user: t.user, reply: t.res!.reply, filters: t.res!.memo }));
       setTurns((prev) => [...prev, { id, user: q, res: null, at: Date.now() }].slice(-MAX_TURNS));
       try {
-        const params = new URLSearchParams({ q, uid: user.id });
+        const params = new URLSearchParams({ q });
+        if (user) params.set("uid", user.id);
+        else params.set("aid", anonId());
         const city = pageContext.city ?? getCityPref();
         if (city) params.set("city", city);
         const at = loc ?? locRef.current;
@@ -155,9 +177,16 @@ export function AskProvider({ children }: { children: ReactNode }) {
         if (pageContext.turf || pageContext.city) params.set("ctx", JSON.stringify({ turf: pageContext.turf?.name ?? null, city: pageContext.city ?? null }));
         const r = await fetch(`/api/ask?${params}`);
         if (r.status === 429) throw new Error("That's a lot of questions in a row. Give it a few minutes.");
-        if (r.status === 401) throw new Error("Sign in to keep chatting.");
+        if (r.status === 401) {
+          // Free answers used up: keep the message and show the sign-in card.
+          setFreeLeft(0);
+          setPending(q);
+          setTurns((prev) => prev.filter((t) => t.id !== id));
+          return;
+        }
         if (!r.ok) throw new Error("I'm having trouble right now. Try again in a moment.");
         const data = (await r.json()) as AskResponse;
+        if (!user) setFreeLeft(data.freeLeft);
         setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, res: data } : t)));
       } catch (e) {
         const msg = (e as Error).message || "Something went wrong.";
@@ -166,8 +195,13 @@ export function AskProvider({ children }: { children: ReactNode }) {
         setBusy(false);
       }
     },
-    [busy, turns, pageContext, user, login],
+    [busy, turns, pageContext, user, freeLeft],
   );
+
+  // Signed in: the allowance no longer applies.
+  useEffect(() => {
+    if (user) setFreeLeft(null);
+  }, [user]);
 
   // Signed in with a message waiting: send it now.
   useEffect(() => {
@@ -215,8 +249,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Ctx>(
-    () => ({ open, openPanel, closePanel, turns, busy, send: (t) => send(t), reset, requestLocation, locating, hasLocation, pageContext, setPageContext, draft, setDraft, signedIn: !!user, pending }),
-    [open, openPanel, closePanel, turns, busy, send, reset, requestLocation, locating, hasLocation, pageContext, draft, user, pending],
+    () => ({ open, openPanel, closePanel, turns, busy, send: (t) => send(t), reset, requestLocation, locating, hasLocation, pageContext, setPageContext, draft, setDraft, signedIn: !!user, pending, freeLeft, signIn: login }),
+    [open, openPanel, closePanel, turns, busy, send, reset, requestLocation, locating, hasLocation, pageContext, draft, user, pending, freeLeft, login],
   );
   return <AskCtx.Provider value={value}>{children}</AskCtx.Provider>;
 }
