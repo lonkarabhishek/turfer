@@ -1,6 +1,6 @@
 "use client";
 
-import { AskTurf } from "@/components/search/AskTurf";
+import { AskEntry } from "@/components/ask/AskEntry";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Search, ChevronDown, Navigation, Loader2, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
@@ -240,7 +240,7 @@ export function TurfListingClient({
         )}
       </p>
 
-      <AskTurf variant="listing" />
+      <AskEntry compact />
 
       {/* Search field, iOS style: filled, borderless. */}
       <div className="relative mb-3">

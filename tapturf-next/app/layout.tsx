@@ -5,6 +5,9 @@ import { CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
 import { AwardsBanner } from "@/components/layout/AwardsBanner";
 import { Footer } from "@/components/layout/Footer";
 import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
+import { AskProvider } from "@/components/ask/AskProvider";
+import { AskLauncher } from "@/components/ask/AskLauncher";
+import { AskPanel } from "@/components/ask/AskPanel";
 import { AppMain } from "@/components/layout/AppMain";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
@@ -82,14 +85,18 @@ export default function RootLayout({
         <PWALifecycle />
         <RouteProgress />
         <AuthWrapper>
-          <Header />
-          <AwardsBanner />
-          {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator, skipped on landing */}
-          <AppMain>{children}</AppMain>
-          <OwnerContactCTA />
-          <div className="hidden md:block">
-            <Footer />
-          </div>
+          <AskProvider>
+            <Header />
+            <AwardsBanner />
+            {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator, skipped on landing */}
+            <AppMain>{children}</AppMain>
+            <OwnerContactCTA />
+            <div className="hidden md:block">
+              <Footer />
+            </div>
+            <AskLauncher />
+            <AskPanel />
+          </AskProvider>
         </AuthWrapper>
       </body>
     </html>

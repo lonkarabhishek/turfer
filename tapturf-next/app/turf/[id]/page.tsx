@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -435,6 +436,8 @@ export default async function TurfDetailPage({
 
         <div className="lg:hidden mb-24" />
       </div>
+
+      <AskPageContext turf={{ id: turf.id, name: turf.name }} city={isCity(turf.city) ? turf.city : null} />
 
       {/* Mobile fixed CTA: Call / WhatsApp, or the "we don't have
           the number yet" bar that opens the suggest form. */}

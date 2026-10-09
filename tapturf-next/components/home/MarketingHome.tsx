@@ -1,6 +1,6 @@
 "use client";
 
-import { AskTurf } from "@/components/search/AskTurf";
+import { AskEntry } from "@/components/ask/AskEntry";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -119,7 +119,7 @@ export function MarketingHome() {
           </div>
 
           {/* Ask in plain words; results render right here. */}
-          <AskTurf variant="home" />
+          <AskEntry />
 
           {/* Single 'Pick your city' button (opens a sheet). Much
               cleaner than an inline row of chips, which fought the
