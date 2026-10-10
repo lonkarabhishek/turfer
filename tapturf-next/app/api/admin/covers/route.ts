@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const rows = (batch ?? []) as { id: string; name: string; images: unknown; cover_image: string | null }[];
 
-  const results: { id: string; name: string; cover: string | null; changed: boolean; flagged: number; broken: number }[] = [];
+  const results: { id: string; name: string; line: string; image: string | null; tone: "ok" | "warn" }[] = [];
   for (const row of rows) {
     const images = convertImageUrls(Array.isArray(row.images) ? (row.images as string[]) : []);
     try {
@@ -50,17 +50,18 @@ export async function POST(req: Request) {
         p_firebase_token: token,
       });
       if (werr) throw werr;
+      const flagged = pick.review.filter((r) => !r.usable).length;
+      const broken = pick.broken.length;
       results.push({
         id: row.id,
         name: row.name,
-        cover: pick.cover,
-        changed: !!pick.cover && pick.cover !== row.cover_image,
-        flagged: pick.review.filter((r) => !r.usable).length,
-        broken: pick.broken.length,
+        image: pick.cover,
+        line: [pick.cover ? (pick.cover !== row.cover_image ? "New cover" : "Cover kept") : "No usable photo", flagged ? `${flagged} hidden` : "", broken ? `${broken} dead link${broken === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · "),
+        tone: pick.cover ? "ok" : "warn",
       });
     } catch (e) {
       console.error("covers: failed for", row.id, e);
-      results.push({ id: row.id, name: row.name, cover: null, changed: false, flagged: 0, broken: 0 });
+      results.push({ id: row.id, name: row.name, image: null, line: "Could not judge, will retry", tone: "warn" });
       // Leave cover_reviewed_at null so it is retried next run.
     }
   }
