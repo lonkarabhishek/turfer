@@ -39,7 +39,7 @@ const SYSTEM = `You turn one message from a player into a draft of a pickup game
 The player may write in English, Hinglish, Hindi or Marathi, in any script. Read it all.
 
 Fields:
-- sport: the closest option. "Turf cricket", "cage cricket", "box" mean Box Cricket. "Futsal", "5-a-side", "5s" mean 5v5 Football. "Nets", "practice", "leather ball" mean Cricket. Null when no sport is said.
+- sport: the closest option. "Turf cricket", "cage cricket", "box" mean Box Cricket. Plain "football" is Football; 5v5 Football only when they say 5v5, futsal, 5-a-side or 5s, whatever the player count. "Nets", "practice", "leather ball" mean Cricket. Null when no sport is said.
 - date: YYYY-MM-DD in India. Today's date and weekday are given. "Tonight", "aaj", "aaj raat" mean today. "Tomorrow", "kal" mean tomorrow. A weekday name means the next such day, today included if the time is still ahead. "Weekend" alone means the coming Saturday. Null when no day is said.
 - start_time: HH:MM, 24-hour. Hours 1 to 11 with no am/pm are evening (7 = 19:00), except with "morning", "subah", "sakali" or "am". "Noon" is 12:00, "midnight" is 00:00. Null when no time is said.
 - duration_hours: 0.5, 1, 1.5 or 2. "An hour", "ek ghanta" is 1. Null when not said.
