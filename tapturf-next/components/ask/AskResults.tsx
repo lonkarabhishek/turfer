@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useAsk } from "./AskProvider";
 import { ArrowRight, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import { imageUrlForCard } from "@/lib/utils/images";
@@ -172,6 +173,8 @@ export function AskResultBody({
         </button>
       )}
 
+      {res.intent === "create_game" && res.draft && <CreateGameCard draft={res.draft} />}
+
       {res.intent === "find_turf" && turfs.length > 0 && (
         <>
           <Row>
@@ -286,5 +289,19 @@ function CompareBlock({ res }: { res: AskResponse }) {
         </Row>
       </div>
     </div>
+  );
+}
+
+/** Hand the sentence to the game wizard, which drafts the form from it. */
+function CreateGameCard({ draft }: { draft: string }) {
+  const { closePanel } = useAsk();
+  return (
+    <Link
+      href={`/game/create?draft=${encodeURIComponent(draft)}`}
+      onClick={closePanel}
+      className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[14px] font-semibold transition-colors"
+    >
+      Set up this game <ArrowRight className="w-4 h-4" />
+    </Link>
   );
 }

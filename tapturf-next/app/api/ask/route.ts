@@ -208,6 +208,10 @@ export async function GET(req: Request) {
         body = { ...base, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
         break;
       }
+      case "create_game":
+        // The wizard drafts the game from the same sentence.
+        body = { ...base, relaxed: [], total: 0, draft: q };
+        break;
       case "other":
         body = { ...base, relaxed: [], total: 0 };
         break;

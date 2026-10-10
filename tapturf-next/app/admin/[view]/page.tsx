@@ -426,7 +426,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
       const rows = filterAsks(res.rows, f);
       const threads = threadAsks(rows);
       const st = askStats(rows);
-      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", other: "Chit-chat" };
+      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", create_game: "Host a game", other: "Chit-chat" };
       return {
         count: rows.length,
         node: (
