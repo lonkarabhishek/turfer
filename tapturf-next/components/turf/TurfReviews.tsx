@@ -25,8 +25,11 @@ export function TurfReviews({
   googleRating,
   googleReviewCount,
   googleReviewUrl,
+  playersSay,
 }: {
   turfId: string;
+  /** Summary of written reviews made by the admin pass; null until it runs. */
+  playersSay?: { summary: string; likes: string[]; gripes: string[]; based_on: number; sources: string[] } | null;
   // Pass Google's public rating so the block has something to show
   // before anyone has left an in-app review. Both values come from the
   // turfs table (which we've backfilled from Google) and any of them
@@ -164,6 +167,32 @@ export function TurfReviews({
           </div>
         )}
       </div>
+
+      {/* What players say: two sentences from the written reviews we
+          hold (Google and TapTurf), made by the admin pass. */}
+      {playersSay && (
+        <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4 mb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-500 mb-1.5">What players say</p>
+          <p className="text-[15px] text-primary-900 leading-snug">{playersSay.summary}</p>
+          {(playersSay.likes.length > 0 || playersSay.gripes.length > 0) && (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {playersSay.likes.map((l) => (
+                <span key={`l-${l}`} className="inline-flex items-center rounded-full bg-white border border-primary-200 px-2.5 py-1 text-[12px] text-primary-800">
+                  + {l}
+                </span>
+              ))}
+              {playersSay.gripes.map((g) => (
+                <span key={`g-${g}`} className="inline-flex items-center rounded-full bg-white border border-amber-200 px-2.5 py-1 text-[12px] text-amber-800">
+                  &minus; {g}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-primary-400">
+            Summarised by TapTurf from {playersSay.based_on} written {playersSay.sources.join(" and ")} review{playersSay.based_on === 1 ? "" : "s"}.
+          </p>
+        </div>
+      )}
 
       {/* Google summary card — shown whenever we have a public rating,
           regardless of whether in-app reviews exist. This is the fastest

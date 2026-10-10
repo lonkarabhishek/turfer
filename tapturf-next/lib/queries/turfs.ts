@@ -146,6 +146,7 @@ function transformTurf(raw: any): Turf {
     google_place_id: raw.google_place_id || null,
     description_source: raw.description_source || null,
     description_updated_at: raw.description_updated_at ?? null,
+    review_summary: raw.review_summary && typeof raw.review_summary.summary === "string" ? raw.review_summary : null,
     is_active: raw.is_active ?? true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,

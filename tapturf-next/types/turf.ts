@@ -87,6 +87,8 @@ export interface Turf {
   description_updated_at: string | null;
   /** AI cover pass verdicts; unusable photos are filtered out of images. */
   image_review?: { url: string; usable: boolean; quality: number; shows: string; note: string }[] | null;
+  /** "What players say": made from written reviews by the admin pass. */
+  review_summary?: { summary: string; likes: string[]; gripes: string[]; based_on: number; sources: string[] } | null;
 
   // System
   is_active: boolean;

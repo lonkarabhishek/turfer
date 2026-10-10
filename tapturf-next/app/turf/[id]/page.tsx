@@ -336,6 +336,7 @@ export default async function TurfDetailPage({
               googleRating={turf.rating}
               googleReviewCount={turf.total_reviews}
               googleReviewUrl={turf.external_review_url}
+              playersSay={turf.review_summary ?? null}
             />
           </div>
 
