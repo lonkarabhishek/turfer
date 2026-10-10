@@ -32,6 +32,7 @@ import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { ASK_FILTERS, askStats, filterAsks, getAskDigest, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
 import { AskDigestCard } from "@/components/admin/AskDigest";
+import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 
@@ -48,6 +49,7 @@ const VIEWS = {
   reviews: { title: "Reviews", filters: { all: "All" } },
   notifications: { title: "Notifications", filters: NOTIFICATION_FILTERS },
   suggestions: { title: "Player suggestions", filters: { all: "Pending" } },
+  listing: { title: "Listing checks", filters: { all: "Flagged" } },
   asks: { title: "Ask TapTurf chats", filters: ASK_FILTERS },
 } as const;
 type View = keyof typeof VIEWS;
@@ -477,6 +479,49 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                       </div>
                     ))}
                   </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ),
+      };
+    }
+
+    case "listing": {
+      const flagged = await getFlaggedListings();
+      const sev: Record<string, string> = { fix: "bg-hot-100 text-hot-700", check: "bg-amber-100 text-amber-800", gap: "bg-primary-100 text-primary-700" };
+      return {
+        count: flagged.length,
+        node: (
+          <div>
+            <p className="text-[13px] text-primary-500 mb-4">
+              What the listing checker flagged. It reports, it does not edit: fix the row in Supabase or ask the owner, then the next run clears it.
+            </p>
+            {flagged.length === 0 && <p className="text-primary-500 text-sm">Nothing flagged. Run the Listing checker on the dashboard.</p>}
+            <ul className="space-y-3">
+              {flagged.map((t) => (
+                <li key={t.id} className="rounded-2xl bg-white border border-primary-200 p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Link href={`/turf/${t.id}`} target="_blank" className="font-semibold text-primary-900 hover:text-accent-600">
+                      {t.name} <ExternalLink className="inline w-3.5 h-3.5 text-primary-400" />
+                    </Link>
+                    <span className="text-[12px] text-primary-400 shrink-0">
+                      {t.city ? `${labelFor(t.city as never)} · ` : ""}
+                      {fmtDateTime(t.listing_checked_at)}
+                    </span>
+                  </div>
+                  <p className="text-[13px] text-primary-700 mt-0.5">{t.listing_review.summary}</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {t.listing_review.issues.map((i, k) => (
+                      <li key={k} className="text-[13px] text-primary-800 flex items-start gap-2">
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${sev[i.severity] ?? sev.gap}`}>{i.severity}</span>
+                        <span>
+                          <span className="font-mono text-[12px] text-primary-500">{i.field}</span> {i.note}
+                          {i.suggested ? <span className="text-accent-800"> Suggested: {i.suggested}</span> : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>

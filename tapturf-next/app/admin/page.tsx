@@ -18,6 +18,7 @@ import {
 import { getAdminGames } from "@/lib/queries/adminDetail";
 import { StatTile } from "@/components/admin/StatTile";
 import { CoverPhotoTool } from "@/components/admin/CoverPhotoTool";
+import { ListingCheckTool, ReviewSummaryTool } from "@/components/admin/AiTools";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
@@ -280,8 +281,10 @@ export default async function AdminPage() {
       </section>
 
       {/* AI tools */}
-      <section className="mb-8">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <CoverPhotoTool />
+        <ReviewSummaryTool />
+        <ListingCheckTool />
       </section>
 
       {/* Charts */}
