@@ -51,10 +51,10 @@ export function GameDraftBox({ userId, initial, onPrefill }: { userId: string; i
 
   // Arrived with a sentence already: draft it once.
   useEffect(() => {
-    if (initial && !fired.current) {
-      fired.current = true;
-      void run(initial);
-    }
+    if (!initial || fired.current) return;
+    fired.current = true;
+    const t = setTimeout(() => void run(initial), 0);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
