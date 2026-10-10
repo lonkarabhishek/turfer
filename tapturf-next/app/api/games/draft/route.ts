@@ -20,9 +20,19 @@ function ipHash(req: Request): string {
   return createHash("sha256").update(`${process.env.ASK_SALT ?? "tapturf"}|${ip}`).digest("hex").slice(0, 32);
 }
 
+/** Same as POST, with q, city and uid as query parameters. */
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  return handle(req, { text: searchParams.get("q"), city: searchParams.get("city"), uid: searchParams.get("uid") });
+}
+
 export async function POST(req: Request) {
-  if (!isAskConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
   const body = (await req.json().catch(() => ({}))) as { text?: unknown; city?: unknown; uid?: unknown };
+  return handle(req, body);
+}
+
+async function handle(req: Request, body: { text?: unknown; city?: unknown; uid?: unknown }) {
+  if (!isAskConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
   const text = typeof body.text === "string" ? body.text.replace(/\s+/g, " ").trim().slice(0, 240) : "";
   if (text.length < 4) return NextResponse.json({ error: "text is required" }, { status: 400 });
   const uid = typeof body.uid === "string" && UUID.test(body.uid) ? body.uid : null;
