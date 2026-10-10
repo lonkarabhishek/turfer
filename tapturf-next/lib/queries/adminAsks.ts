@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
+import type { DigestRecord } from "@/components/admin/AskDigest";
 
 export type AskRow = {
   id: number;
@@ -97,4 +98,18 @@ export function askStats(rows: AskRow[]) {
   const p50 = ms.length ? ms[Math.floor(ms.length / 2)] : null;
   const byIntent = rows.reduce<Record<string, number>>((m, r) => ((m[r.intent ?? "?"] = (m[r.intent ?? "?"] ?? 0) + 1), m), {});
   return { total: rows.length, claude, empty, visitors, p50, byIntent };
+}
+
+/** Latest cached "where we fell short" digest for the window, if any. */
+export async function getAskDigest(days: number): Promise<DigestRecord | null> {
+  try {
+    const supabase = await createServerClient();
+    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+    const { data, error } = await supabase.rpc("get_ask_digest", { p_days: days, p_firebase_token: token });
+    if (error) return null;
+    const row = (Array.isArray(data) ? data[0] : data) as DigestRecord | undefined;
+    return row?.digest ? row : null;
+  } catch {
+    return null;
+  }
 }

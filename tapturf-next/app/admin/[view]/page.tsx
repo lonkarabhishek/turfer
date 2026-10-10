@@ -30,7 +30,9 @@ import {
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
-import { ASK_FILTERS, askStats, filterAsks, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
+import { ASK_FILTERS, askStats, filterAsks, getAskDigest, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
+import { AskDigestCard } from "@/components/admin/AskDigest";
+import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 
 export const revalidate = 0;
@@ -425,12 +427,15 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
       }
       const rows = filterAsks(res.rows, f);
       const threads = threadAsks(rows);
+      const digestDays = f === "month" ? 30 : 7;
+      const digest = await getAskDigest(digestDays);
       const st = askStats(rows);
       const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", create_game: "Host a game", other: "Chit-chat" };
       return {
         count: rows.length,
         node: (
           <div>
+            <AskDigestCard initial={digest} days={digestDays} configured={isAskConfigured()} />
             <div className="flex flex-wrap gap-2 mb-5 text-[13px]">
               <Badge className="bg-primary-100 text-primary-700">{st.visitors} visitor{st.visitors === 1 ? "" : "s"}</Badge>
               <Badge className="bg-primary-100 text-primary-700">{threads.length} conversation{threads.length === 1 ? "" : "s"}</Badge>
