@@ -11,6 +11,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
 import { searchTurfs } from "@/lib/queries/users";
 import { TimeSlotSheet } from "./TimeSlotSheet";
+import { GameDraftBox } from "./GameDraftBox";
+import type { GamePrefill } from "@/lib/ai/gameDraft";
 import type { CreateGameData } from "@/types/game";
 
 const SPORT_OPTIONS = [
@@ -128,6 +130,9 @@ export function CreateGameFlow() {
   // have to search for it again inside the wizard.
   const preselectedTurfId = searchParams?.get("turf") ?? "";
   const preselectedTurfName = searchParams?.get("turfName") ?? "";
+  // A sentence from the Ask chat ("host box cricket Saturday 7pm at X")
+  // gets drafted into the form as soon as the page loads.
+  const draftText = searchParams?.get("draft") ?? "";
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -152,6 +157,7 @@ export function CreateGameFlow() {
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
   const [timeSheetOpen, setTimeSheetOpen] = useState(false);
+  const [draftNote, setDraftNote] = useState<string | null>(null);
 
   const turfSearchRef = useRef<HTMLInputElement>(null);
 
@@ -209,6 +215,37 @@ export function CreateGameFlow() {
     setSelectedSportObj(s);
     setMaxPlayers(s.defaultMax);
     setTimeout(() => setStep(2), 120);
+  };
+
+  // Fill the form from a drafted sentence. Only values the wizard
+  // accepts arrive here; the player still confirms every step.
+  const applyPrefill = (p: GamePrefill) => {
+    if (p.sport) {
+      const s = SPORT_OPTIONS.find((o) => o.name === p.sport) ?? null;
+      setSport(p.sport);
+      setSelectedSportObj(s);
+      setMaxPlayers(p.maxPlayers ?? s?.defaultMax ?? 10);
+    } else if (p.maxPlayers) {
+      setMaxPlayers(p.maxPlayers);
+    }
+    if (p.date) setDate(p.date);
+    if (p.startTime) setStartTime(p.startTime);
+    if (p.duration) setDuration(p.duration);
+    if (p.turf) {
+      setTurfId(p.turf.id);
+      setTurfName(p.turf.name);
+    } else if (p.turfName) {
+      setTurfSearch(p.turfName);
+    }
+    if (p.skill) setSkillLevel(p.skill);
+    if (p.costPerPerson != null) {
+      setCostPerPerson(p.costPerPerson);
+      setCustomCost(COST_OPTIONS.includes(p.costPerPerson) ? "" : String(p.costPerPerson));
+    }
+    if (p.notes) setNotes(p.notes);
+    const missing = [!p.sport && "the sport", !p.date && "the day", !p.startTime && "the time", !p.turf && "the turf"].filter(Boolean) as string[];
+    setDraftNote(missing.length ? `${p.reply} Still to pick: ${missing.join(", ")}.` : `${p.reply} Check each step and you're set.`);
+    setStep(p.sport ? 2 : 1);
   };
 
   const handleSubmit = async () => {
@@ -378,6 +415,9 @@ export function CreateGameFlow() {
                   Pick your sport
                 </p>
 
+                <GameDraftBox userId={user.id} initial={draftText || null} onPrefill={applyPrefill} />
+                {draftNote && step === 1 && <p className="mb-4 text-[13px] text-primary-700">{draftNote}</p>}
+
                 <div className="grid grid-cols-2 gap-3">
                   {SPORT_OPTIONS.map((s) => {
                     const active = sport === s.name;
@@ -418,6 +458,11 @@ export function CreateGameFlow() {
             {/* ─── Step 2: When & Where (iOS grouped list) ───── */}
             {step === 2 && (
               <div className="space-y-2">
+                {draftNote && (
+                  <div className="mb-4 rounded-2xl bg-accent-50 border border-accent-200 px-4 py-3 text-[13px] text-primary-800">
+                    {draftNote}
+                  </div>
+                )}
                 <div className="mb-6">
                   <h1 className="font-display text-[42px] leading-[0.9] text-primary-800 tracking-tight mb-1">
                     When &<br />
