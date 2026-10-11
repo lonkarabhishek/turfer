@@ -430,3 +430,43 @@ p, li { letter-spacing: 0; }
 @media (prefers-reduced-motion: reduce) {
   .ask-message-in, .ask-sheet-in, .ask-panel-in, .ask-dot, .ask-orb::before { animation: none; }
 }
+
+/* Cricket toss coin (tools/cricket-toss) */
+.coin-scene {
+  width: 140px;
+  height: 140px;
+  perspective: 700px;
+}
+.coin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.coin-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 56px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.35), 0 10px 24px rgba(15, 23, 42, 0.18);
+}
+.coin-heads {
+  background: radial-gradient(circle at 35% 30%, #fde68a, #d97706 70%);
+  color: #78350f;
+}
+.coin-tails {
+  background: radial-gradient(circle at 35% 30%, #e5e7eb, #6b7280 70%);
+  color: #1f2937;
+  transform: rotateY(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .coin { transition: none !important; }
+}
