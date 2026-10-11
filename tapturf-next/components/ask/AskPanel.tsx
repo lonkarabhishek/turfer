@@ -6,7 +6,7 @@ import { ArrowUp, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { useAsk, type Turn } from "./AskProvider";
 import { AskResultBody } from "./AskResults";
 
-const WELCOME_CHIPS = ["Box cricket near me tonight", "Kothrud me sasta turf", "Football games this weekend", "Compare two turfs", "Host a game Saturday 7pm"];
+const WELCOME_CHIPS = ["Box cricket near me tonight", "Kothrud me sasta turf", "Football games this weekend", "Compare two turfs", "Calculate our NRR", "Host a game Saturday 7pm"];
 
 /**
  * The chat itself. A bottom sheet on phones, a side panel on desktop.
@@ -176,7 +176,7 @@ function Welcome({ where }: { where: string | null }) {
               Hey. You&rsquo;re looking at <span className="font-semibold">{where}</span>. Ask me anything about it, compare it with another turf, or find something nearby.
             </>
           ) : (
-            <>Hey. I know every turf and open game on TapTurf. Tell me a sport, an area and a budget, or just ask. Hinglish chalega.</>
+            <>Hey. I know every turf and open game on TapTurf, plus the free cricket tools. Tell me a sport, an area and a budget, or just ask. Hinglish chalega.</>
           )}
 
         </div>

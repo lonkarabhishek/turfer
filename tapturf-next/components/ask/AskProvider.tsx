@@ -9,7 +9,7 @@ import type { Game } from "@/types/game";
 
 export type AskResponse = {
   query: string;
-  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "other";
+  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other";
   summary: string;
   reply: string;
   followups: string[];
@@ -41,6 +41,8 @@ export type AskResponse = {
   answer?: { answer: string; covered: boolean } | null;
   /** For create_game: the sentence to draft the wizard from. */
   draft?: string;
+  /** For tool: the free cricket tool that fits. */
+  tool?: { slug: string; name: string; tagline: string; href: string };
 };
 
 export type Turn = { id: string; user: string; res: AskResponse | null; error?: string; at: number };

@@ -29,7 +29,9 @@ export type Need = (typeof NEEDS)[number];
 const SPORT_SLUGS = SPORT_PAGES.map((s) => s.slug) as [string, ...string[]];
 
 export const AskFilters = z.object({
-  intent: z.enum(["find_turf", "find_game", "compare", "question", "create_game", "other"]),
+  intent: z.enum(["find_turf", "find_game", "compare", "question", "create_game", "tool", "other"]),
+  /** For the tool intent: which free cricket tool fits. */
+  tool: z.enum(["cricket-nrr-calculator", "cricket-toss", "cricket-scorecard-maker", "cricket-tournament-scorer", "cricket-team-generator"]).nullable(),
   city: z.enum(CITY_IDS as [CityId, ...CityId[]]).nullable(),
   sport: z.enum(SPORT_SLUGS).nullable(),
   areas: z.array(z.string()),
@@ -85,6 +87,13 @@ Intents:
 - compare: two or more venue names with "vs", "or", "compare", "which is better".
 - question: a question about one named venue ("does X have parking", "what time does Y open", "how much is Z").
 - create_game: wants to host, organise or set up their own game, or needs players for it ("host box cricket Saturday 7pm at X", "need 4 players for my match", "create a game", "mujhe game banana hai").
+- tool: wants one of TapTurf's free cricket tools, or asks for something one of them does. Set tool to the matching one:
+  cricket-nrr-calculator: net run rate, NRR, run rate maths ("how to calculate NRR", "our NRR after 63 in 6 overs vs 54").
+  cricket-toss: a coin toss, heads or tails, who bats first ("toss karo", "flip a coin").
+  cricket-scorecard-maker: a scorecard, result card or match poster to share ("make a scorecard", "result image for WhatsApp").
+  cricket-tournament-scorer: a points table, standings, series score, tournament or league tracking ("points table for our tri-series", "track my tournament").
+  cricket-team-generator: splitting players into teams, random teams, balanced teams ("divide 10 players into 2 teams", "team banao").
+  For a question about the rules of NRR or a toss, still use tool: the tool page explains it.
 - other: greetings, small talk, thanks, or anything not about sports venues or games.
 
 Page context: the message may say what the player is looking at right now (a venue page or a city page). Then "this turf", "this place", "here", "it" mean that venue: put its name in turf_names for question and compare, and use its city when none is stated.
@@ -114,7 +123,7 @@ Rules:
 - free_text: for find_turf, a single venue name or words you could not map ("rooftop"). Else null.
 - summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a 3 to 6 word label like "Just saying hi".
 - followups: two or three things the player might say next, each under 6 words, as they would type them ("Only 24 hours", "Cheaper ones", "Compare the top two", "Any games there this weekend"). For a greeting: three example asks. Never repeat the current message.
-- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.`;
+- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For tool: one line saying which free tool does it and that it needs no sign-in ("TapTurf has a free NRR calculator for exactly this. It reads overs the cricket way, so 5.3 is five overs and three balls."); when the message includes numbers you may give the answer in the reply too, but only if you are sure of the maths. For other: when the player is clearly after cricket admin we do not have a tool for, say so and offer the nearest tool. For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.`;
 }
 
 let client: Anthropic | null = null;
@@ -237,6 +246,7 @@ export function keywordFilters(query: string): AskFilters {
       : `Turfs matching "${query}"`;
   return {
     intent: game ? "find_game" : "find_turf",
+    tool: null,
     city: city?.id ?? null,
     sport,
     areas: [],

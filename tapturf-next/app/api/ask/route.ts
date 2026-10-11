@@ -20,6 +20,7 @@ import {
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
 import type { Turf } from "@/types/turf";
+import { toolBySlug, toolPath } from "@/lib/tools/registry";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -59,7 +60,7 @@ function parseHistory(raw: string | null): AskTurn[] {
       if (!h || typeof h.user !== "string") return [];
       const f = (h.filters && typeof h.filters === "object" ? h.filters : {}) as Record<string, unknown>;
       const keep: Record<string, unknown> = {};
-      for (const k of ["intent", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort"]) {
+      for (const k of ["intent", "tool", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort"]) {
         if (f[k] != null && f[k] !== false && !(Array.isArray(f[k]) && (f[k] as unknown[]).length === 0)) keep[k] = f[k];
       }
       if (Array.isArray(f.top)) keep.top = (f.top as unknown[]).filter((x) => typeof x === "string").slice(0, 5).map((x) => String(x).slice(0, 80));
@@ -206,6 +207,12 @@ export async function GET(req: Request) {
         const sheet = await loadFacts(hit.turf.id);
         const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts) : null;
         body = { ...base, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
+        break;
+      }
+      case "tool": {
+        // Point at the free cricket tool; the page itself does the work.
+        const def = toolBySlug(filters.tool ?? "") ?? toolBySlug("cricket-nrr-calculator")!;
+        body = { ...base, relaxed: [], total: 1, tool: { slug: def.slug, name: def.name, tagline: def.tagline, href: toolPath(def.slug) } };
         break;
       }
       case "create_game":

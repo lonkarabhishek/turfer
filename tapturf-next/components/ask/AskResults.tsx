@@ -174,6 +174,7 @@ export function AskResultBody({
       )}
 
       {res.intent === "create_game" && res.draft && <CreateGameCard draft={res.draft} />}
+      {res.intent === "tool" && res.tool && <ToolCard tool={res.tool} />}
 
       {res.intent === "find_turf" && turfs.length > 0 && (
         <>
@@ -302,6 +303,20 @@ function CreateGameCard({ draft }: { draft: string }) {
       className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[14px] font-semibold transition-colors"
     >
       Set up this game <ArrowRight className="w-4 h-4" />
+    </Link>
+  );
+}
+
+/** One of the free cricket tools, opened in place of the chat. */
+function ToolCard({ tool }: { tool: { slug: string; name: string; tagline: string; href: string } }) {
+  const { closePanel } = useAsk();
+  return (
+    <Link href={tool.href} onClick={closePanel} className="press-tight flex items-center gap-3 rounded-2xl border border-primary-200 bg-white px-4 py-3 hover:border-accent-400 transition-colors">
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-primary-900 text-[15px]">{tool.name}</span>
+        <span className="block text-[13px] text-primary-500">{tool.tagline} Free, no sign-in.</span>
+      </span>
+      <ArrowRight className="w-4 h-4 text-accent-600 shrink-0" />
     </Link>
   );
 }
