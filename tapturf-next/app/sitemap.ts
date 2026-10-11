@@ -4,6 +4,7 @@ import { ALL_POSTS } from "@/content/blog";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { CITIES } from "@/lib/city";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
+import { TOOLS } from "@/lib/tools/registry";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -76,6 +77,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    // Free cricket tools: the hub and one page per tool.
+    {
+      url: `${BASE}/tools`,
+      lastModified: new Date("2026-10-11"),
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    ...TOOLS.map((t) => ({
+      url: `${BASE}/tools/${t.slug}`,
+      lastModified: new Date("2026-10-11"),
+      changeFrequency: "monthly" as const,
+      priority: 0.8,
+    })),
   ];
 
   // Blog posts - static content, high SEO value for topical authority.

@@ -67,6 +67,11 @@ export function Footer() {
                   Blog
                 </Link>
               </li>
+              <li>
+                <Link href="/tools" className="hover:text-white transition-colors">
+                  Free Cricket Tools
+                </Link>
+              </li>
               {CITIES.map((c) => (
                 <li key={c.id}>
                   <Link href={`/${c.id}`} className="hover:text-white transition-colors">
