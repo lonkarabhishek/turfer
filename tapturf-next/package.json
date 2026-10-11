@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:cricket": "tsc lib/cricket/overs.ts lib/cricket/nrr.ts lib/cricket/cricket.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cricket.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
