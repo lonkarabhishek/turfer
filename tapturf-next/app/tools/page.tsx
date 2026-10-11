@@ -6,7 +6,7 @@ import { TOOLS, TOOLS_BASE, toolPath, type ToolSlug } from "@/lib/tools/registry
 export const metadata: Metadata = {
   title: { absolute: "Free Cricket Tools: NRR Calculator, Toss, Scorecard, Tournament Scorer | TapTurf" },
   description:
-    "Free tools for cricket players and tournament organisers: NRR calculator, online toss, scorecard maker, series and tournament scorer with points table, and a team generator. No sign-up.",
+    "Free tools for cricket players and organisers: NRR calculator, online toss, scorecard maker, tournament scorer with points table, and a team generator. No sign-up.",
   alternates: { canonical: TOOLS_BASE },
   robots: { index: true, follow: true },
   openGraph: {

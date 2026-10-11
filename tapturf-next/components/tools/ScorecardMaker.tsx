@@ -114,8 +114,16 @@ export function drawCard(canvas: HTMLCanvasElement, c: Card) {
     }
   });
 
-  // Result band
-  const bandY = 700;
+  // Extras, listed under the result band when given.
+  const extras = [
+    c.potm ? ["Player of the match", c.potm] : null,
+    c.topScorer ? ["Top scorer", c.topScorer] : null,
+    c.bestBowler ? ["Best bowler", c.bestBowler] : null,
+    c.venue ? ["Venue", c.venue] : null,
+  ].filter((x): x is [string, string] => !!x);
+
+  // Result band: sits lower when there is nothing under it.
+  const bandY = extras.length ? 700 : 780;
   ctx.fillStyle = "#16A34A";
   roundRect(ctx, pad, bandY, W, 110, 24);
   ctx.fill();
@@ -127,13 +135,6 @@ export function drawCard(canvas: HTMLCanvasElement, c: Card) {
   ctx.fillText(res, SIZE / 2, bandY + 70);
   ctx.textAlign = "left";
 
-  // Extras
-  const extras = [
-    c.potm ? ["Player of the match", c.potm] : null,
-    c.topScorer ? ["Top scorer", c.topScorer] : null,
-    c.bestBowler ? ["Best bowler", c.bestBowler] : null,
-    c.venue ? ["Venue", c.venue] : null,
-  ].filter((x): x is [string, string] => !!x);
   let y = bandY + 170;
   for (const [k, v] of extras.slice(0, 4)) {
     ctx.fillStyle = "rgba(255,255,255,0.5)";

@@ -16,7 +16,9 @@ export function AskLauncher() {
   // Turf and game pages own the bottom edge on phones (Call / WhatsApp
   // bar, Join bar, create-game footer), so the pill is desktop-only there
   // and those pages offer an in-page button instead.
-  const barPages = pathname.startsWith("/turf/") || pathname.startsWith("/game/");
+  // Tool pages end their cards with a full-width button the pill would
+  // sit on, so they are desktop-only too.
+  const barPages = pathname.startsWith("/turf/") || pathname.startsWith("/game/") || pathname.startsWith("/tools");
   const count = turns.filter((t) => t.res).length;
   return (
     <button

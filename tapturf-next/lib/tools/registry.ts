@@ -57,7 +57,7 @@ export const TOOLS: ToolDef[] = [
     tagline: "Create and share match result cards.",
     title: "Cricket Scorecard Maker - Create Match Scorecards Free | TapTurf",
     description:
-      "Make a clean cricket match result card in seconds. Add team scores, overs, result, player of the match and venue, then download it as a PNG or share it straight to WhatsApp.",
+      "Make a clean cricket match result card in seconds. Add scores, overs, result, player of the match and venue, then download a PNG or share it to WhatsApp.",
     h1: "Cricket Scorecard Maker",
     cta: { label: "Find your next cricket turf", href: "/sport/box-cricket" },
     related: ["cricket-tournament-scorer", "cricket-nrr-calculator"],
@@ -69,7 +69,7 @@ export const TOOLS: ToolDef[] = [
     tagline: "Track matches, points and NRR.",
     title: "Cricket Tournament Scorer with NRR & Points Table | TapTurf",
     description:
-      "Free cricket tournament scorer for bilateral series, tri-series and round robins. Enter each match and get a live points table with wins, ties, no results and NRR, saved in your browser.",
+      "Free cricket tournament scorer for bilateral series, tri-series and round robins. Enter each match and get a live points table with NRR, saved in your browser.",
     h1: "Cricket Series & Tournament Scorer",
     cta: { label: "Find a turf for your tournament", href: "/sport/box-cricket" },
     related: ["cricket-nrr-calculator", "cricket-scorecard-maker"],
@@ -81,7 +81,7 @@ export const TOOLS: ToolDef[] = [
     tagline: "Split players into teams instantly.",
     title: "Cricket Team Generator - Split Players Into Teams Free | TapTurf",
     description:
-      "Paste player names and split them into 2, 3 or 4 cricket teams at random, or balance them with a quick 1 to 5 rating. Regenerate until it feels fair, then copy the teams.",
+      "Paste player names and split them into 2, 3 or 4 cricket teams at random, or balanced by a quick 1 to 5 rating. Regenerate until it feels fair, then copy the teams.",
     h1: "Cricket Team Generator",
     cta: { label: "Teams ready? Find a turf", href: "/sport/box-cricket" },
     related: ["cricket-toss", "cricket-tournament-scorer"],
