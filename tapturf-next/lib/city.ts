@@ -3,30 +3,47 @@
  * pages, sitemap) and client (city picker, filters) consume this.
  */
 
-export type CityId = "nashik" | "pune" | "mumbai" | "nagpur" | "hyderabad";
-export type CityState = "Maharashtra" | "Telangana";
+export type CityId =
+  | "nashik" | "pune" | "mumbai" | "nagpur" | "hyderabad" | "bangalore" | "sambhajinagar" | "delhi"
+  | "gurgaon" | "noida" | "ghaziabad" | "jalgaon" | "faridabad" | "dhule";
+export type CityState = "Maharashtra" | "Telangana" | "Karnataka" | "Delhi" | "Haryana" | "Uttar Pradesh";
 
+/**
+ * One list, in display order. The id must match turfs.city in the
+ * database. Adding a city here is the only code change needed: routes,
+ * sitemap, pickers, footer, Ask and structured data all read this.
+ */
 export const CITIES: {
   id: CityId;
   label: string;
   labelUpper: string;
   state: CityState;
 }[] = [
-  { id: "nashik",    label: "Nashik",    labelUpper: "NASHIK",    state: "Maharashtra" },
-  { id: "pune",      label: "Pune",      labelUpper: "PUNE",      state: "Maharashtra" },
-  { id: "mumbai",    label: "Mumbai",    labelUpper: "MUMBAI",    state: "Maharashtra" },
-  { id: "nagpur",    label: "Nagpur",    labelUpper: "NAGPUR",    state: "Maharashtra" },
-  { id: "hyderabad", label: "Hyderabad", labelUpper: "HYDERABAD", state: "Telangana" },
+  { id: "nashik",        label: "Nashik",        labelUpper: "NASHIK",        state: "Maharashtra" },
+  { id: "pune",          label: "Pune",          labelUpper: "PUNE",          state: "Maharashtra" },
+  { id: "mumbai",        label: "Mumbai",        labelUpper: "MUMBAI",        state: "Maharashtra" },
+  { id: "nagpur",        label: "Nagpur",        labelUpper: "NAGPUR",        state: "Maharashtra" },
+  { id: "hyderabad",     label: "Hyderabad",     labelUpper: "HYDERABAD",     state: "Telangana" },
+  { id: "bangalore",     label: "Bangalore",     labelUpper: "BANGALORE",     state: "Karnataka" },
+  { id: "delhi",         label: "Delhi",         labelUpper: "DELHI",         state: "Delhi" },
+  { id: "gurgaon",       label: "Gurgaon",       labelUpper: "GURGAON",       state: "Haryana" },
+  { id: "noida",         label: "Noida",         labelUpper: "NOIDA",         state: "Uttar Pradesh" },
+  { id: "ghaziabad",     label: "Ghaziabad",     labelUpper: "GHAZIABAD",     state: "Uttar Pradesh" },
+  { id: "faridabad",     label: "Faridabad",     labelUpper: "FARIDABAD",     state: "Haryana" },
+  { id: "sambhajinagar", label: "Sambhajinagar", labelUpper: "SAMBHAJINAGAR", state: "Maharashtra" },
+  { id: "jalgaon",       label: "Jalgaon",       labelUpper: "JALGAON",       state: "Maharashtra" },
+  { id: "dhule",         label: "Dhule",         labelUpper: "DHULE",         state: "Maharashtra" },
 ];
 
-/** Every city: "Nashik, Pune, Mumbai, Nagpur & Hyderabad"; the "and" form for prose. */
-export const CITY_LIST = CITIES.map((c) => c.label).slice(0, -1).join(", ") + " & " + CITIES.at(-1)!.label;
-export const CITY_LIST_AND = CITIES.map((c) => c.label).slice(0, -1).join(", ") + " and " + CITIES.at(-1)!.label;
-/** For <title> tags, which run long past three cities: "Nashik, Pune, Mumbai & more". */
-export const CITY_LIST_SHORT =
-  CITIES.length > 3 ? CITIES.slice(0, 3).map((c) => c.label).join(", ") + " & more" : CITY_LIST;
+const NAMED = CITIES.slice(0, 5).map((c) => c.label);
+const REST = CITIES.length - NAMED.length;
+/** Prose lists name the first five and count the rest: "Nashik, Pune, Mumbai, Nagpur, Hyderabad & 9 more". */
+export const CITY_LIST = REST > 0 ? `${NAMED.join(", ")} & ${REST} more` : NAMED.slice(0, -1).join(", ") + " & " + NAMED.at(-1)!;
+export const CITY_LIST_AND = REST > 0 ? `${NAMED.join(", ")} and ${REST} more cities` : NAMED.slice(0, -1).join(", ") + " and " + NAMED.at(-1)!;
+/** For <title> tags: "Nashik, Pune, Mumbai & more". */
+export const CITY_LIST_SHORT = CITIES.length > 3 ? CITIES.slice(0, 3).map((c) => c.label).join(", ") + " & more" : CITY_LIST;
 
-/** State for structured data; Hyderabad is in Telangana, the rest in Maharashtra. */
+/** State for structured data. */
 export function stateFor(id: CityId | string | null | undefined): CityState {
   return CITIES.find((c) => c.id === id)?.state ?? "Maharashtra";
 }
@@ -53,6 +70,15 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   if (a.includes("mumbai") || a.includes("bombay") || a.includes("thane") || a.includes("navi mumbai")) return "mumbai";
   if (a.includes("nagpur") || a.includes("kamptee") || a.includes("hingna")) return "nagpur";
   if (a.includes("hyderabad") || a.includes("secunderabad") || a.includes("telangana")) return "hyderabad";
+  if (a.includes("bangalore") || a.includes("bengaluru")) return "bangalore";
+  if (a.includes("gurgaon") || a.includes("gurugram")) return "gurgaon";
+  if (a.includes("noida")) return "noida";
+  if (a.includes("ghaziabad")) return "ghaziabad";
+  if (a.includes("faridabad")) return "faridabad";
+  if (a.includes("delhi")) return "delhi";
+  if (a.includes("sambhajinagar") || a.includes("aurangabad")) return "sambhajinagar";
+  if (a.includes("jalgaon")) return "jalgaon";
+  if (a.includes("dhule")) return "dhule";
   return null;
 }
 
@@ -87,6 +113,15 @@ const CITY_COORDS: Record<CityId, { lat: number; lng: number }> = {
   mumbai: { lat: 19.0760, lng: 72.8777 },
   nagpur: { lat: 21.1458, lng: 79.0882 },
   hyderabad: { lat: 17.3850, lng: 78.4867 },
+  bangalore: { lat: 12.9716, lng: 77.5946 },
+  delhi: { lat: 28.6139, lng: 77.2090 },
+  gurgaon: { lat: 28.4595, lng: 77.0266 },
+  noida: { lat: 28.5355, lng: 77.3910 },
+  ghaziabad: { lat: 28.6692, lng: 77.4538 },
+  faridabad: { lat: 28.4089, lng: 77.3178 },
+  sambhajinagar: { lat: 19.8762, lng: 75.3433 },
+  jalgaon: { lat: 21.0077, lng: 75.5626 },
+  dhule: { lat: 20.9042, lng: 74.7749 },
 };
 
 // Haversine — km between two lat/lng points.
