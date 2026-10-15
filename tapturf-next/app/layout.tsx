@@ -60,6 +60,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#16A34A",
   viewportFit: "cover",
+  // Keyboard shrinks the layout viewport, so 100dvh sheets (Ask chat)
+  // keep their composer above the keys instead of being pushed around.
+  interactiveWidget: "resizes-content",
   width: "device-width",
   initialScale: 1,
 };

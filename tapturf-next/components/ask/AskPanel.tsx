@@ -17,7 +17,7 @@ export function AskPanel() {
   const { open, closePanel, turns, busy, send, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending, freeLeft, signIn } = useAsk();
   const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -36,8 +36,11 @@ export function AskPanel() {
     };
   }, [open, closePanel]);
 
+  // Scroll the thread itself, never the page behind it: scrollIntoView
+  // on a fixed sheet nudges the window on phones and jolts the layout.
   useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ block: "end", behavior: turns.length > 1 ? "smooth" : "auto" });
+    const el = threadRef.current;
+    if (open && el) el.scrollTo({ top: el.scrollHeight, behavior: turns.length > 1 ? "smooth" : "auto" });
   }, [open, turns, busy, freeLeft, pending]);
 
   // Close when navigating away from the page the chat was opened on? No:
@@ -92,13 +95,12 @@ export function AskPanel() {
         </header>
 
         {/* Thread */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4" aria-live="polite">
+        <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4" aria-live="polite">
           {turns.length === 0 && <Welcome where={where} />}
           {turns.map((t, i) => (
             <TurnView key={t.id} turn={t} isLast={i === turns.length - 1} onUseLocation={() => void requestLocation()} locating={locating} />
           ))}
           {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
-          <div ref={endRef} />
         </div>
 
         {/* Composer */}
@@ -135,6 +137,12 @@ export function AskPanel() {
               onChange={(e) => setDraft(e.target.value)}
               maxLength={160}
               enterKeyHint="send"
+              onFocus={(e) => {
+                // iOS scrolls the page to the focused field; the sheet is fixed, so keep the page put.
+                const y = window.scrollY;
+                setTimeout(() => window.scrollTo(0, y), 50);
+                e.currentTarget.scrollIntoView({ block: "nearest" });
+              }}
               autoComplete="off"
               placeholder={!signedIn && freeLeft === 0 ? "Sign in to keep going" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
               className="flex-1 h-12 px-4 rounded-full bg-primary-100 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:bg-white transition-colors"

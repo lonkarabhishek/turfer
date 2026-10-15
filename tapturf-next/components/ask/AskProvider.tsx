@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getCityPref, type CityId } from "@/lib/city";
 import { getUserLocation, type Coords } from "@/lib/utils/location";
@@ -110,6 +111,16 @@ export function AskProvider({ children }: { children: ReactNode }) {
   const locRef = useRef<Coords | null>(null);
   const [hasLocation, setHasLocation] = useState(false);
   const hydrated = useRef(false);
+  // Tapping a turf or game inside the chat navigates; the sheet closes
+  // so the new page is not hidden behind it. The thread is kept.
+  const pathname = usePathname();
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    if (lastPath.current === pathname) return;
+    lastPath.current = pathname;
+    const t = setTimeout(() => setOpen(false), 0);
+    return () => clearTimeout(t);
+  }, [pathname]);
 
   // Restore the thread once on the client.
   useEffect(() => {
