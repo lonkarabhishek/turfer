@@ -153,26 +153,40 @@ function transformTurf(raw: any): Turf {
   };
 }
 
+const PAGE = 1000;
+
+/**
+ * Supabase returns at most 1,000 rows per request and we have more
+ * turfs than that. Page with .range() until a page comes back short.
+ * The page function must apply a stable order (rating, then id) so
+ * rows never straddle two pages.
+ */
+export async function fetchAllRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) {
+      console.error("Paged fetch failed:", error);
+      break;
+    }
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
   const supabase = createServerClient();
-  let query = supabase
-    .from("turfs")
-    .select(CARD_COLUMNS)
-    .eq("is_active", true)
-    .order("rating", { ascending: false });
-
-  if (cityFilter && isCity(cityFilter)) {
-    query = query.eq("city", cityFilter);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error("Failed to fetch turfs:", error);
-    return [];
-  }
+  const city = cityFilter && isCity(cityFilter) ? cityFilter : null;
+  const data = await fetchAllRows<Record<string, unknown>>((from, to) => {
+    let q = supabase.from("turfs").select(CARD_COLUMNS).eq("is_active", true);
+    if (city) q = q.eq("city", city);
+    return q.order("rating", { ascending: false }).order("id").range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
+  });
   // Default order is "top rated" with the minimum-review rule, so a
   // 5.0 from a handful of reviews doesn't lead city / listing pages.
-  return (data ?? []).map(transformTurf).sort(compareTopRated);
+  return data.map((r) => transformTurf(r as never)).sort(compareTopRated);
 }
 
 export async function getTurfById(id: string): Promise<Turf | null> {
@@ -191,29 +205,23 @@ export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
   const supabase = createServerClient();
   // Fetch all active turfs and filter here because the sports field
   // stores comma-separated values inside array elements.
-  const { data, error } = await supabase
-    .from("turfs")
-    .select(CARD_COLUMNS)
-    .eq("is_active", true)
-    .order("rating", { ascending: false });
-
-  if (error) {
-    console.error("Failed to fetch turfs by sport:", error);
-    return [];
-  }
+  const data = await fetchAllRows<Record<string, unknown>>(
+    (from, to) =>
+      supabase.from("turfs").select(CARD_COLUMNS).eq("is_active", true).order("rating", { ascending: false }).order("id").range(from, to) as unknown as PromiseLike<{
+        data: Record<string, unknown>[] | null;
+        error: unknown;
+      }>,
+  );
 
   // Exact label match: "Cricket" must not pull in "Box Cricket".
-  return (data ?? [])
-    .map(transformTurf)
+  return data
+    .map((r) => transformTurf(r as never))
     .filter((t) => turfPlaysSport(t.sports, sport))
     .sort(compareTopRated);
 }
 
 export async function getAllTurfIds(): Promise<string[]> {
   const supabase = createServerClient();
-  const { data } = await supabase
-    .from("turfs")
-    .select("id")
-    .eq("is_active", true);
-  return (data ?? []).map((t) => t.id);
+  const data = await fetchAllRows<{ id: string }>((from, to) => supabase.from("turfs").select("id").eq("is_active", true).order("id").range(from, to));
+  return data.map((t) => t.id);
 }

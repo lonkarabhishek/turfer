@@ -1,3 +1,4 @@
+import { fetchAllRows } from "@/lib/queries/turfs";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 
 /**
@@ -374,10 +375,7 @@ export async function getGamesByStatus(): Promise<CountByLabel[]> {
 
 export async function getTurfsByCity(): Promise<CountByLabel[]> {
   const s = supa();
-  const { data } = await s
-    .from("turfs")
-    .select("city")
-    .eq("is_active", true);
+  const data = await fetchAllRows<{ city: string | null }>((from, to) => s.from("turfs").select("city").eq("is_active", true).order("id").range(from, to));
   const counts = new Map<string, number>();
   (data || []).forEach((t) => {
     const k = (t.city || "unknown").toLowerCase();

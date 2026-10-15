@@ -5,6 +5,7 @@ import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { CITIES } from "@/lib/city";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
+import { fetchAllRows } from "@/lib/queries/turfs";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -17,8 +18,10 @@ const BASE = "https://www.tapturf.in";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createReadOnlyClient();
 
-  const [{ data: turfs }, { data: games }] = await Promise.all([
-    supabase.from("turfs").select("id, updated_at, city, sports").eq("is_active", true),
+  const [turfs, { data: games }] = await Promise.all([
+    fetchAllRows<{ id: string; updated_at: string | null; city: string | null; sports: unknown }>((from, to) =>
+      supabase.from("turfs").select("id, updated_at, city, sports").eq("is_active", true).order("id").range(from, to),
+    ),
     supabase
       .from("games")
       .select("id, updated_at, date, start_time, status")
