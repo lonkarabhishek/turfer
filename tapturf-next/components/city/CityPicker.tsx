@@ -103,7 +103,7 @@ export function CityPicker() {
       {open && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
           <div className="absolute inset-0 bg-primary-800/50 animate-fade-in" onClick={() => setOpen(false)} />
-          <div className="relative w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-elevated animate-slide-up">
+          <div className="relative w-full sm:max-w-sm max-h-[88dvh] sm:max-h-[85vh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-elevated animate-slide-up">
             {/* Grabber */}
             <div className="sm:hidden flex justify-center pt-2.5 pb-1">
               <div className="w-10 h-1 bg-primary-300 rounded-full" />
@@ -126,27 +126,26 @@ export function CityPicker() {
               </h2>
             </div>
 
-            <div className="px-2 pb-2">
-              {CITIES.map((c) => {
-                const active = city === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => pick(c.id)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl hover:bg-primary-50 transition-colors focus-neon"
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="w-9 h-9 rounded-xl bg-accent-50 border border-accent-500/30 flex items-center justify-center">
-                        <MapPin className="w-4 h-4 text-accent-600" />
-                      </span>
-                      <span className="font-display text-xl text-primary-800 leading-none">
-                        {c.label}
-                      </span>
-                    </span>
-                    {active && <Check className="w-5 h-5 text-accent-600" strokeWidth={2.5} />}
-                  </button>
-                );
-              })}
+            {/* Scrolls on its own: fourteen cities no longer fit a phone screen. */}
+            <div className="px-3 pb-2 overflow-y-auto overscroll-contain min-h-0">
+              <div className="grid grid-cols-2 gap-2">
+                {CITIES.map((c) => {
+                  const active = city === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => pick(c.id)}
+                      aria-pressed={active}
+                      className={`flex items-center justify-between gap-2 min-h-[48px] px-3.5 py-2.5 rounded-2xl border transition-colors focus-neon ${
+                        active ? "border-accent-500 bg-accent-50" : "border-primary-200 bg-white hover:border-accent-400 hover:bg-primary-50"
+                      }`}
+                    >
+                      <span className="font-display text-[17px] text-primary-800 leading-none truncate">{c.label}</span>
+                      {active ? <Check className="w-4 h-4 text-accent-600 shrink-0" strokeWidth={2.5} /> : <MapPin className="w-4 h-4 text-primary-300 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
 
               <div className="h-px bg-primary-200 mx-4 my-2" />
 
