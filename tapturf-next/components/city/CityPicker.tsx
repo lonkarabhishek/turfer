@@ -11,7 +11,12 @@ import { CITIES, getCityPref, setCityPref, autoDetectCity, type CityId } from "@
  * Choice is stored in localStorage and broadcast so downstream
  * components (LoggedInHome, TurfListingClient) can react.
  */
-export function CityPicker() {
+/**
+ * variant "pill": the small header chip. variant "row": a full-width row
+ * for the menu, showing the current city and opening the same sheet,
+ * which has the city grid and "Use my location".
+ */
+export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
   const [city, setCity] = useState<CityId | null>(null);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -91,10 +96,28 @@ export function CityPicker() {
   const label = city ? CITIES.find((c) => c.id === city)?.label : "All cities";
 
   // Don't SSR the current pref (localStorage is client-only) → avoid mismatch
-  if (!mounted) return <span aria-hidden className="w-16 h-8" />;
+  if (!mounted) return <span aria-hidden className={variant === "row" ? "block h-12" : "w-16 h-8"} />;
 
   return (
     <>
+      {variant === "row" ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-2xl hover:bg-primary-50 transition-colors focus-neon"
+          aria-label={`Current city: ${label}. Tap to change or use your location.`}
+        >
+          <span className="flex items-center gap-3 min-w-0">
+            <span className="w-9 h-9 rounded-xl bg-accent-50 border border-accent-500/30 flex items-center justify-center shrink-0">
+              {detecting ? <Loader2 className="w-4 h-4 text-accent-600 animate-spin" /> : <MapPin className="w-4 h-4 text-accent-600" />}
+            </span>
+            <span className="text-left min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-primary-500">City</span>
+              <span className="block text-[15px] font-semibold text-primary-900 truncate">{label}</span>
+            </span>
+          </span>
+          <span className="text-[13px] font-semibold text-accent-700 shrink-0">Change</span>
+        </button>
+      ) : (
       <button
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 h-8 pl-2 pr-3 rounded-full border border-primary-200 bg-white hover:border-accent-500 transition-colors focus-neon"
@@ -109,6 +132,8 @@ export function CityPicker() {
           {detecting ? "Locating…" : label}
         </span>
       </button>
+      )}
+
 
       {open && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">

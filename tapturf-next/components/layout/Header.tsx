@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
 import { notify } from "@/lib/notifications/browser";
-import { CityPicker } from "@/components/city/CityPicker";
+import { HeaderMenu } from "@/components/layout/HeaderMenu";
 
 export function Header() {
   const { user, loading, login } = useAuth();
@@ -50,9 +50,6 @@ export function Header() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
-          <div className="mr-2">
-            <CityPicker />
-          </div>
           <Link href="/games" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
             Games
           </Link>
@@ -119,13 +116,14 @@ export function Header() {
               Log in
             </button>
           )}
+          <div className="ml-2">
+            <HeaderMenu />
+          </div>
         </nav>
 
         {/* Mobile right side */}
         <div className="flex md:hidden items-center gap-1.5 flex-shrink-0">
-          <div className="flex-shrink-0">
-            <CityPicker />
-          </div>
+          <HeaderMenu />
           {/* Refresh — iOS PWA won't reload when you re-open the app,
               so give people a one-tap way to pull fresh data. */}
           <button
