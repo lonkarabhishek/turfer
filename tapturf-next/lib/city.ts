@@ -5,7 +5,8 @@
 
 export type CityId =
   | "nashik" | "pune" | "mumbai" | "nagpur" | "hyderabad" | "bangalore" | "sambhajinagar" | "delhi"
-  | "gurgaon" | "noida" | "ghaziabad" | "jalgaon" | "faridabad" | "dhule";
+  | "gurgaon" | "noida" | "ghaziabad" | "jalgaon" | "faridabad" | "dhule"
+  | "kolhapur" | "solapur" | "ahilyanagar" | "amravati" | "nanded" | "sangli" | "satara" | "akola" | "latur" | "malegaon" | "jalna" | "chandrapur";
 export type CityState = "Maharashtra" | "Telangana" | "Karnataka" | "Delhi" | "Haryana" | "Uttar Pradesh";
 
 /**
@@ -33,6 +34,18 @@ export const CITIES: {
   { id: "sambhajinagar", label: "Sambhajinagar", labelUpper: "SAMBHAJINAGAR", state: "Maharashtra" },
   { id: "jalgaon",       label: "Jalgaon",       labelUpper: "JALGAON",       state: "Maharashtra" },
   { id: "dhule",         label: "Dhule",         labelUpper: "DHULE",         state: "Maharashtra" },
+  { id: "kolhapur",      label: "Kolhapur",      labelUpper: "KOLHAPUR",      state: "Maharashtra" },
+  { id: "solapur",       label: "Solapur",       labelUpper: "SOLAPUR",       state: "Maharashtra" },
+  { id: "ahilyanagar",   label: "Ahilyanagar",   labelUpper: "AHILYANAGAR",   state: "Maharashtra" },
+  { id: "amravati",      label: "Amravati",      labelUpper: "AMRAVATI",      state: "Maharashtra" },
+  { id: "nanded",        label: "Nanded",        labelUpper: "NANDED",        state: "Maharashtra" },
+  { id: "sangli",        label: "Sangli",        labelUpper: "SANGLI",        state: "Maharashtra" },
+  { id: "satara",        label: "Satara",        labelUpper: "SATARA",        state: "Maharashtra" },
+  { id: "akola",         label: "Akola",         labelUpper: "AKOLA",         state: "Maharashtra" },
+  { id: "latur",         label: "Latur",         labelUpper: "LATUR",         state: "Maharashtra" },
+  { id: "malegaon",      label: "Malegaon",      labelUpper: "MALEGAON",      state: "Maharashtra" },
+  { id: "jalna",         label: "Jalna",         labelUpper: "JALNA",         state: "Maharashtra" },
+  { id: "chandrapur",    label: "Chandrapur",    labelUpper: "CHANDRAPUR",    state: "Maharashtra" },
 ];
 
 const NAMED = CITIES.slice(0, 5).map((c) => c.label);
@@ -79,6 +92,18 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   if (a.includes("sambhajinagar") || a.includes("aurangabad")) return "sambhajinagar";
   if (a.includes("jalgaon")) return "jalgaon";
   if (a.includes("dhule")) return "dhule";
+  if (a.includes("kolhapur")) return "kolhapur";
+  if (a.includes("solapur")) return "solapur";
+  if (a.includes("ahilyanagar") || a.includes("ahmednagar")) return "ahilyanagar";
+  if (a.includes("amravati")) return "amravati";
+  if (a.includes("nanded")) return "nanded";
+  if (a.includes("sangli")) return "sangli";
+  if (a.includes("satara")) return "satara";
+  if (a.includes("akola")) return "akola";
+  if (a.includes("latur")) return "latur";
+  if (a.includes("malegaon")) return "malegaon";
+  if (a.includes("jalna")) return "jalna";
+  if (a.includes("chandrapur")) return "chandrapur";
   return null;
 }
 
@@ -122,6 +147,18 @@ const CITY_COORDS: Record<CityId, { lat: number; lng: number }> = {
   sambhajinagar: { lat: 19.8762, lng: 75.3433 },
   jalgaon: { lat: 21.0077, lng: 75.5626 },
   dhule: { lat: 20.9042, lng: 74.7749 },
+  kolhapur: { lat: 16.7050, lng: 74.2433 },
+  solapur: { lat: 17.6599, lng: 75.9064 },
+  ahilyanagar: { lat: 19.0948, lng: 74.7480 },
+  amravati: { lat: 20.9374, lng: 77.7796 },
+  nanded: { lat: 19.1383, lng: 77.3210 },
+  sangli: { lat: 16.8524, lng: 74.5815 },
+  satara: { lat: 17.6805, lng: 74.0183 },
+  akola: { lat: 20.7002, lng: 77.0082 },
+  latur: { lat: 18.4088, lng: 76.5604 },
+  malegaon: { lat: 20.5579, lng: 74.5287 },
+  jalna: { lat: 19.8347, lng: 75.8816 },
+  chandrapur: { lat: 19.9615, lng: 79.2961 },
 };
 
 // Haversine — km between two lat/lng points.
