@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed } from "lucide-react";
@@ -48,8 +49,10 @@ export function HeaderMenu() {
         <Menu className="w-5 h-5 text-primary-800" />
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-[60] flex items-end md:items-start md:justify-end" role="presentation">
+      {/* Portal to body: the header's backdrop blur would otherwise trap
+          this fixed sheet inside the header and hide it on phones. */}
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-end md:items-start md:justify-end" role="presentation" data-modal-open="true">
           <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="absolute inset-0 bg-primary-800/40 animate-fade-in cursor-default" />
           <div
             role="dialog"
@@ -79,7 +82,8 @@ export function HeaderMenu() {
             </div>
             <div className="md:hidden h-[env(safe-area-inset-bottom)] bg-white" />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
