@@ -33,14 +33,24 @@ export function CityPicker() {
         alreadyTried = localStorage.getItem("tapturf_city_autodetect_v1") === "1";
       } catch { /* ignore */ }
       if (!alreadyTried) {
+        // One tiny request: the server reads the visitor's approximate
+        // city from the request headers. No permission prompt, no GPS.
+        // The precise "Use my location" stays behind the button below.
+        try {
+          localStorage.setItem("tapturf_city_autodetect_v1", "1");
+        } catch { /* ignore */ }
         setDetecting(true);
-        autoDetectCity()
-          .then((c) => {
-            if (c) {
-              setCity(c);
+        fetch("/api/geo")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d: { city?: string | null } | null) => {
+            const c = d?.city ?? null;
+            if (c && CITIES.some((x) => x.id === c)) {
+              setCityPref(c as CityId);
+              setCity(c as CityId);
               window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: c }));
             }
           })
+          .catch(() => {})
           .finally(() => setDetecting(false));
       }
     }
