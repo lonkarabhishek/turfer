@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CONTACT_EMAIL } from "@/lib/contact";
+import { getCityCopy } from "@/lib/queries/cities";
 import type { HomeData } from "@/lib/home/types";
 
 /**
@@ -86,5 +87,27 @@ export function homeJsonLd(d: HomeData) {
       target: "https://www.tapturf.in/turfs?q={search_term_string}",
       "query-input": "required name=search_term_string",
     },
+  };
+}
+
+// Metadata reads the live city list (cached an hour) so the names and
+// the city count stay honest as cities are added. The title stops at
+// the city list: layout's title.template adds "| TapTurf", so baking it
+// in here produced "... | TapTurf | TapTurf" in SERPs.
+export async function turfsMetadata(): Promise<Metadata> {
+  const { short, listAnd } = await getCityCopy();
+  return {
+    title: `All Sports Turfs in ${short}`,
+    description: `Every sports turf in ${listAnd}. Compare prices, check ratings, view photos. Football, box cricket, cricket, badminton and more. Call or WhatsApp to book, no booking fee.`,
+    keywords:
+      "turf in hyderabad, turf in bangalore, turf in mumbai, turf in pune, turf in delhi, turf in chennai, turf in nashik, turf in nagpur, box cricket hyderabad, box cricket bangalore, box cricket mumbai, football turf hyderabad, football turf bangalore, football turf mumbai, football turf pune, football turf delhi, football turf nashik, football turf nagpur, cricket turf hyderabad, cricket turf bangalore, cricket turf nashik, cricket turf pune, box cricket nagpur, turf booking india, turf booking telangana, turf booking karnataka, turf booking maharashtra, box cricket",
+    openGraph: {
+      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
+      title: `All Sports Turfs in ${short} | TapTurf`,
+      description: `Every sports turf across ${listAnd}. Compare prices, check ratings, call or WhatsApp to book.`,
+      url: "https://www.tapturf.in/turfs",
+      type: "website",
+    },
+    alternates: { canonical: "https://www.tapturf.in/turfs" },
   };
 }

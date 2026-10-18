@@ -2,6 +2,7 @@
 
 import { AskEntry } from "@/components/ask/AskEntry";
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Search, ChevronDown, Navigation, Loader2, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import type { Turf } from "@/types/turf";
@@ -9,7 +10,7 @@ import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
-import { getCityPref, isCity, labelFor, type CityId } from "@/lib/city";
+import type { CityScope } from "@/lib/city";
 
 // Order by frequency in the current DB — Football (166) and Box
 // Cricket (103) dominate, so they're first. Box Cricket was missing
@@ -38,15 +39,27 @@ const SORT_LABELS: Record<SortOption, string> = {
   "price-high":"Price: High to Low",
 };
 
+/**
+ * Search, filters and sort over the turfs the server rendered for this
+ * page: one city's turfs on a city page, every turf on the all-India
+ * page. The city never changes in here; a new city is a new page.
+ */
 export function TurfListingClient({
   turfs,
-  spotlights = [],
+  scope,
+  spotlight,
+  trendingIds: trendingList,
 }: {
   turfs: Turf[];
-  /** Live "Most Trending Turf" picks, one per city. */
-  spotlights?: SpotlightTurf[];
+  scope: CityScope;
+  /** This week's "Most Trending Turf" for the city in view, if any. */
+  spotlight: SpotlightTurf | null;
+  /** Picks that lead the default sort. */
+  trendingIds: string[];
 }) {
-  const trendingIds = useMemo(() => new Set(spotlights.map((s) => s.turfId)), [spotlights]);
+  const router = useRouter();
+  const trendingIds = useMemo(() => new Set(trendingList), [trendingList]);
+  const cityLabel = scope.kind === "city" ? scope.label : null;
   const [search, setSearch] = useState("");
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("rating");
@@ -55,40 +68,15 @@ export function TurfListingClient({
   const [locError, setLocError] = useState("");
   const [locErrorKind, setLocErrorKind] = useState<"denied" | "unavailable" | "timeout" | "other" | null>(null);
 
-  // City scoping: the /turfs page is server-rendered with turfs from
-  // both cities so search engines see everything, but visitors who
-  // picked Nashik (or Pune) in the header expect this page to obey.
-  // Read the pref on mount and re-read on the tapturf:city-changed
-  // event dispatched by CityPicker so switching city updates the list
-  // without a page reload. `showAllCities` lets a picked-city visitor
-  // widen back to every city without clearing the header pill.
-  const [pickedCity, setPickedCity] = useState<CityId | null>(null);
-  const [showAllCities, setShowAllCities] = useState(false);
-  // False until we've read the city pref; the count stays hidden until
-  // then so we never flash the all-cities total to a Nashik visitor.
-  const [prefReady, setPrefReady] = useState(false);
+  // The home's WebSite SearchAction lands here as /turfs?q=...; seed the
+  // box once so that search really runs.
   useEffect(() => {
-    const load = () => {
-      setPickedCity(getCityPref());
-      setPrefReady(true);
-    };
-    // The home's WebSite SearchAction lands here as /turfs?q=...; seed the
-    // box once so that search really runs.
     const seedFromUrl = () => {
       const q = new URLSearchParams(window.location.search).get("q")?.trim();
       if (q) setSearch(q.slice(0, 120));
     };
     seedFromUrl();
-    load();
-    const onChange = () => load();
-    window.addEventListener("tapturf:city-changed", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("tapturf:city-changed", onChange);
-      window.removeEventListener("storage", onChange);
-    };
   }, []);
-  const activeCity = pickedCity && !showAllCities ? pickedCity : null;
 
   const handleLocate = useCallback(async () => {
     setLocating(true);
@@ -129,11 +117,7 @@ export function TurfListingClient({
     }
   }, []);
 
-  // Scope to picked city FIRST so distance/sort work on the visible set.
-  const cityScoped = useMemo(() => {
-    if (!activeCity) return turfs;
-    return turfs.filter((t) => t.city === activeCity);
-  }, [turfs, activeCity]);
+  const cityScoped = turfs;
 
   const turfsWithDistance = useMemo(() => {
     return cityScoped.map((t) => {
@@ -199,13 +183,7 @@ export function TurfListingClient({
     return result;
   }, [turfsWithDistance, search, selectedSport, sortBy, trendingIds]);
 
-  // Spotlight card for the city in scope (or the first pick when
-  // showing all cities).
-  const spotlightPicks = useMemo(() => {
-    if (!prefReady || spotlights.length === 0) return [];
-    const pick = activeCity ? spotlights.find((s) => s.city === activeCity) : spotlights[0];
-    return pick ? [pick] : [];
-  }, [prefReady, spotlights, activeCity]);
+  const spotlightPicks = useMemo(() => (spotlight ? [spotlight] : []), [spotlight]);
 
   const availableSports = useMemo(() => {
     // Sport chips reflect the city-scoped turf set — if Nashik has no
@@ -230,23 +208,6 @@ export function TurfListingClient({
 
   return (
     <div>
-      {/* Subtitle under the page h1: count follows the picked city. */}
-      <p className="text-[17px] text-primary-500 mt-1 mb-6">
-        {!prefReady ? (
-          "Sports turfs with pricing, ratings, and directions"
-        ) : activeCity ? (
-          <>
-            <span className="tabular-nums">{cityScoped.length}</span> sports turf{cityScoped.length !== 1 ? "s" : ""} in{" "}
-            {labelFor(activeCity)} with pricing, ratings, and directions
-          </>
-        ) : (
-          <>
-            <span className="tabular-nums">{cityScoped.length}</span> sports turfs across all cities with pricing,
-            ratings, and directions
-          </>
-        )}
-      </p>
-
       <AskEntry compact />
 
       {/* Search field, iOS style: filled, borderless. */}
@@ -283,15 +244,7 @@ export function TurfListingClient({
       <div className="mb-5 flex items-center gap-3 text-[14px]">
         <p className="text-primary-500 min-w-0 truncate">
           <span className="tabular-nums">{filtered.length}</span> turf{filtered.length !== 1 ? "s" : ""}
-          {pickedCity && !showAllCities && <> in {labelFor(pickedCity)}</>}
-          {pickedCity && (
-            <button
-              onClick={() => setShowAllCities((v) => !v)}
-              className="ml-2 text-accent-600 hover:text-accent-700"
-            >
-              {showAllCities ? `Only ${labelFor(pickedCity)}` : "All cities"}
-            </button>
-          )}
+          {cityLabel && <> in {cityLabel}</>}
         </p>
         <div className="ml-auto flex items-center gap-1 shrink-0">
           {!userLocation ? (
@@ -361,7 +314,7 @@ export function TurfListingClient({
       )}
 
       {/* Grid */}
-      {filtered.length > 0 ? (
+      {cityLabel && search.trim() && filtered.length === 0 ? null : filtered.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
           {filtered.map(({ turf, distanceKm }) => (
             <TurfCard key={turf.id} turf={turf} distanceKm={distanceKm} trending={trendingIds.has(turf.id)} />
@@ -380,6 +333,24 @@ export function TurfListingClient({
               Clear all filters
             </button>
           )}
+        </div>
+      )}
+      {/* A city page searches its own turfs; offer the rest of India when that runs thin. */}
+      {cityLabel && search.trim() && filtered.length < 3 && (
+        <div className="mt-8 flex flex-col items-start gap-3">
+          {filtered.length === 0 && (
+            <p className="text-[15px] text-primary-700">
+              Nothing in {cityLabel} for &quot;{search.trim()}&quot;.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push(`/turfs?q=${encodeURIComponent(search.trim())}`)}
+            className="h-11 px-5 inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white text-[14px] font-semibold text-primary-900 press-tight focus-neon hover:border-primary-900"
+          >
+            <Search className="w-4 h-4" />
+            Search all of India
+          </button>
         </div>
       )}
     </div>
