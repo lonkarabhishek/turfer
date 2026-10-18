@@ -195,28 +195,77 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   return null;
 }
 
-// ── Client-only preference storage ─────────────────────────
+// ── City cookie: one value that the proxy, the server pages and the client share ──
+//
+// tt_city holds the visitor's city choice, first-party, readable by JS:
+//   "pune"       explicit pick (ask sheet, picker, GPS, "Make this my city")
+//   "geo.pune"   detected from the IP by proxy.ts, never re-detected
+//   "all"        chose "Show all of India" or closed the ask; never asked again
+//   "unknown"    detection ran and found nothing; the ask shows
+//   missing      crawler, cookies blocked, or never seen
+// Every value uses only [a-z.-], so it is never percent-encoded.
+// This file stays import-free and pure: proxy.ts bundles it.
 
-const KEY = "tapturf_city_v1";
-const AUTODETECT_TRIED_KEY = "tapturf_city_autodetect_v1";
+export const CITY_COOKIE = "tt_city";
+export const CITY_COOKIE_MAX_AGE = 31536000;
 
-export function getCityPref(): CityId | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const v = localStorage.getItem(KEY);
-    return isCity(v) ? v : null;
-  } catch { return null; }
+export type CityChoice =
+  | { kind: "city"; city: CityId; src: "pick" | "geo" }
+  | { kind: "all" }
+  | { kind: "unknown" };
+
+/** True only for a curated city id. */
+export function isKnownCity(id: string | null | undefined): id is CityId {
+  return typeof id === "string" && CITY_IDS.includes(id);
 }
 
-export function setCityPref(city: CityId | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (city) localStorage.setItem(KEY, city);
-    else localStorage.removeItem(KEY);
-  } catch { /* ignore */ }
+export function parseCityCookie(raw: string | null | undefined): CityChoice | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (v === "all") return { kind: "all" };
+  if (v === "unknown") return { kind: "unknown" };
+  if (v.startsWith("geo.")) {
+    const id = v.slice(4);
+    return isKnownCity(id) ? { kind: "city", city: id, src: "geo" } : null;
+  }
+  return isKnownCity(v) ? { kind: "city", city: v, src: "pick" } : null;
 }
 
-// ── Auto-detect from geolocation ───────────────────────────
+export function serializeCityChoice(c: CityChoice): string {
+  if (c.kind === "city") return c.src === "geo" ? `geo.${c.city}` : c.city;
+  return c.kind;
+}
+
+/** The city a choice scopes pages to, or null for all of India. */
+export function scopeOf(c: CityChoice | null): CityId | null {
+  return c && c.kind === "city" ? c.city : null;
+}
+
+/** Common and old names a visitor (or Vercel's IP city header) may use. */
+export const CITY_ALIASES: Record<string, CityId> = {
+  bengaluru: "bangalore",
+  gurugram: "gurgaon",
+  aurangabad: "sambhajinagar",
+  "chhatrapati sambhajinagar": "sambhajinagar",
+  ahmednagar: "ahilyanagar",
+  "navi mumbai": "mumbai",
+  thane: "mumbai",
+  "new delhi": "delhi",
+  secunderabad: "hyderabad",
+  nasik: "nashik",
+  bombay: "mumbai",
+  poona: "pune",
+  calcutta: "kolkata",
+  madras: "chennai",
+  mysore: "mysuru",
+  mangalore: "mangaluru",
+  belgaum: "belagavi",
+  hubli: "hubballi",
+  baroda: "vadodara",
+  cochin: "kochi",
+};
+
+// ── Distances ──────────────────────────────────────────────
 
 // Rough centroid of each city. We only need to pick the closer one,
 // exact position doesn't matter.
@@ -277,8 +326,12 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   raipur: { lat: 21.2514, lng: 81.6296 },
 };
 
-// Haversine — km between two lat/lng points.
-function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+export function cityCoords(id: string): { lat: number; lng: number } | null {
+  return CITY_COORDS[id] ?? null;
+}
+
+/** Haversine: km between two lat/lng points. */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const toRad = (x: number) => (x * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -287,6 +340,26 @@ function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: numb
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** Rounded km between two city centroids, or null when either has none. */
+export function kmBetween(a: string, b: string): number | null {
+  const pa = cityCoords(a);
+  const pb = cityCoords(b);
+  if (!pa || !pb) return null;
+  return Math.round(distanceKm(pa, pb));
+}
+
+/** The closest curated city to a point, however far. */
+export function nearestCityAny(lat: number, lng: number): { id: CityId; km: number } {
+  const pt = { lat, lng };
+  let best: { id: CityId; km: number } = { id: CITY_IDS[0], km: Infinity };
+  for (const id of Object.keys(CITY_COORDS)) {
+    if (!isKnownCity(id)) continue;
+    const km = distanceKm(pt, CITY_COORDS[id]);
+    if (km < best.km) best = { id, km };
+  }
+  return { id: best.id, km: Math.round(best.km) };
 }
 
 /**
@@ -306,36 +379,245 @@ export function nearestCity(lat: number, lng: number): CityId | null {
 }
 
 /**
- * Ask the browser for a one-shot position and, if we're near a
- * supported city, set the preference. Silently no-ops if the user
- * denies, if the browser doesn't support geolocation, or if we've
- * already tried once (so we don't nag).
+ * Rows ordered by distance from one city: rows with a centroid first,
+ * nearest first; rows without one keep their incoming order at the end.
  */
-export async function autoDetectCity(): Promise<CityId | null> {
-  if (typeof window === "undefined") return null;
-  if (!("geolocation" in navigator)) return null;
-  try {
-    if (localStorage.getItem(AUTODETECT_TRIED_KEY) === "1") return null;
-    localStorage.setItem(AUTODETECT_TRIED_KEY, "1");
-  } catch { /* ignore */ }
+export function byDistanceFrom<T extends { id: string }>(from: string, rows: T[]): (T & { km: number | null })[] {
+  const withKm = rows.map((r, i) => ({ r: { ...r, km: kmBetween(from, r.id) }, i }));
+  return withKm
+    .sort((a, b) => {
+      if (a.r.km == null && b.r.km == null) return a.i - b.i;
+      if (a.r.km == null) return 1;
+      if (b.r.km == null) return -1;
+      return a.r.km - b.r.km || a.i - b.i;
+    })
+    .map((x) => x.r);
+}
 
-  return new Promise<CityId | null>((resolve) => {
-    const finish = (v: CityId | null) => resolve(v);
-    // 8s cap so this never hangs the UI
-    const timer = window.setTimeout(() => finish(null), 8000);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        window.clearTimeout(timer);
-        const c = nearestCity(pos.coords.latitude, pos.coords.longitude);
-        if (c) setCityPref(c);
-        finish(c);
-      },
-      () => {
-        window.clearTimeout(timer);
-        finish(null);
-      },
-      // Reduce battery hit — low accuracy is fine to pick city
-      { enableHighAccuracy: false, timeout: 7000, maximumAge: 15 * 60 * 1000 }
-    );
+export type CityScope =
+  | { kind: "city"; id: string; label: string; requested: null }
+  | { kind: "city"; id: string; label: string; requested: { id: string; label: string; km: number } }
+  | { kind: "india"; requested: { id: string; label: string } | null };
+
+/**
+ * What a page should show for a requested city: that city when it has
+ * turfs, else the nearest live city within 200 km, else all of India.
+ */
+export function resolveCityScope(requested: string | null, live: { id: string; label: string }[]): CityScope {
+  if (!requested) return { kind: "india", requested: null };
+  const hit = live.find((c) => c.id === requested);
+  if (hit) return { kind: "city", id: hit.id, label: hit.label, requested: null };
+  const req = { id: requested, label: labelFor(requested) };
+  const at = cityCoords(requested);
+  if (at) {
+    let best: { c: { id: string; label: string }; km: number } | null = null;
+    for (const c of live) {
+      const p = cityCoords(c.id);
+      if (!p) continue;
+      const km = distanceKm(at, p);
+      if (!best || km < best.km) best = { c, km };
+    }
+    if (best && best.km <= 200) {
+      return { kind: "city", id: best.c.id, label: best.c.label, requested: { ...req, km: Math.round(best.km) } };
+    }
+  }
+  return { kind: "india", requested: req };
+}
+
+/**
+ * Cities matching a typed query: label, any word of the label, id,
+ * state or a known alias ("bom" finds Mumbai). Label prefix first,
+ * then the bigger city.
+ */
+export function matchCities<T extends { id: string; label: string; state?: string; n?: number }>(q: string, list: T[]): T[] {
+  const s = q.trim().toLowerCase();
+  if (!s) return list;
+  const aliasIds = new Set(
+    Object.entries(CITY_ALIASES)
+      .filter(([k]) => k.startsWith(s))
+      .map(([, v]) => v),
+  );
+  const scored = list
+    .map((c, i) => {
+      const label = c.label.toLowerCase();
+      const labelHit = label.startsWith(s);
+      const hit =
+        labelHit ||
+        label.split(/[\s-]+/).some((w) => w.startsWith(s)) ||
+        c.id.startsWith(s) ||
+        (c.state ?? "").toLowerCase().startsWith(s) ||
+        aliasIds.has(c.id);
+      return { c, i, hit, labelHit };
+    })
+    .filter((x) => x.hit);
+  scored.sort((a, b) => Number(b.labelHit) - Number(a.labelHit) || (b.c.n ?? 0) - (a.c.n ?? 0) || a.i - b.i);
+  return scored.map((x) => x.c);
+}
+
+// ── Client helpers (safe to import on the server: each one no-ops there) ──
+
+const KEY = "tapturf_city_v1";
+const TS_KEY = "tapturf_city_ts";
+const MIG_KEY = "tapturf_city_mig_v2";
+
+export type CitySource = "ask" | "ask_dismiss" | "picker" | "gps" | "make_my_city" | "near_me" | "reset";
+
+function rawCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${CITY_COOKIE}=([^;]*)`));
+  return m ? m[1] : null;
+}
+
+/** The parsed tt_city cookie, or null when missing or malformed. */
+export function readCityChoice(): CityChoice | null {
+  return parseCityCookie(rawCookie());
+}
+
+/**
+ * The visitor's city for send-time readers (Ask, game draft). Cookie
+ * first: all and unknown mean no city. With no valid cookie at all, the
+ * legacy localStorage value.
+ */
+export function getCityPref(): CityId | null {
+  if (typeof window === "undefined") return null;
+  const c = readCityChoice();
+  if (c) return scopeOf(c);
+  try {
+    const v = localStorage.getItem(KEY);
+    return isKnownCity(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// GA4 event, inlined so this file stays import-free (lib/analytics/city.ts is the shared helper).
+function track(event: string, params: Record<string, string | number | boolean>) {
+  try {
+    const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
+    gtag?.("event", event, params);
+  } catch {
+    /* ignore */
+  }
+}
+
+function writeCookie(value: string, maxAge = CITY_COOKIE_MAX_AGE) {
+  document.cookie =
+    `${CITY_COOKIE}=${value}; Path=/; Max-Age=${maxAge}; SameSite=Lax` + (location.protocol === "https:" ? "; Secure" : "");
+}
+
+/** Mirrors a choice onto <html> so CSS (city line, ask, Make my city) follows it before paint. */
+export function applyCityToDocument(c: CityChoice | null): void {
+  if (typeof document === "undefined") return;
+  const d = document.documentElement;
+  d.setAttribute("data-city-state", c ? c.kind : "none");
+  if (c && c.kind === "city") {
+    d.setAttribute("data-city", c.city);
+    d.setAttribute("data-city-src", c.src);
+  } else {
+    d.removeAttribute("data-city");
+    d.removeAttribute("data-city-src");
+  }
+}
+
+/**
+ * Store a choice: a city id, "all" (or null) for all of India. Writes
+ * the cookie and the localStorage mirror, updates <html>, tells the page
+ * (tapturf:city-changed) and asks the server to re-issue the cookie.
+ * Returns true when the cookie stuck (false when cookies are blocked).
+ */
+export function setCityPref(next: CityId | "all" | null, opts: { source?: CitySource } = {}): boolean {
+  if (typeof window === "undefined") return false;
+  const value = next ?? "all";
+  if (value !== "all" && !isKnownCity(value)) return false;
+  const prior = readCityChoice();
+  const previous = prior ? serializeCityChoice(prior) : "none";
+  writeCookie(value);
+  const after = readCityChoice();
+  const stuck = Boolean(after && serializeCityChoice(after) === value);
+  try {
+    if (value === "all") localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, value);
+  } catch { /* ignore */ }
+  try {
+    localStorage.setItem(TS_KEY, String(Date.now()));
+    localStorage.setItem(MIG_KEY, "1");
+  } catch { /* ignore */ }
+  applyCityToDocument(parseCityCookie(value));
+  window.dispatchEvent(
+    new CustomEvent("tapturf:city-changed", { detail: { value, source: opts.source, stuck, previous } }),
+  );
+  fetch("/api/city", {
+    method: "POST",
+    keepalive: true,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ choice: value }),
+  }).catch(() => {});
+  track("city_chosen", { city: value, source: opts.source ?? "unknown", previous });
+  return stuck;
+}
+
+/** Forget the choice entirely (cookie and mirror). */
+export function clearCityPref(): void {
+  if (typeof window === "undefined") return;
+  writeCookie("", 0);
+  try {
+    localStorage.removeItem(KEY);
+    localStorage.setItem(TS_KEY, String(Date.now()));
+  } catch { /* ignore */ }
+  applyCityToDocument(null);
+  window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: { value: null, stuck: true } }));
+}
+
+/** Opens the global city picker sheet (components/city/CityPickerSheet.tsx). */
+export function openCityPicker(mode: "list" | "search" = "list"): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("tapturf:open-city-picker", { detail: { mode } }));
+}
+
+export type LocateResult =
+  | { city: CityId }
+  | { error: "denied" | "timeout" | "unavailable" | "unsupported" }
+  | { error: "far"; nearest: { id: CityId; km: number } };
+
+/**
+ * One GPS fix mapped to a city. Only ever called from a tap, so the
+ * permission prompt never appears on its own. Never writes the pref.
+ */
+export function locateCity(): Promise<LocateResult> {
+  if (typeof window === "undefined" || !("geolocation" in navigator)) {
+    return Promise.resolve({ error: "unsupported" });
+  }
+  return new Promise<LocateResult>((resolve) => {
+    let done = false;
+    const finish = (r: LocateResult) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      resolve(r);
+    };
+    const timer = window.setTimeout(() => finish({ error: "timeout" }), 8000);
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const c = nearestCity(latitude, longitude);
+          finish(c ? { city: c } : { error: "far", nearest: nearestCityAny(latitude, longitude) });
+        },
+        (err) => finish({ error: err.code === 1 ? "denied" : err.code === 3 ? "timeout" : "unavailable" }),
+        { enableHighAccuracy: false, timeout: 7000, maximumAge: 900000 },
+      );
+    } catch {
+      finish({ error: "unavailable" });
+    }
   });
+}
+
+/** @deprecated Use locateCity and setCityPref. Kept only while CityPicker still calls it. */
+export async function autoDetectCity(): Promise<CityId | null> {
+  const r = await locateCity();
+  if ("city" in r) {
+    setCityPref(r.city, { source: "gps" });
+    return r.city;
+  }
+  return null;
 }
