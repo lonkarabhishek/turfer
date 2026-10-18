@@ -216,7 +216,16 @@ test("byDistanceFrom orders by km and keeps unknowns last", () => {
 
 // ── Pre-paint script in a sandbox ─────────────────────────────
 
-function runPrePaint(o: { cookie?: string; legacy?: string; migrated?: boolean; path?: string; search?: string; blockCookies?: boolean }) {
+function runPrePaint(o: {
+  cookie?: string;
+  legacy?: string;
+  migrated?: boolean;
+  path?: string;
+  search?: string;
+  blockCookies?: boolean;
+  askSeen?: boolean;
+  storageThrows?: boolean;
+}) {
   let jar = o.cookie ? `tt_city=${o.cookie}` : "";
   const attrs: Record<string, string> = {};
   const style: Record<string, string> = {};
@@ -238,7 +247,10 @@ function runPrePaint(o: { cookie?: string; legacy?: string; migrated?: boolean; 
     documentElement: { setAttribute: (k: string, v: string) => (attrs[k] = v), style },
   };
   const localStorage = {
-    getItem: (k: string) => store.get(k) ?? null,
+    getItem: (k: string) => {
+      if (o.storageThrows) throw new Error("SecurityError");
+      return store.get(k) ?? null;
+    },
     setItem: (k: string, v: string) => store.set(k, v),
     removeItem: (k: string) => store.delete(k),
   };
@@ -248,7 +260,9 @@ function runPrePaint(o: { cookie?: string; legacy?: string; migrated?: boolean; 
     protocol: "https:",
     reload: () => reloads++,
   };
-  const window = { localStorage };
+  const session = new Map<string, string>(o.askSeen ? [["tt_ask_seen", "1"]] : []);
+  const sessionStorage = { getItem: (k: string) => session.get(k) ?? null };
+  const window = { localStorage, sessionStorage };
   vm.runInNewContext(CITY_PREPAINT_JS, { document, window, location });
   return { jar, attrs, style, store, reloads };
 }
@@ -301,4 +315,16 @@ test("pre-paint never reloads when cookies are blocked", () => {
   const r = runPrePaint({ legacy: "nashik", blockCookies: true, path: "/" });
   assert.equal(r.reloads, 0);
   assert.equal(r.attrs["data-city-state"], "none");
+});
+
+test("pre-paint folds the ask once it was shown this session", () => {
+  assert.equal(runPrePaint({ cookie: "unknown" }).attrs["data-city-ask"], undefined);
+  assert.equal(runPrePaint({ cookie: "unknown", askSeen: true }).attrs["data-city-ask"], "seen");
+  assert.equal(runPrePaint({ cookie: "pune", askSeen: true }).attrs["data-city-ask"], undefined);
+});
+
+test("pre-paint still sets the attributes when storage throws", () => {
+  const r = runPrePaint({ cookie: "geo.pune", storageThrows: true });
+  assert.deepEqual(r.attrs, { "data-city-state": "city", "data-city": "pune", "data-city-src": "geo" });
+  assert.equal(runPrePaint({ cookie: "unknown", storageThrows: true }).attrs["data-city-state"], "unknown");
 });

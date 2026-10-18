@@ -41,7 +41,7 @@ export async function HomeView({ requested, ask = false }: { requested: string |
       <HomeShell hero={s.hero} scope={s.scope} line={line} />
 
       {ask && (
-        <CityAsk cities={s.askCities} cityCount={s.askCityCount} page="/" changeHref="#all-cities" />
+        <CityAsk cities={s.askCities} cityCount={s.askCityCount} page="/" changeHref="#all-cities" variant="sheet" />
       )}
 
       {s.strip.tiles.length > 0 && (

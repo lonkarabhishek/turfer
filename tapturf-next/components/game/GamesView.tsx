@@ -50,11 +50,11 @@ export async function GamesView({ requested, ask = false }: { requested: string 
               cityCount={live.length}
               page="/games"
               changeHref="/#all-cities"
+              variant="inline"
             />
           ) : null
         }
       />
-      {ask && <div className="city-ask-spacer" aria-hidden />}
     </>
   );
 }

@@ -42,6 +42,7 @@ export async function TurfsView({ requested, ask = false }: { requested: string 
           cityCount={live.length}
           page="/turfs"
           changeHref="#turfs-by-city"
+          variant="inline"
         />
       )}
       <Link href="/turf-near-me" className="inline-block text-[15px] font-medium text-accent-600 hover:text-accent-700">
@@ -81,7 +82,6 @@ export async function TurfsView({ requested, ask = false }: { requested: string 
           </ul>
         </section>
       )}
-      {ask && <div className="city-ask-spacer" aria-hidden />}
     </div>
   );
 }

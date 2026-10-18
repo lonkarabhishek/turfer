@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   applyCityToDocument,
@@ -13,6 +13,7 @@ import {
   type CitySource,
 } from "@/lib/city";
 import { trackCity } from "@/lib/analytics/city";
+import { ASK_SEEN_KEY } from "@/lib/cityPrePaint";
 import { setPendingCity } from "./cityPending";
 
 const MIRROR = "tapturf_city_v1";
@@ -59,6 +60,20 @@ export function CitySync() {
   // Loop guard is per page.
   useEffect(() => {
     refreshedFor.current = "";
+  }, [pathname]);
+
+  // The first-visit ask is asked once: after a client navigation away
+  // from the page that showed it, fold it on every later page (before
+  // paint, so it never flashes). Reloads get the same from the pre-paint
+  // script.
+  const firstPath = useRef(pathname);
+  useLayoutEffect(() => {
+    if (pathname === firstPath.current) return;
+    try {
+      if (sessionStorage.getItem(ASK_SEEN_KEY)) document.documentElement.setAttribute("data-city-ask", "seen");
+    } catch {
+      /* ignore */
+    }
   }, [pathname]);
 
   useEffect(() => {

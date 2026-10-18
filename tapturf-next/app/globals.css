@@ -474,11 +474,13 @@ p, li { letter-spacing: 0; }
 /* ── City personalisation ─────────────────────────────────────
    <html data-city-state data-city data-city-src> is set before the first
    paint by lib/cityPrePaint.ts, so these rules decide the city line, the
-   first-visit ask and "Make this my city" without a hydration swap. */
+   first-visit ask and "Make this my city" without a hydration swap.
+   The ask shows on the first page that has it in a session only;
+   data-city-ask="seen" (pre-paint script, CitySync) hides it after. */
 .city-ask { display: none; }
-html[data-city-state="unknown"] .city-ask:not([hidden]) { display: block; }
+html[data-city-state="unknown"]:not([data-city-ask="seen"]) .city-ask:not([hidden]) { display: block; }
 .city-ask-spacer { display: none; }
-html[data-city-state="unknown"] .city-ask-spacer { display: block; height: 16rem; }
+html[data-city-state="unknown"]:not([data-city-ask="seen"]) .city-ask-spacer { display: block; height: 12rem; }
 @media (min-width: 768px) { html[data-city-state="unknown"] .city-ask-spacer { display: none; } }
 .city-geo { display: none; }
 html[data-city-src="geo"] .city-geo { display: inline; }
