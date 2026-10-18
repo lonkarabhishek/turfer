@@ -488,5 +488,13 @@ html[data-city-src="geo"] .city-geo { display: inline; }
 html[data-city-state="city"] .city-line-pick { display: none; }
 html[data-city-state="city"] .city-line-back { display: inline; }
 .mine-yes { display: none; }
-html[data-city-pending] main { opacity: .55; transition: opacity .2s; }
-@media (prefers-reduced-motion: reduce) { html[data-city-pending] main { transition: none; } }
+/* While switching city, dim everything in <main> except the city line,
+   which carries "Switching to Mumbai…": the siblings along its ancestor
+   path, never nested, so the dim never compounds. Browsers without :has
+   skip these rules and just swap. */
+html[data-city-pending] main :has(#city-line) > :not(#city-line):not(:has(#city-line)),
+html[data-city-pending] main:has(#city-line) > :not(#city-line):not(:has(#city-line)) { opacity: .55; transition: opacity .2s; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-city-pending] main :has(#city-line) > :not(#city-line):not(:has(#city-line)),
+  html[data-city-pending] main:has(#city-line) > :not(#city-line):not(:has(#city-line)) { transition: none; }
+}

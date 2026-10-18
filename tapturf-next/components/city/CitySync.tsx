@@ -46,8 +46,9 @@ type ChangeDetail = { value: string | null; source?: CitySource; stuck?: boolean
  * - On tapturf:city-changed: one router.refresh(), so the proxy serves
  *   the new city's page and the client router drops old-city prefetches.
  *   A pick from the picker while on a city page goes to the new city.
- * - On other tabs, bfcache restores and tab returns: refresh only when
- *   the page on screen was rendered for a different city.
+ * - On route changes (Back and Forward included), other tabs, bfcache
+ *   restores and tab returns: refresh only when the page on screen was
+ *   rendered for a different city.
  */
 export function CitySync() {
   const router = useRouter();
@@ -56,10 +57,16 @@ export function CitySync() {
   const lastScope = useRef<string | null | undefined>(undefined);
   const refreshedFor = useRef<string>("");
   const dirty = useRef(false);
+  const refocus = useRef(false);
+  const staleCheck = useRef<() => void>(() => {});
 
-  // Loop guard is per page.
+  // Loop guard is per page. After every route change (including Back and
+  // Forward, which restore the client router's cached tree for that
+  // URL), check the page on screen against the cookie once it painted.
   useEffect(() => {
     refreshedFor.current = "";
+    const id = requestAnimationFrame(() => staleCheck.current());
+    return () => cancelAnimationFrame(id);
   }, [pathname]);
 
   // The first-visit ask is asked once: after a client navigation away
@@ -77,9 +84,15 @@ export function CitySync() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!isPending) {
-      setPendingCity(null);
-      document.documentElement.removeAttribute("data-city-pending");
+    if (isPending) return;
+    setPendingCity(null);
+    document.documentElement.removeAttribute("data-city-pending");
+    // The refresh remounts the page, so focus that sat on the city line
+    // or the picker's opener falls back to <body>: put it on the new line.
+    if (refocus.current) {
+      refocus.current = false;
+      const a = document.activeElement;
+      if (!a || a === document.body) document.getElementById("city-line")?.focus({ preventScroll: true });
     }
   }, [isPending]);
 
@@ -121,14 +134,21 @@ export function CitySync() {
 
     const refreshIfStale = () => {
       if (!personalisedHere()) return;
-      const want = scopeOf(readCityChoice()) ?? "";
+      const c = readCityChoice();
+      // No cookie (blocked): the server routes by IP alone, nothing to compare.
+      if (!c) return;
+      const want = scopeOf(c) ?? "";
       if (renderedScope() === want) return;
       const key = `${want}|${location.pathname}`;
       if (refreshedFor.current === key) return;
       refreshedFor.current = key;
       lastScope.current = want || null;
+      setPendingCity(want ? labelFor(want) : "all of India");
+      document.documentElement.setAttribute("data-city-pending", "");
       refresh();
     };
+    staleCheck.current = refreshIfStale;
+    const onPopState = () => window.setTimeout(refreshIfStale, 60);
 
     const onChange = (e: Event) => {
       const d = ((e as CustomEvent).detail ?? {}) as ChangeDetail;
@@ -141,12 +161,16 @@ export function CitySync() {
         return;
       }
       const m = location.pathname.match(/^\/([a-z][a-z-]{1,30})(?:\/[a-z-]+)?\/?$/);
-      if (d.source === "picker" && m && isKnownCity(m[1]) && newScope && newScope !== m[1]) {
+      // From the picker (a list pick or its precise location) on a city
+      // page: go to the new city's page. Its sport pages can be empty for
+      // another city, so this always lands on /<city>.
+      if ((d.source === "picker" || d.source === "gps") && m && isKnownCity(m[1]) && newScope && newScope !== m[1]) {
         lastScope.current = newScope;
         router.push(`/${newScope}`);
         return;
       }
       lastScope.current = newScope;
+      refocus.current = true;
       if (personalisedHere()) {
         setPendingCity(newScope ? labelFor(newScope) : "all of India");
         document.documentElement.setAttribute("data-city-pending", "");
@@ -176,7 +200,9 @@ export function CitySync() {
     window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("popstate", onPopState);
     return () => {
+      window.removeEventListener("popstate", onPopState);
       window.removeEventListener("tapturf:city-changed", onChange);
       window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", onVisible);
