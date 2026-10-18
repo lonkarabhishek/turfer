@@ -1,5 +1,5 @@
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import type { CityId } from "@/lib/city";
+import { CITY_IDS, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { summarisePrice } from "@/lib/utils/prices";
@@ -74,7 +74,8 @@ export function toSpotlights(
       priceLabel: price.kind === "unknown" || price.kind === "reported_text" ? null : price.label,
     });
   }
-  // Nashik first: it's where the spotlight started.
-  const order: CityId[] = ["nashik", "pune", "mumbai", "nagpur", "hyderabad"];
-  return out.sort((a, b) => order.indexOf(a.city) - order.indexOf(b.city));
+  // Biggest city first (lib/city.ts order); a city not in that list goes last.
+  const rank = new Map(CITY_IDS.map((id, i) => [id, i]));
+  const last = CITY_IDS.length;
+  return out.sort((a, b) => (rank.get(a.city) ?? last) - (rank.get(b.city) ?? last));
 }

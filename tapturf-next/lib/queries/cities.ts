@@ -1,6 +1,8 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { CITIES, cityInfo, type CityInfo } from "@/lib/city";
+import { CITIES, cityCopyFrom, cityInfo, type CityInfo } from "@/lib/city";
+import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
+import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 
 export type LiveCity = CityInfo & { n: number };
 
@@ -34,4 +36,94 @@ export const getLiveCities = unstable_cache(
 /** True when the slug has active turfs. */
 export async function isLiveCity(slug: string): Promise<boolean> {
   return (await getLiveCities()).some((c) => c.id === slug);
+}
+
+export type CityCopy = ReturnType<typeof cityCopyFrom>;
+
+/**
+ * Prose from the live city list, biggest first, with the real count:
+ * list "Hyderabad, Bangalore, Mumbai, Pune, Delhi & 49 more", listAnd
+ * "... and 49 more cities", short "Hyderabad, Bangalore & more" for
+ * <title> tags. Same shapes as CITY_LIST, CITY_LIST_AND and
+ * CITY_LIST_SHORT, which are the static fallback. Cached with
+ * getLiveCities (1h).
+ */
+export async function getCityCopy(): Promise<CityCopy> {
+  return cityCopyFrom((await getLiveCities()).map((c) => c.label));
+}
+
+/**
+ * Cities with enough turfs for an indexable "<sport> in <city>" page,
+ * per sport, biggest first: the same rule the sitemap applies, so
+ * cross-links and the sitemap name the same pages. One fetch of
+ * (city, sports) for every active turf, cached for an hour.
+ */
+const getSportCityCounts = unstable_cache(
+  async (): Promise<Record<string, LiveCity[]>> => {
+    const out: Record<string, LiveCity[]> = {};
+    try {
+      const supabase = createReadOnlyClient();
+      const rows: { city: string | null; sports: unknown }[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase
+          .from("turfs")
+          .select("city, sports")
+          .eq("is_active", true)
+          .order("id")
+          .range(from, from + 999);
+        if (error) throw error;
+        rows.push(...((data ?? []) as { city: string | null; sports: unknown }[]));
+        if (!data || data.length < 1000) break;
+      }
+      const split = (raw: unknown): string[] =>
+        (Array.isArray(raw) ? raw : [])
+          .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
+          .map((x) => x.trim())
+          .filter(Boolean);
+      const order = new Map(CITIES.map((c, i) => [c.id, i]));
+      for (const sp of SPORT_PAGES) {
+        const counts = new Map<string, number>();
+        for (const r of rows) {
+          if (!r.city || !/^[a-z][a-z-]{1,30}$/.test(r.city)) continue;
+          if (!turfPlaysSport(split(r.sports), sp)) continue;
+          counts.set(r.city, (counts.get(r.city) ?? 0) + 1);
+        }
+        out[sp.slug] = [...counts.entries()]
+          .filter(([, n]) => n >= MIN_TURFS_TO_INDEX)
+          .map(([city, n]) => ({ ...cityInfo(city), n }))
+          .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+      }
+    } catch (e) {
+      console.error("getSportCityCounts failed", e);
+    }
+    return out;
+  },
+  ["sport-city-counts"],
+  { revalidate: 3600 },
+);
+
+/** Cities where a "<sport> in <city>" page is indexable, biggest first. */
+export async function getCitiesForSport(slug: string): Promise<LiveCity[]> {
+  return (await getSportCityCounts())[slug] ?? [];
+}
+
+/**
+ * Cities to cross-link from a page about one city: up to four from the
+ * same state first (local relevance), then the biggest, twelve in all,
+ * plus the home cities when they qualify and did not make the cut, so
+ * the pages TapTurf started with keep their inbound links.
+ */
+export const HOME_CITIES: readonly string[] = ["nashik", "nagpur"];
+
+export function pickOtherCities<T extends CityInfo>(cities: T[], current: string, limit = 12): T[] {
+  const others = cities.filter((c) => c.id !== current);
+  const state = cities.find((c) => c.id === current)?.state ?? cityInfo(current).state;
+  const sameState = state === "India" ? [] : others.filter((c) => c.state === state).slice(0, 4);
+  const rest = others.filter((c) => !sameState.includes(c));
+  const picked = [...sameState, ...rest].slice(0, limit);
+  for (const home of HOME_CITIES) {
+    const c = others.find((x) => x.id === home);
+    if (c && !picked.includes(c)) picked.push(c);
+  }
+  return picked;
 }
