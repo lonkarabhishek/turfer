@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CITY_LIST, CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
+import { CITY_IDS, guessCityFromAddress, isCity, labelFor } from "@/lib/city";
 import { GamesListingClient } from "@/components/game/GamesListingClient";
 import { getAvailableGamesServer } from "@/lib/queries/games.server";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
@@ -8,19 +8,20 @@ import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 // without paying a per-request DB cost.
 export const revalidate = 60;
 
-// Games span Nashik + Pune now (parallel to the /sport pages and the
-// city-agnostic listing). The old copy claimed "in Nashik" only.
+// Games can be hosted at any turf TapTurf lists, but on a given day
+// most open games sit in a few cities. The metadata stays city-neutral
+// and the H1 names the cities that actually have games right now.
 export const metadata: Metadata = {
-  title: `Open Cricket, Football & Sports Games in ${CITY_LIST_SHORT}`,
+  title: "Open Cricket, Football & Sports Games across India",
   description:
-    `Find and join live sports games in ${CITY_LIST_AND}. Open cricket, football, box-cricket, basketball games near you. Filter by sport, skill level. No booking fee.`,
+    "Find and join live sports games near you. Open cricket, football, box cricket and basketball games across India. Filter by sport and skill level. No booking fee.",
   keywords:
-    "cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
+    "open games india, sports games near me, cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
   openGraph: {
     images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: `Open Games in ${CITY_LIST_SHORT} | TapTurf`,
+    title: "Open Games across India | TapTurf",
     description:
-      `Live sports games looking for players in ${CITY_LIST_AND}. Cricket, football, and more. Join in one tap.`,
+      "Live sports games looking for players across India. Cricket, football, and more. Join in one tap.",
     url: "https://www.tapturf.in/games",
     siteName: "TapTurf",
     locale: "en_IN",
@@ -28,6 +29,22 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: "https://www.tapturf.in/games" },
 };
+
+/** Cities with at least one open game, biggest city first; "across India" when none. */
+function gameCitiesLine(games: { turfs?: { city?: string | null; address?: string } }[]): string {
+  const rank = new Map(CITY_IDS.map((id, i) => [id, i]));
+  const ids = new Set<string>();
+  for (const g of games) {
+    const c = g.turfs?.city ?? guessCityFromAddress(g.turfs?.address);
+    if (isCity(c)) ids.add(c);
+  }
+  const labels = [...ids]
+    .sort((a, b) => (rank.get(a) ?? 999) - (rank.get(b) ?? 999))
+    .map(labelFor);
+  if (labels.length === 0) return "across India";
+  if (labels.length === 1) return `in ${labels[0]}`;
+  return `in ${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
 
 export default async function GamesPage() {
   const all = await getAvailableGamesServer();
@@ -77,9 +94,9 @@ export default async function GamesPage() {
       {/* SEO: server-render a plain, crawler-visible list of the current open
           games. Interactive filters + real cards live in the client component
           below. The client fetches its own state, so both coexist happily. */}
-      {active.length > 0 && (
-        <div className="sr-only" aria-hidden>
-          <h1>Open sports games in {CITY_LIST}</h1>
+      <div className="sr-only" aria-hidden>
+        <h1>Open sports games {gameCitiesLine(active)}</h1>
+        {active.length > 0 && (
           <ul>
             {active.map((g) => (
               <li key={g.id}>
@@ -93,8 +110,8 @@ export default async function GamesPage() {
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
       <GamesListingClient />
     </>
   );
