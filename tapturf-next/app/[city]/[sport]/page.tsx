@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
+import { getLiveCities, isLiveCity } from "@/lib/queries/cities";
 import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
@@ -17,7 +18,7 @@ export function generateStaticParams() {
 }
 
 async function load(cityParam: string, sportParam: string) {
-  if (!isCity(cityParam)) return null;
+  if (!isCity(cityParam) || !(await isLiveCity(cityParam))) return null;
   const sport = sportBySlug(sportParam);
   if (!sport) return null;
   const city = cityParam as CityId;
@@ -97,7 +98,7 @@ export default async function CitySportPage({
 
   // Same sport in other cities, and other sports in this city, for
   // players and crawlers. Only cities/sports that have turfs.
-  const otherCities = CITIES.filter((c) => c.id !== cityId);
+  const otherCities = (await getLiveCities()).filter((c) => c.id !== cityId).slice(0, 12);
   const otherSports = SPORT_PAGES.filter((sp) => sp.slug !== s.slug)
     .map((sp) => ({ ...sp, count: data.cityTurfs.filter((t) => turfPlaysSport(t.sports, sp)).length }))
     .filter((sp) => sp.count > 0);

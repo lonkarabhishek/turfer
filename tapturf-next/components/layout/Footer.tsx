@@ -72,7 +72,7 @@ export function Footer() {
                   Free Cricket Tools
                 </Link>
               </li>
-              {CITIES.map((c) => (
+              {CITIES.slice(0, 8).map((c) => (
                 <li key={c.id}>
                   <Link href={`/${c.id}`} className="hover:text-white transition-colors">
                     Turfs in {c.label}

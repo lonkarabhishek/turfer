@@ -236,7 +236,7 @@ function CitySheet({
 
           {/* Options */}
           <div className="mt-5 space-y-2">
-            {CITIES.map((c) => {
+            {CITIES.slice(0, 12).map((c) => {
               const active = value === c.id;
               const tagline = `${c.label}, ${c.state}`;
               return (

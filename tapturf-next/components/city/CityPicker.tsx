@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { MapPin, Check, X, Loader2 } from "lucide-react";
-import { CITIES, getCityPref, setCityPref, autoDetectCity, type CityId } from "@/lib/city";
+import { CITIES, getCityPref, setCityPref, autoDetectCity, isCity, labelFor, type CityId } from "@/lib/city";
 
 /**
  * Small chip in the header that says "Nashik", "Pune", or "All cities".
@@ -19,6 +19,21 @@ import { CITIES, getCityPref, setCityPref, autoDetectCity, type CityId } from "@
 export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
   const [city, setCity] = useState<CityId | null>(null);
   const [open, setOpen] = useState(false);
+  // Cities with turfs, from the database; the curated list until it loads.
+  const [list, setList] = useState<{ id: CityId; label: string }[]>(CITIES);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    fetch("/api/cities")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { id: string; label: string }[] | null) => {
+        if (alive && Array.isArray(d) && d.length) setList(d);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [open]);
   const [mounted, setMounted] = useState(false);
   const [detecting, setDetecting] = useState(false);
 
@@ -49,7 +64,7 @@ export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
           .then((r) => (r.ok ? r.json() : null))
           .then((d: { city?: string | null } | null) => {
             const c = d?.city ?? null;
-            if (c && CITIES.some((x) => x.id === c)) {
+            if (c && isCity(c)) {
               setCityPref(c as CityId);
               setCity(c as CityId);
               window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: c }));
@@ -93,7 +108,7 @@ export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
     window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: next }));
   };
 
-  const label = city ? CITIES.find((c) => c.id === city)?.label : "All cities";
+  const label = city ? (list.find((c) => c.id === city)?.label ?? labelFor(city)) : "All cities";
 
   // Don't SSR the current pref (localStorage is client-only) → avoid mismatch
   if (!mounted) return <span aria-hidden className={variant === "row" ? "block h-12" : "w-16 h-8"} />;
@@ -164,7 +179,7 @@ export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
             {/* Scrolls on its own: fourteen cities no longer fit a phone screen. */}
             <div className="px-3 pb-2 overflow-y-auto overscroll-contain min-h-0">
               <div className="grid grid-cols-2 gap-2">
-                {CITIES.map((c) => {
+                {list.map((c) => {
                   const active = city === c.id;
                   return (
                     <button

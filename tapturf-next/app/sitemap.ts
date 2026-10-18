@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ALL_POSTS } from "@/content/blog";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
-import { CITIES } from "@/lib/city";
+import { getLiveCities } from "@/lib/queries/cities";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
 import { fetchAllRows } from "@/lib/queries/turfs";
@@ -29,6 +29,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]);
 
   const sports = SPORT_PAGES.map((sp) => sp.slug);
+  // Every city with active turfs, from the database.
+  const liveCities = await getLiveCities();
 
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -56,7 +58,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     // City landing pages, one per entry in lib/city.ts. Key for local SEO.
-    ...CITIES.map((c) => ({
+    ...liveCities.map((c) => ({
       url: `${BASE}/${c.id}`,
       lastModified: new Date(),
       changeFrequency: "daily" as const,
@@ -117,7 +119,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
       .map((x) => x.trim())
       .filter(Boolean);
-  const citySportPages: MetadataRoute.Sitemap = CITIES.flatMap((c) =>
+  const citySportPages: MetadataRoute.Sitemap = liveCities.flatMap((c) =>
     SPORT_PAGES.filter(
       (sp) =>
         (turfs ?? []).filter((t) => t.city === c.id && turfPlaysSport(splitSports(t.sports), sp)).length >=

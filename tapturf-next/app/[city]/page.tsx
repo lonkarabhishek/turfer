@@ -10,6 +10,7 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
+import { isLiveCity } from "@/lib/queries/cities";
 
 // One page per city — hard SEO landing so /nashik and /pune both rank
 // for their own local queries.
@@ -23,7 +24,7 @@ export async function generateMetadata(
   { params }: { params: Promise<{ city: string }> }
 ): Promise<Metadata> {
   const { city } = await params;
-  if (!isCity(city)) return { title: "City not found", robots: { index: false } };
+  if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: { index: false } };
   const label = labelFor(city);
 
   return {
@@ -55,7 +56,7 @@ export async function generateMetadata(
 
 export default async function CityPage({ params }: { params: Promise<{ city: string }> }) {
   const { city } = await params;
-  if (!isCity(city)) notFound();
+  if (!isCity(city) || !(await isLiveCity(city))) notFound();
   const cityId = city as CityId;
   const label = labelFor(cityId);
 
