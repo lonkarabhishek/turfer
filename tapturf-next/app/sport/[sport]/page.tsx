@@ -1,16 +1,50 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { SportTurfList } from "@/components/sport/SportTurfList";
-import { SPORT_PAGES, sportBySlug, sportVenues, venueWord } from "@/lib/sports";
-import { CITIES, CITY_LIST_SHORT, labelFor } from "@/lib/city";
+import { SPORT_PAGES, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
+import { CITY_IDS, isCity, labelFor } from "@/lib/city";
+import type { Turf } from "@/types/turf";
 
 export const revalidate = 3600;
 
-// Pages list turfs from every city.
-const CITY_LABEL = CITY_LIST_SHORT;
+// Pages list turfs from every city. One fetch per request, shared by
+// generateMetadata and the page.
+const turfsFor = cache((info: SportPage) => getTurfsBySport(info));
+
+/**
+ * Cities that have this sport, most venues first (ties by city size).
+ * Grouped from the turfs themselves, so a city the database has and
+ * lib/city.ts does not still gets its chip.
+ */
+function citiesFor(turfs: Turf[]): { id: string; label: string; count: number }[] {
+  const rank = new Map(CITY_IDS.map((id, i) => [id, i]));
+  const counts = new Map<string, number>();
+  for (const t of turfs) if (isCity(t.city)) counts.set(t.city, (counts.get(t.city) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, label: labelFor(id), count }))
+    .sort((a, b) => b.count - a.count || (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
+}
+
+/**
+ * Where the sport is played, for the title ("across 54 Cities"), the H1
+ * ("in 54 cities across India") and the list heading ("in 54 cities").
+ * Three cities or fewer are named instead of counted, so a sport in two
+ * cities never claims a number it does not have.
+ */
+function placeFor(cities: { label: string }[]) {
+  const n = cities.length;
+  if (n > 3) {
+    return { title: `across ${n} Cities`, prose: `in ${n} cities across India`, short: `${n} cities` };
+  }
+  const names = cities.map((c) => c.label);
+  const and = names.length <= 1 ? names[0] ?? "India" : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  const amp = names.length <= 1 ? names[0] ?? "India" : `${names.slice(0, -1).join(", ")} & ${names.at(-1)}`;
+  return { title: `in ${amp}`, prose: `in ${and}`, short: and };
+}
 
 export async function generateStaticParams() {
   return SPORT_PAGES.map((s) => ({ sport: s.slug }));
@@ -27,19 +61,21 @@ export async function generateMetadata({
 
   const lower = info.name.toLowerCase();
   const word = venueWord(info, 1);
+  const cities = citiesFor(await turfsFor(info));
+  const place = placeFor(cities);
   return {
     // Layout's title template appends "| TapTurf".
-    // "Football Turfs across 5 Cities: Compare & Book" stays under 60 with the suffix.
-    title: `${sportVenues(info, { title: true })} across ${CITIES.length} Cities: Compare & Book`,
-    description: `${info.blurb} Compare ${lower} ${venueWord(info)} across ${CITY_LABEL} by price, rating and photos. Call or WhatsApp to book.`,
-    keywords: CITIES.flatMap((c) => [
+    // "Football Turfs across 54 Cities: Compare & Book" stays under 60 with the suffix.
+    title: `${sportVenues(info, { title: true })} ${place.title}: Compare & Book`,
+    description: `${info.blurb} Compare ${lower} ${venueWord(info)} ${place.prose} by price, rating and photos. Call or WhatsApp to book.`,
+    keywords: [`${lower} ${word}`, `${lower} ${word} near me`, `book ${lower} ${word}`, ...cities.flatMap((c) => [
       `${lower} ${word} ${c.label.toLowerCase()}`,
       `${lower} ${c.label.toLowerCase()}`,
       `book ${lower} ${c.label.toLowerCase()}`,
-    ]).join(", "),
+    ])].join(", "),
     openGraph: {
       images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `${sportVenues(info, { title: true })} across ${CITIES.length} Cities | TapTurf`,
+      title: `${sportVenues(info, { title: true })} ${place.title} | TapTurf`,
       description: info.blurb,
       url: `https://www.tapturf.in/sport/${info.slug}`,
       type: "website",
@@ -57,11 +93,9 @@ export default async function SportPage({
   const info = sportBySlug(sport);
   if (!info) notFound();
 
-  const turfs = await getTurfsBySport(info);
-  const perCity = CITIES.map((c) => ({
-    id: c.id,
-    count: turfs.filter((t) => t.city === c.id).length,
-  })).filter((c) => c.count > 0);
+  const turfs = await turfsFor(info);
+  const perCity = citiesFor(turfs);
+  const place = placeFor(perCity);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -84,12 +118,12 @@ export default async function SportPage({
           <span className="text-5xl">{info.icon}</span>
           <div>
             <h1 className="text-[28px] md:text-[36px] text-primary-900 leading-tight font-display">
-              {sportVenues(info)} in {CITY_LABEL}
+              {sportVenues(info)} {place.prose}
             </h1>
             <p className="text-[15px] text-primary-500 mt-1">
               {turfs.length} {info.name.toLowerCase()} {venueWord(info, turfs.length)}
               {perCity.length > 0 && (
-                <> · {perCity.map((c) => `${c.count} in ${labelFor(c.id)}`).join(", ")}</>
+                <> · {perCity.slice(0, 8).map((c) => `${c.count} in ${c.label}`).join(", ")}{perCity.length > 8 ? ` and ${perCity.length - 8} more cities` : ""}</>
               )}
             </p>
           </div>
@@ -105,7 +139,7 @@ export default async function SportPage({
                 href={`/${c.id}/${info.slug}`}
                 className="h-10 px-4 inline-flex items-center gap-1.5 rounded-full bg-accent-50 hover:bg-accent-100 text-[14px] font-medium text-accent-700"
               >
-                {sportVenues(info)} in {labelFor(c.id)}
+                {sportVenues(info)} in {c.label}
                 <span className="text-accent-600/70 tabular-nums">{c.count}</span>
               </Link>
             ))}
@@ -133,7 +167,7 @@ export default async function SportPage({
 
       {/* Top 24 as cards, the rest as a light list */}
       {turfs.length > 0 ? (
-        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={CITY_LABEL} showCity />
+        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity />
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
