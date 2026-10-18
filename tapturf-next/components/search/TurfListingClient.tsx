@@ -72,6 +72,13 @@ export function TurfListingClient({
       setPickedCity(getCityPref());
       setPrefReady(true);
     };
+    // The home's WebSite SearchAction lands here as /turfs?q=...; seed the
+    // box once so that search really runs.
+    const seedFromUrl = () => {
+      const q = new URLSearchParams(window.location.search).get("q")?.trim();
+      if (q) setSearch(q.slice(0, 120));
+    };
+    seedFromUrl();
     load();
     const onChange = () => load();
     window.addEventListener("tapturf:city-changed", onChange);

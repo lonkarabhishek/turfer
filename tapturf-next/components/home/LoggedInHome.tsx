@@ -114,7 +114,9 @@ export function LoggedInHome() {
       className="min-h-0 bg-white pb-8"
       style={{ background: "linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 40%)" }}
     >
-      <div className="max-w-3xl mx-auto px-5 sm:px-6 pt-6 sm:pt-10">
+      {/* Same gutter and left edge as every shared section below. */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
+        <div className="max-w-3xl">
         {/* ─── Greeting ─────────────────────────────────────── */}
         <header className="mb-6">
           <p className="text-[11px] font-mono text-accent-600 mb-1.5">
@@ -237,6 +239,7 @@ export function LoggedInHome() {
             <LogOut className="w-3.5 h-3.5" />
             Log out
           </button>
+        </div>
         </div>
       </div>
     </div>

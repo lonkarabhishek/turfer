@@ -29,15 +29,17 @@ export async function Footer() {
               Tap<span className="text-accent-400">Turf</span>
             </h3>
             <p className="mt-3 text-sm text-primary-200 leading-relaxed">
-              Find, compare and book sports turfs in {cities.length} cities across India.
+              Find, compare and book sports turfs {cities.length > 0 ? `in ${cities.length} cities ` : ""}across India.
             </p>
-            <div className="mt-4 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />
-              <span className="text-xs text-primary-300">
-                {top.map((c) => c.label).join(" · ")}
-                {cities.length > top.length ? ` · ${cities.length - top.length} more` : ""}
-              </span>
-            </div>
+            {top.length > 0 && (
+              <div className="mt-4 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />
+                <span className="text-xs text-primary-300">
+                  {top.map((c) => c.label).join(" · ")}
+                  {cities.length > top.length ? ` · ${cities.length - top.length} more` : ""}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Sports */}
@@ -94,20 +96,22 @@ export async function Footer() {
           </div>
 
           {/* Cities */}
-          <div>
-            <h4 className="font-semibold text-sm text-accent-400 mb-4">
-              Cities
-            </h4>
-            <ul className="space-y-2.5 text-sm text-primary-200">
-              {linked.map((c) => (
-                <li key={c.id}>
-                  <Link href={`/${c.id}`} className="hover:text-white transition-colors">
-                    Turfs in {c.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {linked.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-sm text-accent-400 mb-4">
+                Cities
+              </h4>
+              <ul className="space-y-2.5 text-sm text-primary-200">
+                {linked.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/${c.id}`} className="hover:text-white transition-colors">
+                      Turfs in {c.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Contact */}
           <div>
