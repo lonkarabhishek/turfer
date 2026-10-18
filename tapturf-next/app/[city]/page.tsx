@@ -10,10 +10,10 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
-import { isLiveCity } from "@/lib/queries/cities";
+import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 
-// One page per city — hard SEO landing so /nashik and /pune both rank
-// for their own local queries.
+// One page per city: a hard SEO landing so each city ranks for its own
+// local queries.
 export const revalidate = 600;
 
 export function generateStaticParams() {
@@ -60,10 +60,13 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const cityId = city as CityId;
   const label = labelFor(cityId);
 
-  const [turfs, trendingPick] = await Promise.all([
+  const [turfs, trendingPick, liveCities] = await Promise.all([
     getAllActiveTurfs(cityId),
     getTrendingPick(cityId),
+    getLiveCities(),
   ]);
+  // Cross-links to other city pages: same state first, then biggest.
+  const otherCities = pickOtherCities(liveCities, cityId);
   const spotlight = trendingPick ? toSpotlights({ [cityId]: trendingPick }, turfs) : [];
   const trendingId = spotlight[0]?.turfId ?? null;
   const sportCounts = SPORT_PAGES.map((sp) => ({
@@ -212,6 +215,25 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                     <p className="text-[14px] font-semibold text-primary-800 truncate">{t.name}</p>
                     <p className="text-[12px] text-primary-500 truncate">{t.address}</p>
                   </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Other cities: the only sibling links between city pages. */}
+      {otherCities.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-14">
+          <h2 className="text-[18px] font-semibold text-primary-900 mb-3">Turfs in other cities</h2>
+          <ul className="flex flex-wrap gap-2">
+            {otherCities.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/${c.id}`}
+                  className="h-9 px-4 inline-flex items-center rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] text-primary-900"
+                >
+                  Turfs in {c.label}
                 </Link>
               </li>
             ))}

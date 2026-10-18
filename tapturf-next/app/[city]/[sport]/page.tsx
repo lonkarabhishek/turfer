@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
-import { getLiveCities, isLiveCity } from "@/lib/queries/cities";
+import { getCitiesForSport, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
@@ -97,8 +97,11 @@ export default async function CitySportPage({
   const pageUrl = `https://www.tapturf.in/${cityId}/${s.slug}`;
 
   // Same sport in other cities, and other sports in this city, for
-  // players and crawlers. Only cities/sports that have turfs.
-  const otherCities = (await getLiveCities()).filter((c) => c.id !== cityId).slice(0, 12);
+  // players and crawlers. Only cities where this sport's page is
+  // indexable (same threshold as the sitemap), same state first, then
+  // the biggest, plus the home cities so /nashik/<sport> keeps its
+  // sibling links.
+  const otherCities = pickOtherCities(await getCitiesForSport(s.slug), cityId);
   const otherSports = SPORT_PAGES.filter((sp) => sp.slug !== s.slug)
     .map((sp) => ({ ...sp, count: data.cityTurfs.filter((t) => turfPlaysSport(t.sports, sp)).length }))
     .filter((sp) => sp.count > 0);
