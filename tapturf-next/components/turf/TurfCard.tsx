@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 
 const subscribeNoop = () => () => {};
 import Link from "next/link";
-import { Flame, MapPin, Star } from "lucide-react";
+import { Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { imageUrlForCard } from "@/lib/utils/images";
@@ -19,10 +19,7 @@ interface TurfCardProps {
   trending?: boolean;
 }
 
-// How long each photo stays on screen before crossfading to the next.
-const SLIDE_MS = 2000;
-// Crossfade duration — long enough to feel gentle, short enough to
-// not overlap the next tick.
+// Slide duration when a swipe or arrow moves to the next photo.
 const FADE_MS = 500;
 
 export function TurfCard({ turf, distanceKm, priority = false, trending = false }: TurfCardProps) {
@@ -47,24 +44,51 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
   // showing a blank frame; the placeholder appears only if all fail.
   const [broken, setBroken] = useState<string[]>([]);
   const shown = photos.filter((p) => !broken.includes(p));
-  const [tick, setTick] = useState(0);
-  const activeIdx = shown.length ? tick % shown.length : 0;
+  const [idx, setIdx] = useState(0);
+  const activeIdx = Math.min(idx, Math.max(0, shown.length - 1));
   // Server HTML carries only the first photo per card (240 cards x 9
   // photos was 2,000 <img> tags on /turfs); the rest mount on the client.
   const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false);
   const rendered = hydrated ? shown : shown.slice(0, 1);
 
-  // Auto-slideshow. The manual scroll-snap carousel felt fine on
-  // desktop but glitched on iOS Safari — a swipe on the card would
-  // sometimes trigger the parent Link's navigation before the
-  // scroll-snap kicked in, and sometimes stall between snap points.
-  // Replaced with a plain interval so users always see every photo
-  // without touching anything, and tapping the card just navigates.
-  useEffect(() => {
+  // Swipe to change photo. No auto-play: the strip only moves when the
+  // player drags it. Touch handling is done by hand rather than with
+  // scroll-snap because iOS Safari sometimes fired the card's Link on a
+  // swipe; here a swipe sets a flag that cancels the click that follows.
+  const [drag, setDrag] = useState(0);
+  const touch = useRef<{ x: number; y: number; horizontal: boolean | null } | null>(null);
+  const swiped = useRef(false);
+  const go = (next: number) => setIdx(Math.max(0, Math.min(shown.length - 1, next)));
+  const onTouchStart = (e: React.TouchEvent) => {
     if (shown.length <= 1) return;
-    const id = window.setInterval(() => setTick((t) => t + 1), SLIDE_MS);
-    return () => window.clearInterval(id);
-  }, [shown.length]);
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY, horizontal: null };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const st = touch.current;
+    if (!st) return;
+    const t = e.touches[0];
+    const dx = t.clientX - st.x;
+    const dy = t.clientY - st.y;
+    if (st.horizontal === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) st.horizontal = Math.abs(dx) > Math.abs(dy);
+    if (st.horizontal) {
+      // Resist at the ends so the first and last photo feel anchored.
+      const atEdge = (dx > 0 && activeIdx === 0) || (dx < 0 && activeIdx === shown.length - 1);
+      setDrag(atEdge ? dx / 3 : dx);
+    }
+  };
+  const onTouchEnd = () => {
+    const st = touch.current;
+    touch.current = null;
+    if (!st || !st.horizontal) {
+      setDrag(0);
+      return;
+    }
+    if (Math.abs(drag) > 40) go(activeIdx + (drag < 0 ? 1 : -1));
+    setDrag(0);
+    swiped.current = true;
+    window.setTimeout(() => (swiped.current = false), 300);
+  };
 
   const distanceLabel = distanceKm != null && Number.isFinite(distanceKm)
     ? distanceKm < 1
@@ -87,13 +111,23 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
     <Link
       href={`/turf/${turf.id}`}
       className="block group rounded-2xl focus-neon"
+      onClick={(e) => {
+        if (swiped.current) e.preventDefault();
+      }}
     >
       <article>
         {/* Photo. Only the pager dots sit on top; everything else lives
             below so the picture reads clean, App Store style. The
             trending pick gets a thin gold frame and one badge. */}
         <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
-        <div className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100">
+        <div
+          className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100"
+          style={{ touchAction: "pan-y" }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchEnd}
+        >
           {trending && (
             <span className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 rounded-full spotlight-badge px-2.5 py-1 text-[11px] font-semibold shadow-soft pointer-events-none">
               <Flame className="w-3 h-3 fill-[#e0a92e] text-[#b9851f]" />
@@ -101,16 +135,20 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
             </span>
           )}
           {rendered.length > 0 ? (
-            rendered.map((src, i) => {
-              const active = i === activeIdx;
-              return (
+            <div
+              className="flex h-full w-full"
+              style={{
+                transform: `translateX(calc(${-activeIdx * 100}% + ${drag}px))`,
+                transition: drag === 0 ? `transform ${FADE_MS}ms cubic-bezier(0.2, 0.7, 0.2, 1)` : "none",
+              }}
+            >
+              {rendered.map((src, i) => (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   key={src}
                   src={imageUrlForCard(src)}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
-                  className={`absolute inset-0 w-full h-full object-cover transition-[opacity,transform] ${active ? "opacity-100" : "opacity-0"} group-hover:scale-[1.02]`}
-                  style={{ transitionDuration: `${FADE_MS}ms` }}
+                  className="w-full h-full shrink-0 object-cover"
                   loading={priority && i === 0 ? "eager" : "lazy"}
                   // @ts-expect-error — fetchpriority is a valid HTML attr not yet in React types
                   fetchpriority={priority && i === 0 ? "high" : "auto"}
@@ -118,14 +156,48 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
                   referrerPolicy="no-referrer"
                   onError={() => setBroken((b) => (b.includes(src) ? b : [...b, src]))}
                   draggable={false}
-                  aria-hidden={!active}
+                  aria-hidden={i !== activeIdx}
                 />
-              );
-            })
+              ))}
+            </div>
           ) : (
             <div className="w-full h-full bg-primary-100 flex items-center justify-center">
               <MapPin className="w-8 h-8 text-primary-300" />
             </div>
+          )}
+
+          {/* Desktop: arrows on hover. Phones swipe. */}
+          {hasMultiple && (
+            <>
+              {activeIdx > 0 && (
+                <button
+                  type="button"
+                  aria-label="Previous photo"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    go(activeIdx - 1);
+                  }}
+                  className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 items-center justify-center rounded-full bg-white/90 shadow-soft text-primary-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              {activeIdx < shown.length - 1 && (
+                <button
+                  type="button"
+                  aria-label="Next photo"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    go(activeIdx + 1);
+                  }}
+                  className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 items-center justify-center rounded-full bg-white/90 shadow-soft text-primary-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </>
           )}
 
           {hasMultiple && (
