@@ -10,7 +10,7 @@ import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
 import { areaFor } from "@/lib/utils/area";
-import { labelFor, isCity } from "@/lib/city";
+import { guessCityFromAddress, labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
@@ -48,11 +48,14 @@ export async function generateMetadata({
     turf.cover_image ||
     (turf.images[0] ? convertGoogleDriveUrl(turf.images[0]) : null);
 
-  // City-aware metadata so Pune turfs don't get titled "Turf in Nashik".
-  const cityLabel = isCity(turf.city) ? labelFor(turf.city) : "Maharashtra";
-  const cityHash = isCity(turf.city) ? `#${turf.city}turf` : "";
+  // City-aware metadata: the turf's own city, then its address. A turf
+  // with neither is described by name and area only, never placed in a
+  // guessed city or state.
+  const cityId = isCity(turf.city) ? turf.city : guessCityFromAddress(turf.address);
+  const cityLabel = cityId ? labelFor(cityId) : null;
+  const cityHash = cityId ? `#${cityId}turf` : "";
   const area = areaFor(turf);
-  const cityAndArea = area ? `${area}, ${cityLabel}` : cityLabel;
+  const cityAndArea = [area, cityLabel].filter(Boolean).join(", ");
 
   const hasRatings = turf.total_reviews > 0 && turf.rating > 0;
   const ratingClause = hasRatings
@@ -92,24 +95,21 @@ export async function generateMetadata({
   // the area, then the second sport, then the USP; finally shorten
   // the name itself at a word boundary.
   const MAX = 50;
+  const place = cityLabel ?? area ?? "";
   const candidates = [
-    `${displayName} ${cityAndArea} – ${usp}`,
-    `${displayName} ${cityLabel} – ${usp}`,
-    turfTypeShort && turfTypeShort !== usp ? `${displayName} ${cityLabel} – ${turfTypeShort}` : null,
-    `${displayName} ${cityAndArea}`,
-    `${displayName}, ${cityLabel}`,
+    cityAndArea ? `${displayName} ${cityAndArea} – ${usp}` : `${displayName} – ${usp}`,
+    place ? `${displayName} ${place} – ${usp}` : null,
+    turfTypeShort && turfTypeShort !== usp ? `${displayName}${place ? ` ${place}` : ""} – ${turfTypeShort}` : null,
+    cityAndArea ? `${displayName} ${cityAndArea}` : null,
+    place ? `${displayName}, ${place}` : displayName,
   ];
   const title =
     candidates.find((t): t is string => !!t && t.length <= MAX) ??
-    `${truncateWords(displayName, MAX - cityLabel.length - 2)}, ${cityLabel}`;
+    (place ? `${truncateWords(displayName, MAX - place.length - 2)}, ${place}` : truncateWords(displayName, MAX));
 
   const photoCount = turf.images?.length ?? 0;
   const photoClause = photoCount > 0 ? ` ${photoCount} photo${photoCount === 1 ? "" : "s"}.` : "";
-  const locationClause = area
-    ? ` in ${area}, ${cityLabel}`
-    : cityLabel
-      ? ` in ${cityLabel}`
-      : "";
+  const locationClause = cityAndArea ? ` in ${cityAndArea}` : "";
 
   return {
     title,
@@ -120,13 +120,13 @@ export async function generateMetadata({
     keywords: [
       turf.name,
       area ? `turf in ${area.toLowerCase()}` : null,
-      `turf in ${cityLabel.toLowerCase()}`,
-      `${cityLabel.toLowerCase()} turf booking`,
-      ...turf.sports.map((s) => `${s.toLowerCase()} ${sportPageForLabel(s)?.venue ?? "turf"} ${cityLabel.toLowerCase()}`),
+      cityLabel ? `turf in ${cityLabel.toLowerCase()}` : null,
+      cityLabel ? `${cityLabel.toLowerCase()} turf booking` : null,
+      ...turf.sports.map((s) => `${s.toLowerCase()} ${sportPageForLabel(s)?.venue ?? "turf"}${cityLabel ? ` ${cityLabel.toLowerCase()}` : ""}`),
       cityHash,
     ].filter(Boolean).join(", "),
     openGraph: {
-      title: `${turf.name}, ${cityAndArea}`,
+      title: cityAndArea ? `${turf.name}, ${cityAndArea}` : turf.name,
       description: `${sports || "Multi-sport"}${locationClause}.${priceClause}${ratingClause}`,
       url: `https://www.tapturf.in/turf/${turf.id}`,
       ...(firstImage && {

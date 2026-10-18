@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ROUTER_MODEL, structured } from "./ask";
+import { CITIES } from "@/lib/city";
 
 /**
  * "Where we fell short": Haiku reads a window of Ask TapTurf messages
@@ -31,7 +32,7 @@ export type AskDigest = z.infer<typeof AskDigest>;
 
 export type DigestRow = { query: string; intent: string | null; results: number | null; city: string | null };
 
-const SYSTEM = `You review messages players typed into Ask TapTurf, the chat box on an Indian sports venue directory (turfs, courts and pickup games in Nashik, Pune, Mumbai, Nagpur, Hyderabad). Reply only with the JSON object.
+const SYSTEM = `You review messages players typed into Ask TapTurf, the chat box on an Indian sports venue directory (turfs, courts and pickup games in ${CITIES.length} cities across India, biggest first: ${CITIES.slice(0, 5).map((c) => c.label).join(", ")} and more). Reply only with the JSON object.
 
 Each line is one message with its intent and how many results it got. Group the messages that TapTurf could not serve well into 3 to 6 themes: searches with no results, cities, areas or sports we do not cover, things people expected the product to do (book, pay, see slots, see host numbers), repeated confusion, and off-topic asks that hint at a real need. Ignore plain greetings and tests ("hi", "test", "asdf").
 

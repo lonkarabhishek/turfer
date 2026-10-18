@@ -7,7 +7,7 @@ import { GameCard } from "./GameCard";
 import { getAvailableGames } from "@/lib/queries/games";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getCityPref, guessCityFromAddress, isCity, labelFor, type CityId } from "@/lib/city";
+import { getCityPref, guessCityFromAddress, labelFor, type CityId } from "@/lib/city";
 import type { Game } from "@/types/game";
 
 const SPORTS = ["All", "Cricket", "Box Cricket", "Football", "Basketball", "Tennis", "Pickleball"];
@@ -111,7 +111,7 @@ export function GamesListingClient() {
           <MapPin className="w-4 h-4 text-accent-600 shrink-0" />
           <p className="text-sm text-primary-700 flex-1 min-w-0">
             {showAllCities ? (
-              <>Games across <span className="font-semibold">Nashik + Pune</span></>
+              <>Games across <span className="font-semibold">all cities</span></>
             ) : (
               <>Games in <span className="font-semibold">{labelFor(pickedCity)}</span></>
             )}

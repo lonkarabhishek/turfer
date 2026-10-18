@@ -52,7 +52,7 @@ export interface Turf {
   // Location
   lat: number | null;
   lng: number | null;
-  city: string | null; // 'nashik' | 'pune' | 'mumbai' (see lib/city.ts)
+  city: string | null; // city slug, e.g. 'hyderabad' (see lib/city.ts; the database is the source of truth)
   area: string | null; // neighbourhood set by data ops; areaFor() falls back to the address
 
   // Enrichment added by data ops on 2026-09-25

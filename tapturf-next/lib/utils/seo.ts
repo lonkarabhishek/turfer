@@ -1,7 +1,7 @@
 import type { Turf } from "@/types/turf";
 import { getMinimumPrice, getMaximumPrice } from "./prices";
 import { normalizeImageUrl } from "./images";
-import { isCity, labelFor, stateFor } from "@/lib/city";
+import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
 
@@ -9,9 +9,11 @@ export function generateTurfJsonLd(turf: Turf) {
   const minPrice = getMinimumPrice(turf);
   const maxPrice = getMaximumPrice(turf);
   const phone = getPhone(turf);
-  // City-aware locality — was hard-coded "Nashik", so Pune turfs were
-  // being served with the wrong locality in structured data.
-  const locality = isCity(turf.city) ? labelFor(turf.city) : "Nashik";
+  // Locality follows the turf's own city, then its address; with
+  // neither on record the address carries no locality rather than a
+  // guessed one (a wrong locality is worse for rich results than none).
+  const cityId = isCity(turf.city) ? turf.city : guessCityFromAddress(turf.address);
+  const locality = cityId ? labelFor(cityId) : null;
   // Only emit aggregateRating when we actually have ratings — a null
   // rating masquerading as 0.0 hurts SERP trust.
   const hasRatings =
@@ -30,12 +32,12 @@ export function generateTurfJsonLd(turf: Turf) {
     "@id": `https://www.tapturf.in/turf/${turf.id}`,
     name: turf.name,
     description:
-      turf.description || `Book ${turf.name} for sports in ${locality}.`,
+      turf.description || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
     address: {
       "@type": "PostalAddress",
       streetAddress: turf.address,
-      addressLocality: locality,
-      addressRegion: stateFor(turf.city),
+      ...(locality && { addressLocality: locality }),
+      addressRegion: stateFor(cityId),
       addressCountry: "IN",
     },
     ...(turf.lat != null && turf.lng != null && {

@@ -62,7 +62,7 @@ export function AwardsBanner() {
 
   const city = isCity(cityRaw) && POST_CITIES.has(cityRaw) ? cityRaw : null;
   const href = city ? `${POST}#${city}` : POST;
-  const where = city ? labelFor(city) : "Nashik, Pune and Mumbai";
+  const where = city ? labelFor(city) : "Mumbai, Pune and Nashik";
   // Phones get about 45 characters before the cross; keep the city visible.
   const short = city ? `best turfs in ${labelFor(city)}` : "best turfs in each city";
 

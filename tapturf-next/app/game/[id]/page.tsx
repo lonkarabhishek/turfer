@@ -32,18 +32,18 @@ export async function generateMetadata(
     };
   }
 
-  const venue = game.turfs?.name || "Nashik turf";
+  const venue = game.turfs?.name || "a local turf";
   const when = humanDate(game.date, game.start_time);
   const spotsLeft = Math.max(0, game.max_players - game.current_players);
   const price = game.price_per_player > 0 ? `₹${game.price_per_player}/player` : "Free";
 
-  // Locality follows the turf's own city instead of a Nashik default —
-  // Pune games were being served with the wrong locality in meta.
+  // Locality follows the turf's own city; with no city on record the
+  // description names only the venue instead of guessing a city.
   const turfCity = (game.turfs?.["city"] as string | undefined) ??
     (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
-  const cityLabel = isCity(turfCity) ? labelFor(turfCity) : "Nashik";
+  const cityLabel = isCity(turfCity) ? labelFor(turfCity) : null;
   const title = `${game.sport} at ${venue}, ${when}`;
-  const description = `${game.sport} game at ${venue}, ${cityLabel} on ${when}. ${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left · ${price}. Join in one tap on TapTurf.`;
+  const description = `${game.sport} game at ${venue}${cityLabel ? `, ${cityLabel}` : ""} on ${when}. ${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left · ${price}. Join in one tap on TapTurf.`;
 
   return {
     title,
@@ -68,14 +68,14 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const jsonLd = game ? (() => {
     const gTurfCity = (game.turfs?.["city"] as string | undefined) ??
       (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
-    const gCityLabel = isCity(gTurfCity) ? labelFor(gTurfCity) : "Nashik";
-    const venueName = game.turfs?.name;
+    const gCityLabel = isCity(gTurfCity) ? labelFor(gTurfCity) : null;
+    const venueName = game.turfs?.name ?? "a local turf";
     return {
       "@context": "https://schema.org",
       "@type": "SportsEvent",
       "@id": `https://www.tapturf.in/game/${id}`,
-      name: `${game.sport} at ${venueName ?? `a ${gCityLabel} turf`}`,
-      description: `Join a ${game.sport} game at ${venueName ?? `a ${gCityLabel} turf`} on TapTurf.`,
+      name: `${game.sport} at ${venueName}`,
+      description: `Join a ${game.sport} game at ${venueName} on TapTurf.`,
       startDate: `${game.date}T${game.start_time}`,
       endDate: `${game.date}T${game.end_time}`,
       sport: game.sport,
@@ -88,7 +88,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
             address: {
               "@type": "PostalAddress",
               streetAddress: game.turfs.address,
-              addressLocality: gCityLabel,
+              ...(gCityLabel && { addressLocality: gCityLabel }),
               addressRegion: stateFor(game.turfs.city),
               addressCountry: "IN",
             },
