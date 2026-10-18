@@ -11,11 +11,21 @@ const EXAMPLES = ["Box cricket in Kothrud under ₹1,000", "Football games near 
  * chat with the message already sent, so the landing page stays
  * clean and the conversation lives in one place.
  */
-export function AskEntry({ compact = false }: { compact?: boolean }) {
+export function AskEntry({
+  compact = false,
+  examples = EXAMPLES,
+  className,
+}: {
+  compact?: boolean;
+  /** Chips under the input; the home passes city-aware ones. */
+  examples?: string[];
+  /** Outer spacing; replaces the baked-in margin when given. */
+  className?: string;
+}) {
   const { openPanel } = useAsk();
   const [q, setQ] = useState("");
   return (
-    <section className={compact ? "mb-4" : "mt-7"} aria-label="Ask TapTurf">
+    <section className={className ?? (compact ? "mb-4" : "mt-7")} aria-label="Ask TapTurf">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -54,7 +64,7 @@ export function AskEntry({ compact = false }: { compact?: boolean }) {
       </form>
       {!compact && (
         <div className="mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-          {EXAMPLES.map((ex) => (
+          {examples.map((ex) => (
             <button
               key={ex}
               type="button"

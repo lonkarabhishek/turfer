@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { MapPin, Check, X, Loader2 } from "lucide-react";
+import { MapPin, Check, X, Loader2, ChevronDown } from "lucide-react";
 import { CITIES, getCityPref, setCityPref, autoDetectCity, isCity, labelFor, type CityId } from "@/lib/city";
 
 /**
@@ -13,10 +13,11 @@ import { CITIES, getCityPref, setCityPref, autoDetectCity, isCity, labelFor, typ
  */
 /**
  * variant "pill": the small header chip. variant "row": a full-width row
- * for the menu, showing the current city and opening the same sheet,
- * which has the city grid and "Use my location".
+ * for the menu. variant "hero": the 44px pill at the top of the home
+ * page. All three show the current city and open the same sheet, which
+ * has the city grid and "Use my location".
  */
-export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
+export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" | "hero" }) {
   const [city, setCity] = useState<CityId | null>(null);
   const [open, setOpen] = useState(false);
   // Cities with turfs, from the database; the curated list until it loads.
@@ -111,7 +112,10 @@ export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
   const label = city ? (list.find((c) => c.id === city)?.label ?? labelFor(city)) : "All cities";
 
   // Don't SSR the current pref (localStorage is client-only) → avoid mismatch
-  if (!mounted) return <span aria-hidden className={variant === "row" ? "block h-12" : "w-16 h-8"} />;
+  if (!mounted) {
+    if (variant === "hero") return <span aria-hidden className="inline-block h-11 w-36 rounded-full bg-primary-100" />;
+    return <span aria-hidden className={variant === "row" ? "block h-12" : "w-16 h-8"} />;
+  }
 
   return (
     <>
@@ -131,6 +135,20 @@ export function CityPicker({ variant = "pill" }: { variant?: "pill" | "row" }) {
             </span>
           </span>
           <span className="text-[13px] font-semibold text-accent-700 shrink-0">Change</span>
+        </button>
+      ) : variant === "hero" ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 h-11 pl-3 pr-3.5 rounded-full bg-white border border-primary-200 shadow-soft hover:border-accent-500 transition-colors focus-neon"
+          aria-label={`Current city: ${label}. Tap to change or use your location.`}
+        >
+          {detecting ? (
+            <Loader2 className="w-4 h-4 text-accent-600 animate-spin" />
+          ) : (
+            <MapPin className="w-4 h-4 text-accent-600" />
+          )}
+          <span className="text-[15px] font-semibold text-primary-900">{detecting ? "Locating…" : label}</span>
+          <ChevronDown className="w-4 h-4 text-primary-400" />
         </button>
       ) : (
       <button
