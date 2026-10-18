@@ -5,11 +5,15 @@ import { MapPin, Clock, Users, User, Zap } from "lucide-react";
 import type { Game } from "@/types/game";
 import { formatDate, formatTimeSlot, capitalizeSkillLevel } from "@/lib/utils/game";
 
-export function GameCard({ game, hideVenue = false }: {
+export function GameCard({ game, hideVenue = false, cityLabel }: {
   game: Game;
   /** On a turf's own page the venue is obvious; show the game title instead. */
   hideVenue?: boolean;
+  /** When set (lists that span cities), the location line reads "{area}, {city}". */
+  cityLabel?: string;
 }) {
+  const area = game.turfs?.address?.split(",")[0]?.trim() || null;
+  const placeLine = cityLabel ? [area, cityLabel].filter(Boolean).join(", ") : game.turfs?.address;
   const spotsLeft = game.max_players - game.current_players;
   const fillPercent = (game.current_players / game.max_players) * 100;
   const isFull = spotsLeft <= 0;
@@ -78,10 +82,10 @@ export function GameCard({ game, hideVenue = false }: {
             <h3 className="font-display text-lg sm:text-xl text-primary-800 group-hover:text-accent-600 transition-colors leading-tight">
               {game.turfs?.name || game.title}
             </h3>
-            {game.turfs?.address && (
+            {placeLine && (
               <p className="flex items-center gap-1 text-xs text-primary-500 mt-1">
                 <MapPin className="w-3 h-3 flex-shrink-0 text-primary-400" />
-                <span className="truncate">{game.turfs.address}</span>
+                <span className="truncate">{placeLine}</span>
               </p>
             )}
           </div>

@@ -1,76 +1,70 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, MapPin } from "lucide-react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { GameCard } from "./GameCard";
-import { getAvailableGames } from "@/lib/queries/games";
-import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
+import { filterNonExpiredGames } from "@/lib/utils/game";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getCityPref, guessCityFromAddress, labelFor, type CityId } from "@/lib/city";
+import { CityLine } from "@/components/city/CityLine";
+import { guessCityFromAddress, labelFor, type CityScope } from "@/lib/city";
+import type { CityLineProps } from "@/lib/cityLine";
 import type { Game } from "@/types/game";
 
 const SPORTS = ["All", "Cricket", "Box Cricket", "Football", "Basketball", "Tennis", "Pickleball"];
 const SKILL_LEVELS = ["all", "beginner", "intermediate", "advanced"];
 
-export function GamesListingClient() {
+const noop = () => () => {};
+
+function cityLabelOf(g: Game): string | undefined {
+  const c = g.turfs?.city ?? guessCityFromAddress(g.turfs?.address);
+  return c ? labelFor(c) : undefined;
+}
+
+/**
+ * /games: the open games the server rendered for this page (one city's,
+ * or every city's), filtered in memory by sport, skill and search. No
+ * fetch on load. In a city view, games elsewhere sit below under their
+ * own heading.
+ */
+export function GamesListingClient({
+  initialGames,
+  otherGames,
+  scope,
+  line,
+  ask,
+}: {
+  initialGames: Game[];
+  otherGames: Game[];
+  scope: CityScope;
+  line: CityLineProps;
+  /** The first-visit city ask (all-India page only). */
+  ask: ReactNode;
+}) {
   const { user, login } = useAuth();
-  const [games, setGames] = useState<Game[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sport, setSport] = useState("All");
   const [skillLevel, setSkillLevel] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const cityLabel = scope.kind === "city" ? scope.label : null;
 
-  // Same city-scoping pattern as /turfs — the header CityPicker
-  // publishes tapturf:city-changed events and this list obeys them.
-  const [pickedCity, setPickedCity] = useState<CityId | null>(null);
-  const [showAllCities, setShowAllCities] = useState(false);
-  useEffect(() => {
-    const load = () => setPickedCity(getCityPref());
-    load();
-    const onChange = () => load();
-    window.addEventListener("tapturf:city-changed", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("tapturf:city-changed", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
-  const activeCity = pickedCity && !showAllCities ? pickedCity : null;
+  // The HTML can be up to a minute old (ISR): after hydration, drop games
+  // that kicked off since. Same list as the server's until then.
+  const hydrated = useSyncExternalStore(noop, () => true, () => false);
+  const fresh = (list: Game[]) => (hydrated ? filterNonExpiredGames(list) : list);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const filters: { sport?: string; skillLevel?: string } = {};
-      if (sport !== "All") filters.sport = sport;
-      if (skillLevel !== "all") filters.skillLevel = skillLevel;
-
-      const { data } = await getAvailableGames(filters);
-      const active = filterNonExpiredGames(data);
-      const sorted = sortGamesByDateTime(active);
-      setGames(sorted);
-      setLoading(false);
-    };
-    load();
-  }, [sport, skillLevel]);
-
-  const cityScopedGames = activeCity
-    ? games.filter((g) => {
-        // Prefer the turf's stored city; fall back to guessing from the
-        // address (for game rows whose turf hasn't been backfilled).
-        const c = g.turfs?.city ?? guessCityFromAddress(g.turfs?.address ?? null);
-        return c === activeCity;
-      })
-    : games;
-
-  const filteredGames = searchQuery
-    ? cityScopedGames.filter((g) =>
-        [g.turfs?.name, g.turfs?.address, g.sport, g.host_name]
-          .filter(Boolean)
-          .some((field) => field!.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : cityScopedGames;
+  // Exactly the predicates the old Supabase query applied.
+  const matches = (g: Game) => {
+    if (sport !== "All" && g.sport !== sport) return false;
+    if (skillLevel !== "all" && g.skill_level !== skillLevel) return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return [g.turfs?.name, g.turfs?.address, g.sport, g.host_name]
+      .filter(Boolean)
+      .some((field) => field!.toLowerCase().includes(q));
+  };
+  const filteredGames = fresh(initialGames).filter(matches);
+  const filteredOthers = fresh(otherGames).filter(matches);
 
   const handleHostClick = (e: React.MouseEvent) => {
     if (!user) {
@@ -90,7 +84,10 @@ export function GamesListingClient() {
           <h1 className="font-display text-3xl md:text-5xl text-primary-800 leading-[0.92] tracking-tight">
             Open games
           </h1>
-          <p className="text-sm text-primary-500 mt-2 max-w-md">
+          <div className="mt-1">
+            <CityLine {...line} />
+          </div>
+          <p className="text-sm text-primary-500 max-w-md">
             Join a squad tonight, or host your own.
           </p>
         </div>
@@ -104,26 +101,7 @@ export function GamesListingClient() {
         </Link>
       </div>
 
-      {/* City scope banner — same treatment as /turfs so switching city
-          in the header narrows this list too, with a toggle to widen. */}
-      {pickedCity && (
-        <div className="mb-3 flex items-center gap-3 bg-white border border-primary-100 rounded-2xl px-4 py-2.5">
-          <MapPin className="w-4 h-4 text-accent-600 shrink-0" />
-          <p className="text-sm text-primary-700 flex-1 min-w-0">
-            {showAllCities ? (
-              <>Games across <span className="font-semibold">all cities</span></>
-            ) : (
-              <>Games in <span className="font-semibold">{labelFor(pickedCity)}</span></>
-            )}
-          </p>
-          <button
-            onClick={() => setShowAllCities((v) => !v)}
-            className="text-xs font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap"
-          >
-            {showAllCities ? `Only ${labelFor(pickedCity)}` : "Show all cities"}
-          </button>
-        </div>
-      )}
+      {ask}
 
       {/* Search bar */}
       <div className="relative mb-3">
@@ -188,56 +166,77 @@ export function GamesListingClient() {
       )}
 
       {/* Results */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="border border-primary-200 rounded-2xl overflow-hidden animate-pulse bg-white relative">
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-200" />
-              <div className="p-5 pl-6">
-                <div className="flex gap-2 mb-3">
-                  <div className="w-20 h-6 bg-primary-100 rounded-full" />
-                  <div className="w-16 h-6 bg-primary-100 rounded-full" />
-                </div>
-                <div className="w-3/4 h-5 bg-primary-100 rounded mb-2" />
-                <div className="w-1/2 h-4 bg-primary-100 rounded mb-4" />
-                <div className="w-full h-1.5 bg-primary-100 rounded-full mb-3" />
-                <div className="flex justify-between pt-3 border-t border-primary-200">
-                  <div className="w-24 h-5 bg-primary-100 rounded" />
-                  <div className="w-16 h-5 bg-primary-100 rounded" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : filteredGames.length === 0 ? (
-        <div className="text-center py-20">
-          <div className="w-16 h-16 bg-white border border-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-5">
-            <Gamepad2 className="w-7 h-7 text-primary-400" />
+      {filteredGames.length === 0 ? (
+        cityLabel && !searchQuery && sport === "All" && skillLevel === "all" ? (
+          <div className="mt-4 rounded-2xl border border-primary-200 bg-white p-5 flex flex-wrap items-center gap-3">
+            <span className="w-10 h-10 shrink-0 rounded-xl bg-accent-50 text-accent-700 inline-flex items-center justify-center">
+              <Gamepad2 className="w-5 h-5" />
+            </span>
+            <p className="flex-1 min-w-[12rem] text-[15px] font-semibold text-primary-900">No open games in {cityLabel} yet.</p>
+            <Link
+              href={user ? "/game/create" : "#"}
+              onClick={handleHostClick}
+              className="h-11 px-5 inline-flex items-center gap-2 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-[14px] font-semibold press-tight focus-neon"
+            >
+              <Zap className="w-4 h-4" strokeWidth={2.5} />
+              Host a game
+            </Link>
+            {otherGames.length > 0 && (
+              <a
+                href="#other-city-games"
+                className="basis-full inline-flex items-center gap-1 h-11 text-[14px] font-semibold text-accent-700 hover:text-accent-800 focus-neon"
+              >
+                {otherGames.length.toLocaleString("en-IN")} open in other cities <ArrowUpRight className="w-4 h-4" />
+              </a>
+            )}
           </div>
-          <p className="font-display text-2xl text-primary-800 mb-1">No games yet</p>
-          <p className="text-sm text-primary-500 mb-8">
-            {searchQuery ? "Try a different search" : "Be the first to host one."}
-          </p>
-          <Link
-            href={user ? "/game/create" : "#"}
-            onClick={handleHostClick}
-            className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-6 py-3 rounded-full shadow-neon transition-all focus-neon"
-          >
-            <Zap className="w-4 h-4" strokeWidth={2.75} />
-            Host a game
-          </Link>
-        </div>
+        ) : (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-white border border-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <Gamepad2 className="w-7 h-7 text-primary-400" />
+            </div>
+            <p className="font-display text-2xl text-primary-800 mb-1">No games yet</p>
+            <p className="text-sm text-primary-500 mb-8">
+              {searchQuery ? "Try a different search" : "Be the first to host one."}
+            </p>
+            <Link
+              href={user ? "/game/create" : "#"}
+              onClick={handleHostClick}
+              className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-6 py-3 rounded-full shadow-neon transition-all focus-neon"
+            >
+              <Zap className="w-4 h-4" strokeWidth={2.75} />
+              Host a game
+            </Link>
+          </div>
+        )
       ) : (
         <>
           <p className="text-[11px] font-semibold text-primary-500 mb-4 mt-4">
-            {filteredGames.length} game{filteredGames.length !== 1 ? "s" : ""} · Sorted by kickoff
+            {filteredGames.length} game{filteredGames.length !== 1 ? "s" : ""}
+            {cityLabel ? ` in ${cityLabel}` : ""} · Sorted by kickoff
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredGames.map((game) => (
-              <GameCard key={game.id} game={game} />
+              <GameCard key={game.id} game={game} cityLabel={cityLabel ? undefined : cityLabelOf(game)} />
             ))}
           </div>
         </>
+      )}
+
+      {cityLabel && filteredOthers.length > 0 && (
+        <section id="other-city-games" className="mt-12" style={{ scrollMarginTop: "4.5rem" }} aria-labelledby="other-city-games-h">
+          <h2 id="other-city-games-h" className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight">
+            Open games in other cities
+          </h2>
+          <p className="text-[13px] text-primary-500 mt-1 mb-4">
+            {filteredOthers.length} game{filteredOthers.length !== 1 ? "s" : ""} · Sorted by kickoff
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredOthers.map((game) => (
+              <GameCard key={game.id} game={game} cityLabel={cityLabelOf(game)} />
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Mobile host CTA fallback */}

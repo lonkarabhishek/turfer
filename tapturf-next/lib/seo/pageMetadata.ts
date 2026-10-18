@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { getCityCopy } from "@/lib/queries/cities";
 import type { HomeData } from "@/lib/home/types";
+import type { Game } from "@/types/game";
 
 /**
  * Metadata and JSON-LD for the pages that have per-city twins (/, and
@@ -109,5 +110,65 @@ export async function turfsMetadata(): Promise<Metadata> {
       type: "website",
     },
     alternates: { canonical: "https://www.tapturf.in/turfs" },
+  };
+}
+
+// Games can be hosted at any turf TapTurf lists, but on a given day
+// most open games sit in a few cities. The metadata stays city-neutral
+// and the H1 names the cities that actually have games right now.
+export const GAMES_METADATA: Metadata = {
+  title: "Open Cricket, Football & Sports Games across India",
+  description:
+    "Find and join live sports games near you. Open cricket, football, box cricket and basketball games across India. Filter by sport and skill level. No booking fee.",
+  keywords:
+    "open games india, sports games near me, cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
+  openGraph: {
+    images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
+    title: "Open Games across India | TapTurf",
+    description:
+      "Live sports games looking for players across India. Cricket, football, and more. Join in one tap.",
+    url: "https://www.tapturf.in/games",
+    siteName: "TapTurf",
+    locale: "en_IN",
+    type: "website",
+  },
+  alternates: { canonical: "https://www.tapturf.in/games" },
+};
+
+/** ItemList of SportsEvent for the first 20 open games, identical in every /games variant. */
+export function gamesJsonLd(active: Game[]) {
+  // JSON-LD: SportsEvent per game so Google can show rich results.
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: active.slice(0, 20).map((g, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      item: {
+        "@type": "SportsEvent",
+        "@id": `https://www.tapturf.in/game/${g.id}`,
+        name: `${g.sport} at ${g.turfs?.name || "a local turf"}`,
+        startDate: `${g.date}T${g.start_time}`,
+        endDate: `${g.date}T${g.end_time}`,
+        sport: g.sport,
+        location: g.turfs
+          ? {
+              "@type": "Place",
+              name: g.turfs.name,
+              address: g.turfs.address,
+            }
+          : undefined,
+        offers: {
+          "@type": "Offer",
+          price: g.price_per_player ?? 0,
+          priceCurrency: "INR",
+          availability: g.current_players < g.max_players
+            ? "https://schema.org/InStock"
+            : "https://schema.org/SoldOut",
+        },
+        maximumAttendeeCapacity: g.max_players,
+        remainingAttendeeCapacity: Math.max(0, g.max_players - g.current_players),
+      },
+    })),
   };
 }

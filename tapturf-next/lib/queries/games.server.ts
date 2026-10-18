@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
 /**
@@ -55,3 +57,13 @@ export async function getGameByIdServer(gameId: string): Promise<Game | null> {
 
   return g as Game;
 }
+
+/**
+ * Open games, soonest first, shared by /games and every per-city /games
+ * variant: one cached load every 60 s however many city pages render.
+ */
+export const getOpenGamesCached = unstable_cache(
+  async () => sortGamesByDateTime(filterNonExpiredGames(await getAvailableGamesServer())),
+  ["open-games-v1"],
+  { revalidate: 60, tags: ["games"] },
+);
