@@ -24,7 +24,7 @@ export const SPORT_PAGES: SportPage[] = [
     venue: "turf",
     name: "Football",
     icon: "⚽",
-    labels: ["Football"],
+    labels: ["Football", "Futsal"],
     blurb: "5-a-side, 7-a-side and full-size football turfs, with floodlights for night games.",
   },
   {
@@ -40,7 +40,7 @@ export const SPORT_PAGES: SportPage[] = [
     venue: "turf",
     name: "Cricket",
     icon: "🏏",
-    labels: ["Cricket", "Cricket Nets"],
+    labels: ["Cricket", "Cricket Nets", "Indoor Cricket Net", "Bowling Machine"],
     blurb: "Cricket grounds and practice nets for matches, coaching and net sessions.",
   },
   {
@@ -80,7 +80,7 @@ export const SPORT_PAGES: SportPage[] = [
     venue: "court",
     name: "Tennis",
     icon: "🎾",
-    labels: ["Tennis"],
+    labels: ["Tennis", "Lawn Tennis"],
     blurb: "Tennis courts for practice and matches.",
   },
 ];
