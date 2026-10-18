@@ -244,7 +244,7 @@ export function TurfListingClient({
       <div className="mb-5 flex items-center gap-3 text-[14px]">
         <p className="text-primary-500 min-w-0 truncate">
           <span className="tabular-nums">{filtered.length}</span> turf{filtered.length !== 1 ? "s" : ""}
-          {cityLabel && <> in {cityLabel}</>}
+          {cityLabel && <span className="hidden sm:inline"> in {cityLabel}</span>}
         </p>
         <div className="ml-auto flex items-center gap-1 shrink-0">
           {!userLocation ? (

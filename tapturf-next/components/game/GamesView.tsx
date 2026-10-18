@@ -32,7 +32,7 @@ function gameCitiesLine(games: Game[]): string {
  * client fetch, no skeleton). `requested` is the city from the URL the
  * proxy rewrote to (app/c/[city]/games), or null for the public page.
  * City view: that city's games, then "Open games in other cities".
- * Never reads cookies, headers or searchParams.
+ * Never reads cookies, headers or the query string.
  */
 export async function GamesView({ requested }: { requested: string | null }) {
   const [games, liveAll] = await Promise.all([getOpenGamesCached(), getLiveCities()]);

@@ -212,8 +212,10 @@ export function GamesListingClient({
       ) : (
         <>
           <p className="text-[11px] font-semibold text-primary-500 mb-4 mt-4">
-            {filteredGames.length} game{filteredGames.length !== 1 ? "s" : ""}
-            {cityLabel ? ` in ${cityLabel}` : ""} · Sorted by kickoff
+            {cityLabel
+              ? `${filteredGames.length} open game${filteredGames.length !== 1 ? "s" : ""} in ${cityLabel}`
+              : `${filteredGames.length} game${filteredGames.length !== 1 ? "s" : ""}`}{" "}
+            · Sorted by kickoff
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredGames.map((game) => (

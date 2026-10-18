@@ -32,7 +32,7 @@ function Change({ href, children }: { href: string; children: React.ReactNode })
 export function CityLine(props: CityLineProps) {
   const pending = usePendingCity();
   return (
-    <p id="city-line" tabIndex={-1} className="flex flex-wrap items-center gap-x-1.5 min-h-[44px] text-[14px] text-primary-600 outline-none">
+    <p id="city-line" tabIndex={-1} className="flex flex-wrap items-center gap-x-1.5 min-h-[44px] text-[13px] min-[400px]:text-[14px] text-primary-600 outline-none">
       {pending ? (
         <>
           <Loader2 className="w-4 h-4 text-accent-600 shrink-0 animate-spin" aria-hidden />

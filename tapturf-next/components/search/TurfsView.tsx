@@ -17,7 +17,7 @@ const PILL =
  * URL the proxy rewrote to (app/c/[city]/turfs), or null for the public
  * all-India page. A city page ships only that city's cards (one small
  * per-city query) and lists the other cities, nearest first, at the
- * bottom. Never reads cookies, headers or searchParams.
+ * bottom. Never reads cookies, headers or the query string.
  */
 export async function TurfsView({ requested }: { requested: string | null }) {
   const live = (await getLiveCities()).filter((c) => isKnownCity(c.id));

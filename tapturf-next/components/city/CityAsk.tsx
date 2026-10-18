@@ -126,12 +126,12 @@ export function CityAsk({ cities, cityCount, page, changeHref }: CityAskProps) {
             <Search className="w-4 h-4" />
             Search {cityCount} cities
           </a>
-          <div className="mt-1 flex items-center justify-between gap-2">
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2">
             <button
               type="button"
               onClick={onGps}
               disabled={locating}
-              className="h-11 inline-flex items-center gap-2 text-[14px] font-semibold text-primary-900 focus-neon disabled:opacity-70"
+              className="h-11 inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] min-[400px]:text-[14px] font-semibold text-primary-900 focus-neon disabled:opacity-70"
             >
               <Navigation className="w-4 h-4 text-accent-600" />
               {locating ? "Finding you…" : "Use my precise location"}
@@ -140,7 +140,7 @@ export function CityAsk({ cities, cityCount, page, changeHref }: CityAskProps) {
               name="choice"
               value="all"
               data-source="ask"
-              className="h-11 inline-flex items-center gap-1.5 text-[14px] font-semibold text-accent-700 focus-neon"
+              className="h-11 inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] min-[400px]:text-[14px] font-semibold text-accent-700 focus-neon"
             >
               <Globe className="w-4 h-4" />
               Show all of India
