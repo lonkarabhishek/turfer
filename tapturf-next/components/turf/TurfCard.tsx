@@ -17,12 +17,14 @@ interface TurfCardProps {
   priority?: boolean;
   /** This week's Most Trending Turf in its city: gold frame + badge. */
   trending?: boolean;
+  /** Lists that span cities name the city: "Rasbihari Road, Nashik". */
+  cityLabel?: string;
 }
 
 // Slide duration when a swipe or arrow moves to the next photo.
 const FADE_MS = 500;
 
-export function TurfCard({ turf, distanceKm, priority = false, trending = false }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel }: TurfCardProps) {
   // Reject covers that are still tiny thumbs after normalization (e.g.
   // a non-Google URL that ends "=w32-h32-..."). We'd rather show a real
   // photo from images[] than a 32px placeholder.
@@ -100,7 +102,11 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false 
 
   const hasMultiple = shown.length > 1;
   const area = areaFor(turf);
-  const place = area ?? turf.address;
+  const base = area ?? turf.address;
+  const place =
+    cityLabel && !(base ?? "").toLowerCase().includes(cityLabel.toLowerCase())
+      ? [base, cityLabel].filter(Boolean).join(", ")
+      : base;
   const range = (min: number | null, max: number | null) => {
     const lo = min ?? max ?? 0;
     const hi = max ?? lo;

@@ -10,7 +10,7 @@ import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
-import type { CityScope } from "@/lib/city";
+import { isCity, labelFor, type CityScope } from "@/lib/city";
 
 // Order by frequency in the current DB — Football (166) and Box
 // Cricket (103) dominate, so they're first. Box Cricket was missing
@@ -317,7 +317,13 @@ export function TurfListingClient({
       {cityLabel && search.trim() && filtered.length === 0 ? null : filtered.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
           {filtered.map(({ turf, distanceKm }) => (
-            <TurfCard key={turf.id} turf={turf} distanceKm={distanceKm} trending={trendingIds.has(turf.id)} />
+            <TurfCard
+              key={turf.id}
+              turf={turf}
+              distanceKm={distanceKm}
+              trending={trendingIds.has(turf.id)}
+              cityLabel={cityLabel || !isCity(turf.city) ? undefined : labelFor(turf.city)}
+            />
           ))}
         </div>
       ) : (
