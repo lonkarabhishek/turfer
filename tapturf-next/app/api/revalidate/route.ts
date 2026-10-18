@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 
@@ -93,6 +93,26 @@ export async function POST(req: Request) {
       // retry the delivery which would just amplify a real problem.
       console.warn(`revalidatePath(${p}) failed`, e);
     }
+  }
+
+  // proxy.ts rewrites /, /turfs and /games to per-city pages under
+  // app/c/[city]; revalidatePath("/") and ("/turfs") do not follow
+  // rewrites, so bust the variants and the shared home snapshot too.
+  // (/games and its variants run on a 60 s timer.)
+  try {
+    revalidatePath("/c/[city]", "page");
+  } catch (e) {
+    console.warn("revalidatePath(/c/[city]) failed", e);
+  }
+  try {
+    revalidatePath("/c/[city]/turfs", "page");
+  } catch (e) {
+    console.warn("revalidatePath(/c/[city]/turfs) failed", e);
+  }
+  try {
+    revalidateTag("turf-data", "max");
+  } catch (e) {
+    console.warn("revalidateTag(turf-data) failed", e);
   }
 
   return NextResponse.json({ ok: true, revalidated: Array.from(paths) });
