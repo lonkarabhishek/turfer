@@ -95,7 +95,7 @@ export function CityAsk({ cities, cityCount, page, changeHref, variant }: CityAs
       id="city-ask"
       className={
         sheet
-          ? "city-ask fixed z-[45] inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:static md:z-auto md:max-w-6xl md:mx-auto md:px-6 md:mt-8"
+          ? "city-ask fixed z-[45] inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:static md:z-auto md:max-w-6xl md:mx-auto md:px-6 md:mt-4 lg:mt-0"
           : "city-ask my-4"
       }
       role="dialog"
@@ -135,58 +135,61 @@ export function CityAsk({ cities, cityCount, page, changeHref, variant }: CityAs
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="mt-2 md:mt-3 -mx-4 px-4 scroll-px-4 flex gap-2 overflow-x-auto scrollbar-hide snap-x md:mx-0 md:px-0 md:flex-wrap md:overflow-visible">
-            {/* Phones: search is the first pill (icon only), so the sheet stays short. */}
+          {/* Desktop: pills, search and the two actions flow in wrapping rows. */}
+          <div className="md:mt-3 md:flex md:flex-wrap md:items-center md:gap-x-4 md:gap-y-3">
+            <div className="mt-2 -mx-4 px-4 scroll-px-4 flex gap-2 overflow-x-auto scrollbar-hide snap-x md:mt-0 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible">
+              {/* Phones: search is the first pill (icon only), so the sheet stays short. */}
+              <a
+                href={changeHref}
+                onClick={openSearch}
+                aria-label={`Search ${cityCount} cities`}
+                className="md:hidden snap-start shrink-0 w-11 h-11 inline-flex items-center justify-center rounded-full border border-primary-200 bg-primary-50 text-primary-700 press-tight focus-neon"
+              >
+                <Search className="w-4 h-4" aria-hidden />
+              </a>
+              {cities.map((c) => (
+                <button key={c.id} name="choice" value={c.id} data-source="ask" className={PILL}>
+                  {c.label}
+                  <span className="font-normal text-primary-500 tabular-nums">{c.n.toLocaleString("en-IN")}</span>
+                </button>
+              ))}
+            </div>
             <a
               href={changeHref}
               onClick={openSearch}
-              aria-label={`Search ${cityCount} cities`}
-              className="md:hidden snap-start shrink-0 w-11 h-11 inline-flex items-center justify-center rounded-full border border-primary-200 bg-primary-50 text-primary-700 press-tight focus-neon"
+              className="hidden md:inline-flex h-11 w-64 items-center gap-2 px-4 rounded-full bg-primary-50 border border-primary-200 text-[14px] text-primary-500 focus-neon"
             >
               <Search className="w-4 h-4" aria-hidden />
+              Search {cityCount} cities
             </a>
-            {cities.map((c) => (
-              <button key={c.id} name="choice" value={c.id} data-source="ask" className={PILL}>
-                {c.label}
-                <span className="font-normal text-primary-500 tabular-nums">{c.n.toLocaleString("en-IN")}</span>
+            <div className="mt-1 flex items-center justify-between gap-x-3 md:mt-0 md:justify-start md:gap-x-6">
+              <button
+                type="button"
+                onClick={onGps}
+                disabled={locating}
+                className="h-11 inline-flex items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-primary-900 focus-neon disabled:opacity-70"
+              >
+                <Navigation className="w-4 h-4 text-accent-600" aria-hidden />
+                {locating ? (
+                  "Finding you…"
+                ) : (
+                  <>
+                    <span className="min-[400px]:hidden">Use my location</span>
+                    <span className="hidden min-[400px]:inline">Use my precise location</span>
+                  </>
+                )}
               </button>
-            ))}
-          </div>
-          <a
-            href={changeHref}
-            onClick={openSearch}
-            className="hidden md:inline-flex mt-3 h-11 w-full max-w-md items-center gap-2 px-4 rounded-full bg-primary-50 border border-primary-200 text-[14px] text-primary-500 focus-neon"
-          >
-            <Search className="w-4 h-4" aria-hidden />
-            Search {cityCount} cities
-          </a>
-          <div className="mt-1 flex items-center justify-between gap-x-3 md:justify-start md:gap-x-6">
-            <button
-              type="button"
-              onClick={onGps}
-              disabled={locating}
-              className="h-11 inline-flex items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-primary-900 focus-neon disabled:opacity-70"
-            >
-              <Navigation className="w-4 h-4 text-accent-600" aria-hidden />
-              {locating ? (
-                "Finding you…"
-              ) : (
-                <>
-                  <span className="min-[400px]:hidden">Use my location</span>
-                  <span className="hidden min-[400px]:inline">Use my precise location</span>
-                </>
-              )}
-            </button>
-            <button
-              name="choice"
-              value="all"
-              data-source="ask"
-              className="h-11 inline-flex items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-accent-700 focus-neon"
-            >
-              <Globe className="w-4 h-4" aria-hidden />
-              <span className="min-[400px]:hidden">All of India</span>
-              <span className="hidden min-[400px]:inline">Show all of India</span>
-            </button>
+              <button
+                name="choice"
+                value="all"
+                data-source="ask"
+                className="h-11 inline-flex items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold text-accent-700 focus-neon"
+              >
+                <Globe className="w-4 h-4" aria-hidden />
+                <span className="min-[400px]:hidden">All of India</span>
+                <span className="hidden min-[400px]:inline">Show all of India</span>
+              </button>
+            </div>
           </div>
           <p aria-live="polite" className="text-[13px] text-primary-600">
             {status}
