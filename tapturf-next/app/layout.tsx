@@ -4,7 +4,6 @@ import { Header } from "@/components/layout/Header";
 import { CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
 import { AwardsBanner } from "@/components/layout/AwardsBanner";
 import { Footer } from "@/components/layout/Footer";
-import { OwnerContactCTA } from "@/components/layout/OwnerContactCTA";
 import { AskProvider } from "@/components/ask/AskProvider";
 import { AskLauncher } from "@/components/ask/AskLauncher";
 import { AskPanel } from "@/components/ask/AskPanel";
@@ -91,9 +90,8 @@ export default function RootLayout({
           <AskProvider>
             <Header />
             <AwardsBanner />
-            {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator, skipped on landing */}
+            {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator */}
             <AppMain>{children}</AppMain>
-            <OwnerContactCTA />
             <div className="hidden md:block">
               <Footer />
             </div>

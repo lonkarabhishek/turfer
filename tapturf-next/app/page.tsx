@@ -1,56 +1,53 @@
 import type { Metadata } from "next";
 import { CONTACT_EMAIL } from "@/lib/contact";
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getHomeData } from "@/lib/home/data";
 import { HomeShell } from "@/components/home/HomeShell";
-import Link from "next/link";
-import { PopularByCity } from "@/components/home/PopularByCity";
-import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
-import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
-import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
-import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
-import { CITIES, CITY_LIST_AND, type CityId } from "@/lib/city";
-import type { Turf } from "@/types/turf";
+import { TopTurfsByCity } from "@/components/home/TopTurfsByCity";
+import { EveryCityList } from "@/components/home/EveryCityList";
+import { OpenGames } from "@/components/home/OpenGames";
+import { SportGrid } from "@/components/home/SportGrid";
+import { NearMeBand } from "@/components/home/NearMeBand";
+import { ToolsRow } from "@/components/home/ToolsRow";
+import { GuidesRow } from "@/components/home/GuidesRow";
+import { FinalBand } from "@/components/home/FinalBand";
 
+// Same window as HOME_REVALIDATE in lib/home/data.ts (Next needs a literal here).
 export const revalidate = 600;
 
-async function fetchAllCities(): Promise<Record<CityId, Turf[]>> {
-  const entries = await Promise.all(
-    CITIES.map(async (c) => [c.id, await getAllActiveTurfs(c.id)] as const),
-  );
-  return Object.fromEntries(entries) as Record<CityId, Turf[]>;
+/** "Hyderabad, Bangalore, Mumbai, Pune, Delhi and 49 more cities", biggest first. */
+function whereLine(labels: string[], cityCount: number): string {
+  const top5 = labels.slice(0, 5);
+  if (top5.length === 0) return "India";
+  const more = cityCount - top5.length;
+  return `${top5.join(", ")}${more > 0 ? ` and ${more} more cities` : ""}`;
 }
 
-// generateMetadata so the "N+ grounds" number in title/description
-// stays honest as the DB grows, instead of the old hard-coded "90+".
+// generateMetadata so the count and the city names in title/description
+// stay honest as the database grows. Same snapshot as the page.
 export async function generateMetadata(): Promise<Metadata> {
-  const byCity = await fetchAllCities();
-  const total = Object.values(byCity).reduce((n, list) => n + list.length, 0);
-  // Round down to a tens boundary so we don't reprint stale counts
-  // on every deploy — "175+" reads honest even if it becomes 176.
-  const rounded = Math.max(50, Math.floor(total / 5) * 5);
-  const activeCityLabels = CITIES
-    .filter((c) => (byCity[c.id]?.length ?? 0) > 0)
-    .map((c) => c.label);
-  const cityLine =
-    activeCityLabels.length <= 1
-      ? activeCityLabels[0] ?? "Nashik"
-      : activeCityLabels.slice(0, -1).join(", ") + " & " + activeCityLabels.at(-1)!;
-  // Five cities overflow a <title>; name three and say "& more".
-  const titleLine = activeCityLabels.length > 3 ? activeCityLabels.slice(0, 3).join(", ") + " & more" : cityLine;
+  const d = await getHomeData();
+  const labels = d.hero.topCities.map((c) => c.label);
+  const top3 = labels.slice(0, 3);
+  const top5 = labels.slice(0, 5);
+  // Floor to a multiple of 5 so "2,335+" reads honest even when the
+  // live count is 2,337 and changes between deploys.
+  const rounded = Math.floor(d.total / 5) * 5;
+  const where = whereLine(labels, d.cityCount);
+  const countLine = rounded >= 50 ? `${rounded.toLocaleString("en-IN")}+ grounds with photos, ratings and prices. ` : "";
+  const titleCities = top3.length ? `${top3.join(", ")} & more` : "India";
 
   return {
-    // absolute so layout's template doesn't add another "| TapTurf" —
+    // absolute so layout's template doesn't add another "| TapTurf":
     // the wordmark is already the first word.
-    title: {
-      absolute: `TapTurf: Football & Box Cricket Turfs in ${titleLine}`,
-    },
-    description: `Find and book football, box cricket and sports turfs across ${cityLine}. ${rounded}+ grounds with photos, ratings and prices. Call or WhatsApp the turf, no booking fee.`,
-    keywords:
-      "football turf, football turf near me, football turf nashik, football turf pune, football turf mumbai, box cricket, turf booking nashik, turf booking pune, turf booking mumbai, tapturf",
+    title: { absolute: `TapTurf: Football & Box Cricket Turfs in ${titleCities}` },
+    description: `Find football, box cricket and sports turfs across ${where}. ${countLine}Call or WhatsApp the turf to book. No booking fee.`,
+    keywords: `football turf, football turf near me, box cricket, box cricket near me, turf near me, ${top5
+      .map((l) => `turf ${l.toLowerCase()}`)
+      .join(", ")}, tapturf`,
     openGraph: {
       images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `TapTurf: Book Turfs in ${cityLine}`,
-      description: `${rounded}+ sports turfs across ${cityLine}. Find a game, host a game, run the pitch.`,
+      title: `TapTurf: Sports Turfs in ${titleCities}`,
+      description: `${countLine}Find a turf, call or WhatsApp to book, join an open game.`.trim(),
       url: "https://www.tapturf.in",
       siteName: "TapTurf",
       locale: "en_IN",
@@ -60,39 +57,19 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-/**
- * Pick top turfs for a city — rating × review-count (Wilson-lite),
- * skipping unrated. Server-rendered so Googlebot sees turf links even
- * though the marketing hero mounts as a client component below.
- */
-function topTurfsFor(all: Turf[]) {
-  return [...all]
-    .filter(hasEnoughReviews)
-    .sort(compareTopRated)
-    .slice(0, 8);
-}
-
 export default async function HomePage() {
-  const [byCity, trendingPicks] = await Promise.all([fetchAllCities(), getTrendingPicks()]);
-  const spotlights = toSpotlights(trendingPicks, Object.values(byCity).flat());
-  const allTurfs = Object.values(byCity).flat();
-  const sportCounts = SPORT_PAGES.map((sp) => ({
-    ...sp,
-    count: allTurfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
-  })).filter((sp) => sp.count > 0);
-  const total = Object.values(byCity).reduce((n, list) => n + list.length, 0);
-  // HomeShell still takes nashik/pune explicitly for now — its child
-  // MarketingHome shows a "Browse Nashik / Browse Pune" pair; when
-  // Mumbai has turfs we'll extend that too.
-  const nashikTurfs = byCity.nashik ?? [];
-  const puneTurfs = byCity.pune ?? [];
+  const d = await getHomeData();
+  const where = whereLine(d.hero.topCities.map((c) => c.label), d.cityCount);
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "TapTurf",
     url: "https://www.tapturf.in",
-    description: `Find and book sports turfs across ${CITY_LIST_AND} (${total}+ grounds).`,
+    description:
+      d.total > 0
+        ? `Find sports turfs across ${where} (${d.total.toLocaleString("en-IN")} grounds). Call or WhatsApp the turf, no booking fee.`
+        : "Find sports turfs across India. Call or WhatsApp the turf, no booking fee.",
     publisher: {
       "@type": "Organization",
       name: "TapTurf",
@@ -109,75 +86,28 @@ export default async function HomePage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <HomeShell nashikTurfs={nashikTurfs} puneTurfs={puneTurfs} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      {/* This week's "Most Trending Turf" for the visitor's city. */}
-      <TrendingSpotlight picks={spotlights} className="max-w-6xl mx-auto px-4 sm:px-6 mt-14" />
+      {/* Visitors: the hero. Signed in: LoggedInHome. Everything below is shared. */}
+      <HomeShell hero={d.hero} />
 
-      {/* Top-turf strips. Server-rendered for every city (crawlers see
-          all the /turf links); the client then narrows to the visitor's
-          picked or detected city. Iterates CITIES so a new city appears
-          once it has rated turfs. */}
-      <PopularByCity
-        cities={CITIES.map((c) => ({
-          id: c.id,
-          total: (byCity[c.id] ?? []).length,
-          turfs: topTurfsFor(byCity[c.id] ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            address: t.address,
-            rating: t.rating,
-            reviews: t.total_reviews,
-          })),
-        })).filter((c) => c.turfs.length > 0)}
-      />
-      {/* Turf near me: the most searched way in. */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-12">
-        <Link
-          href="/turf-near-me"
-          className="group flex items-center justify-between gap-4 rounded-3xl bg-primary-900 hover:bg-primary-800 text-white px-6 py-6 md:px-8 md:py-7 transition-colors"
-        >
-          <span className="min-w-0">
-            <span className="block font-display text-[22px] md:text-[28px] leading-tight">Find a turf near you</span>
-            <span className="block text-[15px] text-white/70 mt-1">
-              {total} turfs sorted by distance from where you are
-            </span>
-          </span>
-          <span aria-hidden className="shrink-0 w-11 h-11 rounded-full bg-white/15 group-hover:bg-white/25 inline-flex items-center justify-center text-xl">
-            📍
-          </span>
-        </Link>
-      </section>
-      {/* Browse by sport: server-rendered links to every sport page,
-          with live counts. Also what Google uses to pick sitelinks. */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-12">
-        <h2 className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight mb-4">
-          Browse by sport
-        </h2>
-        <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {sportCounts.map((s) => (
-            <li key={s.slug}>
-              <Link
-                href={`/sport/${s.slug}`}
-                className="flex items-center gap-3 rounded-2xl bg-primary-50 hover:bg-primary-100 px-4 py-3 transition-colors"
-              >
-                <span className="text-2xl" aria-hidden>{s.icon}</span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold text-primary-900 truncate">{s.name}</span>
-                  <span className="block text-[13px] text-primary-500 tabular-nums">
-                    {s.count} {venueWord(s, s.count)}
-                  </span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <div className="h-16" />
+      {/* Top-rated photo tiles for the visitor's city (server renders the
+          biggest city) and every city with its top turf links for crawlers. */}
+      {d.strips.length > 0 && (
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-10">
+          <TopTurfsByCity strips={d.strips} featuredId={d.strips[0].id} spotlights={d.spotlights} />
+          <EveryCityList cities={d.cityRows} cityCount={d.cityCount} />
+        </section>
+      )}
+
+      <OpenGames games={d.games} total={d.openGamesTotal} />
+
+      {d.sports.length > 0 && <SportGrid sports={d.sports} byCity={d.sportsByCity} />}
+
+      <NearMeBand pins={d.pins} />
+      <ToolsRow />
+      <GuidesRow posts={d.posts} />
+      <FinalBand />
     </>
   );
 }

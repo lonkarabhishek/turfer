@@ -111,7 +111,7 @@ export function LoggedInHome() {
 
   return (
     <div
-      className="min-h-screen bg-white"
+      className="min-h-0 bg-white pb-8"
       style={{ background: "linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 40%)" }}
     >
       <div className="max-w-3xl mx-auto px-5 sm:px-6 pt-6 sm:pt-10">
