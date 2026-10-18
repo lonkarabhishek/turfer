@@ -33,13 +33,16 @@ export function GamesListingClient({
   scope,
   line,
   ask,
+  renderedAt,
 }: {
   initialGames: Game[];
   otherGames: Game[];
   scope: CityScope;
   line: CityLineProps;
-  /** The first-visit city ask (all-India page only). */
+  /** The first-visit city ask (ask variant only). */
   ask: ReactNode;
+  /** When the server rendered this list: dates read relative to it until hydration. */
+  renderedAt: number;
 }) {
   const { user, login } = useAuth();
   const [sport, setSport] = useState("All");
@@ -48,14 +51,19 @@ export function GamesListingClient({
   const [showFilters, setShowFilters] = useState(false);
   const cityLabel = scope.kind === "city" ? scope.label : null;
 
-  // The HTML can be up to a minute old (ISR): after hydration, drop games
-  // that kicked off since. Same list as the server's until then.
+  // The HTML can be up to a minute old (ISR). Until hydration, render
+  // exactly what the server did (same list, dates relative to the render
+  // time). After it, drop games that kicked off since and read dates
+  // against now. Both sides read times in IST (lib/utils/game.ts), so
+  // this only changes anything when the clock really moved on.
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
+  const now = hydrated ? undefined : renderedAt;
   const fresh = (list: Game[]) => (hydrated ? filterNonExpiredGames(list) : list);
 
-  // Exactly the predicates the old Supabase query applied.
+  // The old Supabase query's predicates; sport ignores case, since games
+  // store "football" while the chip says "Football".
   const matches = (g: Game) => {
-    if (sport !== "All" && g.sport !== sport) return false;
+    if (sport !== "All" && (g.sport ?? "").toLowerCase() !== sport.toLowerCase()) return false;
     if (skillLevel !== "all" && g.skill_level !== skillLevel) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -214,12 +222,12 @@ export function GamesListingClient({
           <p className="text-[11px] font-semibold text-primary-500 mb-4 mt-4">
             {cityLabel
               ? `${filteredGames.length} open game${filteredGames.length !== 1 ? "s" : ""} in ${cityLabel}`
-              : `${filteredGames.length} game${filteredGames.length !== 1 ? "s" : ""}`}{" "}
+              : `${filteredGames.length} open game${filteredGames.length !== 1 ? "s" : ""} across India`}{" "}
             · Sorted by kickoff
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredGames.map((game) => (
-              <GameCard key={game.id} game={game} cityLabel={cityLabel ? undefined : cityLabelOf(game)} />
+              <GameCard key={game.id} game={game} now={now} cityLabel={cityLabel ? undefined : cityLabelOf(game)} />
             ))}
           </div>
         </>
@@ -235,7 +243,7 @@ export function GamesListingClient({
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredOthers.map((game) => (
-              <GameCard key={game.id} game={game} cityLabel={cityLabelOf(game)} />
+              <GameCard key={game.id} game={game} now={now} cityLabel={cityLabelOf(game)} />
             ))}
           </div>
         </section>

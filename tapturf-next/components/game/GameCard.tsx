@@ -5,12 +5,14 @@ import { MapPin, Clock, Users, User, Zap } from "lucide-react";
 import type { Game } from "@/types/game";
 import { formatDate, formatTimeSlot, capitalizeSkillLevel } from "@/lib/utils/game";
 
-export function GameCard({ game, hideVenue = false, cityLabel }: {
+export function GameCard({ game, hideVenue = false, cityLabel, now }: {
   game: Game;
   /** On a turf's own page the venue is obvious; show the game title instead. */
   hideVenue?: boolean;
   /** When set (lists that span cities), the location line reads "{area}, {city}". */
   cityLabel?: string;
+  /** "Today"/"Tomorrow" relative to this instant. Server-rendered lists pass the render time until hydration. */
+  now?: number;
 }) {
   const area = game.turfs?.address?.split(",")[0]?.trim() || null;
   const placeLine = cityLabel ? [area, cityLabel].filter(Boolean).join(", ") : game.turfs?.address;
@@ -94,7 +96,7 @@ export function GameCard({ game, hideVenue = false, cityLabel }: {
           {/* Date + time chips */}
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex items-center text-[11px] font-semibold text-accent-700 bg-accent-50 border border-accent-500/30 px-2.5 py-1.5 rounded-lg">
-              {formatDate(game.date)}
+              {formatDate(game.date, now)}
             </span>
             <span className="inline-flex items-center gap-1 text-[11px] font-mono text-primary-700 bg-primary-100 border border-primary-200 px-2.5 py-1.5 rounded-lg">
               <Clock className="w-3 h-3 text-primary-500" />

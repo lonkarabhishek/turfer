@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { cache } from "react";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
@@ -59,11 +59,16 @@ export async function getGameByIdServer(gameId: string): Promise<Game | null> {
 }
 
 /**
- * Open games, soonest first, shared by /games and every per-city /games
- * variant: one cached load every 60 s however many city pages render.
+ * Open games, soonest first, for /games and every per-city /games
+ * variant. Deliberately not wrapped in unstable_cache: the pages' own
+ * 60 s ISR window is the only staleness, so a game a host just created
+ * shows up within a minute instead of two. Each variant regenerates at
+ * most once a minute and only when visited, far fewer reads than the old
+ * per-visitor browser fetch. React cache() dedupes calls within a render.
+ * `at` is the load time, which the list reads "Today" against until it
+ * hydrates.
  */
-export const getOpenGamesCached = unstable_cache(
-  async () => sortGamesByDateTime(filterNonExpiredGames(await getAvailableGamesServer())),
-  ["open-games-v1"],
-  { revalidate: 60, tags: ["games"] },
-);
+export const getOpenGamesCached = cache(async (): Promise<{ games: Game[]; at: number }> => {
+  const at = Date.now();
+  return { games: sortGamesByDateTime(filterNonExpiredGames(await getAvailableGamesServer(), at)), at };
+});
