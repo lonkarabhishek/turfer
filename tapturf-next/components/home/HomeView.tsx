@@ -17,15 +17,16 @@ import { plural } from "@/lib/home/format";
 /**
  * The home, for one city or all of India. `requested` is the city from
  * the URL the proxy rewrote to (app/c/[city]), or null for the public
- * page that crawlers, "all of India" and unknown visitors get. Never
- * reads cookies or headers, so every variant stays a static ISR page.
+ * all-India page that crawlers and "all of India" visitors get. `ask`
+ * (app/c/ask, humans whose city is unknown only) adds the first-visit
+ * city ask, so crawler HTML never carries it. Never reads cookies or
+ * headers, so every variant stays a static ISR page.
  *
  * City view: that city's hero, top turfs, games and sports, then every
  * other city nearest first under "Other cities". All-India view: the
- * national picks with each city named, then every city biggest first,
- * plus the first-visit ask (shown by CSS only when the city is unknown).
+ * national picks with each city named, then every city biggest first.
  */
-export async function HomeView({ requested }: { requested: string | null }) {
+export async function HomeView({ requested, ask = false }: { requested: string | null; ask?: boolean }) {
   const d = await getHomeData();
   const s = scopeHome(d, requested);
   const line = cityLineFor(s.scope, "#all-cities", "/");
@@ -34,12 +35,12 @@ export async function HomeView({ requested }: { requested: string | null }) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd(d)) }} />
-      <div id="tt-scope" data-scope={requested ?? ""} hidden />
+      <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
 
       {/* Visitors: the hero. Signed in: LoggedInHome. Everything below is shared. */}
       <HomeShell hero={s.hero} scope={s.scope} line={line} />
 
-      {requested === null && (
+      {ask && (
         <CityAsk cities={s.askCities} cityCount={s.askCityCount} page="/" changeHref="#all-cities" />
       )}
 
@@ -78,7 +79,7 @@ export async function HomeView({ requested }: { requested: string | null }) {
       <ToolsRow />
       <GuidesRow posts={d.posts} />
       <FinalBand />
-      {requested === null && <div className="city-ask-spacer" aria-hidden />}
+      {ask && <div className="city-ask-spacer" aria-hidden />}
     </>
   );
 }

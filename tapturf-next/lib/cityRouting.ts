@@ -17,6 +17,14 @@ import {
 export const PERSONALISED: Record<string, string> = { "/": "", "/turfs": "/turfs", "/games": "/games" };
 
 /**
+ * The internal segment of the "ask" twins (app/c/ask): the all-India
+ * page plus the first-visit "Where do you play?" ask. Only humans whose
+ * city is unknown are rewritten there, so crawlers and "all of India"
+ * visitors never receive the ask's markup. Never a city id.
+ */
+export const ASK_SEGMENT = "ask";
+
+/**
  * Crawlers, link unfurlers, audit tools and scripts. Generic "bot" covers
  * Googlebot (all), bingbot, AdsBot, Twitterbot, LinkedInBot, Slackbot,
  * Discordbot, Applebot, DuckDuckBot, YandexBot, PetalBot, GPTBot,
@@ -89,8 +97,10 @@ export type ProxyDecision =
  * 3. A valid cookie wins. Without one (or with "unknown"), a human gets
  *    IP detection; the cookie is written only on documents.
  * 4. A city choice rewrites /, /turfs (without ?q=) and /games to the
- *    city's ISR twin. Everything else passes through.
- * Crawlers never get detection, a cookie or a rewrite.
+ *    city's ISR twin; an unknown city rewrites them to the ask twin.
+ *    Everything else passes through.
+ * Crawlers never get detection, a cookie or a rewrite (unless they send
+ * a cookie, which only a lab tool set up on purpose does).
  */
 export function decide(i: ProxyInput): ProxyDecision {
   const { pathname, search, header } = i;
@@ -114,8 +124,11 @@ export function decide(i: ProxyInput): ProxyDecision {
   const suffix = PERSONALISED[pathname];
   const city = choice?.kind === "city" ? choice.city : null;
   const bypass = pathname === "/turfs" && !!new URLSearchParams(search).get("q");
-  if (suffix !== undefined && city && !bypass) {
-    return { action: "rewrite", pathname: `/c/${city}${suffix}`, setCookie, debug: city };
+  if (suffix !== undefined && !bypass) {
+    if (city) return { action: "rewrite", pathname: `/c/${city}${suffix}`, setCookie, debug: city };
+    if (choice?.kind === "unknown") {
+      return { action: "rewrite", pathname: `/c/${ASK_SEGMENT}${suffix}`, setCookie, debug: ASK_SEGMENT };
+    }
   }
   return { action: "next", setCookie, debug: city ?? "default" };
 }

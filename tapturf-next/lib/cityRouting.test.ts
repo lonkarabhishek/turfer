@@ -85,14 +85,14 @@ test("the same request as RSC rewrites without a cookie", () => {
 
 test("outside India is unknown", () => {
   const d = decide(req({ headers: { "x-vercel-ip-country": "US", "x-vercel-ip-latitude": "37.77", "x-vercel-ip-longitude": "-122.41" } }));
-  assert.deepEqual(d, { action: "next", setCookie: "unknown", debug: "default" });
+  assert.deepEqual(d, { action: "rewrite", pathname: "/c/ask", setCookie: "unknown", debug: "ask" });
   const london = decide(req({ headers: { "x-vercel-ip-latitude": "51.5", "x-vercel-ip-longitude": "-0.12" } }));
-  assert.deepEqual(london, { action: "next", setCookie: "unknown", debug: "default" });
+  assert.deepEqual(london, { action: "rewrite", pathname: "/c/ask", setCookie: "unknown", debug: "ask" });
 });
 
 test("a malformed city header with no coords does not throw", () => {
   const d = decide(req({ headers: { "x-vercel-ip-country": "IN", "x-vercel-ip-city": "%E0%A4" } }));
-  assert.deepEqual(d, { action: "next", setCookie: "unknown", debug: "default" });
+  assert.deepEqual(d, { action: "rewrite", pathname: "/c/ask", setCookie: "unknown", debug: "ask" });
 });
 
 test("Aurangabad, Bihar coordinates never map to Sambhajinagar", () => {
@@ -102,7 +102,7 @@ test("Aurangabad, Bihar coordinates never map to Sambhajinagar", () => {
     null,
   );
   const d = decide(req({ headers: { "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "24.75", "x-vercel-ip-longitude": "84.37", "x-vercel-ip-city": "Aurangabad" } }));
-  assert.equal(d.action === "next" && d.setCookie, "unknown");
+  assert.equal(d.action === "rewrite" && d.setCookie, "unknown");
 });
 
 test("the city name header is a fallback when coordinates are absent", () => {
@@ -123,12 +123,12 @@ test("cookie unknown upgrades on a document with geo", () => {
     setCookie: "geo.pune",
     debug: "pune",
   });
-  // Still unknown: no rewrite, and no Set-Cookie when the value would not change.
-  assert.deepEqual(decide(req({ cookie: "unknown" })), { action: "next", setCookie: undefined, debug: "default" });
+  // Still unknown: the ask twin, and no Set-Cookie when the value would not change.
+  assert.deepEqual(decide(req({ cookie: "unknown" })), { action: "rewrite", pathname: "/c/ask", setCookie: undefined, debug: "ask" });
 });
 
 test("a bogus cookie is treated as missing", () => {
-  assert.deepEqual(decide(req({ cookie: "bogus" })), { action: "next", setCookie: "unknown", debug: "default" });
+  assert.deepEqual(decide(req({ cookie: "bogus" })), { action: "rewrite", pathname: "/c/ask", setCookie: "unknown", debug: "ask" });
   assert.deepEqual(decide(req({ cookie: "geo.atlantis", headers: PUNE })).action, "rewrite");
 });
 
@@ -144,6 +144,19 @@ test("internal /c paths redirect to their public URL", () => {
   assert.deepEqual(decide(req({ path: "/c/zz/turfs", method: "POST" })), { action: "redirect", location: "/turfs" });
   assert.deepEqual(decide(req({ path: "/c/pune", headers: { "x-prerender-revalidate": "abc" } })), { action: "next", debug: "internal" });
   assert.equal(publicPathFromInternal("/c/pune/games"), "/games");
+});
+
+test("unknown humans get the ask twin of /, /turfs and /games only", () => {
+  for (const [path, target] of [["/", "/c/ask"], ["/turfs", "/c/ask/turfs"], ["/games", "/c/ask/games"]]) {
+    assert.deepEqual(decide(req({ path })), { action: "rewrite", pathname: target, setCookie: "unknown", debug: "ask" });
+  }
+  // Search, other pages, crawlers and "all" never get the ask.
+  assert.deepEqual(decide(req({ path: "/turfs?q=box", cookie: "unknown" })), { action: "next", setCookie: undefined, debug: "default" });
+  assert.deepEqual(decide(req({ path: "/turf/abc" })), { action: "next", setCookie: "unknown", debug: "default" });
+  assert.deepEqual(decide(req({ ua: GOOGLEBOT })), { action: "next", setCookie: undefined, debug: "default" });
+  assert.deepEqual(decide(req({ cookie: "all" })), { action: "next", setCookie: undefined, debug: "default" });
+  // Internal ask paths are redirected like any other /c path.
+  assert.deepEqual(decide(req({ path: "/c/ask/games" })), { action: "redirect", location: "/games" });
 });
 
 test("POST passes through", () => {

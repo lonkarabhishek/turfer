@@ -15,11 +15,12 @@ const PILL =
 /**
  * /turfs for one city or all of India. `requested` is the city from the
  * URL the proxy rewrote to (app/c/[city]/turfs), or null for the public
- * all-India page. A city page ships only that city's cards (one small
+ * all-India page; `ask` (app/c/ask/turfs) adds the first-visit city ask
+ * for humans whose city is unknown. A city page ships only that city's cards (one small
  * per-city query) and lists the other cities, nearest first, at the
  * bottom. Never reads cookies, headers or the query string.
  */
-export async function TurfsView({ requested }: { requested: string | null }) {
+export async function TurfsView({ requested, ask = false }: { requested: string | null; ask?: boolean }) {
   const live = (await getLiveCities()).filter((c) => isKnownCity(c.id));
   const scope = resolveCityScope(requested, live);
   const cityId = scope.kind === "city" ? scope.id : null;
@@ -32,10 +33,10 @@ export async function TurfsView({ requested }: { requested: string | null }) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
-      <div id="tt-scope" data-scope={requested ?? ""} hidden />
+      <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
       <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">Find your turf</h1>
       <CityLine {...cityLineFor(scope, "#turfs-by-city", "/turfs")} />
-      {requested === null && (
+      {ask && (
         <CityAsk
           cities={live.slice(0, 8).map((c) => ({ id: c.id, label: c.label, n: c.n }))}
           cityCount={live.length}
@@ -80,7 +81,7 @@ export async function TurfsView({ requested }: { requested: string | null }) {
           </ul>
         </section>
       )}
-      {requested === null && <div className="city-ask-spacer" aria-hidden />}
+      {ask && <div className="city-ask-spacer" aria-hidden />}
     </div>
   );
 }

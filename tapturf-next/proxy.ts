@@ -33,9 +33,25 @@ import { decide } from "./lib/cityRouting";
  *   on this request) is rewritten from /, /turfs (without ?q=) and
  *   /games to that city's static ISR twin under app/c/[city]. The URL in
  *   the browser, the metadata and the canonical stay the public ones.
+ * - A human whose city is unknown (no IP match, VPN, abroad) is
+ *   rewritten to the ask twin under app/c/ask: the all-India page plus
+ *   the first-visit "Where do you play?" ask.
  * - Crawlers (no cookie) get no detection, no cookie and no rewrite: the
- *   all-India page at the canonical URL.
+ *   all-India page at the canonical URL, with no ask markup at all.
+ *   Lighthouse and PageSpeed lab runs count as crawlers too, so they
+ *   measure that page. To lab-test what people get, send a tt_city
+ *   cookie (pune, or unknown for the ask): a valid cookie wins over the
+ *   crawler check.
  * - Direct hits on /c are 308'd to the public URL.
+ *
+ * Caching: one public URL now returns different bodies by cookie and IP,
+ * yet keeps Next's s-maxage and has no Vary: Cookie (that would split
+ * Vercel's cache by every analytics and auth cookie). This is only
+ * correct because Vercel runs this proxy before its edge cache and
+ * caches the rewritten /c path. No other CDN or shared cache may sit in
+ * front of Vercel for /, /turfs and /games. If the site is ever
+ * self-hosted or put behind another CDN, these three responses must be
+ * marked private there.
  *
  * Matcher:
  * - "/", "/turfs", "/games" match every request kind (document, RSC

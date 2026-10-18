@@ -96,21 +96,28 @@ export async function POST(req: Request) {
   }
 
   // proxy.ts rewrites /, /turfs and /games to per-city pages under
-  // app/c/[city]; revalidatePath("/") and ("/turfs") do not follow
-  // rewrites, so bust the variants and the shared home snapshot too.
-  // (/games and its variants run on a 60 s timer.)
-  try {
-    revalidatePath("/c/[city]", "page");
-  } catch (e) {
-    console.warn("revalidatePath(/c/[city]) failed", e);
+  // app/c/[city] and to the ask pages under app/c/ask;
+  // revalidatePath("/") and ("/turfs") do not follow rewrites, so bust
+  // the variants and the shared home snapshot too. (/games and its
+  // variants run on a 60 s timer.)
+  for (const [path, type] of [
+    ["/c/[city]", "page"],
+    ["/c/[city]/turfs", "page"],
+    ["/c/ask", undefined],
+    ["/c/ask/turfs", undefined],
+  ] as const) {
+    try {
+      if (type) revalidatePath(path, type);
+      else revalidatePath(path);
+    } catch (e) {
+      console.warn(`revalidatePath(${path}) failed`, e);
+    }
   }
   try {
-    revalidatePath("/c/[city]/turfs", "page");
-  } catch (e) {
-    console.warn("revalidatePath(/c/[city]/turfs) failed", e);
-  }
-  try {
-    revalidateTag("turf-data", "max");
+    // Expire now (not stale-while-revalidate), so the pages regenerated
+    // just above read the fresh home snapshot instead of caching the old
+    // one for another window.
+    revalidateTag("turf-data", { expire: 0 });
   } catch (e) {
     console.warn("revalidateTag(turf-data) failed", e);
   }

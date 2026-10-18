@@ -14,11 +14,13 @@ function cityOf(g: Game): string | null {
 /**
  * /games for one city or all of India, with the games in the HTML (no
  * client fetch, no skeleton). `requested` is the city from the URL the
- * proxy rewrote to (app/c/[city]/games), or null for the public page.
+ * proxy rewrote to (app/c/[city]/games), or null for the public page;
+ * `ask` (app/c/ask/games) adds the first-visit city ask for humans whose
+ * city is unknown.
  * City view: that city's games, then "Open games in other cities".
  * Never reads cookies, headers or the query string.
  */
-export async function GamesView({ requested }: { requested: string | null }) {
+export async function GamesView({ requested, ask = false }: { requested: string | null; ask?: boolean }) {
   const [{ games, at }, liveAll] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
   const live = liveAll.filter((c) => isKnownCity(c.id));
   const scope = resolveCityScope(requested, live);
@@ -34,7 +36,7 @@ export async function GamesView({ requested }: { requested: string | null }) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(gamesJsonLd(games)) }} />
-      <div id="tt-scope" data-scope={requested ?? ""} hidden />
+      <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
       <GamesListingClient
         initialGames={mine}
         otherGames={others}
@@ -42,7 +44,7 @@ export async function GamesView({ requested }: { requested: string | null }) {
         renderedAt={at}
         line={cityLineFor(scope, "/#all-cities", "/games")}
         ask={
-          requested === null ? (
+          ask ? (
             <CityAsk
               cities={live.slice(0, 8).map((c) => ({ id: c.id, label: c.label, n: c.n }))}
               cityCount={live.length}
@@ -52,7 +54,7 @@ export async function GamesView({ requested }: { requested: string | null }) {
           ) : null
         }
       />
-      {requested === null && <div className="city-ask-spacer" aria-hidden />}
+      {ask && <div className="city-ask-spacer" aria-hidden />}
     </>
   );
 }
