@@ -63,7 +63,7 @@ export function AskEntry({
         </button>
       </form>
       {!compact && (
-        <div className="mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
           {examples.map((ex) => (
             <button
               key={ex}

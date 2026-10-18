@@ -9,7 +9,8 @@ const SEP = " · ";
 
 /**
  * One photo tile in the home's top-turfs strip. Markup only; the photo
- * URL arrives already sized. `eager` marks the page's single eager image.
+ * URL arrives already sized. `eager` marks the page's single eager image;
+ * it still yields priority to the text above it, which is the real LCP.
  */
 export function HomeTurfTile({ tile, eager = false }: { tile: HomeTile; eager?: boolean }) {
   return (
@@ -23,7 +24,6 @@ export function HomeTurfTile({ tile, eager = false }: { tile: HomeTile; eager?: 
             width={480}
             height={360}
             loading={eager ? "eager" : "lazy"}
-            fetchPriority={eager ? "high" : "auto"}
             decoding="async"
             draggable={false}
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 motion-safe:group-hover:scale-[1.03]"
@@ -40,7 +40,7 @@ export function HomeTurfTile({ tile, eager = false }: { tile: HomeTile; eager?: 
           <span className="inline-flex items-center gap-1 text-primary-900">
             <Star className="w-3.5 h-3.5 fill-current" />
             {tile.rating.toFixed(1)}
-            <span className="text-primary-400">({tile.reviews.toLocaleString("en-IN")})</span>
+            <span className="text-primary-500">({tile.reviews.toLocaleString("en-IN")})</span>
           </span>
         ) : (
           <span />

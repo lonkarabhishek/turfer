@@ -15,7 +15,10 @@ export function GuidesRow({ posts }: { posts: HomePost[] }) {
           </h2>
           <p className="text-[13px] text-primary-500 mt-1">Prices, rules, tactics and the best turfs by city.</p>
         </div>
-        <Link href="/blog" className="inline-flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap">
+        <Link
+          href="/blog"
+          className="hidden sm:inline-flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap"
+        >
           All guides <ArrowUpRight className="w-4 h-4" />
         </Link>
       </div>
@@ -48,6 +51,12 @@ export function GuidesRow({ posts }: { posts: HomePost[] }) {
           </li>
         ))}
       </ul>
+      <Link
+        href="/blog"
+        className="sm:hidden mt-3 flex h-11 items-center justify-center rounded-full border border-primary-200 text-[15px] font-semibold text-primary-900 press-tight focus-neon"
+      >
+        All guides
+      </Link>
     </section>
   );
 }

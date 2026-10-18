@@ -7,9 +7,11 @@ import type { HomeSport } from "@/lib/home/types";
 import { useCityPref } from "./useCityPref";
 
 /**
- * Browse by sport: twelve sport pages with live counts, type-led tiles
+ * Browse by sport: the sport pages with live counts, type-led tiles
  * (the sport name is the icon). After hydration a tile points at the
- * visitor's city sport page when that page is big enough to be indexed.
+ * visitor's city sport page when that page is big enough to be indexed;
+ * otherwise the all-India count says so, so two scopes never sit
+ * side by side unlabelled.
  */
 export function SportGrid({ sports, byCity }: { sports: HomeSport[]; byCity: Record<string, Record<string, number>> }) {
   const pref = useCityPref();
@@ -25,9 +27,10 @@ export function SportGrid({ sports, byCity }: { sports: HomeSport[]; byCity: Rec
         {sports.map((s) => {
           const sp = sportBySlug(s.slug);
           const n = cityCounts?.[s.slug];
-          const local = pref && n != null && label;
-          const count = local ? n : s.count;
+          const local = Boolean(pref && n != null && label);
+          const count = local && n != null ? n : s.count;
           const word = sp ? venueWord(sp, count) : count === 1 ? "turf" : "turfs";
+          const scope = local ? ` in ${label}` : pref ? " across India" : "";
           return (
             <li key={s.slug}>
               <Link
@@ -35,10 +38,10 @@ export function SportGrid({ sports, byCity }: { sports: HomeSport[]; byCity: Rec
                 className="press-tight focus-neon flex flex-col justify-between rounded-2xl bg-primary-50 hover:bg-primary-100 px-4 py-3.5 min-h-[76px] transition-colors"
               >
                 <span className="block w-5 h-0.5 rounded-full bg-accent-500" aria-hidden />
-                <span className="mt-2 text-[16px] font-semibold text-primary-900 truncate">{s.name}</span>
-                <span className="text-[13px] text-primary-500 tabular-nums truncate">
+                <span className="mt-2 text-[15px] sm:text-[16px] font-semibold text-primary-900 leading-tight">{s.name}</span>
+                <span className="text-[12px] sm:text-[13px] text-primary-500 tabular-nums leading-snug">
                   {count.toLocaleString("en-IN")} {word}
-                  {local ? ` in ${label}` : ""}
+                  {scope}
                 </span>
               </Link>
             </li>

@@ -13,9 +13,13 @@ const ICONS: Record<ToolSlug, LucideIcon> = {
   "cricket-tournament-scorer": ListOrdered,
 };
 
-/** The five free cricket tools, for someone already at the ground. */
+const WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+
+/** The free cricket tools, for someone already at the ground. */
 export function ToolsRow() {
   const tools = ORDER.map((slug) => TOOLS.find((t) => t.slug === slug)).filter((t) => t != null);
+  if (tools.length === 0) return null;
+  const howMany = WORDS[tools.length] ?? String(tools.length);
   return (
     <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-12" aria-labelledby="tools-h">
       <div className="flex items-end justify-between gap-4">
@@ -23,9 +27,12 @@ export function ToolsRow() {
           <h2 id="tools-h" className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight">
             At the ground already?
           </h2>
-          <p className="text-[13px] text-primary-500 mt-1">Five free cricket tools. No sign-up, built for a phone at the pitch.</p>
+          <p className="text-[13px] text-primary-500 mt-1">{howMany} free cricket tools. No sign-up, built for a phone at the pitch.</p>
         </div>
-        <Link href="/tools" className="inline-flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap">
+        <Link
+          href="/tools"
+          className="hidden sm:inline-flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap"
+        >
           All tools <ArrowUpRight className="w-4 h-4" />
         </Link>
       </div>
@@ -36,20 +43,26 @@ export function ToolsRow() {
             <li key={t.slug} className="w-[240px] shrink-0 snap-start md:w-auto">
               <Link
                 href={toolPath(t.slug)}
-                className="press-tight card-lift focus-neon flex items-start gap-3 rounded-2xl border border-primary-200 bg-white p-4 hover:border-accent-400 hover:shadow-card-hover h-full"
+                className="press-tight card-lift focus-neon flex items-center gap-3 rounded-2xl border border-primary-200 bg-white px-4 py-3 min-h-24 h-full hover:border-accent-400 hover:shadow-card-hover"
               >
                 <span className="shrink-0 w-10 h-10 rounded-xl bg-accent-50 text-accent-700 inline-flex items-center justify-center">
                   <Icon className="w-5 h-5" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold text-primary-900">{t.name}</span>
-                  <span className="block text-[13px] text-primary-500 mt-0.5">{t.tagline}</span>
+                  <span className="block text-[15px] lg:text-[14px] font-semibold text-primary-900 leading-tight">{t.name}</span>
+                  <span className="block text-[13px] text-primary-500 mt-0.5 line-clamp-1">{t.tagline}</span>
                 </span>
               </Link>
             </li>
           );
         })}
       </ul>
+      <Link
+        href="/tools"
+        className="sm:hidden mt-3 flex h-11 items-center justify-center rounded-full border border-primary-200 text-[15px] font-semibold text-primary-900 press-tight focus-neon"
+      >
+        All {howMany.toLowerCase()} tools
+      </Link>
     </section>
   );
 }

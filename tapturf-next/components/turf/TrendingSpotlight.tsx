@@ -32,10 +32,13 @@ export function TrendingSpotlight({
   picks,
   mode = "by-city",
   className = "",
+  loading = "eager",
 }: {
   picks: SpotlightTurf[];
   mode?: "by-city" | "fixed";
   className?: string;
+  /** "lazy" when the card sits below the fold (the home). */
+  loading?: "eager" | "lazy";
 }) {
   const [city, setCity] = useState<CityId | null>(null);
   const [ready, setReady] = useState(mode === "fixed");
@@ -63,12 +66,12 @@ export function TrendingSpotlight({
   // when this city has no pick.
   return (
     <div className={className}>
-      <SpotlightCard pick={pick} />
+      <SpotlightCard key={pick.turfId} pick={pick} loading={loading} />
     </div>
   );
 }
 
-function SpotlightCard({ pick }: { pick: SpotlightTurf }) {
+function SpotlightCard({ pick, loading }: { pick: SpotlightTurf; loading: "eager" | "lazy" }) {
   const [photoOk, setPhotoOk] = useState(true);
   const cityLabel = labelFor(pick.city);
 
@@ -88,6 +91,8 @@ function SpotlightCard({ pick }: { pick: SpotlightTurf }) {
               alt={`${pick.name}, most trending turf in ${cityLabel}`}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               referrerPolicy="no-referrer"
+              loading={loading}
+              decoding="async"
               onError={() => setPhotoOk(false)}
             />
           ) : (
@@ -118,7 +123,7 @@ function SpotlightCard({ pick }: { pick: SpotlightTurf }) {
                 <Star className="w-4 h-4 fill-[#e0a92e] text-[#e0a92e]" />
                 <span className="font-semibold tabular-nums">{pick.rating.toFixed(1)}</span>
                 {pick.reviews > 0 && (
-                  <span className="text-primary-400 tabular-nums">({pick.reviews.toLocaleString("en-IN")})</span>
+                  <span className="text-primary-500 tabular-nums">({pick.reviews.toLocaleString("en-IN")})</span>
                 )}
               </span>
             )}

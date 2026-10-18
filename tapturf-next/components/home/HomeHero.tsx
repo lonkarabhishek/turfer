@@ -64,14 +64,18 @@ function HeroTile({
  * text for text in the hydration commit. No GPS, no fetch here: the
  * shared CityPicker does the silent header-based detect on a first visit.
  */
-export function HomeHero({ total, cityCount, sportCount, cities, topCities }: HomeHeroProps) {
+export function HomeHero({ total, cityCount, cities, topCities }: HomeHeroProps) {
   const pref = useCityPref();
   const city = pref && cities[pref] ? pref : null;
   const info = city ? cities[city] : null;
 
+  // The one bold line that sells scale. It names the two sports people
+  // search for whenever the data backs it, and wraps rather than clips.
   const statLine = info
-    ? `${plural(info.n, "turf", "turfs")} in ${info.label}${SEP}${plural(info.sports, "sport", "sports")}`
-    : `${plural(total, "turf", "turfs")}${SEP}${plural(cityCount, "city", "cities")}${SEP}${plural(sportCount, "sport", "sports")}`;
+    ? info.core
+      ? `${info.n.toLocaleString("en-IN")} football, box cricket and sports turfs in ${info.label}`
+      : `${plural(info.n, "turf", "turfs")} in ${info.label}${SEP}${plural(info.sports, "sport", "sports")}`
+    : `${total.toLocaleString("en-IN")} football, box cricket and sports turfs${SEP}${plural(cityCount, "city", "cities")}`;
 
   const chips = info
     ? [
@@ -86,7 +90,7 @@ export function HomeHero({ total, cityCount, sportCount, cities, topCities }: Ho
 
   return (
     <section className="relative" style={{ background: "linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 70%)" }}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-6 lg:pt-14 lg:pb-12 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12 lg:items-start">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-4 lg:pt-14 lg:pb-12 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12 lg:items-start">
         <div className="max-w-[640px]">
           <CityPicker variant="hero" />
 
@@ -96,12 +100,14 @@ export function HomeHero({ total, cityCount, sportCount, cities, topCities }: Ho
             <span className="text-accent-500">Go play.</span>
           </h1>
 
-          <p className="mt-3 h-6 md:h-7 text-[15px] min-[360px]:text-[17px] md:text-[20px] font-semibold text-primary-900 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
-            {total > 0 ? statLine : null}
-          </p>
+          {total > 0 && (
+            <p className="mt-3 max-w-[40ch] md:max-w-none text-[15px] min-[360px]:text-[17px] md:text-[20px] font-semibold text-primary-900 tabular-nums leading-snug">
+              {statLine}
+            </p>
+          )}
 
-          <p className="mt-2 max-w-[36ch] text-[15px] md:text-[17px] leading-snug text-primary-500">
-            Football, box cricket and more. Photos, ratings and prices for every ground we know. Call or WhatsApp the turf, no booking fee.
+          <p className="mt-2 max-w-[38ch] text-[15px] md:text-[17px] leading-snug text-primary-500">
+            Photos, ratings and prices. Call or WhatsApp the turf to book, no booking fee.
           </p>
 
           <AskEntry examples={chips} className="mt-5" />
@@ -129,7 +135,7 @@ export function HomeHero({ total, cityCount, sportCount, cities, topCities }: Ho
                 icon={<MapPin className="w-5 h-5 text-accent-600" />}
                 title="All turfs"
                 sub={total > 0 ? `${plural(total, "turf", "turfs")} in ${plural(cityCount, "city", "cities")}` : "Every ground we know"}
-                subShort={total > 0 ? plural(total, "turf", "turfs") : "Every ground we know"}
+                subShort="Top rated first"
               />
             )}
           </div>
@@ -146,7 +152,7 @@ export function HomeHero({ total, cityCount, sportCount, cities, topCities }: Ho
                     <li key={c.id}>
                       <Link
                         href={`/${c.id}`}
-                        className={`relative isolate flex items-center justify-between h-10 px-3 rounded-xl hover:bg-primary-50 focus-neon transition-colors ${active ? "bg-accent-50/60" : ""}`}
+                        className={`relative isolate flex items-center justify-between h-10 px-3 rounded-xl hover:bg-primary-50 focus-neon transition-colors ${active ? "ring-1 ring-accent-300" : ""}`}
                       >
                         <span
                           aria-hidden
