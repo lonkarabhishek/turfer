@@ -582,6 +582,13 @@ export type LocateResult =
 /**
  * One GPS fix mapped to a city. Only ever called from a tap, so the
  * permission prompt never appears on its own. Never writes the pref.
+ *
+ * The API's own 7 s timeout covers the fix itself and excludes time on
+ * the permission prompt. The extra hard cap (for browsers that never
+ * call back) starts only once permission is granted, so a visitor who
+ * reads the prompt for a while and then taps Allow still gets a result.
+ * While the prompt is up it is a generous 60 s (a dismissed prompt in
+ * some browsers never answers at all).
  */
 export function locateCity(): Promise<LocateResult> {
   if (typeof window === "undefined" || !("geolocation" in navigator)) {
@@ -589,13 +596,36 @@ export function locateCity(): Promise<LocateResult> {
   }
   return new Promise<LocateResult>((resolve) => {
     let done = false;
+    let timer = 0;
+    let status: PermissionStatus | null = null;
     const finish = (r: LocateResult) => {
       if (done) return;
       done = true;
       window.clearTimeout(timer);
+      if (status) status.onchange = null;
       resolve(r);
     };
-    const timer = window.setTimeout(() => finish({ error: "timeout" }), 8000);
+    const cap = (ms: number) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => finish({ error: "timeout" }), ms);
+    };
+    cap(60000);
+    const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
+    if (perms?.query) {
+      perms
+        .query({ name: "geolocation" as PermissionName })
+        .then((p) => {
+          if (done) return;
+          status = p;
+          if (p.state === "granted") cap(8000);
+          p.onchange = () => {
+            if (p.state === "granted") cap(8000);
+          };
+        })
+        .catch(() => cap(8000));
+    } else {
+      cap(8000);
+    }
     try {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
