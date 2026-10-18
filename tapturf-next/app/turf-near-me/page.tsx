@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronRight, MapPin } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
-import { CITIES, type CityId } from "@/lib/city";
+import { labelFor, type CityId } from "@/lib/city";
+import { getLiveCities } from "@/lib/queries/cities";
 import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
 import { slugify } from "@/lib/utils/slugify";
@@ -37,9 +38,11 @@ type CityBlock = {
 
 
 async function load() {
+  // Every live city, biggest first; one block per city with turfs.
+  const cities = await getLiveCities();
   const blocks: CityBlock[] = (
     await Promise.all(
-      CITIES.map(async (c) => {
+      cities.map(async (c) => {
         const turfs = await getAllActiveTurfs(c.id); // already top-rated first
         const byArea = new Map<string, Turf[]>();
         const noArea: Turf[] = [];
@@ -65,10 +68,12 @@ async function load() {
           icon: sp.icon,
           count: turfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
         })).filter((s) => s.count > 0);
-        return { id: c.id, label: c.label, turfs, areas, more, sports };
+        return { id: c.id, label: labelFor(c.id), turfs, areas, more, sports };
       }),
     )
-  ).filter((b) => b.turfs.length > 0);
+  )
+    .filter((b) => b.turfs.length > 0)
+    .sort((a, b) => b.turfs.length - a.turfs.length);
 
   const all = blocks.flatMap((b) => b.turfs);
   const football = sportBySlug("football");
@@ -83,13 +88,17 @@ async function load() {
   };
 }
 
-function cityLine(labels: string[]) {
-  return labels.length <= 1 ? labels[0] ?? "" : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+/** Five biggest cities by name, the rest counted: "Hyderabad, Bangalore, Mumbai, Pune, Delhi and 49 more cities". */
+function cityLine(blocks: { label: string }[]) {
+  const named = blocks.slice(0, 5).map((b) => b.label);
+  const rest = blocks.length - named.length;
+  if (rest > 0) return `${named.join(", ")} and ${rest} more cities`;
+  return named.length <= 1 ? named[0] ?? "" : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
 }
 
 export async function generateMetadata(): Promise<Metadata> {
   const { total, blocks } = await load();
-  const cities = cityLine(blocks.map((b) => b.label));
+  const cities = cityLine(blocks);
   const description = `Find a turf near you in ${cities}. ${total} football and box cricket turfs sorted by distance, with photos, ratings and timings. Call or WhatsApp to book, no booking fee.`;
   return {
     // Keyword first; absolute so the layout template doesn't add a second brand.
@@ -119,7 +128,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function TurfNearMePage() {
   const { blocks, total, floodlit, areaCount, footballCount, boxCricketCount } = await load();
-  const cities = cityLine(blocks.map((b) => b.label));
+  const cities = cityLine(blocks);
   const topAreas = blocks
     .flatMap((b) => b.areas.slice(0, 2).map((a) => `${a.area} (${b.label})`))
     .slice(0, 6);
@@ -132,9 +141,9 @@ export default async function TurfNearMePage() {
     },
     {
       q: "How many turfs are there near me?",
-      a: `TapTurf lists ${blocks.map((b) => `${b.turfs.length} turfs in ${b.label}`).join(", ")}${
-        topAreas.length ? `. Areas with the most turfs include ${topAreas.join(", ")}.` : "."
-      }`,
+      a: `TapTurf lists ${blocks.slice(0, 8).map((b) => `${b.turfs.length} turfs in ${b.label}`).join(", ")}${
+        blocks.length > 8 ? ` and turfs in ${blocks.length - 8} more cities` : ""
+      }${topAreas.length ? `. Areas with the most turfs include ${topAreas.join(", ")}.` : "."}`,
     },
     {
       q: "Can I play football and box cricket at a turf near me?",
@@ -224,7 +233,7 @@ export default async function TurfNearMePage() {
           </p>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <NearMeFinder total={total} />
+          <NearMeFinder total={total} cities={blocks.map((b) => ({ id: b.id, label: b.label }))} />
         </div>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-12 md:pb-16 text-center">
           <ul className="mt-8 flex flex-wrap justify-center gap-2 text-[13px] text-primary-600">
@@ -239,7 +248,7 @@ export default async function TurfNearMePage() {
       </section>
 
       {/* Jump to a city */}
-      <nav aria-label="Cities" className="max-w-7xl mx-auto px-4 sm:px-6 -mt-2 mb-4">
+      <nav id="cities" aria-label="Cities" className="max-w-7xl mx-auto px-4 sm:px-6 -mt-2 mb-4 scroll-mt-20">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide justify-start sm:justify-center">
           {blocks.map((b) => (
             <a

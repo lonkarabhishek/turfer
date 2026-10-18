@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Loader2, LocateFixed, Navigation, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { getUserLocation } from "@/lib/utils/location";
-import { CITIES, CITY_LIST_AND, guessCityFromAddress, isCity, labelFor } from "@/lib/city";
+import { guessCityFromAddress, isCity, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
 type NearTurf = Turf & { distanceKm: number };
@@ -14,6 +14,8 @@ type State = "idle" | "locating" | "loading" | "done" | "denied" | "error";
 
 /** Nearest turf further than this means we don't cover the visitor's area yet. */
 const FAR_KM = 60;
+/** City chips shown when location is off; the page's own city nav has the rest. */
+const CHIP_LIMIT = 12;
 
 /**
  * "Use my location" for /turf-near-me. Asks for location only on tap
@@ -21,7 +23,14 @@ const FAR_KM = 60;
  * nearest turfs with distances. The server-rendered lists below stay
  * the crawlable part of the page; this is the interactive layer.
  */
-export function NearMeFinder({ total }: { total: number }) {
+export function NearMeFinder({
+  total,
+  cities,
+}: {
+  total: number;
+  /** Cities with a section on the page, biggest first. */
+  cities: { id: string; label: string }[];
+}) {
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<Result | null>(null);
 
@@ -87,7 +96,7 @@ export function NearMeFinder({ total }: { total: number }) {
           </p>
           {(state === "denied" || state === "error") && (
             <div className="flex flex-wrap justify-center gap-2 mt-1">
-              {CITIES.map((c) => (
+              {cities.slice(0, CHIP_LIMIT).map((c) => (
                 <a
                   key={c.id}
                   href={`#${c.id}`}
@@ -96,6 +105,14 @@ export function NearMeFinder({ total }: { total: number }) {
                   {c.label}
                 </a>
               ))}
+              {cities.length > CHIP_LIMIT && (
+                <a
+                  href="#cities"
+                  className="h-9 px-4 inline-flex items-center rounded-full ring-1 ring-primary-200 hover:bg-primary-50 text-[14px] font-medium text-primary-700"
+                >
+                  {cities.length - CHIP_LIMIT} more cities
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -131,7 +148,7 @@ export function NearMeFinder({ total }: { total: number }) {
               </h2>
               {far && (
                 <p className="text-[15px] text-primary-500 mt-1">
-                  We list turfs in {CITY_LIST_AND}. Here are the closest ones.
+                  We list turfs in {cities.length} cities across India. Here are the closest ones.
                 </p>
               )}
             </div>
