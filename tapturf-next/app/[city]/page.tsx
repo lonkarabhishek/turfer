@@ -8,6 +8,8 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
 import { forCard } from "@/lib/utils/cardTurf";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
+import { MakeMyCity } from "@/components/city/MakeMyCity";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
@@ -110,6 +112,8 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      {/* The chat answers for this city while the visitor is on its page. */}
+      <AskPageContext city={cityId} />
 
       {/* Hero */}
       <section
@@ -124,6 +128,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             Turfs in<br />
             <span className="text-accent-500">{label}.</span>
           </h1>
+          <div className="mt-4">
+            <MakeMyCity city={cityId} label={label} />
+          </div>
           <p className="mt-4 max-w-xl text-base text-primary-500">
             Every cricket, football, box-cricket and multi-sport turf in {label}.
             Compare, contact, and book without a booking fee.
@@ -182,12 +189,14 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Popular in {label}
               </h2>
             </div>
-            <Link
-              href="/turfs"
-              className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
-            >
-              All {turfs.length} <ArrowUpRight className="w-4 h-4" />
-            </Link>
+            {turfs.length > 6 && (
+              <Link
+                href="#all-turfs"
+                className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
+              >
+                All {turfs.length} <ArrowUpRight className="w-4 h-4" />
+              </Link>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
             {featured.map((turf, i) => (
@@ -199,7 +208,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
 
       {/* Full crawlable list (visible) */}
       {turfs.length > 6 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-14">
+        <section id="all-turfs" className="max-w-7xl mx-auto px-4 sm:px-6 mt-14" style={{ scrollMarginTop: "4.5rem" }}>
           <h2 className="font-display text-2xl text-primary-800 tracking-tight mb-4">
             All {turfs.length} turfs in {label}
           </h2>

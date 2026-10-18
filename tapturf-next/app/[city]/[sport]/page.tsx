@@ -8,6 +8,8 @@ import { getCitiesForSport, isLiveCity, pickOtherCities } from "@/lib/queries/ci
 import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
+import { MakeMyCity } from "@/components/city/MakeMyCity";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -142,6 +144,8 @@ export default async function CitySportPage({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {/* The chat answers for this city while the visitor is on its page. */}
+      <AskPageContext city={cityId} />
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-primary-400 mb-8 overflow-x-auto scrollbar-hide">
@@ -169,6 +173,11 @@ export default async function CitySportPage({
             </p>
           </div>
         </div>
+        {isCity(cityId) && (
+          <div className="mt-4">
+            <MakeMyCity city={cityId} label={cityLabel} />
+          </div>
+        )}
         <p className="text-[16px] text-primary-600 mt-4 max-w-2xl leading-relaxed">
           {s.blurb} Every {lower} {venueWord(s, 1)} in {cityLabel} we know of, ranked by Google rating
           (places with at least 15 reviews first). Call or WhatsApp to book, no booking fee.

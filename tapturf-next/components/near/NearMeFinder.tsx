@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, LocateFixed, Navigation, X } from "lucide-react";
+import { Check, Loader2, LocateFixed, MapPin, Navigation, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { getUserLocation } from "@/lib/utils/location";
-import { guessCityFromAddress, isCity, labelFor } from "@/lib/city";
+import { guessCityFromAddress, isCity, labelFor, nearestCity as cityNear, readCityChoice, setCityPref } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 
 type NearTurf = Turf & { distanceKm: number };
@@ -33,11 +33,26 @@ export function NearMeFinder({
 }) {
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<Result | null>(null);
+  // A GPS fix is the best city signal there is: save it when the visitor
+  // has not chosen a city themselves, otherwise only offer it.
+  const [gpsCity, setGpsCity] = useState<{ id: string; saved: boolean } | null>(null);
 
   const find = useCallback(async () => {
     setState("locating");
     try {
       const me = await getUserLocation();
+      const c = cityNear(me.lat, me.lng);
+      if (c) {
+        const cur = readCityChoice();
+        const already = cur?.kind === "city" && cur.city === c;
+        const explicit = cur?.kind === "all" || (cur?.kind === "city" && cur.src === "pick");
+        if (already) setGpsCity(null);
+        else if (explicit) setGpsCity({ id: c, saved: false });
+        else {
+          setCityPref(c, { source: "near_me" });
+          setGpsCity({ id: c, saved: true });
+        }
+      }
       setState("loading");
       const res = await fetch(`/api/turfs/near?lat=${me.lat.toFixed(4)}&lng=${me.lng.toFixed(4)}&limit=12`);
       if (!res.ok) throw new Error(String(res.status));
@@ -163,6 +178,28 @@ export function NearMeFinder({
               <X className="w-3.5 h-3.5" /> Clear
             </button>
           </div>
+          {gpsCity && (
+            <div className="mb-6 flex flex-wrap items-center gap-3" aria-live="polite">
+              {gpsCity.saved ? (
+                <p className="inline-flex items-center gap-2 text-[14px] font-semibold text-accent-700">
+                  <Check className="w-4 h-4" />
+                  Saved. {labelFor(gpsCity.id)} is now your city.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCityPref(gpsCity.id, { source: "near_me" });
+                    setGpsCity({ id: gpsCity.id, saved: true });
+                  }}
+                  className="h-11 px-4 inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white text-[14px] font-semibold text-primary-900 press-tight focus-neon hover:border-primary-900"
+                >
+                  <MapPin className="w-4 h-4 text-accent-600" />
+                  Make {labelFor(gpsCity.id)} my city
+                </button>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
             {result.turfs.map((t, i) => (
               <TurfCard key={t.id} turf={t} distanceKm={t.distanceKm} priority={i < 2} />
