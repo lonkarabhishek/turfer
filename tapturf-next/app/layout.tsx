@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
-import { AwardsBanner } from "@/components/layout/AwardsBanner";
 import { Footer } from "@/components/layout/Footer";
 import { AskProvider } from "@/components/ask/AskProvider";
 import { AskLauncher } from "@/components/ask/AskLauncher";
@@ -12,6 +11,9 @@ import { AuthWrapper } from "@/components/auth/AuthWrapper";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWALifecycle } from "@/components/pwa/PWALifecycle";
 import { RouteProgress } from "@/components/nav/RouteProgress";
+import { CityPrePaint } from "@/components/city/CityPrePaint";
+import { CitySync } from "@/components/city/CitySync";
+import { CityPickerSheet } from "@/components/city/CityPickerSheet";
 import "./globals.css";
 
 const inter = Inter({
@@ -72,8 +74,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: CityPrePaint sets data-city-* on <html>
+    // before React hydrates.
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* First: mirrors the tt_city cookie onto <html> before any paint. */}
+        <CityPrePaint />
         {/* Turf cover images are served from Google Drive → googleusercontent
             after a redirect. Warming the DNS + TLS handshake to both hosts
             trims a few hundred ms off the LCP image on cold visits. */}
@@ -88,8 +94,8 @@ export default function RootLayout({
         <RouteProgress />
         <AuthWrapper>
           <AskProvider>
+            <CitySync />
             <Header />
-            <AwardsBanner />
             {/* pb accounts for MobileNav (h-14 = 56px) + iOS home indicator */}
             <AppMain>{children}</AppMain>
             <div className="hidden md:block">
@@ -97,6 +103,7 @@ export default function RootLayout({
             </div>
             <AskLauncher />
             <AskPanel />
+            <CityPickerSheet />
           </AskProvider>
         </AuthWrapper>
       </body>

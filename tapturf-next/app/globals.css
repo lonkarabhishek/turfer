@@ -470,3 +470,21 @@ p, li { letter-spacing: 0; }
 @media (prefers-reduced-motion: reduce) {
   .coin { transition: none !important; }
 }
+
+/* ── City personalisation ─────────────────────────────────────
+   <html data-city-state data-city data-city-src> is set before the first
+   paint by lib/cityPrePaint.ts, so these rules decide the city line, the
+   first-visit ask and "Make this my city" without a hydration swap. */
+.city-ask { display: none; }
+html[data-city-state="unknown"] .city-ask:not([hidden]) { display: block; }
+.city-ask-spacer { display: none; }
+html[data-city-state="unknown"] .city-ask-spacer { display: block; height: 16rem; }
+@media (min-width: 768px) { html[data-city-state="unknown"] .city-ask-spacer { display: none; } }
+.city-geo { display: none; }
+html[data-city-src="geo"] .city-geo { display: inline; }
+.city-line-back { display: none; }
+html[data-city-state="city"] .city-line-pick { display: none; }
+html[data-city-state="city"] .city-line-back { display: inline; }
+.mine-yes { display: none; }
+html[data-city-pending] main { opacity: .55; transition: opacity .2s; }
+@media (prefers-reduced-motion: reduce) { html[data-city-pending] main { transition: none; } }

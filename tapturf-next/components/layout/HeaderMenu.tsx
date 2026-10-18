@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed } from "lucide-react";
-import { CityPicker } from "@/components/city/CityPicker";
+import { CityMenuRow } from "@/components/city/CityMenuRow";
 
 const LINKS = [
   { href: "/turfs", label: "All turfs", icon: MapPin },
@@ -67,8 +67,8 @@ export function HeaderMenu() {
             </div>
 
             <div className="px-3 pb-3 overflow-y-auto">
-              {/* City, with "Use my location" inside the picker sheet. */}
-              <CityPicker variant="row" />
+              {/* City: "Change" closes the menu and opens the city picker. */}
+              <CityMenuRow onChange={() => setOpen(false)} />
 
               <div className="h-px bg-primary-200 mx-2 my-2" />
               <nav aria-label="Main">
