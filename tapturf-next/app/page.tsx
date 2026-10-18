@@ -34,20 +34,30 @@ export async function generateMetadata(): Promise<Metadata> {
   const rounded = Math.floor(d.total / 5) * 5;
   const where = whereLine(labels, d.cityCount);
   const countLine = rounded >= 50 ? `${rounded.toLocaleString("en-IN")}+ grounds with photos, ratings and prices. ` : "";
+
+  // Title under 60 characters, description about 150: Google shows the
+  // whole of both, including the no-fee line that sets TapTurf apart.
+  const titleWhere = d.cityCount > 0 ? `${d.cityCount} Indian Cities` : "India";
+  const more = d.cityCount - top3.length;
+  const descWhere = top3.length ? `in ${top3.join(", ")}${more > 0 ? ` and ${more} more cities` : ""}` : "across India";
+  const description =
+    rounded >= 50
+      ? `${rounded.toLocaleString("en-IN")}+ football, box cricket and sports turfs ${descWhere}. Photos, ratings and prices. No booking fee.`
+      : `Football, box cricket and sports turfs ${descWhere}. Photos, ratings and prices. Call or WhatsApp the turf, no booking fee.`;
   const titleCities = top3.length ? `${top3.join(", ")} & more` : "India";
 
   return {
     // absolute so layout's template doesn't add another "| TapTurf":
     // the wordmark is already the first word.
-    title: { absolute: `TapTurf: Football & Box Cricket Turfs in ${titleCities}` },
-    description: `Find football, box cricket and sports turfs across ${where}. ${countLine}Call or WhatsApp the turf to book. No booking fee.`,
+    title: { absolute: `TapTurf: Football & Box Cricket Turfs in ${titleWhere}` },
+    description,
     keywords: `football turf, football turf near me, box cricket, box cricket near me, turf near me, ${top5
       .map((l) => `turf ${l.toLowerCase()}`)
       .join(", ")}, tapturf`,
     openGraph: {
       images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title: `TapTurf: Sports Turfs in ${titleCities}`,
-      description: `${countLine}Find a turf, call or WhatsApp to book, join an open game.`.trim(),
+      description: `${countLine}Find a turf across ${where}, call or WhatsApp to book, join an open game.`.trim(),
       url: "https://www.tapturf.in",
       siteName: "TapTurf",
       locale: "en_IN",
@@ -77,6 +87,7 @@ export default async function HomePage() {
       email: CONTACT_EMAIL,
       logo: "https://www.tapturf.in/icon-512.png",
     },
+    // /turfs seeds its search box from ?q=, so this action is real.
     potentialAction: {
       "@type": "SearchAction",
       target: "https://www.tapturf.in/turfs?q={search_term_string}",
@@ -92,15 +103,19 @@ export default async function HomePage() {
       <HomeShell hero={d.hero} />
 
       {/* Top-rated photo tiles for the visitor's city (server renders the
-          biggest city) and every city with its top turf links for crawlers. */}
+          biggest city), then every city with its top turf links for crawlers. */}
       {d.strips.length > 0 && (
-        <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6 md:mt-10">
           <TopTurfsByCity strips={d.strips} featuredId={d.strips[0].id} spotlights={d.spotlights} />
+        </div>
+      )}
+      {d.cityRows.length > 0 && (
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 mt-12">
           <EveryCityList cities={d.cityRows} cityCount={d.cityCount} />
         </section>
       )}
 
-      <OpenGames games={d.games} total={d.openGamesTotal} />
+      <OpenGames games={d.games} gamesByCity={d.gamesByCity} total={d.openGamesTotal} totalByCity={d.openGamesByCity} />
 
       {d.sports.length > 0 && <SportGrid sports={d.sports} byCity={d.sportsByCity} />}
 
