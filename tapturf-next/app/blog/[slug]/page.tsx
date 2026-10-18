@@ -102,6 +102,7 @@ export default async function BlogPostPage({
       name: "TapTurf",
       url: "https://www.tapturf.in",
       email: CONTACT_EMAIL,
+      areaServed: { "@type": "Country", name: "India" },
       logo: {
         "@type": "ImageObject",
         url: "https://www.tapturf.in/icon-512.png",

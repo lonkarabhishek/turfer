@@ -1,7 +1,7 @@
 # TapTurf - Next.js App
 
 ## What is this?
-TapTurf (tapturf.in) is a turf booking + sports games platform for Nashik, India. This is the Next.js 16 App Router migration of the original Vite React SPA at `../src/`.
+TapTurf (tapturf.in) is a turf directory + sports games platform for 54 cities across India (started in Nashik; biggest markets Hyderabad, Bangalore, Mumbai, Pune, Delhi). Copy and lists order cities by size; `lib/city.ts` CITIES is biggest-first and `lib/queries/cities.ts` has the live list. This is the Next.js 16 App Router migration of the original Vite React SPA at `../src/`.
 
 ## Tech Stack
 - **Framework**: Next.js 16 App Router with Turbopack

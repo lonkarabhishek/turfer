@@ -33,7 +33,7 @@ export function ToolPage({ tool, intro, children, explainer, faq }: { tool: Tool
       operatingSystem: "Any",
       isAccessibleForFree: true,
       offers: { "@type": "Offer", price: "0", priceCurrency: "INR" },
-      publisher: { "@type": "Organization", name: "TapTurf", url: "https://www.tapturf.in" },
+      publisher: { "@type": "Organization", name: "TapTurf", url: "https://www.tapturf.in", areaServed: { "@type": "Country", name: "India" } },
     },
     // FAQ schema mirrors the visible questions below, nothing hidden.
     faq.length

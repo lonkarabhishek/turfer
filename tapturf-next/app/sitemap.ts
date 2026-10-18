@@ -57,7 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 0.9,
     },
-    // City landing pages, one per entry in lib/city.ts. Key for local SEO.
+    // City landing pages, one per live city (biggest first). Key for local SEO.
     ...liveCities.map((c) => ({
       url: `${BASE}/${c.id}`,
       lastModified: new Date(),
