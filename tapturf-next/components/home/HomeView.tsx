@@ -1,4 +1,5 @@
 import { getHomeData } from "@/lib/home/data";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 import { scopeHome } from "@/lib/home/select";
 import { homeJsonLd } from "@/lib/seo/pageMetadata";
 import { cityLineFor } from "@/lib/cityLine";
@@ -36,6 +37,8 @@ export async function HomeView({ requested, ask = false }: { requested: string |
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd(d)) }} />
       <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
+      {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
+      <AskPageContext city={s.scope.kind === "city" ? s.scope.id : null} />
 
       {/* Visitors: the hero. Signed in: LoggedInHome. Everything below is shared. */}
       <HomeShell hero={s.hero} scope={s.scope} line={line} />

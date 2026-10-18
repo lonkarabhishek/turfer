@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { getLiveCities } from "@/lib/queries/cities";
@@ -34,6 +35,8 @@ export async function TurfsView({ requested, ask = false }: { requested: string 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
       <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
+      {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
+      <AskPageContext city={scope.kind === "city" ? scope.id : null} />
       <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">Find your turf</h1>
       <CityLine {...cityLineFor(scope, "#turfs-by-city", "/turfs")} />
       {ask && (

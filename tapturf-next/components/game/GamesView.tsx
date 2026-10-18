@@ -1,4 +1,5 @@
 import { getOpenGamesCached } from "@/lib/queries/games.server";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 import { getLiveCities } from "@/lib/queries/cities";
 import { guessCityFromAddress, isKnownCity, resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
@@ -37,6 +38,8 @@ export async function GamesView({ requested, ask = false }: { requested: string 
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(gamesJsonLd(games)) }} />
       <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
+      {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
+      <AskPageContext city={scope.kind === "city" ? scope.id : null} />
       <GamesListingClient
         initialGames={mine}
         otherGames={others}

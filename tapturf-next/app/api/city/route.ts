@@ -20,9 +20,16 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
+/**
+ * Only same-site paths: a leading "/", no "//" or "/\\" (protocol-relative),
+ * and no backslash or control character anywhere, since browsers strip
+ * tabs and newlines from a Location ("/\t/evil.com" would become
+ * "//evil.com").
+ */
 function safeNext(next: string | null): string {
   if (!next || next.length > 200) return "/";
-  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
+  if (!next.startsWith("/") || next.startsWith("//")) return "/";
+  if (/[\\\u0000-\u001f\u007f]/.test(next)) return "/";
   return next;
 }
 

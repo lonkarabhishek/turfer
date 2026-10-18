@@ -32,7 +32,7 @@ export function TopTurfsByCity({
   const shownCount = tiles.length;
   const title = city ? (curated ? `Top-rated in ${city.label}` : `Turfs in ${city.label}`) : "Top-rated across India";
   const subtitle = !city
-    ? `Each with ${MIN_REVIEWS_FOR_TOP_RATED} or more reviews where we have them, two per city at most.`
+    ? "Best rated in each city, two per city."
     : curated
       ? `Each with ${MIN_REVIEWS_FOR_TOP_RATED} or more reviews, best rated first.`
       : n > shownCount
