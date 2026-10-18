@@ -5,7 +5,7 @@ import { getLiveCities } from "@/lib/queries/cities";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { loadOpenGames } from "@/lib/ai/games";
 import { sortGamesByDateTime } from "@/lib/utils/game";
-import { CITIES, cityInfo, guessCityFromAddress } from "@/lib/city";
+import { CITIES, cityInfo, guessCityFromAddress, isCity } from "@/lib/city";
 import { SPORT_PAGES, sportPageForLabel, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { hasEnoughReviews } from "@/lib/utils/ranking";
@@ -20,6 +20,10 @@ import { formatTime12, plural } from "./format";
 
 export const HOME_REVALIDATE = 600;
 export { plural, formatTime12 };
+
+/** Cities ranked above this ship six photo tiles; the rest ship three. */
+const FULL_STRIP_CITIES = 12;
+const GAMES_PER_CITY = 3;
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -51,7 +55,9 @@ function toTile(t: Turf): HomeTile {
     reviews: t.total_reviews,
     photo,
     sport: sp?.name ?? t.sports[0] ?? null,
-    price: price.kind === "real" || price.kind === "reported" ? price.label : null,
+    // Reported prices (from review mentions) carry a "(reported)" suffix
+    // that a 236px tile would truncate away, so only listed rates show.
+    price: price.kind === "real" ? price.label : null,
   };
 }
 
@@ -103,16 +109,21 @@ async function buildHomeData(): Promise<HomeData> {
 
   // One pass: group by city. Rows come back in compareTopRated order,
   // so every per-city list is already ranked.
+  // Only slug-shaped ids: a stray capitalised or spaced turfs.city value
+  // must never become a /{city} link that 404s.
   const byCity = new Map<string, Turf[]>();
   for (const t of turfs) {
     const id = t.city ?? guessCityFromAddress(t.address);
-    if (!id) continue;
+    if (!id || !isCity(id)) continue;
     const list = byCity.get(id);
     if (list) list.push(t);
     else byCity.set(id, [t]);
   }
 
-  const ids = new Set<string>([...byCity.keys(), ...live.map((c) => c.id)]);
+  // When the live city view answered, only its cities get a link, so
+  // every /{city} on the home is a page that exists.
+  const liveIds = new Set(live.map((c) => c.id));
+  const ids = new Set<string>(liveIds.size > 0 ? [...byCity.keys()].filter((id) => liveIds.has(id)) : byCity.keys());
   const cities = [...ids]
     .map((id) => ({ id, label: cityInfo(id).label, list: byCity.get(id) ?? [] }))
     .filter((c) => c.list.length > 0)
@@ -123,34 +134,47 @@ async function buildHomeData(): Promise<HomeData> {
   const cityRows: HomeCityRow[] = [];
   const sportsByCity: Record<string, Record<string, number>> = {};
 
-  for (const c of cities) {
+  cities.forEach((c, rank) => {
     const { id, label, list } = c;
     const n = list.length;
     const perSport: Record<string, number> = {};
     let sportsHere = 0;
+    let football = 0;
+    let boxCricket = 0;
     for (const sp of SPORT_PAGES) {
       const count = list.filter((t) => turfPlaysSport(t.sports, sp)).length;
       if (count > 0) sportsHere++;
+      if (sp.slug === "football") football = count;
+      if (sp.slug === "box-cricket") boxCricket = count;
       if (count >= MIN_TURFS_TO_INDEX) perSport[sp.slug] = count;
     }
     if (Object.keys(perSport).length) sportsByCity[id] = perSport;
 
-    heroCities[id] = { label, n, sports: sportsHere, area: modeOf(list.map((t) => areaFor(t))) };
+    heroCities[id] = {
+      label,
+      n,
+      sports: sportsHere,
+      area: modeOf(list.map((t) => areaFor(t))),
+      core: football > 0 && boxCricket > 0,
+    };
 
     const qualified = list.filter(hasEnoughReviews);
     const curated = qualified.length >= 3;
     const pool = curated ? qualified : list;
     const trendingId = picks[id]?.turfId;
+    // Every strip is serialised into the client payload, so only the
+    // biggest cities ship six tiles; smaller or lower-ranked ones ship three.
+    const tileCount = rank < FULL_STRIP_CITIES && n >= 20 ? 6 : 3;
     strips.push({
       id,
       label,
       n,
       curated,
-      tiles: pool.filter((t) => t.id !== trendingId).slice(0, n >= 20 ? 6 : 3).map(toTile),
+      tiles: pool.filter((t) => t.id !== trendingId).slice(0, tileCount).map(toTile),
     });
 
     cityRows.push({ id, label, n, top: list.slice(0, 3).map((t) => ({ id: t.id, name: t.name })) });
-  }
+  });
 
   const sports = SPORT_PAGES.map((sp) => ({
     slug: sp.slug,
@@ -168,7 +192,18 @@ async function buildHomeData(): Promise<HomeData> {
     topCities: cities.slice(0, 8).map((c) => ({ id: c.id, label: c.label, n: c.list.length })),
   };
 
-  const sortedGames = sortGamesByDateTime(games);
+  // Games shaped per city on the server: the client only picks a key,
+  // so a city's count and empty state come from all of its games, not
+  // from whichever happen to be soonest nationally.
+  const sortedGames = sortGamesByDateTime(games).map(toHomeGame);
+  const gamesByCity: Record<string, HomeGame[]> = {};
+  const openGamesByCity: Record<string, number> = {};
+  for (const g of sortedGames) {
+    if (!g.city) continue;
+    openGamesByCity[g.city] = (openGamesByCity[g.city] ?? 0) + 1;
+    const list = (gamesByCity[g.city] ??= []);
+    if (list.length < GAMES_PER_CITY) list.push(g);
+  }
 
   const posts: HomePost[] = getSortedPosts()
     .slice(0, 3)
@@ -193,13 +228,15 @@ async function buildHomeData(): Promise<HomeData> {
     sports,
     sportsByCity,
     spotlights: toSpotlights(picks, turfs),
-    games: sortedGames.slice(0, 12).map(toHomeGame),
+    games: sortedGames.slice(0, GAMES_PER_CITY),
+    gamesByCity,
     openGamesTotal: sortedGames.length,
+    openGamesByCity,
     posts,
   };
 }
 
-const cached = unstable_cache(buildHomeData, ["home-data-v1"], { revalidate: HOME_REVALIDATE });
+const cached = unstable_cache(buildHomeData, ["home-data-v2"], { revalidate: HOME_REVALIDATE });
 
 /**
  * Everything the home page shows, shaped once. generateMetadata and the

@@ -17,7 +17,7 @@ export type HomeTile = {
   photo: string | null;
   /** First sport label that has a page, else sports[0]. */
   sport: string | null;
-  /** summarisePrice label, only when the price is real or reported. */
+  /** summarisePrice label, only when the price is a listed (real) rate. */
   price: string | null;
 };
 
@@ -63,7 +63,14 @@ export type HomePost = {
   hero: { url: string; alt: string } | null;
 };
 
-export type HeroCity = { label: string; n: number; sports: number; area: string | null };
+export type HeroCity = {
+  label: string;
+  n: number;
+  sports: number;
+  area: string | null;
+  /** True when the city has both football and box cricket turfs. */
+  core: boolean;
+};
 
 export type HomeHeroProps = {
   total: number;
@@ -87,7 +94,12 @@ export type HomeData = {
   /** sportsByCity[cityId][slug], present only when the count is indexable. */
   sportsByCity: Record<string, Record<string, number>>;
   spotlights: SpotlightTurf[];
+  /** The three soonest open games anywhere, for the all-cities view. */
   games: HomeGame[];
+  /** The three soonest open games per city, keyed by city slug. */
+  gamesByCity: Record<string, HomeGame[]>;
   openGamesTotal: number;
+  /** True per-city totals, so counts and empty states never undercount. */
+  openGamesByCity: Record<string, number>;
   posts: HomePost[];
 };
