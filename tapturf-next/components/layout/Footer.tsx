@@ -1,24 +1,42 @@
 import Link from "next/link";
-import { CITIES, CITY_LIST_AND } from "@/lib/city";
+import { getLiveCities, HOME_CITIES } from "@/lib/queries/cities";
 import { SPORT_PAGES } from "@/lib/sports";
 import { CONTACT_EMAIL, CONTACT_MAILTO, WHATSAPP_URL } from "@/lib/contact";
 
-export function Footer() {
+/** City links on every desktop page: the twelve biggest live cities. */
+const LINKED_CITIES = 12;
+
+/**
+ * Server component (rendered inside the client providers, which is
+ * allowed). Reads the live city list, cached for an hour, so the city
+ * count and the biggest-first order stay honest without a code change.
+ */
+export async function Footer() {
+  const cities = await getLiveCities();
+  // Biggest cities first, plus the home cities (where TapTurf started
+  // and launched next) when they fall outside the cut, so no city page
+  // that had a sitewide link loses it.
+  const top = cities.slice(0, LINKED_CITIES);
+  const linked = [...top, ...cities.filter((c) => HOME_CITIES.includes(c.id) && !top.includes(c))];
+
   return (
     <footer className="bg-primary-600 border-t border-primary-700 mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <h3 className="font-bold text-2xl text-white tracking-tight font-serif">
               Tap<span className="text-accent-400">Turf</span>
             </h3>
             <p className="mt-3 text-sm text-primary-200 leading-relaxed">
-              Find, compare and book sports turfs across {CITY_LIST_AND}.
+              Find, compare and book sports turfs in {cities.length} cities across India.
             </p>
             <div className="mt-4 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />
-              <span className="text-xs text-primary-300">{CITIES.map((c) => c.label).join(" · ")}</span>
+              <span className="text-xs text-primary-300">
+                {top.map((c) => c.label).join(" · ")}
+                {cities.length > top.length ? ` · ${cities.length - top.length} more` : ""}
+              </span>
             </div>
           </div>
 
@@ -72,7 +90,16 @@ export function Footer() {
                   Free Cricket Tools
                 </Link>
               </li>
-              {CITIES.slice(0, 8).map((c) => (
+            </ul>
+          </div>
+
+          {/* Cities */}
+          <div>
+            <h4 className="font-semibold text-sm text-accent-400 mb-4">
+              Cities
+            </h4>
+            <ul className="space-y-2.5 text-sm text-primary-200">
+              {linked.map((c) => (
                 <li key={c.id}>
                   <Link href={`/${c.id}`} className="hover:text-white transition-colors">
                     Turfs in {c.label}
