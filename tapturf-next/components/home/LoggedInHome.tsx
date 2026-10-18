@@ -14,7 +14,10 @@ import {
   getUserJoinedGames,
   getMyRequests,
 } from "@/lib/queries/games";
-import { getCityPref, labelFor, isCity, type CityId, guessCityFromAddress } from "@/lib/city";
+import { guessCityFromAddress } from "@/lib/city";
+import type { CityLineProps } from "@/lib/cityLine";
+import type { HomeScope } from "@/lib/home/select";
+import { CityLine } from "@/components/city/CityLine";
 import {
   filterNonExpiredGames,
   sortGamesByDateTime,
@@ -30,26 +33,17 @@ import type { Game, GameRequest } from "@/types/game";
  * here. For a brand-new user with no history, shows a warm
  * "Start exploring" empty state instead of a wall of zeros.
  */
-export function LoggedInHome() {
+export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLineProps }) {
   const { user, logout } = useAuth();
+  // The city this page was rendered for (server props): no pref listener,
+  // a city change re-renders the page with new props.
+  const city = scope.kind === "city" ? { id: scope.id, label: scope.label } : null;
+  const scopeId = city?.id ?? null;
   const [stats, setStats] = useState<UserStats | null>(null);
   const [upcoming, setUpcoming] = useState<Game[]>([]);
   const [tonight, setTonight] = useState<Game[]>([]);
   const [requests, setRequests] = useState<GameRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [city, setCity] = useState<CityId | null>(null);
-
-  // Follow the user's city preference; refetch when it changes.
-  useEffect(() => {
-    setCity(getCityPref());
-    const onChange = () => setCity(getCityPref());
-    window.addEventListener("tapturf:city-changed", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("tapturf:city-changed", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -78,9 +72,9 @@ export function LoggedInHome() {
       // City filter — falls back to guessing from turf.address for
       // games whose turf hasn't been backfilled yet.
       const inCity = (g: Game) => {
-        if (!city) return true;
+        if (!scopeId) return true;
         const c = (g.turfs as { city?: string } | undefined)?.city ?? guessCityFromAddress(g.turfs?.address);
-        return c === city;
+        return c === scopeId;
       };
       const notMine = active.filter((g) => !seen.has(g.id) && inCity(g)).slice(0, 3);
 
@@ -93,7 +87,7 @@ export function LoggedInHome() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [user?.id, city]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, scopeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) return null;
 
@@ -120,12 +114,15 @@ export function LoggedInHome() {
         {/* ─── Greeting ─────────────────────────────────────── */}
         <header className="mb-6">
           <p className="text-[11px] font-mono text-accent-600 mb-1.5">
-            {dayLabel} · {dateLabel}{city ? ` · ${labelFor(city)}` : ""}
+            {dayLabel} · {dateLabel}{city ? ` · ${city.label}` : ""}
           </p>
           <h1 className="font-display text-4xl sm:text-6xl text-primary-800 leading-[0.9] tracking-tight">
             Hey<br className="sm:hidden" />
             <span className="text-accent-500"> {firstName}.</span>
           </h1>
+          <div className="mt-2">
+            <CityLine {...line} />
+          </div>
         </header>
 
         {/* ─── Loading skeleton ─────────────────────────────── */}
@@ -194,7 +191,7 @@ export function LoggedInHome() {
             )}
 
             {/* ─── Discover: games happening tonight ───────── */}
-            <Section title="Happening near you" caption={tonight.length > 0 ? "Join in one tap" : ""} icon={<Compass className="w-4 h-4" />}>
+            <Section title={city ? `Open games in ${city.label}` : "Open games across India"} caption={tonight.length > 0 ? "Join in one tap" : ""} icon={<Compass className="w-4 h-4" />}>
               {tonight.length === 0 ? (
                 <EmptyLine>
                   Nothing open right now.{" "}
@@ -491,7 +488,7 @@ function QuickAction({ href, icon, label, primary = false }: { href: string; ico
 // Start exploring (new user empty state)
 // ────────────────────────────────────────────────────────────
 
-function StartExploring({ firstName, city }: { firstName: string; city: CityId | null }) {
+function StartExploring({ firstName, city }: { firstName: string; city: { id: string; label: string } | null }) {
   return (
     <>
       <div className="rounded-3xl border border-accent-500/30 bg-accent-50 p-6 sm:p-8 mb-6">
@@ -527,8 +524,8 @@ function StartExploring({ firstName, city }: { firstName: string; city: CityId |
       <Section title="Explore">
         <div className="grid grid-cols-2 gap-3">
           <ExploreCard
-            href="/turfs"
-            label={city ? `All turfs in ${labelFor(city)}` : "All turfs"}
+            href={city ? `/${city.id}` : "/turfs"}
+            label={city ? `All turfs in ${city.label}` : "All turfs"}
             sublabel="Compare & book"
             icon={<Search className="w-5 h-5" />}
           />

@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { ArrowUpRight, MapPin, Navigation } from "lucide-react";
-import { CityPicker } from "@/components/city/CityPicker";
+import { CityLine } from "@/components/city/CityLine";
 import { AskEntry } from "@/components/ask/AskEntry";
 import { plural } from "@/lib/home/format";
-import type { HomeHeroProps } from "@/lib/home/types";
-import { useCityPref } from "./useCityPref";
+import type { CityLineProps } from "@/lib/cityLine";
+import type { HomeScope, ScopedHome } from "@/lib/home/select";
 
 const SEP = " · ";
 
@@ -58,16 +58,15 @@ function HeroTile({
 }
 
 /**
- * Home hero for visitors. Left-aligned, never viewport-filling: where
- * you are, how big TapTurf is, the Ask box and two one-tap routes.
- * Fully pre-rendered with the all-cities strings; the city pref swaps
- * text for text in the hydration commit. No GPS, no fetch here: the
- * shared CityPicker does the silent header-based detect on a first visit.
+ * Home hero for visitors. Left-aligned, never viewport-filling: which
+ * city the page shows (and why), how big TapTurf is, the Ask box and two
+ * one-tap routes. Every string comes from server props for the city the
+ * page was rendered for, so nothing swaps after load.
  */
-export function HomeHero({ total, cityCount, cities, topCities }: HomeHeroProps) {
-  const pref = useCityPref();
-  const city = pref && cities[pref] ? pref : null;
-  const info = city ? cities[city] : null;
+export function HomeHero({ hero, line }: { hero: ScopedHome["hero"]; scope: HomeScope; line: CityLineProps }) {
+  const { total, cityCount, topCities } = hero;
+  const info = hero.city;
+  const city = info?.id ?? null;
 
   // The one bold line that sells scale. It names the two sports people
   // search for whenever the data backs it, and wraps rather than clips.
@@ -92,9 +91,9 @@ export function HomeHero({ total, cityCount, cities, topCities }: HomeHeroProps)
     <section className="relative" style={{ background: "linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 70%)" }}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-4 lg:pt-14 lg:pb-12 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12 lg:items-start">
         <div className="max-w-[640px]">
-          <CityPicker variant="hero" />
+          <CityLine {...line} />
 
-          <h1 className="mt-4 font-display text-[clamp(2.125rem,10.5vw,2.5rem)] md:text-[64px] leading-[1.02] tracking-[-0.03em] text-primary-900">
+          <h1 className="mt-2 font-display text-[clamp(2.125rem,10.5vw,2.5rem)] md:text-[64px] leading-[1.02] tracking-[-0.03em] text-primary-900">
             Find your turf.
             <br />
             <span className="text-accent-500">Go play.</span>
@@ -141,30 +140,52 @@ export function HomeHero({ total, cityCount, cities, topCities }: HomeHeroProps)
           </div>
         </div>
 
-        {topCities.length > 0 && (
+        {info && info.bySport.length > 0 ? (
+          <aside className="hidden lg:block rounded-3xl border border-primary-200 bg-white p-5 shadow-card">
+            <p className="text-[13px] font-semibold text-primary-500">{info.label} by sport</p>
+            <ul className="mt-2 space-y-0.5">
+              {info.bySport.map((sp) => (
+                <li key={sp.slug}>
+                  <span className="relative isolate flex items-center justify-between h-10 px-3 rounded-xl">
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-1 left-0 rounded-lg bg-accent-50 -z-10"
+                      style={{ width: `${Math.round((sp.n / (info.bySport[0]?.n || 1)) * 100)}%` }}
+                    />
+                    <span className="relative text-[15px] font-semibold text-primary-900">{sp.name}</span>
+                    <span className="relative text-[14px] text-primary-500 tabular-nums">{sp.n.toLocaleString("en-IN")}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href={`/${city}`}
+              className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent-600 hover:text-accent-700"
+            >
+              All {plural(info.n, "turf", "turfs")} in {info.label} <ArrowUpRight className="w-4 h-4" />
+            </Link>
+          </aside>
+        ) : topCities.length > 0 ? (
           <aside className="hidden lg:block rounded-3xl border border-primary-200 bg-white p-5 shadow-card">
             <p className="text-[13px] font-semibold text-primary-500">Where the turfs are</p>
             <nav aria-label="Biggest cities" className="mt-2">
               <ul className="space-y-0.5">
-                {topCities.map((c) => {
-                  const active = c.id === city;
-                  return (
-                    <li key={c.id}>
-                      <Link
-                        href={`/${c.id}`}
-                        className={`relative isolate flex items-center justify-between h-10 px-3 rounded-xl hover:bg-primary-50 focus-neon transition-colors ${active ? "ring-1 ring-accent-300" : ""}`}
-                      >
-                        <span
-                          aria-hidden
-                          className="absolute inset-y-1 left-0 rounded-lg bg-accent-50 -z-10"
-                          style={{ width: `${Math.round((c.n / maxN) * 100)}%` }}
-                        />
-                        <span className={`relative text-[15px] font-semibold ${active ? "text-accent-700" : "text-primary-900"}`}>{c.label}</span>
-                        <span className="relative text-[14px] text-primary-500 tabular-nums">{c.n.toLocaleString("en-IN")}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
+                {topCities.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      href={`/${c.id}`}
+                      className="relative isolate flex items-center justify-between h-10 px-3 rounded-xl hover:bg-primary-50 focus-neon transition-colors"
+                    >
+                      <span
+                        aria-hidden
+                        className="absolute inset-y-1 left-0 rounded-lg bg-accent-50 -z-10"
+                        style={{ width: `${Math.round((c.n / maxN) * 100)}%` }}
+                      />
+                      <span className="relative text-[15px] font-semibold text-primary-900">{c.label}</span>
+                      <span className="relative text-[14px] text-primary-500 tabular-nums">{c.n.toLocaleString("en-IN")}</span>
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </nav>
             <Link
@@ -174,7 +195,7 @@ export function HomeHero({ total, cityCount, cities, topCities }: HomeHeroProps)
               All {plural(cityCount, "city", "cities")} <ArrowUpRight className="w-4 h-4" />
             </Link>
           </aside>
-        )}
+        ) : null}
       </div>
     </section>
   );

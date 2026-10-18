@@ -19,6 +19,8 @@ export type HomeTile = {
   sport: string | null;
   /** summarisePrice label, only when the price is a listed (real) rate. */
   price: string | null;
+  /** Set on all-India tiles, so the place line names the city. */
+  cityLabel?: string;
 };
 
 export type HomeStrip = {
@@ -70,6 +72,8 @@ export type HeroCity = {
   area: string | null;
   /** True when the city has both football and box cricket turfs. */
   core: boolean;
+  /** Sports with turfs here, biggest first, at most eight (the desktop aside). */
+  bySport: { slug: string; name: string; n: number }[];
 };
 
 export type HomeHeroProps = {
@@ -89,6 +93,8 @@ export type HomeData = {
   pins: number;
   hero: HomeHeroProps;
   strips: HomeStrip[];
+  /** "Top-rated across India": six tiles, at most two per city. */
+  nationalTiles: HomeTile[];
   cityRows: HomeCityRow[];
   sports: HomeSport[];
   /** sportsByCity[cityId][slug], present only when the count is indexable. */

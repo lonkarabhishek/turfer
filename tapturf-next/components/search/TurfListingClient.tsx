@@ -357,7 +357,7 @@ export function TurfListingClient({
       {/* This week's Most Trending Turf for the city in view. Hidden
           while searching or filtering so it doesn't fight the results. */}
       {!search && !selectedSport && (
-        <TrendingSpotlight picks={spotlightPicks} mode="fixed" className="mb-8" />
+        <TrendingSpotlight picks={spotlightPicks} className="mb-8" />
       )}
 
       {/* Grid */}

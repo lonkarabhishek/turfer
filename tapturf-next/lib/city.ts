@@ -611,13 +611,3 @@ export function locateCity(): Promise<LocateResult> {
     }
   });
 }
-
-/** @deprecated Use locateCity and setCityPref. Kept only while CityPicker still calls it. */
-export async function autoDetectCity(): Promise<CityId | null> {
-  const r = await locateCity();
-  if ("city" in r) {
-    setCityPref(r.city, { source: "gps" });
-    return r.city;
-  }
-  return null;
-}

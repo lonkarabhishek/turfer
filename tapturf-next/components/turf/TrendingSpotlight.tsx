@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { imageUrlForCard } from "@/lib/utils/images";
 import { ChevronRight, Flame, MapPin, Star } from "lucide-react";
-import { getCityPref, labelFor, type CityId } from "@/lib/city";
+import { labelFor, type CityId } from "@/lib/city";
 
 /** Everything the spotlight card needs, prepared on the server. */
 export interface SpotlightTurf {
@@ -22,44 +22,20 @@ export interface SpotlightTurf {
 
 /**
  * "Most Trending Turf" spotlight: gold-framed feature card for the
- * turf the team picked for a city this week.
- *
- * mode="by-city": follows the visitor's picked city (header picker or
- *   auto-detect). With no city picked it shows the first pick.
- * mode="fixed": always shows picks[0] (city pages).
+ * turf the team picked for a city this week. Shows picks[0]; the server
+ * page decides which city's pick that is.
  */
 export function TrendingSpotlight({
   picks,
-  mode = "by-city",
   className = "",
   loading = "eager",
 }: {
   picks: SpotlightTurf[];
-  mode?: "by-city" | "fixed";
   className?: string;
   /** "lazy" when the card sits below the fold (the home). */
   loading?: "eager" | "lazy";
 }) {
-  const [city, setCity] = useState<CityId | null>(null);
-  const [ready, setReady] = useState(mode === "fixed");
-
-  useEffect(() => {
-    if (mode === "fixed") return;
-    const load = () => {
-      setCity(getCityPref());
-      setReady(true);
-    };
-    load();
-    window.addEventListener("tapturf:city-changed", load);
-    window.addEventListener("storage", load);
-    return () => {
-      window.removeEventListener("tapturf:city-changed", load);
-      window.removeEventListener("storage", load);
-    };
-  }, [mode]);
-
-  if (!ready || picks.length === 0) return null;
-  const pick = mode === "fixed" || !city ? picks[0] : picks.find((p) => p.city === city);
+  const pick = picks[0];
   if (!pick) return null;
 
   // className = outer spacing, so nothing (not even a gap) renders

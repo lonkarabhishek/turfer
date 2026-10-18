@@ -40,7 +40,7 @@ function isGoogleHosted(url: string): boolean {
   return /googleusercontent\.com|drive\.google\.com/i.test(url);
 }
 
-function toTile(t: Turf): HomeTile {
+function toTile(t: Turf, cityLabel?: string): HomeTile {
   const photoRaw = t.cover_image ?? t.images[0] ?? null;
   // Cards are 236px wide on phones; 480x360 is plenty for lh3 photos
   // and imageUrlForCard handles Drive thumbnails and other hosts.
@@ -58,6 +58,7 @@ function toTile(t: Turf): HomeTile {
     // Reported prices (from review mentions) carry a "(reported)" suffix
     // that a 236px tile would truncate away, so only listed rates show.
     price: price.kind === "real" ? price.label : null,
+    ...(cityLabel ? { cityLabel } : {}),
   };
 }
 
@@ -141,9 +142,13 @@ async function buildHomeData(): Promise<HomeData> {
     let sportsHere = 0;
     let football = 0;
     let boxCricket = 0;
+    const bySport: HeroCity["bySport"] = [];
     for (const sp of SPORT_PAGES) {
       const count = list.filter((t) => turfPlaysSport(t.sports, sp)).length;
-      if (count > 0) sportsHere++;
+      if (count > 0) {
+        sportsHere++;
+        bySport.push({ slug: sp.slug, name: sp.name, n: count });
+      }
       if (sp.slug === "football") football = count;
       if (sp.slug === "box-cricket") boxCricket = count;
       if (count >= MIN_TURFS_TO_INDEX) perSport[sp.slug] = count;
@@ -156,6 +161,7 @@ async function buildHomeData(): Promise<HomeData> {
       sports: sportsHere,
       area: modeOf(list.map((t) => areaFor(t))),
       core: football > 0 && boxCricket > 0,
+      bySport: bySport.sort((a, b) => b.n - a.n).slice(0, 8),
     };
 
     const qualified = list.filter(hasEnoughReviews);
@@ -170,11 +176,34 @@ async function buildHomeData(): Promise<HomeData> {
       label,
       n,
       curated,
-      tiles: pool.filter((t) => t.id !== trendingId).slice(0, tileCount).map(toTile),
+      tiles: pool.filter((t) => t.id !== trendingId).slice(0, tileCount).map((t) => toTile(t)),
     });
 
     cityRows.push({ id, label, n, top: list.slice(0, 3).map((t) => ({ id: t.id, name: t.name })) });
   });
+
+  // "Top-rated across India": walk the national ranking, at most two
+  // turfs per city, reviewed turfs first, then any turf if six aren't found.
+  const nationalTiles: HomeTile[] = [];
+  {
+    const perCity = new Map<string, number>();
+    const taken = new Set<string>();
+    const cityOf = (t: Turf) => t.city ?? guessCityFromAddress(t.address);
+    const pass = (needReviews: boolean) => {
+      for (const t of turfs) {
+        if (nationalTiles.length >= 6) return;
+        const id = cityOf(t);
+        if (!id || !heroCities[id] || taken.has(t.id)) continue;
+        if (needReviews && !hasEnoughReviews(t)) continue;
+        if ((perCity.get(id) ?? 0) >= 2) continue;
+        perCity.set(id, (perCity.get(id) ?? 0) + 1);
+        taken.add(t.id);
+        nationalTiles.push(toTile(t, heroCities[id].label));
+      }
+    };
+    pass(true);
+    pass(false);
+  }
 
   const sports = SPORT_PAGES.map((sp) => ({
     slug: sp.slug,
@@ -224,6 +253,7 @@ async function buildHomeData(): Promise<HomeData> {
     pins: turfs.filter((t) => t.lat != null && t.lng != null).length,
     hero,
     strips,
+    nationalTiles,
     cityRows,
     sports,
     sportsByCity,
@@ -236,7 +266,7 @@ async function buildHomeData(): Promise<HomeData> {
   };
 }
 
-const cached = unstable_cache(buildHomeData, ["home-data-v2"], { revalidate: HOME_REVALIDATE });
+const cached = unstable_cache(buildHomeData, ["home-data-v3"], { revalidate: HOME_REVALIDATE, tags: ["turf-data"] });
 
 /**
  * Everything the home page shows, shaped once. generateMetadata and the

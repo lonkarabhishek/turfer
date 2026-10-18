@@ -32,7 +32,7 @@ export function HomeTurfTile({ tile, eager = false }: { tile: HomeTile; eager?: 
       </div>
       <p className="mt-2.5 text-[15px] font-semibold text-primary-900 truncate">{tile.name}</p>
       <p className="text-[13px] text-primary-500 truncate">
-        {tile.place}
+        {tile.cityLabel ? `${tile.place}, ${tile.cityLabel}` : tile.place}
         {tile.sport ? `${SEP}${tile.sport}` : ""}
       </p>
       <p className="mt-0.5 flex items-center justify-between gap-2 text-[13px]">

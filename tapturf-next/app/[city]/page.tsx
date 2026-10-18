@@ -168,7 +168,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       )}
 
       {/* This week's Most Trending Turf in this city */}
-      <TrendingSpotlight picks={spotlight} mode="fixed" className="max-w-7xl mx-auto px-4 sm:px-6 mt-10" />
+      <TrendingSpotlight picks={spotlight} className="max-w-7xl mx-auto px-4 sm:px-6 mt-10" />
 
       {/* Featured grid */}
       {featured.length > 0 && (
