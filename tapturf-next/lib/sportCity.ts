@@ -98,7 +98,7 @@ export function sportCityFaq(sport: SportPage, city: CityId, s: SportCityStats) 
 
   if (s.floodlit > 0) {
     faq.push({
-      q: `Can I play ${lower} at night in ${cityLabel}?`,
+      q: `Can I ${sport.verb ?? `play ${lower}`} at night in ${cityLabel}?`,
       a: `Yes. At least ${s.floodlit} ${lower} ${n(s.floodlit)} in ${cityLabel} ${s.floodlit !== 1 ? "are" : "is"} listed with floodlights for evening games.${
         s.covered > 0 ? ` ${s.covered} ${s.covered !== 1 ? "are" : "is"} covered, which helps in the monsoon.` : ""
       }`,

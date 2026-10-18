@@ -53,12 +53,12 @@ export async function generateMetadata({
 
   return {
     // Layout's template appends "| TapTurf".
-    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${s.venue === "court" ? "Venues" : "Grounds"}, Compare & Book`,
+    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${s.venue === "turf" ? "Grounds" : "Venues"}, Compare & Book`,
     description: bits.join(" "),
     keywords: [
       `${lower} ${word} in ${cityLabel.toLowerCase()}`,
       `${lower} ${word} ${cityLabel.toLowerCase()}`,
-      `${lower} ${s.venue === "court" ? "court booking" : "ground"} ${cityLabel.toLowerCase()}`,
+      `${lower} ${s.venue === "turf" ? "ground" : `${s.venue} booking`} ${cityLabel.toLowerCase()}`,
       `${lower} ${word} near me`,
       `book ${lower} ${word} ${cityLabel.toLowerCase()}`,
       ...stats.topAreas.slice(0, 4).map((a) => `${lower} ${word} ${a.area.toLowerCase()}`),

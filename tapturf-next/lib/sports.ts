@@ -14,8 +14,10 @@ export interface SportPage {
   icon: string;
   labels: string[];
   blurb: string;
-  /** What people call the place they play it: a turf (football, cricket) or a court (racquet and ball-court sports). */
-  venue: "turf" | "court";
+  /** What people call the place they play it: a turf (football, cricket), a court (racquet and ball-court sports), a pool or a table. */
+  venue: "turf" | "court" | "pool" | "table";
+  /** Verb phrase for FAQ copy when "play <sport>" reads wrong, e.g. "swim". */
+  verb?: string;
 }
 
 export const SPORT_PAGES: SportPage[] = [
@@ -83,6 +85,39 @@ export const SPORT_PAGES: SportPage[] = [
     labels: ["Tennis", "Lawn Tennis"],
     blurb: "Tennis courts for practice and matches.",
   },
+  {
+    slug: "table-tennis",
+    venue: "table",
+    name: "Table Tennis",
+    icon: "🏓",
+    labels: ["Table Tennis"],
+    blurb: "Table tennis tables at sports clubs and arenas, usually by the hour.",
+  },
+  {
+    slug: "padel",
+    venue: "court",
+    name: "Padel",
+    icon: "🎾",
+    labels: ["Padel"],
+    blurb: "Glass-walled padel courts, the fastest growing racquet sport in India.",
+  },
+  {
+    slug: "ultimate-frisbee",
+    venue: "turf",
+    name: "Ultimate Frisbee",
+    icon: "🥏",
+    labels: ["Ultimate Frisbee"],
+    blurb: "Open grounds and turfs that host ultimate frisbee pickups and leagues.",
+  },
+  {
+    slug: "swimming",
+    venue: "pool",
+    name: "Swimming",
+    icon: "🏊",
+    labels: ["Swimming"],
+    blurb: "Swimming pools at sports complexes, with lap timings and coaching.",
+    verb: "swim",
+  },
 ];
 
 const BY_SLUG = new Map(SPORT_PAGES.map((s) => [s.slug, s]));
@@ -123,6 +158,10 @@ export function sportVenues(sport: SportPage, opts: { title?: boolean } = {}): s
 export function courtType(labels: string[]): string | null {
   const pages = [...new Set(labels.map((l) => sportPageForLabel(l)).filter((p): p is SportPage => !!p))];
   if (pages.length === 0 || pages.some((p) => p.venue === "turf")) return null;
-  const names = pages.slice(0, 2).map((p) => p.name);
-  return names.length === 1 ? `${names[0]} Court` : `${names.join(" & ")} Courts`;
+  const cap = (w: string) => w[0].toUpperCase() + w.slice(1);
+  const two = pages.slice(0, 2);
+  if (two.length === 1) return `${two[0].name} ${cap(two[0].venue)}`;
+  // "Badminton & Pickleball Courts" when both share a venue word, else name each.
+  if (two[0].venue === two[1].venue) return `${two.map((p) => p.name).join(" & ")} ${cap(two[0].venue)}s`;
+  return two.map((p) => `${p.name} ${cap(p.venue)}`).join(" & ");
 }

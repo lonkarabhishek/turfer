@@ -45,6 +45,10 @@ const sportEmoji: Record<string, string> = {
   badminton: "🏸",
   tennis: "🎾",
   pickleball: "🏓",
+  "table tennis": "🏓",
+  padel: "🎾",
+  "ultimate frisbee": "🥏",
+  swimming: "🏊",
 };
 
 export function SportChip({
