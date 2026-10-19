@@ -4,7 +4,7 @@ import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-10-07";
+const UPDATED = "2026-10-19";
 const PAGE_URL = "https://www.tapturf.in/privacy";
 
 export const metadata: Metadata = {
@@ -92,6 +92,10 @@ const SECTIONS: LegalSection[] = [
         <li>To publish reviews and venue corrections you submit.</li>
         <li>To keep the service safe: rate-limiting sign-ins and OTP sends, and investigating misuse.</li>
         <li>To understand which turfs, cities and features people use, in aggregate, so we can improve them.</li>
+        <li>
+          To learn how new members find us and what they came for, so we know which cities and sports to add
+          and which links bring players (see &ldquo;When you sign up&rdquo; below).
+        </li>
         <li>To reply when you contact us.</li>
       </ul>
     ),
@@ -136,10 +140,22 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          We use Google Analytics to count visits and see which pages people use. It sets cookies and records
-          your approximate location from your IP address, device type and the pages you view. We don&rsquo;t
-          link these statistics to your account. You can block them with any standard cookie or tracker
-          blocker, and the site works exactly the same.
+          We use Google Analytics to count visits and see which pages people use: page views, the turfs you
+          open, the city and sport filters you use, and taps on Call or WhatsApp. It sets cookies and records
+          an approximate location derived from your IP address (Google Analytics does not store the address
+          itself), your device type and the pages you view. We have turned off Google signals and ad
+          personalisation, so this is not used to follow you across other websites or for advertising. You
+          can block it with any standard cookie or tracker blocker, and the site works exactly the same.
+        </p>
+        <p id="signup">
+          <strong>When you sign up.</strong> While you browse, your device keeps a short note of how you first
+          arrived (the website or campaign link that sent you, not the full address), how many times and on how
+          many days you have visited, which cities, sports and turfs you looked at, when you first opened a
+          turf or tapped Call or WhatsApp, and your device type, operating system and browser family. Nothing
+          is sent while you are signed out. When you create an account, one summary of this is saved with your
+          account so we can see where members come from and what they want. We never store your IP address,
+          your full browser details or anything you type into a form here. We use it only to improve TapTurf,
+          we do not sell it, and you can ask us to delete it at any time.
         </p>
         <p>
           Turf pages embed Google Maps, and photos load from Google&rsquo;s servers. Loading these shares your
@@ -163,9 +179,10 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
-        banners you closed, and whether you dismissed the &ldquo;install app&rdquo; prompt. None of this is
-        sent to us except the sign-in token, which identifies you to our server. Clearing site data in your
-        browser removes all of it.
+        banners you closed, whether you dismissed the &ldquo;install app&rdquo; prompt, and the short visit
+        note described under &ldquo;When you sign up&rdquo;. None of this is sent to us except the sign-in
+        token, which identifies you to our server, and that one summary when you create an account. Clearing
+        site data in your browser removes all of it.
       </p>
     ),
   },
@@ -178,6 +195,7 @@ const SECTIONS: LegalSection[] = [
         <li>Games expire after their date and are hidden; the record is kept so hosts can see their history.</li>
         <li>Sign-in and OTP logs are kept for up to 12 months, then removed.</li>
         <li>Call and WhatsApp tap counts are kept as totals; the link to your account is dropped after 90 days.</li>
+        <li>The sign-up summary stays with your account and is deleted with it, or sooner if you ask.</li>
         <li>Emails you send us are kept as long as needed to deal with your request.</li>
       </ul>
     ),
