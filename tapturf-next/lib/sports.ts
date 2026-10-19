@@ -15,7 +15,7 @@ export interface SportPage {
   labels: string[];
   blurb: string;
   /** What people call the place they play it: a turf (football, cricket), a court (racquet and ball-court sports), a pool or a table. */
-  venue: "turf" | "court" | "pool" | "table";
+  venue: "turf" | "court" | "pool" | "table" | "net";
   /** Verb phrase for FAQ copy when "play <sport>" reads wrong, e.g. "swim". */
   verb?: string;
 }
@@ -117,6 +117,23 @@ export const SPORT_PAGES: SportPage[] = [
     labels: ["Swimming"],
     blurb: "Swimming pools at sports complexes, with lap timings and coaching.",
     verb: "swim",
+  },
+  {
+    slug: "futsal",
+    venue: "turf",
+    name: "Futsal",
+    icon: "⚽",
+    labels: ["Futsal"],
+    blurb: "Futsal courts and 5-a-side turfs for fast, small-sided football, indoors and out.",
+  },
+  {
+    slug: "cricket-nets",
+    venue: "net",
+    // Copy reads "cricket practice nets", "12 nets", "Cricket Practice Nets in Pune".
+    name: "Cricket Practice",
+    icon: "🏏",
+    labels: ["Cricket Nets", "Indoor Cricket Net", "Bowling Machine"],
+    blurb: "Cricket practice nets, indoor and outdoor, some with bowling machines, by the hour.",
   },
 ];
 
