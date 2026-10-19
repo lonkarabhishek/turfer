@@ -430,8 +430,64 @@ p, li { letter-spacing: 0; }
   background: conic-gradient(from 0deg, #16A34A, #86efac, #052E16, #16A34A);
   animation: askOrb 6s linear infinite;
 }
+/* Newest reply typing in (TypingReply). The real text keeps its place
+   underneath, hidden until done; the layer on top shows the letters as
+   the ball reaches them. Ball: optic yellow felt, white seam that spins,
+   light fixed at the top left, squashed from its bottom edge. */
+.ask-type { position: relative; display: block; }
+.ask-type[data-typing] > .ask-type-text { opacity: 0; }
+.ask-type-layer { position: absolute; inset: 0; user-select: none; }
+.ask-g { opacity: 0; transition: opacity 70ms ease-out; }
+.ask-g.on { opacity: 1; }
+.ask-ball {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  opacity: 0;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+  pointer-events: none;
+  box-shadow: 0 0 0 0.5px rgba(94, 112, 6, 0.45), 0 1px 2px rgba(60, 72, 0, 0.3);
+}
+.ask-ball > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: #d9f03f;
+}
+.ask-ball > i::before,
+.ask-ball > i::after {
+  content: "";
+  position: absolute;
+  top: -15%;
+  width: 100%;
+  height: 130%;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+}
+.ask-ball > i::before { left: -64%; }
+.ask-ball > i::after  { right: -64%; }
+.ask-ball::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7) 0, rgba(255, 255, 255, 0) 42%),
+    radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0) 55%, rgba(74, 92, 0, 0.38) 100%);
+}
+/* Subline and cards wait for two thirds of the reply, then fade up. */
+.ask-held   { opacity: 0; pointer-events: none; }
+.ask-reveal { animation: askReveal 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes askReveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .ask-message-in, .ask-sheet-in, .ask-screen-in, .ask-panel-in, .ask-dot, .ask-orb::before { animation: none; }
+  .ask-message-in, .ask-sheet-in, .ask-screen-in, .ask-panel-in, .ask-dot, .ask-orb::before, .ask-reveal { animation: none; }
+  .ask-type[data-typing] > .ask-type-text, .ask-held { opacity: 1; }
+  .ask-type-layer { display: none; }
 }
 
 /* Cricket toss coin (tools/cricket-toss) */

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, ArrowUp, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { useAsk, type Turn } from "./AskProvider";
 import { AskResultBody } from "./AskResults";
+import { TypingReply, prefersReducedMotion } from "./TypingReply";
 import { askChips } from "@/lib/ask/chips";
 import { getCityPref } from "@/lib/city";
 
@@ -60,9 +61,16 @@ export function AskPanel() {
 
   // Scroll the thread itself, never the page behind it: scrollIntoView
   // on a fixed sheet nudges the window on phones and jolts the layout.
+  // Aim at the newest turn's top (the browser stops at the bottom when it
+  // fits), so a tall result never pushes the reply typing in off screen.
+  // A parked message goes to the sign-in card at the bottom instead.
   useEffect(() => {
     const el = threadRef.current;
-    if (open && el) el.scrollTo({ top: el.scrollHeight, behavior: turns.length > 1 ? "smooth" : "auto" });
+    if (!open || !el) return;
+    const all = el.querySelectorAll<HTMLElement>("[data-turn]");
+    const turn = pending ? null : all[all.length - 1];
+    const top = turn ? turn.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 16 : el.scrollHeight;
+    el.scrollTo({ top, behavior: turns.length > 1 ? "smooth" : "auto" });
   }, [open, turns, busy, freeLeft, pending]);
 
   // Close when navigating away from the page the chat was opened on? No:
@@ -262,8 +270,20 @@ function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: (
 }
 
 function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLast: boolean; onUseLocation: () => void; locating: boolean }) {
+  // Only a reply that lands while this turn is on screen types in, and only
+  // once. Restored history, a reopened panel and errors show plain text.
+  const [fresh] = useState(() => !turn.res && !turn.error && !prefersReducedMotion());
+  const [typed, setTyped] = useState(false);
+  const [shown, setShown] = useState(false);
+  const live = fresh && !typed && !!turn.res && !turn.res.failed && turn.res.reply.trim() !== "";
+  // A newer message went out before it finished: settle now, never replay.
+  if (live && !isLast) setTyped(true);
+  const typing = live && isLast;
+  // Subline and cards are in the page from the start (no jump, screen
+  // readers get them at once) and fade in two thirds of the way through.
+  const settle = !fresh || !turn.res ? "" : typing && !shown ? "ask-held" : "ask-reveal";
   return (
-    <div className="space-y-4 ask-message-in">
+    <div data-turn className="space-y-4 ask-message-in">
       <div className="flex justify-end">
         <p className="max-w-[85%] rounded-[20px] rounded-br-md bg-primary-900 text-white text-[15px] px-4 py-2.5 leading-snug">{turn.user}</p>
       </div>
@@ -274,8 +294,8 @@ function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLas
             <span className="text-hot-600">{turn.error}</span>
           ) : turn.res ? (
             <>
-              {turn.res.reply}
-              <Subline res={turn.res} />
+              <TypingReply text={turn.res.reply} play={typing} onReveal={() => setShown(true)} onDone={() => setTyped(true)} />
+              <Subline res={turn.res} className={settle} />
             </>
           ) : (
             <span className="inline-flex items-center gap-1 h-6" aria-label="Typing">
@@ -285,13 +305,17 @@ function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLas
             </span>
           )}
         </div>
-        {turn.res && (isLast || turn.res.intent !== "other") && <AskResultBody res={turn.res} onUseLocation={onUseLocation} locating={locating} />}
+        {turn.res && (isLast || turn.res.intent !== "other") && (
+          <div className={settle}>
+            <AskResultBody res={turn.res} onUseLocation={onUseLocation} locating={locating} />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Subline({ res }: { res: Turn["res"] & object }) {
+function Subline({ res, className = "" }: { res: Turn["res"] & object; className?: string }) {
   let text = "";
   if (res.failed) text = "Something went wrong on our side. Try again in a moment.";
   else
@@ -312,5 +336,5 @@ function Subline({ res }: { res: Turn["res"] & object }) {
         break;
     }
   if (!text) return null;
-  return <span className="block mt-1 text-[13px] text-primary-500">{text}</span>;
+  return <span className={`block mt-1 text-[13px] text-primary-500 ${className}`}>{text}</span>;
 }
