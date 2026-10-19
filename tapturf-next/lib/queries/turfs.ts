@@ -196,11 +196,14 @@ function toBands(raw: unknown): PriceBand[] | null {
   return out.length ? out : null;
 }
 
-const PAGE = 1000;
+// Supabase returns at most 1,000 rows per request; 500 keeps each
+// statement well inside the 3 s timeout the public role has when the
+// database is busy (a 1,000-row page of card columns took up to 2.98 s).
+const PAGE = 500;
 
 /**
- * Supabase returns at most 1,000 rows per request and we have more
- * turfs than that. Page with .range() until a page comes back short.
+ * We have more turfs than one request returns. Page with .range()
+ * until a page comes back short.
  * The page function must apply a stable order (rating, then id) so
  * rows never straddle two pages.
  *
@@ -230,14 +233,31 @@ export async function fetchAllRows<T>(page: (from: number, to: number) => Promis
   return out;
 }
 
+// Calls that arrive while the same list is being read share that read:
+// a build renders dozens of pages at once, each asking for every turf,
+// and together they pushed the database past its statement timeout.
+// Only reads in flight are shared, never a finished one, so a turf edit
+// is never hidden. Each caller still gets its own transformed rows.
+const inflight = new Map<string, Promise<Record<string, unknown>[]>>();
+
+function activeRows(city: CityId | null): Promise<Record<string, unknown>[]> {
+  const key = city ?? "all";
+  let p = inflight.get(key);
+  if (!p) {
+    const supabase = createServerClient();
+    p = fetchAllRows<Record<string, unknown>>((from, to) => {
+      let q = supabase.from("turfs").select(CARD_COLUMNS).eq("is_active", true);
+      if (city) q = q.eq("city", city);
+      return q.order("rating", { ascending: false }).order("id").range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
+    }).finally(() => inflight.delete(key));
+    inflight.set(key, p);
+  }
+  return p;
+}
+
 export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
-  const supabase = createServerClient();
   const city = cityFilter && isCity(cityFilter) ? cityFilter : null;
-  const data = await fetchAllRows<Record<string, unknown>>((from, to) => {
-    let q = supabase.from("turfs").select(CARD_COLUMNS).eq("is_active", true);
-    if (city) q = q.eq("city", city);
-    return q.order("rating", { ascending: false }).order("id").range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
-  });
+  const data = await activeRows(city);
   // Default order is "top rated" with the minimum-review rule, so a
   // 5.0 from a handful of reviews doesn't lead city / listing pages.
   return data.map((r) => transformTurf(r as never)).sort(compareTopRated);
@@ -256,16 +276,9 @@ export async function getTurfById(id: string): Promise<Turf | null> {
 }
 
 export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
-  const supabase = createServerClient();
   // Fetch all active turfs and filter here because the sports field
   // stores comma-separated values inside array elements.
-  const data = await fetchAllRows<Record<string, unknown>>(
-    (from, to) =>
-      supabase.from("turfs").select(CARD_COLUMNS).eq("is_active", true).order("rating", { ascending: false }).order("id").range(from, to) as unknown as PromiseLike<{
-        data: Record<string, unknown>[] | null;
-        error: unknown;
-      }>,
-  );
+  const data = await activeRows(null);
 
   // Exact label match: "Cricket" must not pull in "Box Cricket".
   return data
