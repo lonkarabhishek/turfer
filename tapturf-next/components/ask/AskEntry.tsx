@@ -4,7 +4,8 @@ import { useState } from "react";
 import { ArrowUp, Sparkles } from "lucide-react";
 import { useAsk } from "./AskProvider";
 
-const EXAMPLES = ["Box cricket in Kothrud under ₹1,000", "Football games near me this weekend", "Hindu Gymkhana vs Vedant", "Does CC Turf Pardi have parking?"];
+// Default chips name no place; pages that know the city pass their own.
+const EXAMPLES = ["Box cricket near me under ₹1,000", "Football turf with floodlights tonight", "Compare two turfs", "Host a game Saturday 7pm"];
 
 /**
  * Inline entry on the home page and /turfs. Typing here opens the
@@ -14,9 +15,12 @@ const EXAMPLES = ["Box cricket in Kothrud under ₹1,000", "Football games near 
 export function AskEntry({
   compact = false,
   examples = EXAMPLES,
+  center = false,
   className,
 }: {
   compact?: boolean;
+  /** Centre the chips (the centred home hero). */
+  center?: boolean;
   /** Chips under the input; the home passes city-aware ones. */
   examples?: string[];
   /** Outer spacing; replaces the baked-in margin when given. */
@@ -63,7 +67,7 @@ export function AskEntry({
         </button>
       </form>
       {!compact && (
-        <div className="mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
+        <div className={`mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible${center ? " sm:justify-center" : ""}`}>
           {examples.map((ex) => (
             <button
               key={ex}

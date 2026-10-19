@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowUp, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { useAsk, type Turn } from "./AskProvider";
 import { AskResultBody } from "./AskResults";
+import { askChips } from "@/lib/ask/chips";
+import { getCityPref } from "@/lib/city";
 
-const WELCOME_CHIPS = ["Box cricket near me tonight", "Kothrud me sasta turf", "Football games this weekend", "Compare two turfs", "Calculate our NRR", "Host a game Saturday 7pm"];
+// Until /api/ask/chips answers: no place names, no games promise.
+const WELCOME_CHIPS = askChips(null, 0);
 
 /**
  * The chat itself. A bottom sheet on phones, a side panel on desktop.
@@ -18,6 +21,25 @@ export function AskPanel() {
   const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  const [welcome, setWelcome] = useState<string[]>(WELCOME_CHIPS);
+  const fresh = turns.length === 0;
+
+  // Opening chips follow the city on screen (or the visitor's city):
+  // its own area and turfs, and a games chip only when it has open games.
+  useEffect(() => {
+    if (!open || !fresh) return;
+    const city = pageContext.city ?? getCityPref();
+    let live = true;
+    fetch(`/api/ask/chips${city ? `?city=${encodeURIComponent(city)}` : ""}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { chips?: unknown } | null) => {
+        if (live && Array.isArray(j?.chips) && j.chips.length) setWelcome(j.chips.filter((c): c is string => typeof c === "string"));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [open, fresh, pageContext.city]);
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +70,7 @@ export function AskPanel() {
   if (!open || pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
 
   const last = turns.length ? turns[turns.length - 1] : null;
-  const chips = last?.res?.followups?.length ? last.res.followups : turns.length === 0 ? WELCOME_CHIPS : [];
+  const chips = last?.res?.followups?.length ? last.res.followups : fresh ? welcome : [];
   const where = pageContext.turf ? pageContext.turf.name : null;
 
   return (

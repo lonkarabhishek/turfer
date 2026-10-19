@@ -1,5 +1,6 @@
 import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { byDistanceFrom, isKnownCity, resolveCityScope, type CityScope } from "@/lib/city";
+import { askChips, chipName } from "@/lib/ask/chips";
 import type { HeroCity, HomeCityRow, HomeData, HomeGame, HomeHeroProps, HomeTile } from "./types";
 
 export type HomeScope = CityScope;
@@ -12,6 +13,8 @@ export type ScopedHome = {
     sportCount: number;
     topCities: HomeHeroProps["topCities"];
     city: (HeroCity & { id: string }) | null;
+    /** Ask chips for this city: its own area and turfs, a games chip only with open games. */
+    chips: string[];
   };
   strip: { tiles: HomeTile[]; n: number; curated: boolean };
   spotlight: SpotlightTurf | null;
@@ -23,6 +26,18 @@ export type ScopedHome = {
   askCities: { id: string; label: string; n: number }[];
   askCityCount: number;
 };
+
+/** Ask TapTurf chips for one city (or all of India) from the cached home snapshot. */
+export function askChipsFor(d: HomeData, id: string | null): string[] {
+  const hc = id ? d.hero.cities[id] : undefined;
+  if (!id || !hc) return askChips(null, d.openGamesTotal);
+  const names = (d.strips.find((s) => s.id === id)?.tiles ?? []).map((t) => chipName(t.name)).filter((n): n is string => !!n);
+  const [a, b] = [...new Set(names)];
+  return askChips(
+    { label: hc.label, area: hc.area, boxCricket: hc.bySport.some((s) => s.slug === "box-cricket"), pair: a && b ? [a, b] : null },
+    d.openGamesByCity[id] ?? 0,
+  );
+}
 
 /**
  * The slices of the shaped home snapshot that one page variant needs:
@@ -52,7 +67,7 @@ export function scopeHome(d: HomeData, requested: string | null): ScopedHome {
     const primarySlugs = new Set(primary.map((p) => p.slug));
     return {
       scope,
-      hero: { ...heroBase, city: hc ? { id, ...hc } : null },
+      hero: { ...heroBase, city: hc ? { id, ...hc } : null, chips: askChipsFor(d, id) },
       strip: strip ? { tiles: strip.tiles, n: strip.n, curated: strip.curated } : { tiles: [], n: hc?.n ?? 0, curated: false },
       spotlight: d.spotlights.find((s) => s.city === id) ?? null,
       games: { rows: d.gamesByCity[id] ?? [], inScope: d.openGamesByCity[id] ?? 0, total: d.openGamesTotal },
@@ -72,7 +87,7 @@ export function scopeHome(d: HomeData, requested: string | null): ScopedHome {
 
   return {
     scope,
-    hero: { ...heroBase, city: null },
+    hero: { ...heroBase, city: null, chips: askChipsFor(d, null) },
     strip: { tiles: d.nationalTiles, n: d.total, curated: true },
     spotlight: null,
     games: { rows: d.games, inScope: d.openGamesTotal, total: d.openGamesTotal },
