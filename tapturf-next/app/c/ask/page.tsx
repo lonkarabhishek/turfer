@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getHomeData } from "@/lib/home/data";
 import { homeMetadata } from "@/lib/seo/pageMetadata";
 import { HomeView } from "@/components/home/HomeView";
+import { getLiveCities } from "@/lib/queries/cities";
 
 // Never read the request (its cookies, headers or query) under app/c:
 // it turns these ISR pages dynamic.
@@ -13,7 +14,8 @@ import { HomeView } from "@/components/home/HomeView";
 export const revalidate = 600;
 
 export async function generateMetadata(): Promise<Metadata> {
-  return homeMetadata(await getHomeData());
+  const [home, live] = await Promise.all([getHomeData(), getLiveCities()]);
+  return homeMetadata(home, live.length);
 }
 
 export default function AskHomePage() {

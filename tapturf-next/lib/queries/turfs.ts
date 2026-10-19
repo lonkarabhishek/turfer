@@ -179,16 +179,25 @@ const PAGE = 1000;
  * turfs than that. Page with .range() until a page comes back short.
  * The page function must apply a stable order (rating, then id) so
  * rows never straddle two pages.
+ *
+ * A failed page is retried twice; if it still fails this throws rather
+ * than return part of the list, because a partial list gets cached and
+ * shows wrong counts (a home title once said 51 cities instead of 54).
+ * A throw keeps the last good cached page or snapshot in place.
  */
 export async function fetchAllRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
   const out: T[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await page(from, from + PAGE - 1);
-    if (error) {
-      console.error("Paged fetch failed:", error);
-      break;
+    let res = await page(from, from + PAGE - 1);
+    for (let attempt = 1; res.error && attempt <= 2; attempt++) {
+      await new Promise((r) => setTimeout(r, 300 * attempt));
+      res = await page(from, from + PAGE - 1);
     }
-    const rows = data ?? [];
+    if (res.error) {
+      console.error("Paged fetch failed after retries:", res.error);
+      throw new Error(`Paged fetch failed at row ${from}`);
+    }
+    const rows = res.data ?? [];
     out.push(...rows);
     if (rows.length < PAGE) break;
   }

@@ -21,20 +21,21 @@ function whereLine(labels: string[], cityCount: number): string {
 
 // generateMetadata so the count and the city names in title/description
 // stay honest as the database grows. Same snapshot as the page.
-export function homeMetadata(d: HomeData): Metadata {
+export function homeMetadata(d: HomeData, liveCityCount?: number): Metadata {
+  const cityCount = liveCityCount && liveCityCount > 0 ? liveCityCount : d.cityCount;
   const labels = d.hero.topCities.map((c) => c.label);
   const top3 = labels.slice(0, 3);
   const top5 = labels.slice(0, 5);
   // Floor to a multiple of 5 so "2,335+" reads honest even when the
   // live count is 2,337 and changes between deploys.
   const rounded = Math.floor(d.total / 5) * 5;
-  const where = whereLine(labels, d.cityCount);
+  const where = whereLine(labels, cityCount);
   const countLine = rounded >= 50 ? `${rounded.toLocaleString("en-IN")}+ grounds with photos, ratings and prices. ` : "";
 
   // Title under 60 characters, description about 150: Google shows the
   // whole of both, including the no-fee line that sets TapTurf apart.
-  const titleWhere = d.cityCount > 0 ? `${d.cityCount} Indian Cities` : "India";
-  const more = d.cityCount - top3.length;
+  const titleWhere = cityCount > 0 ? `${cityCount} Indian Cities` : "India";
+  const more = cityCount - top3.length;
   const descWhere = top3.length ? `in ${top3.join(", ")}${more > 0 ? ` and ${more} more cities` : ""}` : "across India";
   const description =
     rounded >= 50
