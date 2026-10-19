@@ -1,0 +1,105 @@
+import { createClient } from "@/lib/supabase/client";
+import { getFirebaseAuth } from "@/lib/firebase/client";
+
+/**
+ * Browser side of myTapturf. Every owner call goes to a database
+ * function that works out who is calling on its own: a Google sign-in
+ * rides along as the Supabase session, a phone sign-in sends its
+ * Firebase ID token, which the database checks with Google. Nothing
+ * here grants access; a wrong token just gets "forbidden" back.
+ */
+
+/** Firebase ID token for phone sign-ins; null for Google sign-ins. */
+export async function ownerToken(): Promise<string | null> {
+  try {
+    const auth = await getFirebaseAuth();
+    await auth.authStateReady();
+    return (await auth.currentUser?.getIdToken()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function ownerRpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const token = await ownerToken();
+  const { data, error } = await createClient().rpc(fn, { p_token: token, ...args });
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
+/** Ask the server to rebuild the public turf page after an edit. */
+export async function refreshTurfPage(turfId: string) {
+  try {
+    await fetch("/api/my/revalidate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ turfId, token: await ownerToken() }),
+    });
+  } catch {
+    /* the page refreshes on its own schedule anyway */
+  }
+}
+
+export type OwnerTurfRef = { id: string; name: string; city: string | null; area: string | null; cover: string | null };
+export type OwnerHome =
+  | { signed_in: false }
+  | {
+      signed_in: true;
+      who: string;
+      kind: "phone" | "email";
+      admin: boolean;
+      turfs: (OwnerTurfRef & { status: "active" | "pending"; via: string; since: string })[];
+      matches: OwnerTurfRef[];
+    };
+
+export type DayStat = { day: string; views: number; calls: number; whatsapp: number };
+export type OwnerTurf = {
+  id: string;
+  name: string;
+  city: string | null;
+  area: string | null;
+  address: string | null;
+  sports: string[] | null;
+  rating: number | null;
+  total_reviews: number | null;
+  cover: string | null;
+  photos: number;
+  morning_price: number | null;
+  afternoon_price: number | null;
+  evening_price: number | null;
+  weekend_morning_price: number | null;
+  weekend_afternoon_price: number | null;
+  weekend_evening_price: number | null;
+  price_owner_confirmed: boolean | null;
+  price_verified_at: string | null;
+  has_listed_bands: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  is_24x7: boolean | null;
+  closed_days: string | null;
+  has_floodlights: boolean | null;
+  is_covered: boolean | null;
+  parking_available: boolean | null;
+  washroom_available: boolean | null;
+  changing_room_available: boolean | null;
+  has_cafeteria: boolean | null;
+  has_drinking_water: boolean | null;
+  equipment_provided: boolean | null;
+  description: string | null;
+  number_of_grounds: number | null;
+  surface_type: string | null;
+  formats: string[] | null;
+  whatsapp_phone: string | null;
+};
+export type OwnerDashboard =
+  | { error: string }
+  | {
+      days: number;
+      turf: OwnerTurf;
+      series: DayStat[];
+      prev: { views: number; calls: number; whatsapp: number; ask: number };
+      ask: number;
+      games: { hosted: number; upcoming: number };
+      reviews: { tapturf: number; recent: { rating: number; comment: string; author: string; source: string; created_at: string }[] };
+      edits: { created_at: string; fields: string[] }[];
+    };

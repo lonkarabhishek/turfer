@@ -12,7 +12,8 @@ import { useAsk } from "./AskProvider";
 export function AskLauncher() {
   const { open, openPanel, turns } = useAsk();
   const pathname = usePathname();
-  if (open || pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
+  // Not on owner (myTapturf), admin or login pages.
+  if (open || pathname.startsWith("/admin") || pathname.startsWith("/login") || pathname === "/my" || pathname.startsWith("/my/")) return null;
   // Turf and game pages own the bottom edge on phones (Call / WhatsApp
   // bar, Join bar, create-game footer), so the pill is desktop-only there
   // and those pages offer an in-page button instead.
