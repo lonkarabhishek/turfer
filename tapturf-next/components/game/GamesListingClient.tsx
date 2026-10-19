@@ -203,7 +203,7 @@ export function GamesListingClient({
             <div className="w-16 h-16 bg-white border border-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-5">
               <Gamepad2 className="w-7 h-7 text-primary-400" />
             </div>
-            <p className="font-display text-2xl text-primary-800 mb-1">No games yet</p>
+            <p className="font-display text-2xl text-primary-800 mb-1">{searchQuery ? "No games match" : "No upcoming games"}</p>
             <p className="text-sm text-primary-500 mb-8">
               {searchQuery ? "Try a different search" : "Be the first to host one."}
             </p>
