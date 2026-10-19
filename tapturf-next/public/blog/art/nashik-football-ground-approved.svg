@@ -1,24 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Illustration of a floodlit football ground at night with two tall floodlight masts and a Nashik news label</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Illustration of two separate Nashik sites: a floodlight mast beside a generic field outline, and a second field outline for a new ground</title>
 <defs>
-<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B0B0E"/><stop offset="1" stop-color="#26262B"/></linearGradient>
-<linearGradient id="turf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16A34A"/><stop offset="1" stop-color="#14532D"/></linearGradient>
-<radialGradient id="beam" cx="0.5" cy="0" r="1"><stop offset="0" stop-color="#FFF3C4" stop-opacity="0.55"/><stop offset="1" stop-color="#FFF3C4" stop-opacity="0"/></radialGradient>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F0F11"/><stop offset="1" stop-color="#2A2A2E"/></linearGradient>
+<radialGradient id="beam" cx="0.5" cy="0" r="1"><stop offset="0" stop-color="#FFF3C4" stop-opacity="0.5"/><stop offset="1" stop-color="#FFF3C4" stop-opacity="0"/></radialGradient>
 </defs>
-<rect width="1200" height="675" fill="url(#sky)"/>
-<polygon points="210,170 40,560 380,560" fill="url(#beam)"/>
-<polygon points="990,170 820,560 1160,560" fill="url(#beam)"/>
-<polygon points="0,430 1200,430 1200,675 0,675" fill="url(#turf)"/>
-<g stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="4" fill="none">
-<polygon points="120,470 1080,470 1160,650 40,650"/>
-<line x1="600" y1="470" x2="600" y2="650"/>
-<ellipse cx="600" cy="560" rx="90" ry="30"/>
-</g>
-<g fill="#52525B"><rect x="204" y="190" width="12" height="260"/><rect x="984" y="190" width="12" height="260"/></g>
-<g fill="#FFF3C4"><rect x="170" y="150" width="80" height="40" rx="6"/><rect x="950" y="150" width="80" height="40" rx="6"/></g>
-<g fill="#0B0B0E" opacity="0.35"><circle cx="190" cy="170" r="6"/><circle cx="210" cy="170" r="6"/><circle cx="230" cy="170" r="6"/><circle cx="970" cy="170" r="6"/><circle cx="990" cy="170" r="6"/><circle cx="1010" cy="170" r="6"/></g>
+<rect width="1200" height="675" fill="url(#bg)"/>
 <g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
-<rect x="380" y="90" width="440" height="110" rx="18" fill="#E0A92E"/>
-<text x="600" y="140" font-size="30" font-weight="700" fill="#0B0B0E" text-anchor="middle">NASHIK</text>
-<text x="600" y="180" font-size="30" fill="#0B0B0E" text-anchor="middle">Football ground approved</text>
+<text x="80" y="110" font-size="44" font-weight="700">Nashik sports infrastructure</text>
+<text x="80" y="152" font-size="24" fill-opacity="0.7">Two separate approvals, announced 6 October 2026</text>
+<!-- divider -->
+<line x1="600" y1="200" x2="600" y2="600" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="2" stroke-dasharray="8 10"/>
+<!-- left site: floodlight -->
+<polygon points="260,260 150,470 370,470" fill="url(#beam)"/>
+<rect x="254" y="270" width="12" height="230" fill="#71717A"/>
+<rect x="222" y="236" width="76" height="36" rx="6" fill="#FFF3C4"/>
+<ellipse cx="260" cy="520" rx="200" ry="60" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="4"/>
+<text x="260" y="620" font-size="28" font-weight="700" text-anchor="middle">Floodlights</text>
+<text x="260" y="654" font-size="22" fill-opacity="0.7" text-anchor="middle">Kanhere Maidan</text>
+<!-- right site: generic field outline -->
+<rect x="780" y="400" width="320" height="170" rx="10" fill="none" stroke="#16A34A" stroke-width="5"/>
+<text x="940" y="620" font-size="28" font-weight="700" text-anchor="middle">New ground</text>
+<text x="940" y="654" font-size="22" fill-opacity="0.7" text-anchor="middle">Panchavati</text>
 </g>
 </svg>
