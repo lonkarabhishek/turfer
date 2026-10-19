@@ -37,9 +37,12 @@ import { post as boxCricketPricesIndia } from "./posts/box-cricket-prices-india"
 import { post as howToWinAtBoxCricket } from "./posts/how-to-win-at-box-cricket";
 // 2026-10-19: data post from the TapTurf database.
 import { post as nashikVsPuneTurfsListedPrices2026 } from "./posts/nashik-vs-pune-turfs-listed-prices-2026";
+// 2026-10-19: Nashik sports news.
+import { post as nashikFootballGroundKanhereFloodlightsApproved } from "./posts/nashik-football-ground-kanhere-floodlights-approved";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  nashikFootballGroundKanhereFloodlightsApproved,
   nashikVsPuneTurfsListedPrices2026,
   howToWinAtBoxCricket,
   boxCricketPricesIndia,
