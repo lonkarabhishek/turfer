@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Illustration of a football, a dumbbell and a weekly calendar with three training days marked</title>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F0F11"/><stop offset="1" stop-color="#2A2A2E"/></linearGradient>
+  <linearGradient id="turf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16A34A"/><stop offset="1" stop-color="#15803D"/></linearGradient>
+</defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<rect x="0" y="520" width="1200" height="155" fill="url(#turf)"/>
+<path d="M0 560H1200M0 610H1200" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="2"/>
+<!-- calendar -->
+<g transform="translate(90,110)">
+  <rect width="560" height="250" rx="22" fill="#18181B" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="2"/>
+  <rect width="560" height="64" rx="22" fill="#E0A92E"/><rect y="40" width="560" height="24" fill="#E0A92E"/>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#0F0F11" text-anchor="middle">
+    <text x="40" y="42">M</text><text x="120" y="42">T</text><text x="200" y="42">W</text><text x="280" y="42">T</text><text x="360" y="42">F</text><text x="440" y="42">S</text><text x="520" y="42">S</text>
+  </g>
+  <g fill="#FFFFFF" fill-opacity="0.10">
+    <rect x="12" y="90" width="56" height="56" rx="12"/><rect x="172" y="90" width="56" height="56" rx="12"/><rect x="332" y="90" width="56" height="56" rx="12"/>
+    </g>
+  <!-- training days: Tue, Thu -->
+  <rect x="92" y="90" width="56" height="56" rx="12" fill="#16A34A"/>
+  <rect x="252" y="90" width="56" height="56" rx="12" fill="#16A34A"/>
+  <!-- match day: Sat -->
+  <rect x="412" y="90" width="56" height="56" rx="12" fill="#E0A92E"/>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle"><text x="120" y="126">1</text><text x="280" y="126">2</text></g>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="#0F0F11" text-anchor="middle"><text x="440" y="126">3</text></g>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#FFFFFF" fill-opacity="0.8">
+    <circle cx="30" cy="196" r="7" fill="#16A34A"/><text x="48" y="202">Strength</text>
+    <circle cx="170" cy="196" r="7" fill="#16A34A"/><text x="188" y="202">Power</text>
+    <circle cx="290" cy="196" r="7" fill="#E0A92E"/><text x="308" y="202">Match</text>
+  </g>
+</g>
+<!-- football -->
+<g transform="translate(900,330)">
+  <ellipse cx="0" cy="205" rx="130" ry="18" fill="#000000" opacity="0.3"/>
+  <circle r="150" fill="#FFFFFF"/>
+  <circle r="150" fill="none" stroke="#0F0F11" stroke-width="4"/>
+  <polygon points="0,-55 52,-17 32,45 -32,45 -52,-17" fill="#0F0F11"/>
+  <g stroke="#0F0F11" stroke-width="4" fill="none"><path d="M0 -55V-146M52 -17L138 -45M32 45L84 120M-32 45L-84 120M-52 -17L-138 -45"/></g>
+  <g fill="#0F0F11"><polygon points="-10,-146 10,-146 40,-120 0,-96 -40,-120" opacity="0.0"/>
+  <polygon points="118,-30 146,-10 138,30 108,32 98,0"/><polygon points="-118,-30 -146,-10 -138,30 -108,32 -98,0"/><polygon points="60,112 90,100 112,128 84,148 56,136"/><polygon points="-60,112 -90,100 -112,128 -84,148 -56,136"/></g>
+</g>
+<!-- dumbbell -->
+<g transform="translate(170,590) rotate(-4)">
+  <rect x="60" y="-8" width="220" height="16" rx="6" fill="#D4D4D8"/>
+  <rect x="30" y="-40" width="34" height="80" rx="8" fill="#52525B"/><rect x="0" y="-28" width="28" height="56" rx="8" fill="#71717A"/>
+  <rect x="276" y="-40" width="34" height="80" rx="8" fill="#52525B"/><rect x="312" y="-28" width="28" height="56" rx="8" fill="#71717A"/>
+</g>
+</svg>

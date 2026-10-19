@@ -35,9 +35,12 @@ import { post as bestBoxCricketTurfsMumbai } from "./posts/best-box-cricket-turf
 import { post as bestBoxCricketTurfsNagpur } from "./posts/best-box-cricket-turfs-nagpur";
 import { post as boxCricketPricesIndia } from "./posts/box-cricket-prices-india";
 import { post as howToWinAtBoxCricket } from "./posts/how-to-win-at-box-cricket";
+// 2026-10-19: first Fitness post.
+import { post as gymWorkoutsForFootballPlayers } from "./posts/gym-workouts-for-football-players";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  gymWorkoutsForFootballPlayers,
   howToWinAtBoxCricket,
   boxCricketPricesIndia,
   bestBoxCricketTurfsHyderabad,
