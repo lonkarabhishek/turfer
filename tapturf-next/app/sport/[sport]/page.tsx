@@ -8,6 +8,7 @@ import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
 import { CITY_IDS, isCity, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
+import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 export const revalidate = 3600;
 
@@ -99,6 +100,7 @@ export default async function SportPage({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <NoteInterest sports={[info.name]} />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-primary-400 mb-8">
         <Link href="/" className="hover:text-primary-600 transition-colors">

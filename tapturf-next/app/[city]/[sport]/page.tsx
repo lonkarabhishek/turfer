@@ -10,6 +10,7 @@ import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
+import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -146,6 +147,7 @@ export default async function CitySportPage({
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       {/* The chat answers for this city while the visitor is on its page. */}
       <AskPageContext city={cityId} />
+      <NoteInterest city={cityId} sports={[s.name]} />
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-primary-400 mb-8 overflow-x-auto scrollbar-hide">

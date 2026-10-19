@@ -13,6 +13,7 @@ import { AskPageContext } from "@/components/ask/AskPageContext";
 import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
+import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
@@ -108,6 +109,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
 
   return (
     <>
+      <NoteInterest city={city} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

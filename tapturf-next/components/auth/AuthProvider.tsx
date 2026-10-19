@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, ty
 import { createClient } from "@/lib/supabase/client";
 import type { AppUser } from "@/types/user";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { saveSignupContext } from "@/lib/analytics/visitor";
 
 interface AuthContextType {
   user: AppUser | null;
@@ -176,7 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile_image_url: userData.profile_image_url || null,
         password: "oauth-no-password",
       }]).select("id, name, email, phone, role, profile_image_url").single();
-      if (inserted) return inserted as AppUser;
+      if (inserted) {
+        // A new account: save how they found us, in the background.
+        saveSignupContext(inserted.id, "google");
+        return inserted as AppUser;
+      }
     } catch (e) {
       console.warn("[Auth] ensureUserInDB insert failed (likely RLS):", e);
     }

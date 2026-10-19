@@ -24,6 +24,7 @@ import { TurfGames } from "@/components/turf/TurfGames";
 import { getTrendingPick } from "@/lib/queries/trending";
 import { courtType, sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
+import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 export const revalidate = 3600;
 
@@ -162,6 +163,7 @@ export default async function TurfDetailPage({
   return (
     <div className="has-bottom-cta">
       <TurfJsonLd turf={turf} />
+      <NoteInterest city={turf.city} sports={turf.sports} turfId={turf.id} />
 
       {/* Breadcrumb */}
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-1.5 text-sm text-primary-400 overflow-x-auto scrollbar-hide">

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { logPhoneLogin } from "@/lib/analytics/logins";
 import { useAuth } from "./AuthProvider";
 import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
+import { saveSignupContext } from "@/lib/analytics/visitor";
 
 type Step = "phone" | "otp" | "name";
 
@@ -223,6 +224,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
       const authToken = localStorage.getItem("auth_token") || `phone_${Date.now()}`;
       localStorage.setItem("auth_token", authToken);
+      saveSignupContext(newUser.id, "phone");
       localStorage.setItem("user", JSON.stringify({
         id: newUser.id,
         name: newUser.name,

@@ -15,6 +15,7 @@ import { CityPrePaint } from "@/components/city/CityPrePaint";
 import { CitySync } from "@/components/city/CitySync";
 import { CityPickerSheet } from "@/components/city/CityPickerSheet";
 import "./globals.css";
+import { VisitTracker } from "@/components/analytics/VisitTracker";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -90,6 +91,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} antialiased`}>
         <GoogleAnalytics />
+        <VisitTracker />
         <PWALifecycle />
         <RouteProgress />
         <AuthWrapper>

@@ -11,6 +11,7 @@ import { compareTopRated } from "@/lib/utils/ranking";
 import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
 import { isCity, labelFor, type CityScope } from "@/lib/city";
+import { noteInterest } from "@/lib/analytics/visitor";
 
 const PAGE_SIZE = 48;
 
@@ -238,7 +239,10 @@ export function TurfListingClient({
           return (
             <button
               key={sport ?? "all"}
-              onClick={() => setSelectedSport(sport && selectedSport === sport ? null : sport)}
+              onClick={() => {
+                if (sport && selectedSport !== sport) noteInterest({ sports: [sport] });
+                setSelectedSport(sport && selectedSport === sport ? null : sport);
+              }}
               className={`shrink-0 h-9 px-4 rounded-full text-[14px] font-medium transition-colors ${
                 active ? "bg-primary-900 text-white" : "bg-primary-100 text-primary-900 hover:bg-primary-200"
               }`}

@@ -34,7 +34,7 @@ export function GoogleAnalytics() {
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', '${GA_ID}', { send_page_view: true });
+          gtag('config', '${GA_ID}', { send_page_view: true, allow_google_signals: false, allow_ad_personalization_signals: false });
         `}
       </Script>
       <Suspense fallback={null}>

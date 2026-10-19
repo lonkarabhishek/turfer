@@ -1,3 +1,5 @@
+import { step } from "./visitor";
+
 /**
  * Record a Call / WhatsApp tap on a turf.
  *
@@ -20,6 +22,7 @@ export function logContactClick(opts: {
   userId?: string | null;
 }) {
   if (typeof window === "undefined") return;
+  step("contact_click");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (url && key) {
