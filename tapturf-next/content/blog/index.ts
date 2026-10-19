@@ -35,9 +35,12 @@ import { post as bestBoxCricketTurfsMumbai } from "./posts/best-box-cricket-turf
 import { post as bestBoxCricketTurfsNagpur } from "./posts/best-box-cricket-turfs-nagpur";
 import { post as boxCricketPricesIndia } from "./posts/box-cricket-prices-india";
 import { post as howToWinAtBoxCricket } from "./posts/how-to-win-at-box-cricket";
+// 2026-10-19: data post from the TapTurf database.
+import { post as nashikVsPuneTurfsListedPrices2026 } from "./posts/nashik-vs-pune-turfs-listed-prices-2026";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  nashikVsPuneTurfsListedPrices2026,
   howToWinAtBoxCricket,
   boxCricketPricesIndia,
   bestBoxCricketTurfsHyderabad,

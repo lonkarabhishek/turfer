@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Bar chart comparing how many venues list football, cricket and box cricket in Nashik and Pune on TapTurf</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0F0F11"/><stop offset="1" stop-color="#2A2A2E"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="110" font-size="44" font-weight="700">Nashik vs Pune: venues listing each sport</text>
+<text x="80" y="150" font-size="24" fill-opacity="0.7">TapTurf database, 19 Oct 2026</text>
+<rect x="80" y="190" width="22" height="22" rx="4" fill="#E0A92E"/><text x="112" y="209" font-size="22">Nashik (63 venues)</text>
+<rect x="340" y="190" width="22" height="22" rx="4" fill="#16A34A"/><text x="372" y="209" font-size="22">Pune (117 venues)</text>
+<g font-size="24" font-weight="700">
+<text x="80" y="300">Football</text>
+<rect x="260" y="270" width="448" height="34" rx="6" fill="#E0A92E"/><text x="722" y="297">56</text>
+<rect x="260" y="314" width="864" height="34" rx="6" fill="#16A34A"/><text x="1138" y="341">108</text>
+<text x="80" y="440">Cricket</text>
+<rect x="260" y="410" width="360" height="34" rx="6" fill="#E0A92E"/><text x="634" y="437">45</text>
+<rect x="260" y="454" width="160" height="34" rx="6" fill="#16A34A"/><text x="434" y="481">20</text>
+<text x="80" y="580">Box Cricket</text>
+<rect x="260" y="550" width="88" height="34" rx="6" fill="#E0A92E"/><text x="362" y="577">11</text>
+<rect x="260" y="594" width="744" height="34" rx="6" fill="#16A34A"/><text x="1018" y="621">93</text>
+</g></g>
+</svg>
