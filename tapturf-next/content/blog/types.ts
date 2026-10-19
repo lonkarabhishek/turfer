@@ -51,7 +51,9 @@ export type Block =
       caption?: string;
     }
   // NEW: Full-width image with alt (uses next/image, lazy).
-  | { type: "image"; src: string; alt: string; caption?: string };
+  | { type: "image"; src: string; alt: string; caption?: string }
+  // Cited sources for news and data posts. Each item links out (https only).
+  | { type: "sources"; items: { label: string; url: string }[]; note?: string };
 
 export type PostCategory =
   | "Best Turfs"

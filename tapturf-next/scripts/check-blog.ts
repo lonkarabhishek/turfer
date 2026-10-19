@@ -162,6 +162,9 @@ function textsOf(post: Post): string[] {
       case "image":
         out.push(b.alt, b.caption ?? "");
         break;
+      case "sources":
+        out.push(...b.items.map((i) => i.label), b.note ?? "");
+        break;
     }
   }
   return out.filter(Boolean);
@@ -209,6 +212,13 @@ for (const post of ALL_POSTS) {
         break;
       case "cta":
         checkHref(slug, at, b.href, internal);
+        break;
+      case "sources":
+        if (!b.items.length) warn(slug, `${at}: sources list is empty`);
+        b.items.forEach((item, j) => {
+          if (!/^https:\/\/[^\s]+$/.test(item.url ?? "")) err(slug, `${at}: source ${j + 1} url must be a full https:// link`);
+          if (!item.label?.trim()) warn(slug, `${at}: source ${j + 1} has no label`);
+        });
         break;
       case "turf":
         internal.push(`/turf/${b.id}`);
@@ -271,7 +281,7 @@ for (const post of ALL_POSTS) {
     if (local.startsWith("/") && !fs.existsSync(path.join(PUBLIC, local))) warn(slug, `heroImage.og ${og} is not in public/`);
   }
 
-  if (category === "News" && !post.blocks.some((b) => (b.type === "h2" || b.type === "h3") && /source/i.test(b.text)))
+  if (category === "News" && !post.blocks.some((b) => b.type === "sources" || ((b.type === "h2" || b.type === "h3") && /source/i.test(b.text))))
     warn(slug, `News post has no "Sources" heading, list where each fact came from`);
   if (category === "Fitness" && !/not medical advice/i.test(all))
     warn(slug, `Fitness post is missing the "not medical advice" line`);

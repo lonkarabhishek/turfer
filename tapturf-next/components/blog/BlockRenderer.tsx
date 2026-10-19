@@ -63,6 +63,22 @@ export function BlockRenderer({ block }: { block: Block }) {
         </ol>
       );
 
+    case "sources":
+      return (
+        <div className="mb-6">
+          <ul className="list-disc pl-6 space-y-2 marker:text-accent-500">
+            {block.items.map((item, i) => (
+              <li key={i} className="text-[15px] leading-[1.6] text-primary-800">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="underline decoration-primary-300 underline-offset-2 hover:text-accent-600 break-words">
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+          {block.note && <p className="mt-3 text-[14px] leading-relaxed text-primary-500">{block.note}</p>}
+        </div>
+      );
+
     case "quote":
       return (
         <blockquote className="border-l-4 border-accent-500 pl-5 py-2 my-6 text-[17px] italic text-primary-700 bg-accent-50/40 rounded-r-lg">

@@ -113,7 +113,7 @@ All block types (`p`, `h2`, `h3`, `ul`, `ol`, `quote`, `callout`, `cta`, `stat-g
 **Hard rules.** A post that breaks any of these does not ship.
 
 1. **Never invent facts.** That means no made-up studies, statistics, quotes, prices, gym names, openings, events or people. Every number needs a source you actually read. If you cannot source a claim, cut it.
-2. **Every news post cites its sources.** Use a short "Sources" `ul` at the end, with the publication name and date for each source. Only cover events that actually happened, with the real date. If you are rewriting a report, summarise it in your own words and link to it. Do not copy paragraphs.
+2. **Every news post cites its sources.** End with an `h2` "Sources" followed by a `sources` block, which renders clickable links: `{ type: "sources", items: [{ label: "Pudhari, 7 October 2026", url: "https://..." }], note: "optional line" }`. Give the publication name and date in each label. Only cover events that actually happened, with the real date. If you are rewriting a report, summarise it in your own words and link to it. Do not copy paragraphs.
 3. **Health content is YMYL (Your Money or Your Life).** Google holds it to a higher bar.
    - No medical, injury-treatment or supplement-dosage advice beyond plain, widely accepted guidance. Prefer guidance from WHO, ICMR, NHS or a sports body.
    - End every training post with a line like: "This is general information, not medical advice. Check with a doctor or a qualified coach before starting a new programme, especially after an injury."

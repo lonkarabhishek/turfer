@@ -144,15 +144,15 @@ export const post: Post = {
 
     { type: "h2", text: "Sources" },
     {
-      type: "ul",
+      type: "sources",
       items: [
-        "Nashik Calling, press note on the approvals, dated 6 October 2026: https://nashikcalling.com/nashik-city-news-06102026-3/",
-        "Pudhari, report published 7 October 2026: https://pudhari.news/maharashtra/north-maharashtra/nashik/nashik-to-get-national-level-football-ground-and-floodlights-at-kanhere-stadium-sd22",
-        "Prahaar, report published 7 October 2026: https://www.prahaar.in/2026/10/07/nashik-national-standard-football-ground-in-nashik-high-mast-floodlights-for-night-cricket-at-kanhere-ground/",
-        "Free Press Journal, report updated 7 October 2026: https://www.freepressjournal.in/pune/nashik-city-set-to-host-national-level-football-matches-at-anant-kanhere-maidan",
-        "Navbharat Live, report published 7 October 2026 (source of the cost figure we do not rely on): https://navbharatlive.com/maharashtra/nashik/nashik-national-level-football-ground-kanhere-maidan-floodlights-mgb06",
-        "Marathi and Hindi sources were read in the original and summarised in our own words. Details were checked on 19 October 2026.",
+        { label: "Nashik Calling, press note on the approvals, dated 6 October 2026", url: "https://nashikcalling.com/nashik-city-news-06102026-3/" },
+        { label: "Pudhari, report published 7 October 2026", url: "https://pudhari.news/maharashtra/north-maharashtra/nashik/nashik-to-get-national-level-football-ground-and-floodlights-at-kanhere-stadium-sd22" },
+        { label: "Prahaar, report published 7 October 2026", url: "https://www.prahaar.in/2026/10/07/nashik-national-standard-football-ground-in-nashik-high-mast-floodlights-for-night-cricket-at-kanhere-ground/" },
+        { label: "Free Press Journal, report updated 7 October 2026", url: "https://www.freepressjournal.in/pune/nashik-city-set-to-host-national-level-football-matches-at-anant-kanhere-maidan" },
+        { label: "Navbharat Live, report published 7 October 2026 (source of the cost figure we do not rely on)", url: "https://navbharatlive.com/maharashtra/nashik/nashik-national-level-football-ground-kanhere-maidan-floodlights-mgb06" },
       ],
+      note: "Marathi and Hindi sources were read in the original and summarised in our own words. Details were checked on 19 October 2026.",
     },
   ],
 };
