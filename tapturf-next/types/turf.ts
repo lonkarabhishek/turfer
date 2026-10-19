@@ -87,6 +87,14 @@ export interface Turf {
   description_updated_at: string | null;
   /** AI cover pass verdicts; unusable photos are filtered out of images. */
   image_review?: { url: string; usable: boolean; quality: number; shows: string; note: string }[] | null;
+  /** Listed per-hour prices by format, time band and day type (from online listings). */
+  pricing_bands?: PriceBand[] | null;
+  /** Formats the venue lists, e.g. "6-a-side", "box cricket". */
+  formats?: string[] | null;
+  has_nets?: boolean | null;
+  /** Short research note from public reviews. */
+  good_to_know?: string | null;
+  good_to_know_updated_at?: string | null;
   /** "What players say": made from written reviews by the admin pass. */
   review_summary?: { summary: string; likes: string[]; gripes: string[]; based_on: number; sources: string[] } | null;
 
@@ -111,6 +119,14 @@ export type PriceUnit = "per_hour" | "per_slot" | "per_person";
  * numeric form (price_inr + context) and the research form (free text
  * + source_url). Both are unverified and never go into JSON-LD.
  */
+export type PriceBand = {
+  band: "morning" | "day" | "evening" | "night";
+  days: "weekday" | "weekend" | "all";
+  format: string | null;
+  price_per_hour: number;
+  source?: string | null;
+};
+
 export type PriceMention = {
   price_inr?: number | null;
   context?: string | null;

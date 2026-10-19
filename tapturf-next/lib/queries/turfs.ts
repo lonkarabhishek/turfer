@@ -3,7 +3,7 @@ import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
-import type { Turf } from "@/types/turf";
+import type { PriceBand, Turf } from "@/types/turf";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -147,10 +147,28 @@ function transformTurf(raw: any): Turf {
     description_source: raw.description_source || null,
     description_updated_at: raw.description_updated_at ?? null,
     review_summary: raw.review_summary && typeof raw.review_summary.summary === "string" ? raw.review_summary : null,
+    pricing_bands: toBands(raw.pricing_bands),
+    formats: Array.isArray(raw.formats) ? raw.formats.filter((f: unknown): f is string => typeof f === "string" && !!f.trim()) : null,
+    has_nets: raw.has_nets ?? null,
+    good_to_know: typeof raw.good_to_know === "string" && raw.good_to_know.trim() ? raw.good_to_know.trim() : null,
+    good_to_know_updated_at: raw.good_to_know_updated_at ?? null,
     is_active: raw.is_active ?? true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
+}
+
+const BANDS = new Set(["morning", "day", "evening", "night"]);
+const DAYS = new Set(["weekday", "weekend", "all"]);
+
+/** Keep only well-formed price bands with a real per-hour price. */
+function toBands(raw: unknown): PriceBand[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out = raw.filter(
+    (b): b is PriceBand =>
+      !!b && BANDS.has(b.band) && DAYS.has(b.days) && typeof b.price_per_hour === "number" && b.price_per_hour > 0 && b.price_per_hour < 100000,
+  );
+  return out.length ? out : null;
 }
 
 const PAGE = 1000;

@@ -292,7 +292,7 @@ export default async function TurfDetailPage({
             {/* Description */}
             {turf.description && (
               <div className="section-divider">
-                <p className="text-base text-primary-600 leading-relaxed whitespace-pre-line">
+                <p className="text-base text-primary-600 leading-relaxed whitespace-pre-line [overflow-wrap:anywhere]">
                   {turf.description}
                 </p>
               </div>

@@ -1,8 +1,18 @@
 import { ExternalLink } from "lucide-react";
 import type { Turf } from "@/types/turf";
 import { formatPrice, getTextPriceMentions, priceUnitSuffix } from "@/lib/utils/prices";
+import { PriceBands } from "./PriceBands";
 
 export function TurfPricing({ turf }: { turf: Turf }) {
+  // Listed prices by format and time band are the richest we have.
+  if (turf.pricing_bands?.length) {
+    return (
+      <div className="section-divider">
+        <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
+        <PriceBands bands={turf.pricing_bands} />
+      </div>
+    );
+  }
   const unit = priceUnitSuffix(turf);
   // Research notes ("Rs 500 per hour (Day), Rs 600 (Night)" with a
   // source). Shown when we have no price table of our own.

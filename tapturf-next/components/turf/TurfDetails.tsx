@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Turf } from "@/types/turf";
 import { normaliseOpeningHours, istWeekdayName, formatSpan } from "@/lib/utils/hours";
+import { formatLabel } from "@/lib/utils/formats";
 
 export function TurfDetails({ turf }: { turf: Turf }) {
   const hoursRows = normaliseOpeningHours(turf.opening_hours, {
@@ -30,7 +31,14 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     });
   }
 
-  if (turf.ground_format) {
+  const formats = [...new Set((turf.formats ?? []).map((f) => formatLabel(f)))];
+  if (formats.length) {
+    details.push({
+      icon: <Users className="w-5 h-5 text-primary-400" />,
+      label: formats.length > 1 ? "Formats" : "Format",
+      value: formats.join(", "),
+    });
+  } else if (turf.ground_format) {
     details.push({
       icon: <Users className="w-5 h-5 text-primary-400" />,
       label: "Format",
@@ -72,11 +80,11 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     });
   }
 
-  if (turf.net_condition) {
+  if (turf.has_nets || turf.net_condition) {
     details.push({
       icon: <span className="text-lg">🥅</span>,
-      label: "Net Condition",
-      value: turf.net_condition,
+      label: "Nets",
+      value: turf.net_condition ? `${turf.has_nets ? "Yes, " : ""}${turf.has_nets ? turf.net_condition.toLowerCase() : turf.net_condition} condition` : "Yes",
     });
   }
 
@@ -95,14 +103,25 @@ export function TurfDetails({ turf }: { turf: Turf }) {
 
   const hasFacts = details.length > 0 || links.length > 0;
   const hasHours = hoursRows.length > 0;
+  const note = turf.good_to_know;
 
-  if (!hasFacts && !hasHours) return null;
+  if (!hasFacts && !hasHours && !note) return null;
 
   return (
     <div className="section-divider">
       <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">
         Turf details
       </h2>
+
+      {note && (
+        <div className="mb-8 rounded-2xl bg-cream-50 border border-cream-300 px-4 py-3.5">
+          <p className="text-xs font-semibold text-primary-500">Good to know</p>
+          <p className="mt-1 text-[15px] leading-relaxed text-primary-800">{note}</p>
+          <p className="mt-1.5 text-[12px] text-primary-400">
+            From public reviews{monthYear(turf.good_to_know_updated_at) ? `, updated ${monthYear(turf.good_to_know_updated_at)}` : ""}. Confirm with the turf.
+          </p>
+        </div>
+      )}
 
       {hasFacts && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5 mb-8">
@@ -192,6 +211,13 @@ export function TurfDetails({ turf }: { turf: Turf }) {
       )}
     </div>
   );
+}
+
+/** ISO timestamp -> "Oct 2026" in India time, null when missing or bad. */
+function monthYear(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 /** "https://www.niwec.org/sport-fees/" -> "niwec.org" */
