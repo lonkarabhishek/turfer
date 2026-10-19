@@ -41,7 +41,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const turf = await getTurfById(id);
-  if (!turf) return { title: "Turf Not Found" };
+  if (!turf) return { title: "Turf not found", robots: { index: false } };
 
   const priceSummary = summarisePrice(turf);
   const sports = turf.sports.join(", ");
@@ -118,7 +118,7 @@ export async function generateMetadata({
     description:
       `${turfType ?? (sports || "Sports turf")}${locationClause}.` +
       (turfType && sports ? ` Sports: ${sports}.` : "") +
-      `${priceClause}${ratingClause}${photoClause} Call or WhatsApp to book.`,
+      `${priceClause}${ratingClause}${photoClause}${getPhone(turf) ? " Call or WhatsApp to book." : ""}`,
     keywords: [
       turf.name,
       area ? `turf in ${area.toLowerCase()}` : null,
@@ -411,7 +411,7 @@ export default async function TurfDetailPage({
                       Price on request
                     </span>
                     <p className="text-[13px] text-primary-500 mt-1">
-                      Call or WhatsApp for slot rates
+                      {phone ? "Call or WhatsApp for slot rates" : "Contact details not listed yet"}
                     </p>
                   </div>
                 )}

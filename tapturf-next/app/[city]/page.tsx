@@ -124,7 +124,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       >
         <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-10 pb-10 md:pt-16 md:pb-14">
           <p className="text-[11px] font-mono text-accent-600 mb-2">
-            {turfs.length} grounds
+            {turfs.length} {turfs.length === 1 ? "ground" : "grounds"}
           </p>
           <h1 className="font-display text-primary-800 leading-[0.88] tracking-tight text-[48px] sm:text-[80px] md:text-[120px]">
             Turfs in<br />

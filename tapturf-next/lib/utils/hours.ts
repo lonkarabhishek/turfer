@@ -116,6 +116,9 @@ export function normaliseOpeningHours(
   }
 
   if (fallback?.start_time && fallback?.end_time) {
+    // 00:00 to 23:59 with no 24x7 flag and no researched hours is the
+    // column default, not a fact: show nothing rather than "Open 24 hours".
+    if (isAllDaySpan({ opens: trimSeconds(fallback.start_time), closes: trimSeconds(fallback.end_time) })) return rows;
     const raw = `${trimSeconds(fallback.start_time)} – ${trimSeconds(fallback.end_time)}`;
     const parsed = parseHoursString(raw);
     for (const day of DAYS)
