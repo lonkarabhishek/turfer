@@ -10,11 +10,12 @@ export const post: Post = {
   city: "nashik",
   readMinutes: 5,
   publishedAt: "2026-10-19",
+  updatedAt: "2026-10-19",
   coverEmoji: "📰",
   heroImage: {
     url: "/blog/art/nashik-football-ground-approved.svg",
     og: "https://www.tapturf.in/blog/art/nashik-football-ground-approved.png",
-    alt: "Illustration of a floodlit football ground at night with two tall floodlight masts and a Nashik news label",
+    alt: "Illustration of two separate Nashik sites: a floodlight mast beside a generic field outline, and a second field outline for a new ground",
   },
   keywords: [
     "nashik football ground",
@@ -28,13 +29,12 @@ export const post: Post = {
   cta: { href: "/nashik", label: "See turfs in Nashik" },
   blocks: [
     {
-      type: "callout",
-      title: "In brief",
-      text: "On 6 October 2026, Nashik district sports officer Sunanda Patil announced that the District Planning Committee has approved two projects: a national-standard football ground on about 8 acres in Mane Nagar, Panchavati, and high-mast floodlights at Hutatma Anant Kanhere Maidan. Both are approved, not built. No completion date has been reported.",
+      type: "p",
+      text: "Nashik's District Planning Committee has approved a national-standard football ground in Panchavati and high-mast floodlights at Hutatma Anant Kanhere Maidan, according to a press release by district sports officer Sunanda Patil on 6 October 2026. The two are separate projects, both approved and neither built, and no completion date has been reported.",
     },
     {
       type: "p",
-      text: "This is news about public sports infrastructure, not about private turfs. It matters to Nashik players because both projects, if delivered, add proper pitches and evening lighting to a city where many of us play on small-sided turfs. Below we separate what is confirmed from what is only reported or expected.",
+      text: "This is news about public sports infrastructure, not private turfs. If delivered, it adds a proper pitch and evening lighting to a city where many of us play on small-sided turfs. Below we separate what is confirmed from what is only reported or expected.",
     },
 
     { type: "h2", text: "What exactly has been approved in Nashik?" },
@@ -58,17 +58,13 @@ export const post: Post = {
     },
     {
       type: "p",
-      text: "We have no official document to settle it. On the weight of the Marathi reports, which follow the press note closely, the floodlights look cricket-focused. Treat any football use of that lighting as unconfirmed until the district sports office says otherwise.",
+      text: "Kanhere Maidan is a cricket ground, and Wikipedia lists the Maharashtra Cricket Association as its operator. That supports the cricket reading. We have no official document to settle it, but the Marathi reports follow the press note closely and the floodlights look cricket-focused. Treat any football use of that lighting as unconfirmed until the district sports office says otherwise.",
     },
 
     { type: "h2", text: "What did the officials and reports claim about the benefits?" },
     {
       type: "p",
       text: "These are stated expectations, not results. The reports say a proper ground should reduce injuries from rough surfaces, let Nashik host state and national football tournaments and professional leagues, and spare local players trips to Mumbai or Pune for quality facilities. They also say evening lighting lets students and working players practise after hours, and that the facilities could draw visitors and help local businesses.",
-    },
-    {
-      type: "p",
-      text: "One outlet, Navbharat Live, also gave a cost of about ₹21.11 lakh for the football ground. We have not seen that figure in the other reports we read, so we are not relying on it here.",
     },
 
     { type: "h2", text: "What does this mean for players in Nashik?" },
@@ -150,7 +146,8 @@ export const post: Post = {
         { label: "Pudhari, report published 7 October 2026", url: "https://pudhari.news/maharashtra/north-maharashtra/nashik/nashik-to-get-national-level-football-ground-and-floodlights-at-kanhere-stadium-sd22" },
         { label: "Prahaar, report published 7 October 2026", url: "https://www.prahaar.in/2026/10/07/nashik-national-standard-football-ground-in-nashik-high-mast-floodlights-for-night-cricket-at-kanhere-ground/" },
         { label: "Free Press Journal, report updated 7 October 2026", url: "https://www.freepressjournal.in/pune/nashik-city-set-to-host-national-level-football-matches-at-anant-kanhere-maidan" },
-        { label: "Navbharat Live, report published 7 October 2026 (source of the cost figure we do not rely on)", url: "https://navbharatlive.com/maharashtra/nashik/nashik-national-level-football-ground-kanhere-maidan-floodlights-mgb06" },
+        { label: "Navbharat Live, report published 7 October 2026", url: "https://navbharatlive.com/maharashtra/nashik/nashik-national-level-football-ground-kanhere-maidan-floodlights-mgb06" },
+        { label: "Wikipedia, Hutatma Anant Kanhere Maidan, accessed 19 October 2026 (for the ground's cricket use and operator; Wikipedia is user-edited)", url: "https://en.wikipedia.org/wiki/Hutatma_Anant_Kanhere_Maidan" },
       ],
       note: "Marathi and Hindi sources were read in the original and summarised in our own words. Details were checked on 19 October 2026.",
     },
