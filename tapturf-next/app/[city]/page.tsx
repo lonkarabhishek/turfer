@@ -14,6 +14,7 @@ import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
+import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
@@ -89,7 +90,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       position: i + 1,
       item: {
         "@type": "SportsActivityLocation",
-        "@id": `https://www.tapturf.in/turf/${t.id}`,
+        "@id": turfUrl(t),
         name: t.name,
         address: {
           "@type": "PostalAddress",
@@ -142,7 +143,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <ul className="sr-only" aria-hidden>
             {turfs.map((t) => (
               <li key={t.id}>
-                <Link href={`/turf/${t.id}`}>
+                <Link href={turfPath(t)}>
                   {t.name}, {t.address}
                 </Link>
               </li>
@@ -218,7 +219,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             {turfs.map((t) => (
               <li key={t.id}>
                 <Link
-                  href={`/turf/${t.id}`}
+                  href={turfPath(t)}
                   className="flex items-start gap-2 rounded-xl border border-primary-200 bg-white p-3 hover:border-accent-500 transition-colors"
                 >
                   <MapPin className="w-4 h-4 text-accent-600 mt-0.5 shrink-0" />

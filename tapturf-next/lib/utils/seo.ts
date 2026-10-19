@@ -4,6 +4,7 @@ import { normalizeImageUrl } from "./images";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
+import { turfUrl } from "./turfPath";
 
 export function generateTurfJsonLd(turf: Turf) {
   const minPrice = getMinimumPrice(turf);
@@ -29,7 +30,7 @@ export function generateTurfJsonLd(turf: Turf) {
   return {
     "@context": "https://schema.org",
     "@type": "SportsActivityLocation",
-    "@id": `https://www.tapturf.in/turf/${turf.id}`,
+    "@id": turfUrl(turf),
     name: turf.name,
     description:
       turf.description || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
@@ -69,7 +70,7 @@ export function generateTurfJsonLd(turf: Turf) {
       );
       return sameAs.length ? { sameAs } : {};
     })(),
-    url: `https://www.tapturf.in/turf/${turf.id}`,
+    url: turfUrl(turf),
     // Prefer per-day opening_hours (jsonb) so Sunday-closed turfs and
     // split shifts get their own spec entries; fall back to the old
     // single-window start_time / end_time.
@@ -105,7 +106,7 @@ export function generateBreadcrumbJsonLd(turf: Turf) {
         "@type": "ListItem",
         position: 3,
         name: turf.name,
-        item: `https://www.tapturf.in/turf/${turf.id}`,
+        item: turfUrl(turf),
       },
     ],
   };

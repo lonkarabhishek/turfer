@@ -24,6 +24,7 @@ export interface Game {
   // Joined data from turfs table
   turfs?: {
     id: string;
+    slug?: string | null;
     name: string;
     address: string;
     city?: string | null;

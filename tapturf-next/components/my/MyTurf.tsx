@@ -8,6 +8,7 @@ import { DailyChart } from "@/components/admin/DailyChart";
 import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { EditListing } from "./EditListing";
+import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
 
@@ -69,7 +70,7 @@ export function MyTurf({ id }: { id: string }) {
           <h1 className="font-display text-[28px] md:text-[34px] leading-tight text-primary-900">{t.name}</h1>
           <p className="text-[14px] text-primary-500">{place}</p>
         </div>
-        <Link href={`/turf/${t.id}`} target="_blank" className="shrink-0 inline-flex items-center gap-1 h-10 px-3.5 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] font-semibold text-primary-900">
+        <Link href={turfPath(t)} target="_blank" className="shrink-0 inline-flex items-center gap-1 h-10 px-3.5 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] font-semibold text-primary-900">
           Public page <ExternalLink className="w-3.5 h-3.5" />
         </Link>
       </div>

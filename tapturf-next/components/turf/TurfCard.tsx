@@ -9,6 +9,7 @@ import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { imageUrlForCard } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
+import { turfPath } from "@/lib/utils/turfPath";
 
 interface TurfCardProps {
   turf: Turf;
@@ -115,7 +116,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
 
   return (
     <Link
-      href={`/turf/${turf.id}`}
+      href={turfPath(turf)}
       className="block group rounded-2xl focus-neon"
       onClick={(e) => {
         if (swiped.current) e.preventDefault();

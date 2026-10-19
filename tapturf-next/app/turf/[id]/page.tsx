@@ -3,9 +3,10 @@ import { AskPageContext } from "@/components/ask/AskPageContext";
 import { AskAboutButton } from "@/components/ask/AskAboutButton";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
-import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
+import { getAllTurfKeys, getTurfBySlugOrId } from "@/lib/queries/turfs";
+import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
@@ -29,9 +30,11 @@ import { isTurfClaimed } from "@/lib/queries/owners";
 
 export const revalidate = 3600;
 
+// The [id] segment is the turf's slug (/turf/turf-up-hinjewadi). Old
+// links by id still resolve and 308 to the slug URL.
 export async function generateStaticParams() {
-  const ids = await getAllTurfIds();
-  return ids.map((id) => ({ id }));
+  const keys = await getAllTurfKeys();
+  return keys.map((id) => ({ id }));
 }
 
 export async function generateMetadata({
@@ -40,7 +43,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const turf = await getTurfById(id);
+  const turf = await getTurfBySlugOrId(decodeURIComponent(id));
   if (!turf) return { title: "Turf not found", robots: { index: false } };
 
   const priceSummary = summarisePrice(turf);
@@ -130,7 +133,7 @@ export async function generateMetadata({
     openGraph: {
       title: cityAndArea ? `${turf.name}, ${cityAndArea}` : turf.name,
       description: `${sports || "Multi-sport"}${locationClause}.${priceClause}${ratingClause}`,
-      url: `https://www.tapturf.in/turf/${turf.id}`,
+      url: turfUrl(turf),
       ...(firstImage && {
         images: [{ url: firstImage, width: 1200, height: 630 }],
       }),
@@ -138,7 +141,7 @@ export async function generateMetadata({
       locale: "en_IN",
       siteName: "TapTurf",
     },
-    alternates: { canonical: `https://www.tapturf.in/turf/${turf.id}` },
+    alternates: { canonical: turfUrl(turf) },
   };
 }
 
@@ -148,9 +151,11 @@ export default async function TurfDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const turf = await getTurfById(id);
-  const claimed = turf ? await isTurfClaimed(turf.id) : false;
+  const key = decodeURIComponent(id);
+  const turf = await getTurfBySlugOrId(key);
   if (!turf) notFound();
+  if (turf.slug && key !== turf.slug) permanentRedirect(turfPath(turf));
+  const claimed = await isTurfClaimed(turf.id);
 
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);

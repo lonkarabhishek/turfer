@@ -7,6 +7,7 @@ import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
 import { fetchAllRows } from "@/lib/queries/turfs";
 import { isGameExpired } from "@/lib/utils/game";
+import { turfPath } from "@/lib/utils/turfPath";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -20,8 +21,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createReadOnlyClient();
 
   const [turfs, { data: games }] = await Promise.all([
-    fetchAllRows<{ id: string; updated_at: string | null; city: string | null; sports: unknown }>((from, to) =>
-      supabase.from("turfs").select("id, updated_at, city, sports").eq("is_active", true).order("id").range(from, to),
+    fetchAllRows<{ id: string; slug: string | null; updated_at: string | null; city: string | null; sports: unknown }>((from, to) =>
+      supabase.from("turfs").select("id, slug, updated_at, city, sports").eq("is_active", true).order("id").range(from, to),
     ),
     supabase
       .from("games")
@@ -134,7 +135,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   );
 
   const turfPages: MetadataRoute.Sitemap = (turfs ?? []).map((turf) => ({
-    url: `${BASE}/turf/${turf.id}`,
+    url: `${BASE}${turfPath(turf)}`,
     lastModified: turf.updated_at ? new Date(turf.updated_at) : new Date(),
     changeFrequency: "weekly",
     priority: 0.7,

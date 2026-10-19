@@ -59,7 +59,14 @@ export function logContactClick(opts: {
   }
 }
 
-/** Public URL of a turf page, used in the WhatsApp enquiry text. */
+/**
+ * Public URL of a turf page, used in the WhatsApp enquiry text. On the
+ * turf's own page that is the slug URL in the address bar; elsewhere
+ * the id URL, which redirects to it.
+ */
 export function turfPageUrl(turfId: string): string {
+  if (typeof window !== "undefined" && /^\/turf\/[^/]+$/.test(window.location.pathname)) {
+    return `https://www.tapturf.in${window.location.pathname}`;
+  }
   return `https://www.tapturf.in/turf/${turfId}`;
 }

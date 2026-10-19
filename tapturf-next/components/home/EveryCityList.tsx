@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { plural } from "@/lib/home/format";
 import type { HomeCityRow } from "@/lib/home/types";
+import { turfPath } from "@/lib/utils/turfPath";
 
 const SHOWN_FIRST = 6;
 
@@ -23,7 +24,7 @@ function CityRow({ c, showKm }: { c: Row; showKm: boolean }) {
           {c.top.map((t) => (
             <li key={t.id} className="shrink-0">
               <Link
-                href={`/turf/${t.id}`}
+                href={turfPath(t)}
                 className="inline-flex items-center h-10 px-3 rounded-full bg-primary-50 hover:bg-primary-100 text-[13px] text-primary-700 whitespace-nowrap press-tight focus-neon transition-colors"
               >
                 {t.name}

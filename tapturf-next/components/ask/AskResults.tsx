@@ -14,6 +14,7 @@ import { sportBySlug } from "@/lib/sports";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { AskResponse } from "./AskProvider";
+import { turfPath } from "@/lib/utils/turfPath";
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
@@ -23,7 +24,7 @@ export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distan
   const area = areaFor(turf);
   return (
     <Link
-      href={`/turf/${turf.id}`}
+      href={turfPath(turf)}
       className="group snap-start shrink-0 w-[196px] sm:w-[208px] rounded-2xl bg-white border border-primary-100 shadow-soft overflow-hidden hover:border-primary-200 hover:shadow-elevated transition-[box-shadow,border-color] duration-200 cursor-pointer"
     >
       <div className="relative aspect-[4/3] bg-primary-100">
@@ -259,7 +260,7 @@ function CompareBlock({ res }: { res: AskResponse }) {
                   <th className="sticky left-0 bg-primary-50 text-left px-3 py-2 w-[96px] text-[11px] font-semibold uppercase tracking-wide text-primary-400" />
                   {turfs.map((t) => (
                     <th key={t.id} className="text-left px-3 py-2 font-semibold text-primary-900 align-bottom">
-                      <Link href={`/turf/${t.id}`} className="hover:text-accent-700 cursor-pointer">
+                      <Link href={turfPath(t)} className="hover:text-accent-700 cursor-pointer">
                         {t.name}
                       </Link>
                     </th>

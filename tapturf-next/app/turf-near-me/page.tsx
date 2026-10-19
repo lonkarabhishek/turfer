@@ -11,6 +11,7 @@ import { TurfCard } from "@/components/turf/TurfCard";
 import { forCard } from "@/lib/utils/cardTurf";
 import { NearMeFinder } from "@/components/near/NearMeFinder";
 import type { Turf } from "@/types/turf";
+import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 
 // "Turf near me": the page for people who don't know a turf's name yet.
 // Everything a crawler needs is in the HTML (every turf linked, grouped
@@ -193,7 +194,7 @@ export default async function TurfNearMePage() {
           .map((t, i) => ({
             "@type": "ListItem",
             position: i + 1,
-            url: `https://www.tapturf.in/turf/${t.id}`,
+            url: turfUrl(t),
             name: t.name,
           })),
       },
@@ -302,7 +303,7 @@ export default async function TurfNearMePage() {
                 <ul className={LIST}>
                   {turfs.map((t) => (
                     <li key={t.id}>
-                      <Link href={`/turf/${t.id}`}>
+                      <Link href={turfPath(t)}>
                         <span>{t.name}</span>
                         {t.rating > 0 && t.total_reviews > 0 && <i>★ {t.rating.toFixed(1)}</i>}
                       </Link>
@@ -320,7 +321,7 @@ export default async function TurfNearMePage() {
                 <ul className={`${LIST} sm:columns-2 lg:columns-3 gap-x-8`}>
                   {b.more.map(({ turf: t, area }) => (
                     <li key={t.id} className="break-inside-avoid">
-                      <Link href={`/turf/${t.id}`}>
+                      <Link href={turfPath(t)}>
                         <span>
                           {t.name}
                           {area && <small>, {area}</small>}

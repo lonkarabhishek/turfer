@@ -1,6 +1,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { turfPagePaths } from "@/lib/queries/turfs";
 
 /**
  * On-demand cache invalidation for turf writes.
@@ -46,8 +47,8 @@ export async function POST(req: Request) {
   // Supabase DB webhook payload shape: { type, table, record, old_record, schema }
   const b = body as {
     table?: string;
-    record?: { id?: string; city?: string; is_active?: boolean; turf_id?: string };
-    old_record?: { id?: string; city?: string; turf_id?: string };
+    record?: { id?: string; slug?: string | null; city?: string; is_active?: boolean; turf_id?: string };
+    old_record?: { id?: string; slug?: string | null; city?: string; turf_id?: string };
   };
   const row = b.record ?? b.old_record;
   // trending_turfs rows point at a turf via turf_id, not their own id.
@@ -60,11 +61,20 @@ export async function POST(req: Request) {
   paths.add("/turfs");
   paths.add("/sitemap.xml");
 
+  // Turf pages live at /turf/<slug>; /turf/<id> redirects there.
+  const turfPaths = async (id: string, slug?: string | null) => {
+    try {
+      for (const p of await turfPagePaths(id, slug)) paths.add(p);
+    } catch {
+      paths.add(`/turf/${id}`);
+    }
+  };
   if (isTrending) {
-    if (b.record?.turf_id) paths.add(`/turf/${b.record.turf_id}`);
-    if (b.old_record?.turf_id) paths.add(`/turf/${b.old_record.turf_id}`);
+    if (b.record?.turf_id) await turfPaths(b.record.turf_id);
+    if (b.old_record?.turf_id) await turfPaths(b.old_record.turf_id);
   } else if (row?.id) {
-    paths.add(`/turf/${row.id}`);
+    await turfPaths(row.id, row.slug ?? (b.old_record?.slug || undefined));
+    if (b.old_record?.slug && b.old_record.slug !== row.slug) paths.add(`/turf/${b.old_record.slug}`);
   }
   if (row?.city) {
     paths.add(`/${row.city}`);

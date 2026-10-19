@@ -9,6 +9,7 @@ import type { Turf } from "@/types/turf";
 export function forCard(t: Turf): Turf {
   const out: Record<string, unknown> = {
     id: t.id,
+    slug: t.slug,
     name: t.name,
     address: t.address,
     area: t.area,

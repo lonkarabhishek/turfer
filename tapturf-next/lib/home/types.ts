@@ -9,6 +9,7 @@ import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 /** One photo tile in the "Top-rated in {City}" strip. */
 export type HomeTile = {
   id: string;
+  slug?: string | null;
   name: string;
   place: string;
   rating: number;
@@ -37,7 +38,7 @@ export type HomeCityRow = {
   id: string;
   label: string;
   n: number;
-  top: { id: string; name: string }[];
+  top: { id: string; slug?: string | null; name: string }[];
 };
 
 export type HomeGame = {

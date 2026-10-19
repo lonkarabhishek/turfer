@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE, isAdmin } from "@/lib/admin/auth";
+import { turfPagePaths } from "@/lib/queries/turfs";
 
 // Admin only. GET: myTapturf claims, pending first. POST: approve, reject or revoke one.
 
@@ -34,6 +35,6 @@ export async function POST(req: Request) {
     p_status: body.status,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  revalidatePath(`/turf/${body.turfId}`);
+  for (const p of await turfPagePaths(body.turfId)) revalidatePath(p);
   return NextResponse.json(data);
 }

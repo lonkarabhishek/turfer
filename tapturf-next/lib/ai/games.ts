@@ -15,7 +15,7 @@ import type { AskFilters } from "./ask";
 
 export type AskGame = Game & { distanceKm?: number };
 
-const TURF_COLS = 'id, name, address, city, lat, lng, "Gmap Embed link"';
+const TURF_COLS = 'id, slug, name, address, city, lat, lng, "Gmap Embed link"';
 
 /** Today in India as YYYY-MM-DD, since game dates are stored that way. */
 function istToday(): Date {

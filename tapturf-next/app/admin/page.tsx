@@ -25,6 +25,7 @@ import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
+import { turfPath } from "@/lib/utils/turfPath";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -522,7 +523,7 @@ export default async function AdminPage() {
                   {contact30.top.map((t) => (
                     <tr key={t.id} className="border-t border-primary-100">
                       <td className="px-4 py-2.5">
-                        <Link href={`/turf/${t.id}`} className="font-medium text-primary-900 hover:text-accent-600">
+                        <Link href={turfPath(t)} className="font-medium text-primary-900 hover:text-accent-600">
                           {t.name}
                         </Link>
                       </td>

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
+import { turfPagePaths } from "@/lib/queries/turfs";
 
-// POST /api/my/revalidate { turfId, token } -> rebuilds /turf/[id] after
+// POST /api/my/revalidate { turfId, token } -> rebuilds the turf page after
 // an owner edit. Only for callers who manage that turf: the database
 // checks the Google session (cookies) or the phone sign-in token.
 
@@ -16,6 +17,6 @@ export async function POST(req: Request) {
   const supabase = await createServerClient();
   const { data, error } = await supabase.rpc("owner_can_manage", { p_token: token, p_turf_id: turfId });
   if (error || data !== true) return NextResponse.json({ error: "not allowed" }, { status: 403 });
-  revalidatePath(`/turf/${turfId}`);
+  for (const p of await turfPagePaths(turfId)) revalidatePath(p);
   return NextResponse.json({ ok: true });
 }

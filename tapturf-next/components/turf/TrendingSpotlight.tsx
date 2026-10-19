@@ -5,11 +5,13 @@ import Link from "next/link";
 import { imageUrlForCard } from "@/lib/utils/images";
 import { ChevronRight, Flame, MapPin, Star } from "lucide-react";
 import { labelFor, type CityId } from "@/lib/city";
+import { turfPath } from "@/lib/utils/turfPath";
 
 /** Everything the spotlight card needs, prepared on the server. */
 export interface SpotlightTurf {
   city: CityId;
   turfId: string;
+  slug?: string | null;
   tagline: string | null;
   name: string;
   place: string;
@@ -53,7 +55,7 @@ function SpotlightCard({ pick, loading }: { pick: SpotlightTurf; loading: "eager
 
   return (
     <Link
-      href={`/turf/${pick.turfId}`}
+      href={turfPath({ id: pick.turfId, slug: pick.slug })}
       className="group block rounded-3xl overflow-hidden spotlight-ring focus-neon"
       aria-label={`Most trending turf in ${cityLabel} this week: ${pick.name}`}
     >

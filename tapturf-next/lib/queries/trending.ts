@@ -64,6 +64,7 @@ export function toSpotlights(
     out.push({
       city: pick.city,
       turfId: t.id,
+      slug: t.slug,
       tagline: pick.tagline,
       name: t.name,
       place: areaFor(t) ?? t.address,

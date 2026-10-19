@@ -50,6 +50,7 @@ function toTile(t: Turf, cityLabel?: string): HomeTile {
   const price = summarisePrice(t);
   return {
     id: t.id,
+    slug: t.slug,
     name: t.name,
     place: areaFor(t) ?? t.address,
     rating: t.rating,
@@ -180,7 +181,7 @@ async function buildHomeData(): Promise<HomeData> {
       tiles: pool.filter((t) => t.id !== trendingId).slice(0, tileCount).map((t) => toTile(t)),
     });
 
-    cityRows.push({ id, label, n, top: list.slice(0, 3).map((t) => ({ id: t.id, name: t.name })) });
+    cityRows.push({ id, label, n, top: list.slice(0, 3).map((t) => ({ id: t.id, slug: t.slug, name: t.name })) });
   });
 
   // "Top-rated across India": walk the national ranking, at most two

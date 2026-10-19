@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MapPin, Star } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import type { HomeTile } from "@/lib/home/types";
+import { turfPath } from "@/lib/utils/turfPath";
 
 const SEP = " · ";
 
@@ -14,7 +15,7 @@ const SEP = " · ";
  */
 export function HomeTurfTile({ tile, eager = false }: { tile: HomeTile; eager?: boolean }) {
   return (
-    <Link href={`/turf/${tile.id}`} className="group block rounded-2xl press-tight focus-neon card-lift">
+    <Link href={turfPath(tile)} className="group block rounded-2xl press-tight focus-neon card-lift">
       <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-primary-100">
         <MapPin className="absolute inset-0 m-auto w-8 h-8 text-primary-300" aria-hidden />
         {tile.photo && (

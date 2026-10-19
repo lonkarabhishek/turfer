@@ -35,6 +35,7 @@ import { AskDigestCard } from "@/components/admin/AskDigest";
 import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
+import { turfPath } from "@/lib/utils/turfPath";
 
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
@@ -191,7 +192,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                   </td>
                   <td className="px-4 py-3">
                     {g.turf ? (
-                      <Link href={`/turf/${g.turf.id}`} className="text-primary-900 hover:text-accent-600">
+                      <Link href={turfPath(g.turf)} className="text-primary-900 hover:text-accent-600">
                         {g.turf.name}
                       </Link>
                     ) : (
@@ -353,7 +354,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
             {turfs.map((t) => (
               <tr key={t.id}>
                 <td className="px-4 py-3">
-                  <Link href={`/turf/${t.id}`} className="text-primary-900 hover:text-accent-600">{t.name}</Link>
+                  <Link href={turfPath(t)} className="text-primary-900 hover:text-accent-600">{t.name}</Link>
                   <div className="text-[12px] text-primary-400 max-w-[280px] truncate">{t.address}</div>
                 </td>
                 <td className="px-4 py-3 text-primary-700">{t.city && isCity(t.city) ? labelFor(t.city) : "-"}</td>
@@ -502,7 +503,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
               {flagged.map((t) => (
                 <li key={t.id} className="rounded-2xl bg-white border border-primary-200 p-4">
                   <div className="flex items-baseline justify-between gap-3">
-                    <Link href={`/turf/${t.id}`} target="_blank" className="font-semibold text-primary-900 hover:text-accent-600">
+                    <Link href={turfPath(t)} target="_blank" className="font-semibold text-primary-900 hover:text-accent-600">
                       {t.name} <ExternalLink className="inline w-3.5 h-3.5 text-primary-400" />
                     </Link>
                     <span className="text-[12px] text-primary-400 shrink-0">

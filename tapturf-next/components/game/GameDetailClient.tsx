@@ -9,6 +9,7 @@ import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from 
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { GameRequestCard } from "./GameRequestCard";
 import { GameDistance } from "./GameDistance";
+import { turfPath } from "@/lib/utils/turfPath";
 
 export function GameDetailClient({ gameId }: { gameId: string }) {
   const { user, login } = useAuth();
@@ -241,7 +242,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
         {/* Title & address. The turf name links to its turf page. */}
         <h1 className="relative text-2xl sm:text-3xl font-bold mb-1.5">
           {game.turfs?.id ? (
-            <Link href={`/turf/${game.turfs.id}`} className="hover:underline underline-offset-4 decoration-white/40">
+            <Link href={turfPath(game.turfs)} className="hover:underline underline-offset-4 decoration-white/40">
               {game.turfs.name}
             </Link>
           ) : (
@@ -257,7 +258,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
         {game.turfs?.id && (
           <div className="relative flex items-center gap-2 flex-wrap mb-5">
             <Link
-              href={`/turf/${game.turfs.id}`}
+              href={turfPath(game.turfs)}
               className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold bg-white text-primary-900 hover:bg-white/90"
             >
               View turf
@@ -404,7 +405,7 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
                   )}
                 </div>
                 <Link
-                  href={`/turf/${game.turfs.id}`}
+                  href={turfPath(game.turfs)}
                   className="flex items-center gap-3 px-5 py-3 border-t border-primary-100 hover:bg-primary-50 transition-colors"
                 >
                   <span className="flex-1 min-w-0">

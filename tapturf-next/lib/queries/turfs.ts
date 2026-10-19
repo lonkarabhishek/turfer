@@ -3,6 +3,7 @@ import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
+import { isTurfId } from "@/lib/utils/turfPath";
 import type { PriceBand, Turf } from "@/types/turf";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -14,7 +15,7 @@ import type { PriceBand, Turf } from "@/types/turf";
  * still use "*" via getTurfById().
  */
 const CARD_COLUMNS = [
-  "id", "name", "address", "area", "city", "sports", "images", "cover_image",
+  "id", "slug", "name", "address", "area", "city", "sports", "images", "cover_image",
   "rating", "total_reviews", "lat", "lng",
   "morning_price", "afternoon_price", "evening_price",
   "weekend_morning_price", "weekend_afternoon_price", "weekend_evening_price",
@@ -74,6 +75,7 @@ function transformTurf(raw: any): Turf {
 
   return {
     id: raw.id,
+    slug: raw.slug ?? null,
     name: raw.name,
     address: raw.address,
     description: raw.description || null,
@@ -270,8 +272,33 @@ export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
     .sort(compareTopRated);
 }
 
-export async function getAllTurfIds(): Promise<string[]> {
+/** A turf by its slug or, for old links, its id. */
+export async function getTurfBySlugOrId(key: string): Promise<Turf | null> {
+  if (isTurfId(key)) return getTurfById(key);
+  const { data, error } = await createServerClient().from("turfs").select("*").eq("slug", key.toLowerCase()).maybeSingle();
+  if (error || !data) return null;
+  return transformTurf(data);
+}
+
+/** URL keys for the active turf pages built at deploy: the slug, or the id for a turf without one. */
+export async function getAllTurfKeys(): Promise<string[]> {
   const supabase = createServerClient();
-  const data = await fetchAllRows<{ id: string }>((from, to) => supabase.from("turfs").select("id").eq("is_active", true).order("id").range(from, to));
-  return data.map((t) => t.id);
+  const data = await fetchAllRows<{ id: string; slug: string | null }>((from, to) =>
+    supabase.from("turfs").select("id, slug").eq("is_active", true).order("id").range(from, to),
+  );
+  return data.map((t) => t.slug || t.id);
+}
+
+/**
+ * The cached paths of one turf's page, for revalidatePath: /turf/<slug>
+ * and /turf/<id> (which redirects to it). Pass the slug when the caller
+ * has it; otherwise it is looked up.
+ */
+export async function turfPagePaths(id: string, slug?: string | null): Promise<string[]> {
+  let s = slug;
+  if (s === undefined) {
+    const { data } = await createServerClient().from("turfs").select("slug").eq("id", id).maybeSingle();
+    s = (data?.slug as string | undefined) ?? null;
+  }
+  return s ? [`/turf/${s}`, `/turf/${id}`] : [`/turf/${id}`];
 }

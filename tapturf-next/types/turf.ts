@@ -1,5 +1,7 @@
 export interface Turf {
   id: string;
+  /** URL slug, /turf/<slug>; see lib/utils/turfPath.ts. */
+  slug?: string | null;
   name: string;
   address: string;
   description: string | null;

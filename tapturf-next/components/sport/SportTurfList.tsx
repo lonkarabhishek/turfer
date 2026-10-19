@@ -5,6 +5,7 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { areaFor } from "@/lib/utils/area";
 import { labelFor, isCity } from "@/lib/city";
 import type { Turf } from "@/types/turf";
+import { turfPath } from "@/lib/utils/turfPath";
 
 /** How many turfs get a full photo card; the rest are a plain list. */
 const CARD_LIMIT = 24;
@@ -53,7 +54,7 @@ export function SportTurfList({
               return (
                 <li key={t.id}>
                   <Link
-                    href={`/turf/${t.id}`}
+                    href={turfPath(t)}
                     className="flex items-center justify-between gap-3 py-3 group"
                   >
                     <span className="min-w-0">

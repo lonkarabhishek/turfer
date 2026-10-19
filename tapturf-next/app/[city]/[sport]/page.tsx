@@ -11,6 +11,7 @@ import { SportTurfList } from "@/components/sport/SportTurfList";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
+import { turfUrl } from "@/lib/utils/turfPath";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -127,7 +128,7 @@ export default async function CitySportPage({
       itemListElement: turfs.slice(0, 30).map((t, i) => ({
         "@type": "ListItem",
         position: i + 1,
-        url: `https://www.tapturf.in/turf/${t.id}`,
+        url: turfUrl(t),
         name: t.name,
       })),
     },
