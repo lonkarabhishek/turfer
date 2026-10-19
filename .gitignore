@@ -41,3 +41,6 @@ local-admin.html
 
 # Local claude preview config
 .claude/launch.json
+
+# Temporary agent worktrees
+.claude/worktrees/
