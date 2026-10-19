@@ -21,7 +21,7 @@ const CARD_COLUMNS = [
   "price_mentions", "price_unit", "slot_minutes", "is_covered", "has_floodlights",
   "start_time", "end_time", "is_24x7", "membership_required", "is_active",
   // Ask TapTurf filters on these; forCard() drops them before pages ship them.
-  "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria",
+  "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria", "equipment_provided",
   // AI cover pass: photos judged unusable are dropped from images below.
   "image_review",
 ].join(", ");

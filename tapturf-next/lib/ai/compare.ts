@@ -72,6 +72,12 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
     floodlights: t.has_floodlights === true ? "yes" : null,
     covered: t.is_covered === true ? "yes" : null,
     surface: t.surface_type,
+    equipment_provided: t.equipment_provided === true ? "yes" : null,
+    size: t.length_feet && t.width_feet ? `${t.length_feet} ft x ${t.width_feet} ft${t.height_feet ? `, ${t.height_feet} ft high` : ""}` : null,
+    grounds: t.number_of_grounds && t.number_of_grounds > 1 ? `${t.number_of_grounds} grounds` : null,
+    formats: t.formats?.length ? t.formats : t.ground_format ? [t.ground_format] : null,
+    listed_prices_per_hour: bandSummary(t.pricing_bands),
+    good_to_know: t.good_to_know,
     parking: t.parking_available === true ? "yes" : null,
     washroom: t.washroom_available === true ? "yes" : null,
     changing_room: t.changing_room_available === true ? "yes" : null,
@@ -90,6 +96,22 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
   };
   for (const k of Object.keys(facts)) if (facts[k] == null || (Array.isArray(facts[k]) && (facts[k] as unknown[]).length === 0)) delete facts[k];
   return facts;
+}
+
+/** Listed per-hour prices by format: { "6-a-side": "₹800 to ₹1100, weekday mornings cheapest" }. */
+function bandSummary(bands: Turf["pricing_bands"]): Record<string, string> | null {
+  if (!bands?.length) return null;
+  const by = new Map<string, number[]>();
+  for (const b of bands) {
+    const k = b.format ?? "standard";
+    by.set(k, [...(by.get(k) ?? []), b.price_per_hour]);
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of [...by].slice(0, 6)) {
+    const lo = Math.min(...v), hi = Math.max(...v);
+    out[k] = lo === hi ? `₹${lo}` : `₹${lo} to ₹${hi}`;
+  }
+  return out;
 }
 
 export const CompareOut = z.object({
@@ -139,7 +161,9 @@ Rules:
 - answer: at most two short sentences, plain words, currency ₹. Answer from the sheet only.
 - If the sheet does not cover the question, set covered to false and answer like "TapTurf doesn't list parking for CC Turf Pardi yet. The venue can confirm on the phone." Do not include a number. Do not guess.
 - Never use the words "sheet", "fact sheet", "data" or "the information given", and never add a sentence about what more detail is or is not available. Speak as TapTurf: "TapTurf lists...", "reviewers mention...". Example: "Yes, TapTurf lists floodlights at Hindu Gymkhana Kothrud."
-- Reviews are opinions: attribute them ("reviewers mention..."). Reported prices are unverified: say so.
+- Reviews are opinions: attribute them ("reviewers mention..."). Reported prices are unverified: say so. good_to_know is a note from public reviews: attribute it the same way.
+- listed_prices_per_hour are per hour by format, from the venue's online listing: say "listed at". For a budget question, compare the budget with those prices (or rates) and say plainly which formats fit.
+- Size: use size, formats and grounds when present ("TapTurf lists it as a 6-a-side ground, 2 grounds").
 - No preamble, no restating the question.`;
 
 export async function answerQuestion(question: string, sheet: TurfFacts): Promise<AnswerOut | null> {

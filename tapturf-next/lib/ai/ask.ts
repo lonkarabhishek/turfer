@@ -23,7 +23,7 @@ import type { Turf } from "@/types/turf";
 
 export const ROUTER_MODEL = "claude-haiku-5-5";
 
-export const NEEDS = ["floodlights", "parking", "washroom", "changing_room", "cafeteria", "covered"] as const;
+export const NEEDS = ["floodlights", "parking", "washroom", "changing_room", "cafeteria", "covered", "equipment"] as const;
 export type Need = (typeof NEEDS)[number];
 
 const SPORT_SLUGS = SPORT_PAGES.map((s) => s.slug) as [string, ...string[]];
@@ -117,7 +117,7 @@ Rules:
 - when: for games. today, tomorrow, weekend (Saturday or Sunday), this_week. Null when not said.
 - skill: for games, only if the player says beginner, intermediate, advanced, pro, casual (casual = beginner).
 - open_24x7: true for "24 hours", "all night", "open late", "after midnight".
-- needs: only features the player asks for. "lights" or "night match" means floodlights. "rain" or "indoor" means covered.
+- needs: only features the player asks for. "lights" or "night match" means floodlights. "rain" or "indoor" means covered. "equipment", "kit", "bat and ball provided" means equipment.
 - players: the number of people, if given.
 - sort: price_low when the player cares about cost, reviews for "popular", nearby when wants_nearby, else rating.
 - free_text: for find_turf, a single venue name or words you could not map ("rooftop"). Else null.
@@ -301,6 +301,8 @@ function hasNeed(t: Turf, need: Need): boolean {
       return t.changing_room_available === true || /changing/.test(am);
     case "cafeteria":
       return t.has_cafeteria === true || /cafe|canteen|food/.test(am);
+    case "equipment":
+      return t.equipment_provided === true || /equipment|bats? |stumps|kit provided/.test(am);
     case "covered":
       return t.is_covered === true || /covered|indoor|roof/.test(am);
   }

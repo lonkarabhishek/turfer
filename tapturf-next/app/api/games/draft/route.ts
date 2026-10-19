@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
@@ -66,18 +66,22 @@ async function handle(req: Request, body: { text?: unknown; city?: unknown; uid?
   const prefCity = isCity(cityParam) ? cityParam : isCity(cookieCity) ? cookieCity : null;
   const prefill = toPrefill(draft, await allTurfs(), prefCity);
 
+  // Results: 1 when the wizard got anything to prefill (venue, sport or day).
+  const filled = !!(prefill.turf || draft.sport || draft.date);
   if (logId != null) {
-    void supabase
-      .rpc("ask_finish", {
-        p_id: logId,
-        p_filters: draft,
-        p_results: prefill.turf ? 1 : 0,
-        p_ms: Date.now() - started,
-        p_source: "claude",
-        p_reply: draft.reply,
-        p_intent: "create_game",
-      })
-      .then(() => {}, () => {});
+    after(async () => {
+      await supabase
+        .rpc("ask_finish", {
+          p_id: logId,
+          p_filters: draft,
+          p_results: filled ? 1 : 0,
+          p_ms: Date.now() - started,
+          p_source: "claude",
+          p_reply: draft.reply,
+          p_intent: "create_game",
+        })
+        .then(() => {}, () => {});
+    });
   }
 
   return NextResponse.json(prefill, { headers: { "Cache-Control": "private, no-store" } });

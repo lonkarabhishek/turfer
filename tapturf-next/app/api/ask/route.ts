@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
@@ -21,6 +21,8 @@ import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
 import type { Turf } from "@/types/turf";
 import { toolBySlug, toolPath } from "@/lib/tools/registry";
+import { getHomeData } from "@/lib/home/data";
+import { askChipsFor } from "@/lib/home/select";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -225,12 +227,15 @@ export async function GET(req: Request) {
         break;
       }
       case "create_game":
-        // The wizard drafts the game from the same sentence.
-        body = { ...base, relaxed: [], total: 0, draft: q };
+        // The wizard drafts the game from the same sentence. One card shown.
+        body = { ...base, relaxed: [], total: 1, draft: q };
         break;
-      case "other":
+      case "other": {
+        // Unclear or off-topic: offer what Ask can do, for this city.
         body = { ...base, relaxed: [], total: 0 };
+        if (!filters.followups.length) body.followups = askChipsFor(await getHomeData(), filters.city ?? prefCity).slice(0, 5);
         break;
+      }
       default: {
         const r = applyAskFilters(turfs, filters, { prefCity, loc, limit: 12 });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, turfs: r.turfs.map(card) };
@@ -245,18 +250,22 @@ export async function GET(req: Request) {
   const shown = (body.turfs as { name: string }[] | undefined)?.map((t) => t.name) ?? (body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? [];
   body.memo = { ...(body.memo as Record<string, unknown>), top: shown.slice(0, 5) };
 
+  // after(): the log write runs once the reply is sent, and the
+  // function stays alive until it lands (a bare promise could be cut off).
   if (logId != null) {
-    void supabase
-      .rpc("ask_finish", {
-        p_id: logId,
-        p_filters: filters,
-        p_results: Number(body.total) || 0,
-        p_ms: Date.now() - started,
-        p_source: source,
-        p_reply: filters.reply,
-        p_intent: filters.intent,
-      })
-      .then(() => {}, () => {});
+    after(async () => {
+      await supabase
+        .rpc("ask_finish", {
+          p_id: logId,
+          p_filters: filters,
+          p_results: Number(body.total) || (Array.isArray(body.turfs) ? body.turfs.length : 0),
+          p_ms: Date.now() - started,
+          p_source: source,
+          p_reply: filters.reply,
+          p_intent: filters.intent,
+        })
+        .then(() => {}, () => {});
+    });
   }
 
   return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store" } });
