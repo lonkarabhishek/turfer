@@ -173,23 +173,39 @@ export function TurfReviews({
       {playersSay && (
         <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4 mb-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-500 mb-1.5">What players say</p>
-          <p className="text-[15px] text-primary-900 leading-snug">{playersSay.summary}</p>
+          {playersSay.summary && <p className="text-[15px] text-primary-900 leading-snug">{playersSay.summary}</p>}
           {(playersSay.likes.length > 0 || playersSay.gripes.length > 0) && (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {playersSay.likes.map((l) => (
-                <span key={`l-${l}`} className="inline-flex items-center rounded-full bg-white border border-primary-200 px-2.5 py-1 text-[12px] text-primary-800">
-                  + {l}
-                </span>
-              ))}
-              {playersSay.gripes.map((g) => (
-                <span key={`g-${g}`} className="inline-flex items-center rounded-full bg-white border border-amber-200 px-2.5 py-1 text-[12px] text-amber-800">
-                  &minus; {g}
-                </span>
-              ))}
+            <div className={`${playersSay.summary ? "mt-3" : ""} grid sm:grid-cols-2 gap-3`}>
+              {playersSay.likes.length > 0 && (
+                <div>
+                  <p className="text-[12px] font-semibold text-accent-700 mb-1">What players like</p>
+                  <ul className="space-y-1">
+                    {playersSay.likes.map((l) => (
+                      <li key={`l-${l}`} className="flex gap-1.5 text-[14px] text-primary-800 leading-snug">
+                        <span aria-hidden className="text-accent-600">+</span> {l}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {playersSay.gripes.length > 0 && (
+                <div>
+                  <p className="text-[12px] font-semibold text-amber-800 mb-1">Common complaints</p>
+                  <ul className="space-y-1">
+                    {playersSay.gripes.map((g) => (
+                      <li key={`g-${g}`} className="flex gap-1.5 text-[14px] text-primary-800 leading-snug">
+                        <span aria-hidden className="text-amber-700">&minus;</span> {g}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
-          <p className="mt-2 text-[11px] text-primary-400">
-            Summarised by TapTurf from {playersSay.based_on} written {playersSay.sources.join(" and ")} review{playersSay.based_on === 1 ? "" : "s"}.
+          <p className="mt-2.5 text-[11px] text-primary-400">
+            {playersSay.based_on > 0
+              ? `Summarised by TapTurf from ${playersSay.based_on} written ${playersSay.sources.join(" and ")} review${playersSay.based_on === 1 ? "" : "s"}.`
+              : `Summarised by TapTurf from ${playersSay.sources.join(" and ")} reviews.`}
           </p>
         </div>
       )}

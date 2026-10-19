@@ -146,7 +146,7 @@ function transformTurf(raw: any): Turf {
     google_place_id: raw.google_place_id || null,
     description_source: raw.description_source || null,
     description_updated_at: raw.description_updated_at ?? null,
-    review_summary: raw.review_summary && typeof raw.review_summary.summary === "string" ? raw.review_summary : null,
+    review_summary: toPlayersSay(raw.review_summary),
     pricing_bands: toBands(raw.pricing_bands),
     price_owner_confirmed: raw.price_owner_confirmed ?? null,
     formats: Array.isArray(raw.formats) ? raw.formats.filter((f: unknown): f is string => typeof f === "string" && !!f.trim()) : null,
@@ -156,6 +156,28 @@ function transformTurf(raw: any): Turf {
     is_active: raw.is_active ?? true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
+  };
+}
+
+/**
+ * "What players say", from the admin pass or the data team's fill file.
+ * Accepts complaints/dislikes for gripes and a missing summary line, so
+ * either spelling shows; empty means nothing to show.
+ */
+function toPlayersSay(raw: unknown): Turf["review_summary"] {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim()).slice(0, 6) : []);
+  const likes = list(r.likes);
+  const gripes = list(r.gripes ?? r.complaints ?? r.dislikes);
+  const summary = typeof r.summary === "string" ? r.summary.trim() : "";
+  if (!summary && likes.length === 0 && gripes.length === 0) return null;
+  return {
+    summary,
+    likes,
+    gripes,
+    based_on: typeof r.based_on === "number" ? r.based_on : 0,
+    sources: list(r.sources).length ? list(r.sources) : ["Google"],
   };
 }
 

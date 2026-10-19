@@ -101,11 +101,17 @@ export function TurfDetails({ turf }: { turf: Turf }) {
   const closedDays = turf.closed_days?.trim() || null;
   const isClosedDay = (day: string) => !!closedDays && new RegExp(`\\b${day}`, "i").test(closedDays);
 
-  const hasFacts = details.length > 0 || links.length > 0;
   const hasHours = hoursRows.length > 0;
+  // Say so when hours are unknown rather than leave players guessing.
+  if (!hasHours) {
+    details.push({
+      icon: <Clock className="w-5 h-5 text-primary-400" />,
+      label: "Opening hours",
+      value: "Hours not listed",
+    });
+  }
+  const hasFacts = details.length > 0 || links.length > 0;
   const note = turf.good_to_know;
-
-  if (!hasFacts && !hasHours && !note) return null;
 
   return (
     <div className="section-divider">
