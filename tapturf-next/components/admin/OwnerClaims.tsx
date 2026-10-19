@@ -10,6 +10,7 @@ type Claim = {
   via: "phone_match" | "admin";
   name: string | null;
   note: string | null;
+  role: "owner" | "manager" | "staff" | null;
   created_at: string;
   turf_name: string;
   city: string | null;
@@ -65,7 +66,7 @@ export function OwnerClaims() {
                 </Link>
                 <p className="text-[13px] text-primary-500">{[c.area, c.city].filter(Boolean).join(", ")} · listed: {c.listed_phones?.join(", ") || "no mobile listed"}</p>
                 <p className="mt-1 text-[13px] text-primary-800">
-                  {c.name ?? "No name"} · {who(c.user_key)} · {c.via === "phone_match" ? "number matched" : "needs approval"} · <span className="font-semibold">{c.status}</span>
+                  {c.name ?? "No name"}{c.role ? ` (${c.role})` : ""} · {who(c.user_key)} · {c.via === "phone_match" ? "number matched" : "needs approval"} · <span className="font-semibold">{c.status}</span>
                 </p>
                 {c.note && <p className="mt-1 text-[13px] text-primary-600">&ldquo;{c.note}&rdquo;</p>}
               </div>

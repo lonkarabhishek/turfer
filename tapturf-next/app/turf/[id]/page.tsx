@@ -4,7 +4,7 @@ import { AskAboutButton } from "@/components/ask/AskAboutButton";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
+import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
 import { getAllTurfIds, getTurfById } from "@/lib/queries/turfs";
 import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
@@ -25,6 +25,7 @@ import { getTrendingPick } from "@/lib/queries/trending";
 import { courtType, sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
+import { isTurfClaimed } from "@/lib/queries/owners";
 
 export const revalidate = 3600;
 
@@ -148,6 +149,7 @@ export default async function TurfDetailPage({
 }) {
   const { id } = await params;
   const turf = await getTurfById(id);
+  const claimed = turf ? await isTurfClaimed(turf.id) : false;
   if (!turf) notFound();
 
   const phone = getPhone(turf);
@@ -199,6 +201,11 @@ export default async function TurfDetailPage({
           <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
             {turf.name}
           </h1>
+          {claimed && (
+            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-50 px-2.5 h-6 text-[12px] font-semibold text-accent-700">
+              <BadgeCheck className="w-3.5 h-3.5" /> Managed by the owner
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
             {turf.rating > 0 ? (
               <>
@@ -310,12 +317,30 @@ export default async function TurfDetailPage({
             {/* Player-suggested info (contact, prices, hours, facilities).
                 Fetched client-side so a fresh suggestion shows at once. */}
             <TurfSuggestions turfId={turf.id} turfName={turf.name} hasPhone={!!phone} />
-            <p className="mt-3 text-[13px] text-primary-500">
-              Own or manage this turf?{" "}
-              <Link href={`/my?claim=${turf.id}`} className="font-semibold text-accent-700 hover:text-accent-800" prefetch={false}>
-                See your numbers and update it free on myTapturf
-              </Link>
-            </p>
+            {claimed ? (
+              <p className="mt-3 text-[13px] text-primary-500">
+                Also manage this turf?{" "}
+                <Link href={`/my?claim=${turf.id}`} className="font-semibold text-accent-700 hover:text-accent-800" prefetch={false}>
+                  Request access
+                </Link>
+              </p>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-primary-200 bg-white p-4 md:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-primary-900">Is this your turf?</p>
+                  <p className="mt-0.5 text-[14px] text-primary-600 leading-snug">
+                    Claim this listing to see how many players view and call you, and keep your prices and hours right. Free.
+                  </p>
+                </div>
+                <Link
+                  href={`/my?claim=${turf.id}`}
+                  prefetch={false}
+                  className="press-tight shrink-0 inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors"
+                >
+                  Claim this listing
+                </Link>
+              </div>
+            )}
 
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to

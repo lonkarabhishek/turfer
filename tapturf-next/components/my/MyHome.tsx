@@ -7,7 +7,7 @@ import { BarChart3, CheckCircle2, ChevronRight, Clock, Loader2, Phone, Search, S
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
-import { ownerRpc, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
+import { ownerRpc, refreshTurfPage, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
@@ -52,6 +52,8 @@ export function MyHome() {
 
       {home?.signed_in && (
         <>
+          {claimId && <ClaimFocus claimId={claimId} home={home} defaultName={user.name ?? ""} onDone={load} />}
+
           {home.turfs.length > 0 && (
             <section className="mt-8">
               <h2 className="text-[13px] font-semibold text-primary-500 mb-3">Your turfs</h2>
@@ -96,7 +98,7 @@ export function MyHome() {
             </section>
           )}
 
-          <ClaimSearch defaultName={user.name ?? ""} onDone={load} claimId={claimId} owned={new Set(home.turfs.map((t) => t.id))} />
+          <ClaimSearch defaultName={user.name ?? ""} onDone={load} owned={new Set(home.turfs.map((t) => t.id))} />
 
           {home.admin && (
             <p className="mt-10 text-[13px] text-primary-400">
@@ -124,29 +126,73 @@ function Thumb({ src }: { src: string | null }) {
   );
 }
 
-/** Find your turf by name and claim it. */
-function ClaimSearch({ defaultName, onDone, claimId, owned }: { defaultName: string; onDone: () => void; claimId: string | null; owned: Set<string> }) {
-  const [q, setQ] = useState("");
-  const [hits, setHits] = useState<OwnerTurfRef[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  // Arrived from a turf page's "Own this turf?" link: show that turf.
+/** Name, place and photo of one public listing. */
+function usePublicTurf(id: string | null) {
+  const [turf, setTurf] = useState<OwnerTurfRef | null>(null);
   useEffect(() => {
-    if (!claimId) return;
+    if (!id) return;
     let live = true;
     createClient()
       .from("turfs")
       .select("id, name, city, area, cover_image")
-      .eq("id", claimId)
+      .eq("id", id)
       .eq("is_active", true)
       .maybeSingle()
       .then(({ data }) => {
-        if (live && data) setHits([{ id: data.id, name: data.name, city: data.city, area: data.area, cover: data.cover_image }]);
+        if (live && data) setTurf({ id: data.id, name: data.name, city: data.city, area: data.area, cover: data.cover_image });
       });
     return () => {
       live = false;
     };
-  }, [claimId]);
+  }, [id]);
+  return turf;
+}
+
+/** Arrived from "Claim this listing" on a turf page: that turf, first, with the form open. */
+function ClaimFocus({ claimId, home, defaultName, onDone }: { claimId: string; home: Extract<OwnerHome, { signed_in: true }>; defaultName: string; onDone: () => void }) {
+  const turf = usePublicTurf(claimId);
+  if (!turf) return null;
+  const mine = home.turfs.find((t) => t.id === claimId);
+  const match = home.matches.some((t) => t.id === claimId);
+  return (
+    <section className="mt-6 rounded-3xl border-2 border-accent-200 bg-accent-50/40 p-3 md:p-4">
+      <p className="px-1 mb-2 text-[13px] font-semibold text-accent-700">Claim this listing</p>
+      {mine?.status === "active" ? (
+        <Link href={`/my/turf/${claimId}`} className="flex items-center gap-3 rounded-2xl bg-white border border-primary-200 p-3">
+          <Thumb src={turf.cover} />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-primary-900 truncate">{turf.name}</span>
+            <span className="block text-[13px] text-accent-700">You manage this turf. Open your dashboard</span>
+          </span>
+          <ChevronRight className="w-5 h-5 text-primary-400" />
+        </Link>
+      ) : mine?.status === "pending" ? (
+        <div className="flex items-center gap-3 rounded-2xl bg-white border border-primary-200 p-3">
+          <Thumb src={turf.cover} />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-primary-900 truncate">{turf.name}</span>
+            <span className="block text-[13px] text-primary-600">Your claim is with us. We&rsquo;ll confirm it, usually within a day.</span>
+          </span>
+        </div>
+      ) : (
+        <ul>
+          <ClaimRow turf={turf} defaultName={defaultName} onDone={onDone} instant={match} startOpen />
+        </ul>
+      )}
+      {!mine && !match && (
+        <p className="px-1 mt-2 text-[13px] text-primary-600 leading-snug">
+          Your number isn&rsquo;t on this listing, so we&rsquo;ll confirm with you before it opens. Tip: sign in with the number players call to get in at once.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Find your turf by name and claim it. */
+function ClaimSearch({ defaultName, onDone, owned }: { defaultName: string; onDone: () => void; owned: Set<string> }) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<OwnerTurfRef[]>([]);
+  const [busy, setBusy] = useState(false);
 
   const search = async (term: string) => {
     const s = term.trim();
@@ -198,9 +244,10 @@ function ClaimSearch({ defaultName, onDone, claimId, owned }: { defaultName: str
   );
 }
 
-function ClaimRow({ turf, defaultName, onDone, instant = false }: { turf: OwnerTurfRef; defaultName: string; onDone: () => void; instant?: boolean }) {
-  const [open, setOpen] = useState(false);
+function ClaimRow({ turf, defaultName, onDone, instant = false, startOpen = false }: { turf: OwnerTurfRef; defaultName: string; onDone: () => void; instant?: boolean; startOpen?: boolean }) {
+  const [open, setOpen] = useState(startOpen);
   const [name, setName] = useState(defaultName);
+  const [role, setRole] = useState<"owner" | "manager" | "staff">("owner");
   const [note, setNote] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "pending" | "error">("idle");
   const [msg, setMsg] = useState("");
@@ -208,8 +255,9 @@ function ClaimRow({ turf, defaultName, onDone, instant = false }: { turf: OwnerT
   const claim = async () => {
     setState("busy");
     try {
-      const r = await ownerRpc<{ status?: string; error?: string }>("owner_claim", { p_turf_id: turf.id, p_name: name, p_note: note });
+      const r = await ownerRpc<{ status?: string; error?: string }>("owner_claim", { p_turf_id: turf.id, p_name: name, p_note: note, p_role: role });
       if (r.status === "active") {
+        await refreshTurfPage(turf.id);
         window.location.href = `/my/turf/${turf.id}`;
         return;
       }
@@ -251,7 +299,21 @@ function ClaimRow({ turf, defaultName, onDone, instant = false }: { turf: OwnerT
       {open && state !== "pending" && !instant && (
         <div className="mt-3 space-y-2">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" maxLength={80} className="w-full h-11 px-4 rounded-xl border border-primary-200 text-[15px] focus:outline-none focus:border-primary-400" />
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Your role (owner, manager) and anything that helps us confirm it" maxLength={400} rows={2} className="w-full px-4 py-2.5 rounded-xl border border-primary-200 text-[15px] focus:outline-none focus:border-primary-400" />
+          <div className="inline-flex rounded-full bg-primary-100 p-0.5" role="radiogroup" aria-label="Your role">
+            {(["owner", "manager", "staff"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="radio"
+                aria-checked={role === r}
+                onClick={() => setRole(r)}
+                className={`h-9 px-4 rounded-full text-[14px] font-medium capitalize cursor-pointer transition-colors ${role === r ? "bg-white text-primary-900 shadow-soft" : "text-primary-600"}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything that helps us confirm it, e.g. the number players call" maxLength={400} rows={2} className="w-full px-4 py-2.5 rounded-xl border border-primary-200 text-[15px] focus:outline-none focus:border-primary-400" />
           <button type="button" onClick={() => void claim()} disabled={state === "busy" || !name.trim()} className="h-11 px-5 rounded-full bg-primary-900 text-white text-[14px] font-semibold cursor-pointer disabled:opacity-50">
             {state === "busy" ? "Sending…" : "Claim this turf"}
           </button>
@@ -266,6 +328,7 @@ function ClaimRow({ turf, defaultName, onDone, instant = false }: { turf: OwnerT
 /** Signed out: what myTapturf is, and one way in. */
 function Landing({ claimId }: { claimId: string | null }) {
   const next = claimId ? `/my?claim=${encodeURIComponent(claimId)}` : "/my";
+  const claiming = usePublicTurf(claimId);
   const points = [
     { icon: BarChart3, title: "See who finds you", text: "Page views, calls and WhatsApp taps, and how often Ask TapTurf shows your turf, day by day." },
     { icon: Store, title: "Keep your listing right", text: "Update prices, hours, facilities and your WhatsApp number. Changes go live within a minute." },
@@ -291,9 +354,20 @@ function Landing({ claimId }: { claimId: string | null }) {
           </li>
         ))}
       </ul>
-      <Link href={`/login?next=${encodeURIComponent(next)}`} className="press-tight mt-8 inline-flex h-12 items-center rounded-full bg-accent-500 hover:bg-accent-600 px-7 text-[16px] font-semibold text-white transition-colors">
-        Sign in to start
+      {claiming && (
+        <div className="mt-8 flex items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3">
+          <Thumb src={claiming.cover} />
+          <span className="min-w-0">
+            <span className="block text-[12px] font-semibold text-accent-700">You&rsquo;re claiming</span>
+            <span className="block font-semibold text-primary-900 truncate">{claiming.name}</span>
+            <span className="block text-[13px] text-primary-500 truncate">{place(claiming)}</span>
+          </span>
+        </div>
+      )}
+      <Link href={`/login?next=${encodeURIComponent(next)}`} className={`press-tight ${claiming ? "mt-4" : "mt-8"} inline-flex h-12 items-center rounded-full bg-accent-500 hover:bg-accent-600 px-7 text-[16px] font-semibold text-white transition-colors`}>
+        {claiming ? "Sign in to claim it" : "Sign in to start"}
       </Link>
+      {claiming && <p className="mt-2 text-[13px] text-primary-500">Use the number players call for this turf and you get in straight away.</p>}
       <p className="mt-3 text-[13px] text-primary-500">Questions? Email <a href="mailto:info@tapturf.in" className="underline">info@tapturf.in</a>.</p>
     </Shell>
   );

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE, isAdmin } from "@/lib/admin/auth";
@@ -33,5 +34,6 @@ export async function POST(req: Request) {
     p_status: body.status,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidatePath(`/turf/${body.turfId}`);
   return NextResponse.json(data);
 }
