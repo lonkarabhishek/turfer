@@ -40,7 +40,8 @@ export function resolveTurfNames(all: Turf[], names: string[], prefCity?: CityId
     let best: { t: Turf; score: number } | null = null;
     for (const t of all) {
       const hayWords = wordsOf(`${t.name} ${areaFor(t) ?? ""}`);
-      const hit = (w: string) => hayWords.some((h) => h === w || (w.length >= 4 && h.startsWith(w)) || (h.length >= 4 && w.startsWith(h)));
+      // A typed word longer than ours matches unless what it adds is a number: "Arena32" is not "Arena".
+      const hit = (w: string) => hayWords.some((h) => h === w || (w.length >= 4 && h.startsWith(w)) || (h.length >= 4 && w.startsWith(h) && !/^\d/.test(w.slice(h.length))));
       let hits = use.filter(hit).length;
       // "a one" vs "A1" / "A-One": compare the run-together forms.
       if (compactOK && compactOf(wordsOf(t.name)).startsWith(typedCompact)) hits = Math.max(hits, use.length || 1);

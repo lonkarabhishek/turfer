@@ -18,6 +18,9 @@ const rows: [string, string, number][] = [
   ["Hindu Gymkhana Ground", "nashik", 500],
   ["CC Turf Pardi", "nashik", 30],
   ["CC Turf Gangapur", "nashik", 30],
+  ["Arena32", "pune", 10],
+  ["Reboot Sports Arena", "pune", 300],
+  ["DN Parande Football And Cricket Turf", "pune", 120],
 ];
 const all = rows.map(([name, city, total_reviews], i) => ({ id: `t${i}`, name, city, total_reviews, area: null, address: "" }) as unknown as Turf);
 const pick = (q: string, city: string | null = null) => resolveTurfNames(all, [q], city)[0].turf?.name ?? null;
@@ -36,6 +39,12 @@ test("A one / A-One / A1 match each other, the city decides", () => {
 test("a word never matches inside another word", () => {
   // "one" must not find "Champions Zone".
   assert.notEqual(pick("one", "hyderabad"), "Champions Zone Box Cricket");
+});
+
+test("a name with a number is not a shorter word plus digits", () => {
+  // The Pune compare chip is "DN Parande Football vs Arena32".
+  assert.equal(pick("Arena32", "pune"), "Arena32");
+  assert.equal(pick("DN Parande Football", "pune"), "DN Parande Football And Cricket Turf");
 });
 
 test("prefixes and possessives still match", () => {
