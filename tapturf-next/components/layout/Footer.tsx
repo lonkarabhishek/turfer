@@ -92,6 +92,11 @@ export async function Footer() {
                   Free Cricket Tools
                 </Link>
               </li>
+              <li>
+                <Link href="/my" className="hover:text-white transition-colors">
+                  myTapturf for owners
+                </Link>
+              </li>
             </ul>
           </div>
 

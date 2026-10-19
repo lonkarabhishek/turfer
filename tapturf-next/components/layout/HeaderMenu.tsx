@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed } from "lucide-react";
+import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed, Store } from "lucide-react";
 import { CityMenuRow } from "@/components/city/CityMenuRow";
 
 const LINKS = [
@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/game/create", label: "Host a game", icon: PlusCircle },
   { href: "/tools", label: "Free cricket tools", icon: Calculator },
   { href: "/blog", label: "Blog", icon: BookOpen },
+  { href: "/my", label: "myTapturf for turf owners", icon: Store },
 ];
 
 /**

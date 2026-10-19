@@ -4,8 +4,10 @@ import { formatPrice, getTextPriceMentions, priceUnitSuffix } from "@/lib/utils/
 import { PriceBands } from "./PriceBands";
 
 export function TurfPricing({ turf }: { turf: Turf }) {
-  // Listed prices by format and time band are the richest we have.
-  if (turf.pricing_bands?.length) {
+  // Listed prices by format and time band are the richest we have,
+  // unless the owner set their own on myTapturf: theirs win.
+  const ownerSet = turf.price_owner_confirmed === true && [turf.morning_price, turf.afternoon_price, turf.evening_price, turf.weekend_morning_price, turf.weekend_afternoon_price, turf.weekend_evening_price].some((p) => p != null && p > 0);
+  if (turf.pricing_bands?.length && !ownerSet) {
     return (
       <div className="section-divider">
         <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
@@ -99,6 +101,7 @@ export function TurfPricing({ turf }: { turf: Turf }) {
   return (
     <div className="section-divider">
       <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
+      {ownerSet && <p className="-mt-3 mb-4 text-[13px] text-accent-700 font-medium">Prices confirmed by the turf</p>}
       <div className="overflow-x-auto rounded-2xl border border-cream-300">
         <table className="w-full">
           <thead>

@@ -148,6 +148,7 @@ function transformTurf(raw: any): Turf {
     description_updated_at: raw.description_updated_at ?? null,
     review_summary: raw.review_summary && typeof raw.review_summary.summary === "string" ? raw.review_summary : null,
     pricing_bands: toBands(raw.pricing_bands),
+    price_owner_confirmed: raw.price_owner_confirmed ?? null,
     formats: Array.isArray(raw.formats) ? raw.formats.filter((f: unknown): f is string => typeof f === "string" && !!f.trim()) : null,
     has_nets: raw.has_nets ?? null,
     good_to_know: typeof raw.good_to_know === "string" && raw.good_to_know.trim() ? raw.good_to_know.trim() : null,

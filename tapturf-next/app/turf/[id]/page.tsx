@@ -310,6 +310,12 @@ export default async function TurfDetailPage({
             {/* Player-suggested info (contact, prices, hours, facilities).
                 Fetched client-side so a fresh suggestion shows at once. */}
             <TurfSuggestions turfId={turf.id} turfName={turf.name} hasPhone={!!phone} />
+            <p className="mt-3 text-[13px] text-primary-500">
+              Own or manage this turf?{" "}
+              <Link href={`/my?claim=${turf.id}`} className="font-semibold text-accent-700 hover:text-accent-800" prefetch={false}>
+                See your numbers and update it free on myTapturf
+              </Link>
+            </p>
 
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to

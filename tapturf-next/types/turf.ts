@@ -87,6 +87,8 @@ export interface Turf {
   description_updated_at: string | null;
   /** AI cover pass verdicts; unusable photos are filtered out of images. */
   image_review?: { url: string; usable: boolean; quality: number; shows: string; note: string }[] | null;
+  /** Set when the turf owner saved prices on myTapturf; their prices then show first. */
+  price_owner_confirmed?: boolean | null;
   /** Listed per-hour prices by format, time band and day type (from online listings). */
   pricing_bands?: PriceBand[] | null;
   /** Formats the venue lists, e.g. "6-a-side", "box cricket". */
