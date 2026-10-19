@@ -36,8 +36,9 @@ function titleCase(s: string): string {
     .join(" ");
 }
 
+/** Hosts with a smaller card-size copy: Google, Drive, and our own mirrored photos. */
 function isGoogleHosted(url: string): boolean {
-  return /googleusercontent\.com|drive\.google\.com/i.test(url);
+  return /googleusercontent\.com|drive\.google\.com|\/storage\/v1\/object\/public\/turf-photos\//i.test(url);
 }
 
 function toTile(t: Turf, cityLabel?: string): HomeTile {

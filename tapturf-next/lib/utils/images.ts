@@ -28,6 +28,9 @@ export function upsizeGoogleUserContent(url: string, width = 1600, height = 1200
   return `${path}=w${width}-h${height}${tail}`;
 }
 
+/** Our copy of a turf photo (see supabase/functions/mirror-turf-photos): <hash>.webp plus a 640px <hash>-card.webp. */
+const MIRRORED = /\/storage\/v1\/object\/public\/turf-photos\/[^?#]+\/[0-9a-f]{24}\.(jpg|webp)$/i;
+
 /**
  * Smaller copy of a stored photo for cards and inline strips. Stored
  * URLs are normalised to 1600x1200 (Google) / w2000 (Drive), which is
@@ -36,6 +39,7 @@ export function upsizeGoogleUserContent(url: string, width = 1600, height = 1200
  */
 export function imageUrlForCard(url: string): string {
   if (!url || typeof url !== "string") return url;
+  if (MIRRORED.test(url)) return url.replace(/\.(jpg|webp)$/i, "-card.$1");
   if (GOOGLE_USER_CONTENT.test(url)) return upsizeGoogleUserContent(url, 800, 600);
   if (/^https?:\/\/drive\.google\.com\/thumbnail\?/i.test(url)) return url.replace(/([?&]sz=)w\d+/i, "$1w800");
   return url;
