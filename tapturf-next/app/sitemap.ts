@@ -6,6 +6,7 @@ import { getLiveCities } from "@/lib/queries/cities";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
 import { fetchAllRows } from "@/lib/queries/turfs";
+import { isGameExpired } from "@/lib/utils/game";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -139,13 +140,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  // Only future games — expired ones aren't valuable in Google's index.
-  const now = new Date();
+  // Only games still to come (India time); past ones are noindex.
   const gamePages: MetadataRoute.Sitemap = (games ?? [])
-    .filter((g) => {
-      if (!g.date || !g.start_time) return false;
-      return new Date(`${g.date}T${g.start_time}`).getTime() > now.getTime();
-    })
+    .filter((g) => !!g.date && !!g.start_time && !isGameExpired(g))
     .map((g) => ({
       url: `${BASE}/game/${g.id}`,
       lastModified: g.updated_at ? new Date(g.updated_at) : new Date(),

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GameDetailClient } from "@/components/game/GameDetailClient";
 import { getGameByIdServer } from "@/lib/queries/games.server";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
+import { isGameExpired } from "@/lib/utils/game";
 
 export const revalidate = 60;
 
@@ -48,6 +49,8 @@ export async function generateMetadata(
   return {
     title,
     description,
+    // A game that has been played is no use in search; keep its links followed.
+    ...(isGameExpired(game) ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
       title,
