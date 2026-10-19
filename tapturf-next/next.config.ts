@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The build renders about 3,500 pages against Supabase, whose public
+  // role cancels statements after 3 s. Eight pages at once per worker
+  // made the full turf-list reads time out under load and failed three
+  // builds on 19 Oct; four at once, with a page retried before the
+  // build gives up, rides that out.
+  experimental: {
+    staticGenerationMaxConcurrency: 4,
+    staticGenerationRetryCount: 3,
+  },
   // Old marketing URLs that never had a matching route were served as
   // soft-404s (HTTP 200 with a "City not found" body) via the [city]
   // catch-all. 301 them to the canonical city URL so we keep whatever
