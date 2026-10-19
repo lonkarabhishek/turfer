@@ -7,7 +7,7 @@ import { getPhone } from "@/lib/utils/seo";
 import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
 import { priceUnitSuffix } from "@/lib/utils/prices";
 import type { Turf } from "@/types/turf";
-import { ROUTER_MODEL, structured } from "./ask";
+import { ROUTER_MODEL, structured, type AskUsage } from "./ask";
 
 /**
  * Compare and question answering. Both run on a fact sheet built from
@@ -26,16 +26,18 @@ type ReviewRow = { rating: number; comment: string | null; source: string | null
 export type TurfFacts = Record<string, unknown>;
 
 export async function loadFacts(id: string): Promise<{ turf: Turf; facts: TurfFacts } | null> {
-  const turf = await getTurfById(id);
+  // The row and its reviews in parallel: both only need the id.
+  const [turf, { data }] = await Promise.all([
+    getTurfById(id),
+    createReadOnlyClient()
+      .from("reviews")
+      .select("rating, comment, source, author_name")
+      .eq("turf_id", id)
+      .not("comment", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
   if (!turf) return null;
-  const supabase = createReadOnlyClient();
-  const { data } = await supabase
-    .from("reviews")
-    .select("rating, comment, source, author_name")
-    .eq("turf_id", id)
-    .not("comment", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(10);
   return { turf, facts: buildFacts(turf, (data ?? []) as ReviewRow[]) };
 }
 
@@ -134,7 +136,7 @@ Rules:
 - caveats: at most 25 words on what the sheets do not cover (missing rates, hours), or null.
 - Currency is ₹. Spell Indian place names as given. No hedging language and no marketing adjectives.`;
 
-export async function compareTurfs(sheets: TurfFacts[]): Promise<CompareOut | null> {
+export async function compareTurfs(sheets: TurfFacts[], usage?: AskUsage): Promise<CompareOut | null> {
   return structured(
     CompareOut,
     {
@@ -144,6 +146,7 @@ export async function compareTurfs(sheets: TurfFacts[]): Promise<CompareOut | nu
       messages: [{ role: "user", content: `Fact sheets, in order:\n${JSON.stringify(sheets)}` }],
     },
     "compare",
+    usage,
   );
 }
 
@@ -166,7 +169,7 @@ Rules:
 - Size: use size, formats and grounds when present ("TapTurf lists it as a 6-a-side ground, 2 grounds").
 - No preamble, no restating the question.`;
 
-export async function answerQuestion(question: string, sheet: TurfFacts): Promise<AnswerOut | null> {
+export async function answerQuestion(question: string, sheet: TurfFacts, usage?: AskUsage): Promise<AnswerOut | null> {
   return structured(
     AnswerOut,
     {
@@ -176,5 +179,6 @@ export async function answerQuestion(question: string, sheet: TurfFacts): Promis
       messages: [{ role: "user", content: `Question: ${question}\n\nFact sheet:\n${JSON.stringify(sheet)}` }],
     },
     "answer",
+    usage,
   );
 }

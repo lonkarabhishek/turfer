@@ -1,22 +1,25 @@
 import { NextResponse, after } from "next/server";
-import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getAskTurfs } from "@/lib/queries/turfCache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { isCity } from "@/lib/city";
 import { forCard } from "@/lib/utils/cardTurf";
 import {
+  AskFilters,
+  addUsage,
   applyAskFilters,
   areasFromTurfs,
   isAskConfigured,
   keywordFilters,
+  newUsage,
   parseAsk,
   relaxedLabel,
   resolveTurfNames,
   type AskContext,
-  type AskFilters,
   type AskTurn,
 } from "@/lib/ai/ask";
+import { quickAnswer } from "@/lib/ai/quick";
+import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
 import type { Turf } from "@/types/turf";
@@ -27,9 +30,17 @@ import { askChipsFor } from "@/lib/home/select";
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
 // ask about one venue. See lib/ai/ask.ts for how the sentence is read.
+//
+// A fresh question is read without a model call when it is one of our
+// chips or a common shape (lib/ai/quick.ts), else from a cache of
+// Claude's readings (lib/ai/parseCache.ts), else by Claude. The
+// Server-Timing header and the logged filters (_t, _usage, _src) show
+// where the time and tokens went.
 
-const allTurfs = unstable_cache(() => getAllActiveTurfs(), ["ask-all-turfs"], { revalidate: 600 });
 const MAX_Q = 160;
+
+/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords. */
+type Via = "quick" | "cache" | "claude" | "keywords";
 
 function ipHash(req: Request): string {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
@@ -96,13 +107,27 @@ export async function GET(req: Request) {
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
+  const ms: Record<string, number> = {};
+  const timed = <T,>(stage: string, p: Promise<T>): Promise<T> => {
+    const t0 = performance.now();
+    return p.finally(() => {
+      ms[stage] = Math.round(performance.now() - t0);
+    });
+  };
+
+  // The turf list loads while the budget is checked; the budget still
+  // decides before any model call.
+  const turfsLoad = timed("turfs", getAskTurfs());
+  // A refused ask returns without awaiting it; after() keeps the shared
+  // load running until it finishes.
+  after(turfsLoad.catch(() => {}));
 
   // Budgets: null id means this IP has asked too often; free_left -1
   // means the visitor has used today's free answers.
   let logId: number | null = null;
   let freeLeft: number | null = null;
   try {
-    const { data } = await supabase.rpc("ask_begin_v2", { p_ip_hash: ipHash(req), p_query: q, p_user_id: userId, p_anon_id: anonId });
+    const { data } = await timed("budget", Promise.resolve(supabase.rpc("ask_begin_v2", { p_ip_hash: ipHash(req), p_query: q, p_user_id: userId, p_anon_id: anonId })));
     const row = (Array.isArray(data) ? data[0] : data) as { id: number | null; free_left: number | null } | null;
     if (row?.free_left === -1) return NextResponse.json({ error: "sign_in", freeLeft: 0 }, { status: 401 });
     if (row && row.id === null) return NextResponse.json({ error: "Too many searches, try again in a few minutes" }, { status: 429 });
@@ -112,25 +137,43 @@ export async function GET(req: Request) {
     /* logging is best effort */
   }
 
-  const turfs = await allTurfs();
-  let filters: AskFilters;
-  let source: "claude" | "keywords" = "keywords";
-  if (isAskConfigured()) {
+  const turfs = await turfsLoad;
+  const areas = areasFromTurfs(turfs);
+  const usage = newUsage();
+  const parseStart = performance.now();
+  const fresh = history.length === 0;
+  let filters: AskFilters = keywordFilters(q);
+  let via: Via = "keywords";
+  const quick = fresh ? quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }) : null;
+  const quickOk = quick ? AskFilters.safeParse(quick) : null;
+  if (quickOk && !quickOk.success) console.error("ask: ready answer failed the schema", q, quickOk.error.issues.slice(0, 3));
+  if (quickOk?.success) {
+    filters = quickOk.data;
+    via = "quick";
+  } else if (isAskConfigured()) {
     try {
-      const parsed = await parseAsk(q, areasFromTurfs(turfs), history, ctx);
-      if (parsed) {
-        filters = parsed.filters;
-        source = "claude";
+      if (fresh) {
+        const got = await parseFresh(q, areas, ctx);
+        filters = got.filters;
+        via = got.cached ? "cache" : "claude";
+        if (got.usage) addUsage(usage, got.usage);
       } else {
-        filters = keywordFilters(q);
+        const parsed = await parseAsk(q, areas, history, ctx, usage);
+        if (parsed) {
+          filters = parsed.filters;
+          via = "claude";
+        }
       }
     } catch (e) {
-      console.error("ask: claude failed, falling back to keywords", e);
-      filters = keywordFilters(q);
+      if (e instanceof Declined) addUsage(usage, e.usage);
+      else console.error("ask: claude failed, falling back to keywords", e);
     }
-  } else {
-    filters = keywordFilters(q);
   }
+  ms.parse = Math.round(performance.now() - parseStart);
+  // ask_queries.source only takes these two; the real path is logged as _src.
+  const source: "claude" | "keywords" = via === "claude" || via === "cache" ? "claude" : "keywords";
+  // Compare and question need a second call; skip it when Claude is down.
+  const canCallClaude = isAskConfigured() && via !== "keywords";
 
   const base = {
     query: q,
@@ -139,6 +182,8 @@ export async function GET(req: Request) {
     reply: filters.reply,
     followups: filters.followups.slice(0, 3),
     source,
+    /** Which path read the sentence: quick, cache, claude or keywords. */
+    via,
     filters: {
       city: filters.city,
       sport: filters.sport,
@@ -175,6 +220,7 @@ export async function GET(req: Request) {
   };
   let body: Record<string, unknown> = { ...base, relaxed: [], total: 0 };
 
+  const handlerStart = performance.now();
   try {
     switch (filters.intent) {
       case "find_game": {
@@ -199,24 +245,24 @@ export async function GET(req: Request) {
         const resolved = resolveTurfNames(turfs, cmpNames.slice(0, 3), prefCity);
         const found = resolved.filter((r) => r.turf) as { name: string; turf: Turf }[];
         const missing = resolved.filter((r) => !r.turf).map((r) => r.name);
-        if (found.length < 2 || !source.startsWith("claude")) {
+        if (found.length < 2 || !canCallClaude) {
           body = { ...base, relaxed: [], total: found.length, missing, turfs: found.map((r) => card(r.turf)), compare: null };
           break;
         }
         const sheets = (await Promise.all(found.map((r) => loadFacts(r.turf.id)))).filter((s) => s) as { turf: Turf; facts: Record<string, unknown> }[];
-        const out = await compareTurfs(sheets.map((s) => s.facts));
+        const out = await compareTurfs(sheets.map((s) => s.facts), usage);
         body = { ...base, relaxed: [], total: sheets.length, missing, turfs: sheets.map((s) => card(s.turf)), compare: out };
         break;
       }
       case "question": {
         const names = filters.turf_names.length ? filters.turf_names : ctx.turf ? [ctx.turf] : [];
         const [hit] = resolveTurfNames(turfs, names.slice(0, 1), prefCity);
-        if (!hit?.turf || !source.startsWith("claude")) {
+        if (!hit?.turf || !canCallClaude) {
           body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
           break;
         }
         const sheet = await loadFacts(hit.turf.id);
-        const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts) : null;
+        const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts, usage) : null;
         body = { ...base, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
         break;
       }
@@ -245,6 +291,8 @@ export async function GET(req: Request) {
     console.error("ask: intent handler failed", filters.intent, e);
     body = { ...base, relaxed: [], total: 0, failed: true };
   }
+  ms.handler = Math.round(performance.now() - handlerStart);
+  ms.total = Date.now() - started;
 
   // Names shown this turn, so the next message can say "the first one".
   const shown = (body.turfs as { name: string }[] | undefined)?.map((t) => t.name) ?? (body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? [];
@@ -258,7 +306,14 @@ export async function GET(req: Request) {
         .rpc("ask_finish", {
           p_id: logId,
           // shown_ids: which turfs this answer showed (owners see the count on myTapturf).
-          p_filters: { ...filters, shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12) },
+          // _src, _t (stage ms) and _usage (tokens across every model call) are for tuning.
+          p_filters: {
+            ...filters,
+            shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12),
+            _src: via,
+            _t: ms,
+            ...(usage.calls ? { _usage: usage } : {}),
+          },
           p_results: Number(body.total) || (Array.isArray(body.turfs) ? body.turfs.length : 0),
           p_ms: Date.now() - started,
           p_source: source,
@@ -269,5 +324,6 @@ export async function GET(req: Request) {
     });
   }
 
-  return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store" } });
+  const timing = ["budget", "turfs", "parse", "handler", "total"].map((k) => `${k};dur=${ms[k] ?? 0}${k === "parse" ? `;desc="${via}"` : ""}`).join(", ");
+  return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timing } });
 }

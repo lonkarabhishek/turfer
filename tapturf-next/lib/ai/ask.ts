@@ -68,6 +68,9 @@ export function isAskConfigured(): boolean {
   return !!process.env.ANTHROPIC_API_KEY;
 }
 
+/** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
+export const ROUTER_VERSION = 1;
+
 /** Stable system prompt (cacheable): cities, sports, and the areas we know. */
 function systemPrompt(areasByCity: Record<string, string[]>): string {
   const cities = CITIES.map((c) => `${c.id} (${c.label})`).join(", ");
@@ -134,6 +137,27 @@ export function getAnthropic(): Anthropic {
 
 type StructuredParams = Omit<Anthropic.MessageCreateParamsNonStreaming, "output_config">;
 
+/** Tokens spent on one ask, across every model call it made (retries included). */
+export type AskUsage = { input: number; output: number; cache_read: number; cache_write: number; calls: number };
+
+export const newUsage = (): AskUsage => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, calls: 0 });
+
+export function addUsage(to: AskUsage, u: Anthropic.Usage | AskUsage): void {
+  if ("input_tokens" in u) {
+    to.input += u.input_tokens;
+    to.output += u.output_tokens;
+    to.cache_read += u.cache_read_input_tokens ?? 0;
+    to.cache_write += u.cache_creation_input_tokens ?? 0;
+    to.calls += 1;
+  } else {
+    to.input += u.input;
+    to.output += u.output;
+    to.cache_read += u.cache_read;
+    to.cache_write += u.cache_write;
+    to.calls += u.calls;
+  }
+}
+
 /**
  * messages.create with a JSON schema, parsed by hand. The SDK's .parse()
  * runs JSON.parse on every text block and throws on the first bad one.
@@ -143,9 +167,10 @@ type StructuredParams = Omit<Anthropic.MessageCreateParamsNonStreaming, "output_
  * blocks, scrub control characters, cut to the outer braces, validate
  * with zod, and try once more (with a doubled budget if it was cut off)
  * when it still does not parse. Null means the model declined or both
- * attempts came back unusable.
+ * attempts came back unusable. Pass `usage` to have the tokens of each
+ * attempt added to it.
  */
-export async function structured<T extends z.ZodType>(schema: T, params: StructuredParams, tag: string): Promise<z.output<T> | null> {
+export async function structured<T extends z.ZodType>(schema: T, params: StructuredParams, tag: string, usage?: AskUsage): Promise<z.output<T> | null> {
   const format = zodOutputFormat(schema);
   let maxTokens = params.max_tokens;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -157,6 +182,7 @@ export async function structured<T extends z.ZodType>(schema: T, params: Structu
       thinking: { type: "disabled" },
       output_config: { effort: "low", format },
     });
+    if (usage && res.usage) addUsage(usage, res.usage);
     if (res.stop_reason === "refusal") return null;
     if (res.stop_reason === "max_tokens") maxTokens *= 2;
     const text = res.content
@@ -194,14 +220,18 @@ function parseJsonObject(text: string): unknown {
   return undefined;
 }
 
-export type AskParse = { filters: AskFilters; usage?: { input: number; output: number; cached: number } };
+export type AskParse = { filters: AskFilters; usage: AskUsage };
 
-/** Sentence to intent and filters. Throws on API failure; returns null when the model declined. */
+/**
+ * Sentence to intent and filters. Throws on API failure; returns null
+ * when the model declined. The tokens spent go into `usage` either way.
+ */
 export async function parseAsk(
   query: string,
   areasByCity: Record<string, string[]>,
   history: AskTurn[] = [],
   ctx: AskContext = {},
+  usage: AskUsage = newUsage(),
 ): Promise<AskParse | null> {
   const parts: string[] = [];
   if (ctx.turf || ctx.city) {
@@ -227,8 +257,9 @@ export async function parseAsk(
       messages: [{ role: "user", content: context }],
     },
     "router",
+    usage,
   );
-  return filters ? { filters } : null;
+  return filters ? { filters, usage } : null;
 }
 
 /** Plain keyword fallback when the API is unavailable. */
@@ -270,19 +301,30 @@ export function keywordFilters(query: string): AskFilters {
   };
 }
 
-/** Distinct, sorted areas per city from the live turf rows. Stable across requests so the prompt caches. */
+const areasMemo = new WeakMap<Turf[], Record<string, string[]>>();
+
+/**
+ * Distinct, sorted areas per city from the live turf rows. Sorted, so
+ * the same rows in any order give the same prompt bytes and the prompt
+ * caches. Worked out once per turf list (the list is memoised for 10
+ * minutes); callers must not change the result.
+ */
 export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
+  const hit = areasMemo.get(turfs);
+  if (hit) return hit;
   const out: Record<string, Set<string>> = {};
   for (const t of turfs) {
     const area = areaFor(t);
     if (!t.city || !area) continue;
     (out[t.city] ??= new Set()).add(area);
   }
-  return Object.fromEntries(
+  const res = Object.fromEntries(
     Object.entries(out)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([city, set]) => [city, [...set].sort((a, b) => a.localeCompare(b))]),
   );
+  areasMemo.set(turfs, res);
+  return res;
 }
 
 import { norm, resolveTurfNames } from "./names";

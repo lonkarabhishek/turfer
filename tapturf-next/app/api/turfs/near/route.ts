@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { unstable_cache } from "next/cache";
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getNearTurfs } from "@/lib/queries/turfCache";
 import { haversineKm } from "@/lib/utils/location";
 import { forCard } from "@/lib/utils/cardTurf";
 
 // Nearest turfs to a point, for /turf-near-me. Sorting happens here so
 // the page doesn't ship every turf to the phone. The location is used
 // for this one calculation and never stored.
-
-const allTurfs = unstable_cache(() => getAllActiveTurfs(), ["near-me-all-turfs"], { revalidate: 600 });
 
 const MAX_LIMIT = 24;
 
@@ -23,7 +20,7 @@ export async function GET(req: Request) {
   }
 
   const me = { lat, lng };
-  const ranked = (await allTurfs())
+  const ranked = (await getNearTurfs())
     .map((turf) => ({ turf, km: haversineKm(me, { lat: Number(turf.lat), lng: Number(turf.lng) }) }))
     .filter((r) => r.turf.lat != null && r.turf.lng != null && Number.isFinite(r.km))
     .sort((a, b) => a.km - b.km);

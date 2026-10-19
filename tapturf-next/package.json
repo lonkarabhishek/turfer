@@ -10,7 +10,8 @@
     "test:cricket": "tsc lib/cricket/overs.ts lib/cricket/nrr.ts lib/cricket/cricket.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cricket.test.js",
     "test:city": "tsc lib/city.ts lib/cityRouting.ts lib/cityPrePaint.ts lib/cityRouting.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cityRouting.test.js",
     "check:blog": "tsc -p tsconfig.check-blog.json && node .test-out/check-blog/scripts/check-blog.js",
-    "test:names": "tsc -p tsconfig.test-names.json && node --test .test-out/names/lib/ai/names.test.js"
+    "test:names": "tsc -p tsconfig.test-names.json && node --test .test-out/names/lib/ai/names.test.js",
+    "test:ask": "tsc -p tsconfig.test-ask.json && node --test .test-out/ask/lib/ai/quick.test.js .test-out/ask/lib/ask/project.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

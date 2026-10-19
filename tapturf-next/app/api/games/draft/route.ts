@@ -1,7 +1,6 @@
 import { NextResponse, after } from "next/server";
-import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getAskTurfs } from "@/lib/queries/turfCache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { CITY_COOKIE, isCity, parseCityCookie, scopeOf } from "@/lib/city";
 import { isAskConfigured } from "@/lib/ai/ask";
@@ -12,7 +11,6 @@ import { draftGame, toPrefill } from "@/lib/ai/gameDraft";
 // (hosting needs an account anyway); the per-IP budget from Ask caps
 // abuse and every draft lands in the Ask transcript for review.
 
-const allTurfs = unstable_cache(() => getAllActiveTurfs(), ["ask-all-turfs"], { revalidate: 600 });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function ipHash(req: Request): string {
@@ -64,7 +62,7 @@ async function handle(req: Request, body: { text?: unknown; city?: unknown; uid?
   const cityParam = typeof body.city === "string" ? body.city : null;
   const cookieCity = scopeOf(parseCityCookie(new RegExp(`(?:^|;\\s*)${CITY_COOKIE}=([^;]*)`).exec(req.headers.get("cookie") ?? "")?.[1]));
   const prefCity = isCity(cityParam) ? cityParam : isCity(cookieCity) ? cookieCity : null;
-  const prefill = toPrefill(draft, await allTurfs(), prefCity);
+  const prefill = toPrefill(draft, await getAskTurfs(), prefCity);
 
   // Results: 1 when the wizard got anything to prefill (venue, sport or day).
   const filled = !!(prefill.turf || draft.sport || draft.date);
