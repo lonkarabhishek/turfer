@@ -98,11 +98,11 @@ export function MyHome() {
             </section>
           )}
 
-          <ClaimSearch defaultName={user.name ?? ""} onDone={load} owned={new Set(home.turfs.map((t) => t.id))} />
+          <ClaimSearch defaultName={user.name ?? ""} onDone={load} owned={new Set(home.turfs.map((t) => t.id))} admin={home.admin} />
 
           {home.admin && (
             <p className="mt-10 text-[13px] text-primary-400">
-              Signed in as the TapTurf owner: open any turf at /my/turf/&lt;id&gt;, and approve claims in <Link href="/admin" className="underline">admin</Link>.
+              Signed in as the TapTurf owner: every turf opens for you without a claim, and owners&rsquo; claims wait for you in <Link href="/admin" className="underline">admin</Link>.
             </p>
           )}
         </>
@@ -157,7 +157,7 @@ function ClaimFocus({ claimId, home, defaultName, onDone }: { claimId: string; h
   return (
     <section className="mt-6 rounded-3xl border-2 border-accent-200 bg-accent-50/40 p-3 md:p-4">
       <p className="px-1 mb-2 text-[13px] font-semibold text-accent-700">Claim this listing</p>
-      {mine?.status === "active" ? (
+      {mine?.status === "active" || home.admin ? (
         <Link href={`/my/turf/${claimId}`} className="flex items-center gap-3 rounded-2xl bg-white border border-primary-200 p-3">
           <Thumb src={turf.cover} />
           <span className="min-w-0 flex-1">
@@ -179,7 +179,7 @@ function ClaimFocus({ claimId, home, defaultName, onDone }: { claimId: string; h
           <ClaimRow turf={turf} defaultName={defaultName} onDone={onDone} instant={match} startOpen />
         </ul>
       )}
-      {!mine && !match && (
+      {!mine && !match && !home.admin && (
         <p className="px-1 mt-2 text-[13px] text-primary-600 leading-snug">
           Your number isn&rsquo;t on this listing, so we&rsquo;ll confirm with you before it opens. Tip: sign in with the number players call to get in at once.
         </p>
@@ -189,7 +189,7 @@ function ClaimFocus({ claimId, home, defaultName, onDone }: { claimId: string; h
 }
 
 /** Find your turf by name and claim it. */
-function ClaimSearch({ defaultName, onDone, owned }: { defaultName: string; onDone: () => void; owned: Set<string> }) {
+function ClaimSearch({ defaultName, onDone, owned, admin = false }: { defaultName: string; onDone: () => void; owned: Set<string>; admin?: boolean }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<OwnerTurfRef[]>([]);
   const [busy, setBusy] = useState(false);
@@ -211,7 +211,7 @@ function ClaimSearch({ defaultName, onDone, owned }: { defaultName: string; onDo
 
   return (
     <section className="mt-10">
-      <h2 className="text-[13px] font-semibold text-primary-500 mb-3">Claim a turf</h2>
+      <h2 className="text-[13px] font-semibold text-primary-500 mb-3">{admin ? "Open any turf" : "Claim a turf"}</h2>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -233,13 +233,28 @@ function ClaimSearch({ defaultName, onDone, owned }: { defaultName: string; onDo
       {hits.length > 0 && (
         <ul className="mt-3 space-y-2">
           {hits.map((t) =>
-            owned.has(t.id) ? null : <ClaimRow key={t.id} turf={t} defaultName={defaultName} onDone={onDone} />,
+            admin ? (
+              <li key={t.id}>
+                <Link href={`/my/turf/${t.id}`} className="press-tight flex items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3 hover:border-primary-400 transition-colors">
+                  <Thumb src={t.cover} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold text-primary-900 truncate">{t.name}</span>
+                    <span className="block text-[13px] text-primary-500 truncate">{place(t)}</span>
+                  </span>
+                  <ChevronRight className="w-5 h-5 text-primary-400" />
+                </Link>
+              </li>
+            ) : owned.has(t.id) ? null : (
+              <ClaimRow key={t.id} turf={t} defaultName={defaultName} onDone={onDone} />
+            ),
           )}
         </ul>
       )}
-      <p className="mt-3 text-[13px] text-primary-500">
-        Sign in with the number listed on your turf and you get in at once. Any other number, we check with you first.
-      </p>
+      {!admin && (
+        <p className="mt-3 text-[13px] text-primary-500">
+          Sign in with the number listed on your turf and you get in at once. Any other number, we check with you first.
+        </p>
+      )}
     </section>
   );
 }
