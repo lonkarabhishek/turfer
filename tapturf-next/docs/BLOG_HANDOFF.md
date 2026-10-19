@@ -155,6 +155,7 @@ From `tapturf-next/`:
 
 ```bash
 npm ci
+npm run check:blog             # the same guard Vercel runs before every build: ERROR stops the deploy, warn is a style note
 npx tsc --noEmit -p .          # catches a wrong block shape or category typo
 npx eslint content/blog        # lint what you touched
 grep -rn "—" content/blog/posts/<your-files>   # must print nothing
