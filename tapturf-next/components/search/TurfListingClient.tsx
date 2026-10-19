@@ -12,6 +12,8 @@ import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/Trendin
 import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
 import { isCity, labelFor, type CityScope } from "@/lib/city";
 
+const PAGE_SIZE = 48;
+
 // Order by frequency in the current DB — Football (166) and Box
 // Cricket (103) dominate, so they're first. Box Cricket was missing
 // entirely from the old list, hiding 103 venues behind an unclickable
@@ -67,6 +69,10 @@ export function TurfListingClient({
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [locErrorKind, setLocErrorKind] = useState<"denied" | "unavailable" | "timeout" | "other" | null>(null);
+  // Render a page of cards at a time: all of India is 2,000+ turfs and
+  // rendering every card made the page heavy. Search and filters still
+  // run over every turf; a new search or filter starts from page one.
+  const [page, setPage] = useState({ key: "", n: PAGE_SIZE });
 
   // The home's WebSite SearchAction lands here as /turfs?q=...; seed the
   // box once so that search really runs.
@@ -182,6 +188,9 @@ export function TurfListingClient({
 
     return result;
   }, [turfsWithDistance, search, selectedSport, sortBy, trendingIds]);
+
+  const filterKey = `${search.trim()}|${selectedSport ?? ""}|${sortBy}|${userLocation ? "geo" : ""}`;
+  const shown = page.key === filterKey ? page.n : PAGE_SIZE;
 
   const spotlightPicks = useMemo(() => (spotlight ? [spotlight] : []), [spotlight]);
 
@@ -315,8 +324,9 @@ export function TurfListingClient({
 
       {/* Grid */}
       {cityLabel && search.trim() && filtered.length === 0 ? null : filtered.length > 0 ? (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-          {filtered.map(({ turf, distanceKm }) => (
+          {filtered.slice(0, shown).map(({ turf, distanceKm }) => (
             <TurfCard
               key={turf.id}
               turf={turf}
@@ -326,6 +336,21 @@ export function TurfListingClient({
             />
           ))}
         </div>
+        {filtered.length > shown && (
+          <div className="mt-10 flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage({ key: filterKey, n: shown + PAGE_SIZE })}
+              className="press-tight h-12 px-6 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[15px] font-semibold transition-colors cursor-pointer"
+            >
+              Show more turfs
+            </button>
+            <p className="text-[13px] text-primary-500 tabular-nums">
+              Showing {shown.toLocaleString("en-IN")} of {filtered.length.toLocaleString("en-IN")}
+            </p>
+          </div>
+        )}
+        </>
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">🏟️</p>
