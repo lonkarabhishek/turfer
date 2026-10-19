@@ -285,37 +285,8 @@ export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
   );
 }
 
-export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-
-const STOP = new Set(["turf", "turfs", "ground", "grounds", "sports", "sport", "arena", "academy", "club", "the", "and", "box", "cricket", "football", "complex", "hub"]);
-
-/**
- * Match typed venue names against our rows. Generic words (turf,
- * arena, sports) don't count, so "Vedant" finds Vedant Sports Academy
- * and "CC Turf Pardi" needs both "cc" and "pardi". One result per
- * typed name, best match first, same city preferred.
- */
-export function resolveTurfNames(all: Turf[], names: string[], prefCity?: CityId | null): { name: string; turf: Turf | null }[] {
-  return names.map((name) => {
-    const words = norm(name).split(" ").filter((w) => w.length >= 2);
-    const strong = words.filter((w) => !STOP.has(w));
-    const use = strong.length ? strong : words;
-    if (!use.length) return { name, turf: null };
-    let best: { t: Turf; score: number } | null = null;
-    for (const t of all) {
-      const hay = norm(`${t.name} ${areaFor(t) ?? ""}`);
-      const hits = use.filter((w) => hay.includes(w)).length;
-      if (hits === 0) continue;
-      const score =
-        hits / use.length +
-        (hits === use.length ? 0.5 : 0) +
-        (prefCity && t.city === prefCity ? 0.1 : 0) +
-        Math.min(t.total_reviews, 1000) / 20000;
-      if (!best || score > best.score) best = { t, score };
-    }
-    return { name, turf: best && best.score >= 0.75 ? best.t : null };
-  });
-}
+import { norm, resolveTurfNames } from "./names";
+export { norm, resolveTurfNames };
 
 function hasNeed(t: Turf, need: Need): boolean {
   const am = (t.amenities ?? []).map(norm).join(" ");

@@ -198,14 +198,23 @@ export function AskResultBody({
             <MoreLink href="/games" label={res.total > games.length ? `See all ${res.total} games` : "All open games"} />
           </>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            <Link href="/games" className="inline-flex items-center h-9 px-4 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer hover:bg-primary-800 transition-colors">
-              See open games
-            </Link>
-            <Link href="/game/create" className="inline-flex items-center h-9 px-4 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer hover:bg-primary-200 transition-colors">
-              Host one
-            </Link>
-          </div>
+          <>
+            {turfs.length > 0 && (
+              <Row>
+                {turfs.map((t, i) => (
+                  <TurfMiniCard key={t.id} turf={t} priority={i < 2} />
+                ))}
+              </Row>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Link href="/game/create" className="inline-flex items-center h-9 px-4 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer hover:bg-primary-800 transition-colors">
+                Host a game
+              </Link>
+              <Link href="/games" className="inline-flex items-center h-9 px-4 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer hover:bg-primary-200 transition-colors">
+                See all open games
+              </Link>
+            </div>
+          </>
         ))}
 
       {res.intent === "compare" && <CompareBlock res={res} />}

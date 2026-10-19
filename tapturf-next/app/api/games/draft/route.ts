@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { isCity } from "@/lib/city";
+import { CITY_COOKIE, isCity, parseCityCookie, scopeOf } from "@/lib/city";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { draftGame, toPrefill } from "@/lib/ai/gameDraft";
 
@@ -59,8 +59,12 @@ async function handle(req: Request, body: { text?: unknown; city?: unknown; uid?
   }
   if (!draft) return NextResponse.json({ error: "I couldn't make a game out of that. Try: Box cricket Saturday 7pm at Hindu Gymkhana, 10 players, 150 each." }, { status: 422 });
 
+  // The venue is matched in the player's city first: the one the page
+  // sent, else the tt_city cookie (picked or detected).
   const cityParam = typeof body.city === "string" ? body.city : null;
-  const prefill = toPrefill(draft, await allTurfs(), isCity(cityParam) ? cityParam : null);
+  const cookieCity = scopeOf(parseCityCookie(new RegExp(`(?:^|;\\s*)${CITY_COOKIE}=([^;]*)`).exec(req.headers.get("cookie") ?? "")?.[1]));
+  const prefCity = isCity(cityParam) ? cityParam : isCity(cookieCity) ? cookieCity : null;
+  const prefill = toPrefill(draft, await allTurfs(), prefCity);
 
   if (logId != null) {
     void supabase

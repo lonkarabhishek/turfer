@@ -178,6 +178,15 @@ export async function GET(req: Request) {
       case "find_game": {
         const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10 });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, games: r.games };
+        // No open game yet: show turfs for the same sport and place, so
+        // the player can book one and host the game instead of hitting a wall.
+        if (r.games.length === 0) {
+          const t = applyAskFilters(turfs, { ...filters, intent: "find_turf", when: null, time: null }, { prefCity, loc, limit: 3 });
+          if (t.turfs.length) {
+            body.turfs = t.turfs.map(card);
+            body.reply = "No open games match that yet. Book one of these turfs and host it, players nearby can join.";
+          }
+        }
         break;
       }
       case "compare": {
