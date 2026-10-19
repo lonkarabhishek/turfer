@@ -58,6 +58,8 @@ export type PostCategory =
   | "Guides"
   | "Rules"
   | "Playbook"
+  | "Fitness"
+  | "News"
   | "Nashik"
   | "Pune"
   | "Mumbai"
