@@ -90,14 +90,26 @@ export function threadAsks(rows: AskRow[]): AskThread[] {
   return out.sort((a, b) => new Date(b.ended).getTime() - new Date(a.ended).getTime());
 }
 
+/**
+ * How an ask was read. ask_queries.source only takes claude or keywords,
+ * so ready answers are stored as keywords and cached readings as claude;
+ * the route logs the real path as filters._src.
+ */
+export function askVia(r: AskRow): "quick" | "cache" | "claude" | "keywords" | null {
+  const src = r.filters?._src;
+  return src === "quick" || src === "cache" || src === "claude" || src === "keywords" ? src : r.source;
+}
+
 export function askStats(rows: AskRow[]) {
-  const claude = rows.filter((r) => r.source === "claude").length;
+  const claude = rows.filter((r) => askVia(r) === "claude").length;
+  // Answered without a model call: a ready answer or a cached reading.
+  const instant = rows.filter((r) => askVia(r) === "quick" || askVia(r) === "cache").length;
   const empty = rows.filter((r) => r.results === 0 && r.intent !== "other").length;
   const visitors = new Set(rows.map((r) => r.user_id ?? r.ip_hash)).size;
   const ms = rows.map((r) => r.ms).filter((x): x is number => x != null).sort((a, b) => a - b);
   const p50 = ms.length ? ms[Math.floor(ms.length / 2)] : null;
   const byIntent = rows.reduce<Record<string, number>>((m, r) => ((m[r.intent ?? "?"] = (m[r.intent ?? "?"] ?? 0) + 1), m), {});
-  return { total: rows.length, claude, empty, visitors, p50, byIntent };
+  return { total: rows.length, claude, instant, empty, visitors, p50, byIntent };
 }
 
 /** Latest cached "where we fell short" digest for the window, if any. */

@@ -30,7 +30,7 @@ import {
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
-import { ASK_FILTERS, askStats, filterAsks, getAskDigest, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
+import { ASK_FILTERS, askStats, askVia, filterAsks, getAskDigest, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
 import { AskDigestCard } from "@/components/admin/AskDigest";
 import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
@@ -443,6 +443,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
               <Badge className="bg-primary-100 text-primary-700">{st.visitors} visitor{st.visitors === 1 ? "" : "s"}</Badge>
               <Badge className="bg-primary-100 text-primary-700">{threads.length} conversation{threads.length === 1 ? "" : "s"}</Badge>
               <Badge className="bg-accent-100 text-accent-800">{st.claude} via Claude</Badge>
+              {st.instant > 0 && <Badge className="bg-primary-100 text-primary-800">{st.instant} instant</Badge>}
               {st.empty > 0 && <Badge className="bg-amber-100 text-amber-800">{st.empty} with no results</Badge>}
               {st.p50 != null && <Badge className="bg-primary-100 text-primary-700">{(st.p50 / 1000).toFixed(1)}s typical</Badge>}
               {Object.entries(st.byIntent)
@@ -473,7 +474,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                               {intentLabel[r.intent ?? ""] ?? r.intent ?? "?"}
                               {r.results != null && r.intent !== "other" ? ` · ${r.results} result${r.results === 1 ? "" : "s"}` : ""}
                               {r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}
-                              {r.source === "keywords" ? " · keyword fallback" : ""}
+                              {({ quick: " · ready answer", cache: " · cached reading", keywords: " · keyword fallback" } as Record<string, string>)[askVia(r) ?? ""] ?? ""}
                             </p>
                           </div>
                         </div>
