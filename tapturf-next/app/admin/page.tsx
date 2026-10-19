@@ -24,6 +24,7 @@ import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { BreakdownList } from "@/components/admin/BreakdownList";
+import { OwnerClaims } from "@/components/admin/OwnerClaims";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -278,6 +279,13 @@ export default async function AdminPage() {
           sub={pendingSuggestions === 0 ? "Queue is clear" : "Pending your approval"}
           tone={pendingSuggestions > 0 ? "accent" : "default"}
         />
+      </section>
+
+      {/* myTapturf claims */}
+      <section className="mb-8 rounded-2xl bg-white border border-primary-200 p-5">
+        <h2 className="font-semibold text-primary-900 mb-1">myTapturf owners</h2>
+        <p className="text-[13px] text-primary-500 mb-4">Owners whose number is on the listing get in at once; approve the rest here.</p>
+        <OwnerClaims />
       </section>
 
       {/* AI tools */}
