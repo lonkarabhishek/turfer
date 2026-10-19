@@ -98,6 +98,27 @@ export function noteInterest(i: { city?: string | null; sports?: string[] | null
   write(INTEREST, cur);
 }
 
+/** Count a turf page view for the owner's myTapturf numbers, once per turf per session. */
+export function logTurfView(turfId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const k = `tt_viewed_${turfId}`;
+    if (sessionStorage.getItem(k)) return;
+    sessionStorage.setItem(k, "1");
+  } catch {
+    /* no sessionStorage: count it anyway */
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return;
+  void fetch(`${url}/rest/v1/rpc/log_turf_view`, {
+    method: "POST",
+    keepalive: true,
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_turf_id: turfId }),
+  }).catch(() => {});
+}
+
 /** First time each funnel step happened. */
 export function step(name: keyof Funnel) {
   if (typeof window === "undefined") return;

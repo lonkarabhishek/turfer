@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { noteInterest, step, trackVisit } from "@/lib/analytics/visitor";
+import { logTurfView, noteInterest, step, trackVisit } from "@/lib/analytics/visitor";
 
 /**
  * Once per page load: first-visit source, session and day counts, and
@@ -28,6 +28,7 @@ export function NoteInterest({ city, sports, turfId }: { city?: string | null; s
     noteInterest({ city, sports, turf: !!turfId });
     if (turfId) {
       step("turf_open");
+      logTurfView(turfId);
       try {
         (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag?.("event", "turf_view", { turf_id: turfId, city: city ?? "", sport: sports?.[0] ?? "" });
       } catch {

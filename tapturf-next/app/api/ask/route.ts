@@ -257,7 +257,8 @@ export async function GET(req: Request) {
       await supabase
         .rpc("ask_finish", {
           p_id: logId,
-          p_filters: filters,
+          // shown_ids: which turfs this answer showed (owners see the count on myTapturf).
+          p_filters: { ...filters, shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12) },
           p_results: Number(body.total) || (Array.isArray(body.turfs) ? body.turfs.length : 0),
           p_ms: Date.now() - started,
           p_source: source,
