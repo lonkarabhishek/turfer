@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowUp, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { useAsk, type Turn } from "./AskProvider";
 import { AskResultBody } from "./AskResults";
 import { askChips } from "@/lib/ask/chips";
@@ -74,67 +74,76 @@ export function AskPanel() {
   const where = pageContext.turf ? pageContext.turf.name : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-stretch md:justify-end" role="presentation">
-      <button type="button" aria-label="Close" onClick={closePanel} className="absolute inset-0 bg-primary-900/35 backdrop-blur-[2px] cursor-pointer" />
+    <div className="fixed inset-0 z-50 flex md:justify-end" role="presentation">
+      {/* Desktop: dim the page behind the side panel. Phones get a full screen. */}
+      <button type="button" aria-label="Close" onClick={closePanel} className="hidden md:block absolute inset-0 bg-primary-900/30 cursor-pointer" />
 
       <section
         role="dialog"
         aria-modal="true"
         aria-label="Ask TapTurf"
-        className="relative flex flex-col w-full md:w-[440px] h-[calc(100dvh-3rem)] md:h-full bg-white md:bg-primary-50 rounded-t-[28px] md:rounded-none shadow-elevated ask-sheet-in md:ask-panel-in overflow-hidden"
+        className="relative flex flex-col w-full md:w-[480px] h-[100dvh] bg-white md:shadow-elevated ask-screen-in md:ask-panel-in overflow-hidden"
       >
-        {/* Header */}
-        <header className="relative shrink-0 px-4 pt-3 pb-3 md:pt-4 bg-white border-b border-primary-100">
-          <div className="md:hidden mx-auto mb-3 h-1.5 w-10 rounded-full bg-primary-200" aria-hidden />
-          <div className="flex items-center gap-3">
-            <Orb />
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-[17px] text-primary-900 leading-tight">Ask TapTurf</p>
-              <p className="text-[12px] text-primary-500 truncate">
-                {where ? `Looking at ${where}` : "Turfs, games, comparisons, questions"}
-              </p>
-            </div>
-            {turns.length > 0 && (
-              <button
-                type="button"
-                onClick={reset}
-                className="h-11 w-11 inline-flex items-center justify-center rounded-full text-primary-500 hover:text-primary-900 hover:bg-primary-100 cursor-pointer transition-colors"
-                aria-label="Start over"
-                title="Start over"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            )}
+        {/* Header: back on phones, close on desktop. */}
+        <header className="shrink-0 flex items-center gap-1 h-14 px-1.5 border-b border-primary-100">
+          <button
+            type="button"
+            onClick={closePanel}
+            className="md:hidden h-11 w-11 inline-flex items-center justify-center rounded-full text-primary-900 hover:bg-primary-100 cursor-pointer transition-colors"
+            aria-label="Back"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="min-w-0 flex-1 px-1 md:px-2.5">
+            <p className="font-display text-[17px] text-primary-900 leading-tight">Ask TapTurf</p>
+            <p className="text-[12px] text-primary-500 truncate">{where ? `About ${where}` : "Turfs, games, prices and comparisons"}</p>
+          </div>
+          {turns.length > 0 && (
             <button
               type="button"
-              onClick={closePanel}
-              className="h-11 w-11 inline-flex items-center justify-center rounded-full text-primary-500 hover:text-primary-900 hover:bg-primary-100 cursor-pointer transition-colors"
-              aria-label="Close"
+              onClick={reset}
+              className="h-11 px-3 inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium text-primary-600 hover:text-primary-900 hover:bg-primary-100 cursor-pointer transition-colors"
+              aria-label="New chat"
+              title="New chat"
             >
-              <X className="w-5 h-5" />
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden min-[380px]:inline">New</span>
             </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={closePanel}
+            className="hidden md:inline-flex h-11 w-11 items-center justify-center rounded-full text-primary-500 hover:text-primary-900 hover:bg-primary-100 cursor-pointer transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </header>
 
         {/* Thread */}
-        <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4" aria-live="polite">
-          {turns.length === 0 && <Welcome where={where} />}
-          {turns.map((t, i) => (
-            <TurnView key={t.id} turn={t} isLast={i === turns.length - 1} onUseLocation={() => void requestLocation()} locating={locating} />
-          ))}
-          {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
+        <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain" aria-live="polite">
+          {turns.length === 0 ? (
+            <Welcome where={where} chips={chips} onPick={(c) => void send(c)} />
+          ) : (
+            <div className="px-4 py-5 space-y-7">
+              {turns.map((t, i) => (
+                <TurnView key={t.id} turn={t} isLast={i === turns.length - 1} onUseLocation={() => void requestLocation()} locating={locating} />
+              ))}
+              {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
+            </div>
+          )}
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 bg-white border-t border-primary-100 px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          {chips.length > 0 && !busy && (
-            <div className="-mx-3 px-3 mb-2.5 flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="shrink-0 bg-white px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {turns.length > 0 && chips.length > 0 && !busy && (
+            <div className="-mx-3 px-3 mb-2 flex gap-2 overflow-x-auto scrollbar-hide">
               {chips.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => void send(c)}
-                  className="shrink-0 h-9 px-3.5 rounded-full border border-primary-200 bg-white hover:border-accent-500 hover:text-accent-700 text-[13px] font-medium text-primary-800 whitespace-nowrap cursor-pointer transition-colors"
+                  className="shrink-0 h-9 px-3.5 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] font-medium text-primary-800 whitespace-nowrap cursor-pointer transition-colors"
                 >
                   {c}
                 </button>
@@ -146,7 +155,7 @@ export function AskPanel() {
               e.preventDefault();
               void send(draft);
             }}
-            className="flex items-end gap-2"
+            className="relative"
           >
             <label htmlFor="ask-input" className="sr-only">
               Message
@@ -160,22 +169,22 @@ export function AskPanel() {
               maxLength={160}
               enterKeyHint="send"
               onFocus={(e) => {
-                // iOS scrolls the page to the focused field; the sheet is fixed, so keep the page put.
+                // iOS scrolls the page to the focused field; the screen is fixed, so keep the page put.
                 const y = window.scrollY;
                 setTimeout(() => window.scrollTo(0, y), 50);
                 e.currentTarget.scrollIntoView({ block: "nearest" });
               }}
               autoComplete="off"
               placeholder={!signedIn && freeLeft === 0 ? "Sign in to keep going" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
-              className="flex-1 h-12 px-4 rounded-full bg-primary-100 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:bg-white transition-colors"
+              className="w-full h-12 pl-4 pr-14 rounded-full border border-primary-200 bg-white shadow-soft text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus-visible:outline-none focus:border-primary-400 transition-colors"
             />
             <button
               type="submit"
               disabled={busy || draft.trim().length < 1}
               aria-label="Send"
-              className="h-12 w-12 shrink-0 inline-flex items-center justify-center rounded-full bg-primary-900 text-white hover:bg-accent-600 disabled:opacity-40 disabled:hover:bg-primary-900 cursor-pointer transition-colors"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 h-9 w-9 inline-flex items-center justify-center rounded-full bg-primary-900 text-white hover:bg-accent-600 disabled:bg-primary-200 disabled:text-primary-400 cursor-pointer transition-colors"
             >
-              {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUp className="w-5 h-5" strokeWidth={2.5} />}
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
             </button>
           </form>
         </div>
@@ -195,78 +204,89 @@ export function Orb({ size = 40 }: { size?: number }) {
   );
 }
 
-function Welcome({ where }: { where: string | null }) {
+/** Empty chat: a greeting in the middle and the city's suggestions as a grid. */
+function Welcome({ where, chips, onPick }: { where: string | null; chips: string[]; onPick: (c: string) => void }) {
   return (
-    <div className="ask-message-in">
-      <div className="flex items-end gap-2">
-        <Orb size={28} />
-        <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-white md:bg-white border border-primary-100 px-4 py-3 text-[15px] text-primary-900 leading-snug shadow-soft">
-          {where ? (
-            <>
-              Hey. You&rsquo;re looking at <span className="font-semibold">{where}</span>. Ask me anything about it, compare it with another turf, or find something nearby.
-            </>
-          ) : (
-            <>Hey. I know every turf and open game on TapTurf, plus the free cricket tools. Tell me a sport, an area and a budget, or just ask. Hinglish chalega.</>
-          )}
-
+    <div className="min-h-full flex flex-col justify-center px-5 py-8 ask-message-in">
+      <Orb size={44} />
+      <h2 className="mt-4 font-display text-[26px] leading-tight text-primary-900">
+        {where ? <>Ask about {where}</> : <>What are you playing today?</>}
+      </h2>
+      <p className="mt-1.5 text-[15px] leading-snug text-primary-500">
+        {where
+          ? "Prices, timings, facilities, or how it compares with another turf."
+          : "Turfs, open games, prices and comparisons. Hinglish chalega."}
+      </p>
+      {chips.length > 0 && (
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          {chips.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => onPick(c)}
+              className="min-h-[56px] text-left px-3.5 py-2.5 rounded-2xl border border-primary-200 bg-white hover:border-primary-400 hover:bg-primary-50 text-[14px] leading-snug font-medium text-primary-800 cursor-pointer transition-colors"
+            >
+              {c}
+            </button>
+          ))}
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+/** Small label above each reply, in place of an avatar per bubble. */
+function From() {
+  return (
+    <p className="mb-1.5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary-500">
+      <Sparkles className="w-3.5 h-3.5 text-accent-500" strokeWidth={2.25} /> TapTurf
+    </p>
   );
 }
 
 /** Inline sign-in step: the thread stays, the parked message goes once they're in. */
 function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: () => void }) {
   return (
-    <div className="ask-message-in flex items-end gap-2">
-      <Orb size={28} />
-      <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-primary-900 text-white px-4 py-3.5 shadow-elevated">
-        <p className="text-[15px] leading-snug">Sign in to keep chatting. It&rsquo;s free and takes ten seconds, and I&rsquo;ll pick up right where we are.</p>
-        {pending && <p className="mt-1.5 text-[13px] text-white/70">Next up: &ldquo;{pending}&rdquo;</p>}
-        <button
-          type="button"
-          onClick={onSignIn}
-          className="mt-3 inline-flex items-center justify-center h-11 px-5 rounded-full bg-accent-500 hover:bg-accent-400 text-white text-[14px] font-semibold cursor-pointer transition-colors"
-        >
-          Sign in to continue
-        </button>
-      </div>
+    <div className="ask-message-in rounded-2xl bg-primary-900 text-white px-4 py-4">
+      <p className="text-[15px] leading-snug">Sign in to keep chatting. It&rsquo;s free and takes ten seconds, and I&rsquo;ll pick up right where we are.</p>
+      {pending && <p className="mt-1.5 text-[13px] text-white/70">Next up: &ldquo;{pending}&rdquo;</p>}
+      <button
+        type="button"
+        onClick={onSignIn}
+        className="mt-3 inline-flex items-center justify-center h-11 px-5 rounded-full bg-accent-500 hover:bg-accent-400 text-white text-[14px] font-semibold cursor-pointer transition-colors"
+      >
+        Sign in to continue
+      </button>
     </div>
   );
 }
 
 function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLast: boolean; onUseLocation: () => void; locating: boolean }) {
   return (
-    <div className="space-y-3 ask-message-in">
+    <div className="space-y-4 ask-message-in">
       <div className="flex justify-end">
-        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-900 text-white text-[15px] px-4 py-2.5 leading-snug">{turn.user}</p>
+        <p className="max-w-[85%] rounded-[20px] rounded-br-md bg-primary-900 text-white text-[15px] px-4 py-2.5 leading-snug">{turn.user}</p>
       </div>
-      <div className="flex items-end gap-2">
-        <Orb size={28} />
-        <div className="min-w-0 flex-1">
-          <div className="inline-block max-w-[92%] rounded-2xl rounded-bl-md bg-white border border-primary-100 px-4 py-3 text-[15px] text-primary-900 leading-snug shadow-soft">
-            {turn.error ? (
-              <span className="text-hot-600">{turn.error}</span>
-            ) : turn.res ? (
-              <>
-                {turn.res.reply}
-                <Subline res={turn.res} />
-              </>
-            ) : (
-              <span className="inline-flex items-center gap-1 h-5 px-1" aria-label="Typing">
-                <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
-                <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
-                <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
-              </span>
-            )}
-          </div>
+      <div>
+        <From />
+        <div className="text-[15px] text-primary-900 leading-relaxed">
+          {turn.error ? (
+            <span className="text-hot-600">{turn.error}</span>
+          ) : turn.res ? (
+            <>
+              {turn.res.reply}
+              <Subline res={turn.res} />
+            </>
+          ) : (
+            <span className="inline-flex items-center gap-1 h-6" aria-label="Typing">
+              <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
+              <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
+              <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
+            </span>
+          )}
         </div>
+        {turn.res && (isLast || turn.res.intent !== "other") && <AskResultBody res={turn.res} onUseLocation={onUseLocation} locating={locating} />}
       </div>
-      {turn.res && (isLast || turn.res.intent !== "other") && (
-        <div className="pl-0 sm:pl-9">
-          <AskResultBody res={turn.res} onUseLocation={onUseLocation} locating={locating} />
-        </div>
-      )}
     </div>
   );
 }
@@ -292,5 +312,5 @@ function Subline({ res }: { res: Turn["res"] & object }) {
         break;
     }
   if (!text) return null;
-  return <span className="block mt-1 text-[12px] text-primary-500">{text}</span>;
+  return <span className="block mt-1 text-[13px] text-primary-500">{text}</span>;
 }

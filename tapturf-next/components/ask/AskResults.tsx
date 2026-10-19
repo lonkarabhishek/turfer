@@ -96,7 +96,7 @@ export function GameMiniCard({ game }: { game: Game & { distanceKm?: number } })
 
 function Row({ children }: { children: React.ReactNode }) {
   return (
-    <div className="-mx-4 px-4 flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1" role="list">
+    <div className="-mx-4 px-4 scroll-px-4 flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1" role="list">
       {children}
     </div>
   );
