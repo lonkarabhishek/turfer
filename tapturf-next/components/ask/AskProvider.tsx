@@ -46,7 +46,8 @@ export type AskResponse = {
   tool?: { slug: string; name: string; tagline: string; href: string };
 };
 
-export type Turn = { id: string; user: string; res: AskResponse | null; error?: string; at: number };
+/** `retry`: the error offers Try again (too slow, no connection, server error). `tries`: times Try again was pressed. */
+export type Turn = { id: string; user: string; res: AskResponse | null; error?: string; retry?: boolean; tries?: number; at: number };
 export type PageContext = { turf?: { id: string; name: string } | null; city?: CityId | null };
 
 type Ctx = {
@@ -56,6 +57,8 @@ type Ctx = {
   turns: Turn[];
   busy: boolean;
   send: (text: string) => Promise<void>;
+  /** Asks a failed turn's message again, in the same turn. */
+  retry: (id: string) => void;
   reset: () => void;
   requestLocation: () => Promise<void>;
   locating: boolean;
@@ -89,6 +92,18 @@ function anonId(): string {
   }
 }
 const MAX_TURNS = 30;
+/** Past this the answer is not coming (the database is struggling): stop waiting and offer Try again. */
+const TIMEOUT = 25_000;
+const TOO_SLOW = "This is taking too long on our side. Try again in a moment.";
+const OFFLINE = "Couldn't reach TapTurf just now. Check your connection and try again.";
+const TROUBLE = "I'm having trouble right now. Try again in a moment.";
+
+/** The last three answered turns, sent so follow-ups work. */
+const historyOf = (turns: Turn[]) =>
+  turns
+    .filter((t) => t.res)
+    .slice(-3)
+    .map((t) => ({ user: t.user, reply: t.res!.reply, filters: t.res!.memo }));
 
 /**
  * One conversation for the whole site. The thread survives navigation
@@ -159,24 +174,14 @@ export function AskProvider({ children }: { children: ReactNode }) {
     }
   }, [turns]);
 
-  const send = useCallback(
-    async (text: string, loc?: Coords | null) => {
-      const q = text.trim();
-      if (q.length < 1 || busy) return;
-      if (!user && freeLeft === 0) {
-        // Out of free answers: park the message, show the sign-in card.
-        setPending(q);
-        setDraft("");
-        return;
-      }
+  /** Fetches the answer for turn `id` and fills it in, or leaves an error on it. */
+  const ask = useCallback(
+    async (id: string, q: string, history: ReturnType<typeof historyOf>, loc?: Coords | null) => {
       setBusy(true);
-      setDraft("");
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const history = turns
-        .filter((t) => t.res)
-        .slice(-3)
-        .map((t) => ({ user: t.user, reply: t.res!.reply, filters: t.res!.memo }));
-      setTurns((prev) => [...prev, { id, user: q, res: null, at: Date.now() }].slice(-MAX_TURNS));
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), TIMEOUT);
+      // Worth a Try again: too slow, no connection, or the server failing.
+      let retry = false;
       try {
         const params = new URLSearchParams({ q });
         if (user) params.set("uid", user.id);
@@ -190,7 +195,13 @@ export function AskProvider({ children }: { children: ReactNode }) {
         }
         if (history.length) params.set("h", JSON.stringify(history));
         if (pageContext.turf || pageContext.city) params.set("ctx", JSON.stringify({ turf: pageContext.turf?.name ?? null, city: pageContext.city ?? null }));
-        const r = await fetch(`/api/ask?${params}`);
+        let r: Response;
+        try {
+          r = await fetch(`/api/ask?${params}`, { signal: ctl.signal });
+        } catch {
+          retry = true;
+          throw new Error(OFFLINE);
+        }
         if (r.status === 429) throw new Error("That's a lot of questions in a row. Give it a few minutes.");
         if (r.status === 401) {
           // Free answers used up: keep the message and show the sign-in card.
@@ -199,18 +210,58 @@ export function AskProvider({ children }: { children: ReactNode }) {
           setTurns((prev) => prev.filter((t) => t.id !== id));
           return;
         }
-        if (!r.ok) throw new Error("I'm having trouble right now. Try again in a moment.");
+        if (!r.ok) {
+          retry = true;
+          throw new Error(TROUBLE);
+        }
         const data = (await r.json()) as AskResponse;
         if (!user) setFreeLeft(data.freeLeft);
+        // The search broke on our side (the reply is only its opening line): same as a 500.
+        if (data.failed) {
+          retry = true;
+          throw new Error(TROUBLE);
+        }
         setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, res: data } : t)));
       } catch (e) {
-        const msg = (e as Error).message || "Something went wrong.";
-        setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, error: msg } : t)));
+        const slow = ctl.signal.aborted;
+        const msg = slow ? TOO_SLOW : (e as Error).message || "Something went wrong.";
+        setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, error: msg, retry: slow || retry } : t)));
       } finally {
+        clearTimeout(timer);
         setBusy(false);
       }
     },
-    [busy, turns, pageContext, user, freeLeft],
+    [pageContext, user],
+  );
+
+  const send = useCallback(
+    async (text: string, loc?: Coords | null) => {
+      const q = text.trim();
+      if (q.length < 1 || busy) return;
+      if (!user && freeLeft === 0) {
+        // Out of free answers: park the message, show the sign-in card.
+        setPending(q);
+        setDraft("");
+        return;
+      }
+      setDraft("");
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setTurns((prev) => [...prev, { id, user: q, res: null, at: Date.now() }].slice(-MAX_TURNS));
+      await ask(id, q, historyOf(turns), loc);
+    },
+    [busy, turns, user, freeLeft, ask],
+  );
+
+  // Try again: the same message in the same turn, so no second bubble.
+  const retry = useCallback(
+    (id: string) => {
+      const turn = turns.find((t) => t.id === id);
+      // Out of free answers: the server would refuse it, so the sign-in card takes over.
+      if (busy || !turn?.error || (!user && freeLeft === 0)) return;
+      setTurns((prev) => prev.map((t) => (t.id === id ? { id, user: t.user, res: null, tries: (t.tries ?? 0) + 1, at: Date.now() } : t)));
+      void ask(id, turn.user, historyOf(turns.filter((t) => t.id !== id)));
+    },
+    [busy, turns, user, freeLeft, ask],
   );
 
   // Signed in: the allowance no longer applies.
@@ -264,8 +315,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Ctx>(
-    () => ({ open, openPanel, closePanel, turns, busy, send: (t) => send(t), reset, requestLocation, locating, hasLocation, pageContext, setPageContext, draft, setDraft, signedIn: !!user, pending, freeLeft, signIn: login }),
-    [open, openPanel, closePanel, turns, busy, send, reset, requestLocation, locating, hasLocation, pageContext, draft, user, pending, freeLeft, login],
+    () => ({ open, openPanel, closePanel, turns, busy, send: (t) => send(t), retry, reset, requestLocation, locating, hasLocation, pageContext, setPageContext, draft, setDraft, signedIn: !!user, pending, freeLeft, signIn: login }),
+    [open, openPanel, closePanel, turns, busy, send, retry, reset, requestLocation, locating, hasLocation, pageContext, draft, user, pending, freeLeft, login],
   );
   return <AskCtx.Provider value={value}>{children}</AskCtx.Provider>;
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, ArrowUp, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
-import { useAsk, type Turn } from "./AskProvider";
+import { ArrowLeft, ArrowUp, RotateCcw, Sparkles, X } from "lucide-react";
+import { useAsk, type AskResponse, type Turn } from "./AskProvider";
 import { AskResultBody } from "./AskResults";
+import { AskSkeleton, AskThinking, type CardsKind } from "./AskThinking";
 import { TypingReply, prefersReducedMotion } from "./TypingReply";
 import { askChips } from "@/lib/ask/chips";
 import { getCityPref } from "@/lib/city";
@@ -18,7 +19,7 @@ const WELCOME_CHIPS = askChips(null, 0);
  * closes. Only the latest reply shows follow-up chips.
  */
 export function AskPanel() {
-  const { open, closePanel, turns, busy, send, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending, freeLeft, signIn } = useAsk();
+  const { open, closePanel, turns, busy, send, retry, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending, freeLeft, signIn } = useAsk();
   const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -64,14 +65,21 @@ export function AskPanel() {
   // Aim at the newest turn's top (the browser stops at the bottom when it
   // fits), so a tall result never pushes the reply typing in off screen.
   // A parked message goes to the sign-in card at the bottom instead.
+  // Placeholder cards scroll it there too, so the answer's space is in view.
+  const toNewest = useCallback(
+    (smooth: boolean) => {
+      const el = threadRef.current;
+      if (!el) return;
+      const all = el.querySelectorAll<HTMLElement>("[data-turn]");
+      const turn = pending ? null : all[all.length - 1];
+      const top = turn ? turn.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 16 : el.scrollHeight;
+      el.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+    },
+    [pending],
+  );
   useEffect(() => {
-    const el = threadRef.current;
-    if (!open || !el) return;
-    const all = el.querySelectorAll<HTMLElement>("[data-turn]");
-    const turn = pending ? null : all[all.length - 1];
-    const top = turn ? turn.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 16 : el.scrollHeight;
-    el.scrollTo({ top, behavior: turns.length > 1 ? "smooth" : "auto" });
-  }, [open, turns, busy, freeLeft, pending]);
+    if (open) toNewest(turns.length > 1);
+  }, [open, turns, busy, freeLeft, toNewest]);
 
   // Close when navigating away from the page the chat was opened on? No:
   // the thread follows the player. Only hide on admin and login.
@@ -80,6 +88,8 @@ export function AskPanel() {
   const last = turns.length ? turns[turns.length - 1] : null;
   const chips = last?.res?.followups?.length ? last.res.followups : fresh ? welcome : [];
   const where = pageContext.turf ? pageContext.turf.name : null;
+  // Signed out with no free answers left: Try again would be refused, so the sign-in card stands in.
+  const gated = !signedIn && freeLeft === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex md:justify-end" role="presentation">
@@ -130,14 +140,31 @@ export function AskPanel() {
 
         {/* Thread */}
         <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain" aria-live="polite">
-          {turns.length === 0 ? (
+          {/* A parked message shows its sign-in card even when the thread is empty. */}
+          {turns.length === 0 && !(gated && pending) ? (
             <Welcome where={where} chips={chips} onPick={(c) => void send(c)} />
           ) : (
             <div className="px-4 py-5 space-y-7">
               {turns.map((t, i) => (
-                <TurnView key={t.id} turn={t} isLast={i === turns.length - 1} onUseLocation={() => void requestLocation()} locating={locating} />
+                <TurnView
+                  key={t.id}
+                  turn={t}
+                  isLast={i === turns.length - 1}
+                  onUseLocation={() => void requestLocation()}
+                  locating={locating}
+                  onRetry={
+                    t.retry && i === turns.length - 1 && !busy && !gated
+                      ? (e) => {
+                          retry(t.id);
+                          // The button goes with the error, so keep focus in the chat. Touch screens keep their keyboard down.
+                          if (e.detail === 0 || window.matchMedia("(hover: hover)").matches) inputRef.current?.focus({ preventScroll: true });
+                        }
+                      : undefined
+                  }
+                  onCards={() => toNewest(true)}
+                />
               ))}
-              {!signedIn && freeLeft === 0 && <SignInCard pending={pending} onSignIn={signIn} />}
+              {gated && <SignInCard pending={pending} onSignIn={signIn} />}
             </div>
           )}
         </div>
@@ -192,7 +219,8 @@ export function AskPanel() {
               aria-label="Send"
               className="absolute right-1.5 top-1/2 -translate-y-1/2 h-9 w-9 inline-flex items-center justify-center rounded-full bg-primary-900 text-white hover:bg-accent-600 disabled:bg-primary-200 disabled:text-primary-400 cursor-pointer transition-colors"
             >
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
+              {/* Busy: dimmed like an empty box. The ball in the thread shows the wait. */}
+              <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
             </button>
           </form>
         </div>
@@ -269,12 +297,44 @@ function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: (
   );
 }
 
-function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLast: boolean; onUseLocation: () => void; locating: boolean }) {
+/** The card layout a reply shows first under its text, when placeholders can stand in for it. */
+function cardsOf(res: AskResponse): CardsKind | null {
+  if (res.intent === "compare") return res.compare && (res.turfs?.length ?? 0) >= 2 ? "compare" : null;
+  if (res.intent === "find_game" && res.games?.length) return "game";
+  if ((res.intent === "find_turf" || res.intent === "find_game") && res.turfs?.length) return "turf";
+  return null;
+}
+
+function TurnView({
+  turn,
+  isLast,
+  onUseLocation,
+  locating,
+  onRetry,
+  onCards,
+}: {
+  turn: Turn;
+  isLast: boolean;
+  onUseLocation: () => void;
+  locating: boolean;
+  onRetry?: (e: MouseEvent<HTMLButtonElement>) => void;
+  /** Placeholder cards just appeared under this turn. */
+  onCards: () => void;
+}) {
   // Only a reply that lands while this turn is on screen types in, and only
-  // once. Restored history, a reopened panel and errors show plain text.
-  const [fresh] = useState(() => !turn.res && !turn.error && !prefersReducedMotion());
+  // once. Restored history and a reopened panel show plain text.
+  const [fresh] = useState(() => !turn.res && !prefersReducedMotion());
   const [typed, setTyped] = useState(false);
   const [shown, setShown] = useState(false);
+  // Placeholder cards were on screen for this ask (a Try again starts a
+  // new one): they stay where the real cards go and hand over to them as
+  // the reply reveals them.
+  const [heldAt, setHeldAt] = useState<number | null>(null);
+  const [gone, setGone] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  // Where the loader's placeholders sat, from the top of the reply text.
+  const skelAt = useRef<number | null>(null);
   const live = fresh && !typed && !!turn.res && !turn.res.failed && turn.res.reply.trim() !== "";
   // A newer message went out before it finished: settle now, never replay.
   if (live && !isLast) setTyped(true);
@@ -282,6 +342,17 @@ function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLas
   // Subline and cards are in the page from the start (no jump, screen
   // readers get them at once) and fade in two thirds of the way through.
   const settle = !fresh || !turn.res ? "" : typing && !shown ? "ask-held" : "ask-reveal";
+  const ghost = fresh && heldAt === turn.at && !gone && turn.res ? cardsOf(turn.res) : null;
+  // The reply text opens up above the placeholders as it lands: they glide
+  // down from where they were to where the real cards go, never jump.
+  useLayoutEffect(() => {
+    const box = textRef.current;
+    const el = ghostRef.current;
+    const skel = el?.querySelector<HTMLElement>("[data-skel]");
+    if (!ghost || !box || !el || !skel || skelAt.current == null) return;
+    const dy = skelAt.current - (skel.getBoundingClientRect().top - box.getBoundingClientRect().top);
+    if (Math.abs(dy) >= 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 300, easing: "cubic-bezier(0.3, 0, 0.2, 1)" });
+  }, [ghost]);
   return (
     <div data-turn className="space-y-4 ask-message-in">
       <div className="flex justify-end">
@@ -289,25 +360,56 @@ function TurnView({ turn, isLast, onUseLocation, locating }: { turn: Turn; isLas
       </div>
       <div>
         <From />
-        <div className="text-[15px] text-primary-900 leading-relaxed">
+        <div ref={textRef} className="text-[15px] text-primary-900 leading-relaxed">
           {turn.error ? (
-            <span className="text-hot-600">{turn.error}</span>
+            <>
+              <span className="text-hot-600">{turn.error}</span>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-2.5 flex items-center gap-1.5 h-9 px-4 rounded-full bg-primary-900 hover:bg-accent-600 text-white text-[13px] font-semibold cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" strokeWidth={2.5} /> Try again
+                </button>
+              )}
+            </>
           ) : turn.res ? (
             <>
               <TypingReply text={turn.res.reply} play={typing} onReveal={() => setShown(true)} onDone={() => setTyped(true)} />
               <Subline res={turn.res} className={settle} />
             </>
           ) : (
-            <span className="inline-flex items-center gap-1 h-6" aria-label="Typing">
-              <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
-              <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
-              <span className="ask-dot inline-block w-2 h-2 rounded-full bg-primary-400" />
-            </span>
+            <AskThinking
+              key={turn.at}
+              text={turn.user}
+              since={turn.at}
+              retry={!!turn.tries}
+              onCards={() => {
+                // offsetTop: the placeholders are still rising in, and the layout spot is what counts.
+                const skel = textRef.current?.querySelector<HTMLElement>("[data-skel]");
+                if (skel && textRef.current) skelAt.current = skel.offsetTop - textRef.current.offsetTop;
+                setHeldAt(turn.at);
+                onCards();
+              }}
+            />
           )}
         </div>
         {turn.res && (isLast || turn.res.intent !== "other") && (
-          <div className={settle}>
-            <AskResultBody res={turn.res} onUseLocation={onUseLocation} locating={locating} />
+          <div className="relative">
+            <div className={settle}>
+              <AskResultBody res={turn.res} onUseLocation={onUseLocation} locating={locating} />
+            </div>
+            {ghost && (
+              // -top-2.5: the body's top margin collapses out of this box; the placeholder keeps its own.
+              <div
+                ref={ghostRef}
+                className={`absolute inset-x-0 -top-2.5 pointer-events-none ${typing && !shown ? "" : "ask-ghost-out"}`}
+                onAnimationEnd={(e) => e.target === e.currentTarget && setGone(true)}
+              >
+                <AskSkeleton kind={ghost} />
+              </div>
+            )}
           </div>
         )}
       </div>
