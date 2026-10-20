@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { compareTopRated } from "@/lib/utils/ranking";
@@ -233,31 +234,65 @@ export async function fetchAllRows<T>(page: (from: number, to: number) => Promis
   return out;
 }
 
-// Calls that arrive while the same list is being read share that read:
-// a build renders dozens of pages at once, each asking for every turf,
-// and together they pushed the database past its statement timeout.
-// Only reads in flight are shared, never a finished one, so a turf edit
-// is never hidden. Each caller still gets its own transformed rows.
-const inflight = new Map<string, Promise<Record<string, unknown>[]>>();
+// Calls that arrive while the list is being read share that read. Only
+// reads in flight are shared, never a finished one, so a turf edit is
+// never hidden. Each caller still gets its own transformed rows.
+let inflight: Promise<Record<string, unknown>[]> | null = null;
 
-function activeRows(city: CityId | null): Promise<Record<string, unknown>[]> {
-  const key = city ?? "all";
-  let p = inflight.get(key);
-  if (!p) {
+function readActiveRows(): Promise<Record<string, unknown>[]> {
+  inflight ??= fetchAllRows<Record<string, unknown>>((from, to) => {
     const supabase = createServerClient();
-    p = fetchAllRows<Record<string, unknown>>((from, to) => {
-      let q = supabase.from("turfs").select(CARD_COLUMNS).eq("is_active", true);
-      if (city) q = q.eq("city", city);
-      return q.order("rating", { ascending: false }).order("id").range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
-    }).finally(() => inflight.delete(key));
-    inflight.set(key, p);
-  }
-  return p;
+    return supabase
+      .from("turfs")
+      .select(CARD_COLUMNS)
+      .eq("is_active", true)
+      .order("rating", { ascending: false })
+      .order("id")
+      .range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
+  }).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
+/**
+ * Every active turf row, from one copy in Next's data cache shared by
+ * all pages and routes. Before this, each page rebuild read every turf
+ * from Supabase (the heaviest query we run: about 2,500 wide rows,
+ * sorted on disk). On 20 Oct those reads timed out, the rebuilds retried,
+ * and the database stayed overloaded for hours. Now the database sees
+ * one full read per 10 minutes, or when the turf webhook expires the
+ * "turf-data" tag; while a refresh fails the last copy keeps serving.
+ *
+ * The rows (about 2.7 KB each) are split by id into 16 pieces, each
+ * cached on its own, because the data cache refuses anything over 2 MB.
+ */
+const SHARDS = 16;
+const shardOf = (id: unknown) => (parseInt(String(id).slice(0, 2), 16) || 0) % SHARDS;
+const rowPieces = Array.from({ length: SHARDS }, (_, i) =>
+  unstable_cache(async () => (await readActiveRows()).filter((r) => shardOf(r.id) === i), ["turf-rows-v1", String(i)], {
+    revalidate: 600,
+    tags: ["turf-data"],
+  }),
+);
+
+/** Rating high to low (no rating first, as Postgres sorts DESC), then id: the order the query returns. */
+function byRatingThenId(a: Record<string, unknown>, b: Record<string, unknown>): number {
+  const ra = a.rating == null ? Infinity : Number(a.rating);
+  const rb = b.rating == null ? Infinity : Number(b.rating);
+  if (ra !== rb) return rb - ra;
+  return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
+}
+
+async function activeRows(): Promise<Record<string, unknown>[]> {
+  const parts = await Promise.all(rowPieces.map((p) => p()));
+  return parts.flat().sort(byRatingThenId);
 }
 
 export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
   const city = cityFilter && isCity(cityFilter) ? cityFilter : null;
-  const data = await activeRows(city);
+  const rows = await activeRows();
+  const data = city ? rows.filter((r) => r.city === city) : rows;
   // Default order is "top rated" with the minimum-review rule, so a
   // 5.0 from a handful of reviews doesn't lead city / listing pages.
   return data.map((r) => transformTurf(r as never)).sort(compareTopRated);
@@ -278,7 +313,7 @@ export async function getTurfById(id: string): Promise<Turf | null> {
 export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
   // Fetch all active turfs and filter here because the sports field
   // stores comma-separated values inside array elements.
-  const data = await activeRows(null);
+  const data = await activeRows();
 
   // Exact label match: "Cricket" must not pull in "Box Cricket".
   return data
