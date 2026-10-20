@@ -6,6 +6,10 @@ import { toolBySlug, TOOLS_BASE } from "@/lib/tools/registry";
 
 const tool = toolBySlug("cricket-live-scorer")!;
 const URL = `${TOOLS_BASE}/${tool.slug}`;
+// Live links need the server's write key. The page is static, so this is
+// read at build; an env change needs a redeploy anyway. Without the key the
+// scorer hides the live link and this page does not mention it.
+const LIVE_LINKS = Boolean(process.env.LIVE_WRITE_KEY);
 
 export const metadata: Metadata = {
   title: { absolute: tool.title },
@@ -34,7 +38,9 @@ const FAQ = [
   },
   {
     q: "Is my match saved, and can I share it?",
-    a: "Every ball is saved in your browser as you score, so a reload, a dead screen or closing the tab does not lose anything. Open the page again and the match carries on. Share live score sends a WhatsApp-ready update with the score, run rate, batters, bowler and this over. Matches stay on the phone you scored on; nothing is uploaded and no account is needed.",
+    a: LIVE_LINKS
+      ? "Every ball is saved in your browser as you score, so a reload, a dead screen or closing the tab does not lose anything. Open the page again and the match carries on. Share live score sends a WhatsApp-ready update with the score, run rate, batters, bowler and this over. No account is needed, and nothing is uploaded unless you turn on a live link. With it on, anyone you send the link to can follow the match ball by ball, and you can turn it off any time."
+      : "Every ball is saved in your browser as you score, so a reload, a dead screen or closing the tab does not lose anything. Open the page again and the match carries on. Share live score sends a WhatsApp-ready update with the score, run rate, batters, bowler and this over. Matches stay on the phone you scored on; nothing is uploaded and no account is needed.",
   },
 ];
 
@@ -81,6 +87,22 @@ export default function Page() {
             </>
           ),
         },
+        ...(LIVE_LINKS
+          ? [
+              {
+                title: "A live link for everyone watching",
+                body: (
+                  <p>
+                    Turn on a live link when you set up the match, or later from Share live score, and send it to the group. Followers just open the link: the score, scorecard, overs, graphs and commentary update as you score, with no app or sign-up. Only that match is uploaded, and you can turn the link off any time. The{" "}
+                    <Link href="/privacy#live-links" className="text-accent-700 font-semibold hover:underline">
+                      privacy policy
+                    </Link>{" "}
+                    says what is shared and for how long.
+                  </p>
+                ),
+              },
+            ]
+          : []),
         {
           title: "Your house rules",
           body: (
@@ -92,7 +114,7 @@ export default function Page() {
       ]}
       faq={FAQ}
     >
-      <LiveScorer cta={tool.cta} />
+      <LiveScorer cta={tool.cta} liveLinks={LIVE_LINKS} />
     </ToolPage>
   );
 }

@@ -14,7 +14,7 @@ export default function CreateGamePage() {
   // whole route opts into CSR.
   return (
     <Suspense fallback={null}>
-      <CreateGameFlow />
+      <CreateGameFlow liveLinks={Boolean(process.env.LIVE_WRITE_KEY)} />
     </Suspense>
   );
 }

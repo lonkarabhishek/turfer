@@ -4,7 +4,7 @@ import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-10-07";
+const UPDATED = "2026-10-21";
 const PAGE_URL = "https://www.tapturf.in/terms";
 
 export const metadata: Metadata = {
@@ -113,9 +113,11 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          You own what you post. By posting a review, correction, note or photo you give us permission to show
-          it on TapTurf, to edit it for length or clarity, and to keep showing it after you leave, with your
-          name attached. Email us if you want something removed.
+          You own what you post. By posting a review, correction, note, photo or live scorecard you give us
+          permission to show it on TapTurf, to edit it for length or clarity, and to keep showing it after you
+          leave, with your name attached. A live scorecard is different: it is shown only to people who have
+          its link, until you turn the link off or it expires 30 days after its last update. Email us if you
+          want something removed.
         </p>
         <p>Keep it honest and fair:</p>
         <ul>

@@ -12,6 +12,7 @@ import { createGame } from "@/lib/queries/games";
 import { searchTurfs } from "@/lib/queries/users";
 import { TimeSlotSheet } from "./TimeSlotSheet";
 import { GameDraftBox } from "./GameDraftBox";
+import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import type { GamePrefill } from "@/lib/ai/gameDraft";
 import type { CreateGameData } from "@/types/game";
 
@@ -121,7 +122,7 @@ function humanDate(dateStr: string): string {
   return dt.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function CreateGameFlow() {
+export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = {}) {
   const { user, login, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -364,6 +365,8 @@ export function CreateGameFlow() {
               View my game
             </button>
           </div>
+
+          {/cricket/i.test(sport) && <LiveScorerPromo variant="created" venue={turfName} liveLinks={liveLinks} />}
         </div>
       ) : (
         <>

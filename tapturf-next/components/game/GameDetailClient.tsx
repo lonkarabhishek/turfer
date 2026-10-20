@@ -9,9 +9,10 @@ import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from 
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { GameRequestCard } from "./GameRequestCard";
 import { GameDistance } from "./GameDistance";
+import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 
-export function GameDetailClient({ gameId }: { gameId: string }) {
+export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string; liveLinks?: boolean }) {
   const { user, login } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
   const [participants, setParticipants] = useState<GameParticipant[]>([]);
@@ -531,6 +532,10 @@ export function GameDetailClient({ gameId }: { gameId: string }) {
               </div>
             </div>
           </details>
+
+          {/cricket/i.test(game.sport) && status !== "expired" && (
+            <LiveScorerPromo variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />
+          )}
         </div>
 
         {/* ═══════════════════════════════════════════════════════ */}

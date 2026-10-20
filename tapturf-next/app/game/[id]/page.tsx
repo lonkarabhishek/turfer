@@ -124,7 +124,8 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       )}
-      <GameDetailClient gameId={id} />
+      {/* The live link copy only when live links are set up (LIVE_WRITE_KEY is server-only). */}
+      <GameDetailClient gameId={id} liveLinks={Boolean(process.env.LIVE_WRITE_KEY)} />
     </>
   );
 }
