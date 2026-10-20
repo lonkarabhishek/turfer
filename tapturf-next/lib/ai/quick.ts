@@ -290,6 +290,15 @@ const TOOLS: [ToolSlug, string[], string, string][] = [
     "TapTurf has a free scorecard maker for exactly this, no sign-in needed. Add the scores and result, then download it or share it on WhatsApp.",
   ],
   [
+    "cricket-live-scorer",
+    [
+      "live score", "live scorer", "live scoring", "live cricket scorer", "live score our match", "ball by ball", "ball by ball scorer", "ball by ball scoring", "ball by ball score",
+      "score our match", "score my match", "score the match", "score a match", "scoring app", "cricket scoring app", "cricket scorer", "score counter", "cricket score counter", "box cricket score counter",
+    ],
+    "Score a match ball by ball",
+    "TapTurf has a free live scorer for exactly this, no sign-in needed. One tap a ball, and the scorecard, run rate and overs keep themselves up to date.",
+  ],
+  [
     "cricket-tournament-scorer",
     ["points table", "make a points table", "points table maker", "tournament scorer", "track our tournament", "track my tournament", "league table"],
     "Track a tournament points table",
@@ -301,6 +310,7 @@ const TOOL_ASKS: Record<ToolSlug, string> = {
   "cricket-toss": "Toss for who bats first",
   "cricket-team-generator": "Divide players into teams",
   "cricket-scorecard-maker": "Make a scorecard",
+  "cricket-live-scorer": "Score our match live",
   "cricket-tournament-scorer": "Make a points table",
 };
 

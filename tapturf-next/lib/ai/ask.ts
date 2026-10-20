@@ -31,7 +31,7 @@ const SPORT_SLUGS = SPORT_PAGES.map((s) => s.slug) as [string, ...string[]];
 export const AskFilters = z.object({
   intent: z.enum(["find_turf", "find_game", "compare", "question", "create_game", "tool", "other"]),
   /** For the tool intent: which free cricket tool fits. */
-  tool: z.enum(["cricket-nrr-calculator", "cricket-toss", "cricket-scorecard-maker", "cricket-tournament-scorer", "cricket-team-generator"]).nullable(),
+  tool: z.enum(["cricket-nrr-calculator", "cricket-toss", "cricket-scorecard-maker", "cricket-live-scorer", "cricket-tournament-scorer", "cricket-team-generator"]).nullable(),
   city: z.enum(CITY_IDS as [CityId, ...CityId[]]).nullable(),
   sport: z.enum(SPORT_SLUGS).nullable(),
   areas: z.array(z.string()),
@@ -69,7 +69,7 @@ export function isAskConfigured(): boolean {
 }
 
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
-export const ROUTER_VERSION = 1;
+export const ROUTER_VERSION = 2;
 
 /** Stable system prompt (cacheable): cities, sports, and the areas we know. */
 function systemPrompt(areasByCity: Record<string, string[]>): string {
@@ -93,7 +93,8 @@ Intents:
 - tool: wants one of TapTurf's free cricket tools, or asks for something one of them does. Set tool to the matching one:
   cricket-nrr-calculator: net run rate, NRR, run rate maths ("how to calculate NRR", "our NRR after 63 in 6 overs vs 54").
   cricket-toss: a coin toss, heads or tails, who bats first ("toss karo", "flip a coin").
-  cricket-scorecard-maker: a scorecard, result card or match poster to share ("make a scorecard", "result image for WhatsApp").
+  cricket-scorecard-maker: a scorecard, result card or match poster to share after the match ("make a scorecard", "result image for WhatsApp").
+  cricket-live-scorer: scoring their own match ball by ball while it is played, a live score, a scoring app or score counter ("live score for our match", "ball by ball scorer", "score our match", "box cricket scoring app").
   cricket-tournament-scorer: a points table, standings, series score, tournament or league tracking ("points table for our tri-series", "track my tournament").
   cricket-team-generator: splitting players into teams, random teams, balanced teams ("divide 10 players into 2 teams", "team banao").
   For a question about the rules of NRR or a toss, still use tool: the tool page explains it.

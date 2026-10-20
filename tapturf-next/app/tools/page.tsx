@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Calculator, Coins, ImageIcon, ListOrdered, Users } from "lucide-react";
+import { Activity, Calculator, Coins, ImageIcon, ListOrdered, Users } from "lucide-react";
 import { TOOLS, TOOLS_BASE, toolPath, type ToolSlug } from "@/lib/tools/registry";
 
 export const metadata: Metadata = {
-  title: { absolute: "Free Cricket Tools: NRR Calculator, Toss, Scorecard, Tournament Scorer | TapTurf" },
+  title: { absolute: "Free Cricket Tools: Live Scorer, NRR Calculator, Toss, Scorecard | TapTurf" },
   description:
-    "Free tools for cricket players and organisers: NRR calculator, online toss, scorecard maker, tournament scorer with points table, and a team generator. No sign-up.",
+    "Free tools for cricket players and organisers: live ball by ball scorer, NRR calculator, online toss, scorecard maker, tournament scorer and team generator.",
   alternates: { canonical: TOOLS_BASE },
   robots: { index: true, follow: true },
   openGraph: {
     title: "Free Cricket Tools | TapTurf",
-    description: "NRR calculator, online toss, scorecard maker, tournament scorer and team generator. Free, no sign-up.",
+    description: "Live ball by ball scorer, NRR calculator, online toss, scorecard maker, tournament scorer and team generator. Free, no sign-up.",
     url: TOOLS_BASE,
     siteName: "TapTurf",
     type: "website",
@@ -22,6 +22,7 @@ const ICONS: Record<ToolSlug, React.ComponentType<{ className?: string }>> = {
   "cricket-nrr-calculator": Calculator,
   "cricket-toss": Coins,
   "cricket-scorecard-maker": ImageIcon,
+  "cricket-live-scorer": Activity,
   "cricket-tournament-scorer": ListOrdered,
   "cricket-team-generator": Users,
 };

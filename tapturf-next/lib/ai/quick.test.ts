@@ -165,6 +165,19 @@ test("generic chips and the most asked questions", () => {
   assert.equal(hit("Toss").tool, "cricket-toss");
 });
 
+test("live scoring asks open the ball by ball scorer", () => {
+  for (const q of ["live score", "Ball by ball scorer", "score our match", "Scoring app", "box cricket score counter", "live scoring"]) {
+    const f = hit(q);
+    assert.deepEqual([f.intent, f.tool], ["tool", "cricket-live-scorer"], q);
+    assert.match(f.reply, /live scorer/);
+  }
+  // A finished match still goes to the result card, and "score" alone is not a ready answer.
+  assert.equal(hit("make a scorecard").tool, "cricket-scorecard-maker");
+  assert.equal(ask("live score of india match"), null);
+  // Its follow-ups point at the other tools, never back at itself.
+  assert.ok(!hit("live score").followups.includes("Score our match live"));
+});
+
 test("Hinglish variants answer in Hinglish", () => {
   let f = hit("kothrud me sasta box cricket hai kya");
   assert.deepEqual([f.sport, f.areas, f.max_price_per_hour], ["box-cricket", ["Kothrud"], 800]);

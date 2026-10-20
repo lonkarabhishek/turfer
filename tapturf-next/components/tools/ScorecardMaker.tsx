@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Share2 } from "lucide-react";
+import Link from "next/link";
+import { Activity, ArrowRight, Download, Share2 } from "lucide-react";
 import { parseOvers } from "@/lib/cricket/overs";
 import { describeResult } from "@/lib/cricket/nrr";
 import { trackTool } from "@/lib/analytics/tools";
 import { ToolCta } from "./ToolCta";
 import { Field, NumberInput, OversInput, PrimaryButton, SecondaryButton, Segmented, TextInput } from "./inputs";
+import { takeHandoff } from "./scorer/handoff";
 
 const TOOL = "scorecard_maker";
 const SIZE = 1080;
@@ -175,6 +177,7 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
   const [resultEdited, setResultEdited] = useState(false);
   const [more, setMore] = useState(false);
   const [canShare, setCanShare] = useState(false);
+  const [fromLive, setFromLive] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const used = useRef(false);
   const reported = useRef(false);
@@ -188,6 +191,19 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
         setCanShare(typeof nav.share === "function" && typeof nav.canShare === "function" && nav.canShare({ files: [new File([""], "x.png", { type: "image/png" })] }));
       } catch {
         setCanShare(false);
+      }
+      // Arriving from the live scorer's "Make the result card": fill the card in (again after a reload, within the hour).
+      if (new URLSearchParams(window.location.search).get("from") === "live-scorer") {
+        const h = takeHandoff(Date.now());
+        if (h) {
+          setC(h);
+          setBattedFirst("a");
+          setResultEdited(h.result.trim() !== "");
+          setMore(!!(h.potm || h.topScorer || h.bestBowler || h.venue));
+          setFromLive(true);
+          used.current = true;
+          trackTool("tool_used", TOOL, { from: "live_scorer" });
+        }
       }
     }, 0);
     return () => clearTimeout(t);
@@ -274,87 +290,113 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
   };
 
   return (
-    <div className="rounded-3xl border border-primary-200 bg-white p-4 sm:p-6 shadow-soft">
-      <div className="grid lg:grid-cols-[1fr_360px] gap-5">
-        <div className="space-y-4">
-          <Field label="Tournament or series (optional)" htmlFor="sc-tournament">
-            <TextInput id="sc-tournament" value={c.tournament} onChange={set("tournament")} placeholder="Sunday Box League" maxLength={48} />
-          </Field>
+    <>
+      {/* The promo is for people scoring by hand; someone who just came from the live scorer does not need it. */}
+      {!fromLive && (
+        <Link
+          href="/tools/cricket-live-scorer"
+          className="press-tight mb-3 flex items-center gap-3 rounded-2xl border border-accent-200 bg-accent-50 px-4 py-3 hover:border-accent-400 transition-colors"
+        >
+          <span className="shrink-0 w-10 h-10 rounded-xl bg-white text-accent-700 inline-flex items-center justify-center">
+            <Activity className="w-5 h-5" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-primary-900">Scoring live? Use the ball-by-ball scorer</span>
+            <span className="block text-[13px] text-primary-600">One tap a ball, full scorecard and graphs, and it fills this card in for you at the end.</span>
+          </span>
+          <ArrowRight className="w-4 h-4 shrink-0 text-accent-700" aria-hidden />
+        </Link>
+      )}
+      <div className="rounded-3xl border border-primary-200 bg-white p-4 sm:p-6 shadow-soft">
+        {fromLive && (
+          <p role="status" className="mb-4 rounded-2xl bg-accent-50 border border-accent-200 px-4 py-3 text-[14px] text-accent-800">
+            Filled in from your live match. Check it, change anything you like, then download or share.{" "}
+            <Link href="/tools/cricket-live-scorer" className="font-semibold underline underline-offset-2">
+              Back to the scorer
+            </Link>
+          </p>
+        )}
+        <div className="grid lg:grid-cols-[1fr_360px] gap-5">
+          <div className="space-y-4">
+            <Field label="Tournament or series (optional)" htmlFor="sc-tournament">
+              <TextInput id="sc-tournament" value={c.tournament} onChange={set("tournament")} placeholder="Sunday Box League" maxLength={48} />
+            </Field>
 
-          {(["a", "b"] as const).map((side) => (
-            <fieldset key={side} className="rounded-2xl bg-primary-50 p-3 space-y-3">
-              <legend className="sr-only">Team {side.toUpperCase()}</legend>
-              <TextInput value={side === "a" ? c.aName : c.bName} onChange={set(side === "a" ? "aName" : "bName")} placeholder={side === "a" ? "Team A, e.g. Titans" : "Team B, e.g. Strikers"} ariaLabel={`Team ${side.toUpperCase()} name`} />
-              <div className="grid grid-cols-3 gap-2">
-                <Field label="Runs" htmlFor={`sc-${side}-runs`}>
-                  <NumberInput id={`sc-${side}-runs`} value={side === "a" ? c.aRuns : c.bRuns} onChange={set(side === "a" ? "aRuns" : "bRuns")} placeholder="63" />
+            {(["a", "b"] as const).map((side) => (
+              <fieldset key={side} className="rounded-2xl bg-primary-50 p-3 space-y-3">
+                <legend className="sr-only">Team {side.toUpperCase()}</legend>
+                <TextInput value={side === "a" ? c.aName : c.bName} onChange={set(side === "a" ? "aName" : "bName")} placeholder={side === "a" ? "Team A, e.g. Titans" : "Team B, e.g. Strikers"} ariaLabel={`Team ${side.toUpperCase()} name`} />
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label="Runs" htmlFor={`sc-${side}-runs`}>
+                    <NumberInput id={`sc-${side}-runs`} value={side === "a" ? c.aRuns : c.bRuns} onChange={set(side === "a" ? "aRuns" : "bRuns")} placeholder="63" />
+                  </Field>
+                  <Field label="Wickets" htmlFor={`sc-${side}-wkts`}>
+                    <NumberInput id={`sc-${side}-wkts`} value={side === "a" ? c.aWkts : c.bWkts} onChange={set(side === "a" ? "aWkts" : "bWkts")} placeholder="4" max={10} />
+                  </Field>
+                  <Field label="Overs" htmlFor={`sc-${side}-overs`} error={oversErr(side === "a" ? c.aOvers : c.bOvers)}>
+                    <OversInput id={`sc-${side}-overs`} value={side === "a" ? c.aOvers : c.bOvers} onChange={set(side === "a" ? "aOvers" : "bOvers")} placeholder="6" invalid={!!oversErr(side === "a" ? c.aOvers : c.bOvers)} />
+                  </Field>
+                </div>
+              </fieldset>
+            ))}
+
+            <div>
+              <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Who batted first</p>
+              <Segmented
+                value={battedFirst}
+                onChange={setBattedFirst}
+                ariaLabel="Who batted first"
+                options={[
+                  { value: "a", label: c.aName || "Team A" },
+                  { value: "b", label: c.bName || "Team B" },
+                ]}
+              />
+            </div>
+
+            <Field label="Result" htmlFor="sc-result" hint={!resultEdited && suggested ? "Worked out from the scores. Edit it if you like." : undefined}>
+              <TextInput id="sc-result" value={resultEdited ? c.result : suggested} onChange={set("result")} placeholder="Titans won by 8 runs" maxLength={60} />
+            </Field>
+
+            <button type="button" onClick={() => setMore((v) => !v)} className="text-[14px] font-semibold text-accent-700 hover:underline">
+              {more ? "Hide extras" : "Add player of the match, venue and more"}
+            </button>
+            {more && (
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Player of the match" htmlFor="sc-potm">
+                  <TextInput id="sc-potm" value={c.potm} onChange={set("potm")} placeholder="Rohan" />
                 </Field>
-                <Field label="Wickets" htmlFor={`sc-${side}-wkts`}>
-                  <NumberInput id={`sc-${side}-wkts`} value={side === "a" ? c.aWkts : c.bWkts} onChange={set(side === "a" ? "aWkts" : "bWkts")} placeholder="4" max={10} />
+                <Field label="Top scorer" htmlFor="sc-top">
+                  <TextInput id="sc-top" value={c.topScorer} onChange={set("topScorer")} placeholder="Rohan 34 (12)" />
                 </Field>
-                <Field label="Overs" htmlFor={`sc-${side}-overs`} error={oversErr(side === "a" ? c.aOvers : c.bOvers)}>
-                  <OversInput id={`sc-${side}-overs`} value={side === "a" ? c.aOvers : c.bOvers} onChange={set(side === "a" ? "aOvers" : "bOvers")} placeholder="6" invalid={!!oversErr(side === "a" ? c.aOvers : c.bOvers)} />
+                <Field label="Best bowler" htmlFor="sc-bowl">
+                  <TextInput id="sc-bowl" value={c.bestBowler} onChange={set("bestBowler")} placeholder="Sahil 3/12" />
+                </Field>
+                <Field label="Venue" htmlFor="sc-venue">
+                  <TextInput id="sc-venue" value={c.venue} onChange={set("venue")} placeholder="Hindu Gymkhana, Kothrud" maxLength={48} />
                 </Field>
               </div>
-            </fieldset>
-          ))}
-
-          <div>
-            <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Who batted first</p>
-            <Segmented
-              value={battedFirst}
-              onChange={setBattedFirst}
-              ariaLabel="Who batted first"
-              options={[
-                { value: "a", label: c.aName || "Team A" },
-                { value: "b", label: c.bName || "Team B" },
-              ]}
-            />
-          </div>
-
-          <Field label="Result" htmlFor="sc-result" hint={!resultEdited && suggested ? "Worked out from the scores. Edit it if you like." : undefined}>
-            <TextInput id="sc-result" value={resultEdited ? c.result : suggested} onChange={set("result")} placeholder="Titans won by 8 runs" maxLength={60} />
-          </Field>
-
-          <button type="button" onClick={() => setMore((v) => !v)} className="text-[14px] font-semibold text-accent-700 hover:underline">
-            {more ? "Hide extras" : "Add player of the match, venue and more"}
-          </button>
-          {more && (
-            <div className="grid sm:grid-cols-2 gap-3">
-              <Field label="Player of the match" htmlFor="sc-potm">
-                <TextInput id="sc-potm" value={c.potm} onChange={set("potm")} placeholder="Rohan" />
-              </Field>
-              <Field label="Top scorer" htmlFor="sc-top">
-                <TextInput id="sc-top" value={c.topScorer} onChange={set("topScorer")} placeholder="Rohan 34 (12)" />
-              </Field>
-              <Field label="Best bowler" htmlFor="sc-bowl">
-                <TextInput id="sc-bowl" value={c.bestBowler} onChange={set("bestBowler")} placeholder="Sahil 3/12" />
-              </Field>
-              <Field label="Venue" htmlFor="sc-venue">
-                <TextInput id="sc-venue" value={c.venue} onChange={set("venue")} placeholder="Hindu Gymkhana, Kothrud" maxLength={48} />
-              </Field>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <p className="text-[12px] font-bold uppercase tracking-wide text-primary-500 mb-2">Preview</p>
-          <canvas ref={canvasRef} width={SIZE} height={SIZE} className="w-full h-auto rounded-2xl shadow-elevated bg-primary-900" aria-label="Scorecard preview" role="img" />
-          <div className="mt-3 flex flex-col sm:flex-row lg:flex-col gap-2">
-            <PrimaryButton onClick={download} disabled={!ready} className="w-full">
-              <Download className="w-4 h-4" aria-hidden /> Download PNG
-            </PrimaryButton>
-            {canShare && (
-              <SecondaryButton onClick={share} disabled={!ready} className="w-full">
-                <Share2 className="w-4 h-4" aria-hidden /> Share
-              </SecondaryButton>
             )}
           </div>
-          {!ready && <p className="mt-2 text-[12px] text-primary-400 text-center">Add both team names and scores to enable download.</p>}
-        </div>
-      </div>
 
-      <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
-    </div>
+          <div>
+            <p className="text-[12px] font-bold uppercase tracking-wide text-primary-500 mb-2">Preview</p>
+            <canvas ref={canvasRef} width={SIZE} height={SIZE} className="w-full h-auto rounded-2xl shadow-elevated bg-primary-900" aria-label="Scorecard preview" role="img" />
+            <div className="mt-3 flex flex-col sm:flex-row lg:flex-col gap-2">
+              <PrimaryButton onClick={download} disabled={!ready} className="w-full">
+                <Download className="w-4 h-4" aria-hidden /> Download PNG
+              </PrimaryButton>
+              {canShare && (
+                <SecondaryButton onClick={share} disabled={!ready} className="w-full">
+                  <Share2 className="w-4 h-4" aria-hidden /> Share
+                </SecondaryButton>
+              )}
+            </div>
+            {!ready && <p className="mt-2 text-[12px] text-primary-400 text-center">Add both team names and scores to enable download.</p>}
+          </div>
+        </div>
+
+        <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
+      </div>
+    </>
   );
 }

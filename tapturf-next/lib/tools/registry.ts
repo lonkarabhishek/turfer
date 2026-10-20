@@ -3,7 +3,7 @@
  * footer link, the sitemap, related-tool links and each page's metadata.
  */
 
-export type ToolSlug = "cricket-nrr-calculator" | "cricket-toss" | "cricket-scorecard-maker" | "cricket-tournament-scorer" | "cricket-team-generator";
+export type ToolSlug = "cricket-nrr-calculator" | "cricket-toss" | "cricket-scorecard-maker" | "cricket-live-scorer" | "cricket-tournament-scorer" | "cricket-team-generator";
 
 export type ToolDef = {
   slug: ToolSlug;
@@ -48,7 +48,7 @@ export const TOOLS: ToolDef[] = [
       "Online cricket toss. Call heads or tails, flip the coin, see who won and pick bat or bowl. Works one-handed on your phone, no sign-up, ready the moment it loads.",
     h1: "Cricket Toss",
     cta: { label: "Find a turf for your next match", href: "/turf-near-me" },
-    related: ["cricket-team-generator", "cricket-scorecard-maker"],
+    related: ["cricket-team-generator", "cricket-live-scorer"],
   },
   {
     slug: "cricket-scorecard-maker",
@@ -60,7 +60,19 @@ export const TOOLS: ToolDef[] = [
       "Make a clean cricket match result card in seconds. Add scores, overs, result, player of the match and venue, then download a PNG or share it to WhatsApp.",
     h1: "Cricket Scorecard Maker",
     cta: { label: "Find your next cricket turf", href: "/sport/box-cricket" },
-    related: ["cricket-tournament-scorer", "cricket-nrr-calculator"],
+    related: ["cricket-live-scorer", "cricket-tournament-scorer"],
+  },
+  {
+    slug: "cricket-live-scorer",
+    key: "live_scorer",
+    name: "Live Cricket Scorer",
+    tagline: "Score ball by ball, see every stat live.",
+    title: "Live Cricket Scorer - Free Ball by Ball Scoring App | TapTurf",
+    description:
+      "Free ball by ball cricket scorer and live cricket scoring app for box cricket. One tap a ball, then see the scorecard, run rates, graphs and WhatsApp updates.",
+    h1: "Live Cricket Scorer",
+    cta: { label: "Find a box cricket turf near you", href: "/sport/box-cricket" },
+    related: ["cricket-scorecard-maker", "cricket-toss", "cricket-team-generator"],
   },
   {
     slug: "cricket-tournament-scorer",
@@ -84,7 +96,7 @@ export const TOOLS: ToolDef[] = [
       "Paste player names and split them into 2, 3 or 4 cricket teams at random, or balanced by a quick 1 to 5 rating. Regenerate until it feels fair, then copy the teams.",
     h1: "Cricket Team Generator",
     cta: { label: "Teams ready? Find a turf", href: "/sport/box-cricket" },
-    related: ["cricket-toss", "cricket-tournament-scorer"],
+    related: ["cricket-toss", "cricket-live-scorer"],
   },
 ];
 

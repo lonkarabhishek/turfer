@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { ArrowUpRight, Calculator, Coins, ImageIcon, ListOrdered, Users, type LucideIcon } from "lucide-react";
+import { Activity, ArrowUpRight, Calculator, Coins, ImageIcon, ListOrdered, Users, type LucideIcon } from "lucide-react";
 import { TOOLS, toolPath, type ToolSlug } from "@/lib/tools/registry";
 
 /** At-the-pitch order: toss first, teams, then the scoring tools. */
-const ORDER: ToolSlug[] = ["cricket-toss", "cricket-team-generator", "cricket-scorecard-maker", "cricket-nrr-calculator", "cricket-tournament-scorer"];
+const ORDER: ToolSlug[] = ["cricket-toss", "cricket-team-generator", "cricket-live-scorer", "cricket-scorecard-maker", "cricket-nrr-calculator", "cricket-tournament-scorer"];
 
 const ICONS: Record<ToolSlug, LucideIcon> = {
   "cricket-toss": Coins,
   "cricket-team-generator": Users,
+  "cricket-live-scorer": Activity,
   "cricket-scorecard-maker": ImageIcon,
   "cricket-nrr-calculator": Calculator,
   "cricket-tournament-scorer": ListOrdered,
@@ -36,7 +37,7 @@ export function ToolsRow() {
           All tools <ArrowUpRight className="w-4 h-4" />
         </Link>
       </div>
-      <ul className="-mx-4 px-4 sm:mx-0 sm:px-0 mt-4 flex gap-3 overflow-x-auto snap-x scroll-px-4 scrollbar-hide md:grid md:grid-cols-5 md:overflow-visible">
+      <ul className="-mx-4 px-4 sm:mx-0 sm:px-0 mt-4 flex gap-3 overflow-x-auto snap-x scroll-px-4 scrollbar-hide md:grid md:grid-cols-3 md:overflow-visible">
         {tools.map((t) => {
           const Icon = ICONS[t.slug];
           return (

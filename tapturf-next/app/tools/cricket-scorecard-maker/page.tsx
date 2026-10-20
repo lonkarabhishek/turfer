@@ -48,7 +48,11 @@ export default function Page() {
                 The card is square, dark and readable at a glance: both teams and scores up top, the result in a green band, and room for player of the match, top scorer, best bowler and the venue. It renders at 1080 by 1080 pixels, so it stays sharp after WhatsApp compresses it.
               </p>
               <p>
-                Running a league? Enter the same match in the{" "}
+                Scoring the match as it happens? The{" "}
+                <Link href="/tools/cricket-live-scorer" className="text-accent-700 font-semibold hover:underline">
+                  live cricket scorer
+                </Link>{" "}
+                keeps the full scorecard ball by ball and hands the final scores to this card. Running a league? Enter the same match in the{" "}
                 <Link href="/tools/cricket-tournament-scorer" className="text-accent-700 font-semibold hover:underline">
                   tournament scorer
                 </Link>{" "}
