@@ -43,6 +43,10 @@ create table if not exists public.live_matches (
   -- IPv6), for the create limits. The hourly job clears it at 47 hours,
   -- so it is never kept past 2 days.
   ip_hash text,
+  -- On a stop marker (below), every secret that turned the link off. A
+  -- first send with any of them finds the link gone; one with another
+  -- secret (the real scorer, after a stranger's stop) takes it over.
+  stoppers bytea[],
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -152,7 +156,8 @@ begin
     -- written) does not block the scorer: anyone who saw the link before
     -- its first send landed could otherwise kill it. The scorer's own
     -- marker (same secret) still answers 'gone' below.
-    v_marker := found and r.status = 'stopped' and r.writes = 0 and r.match is null and r.secret_hash <> v_hash;
+    v_marker := found and r.status = 'stopped' and r.writes = 0 and r.match is null
+                and not (v_hash = any(coalesce(r.stoppers, array[r.secret_hash])));
     if found and not v_marker then
       if r.status in ('stopped', 'expired') then
         return jsonb_build_object('r', 'gone');
@@ -196,9 +201,10 @@ begin
 
     if v_marker then
       update public.live_matches m
-         set secret_hash = v_hash, match = p_match, status = p_status, rev = p_rev,
+         set secret_hash = v_hash, match = p_match, status = p_status, rev = p_rev, stoppers = null,
              writes = 1, ip_hash = p_ip_hash, created_at = now(), updated_at = now()
-       where m.code = p_code and m.status = 'stopped' and m.writes = 0 and m.secret_hash = r.secret_hash;
+       where m.code = p_code and m.status = 'stopped' and m.writes = 0
+         and m.stoppers is not distinct from r.stoppers;
     else
       insert into public.live_matches (code, secret_hash, match, rev, status, writes, ip_hash)
       values (p_code, v_hash, p_match, p_rev, p_status, 1, p_ip_hash)
@@ -219,7 +225,8 @@ $$;
 -- for live_match_put). rev moves on so followers, who skip a response
 -- whose rev they have seen, notice.
 -- A link that has no row yet gets a stop marker: a stopped row with no
--- match, no writes and no network hash. The scorer's first send may
+-- match, no writes and no network hash, listing the secrets that
+-- stopped it (at most 20). The scorer's first send may
 -- still be on its way (or may commit after its request timed out), and
 -- it then finds the link stopped ('gone') instead of making the match
 -- public after the scorer turned the link off.
@@ -258,13 +265,25 @@ begin
     select * into r from public.live_matches m where m.code = p_code;
     if not found then
       -- No first send yet: leave the stop marker.
-      insert into public.live_matches (code, secret_hash, match, rev, status, writes, ip_hash)
-      values (p_code, v_hash, null, 1, 'stopped', 0, null)
+      insert into public.live_matches (code, secret_hash, match, rev, status, writes, ip_hash, stoppers)
+      values (p_code, v_hash, null, 1, 'stopped', 0, null, array[v_hash])
       on conflict (code) do nothing;
       if found then
         return 'ok';
       end if;
       -- The first send made the row meanwhile: go round and stop it.
+    elsif r.status = 'stopped' and r.writes = 0 and r.match is null
+          and not (v_hash = any(coalesce(r.stoppers, array[r.secret_hash])))
+          and coalesce(array_length(r.stoppers, 1), 1) < 20 then
+      -- Someone else's stop marker: add this secret, so this browser's own
+      -- first send, if still on its way, finds the link gone too.
+      update public.live_matches m
+         set stoppers = coalesce(m.stoppers, array[m.secret_hash]) || v_hash, updated_at = now()
+       where m.code = p_code and m.status = 'stopped' and m.writes = 0
+         and m.stoppers is not distinct from r.stoppers;
+      if found then
+        return 'ok';
+      end if;
     elsif r.status in ('stopped', 'expired') then
       return 'gone';
     elsif r.secret_hash <> v_hash then
