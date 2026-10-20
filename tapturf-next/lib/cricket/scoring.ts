@@ -721,6 +721,160 @@ export function newPlayerId(match: Match, side: Side): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* Reading a match from someone else                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The ids rosterFrom and newPlayerId make: the side, then a number. Four
+ * digits, not three: newPlayerId counts up past every id used, and any
+ * event can bring in a new player, so an odd but real match can pass a999.
+ */
+const PLAYER_ID = /^[ab]\d{1,4}$/;
+const MATCH_ID = /^[a-z0-9]{1,24}$/i;
+/** Far more than a real match: 100 overs a side is about 1,600 events. */
+const MAX_EVENTS = 3000;
+const MAX_ROSTER = 40;
+
+type Obj = Record<string, unknown>;
+const isObj = (x: unknown): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
+/** Numbers only: Number() on an object from JSON can throw ({"valueOf": 1, "toString": 1}). */
+const num = (x: unknown): number | undefined => (typeof x === "number" ? x : undefined);
+const isEnd = (x: unknown): x is End => x === "striker" || x === "nonStriker";
+const isSide = (x: unknown): x is Side => x === "a" || x === "b";
+
+/**
+ * cleanName for a name read back. cleanName trims before it cuts, so a
+ * long name cut at a space ends in that space, and a second pass would
+ * drop it. Keep such a name as it is, so the match comes back exactly.
+ */
+function readName(x: unknown, max: number): string {
+  const s = typeof x === "string" ? x : "";
+  const c = cleanName(s, max);
+  return c && s.length === max && s === `${c} ` ? s : c;
+}
+
+function readRoster(list: unknown): Player[] {
+  const out: Player[] = [];
+  const seen = new Set<string>();
+  for (const p of Array.isArray(list) ? list : []) {
+    if (out.length >= MAX_ROSTER) break;
+    if (!isObj(p) || typeof p.id !== "string" || !PLAYER_ID.test(p.id) || seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push({ id: p.id, name: readName(p.name, 40) || p.id });
+  }
+  return out;
+}
+
+/** Only the rules that are there with the right type, clamped as normalizeRules does: a changeSetup keeps the rest. */
+function readRules(x: unknown): Partial<Rules> {
+  if (!isObj(x)) return {};
+  const isNum = (v: unknown) => typeof v === "number";
+  const isBool = (v: unknown) => typeof v === "boolean";
+  const isLimit = (v: unknown) => v === null || typeof v === "number";
+  const ok: Record<keyof Rules, (v: unknown) => boolean> = { wideRuns: isNum, noBallRuns: isNum, freeHit: isBool, maxOversPerBowler: isLimit, lastManStands: isBool, retireAt: isLimit };
+  const keys = (Object.keys(ok) as (keyof Rules)[]).filter((k) => ok[k](x[k]));
+  const full = normalizeRules(Object.fromEntries(keys.map((k) => [k, x[k]])));
+  return Object.fromEntries(keys.map((k) => [k, full[k]]));
+}
+
+function readSetup(x: Obj): MatchSetup {
+  const base = normalizeSetup({ overs: num(x.overs), playersPerSide: num(x.playersPerSide), battingFirst: x.battingFirst === "b" ? "b" : "a", rules: readRules(x.rules) });
+  const players = isObj(x.players) ? x.players : {};
+  return {
+    ...base,
+    teamA: readName(x.teamA, 32) || base.teamA,
+    teamB: readName(x.teamB, 32) || base.teamB,
+    players: { a: readRoster(players.a), b: readRoster(players.b) },
+    title: readName(x.title, 48),
+    venue: readName(x.venue, 48),
+  };
+}
+
+function readWicket(x: unknown): BallWicket | null {
+  if (!isObj(x) || typeof x.kind !== "string" || !BALL_KINDS.has(x.kind)) return null;
+  const w: BallWicket = { kind: x.kind as BallWicketKind };
+  if (isEnd(x.out)) w.out = x.out;
+  if (typeof x.fielder === "string") w.fielder = readName(x.fielder, 40);
+  if (typeof x.crossed === "boolean") w.crossed = x.crossed;
+  return w;
+}
+
+/** One event, field by field. Null when it is not one the engine knows or a field it needs is unusable. */
+function readEvent(x: unknown): MatchEvent | null {
+  if (!isObj(x)) return null;
+  const at = typeof x.at === "number" && Number.isFinite(x.at) ? { at: x.at } : {};
+  const player = typeof x.player === "string" && PLAYER_ID.test(x.player) ? x.player : null;
+  const name = typeof x.name === "string" ? { name: readName(x.name, 40) } : {};
+  switch (x.type) {
+    case "ball": {
+      if (typeof x.extra !== "string" || !EXTRAS.has(x.extra)) return null;
+      // toInt is how breakdown() reads runs, so the score is what it was.
+      const e: BallEvent = { type: "ball", runs: toInt(num(x.runs)), extra: x.extra as Extra };
+      if (typeof x.extraRuns === "number") e.extraRuns = toInt(x.extraRuns);
+      if (x.noBallExtra === "bye" || x.noBallExtra === "legBye") e.noBallExtra = x.noBallExtra;
+      const w = readWicket(x.wicket);
+      if (w) e.wicket = w;
+      return { ...e, ...at };
+    }
+    case "setBatter":
+      return player ? { type: "setBatter", player, ...name, ...(isEnd(x.end) ? { end: x.end } : {}), ...at } : null;
+    case "setBowler":
+      return player ? { type: "setBowler", player, ...name, ...at } : null;
+    case "swapStrike":
+      return { type: "swapStrike", ...at };
+    case "retire":
+      return isEnd(x.out) && (x.kind === "retiredHurt" || x.kind === "retiredOut") ? { type: "retire", out: x.out, kind: x.kind, ...at } : null;
+    case "endInnings":
+      return { type: "endInnings", ...(x.reason === "declared" || x.reason === "abandoned" ? { reason: x.reason } : {}), ...at };
+    case "addPlayer":
+    case "renamePlayer": {
+      const n = readName(x.name, 40);
+      return player && isSide(x.team) && n ? { type: x.type, team: x.team, player, name: n, ...at } : null;
+    }
+    case "changeSetup": {
+      const e: ChangeSetupEvent = { type: "changeSetup" };
+      if (typeof x.teamA === "string") e.teamA = readName(x.teamA, 40);
+      if (typeof x.teamB === "string") e.teamB = readName(x.teamB, 40);
+      // Players up to 100 like overs, though the engine reads 30: the settings sheet takes two digits, and the match comes back as typed.
+      const overs = clampInt(num(x.overs), 1, 100, 0);
+      const players = clampInt(num(x.playersPerSide), 2, 100, 0);
+      if (overs) e.overs = overs;
+      if (players) e.playersPerSide = players;
+      if (isObj(x.rules)) e.rules = readRules(x.rules);
+      if (typeof x.title === "string") e.title = readName(x.title, 48);
+      if (typeof x.venue === "string") e.venue = readName(x.venue, 48);
+      return { ...e, ...at };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * A match from someone else's browser or the database, rebuilt field by
+ * field from what the engine reads, so nothing else rides along: unknown
+ * keys and event types are dropped, numbers clamped, enums checked, names
+ * cut, player ids kept to the engine's own "a7" form and rosters to 40 a
+ * side. A match the engine made comes back unchanged. Null if it is not a
+ * match, or is longer than any real one.
+ */
+export function sanitizeMatch(raw: unknown): Match | null {
+  if (!isObj(raw) || raw.v !== 1 || !isObj(raw.setup) || !Array.isArray(raw.events) || raw.events.length > MAX_EVENTS) return null;
+  const events: MatchEvent[] = [];
+  for (const x of raw.events) {
+    const e = readEvent(x);
+    if (e) events.push(e);
+  }
+  return {
+    v: 1,
+    id: typeof raw.id === "string" && MATCH_ID.test(raw.id) ? raw.id : "match",
+    createdAt: typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt) ? raw.createdAt : 0,
+    setup: readSetup(raw.setup),
+    events,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* The fold                                                            */
 /* ------------------------------------------------------------------ */
 

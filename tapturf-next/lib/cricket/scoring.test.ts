@@ -12,17 +12,21 @@ import {
   newMatch,
   newPlayerId,
   restoreMatch,
+  sanitizeMatch,
   shareText,
   toScorecard,
   undo,
   undoBall,
   type BallEvent,
   type BallWicket,
+  type BallWicketKind,
+  type ChangeSetupEvent,
   type End,
   type Extra,
   type Match,
   type MatchEvent,
   type SetupInput,
+  type Side,
 } from "./scoring";
 
 /* Titans (a): Amit a1, Rahul a2, Karan a3, Dev a4, Om a5, Jay a6
@@ -944,4 +948,322 @@ test("derive is instant over a long match", () => {
   for (let i = 0; i < 20; i++) derive(m);
   const each = (performance.now() - t0) / 20;
   assert.ok(each < 20, `derive took ${each.toFixed(2)} ms`);
+});
+
+/* ------------------------------------------------------------------ */
+/* sanitizeMatch: what the live link reads                             */
+/* ------------------------------------------------------------------ */
+
+const WICKETS: BallWicketKind[] = ["bowled", "caught", "lbw", "runOut", "stumped", "hitWicket", "obstructing"];
+const EVENT_TYPES: MatchEvent["type"][] = ["ball", "setBatter", "setBowler", "swapStrike", "retire", "endInnings", "addPlayer", "renamePlayer", "changeSetup"];
+/** The match as it travels: JSON. */
+const wire = (m: Match): unknown => JSON.parse(JSON.stringify(m));
+
+/**
+ * A random legal match with every kind of event the scorer makes, built
+ * through the public API: events check() refuses are skipped, so only
+ * legal ones go in. seen counts what went in.
+ */
+function anyMatch(seed: number, seen: Map<string, number>): Match {
+  const r = rng(seed * 7919);
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(r() * xs.length)];
+  const chance = (p: number) => r() < p;
+  const NAMES = ["Amit", "Rahul K", "Sameer", "Vikas Rao", "Om", "Dev", "Jay", "Ravi"];
+  // Longer than 40 and cut at a space: the roster keeps that trailing space, and so must the round trip.
+  const LONG = "Very Long Name Very Long Name Very Long Name";
+  let m = newMatch(
+    {
+      teamA: pick(["Titans", "Kothrud Kings", ""]),
+      teamB: pick(["Strikers", "Baner Boys XI"]),
+      overs: 1 + Math.floor(r() * 3),
+      playersPerSide: 3 + Math.floor(r() * 4),
+      battingFirst: pick(["a", "b"] as const),
+      rules: { wideRuns: pick([0, 1, 2]), noBallRuns: pick([1, 2]), freeHit: chance(0.7), lastManStands: chance(0.3), maxOversPerBowler: pick([null, 1, 2]), retireAt: pick([null, 10]) },
+      players: { a: [...NAMES.slice(0, Math.floor(r() * 5)), ...(chance(0.3) ? [LONG] : [])], b: NAMES.slice(3, 3 + Math.floor(r() * 5)) },
+      title: chance(0.5) ? "Sunday League" : "",
+      venue: chance(0.5) ? "Kothrud Turf, Pune" : "",
+    },
+    { id: `s${seed}`, now: 1_760_000_000_000 + seed },
+  );
+  for (let step = 0; step < 300; step++) {
+    const v = derive(m);
+    if (v.status === "done") break;
+    const inn = v.current;
+    // The scorer stamps each tap; events made through the API may have no time.
+    const at = chance(0.8) ? { at: 1_760_000_000_000 + step * 997 + (chance(0.2) ? 0.25 : 0) } : {};
+    const fresh = (side: Side, role: string) => ({ player: newPlayerId(m, side), name: `${role} ${step}` });
+    const x = r();
+    let e: MatchEvent;
+    if (v.needs.includes("striker") || v.needs.includes("nonStriker")) {
+      const opts = v.batterOptions;
+      e = { type: "setBatter", ...(opts.length && chance(0.7) ? { player: pick(opts).id } : fresh(inn.batting, "Batter")), ...(chance(0.2) ? { end: v.needs[0] as End } : {}), ...at };
+    } else if (v.needs.includes("bowler") || x < 0.02) {
+      const ok = v.bowlerOptions.filter((o) => !o.blocked && !o.current);
+      e = { type: "setBowler", ...(ok.length && chance(0.8) ? { player: pick(ok).id } : fresh(inn.bowling, "Bowler")), ...at };
+    } else if (x < 0.04) e = { type: "swapStrike", ...at };
+    else if (x < 0.06) e = { type: "retire", out: pick(["striker", "nonStriker"] as const), kind: pick(["retiredHurt", "retiredOut"] as const), ...at };
+    else if (x < 0.08) {
+      const side = pick(["a", "b"] as const);
+      e = { type: "addPlayer", team: side, ...fresh(side, "Sub"), ...at };
+    } else if (x < 0.1) {
+      const side = pick(["a", "b"] as const);
+      const players = v.teams[side].players;
+      if (!players.length) continue;
+      e = { type: "renamePlayer", team: side, player: pick(players).id, name: pick([...NAMES, "y".repeat(40)]), ...at };
+    } else if (x < 0.12) {
+      const c: ChangeSetupEvent = { type: "changeSetup", ...at };
+      // 40 characters: the settings sheet allows it, the engine reads 32.
+      if (chance(0.3)) c.teamA = "Kothrud Kings Cricket Club of Pune East";
+      if (chance(0.3)) c.overs = v.setup.overs + pick([-1, 1, 2]);
+      // 40 players can be typed in settings; the engine reads 30.
+      if (chance(0.3)) c.playersPerSide = pick([4, 6, 40]);
+      if (chance(0.3)) c.rules = chance(0.5) ? { ...v.setup.rules, freeHit: !v.setup.rules.freeHit } : { lastManStands: chance(0.5) };
+      if (chance(0.2)) c.title = pick(["", "Final"]);
+      if (chance(0.2)) c.venue = "Baner";
+      e = c;
+    } else if (x < 0.125) e = { type: "endInnings", ...(chance(0.6) ? { reason: pick(["declared", "abandoned"] as const) } : {}), ...at };
+    else if (x < 0.14) {
+      m = chance(0.5) ? undoBall(m) : undo(m);
+      continue;
+    } else {
+      const extra = pick(["none", "none", "none", "none", "wide", "noBall", "bye", "legBye"] as const);
+      const runs = extra === "none" || extra === "noBall" ? pick([0, 0, 1, 2, 3, 4, 6, 5]) : 0;
+      const extraRuns = extra === "bye" || extra === "legBye" ? pick([1, 2, 4]) : extra === "wide" ? pick([0, 0, 1, 4]) : extra === "noBall" && !runs ? pick([0, 1, 2]) : 0;
+      const wicket: BallWicket | null = chance(0.15)
+        ? { kind: pick(WICKETS), ...(chance(0.25) ? { out: pick(["striker", "nonStriker"] as const) } : {}), ...(chance(0.5) ? { fielder: pick(["b1", "a2", "Sub fielder"]) } : {}), ...(chance(0.3) ? { crossed: chance(0.5) } : {}) }
+        : null;
+      e = {
+        type: "ball",
+        runs,
+        extra,
+        ...(extraRuns || chance(0.3) ? { extraRuns } : {}),
+        ...(extra === "noBall" && extraRuns ? { noBallExtra: pick(["bye", "legBye"] as const) } : {}),
+        ...(wicket ? { wicket } : {}),
+        ...at,
+      };
+    }
+    const next = apply(m, e);
+    if (next === m) continue;
+    m = next;
+    for (const k of [e.type, e.type === "ball" ? e.extra : null, e.type === "ball" ? e.wicket?.kind : e.type === "retire" ? e.kind : null]) if (k) seen.set(k, (seen.get(k) ?? 0) + 1);
+  }
+  return m;
+}
+
+test("sanitizeMatch: every match the engine makes comes back exactly", () => {
+  const seen = new Map<string, number>();
+  for (let seed = 1; seed <= 150; seed++) {
+    const m = anyMatch(seed, seen);
+    const s = sanitizeMatch(wire(m));
+    assert.deepEqual(s, m, `seed ${seed}`);
+    assert.deepEqual(derive(s!), derive(m), `seed ${seed} derive`);
+  }
+  for (const k of [...EVENT_TYPES, ...WICKETS, "retiredHurt", "retiredOut", "wide", "noBall", "bye", "legBye"]) assert.ok(seen.get(k), `no ${k} in any match`);
+  for (let seed = 1; seed <= 30; seed++) {
+    const m = randomMatch(seed, { overs: 3 + (seed % 5), playersPerSide: 4 + (seed % 7) });
+    assert.deepEqual(sanitizeMatch(wire(m)), m, `soak seed ${seed}`);
+  }
+  assert.deepEqual(sanitizeMatch(wire(finished())), finished());
+  assert.deepEqual(sanitizeMatch(wire(newMatch({}, { id: "x", now: 1 }))), newMatch({}, { id: "x", now: 1 }));
+});
+
+test("sanitizeMatch: extra keys are dropped everywhere", () => {
+  const m = finished();
+  const padded = {
+    ...m,
+    evil: "<script>",
+    setup: {
+      ...m.setup,
+      evil: 1,
+      rules: { ...m.setup.rules, evil: 2 },
+      players: { a: m.setup.players.a.map((p) => ({ ...p, evil: 3 })), b: m.setup.players.b, c: [{ id: "a1", name: "Nope" }] },
+    },
+    events: m.events.map((e) => ({ ...e, evil: 4, ...(e.type === "ball" && e.wicket ? { wicket: { ...e.wicket, evil: 5 } } : {}) })),
+  };
+  assert.deepEqual(sanitizeMatch(padded), m);
+  // A "__proto__" key from JSON is just a key: dropped, and nothing is polluted.
+  const proto = sanitizeMatch({ ...m, events: [JSON.parse('{"type": "swapStrike", "__proto__": {"polluted": true}}')] });
+  assert.deepEqual(proto?.events, [{ type: "swapStrike" }]);
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});
+
+test("sanitizeMatch: objects where ids and names go are refused, never stringified", () => {
+  const m = finished();
+  // String() on this throws, so the sanitiser must never call it on what it is given.
+  const trap: unknown = JSON.parse('{"toString": 1, "valueOf": 1}');
+  assert.throws(() => String(trap));
+  const s = sanitizeMatch({
+    ...m,
+    id: { $gt: "" },
+    setup: {
+      ...m.setup,
+      teamA: { name: "Titans" },
+      teamB: ["Strikers"],
+      title: 42,
+      venue: trap,
+      overs: trap,
+      rules: { wideRuns: trap, freeHit: trap },
+      players: { a: [{ id: { x: 1 }, name: "Ghost" }, { id: "a1", name: { first: "Amit" } }, { id: "a2", name: trap }, "a9", null], b: "b1" },
+    },
+    events: [
+      { type: "setBatter", player: { id: "a1" } },
+      { type: "setBatter", player: "a1", name: trap },
+      { type: "setBowler", player: ["b1"] },
+      { type: "addPlayer", team: "a", player: "a7", name: ["Sam"] },
+      { type: "renamePlayer", team: { a: 1 }, player: "a1", name: "Sam" },
+      { type: "renamePlayer", team: "a", player: "a1", name: trap },
+      { type: "ball", runs: { n: 4 }, extra: "none", extraRuns: trap, wicket: { kind: "caught", fielder: { id: "b2" }, out: {}, crossed: "yes" } },
+      { type: "ball", runs: 1, extra: { none: 1 } },
+      { type: "ball", runs: 1, extra: "none", wicket: { kind: trap } },
+      { type: "changeSetup", teamA: trap, overs: trap, rules: trap, title: ["Final"] },
+    ],
+  });
+  assert.ok(s);
+  assert.equal(s.id, "match");
+  assert.deepEqual([s.setup.teamA, s.setup.teamB, s.setup.title, s.setup.venue, s.setup.overs, s.setup.rules.wideRuns, s.setup.rules.freeHit], ["Team A", "Team B", "", "", 6, 1, true]);
+  assert.deepEqual(s.setup.players, { a: [{ id: "a1", name: "a1" }, { id: "a2", name: "a2" }], b: [] });
+  assert.deepEqual(s.events, [
+    { type: "setBatter", player: "a1" },
+    { type: "ball", runs: 0, extra: "none", wicket: { kind: "caught" } },
+    { type: "ball", runs: 1, extra: "none" },
+    // The trap is an object, so it reads as rules with nothing usable in them: no change.
+    { type: "changeSetup", rules: {} },
+  ]);
+  assert.doesNotThrow(() => derive(s));
+});
+
+test("sanitizeMatch: 300 KB strings are cut to the engine's lengths", () => {
+  const m = finished();
+  const big = "x ".repeat(150_000);
+  const s = sanitizeMatch({
+    ...m,
+    id: big,
+    setup: { ...m.setup, teamA: big, teamB: big, title: big, venue: big, players: { a: [{ id: "a1", name: big }], b: [] } },
+    events: [
+      { type: "setBatter", player: "a1", name: big },
+      { type: "addPlayer", team: "b", player: "b9", name: big },
+      { type: "ball", runs: 0, extra: "none", wicket: { kind: "runOut", fielder: big } },
+      { type: "changeSetup", teamA: big, title: big, venue: big },
+    ],
+  });
+  assert.ok(s);
+  assert.equal(s.id, "match");
+  assert.deepEqual([s.setup.teamA.length, s.setup.teamB.length, s.setup.title.length, s.setup.venue.length, s.setup.players.a[0].name.length], [32, 32, 48, 48, 40]);
+  for (const e of s.events) for (const v of Object.values(e)) if (typeof v === "string") assert.ok(v.length <= 48, `${e.type} ${v.length}`);
+  assert.ok(JSON.stringify(s).length < 1500, `${JSON.stringify(s).length} chars`);
+});
+
+test("sanitizeMatch: not a match, a wrong version or too many events is null", () => {
+  const m = finished();
+  for (const x of [null, undefined, 0, 1, true, "", "match", JSON.stringify(m), [], [m]]) assert.equal(sanitizeMatch(x), null, String(x));
+  for (const v of [0, 2, "1", null, undefined]) assert.equal(sanitizeMatch({ ...m, v }), null, `v ${v}`);
+  for (const setup of [null, "setup", [m.setup], undefined]) assert.equal(sanitizeMatch({ ...m, setup }), null);
+  for (const events of [null, {}, "[]", undefined]) assert.equal(sanitizeMatch({ ...m, events }), null);
+  const swaps = (n: number) => ({ ...m, events: Array.from({ length: n }, () => ({ type: "swapStrike" })) });
+  assert.equal(sanitizeMatch(swaps(10_000)), null);
+  assert.equal(sanitizeMatch(swaps(3001)), null);
+  assert.equal(sanitizeMatch(swaps(3000))?.events.length, 3000);
+});
+
+test("sanitizeMatch: NaN, Infinity and wild numbers are clamped the engine's way", () => {
+  const m = finished();
+  const s = sanitizeMatch({
+    ...m,
+    createdAt: NaN,
+    setup: { ...m.setup, overs: Infinity, playersPerSide: -Infinity, rules: { wideRuns: NaN, noBallRuns: 1e9, freeHit: "no", maxOversPerBowler: Infinity, lastManStands: 1, retireAt: -5 } },
+    events: [
+      { type: "ball", runs: Infinity, extra: "wide", extraRuns: NaN, at: Infinity },
+      { type: "ball", runs: 1e9, extra: "none", at: NaN },
+      { type: "ball", runs: -3, extra: "noBall", extraRuns: 2.7, at: 5 },
+      { type: "changeSetup", overs: NaN, playersPerSide: Infinity, rules: { wideRuns: -1, retireAt: 1e9, freeHit: "yes" }, at: -Infinity },
+      { type: "changeSetup", overs: 1e9, playersPerSide: 0 },
+    ],
+  });
+  assert.ok(s);
+  assert.equal(s.createdAt, 0);
+  assert.equal(sanitizeMatch({ ...m, createdAt: Infinity })?.createdAt, 0);
+  assert.equal(sanitizeMatch({ ...m, createdAt: "1760000000000" })?.createdAt, 0);
+  assert.deepEqual([s.setup.overs, s.setup.playersPerSide], [6, 11]);
+  assert.deepEqual(s.setup.rules, { wideRuns: 1, noBallRuns: 5, freeHit: true, maxOversPerBowler: null, lastManStands: false, retireAt: null });
+  assert.deepEqual(s.events, [
+    { type: "ball", runs: 0, extra: "wide", extraRuns: 0 },
+    { type: "ball", runs: 99, extra: "none" },
+    { type: "ball", runs: 0, extra: "noBall", extraRuns: 2, at: 5 },
+    { type: "changeSetup", rules: { wideRuns: 0, retireAt: 500 } },
+    { type: "changeSetup", overs: 100, playersPerSide: 2 },
+  ]);
+  const v = derive(s);
+  assert.doesNotMatch([v.headline, ...v.current.commentary.map((c) => c.line)].join("\n"), /NaN|Infinity|undefined/);
+});
+
+test("sanitizeMatch: unknown event types and player ids the engine never makes are dropped", () => {
+  const m = finished();
+  const junk: unknown[] = [{ type: "hack" }, { type: "__proto__" }, { type: "toString" }, { type: "BALL", runs: 4, extra: "none" }, { runs: 4, extra: "none" }, null, 7, "ball", [{ type: "swapStrike" }]];
+  assert.deepEqual(sanitizeMatch({ ...m, events: [...junk, ...m.events, ...junk] })?.events, m.events);
+  const s = sanitizeMatch({
+    ...m,
+    setup: {
+      ...m.setup,
+      players: {
+        a: [{ id: "a1", name: "Amit" }, { id: "c1", name: "X" }, { id: "a12345", name: "X" }, { id: "a1", name: "Again" }, { id: "<img src=x>", name: "X" }, { id: "A2", name: "X" }],
+        b: Array.from({ length: 60 }, (_, i) => ({ id: `b${i + 1}`, name: `Player ${i + 1}` })),
+      },
+    },
+    events: [
+      { type: "setBatter", player: "zz", name: "Who" },
+      { type: "setBowler", player: "b1 " },
+      { type: "setBowler", player: "" },
+      { type: "addPlayer", team: "c", player: "a8", name: "Sam" },
+      { type: "addPlayer", team: "a", player: "a8", name: "   " },
+      { type: "addPlayer", team: "a", player: "a1000", name: "Sam" },
+      { type: "retire", out: "both", kind: "retiredHurt" },
+      { type: "retire", out: "striker", kind: "retiredBored" },
+      { type: "setBatter", player: "a1", end: "middle" },
+      { type: "endInnings", reason: "rain" },
+      { type: "ball", runs: 0, extra: "none", noBallExtra: "four", wicket: { kind: "retiredHurt" } },
+    ],
+  });
+  assert.ok(s);
+  assert.deepEqual(s.setup.players.a, [{ id: "a1", name: "Amit" }]);
+  assert.equal(s.setup.players.b.length, 40);
+  assert.deepEqual(s.setup.players.b.at(-1), { id: "b40", name: "Player 40" });
+  assert.deepEqual(s.events, [
+    { type: "addPlayer", team: "a", player: "a1000", name: "Sam" },
+    { type: "setBatter", player: "a1" },
+    { type: "endInnings" },
+    { type: "ball", runs: 0, extra: "none" },
+  ]);
+});
+
+test("sanitizeMatch: junk anywhere never throws, derives cleanly and reads back the same", () => {
+  const JUNK: unknown[] = [null, true, false, 0, -1, 2.5, 1e308, -1e308, NaN, Infinity, "", " ", "a1", "b99", "x".repeat(5000), "__proto__", {}, [], [1, 2], { kind: "caught" }, { type: "ball" }, JSON.parse('{"toString": 1, "valueOf": 1}'), JSON.parse('{"__proto__": {"polluted": 1}}')];
+  const FIELDS = ["type", "player", "name", "team", "runs", "extra", "extraRuns", "noBallExtra", "wicket", "kind", "out", "fielder", "end", "reason", "rules", "players", "overs", "teamA", "id", "at", "evil"];
+  let checked = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const r = rng(seed * 104729);
+    const doc = wire(anyMatch(seed, new Map()));
+    const holders: Record<string, unknown>[] = [];
+    const walk = (x: unknown) => {
+      if (!x || typeof x !== "object") return;
+      holders.push(x as Record<string, unknown>);
+      for (const v of Object.values(x)) walk(v);
+    };
+    walk(doc);
+    // Skip the top level, which only has to be wrong once to give null.
+    for (let i = 0; i < 12; i++) {
+      const h = holders[1 + Math.floor(r() * (holders.length - 1))];
+      const keys = Object.keys(h);
+      const k = keys.length && r() < 0.7 ? keys[Math.floor(r() * keys.length)] : FIELDS[Math.floor(r() * FIELDS.length)];
+      h[k] = JUNK[Math.floor(r() * JUNK.length)];
+    }
+    const s = sanitizeMatch(doc);
+    if (!s) continue;
+    checked++;
+    const v = derive(s);
+    const text = [v.headline, shareText(v), ...v.innings.flatMap((i) => [i.summary, i.extrasText, ...i.commentary.map((c) => c.line), ...i.batters.map((b) => b.howOut)])].join("\n");
+    assert.doesNotMatch(text, /undefined|NaN|Infinity|\[object/, `seed ${seed}`);
+    assert.deepEqual(sanitizeMatch(wire(s)), s, `seed ${seed} reads back the same`);
+  }
+  assert.ok(checked >= 30, `${checked} junked matches checked`);
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });
