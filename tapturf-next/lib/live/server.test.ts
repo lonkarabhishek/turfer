@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { apply, newMatch, newPlayerId, type Match } from "../cricket/scoring";
 import {
   LIVE_MIN_GAP_MS,
   LIVE_MINTS_PER_10_MIN,
@@ -7,12 +8,15 @@ import {
   createLiveLimiter,
   liveHttpStatus,
   liveIpHash,
+  liveMatchToStore,
   liveResult,
   liveWriteKey,
   parsePutBody,
   parseStopBody,
   readLiveBody,
+  toLiveRow,
 } from "./server";
+import { LIVE_MAX_MATCH_CHARS, LIVE_MAX_REV } from "./types";
 
 const KEY = "k".repeat(64);
 const SECRET = "0123456789abcdef".repeat(4);
@@ -77,21 +81,25 @@ test("write key: unset or blank is off", () => {
 });
 
 test("results map to the HTTP statuses on LiveError", () => {
-  const want: Record<string, number> = { ok: 200, stale: 409, slow: 429, forbidden: 403, gone: 410, limit: 429, too_big: 413, bad: 400, unavailable: 503 };
+  const want: Record<string, number> = { ok: 200, stale: 409, slow: 429, forbidden: 403, gone: 410, limit: 429, busy: 503, too_big: 413, bad: 400, unavailable: 503 };
   for (const [r, status] of Object.entries(want)) assert.equal(liveHttpStatus(r), status, r);
   assert.equal(liveHttpStatus("toString"), 503);
   assert.equal(liveHttpStatus("weird"), 503);
 });
 
 test("an RPC result we do not know is treated as the database being down", () => {
-  for (const r of ["ok", "stale", "slow", "forbidden", "gone", "limit", "too_big", "bad"]) assert.equal(liveResult(r), r);
+  // busy (the site-wide cap) is passed on as itself, so the scorer keeps the link on and retries.
+  for (const r of ["ok", "stale", "slow", "forbidden", "gone", "limit", "busy", "too_big", "bad"]) assert.equal(liveResult(r), r);
   for (const r of ["unavailable", "taken", "constructor", "", null, undefined, 1, { r: "ok" }]) assert.equal(liveResult(r), "unavailable", String(r));
 });
 
-test("PUT body: secret is 64 lowercase hex, rev a positive safe integer", () => {
+test("PUT body: secret is 64 lowercase hex, rev a whole number from 1 to 2^52", () => {
   const match = { v: 1 };
   assert.deepEqual(parsePutBody({ secret: SECRET, match, rev: 1729000000000 }), { secret: SECRET, match, rev: 1729000000000 });
   assert.deepEqual(parsePutBody({ secret: SECRET, rev: 5 }), { secret: SECRET, match: undefined, rev: 5 });
+  // The cap leaves room for the +1 a stop or an expiry adds, so a stored rev stays a safe integer.
+  assert.equal(LIVE_MAX_REV, 2 ** 52);
+  assert.equal(parsePutBody({ secret: SECRET, match, rev: LIVE_MAX_REV })?.rev, LIVE_MAX_REV);
   for (const bad of [
     null,
     "x",
@@ -103,12 +111,78 @@ test("PUT body: secret is 64 lowercase hex, rev a positive safe integer", () => 
     { secret: SECRET, match, rev: -1 },
     { secret: SECRET, match, rev: 1.5 },
     { secret: SECRET, match, rev: "5" },
+    { secret: SECRET, match, rev: LIVE_MAX_REV + 1 },
+    { secret: SECRET, match, rev: Number.MAX_SAFE_INTEGER },
     { secret: SECRET, match, rev: Number.MAX_SAFE_INTEGER + 1 },
     { secret: SECRET, match, rev: NaN },
     { secret: SECRET, match },
   ]) {
     assert.equal(parsePutBody(bad), null, JSON.stringify(bad));
   }
+});
+
+test("row: any whole rev is read, even past MAX_SAFE_INTEGER; a bad status or time throws", () => {
+  const at = "2026-10-20T10:00:00.123456+00:00";
+  assert.deepEqual(toLiveRow({ match: { v: 1 }, rev: 7, status: "live", updated_at: at }), { match: { v: 1 }, rev: 7, status: "live", updated_at: "2026-10-20T10:00:00.123Z" });
+  // A rev the database already holds must not make every read of the link fail.
+  for (const rev of [Number.MAX_SAFE_INTEGER + 1, 2 ** 60]) assert.equal(toLiveRow({ match: null, rev, status: "stopped", updated_at: at }).rev, rev);
+  assert.equal(toLiveRow({ rev: 3, status: "expired", updated_at: at }).match, null);
+  for (const bad of [
+    null,
+    { rev: 1.5, status: "live", updated_at: at },
+    { rev: "x", status: "live", updated_at: at },
+    { rev: Infinity, status: "live", updated_at: at },
+    { rev: 1, status: "waiting", updated_at: at },
+    { rev: 1, status: "live", updated_at: "soon" },
+    { rev: 1, status: "live" },
+  ]) {
+    assert.throws(() => toLiveRow(bad), /unexpected row/, JSON.stringify(bad));
+  }
+});
+
+/** A match as the scorer's browser sends it: through JSON, like the PUT body. */
+const sent = (m: Match): unknown => JSON.parse(JSON.stringify(m));
+
+test("stored match: a renamed player is stored under the latest name only, roster and walk-in alike", () => {
+  let m = newMatch({ teamA: "Kings", teamB: "Royals", players: { a: ["Rahul Sharma", "Amit Verma"], b: ["Bobby Deol"] } }, { id: "m1", now: 1 });
+  const walkIn = newPlayerId(m, "a");
+  const steps = [
+    { type: "addPlayer", team: "a", player: walkIn, name: "Walk In Guy" },
+    { type: "renamePlayer", team: "a", player: "a1", name: "R Sharma" },
+    { type: "renamePlayer", team: "a", player: "a1", name: "Player 1" },
+    { type: "renamePlayer", team: "a", player: walkIn, name: "Guest" },
+  ] as const;
+  for (const e of steps) {
+    const next = apply(m, { ...e });
+    assert.notEqual(next, m, `${e.type} ${e.name} applied`);
+    m = next;
+  }
+  const out = liveMatchToStore(sent(m));
+  assert.ok("match" in out, JSON.stringify(out));
+  const json = JSON.stringify(out.match);
+  for (const old of ["Rahul Sharma", "R Sharma", "Walk In Guy"]) assert.ok(!json.includes(old), `${old} is not stored`);
+  for (const now of ["Player 1", "Guest", "Amit Verma", "Bobby Deol"]) assert.ok(json.includes(now), `${now} is stored`);
+  assert.equal(out.status, "live");
+  // The renames stay, so followers' history lines up with the scorer's.
+  assert.equal(out.match.events.filter((e) => e.type === "renamePlayer").length, 3);
+  // The scorer's own match keeps what was typed.
+  assert.ok(JSON.stringify(m).includes("Rahul Sharma"));
+});
+
+test("stored match: not a match is bad; size is measured after the names are folded", () => {
+  assert.deepEqual(liveMatchToStore({ v: 2 }), { error: "bad" });
+  assert.deepEqual(liveMatchToStore(null), { error: "bad" });
+  // 2000 renames to short names, then one to a 40 character name: under
+  // the cap as sent, over it once every rename says the long name.
+  const base = newMatch({ players: { a: ["Ann"], b: ["Ben"] } }, { id: "m2", now: 1 });
+  const events = Array.from({ length: 2000 }, (_, i) => ({ type: "renamePlayer", team: "a", player: "a1", name: `n${i}` }));
+  events.push({ type: "renamePlayer", team: "a", player: "a1", name: "L".repeat(40) });
+  const raw = { ...base, events };
+  assert.ok(JSON.stringify(raw).length < LIVE_MAX_MATCH_CHARS, "under the cap as sent");
+  assert.deepEqual(liveMatchToStore(raw), { error: "too_big" });
+  // Half the renames, all short, is stored.
+  const ok = liveMatchToStore({ ...base, events: events.slice(0, 1000) });
+  assert.ok("match" in ok && JSON.stringify(ok.match).length <= LIVE_MAX_MATCH_CHARS);
 });
 
 test("DELETE body: just the secret", () => {

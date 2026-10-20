@@ -624,6 +624,7 @@ export type ShareLive = {
 const LIVE_FAULT: Record<LiveFault, string> = {
   offline: "No internet? Try again.",
   unavailable: "Live links are not working right now. Try again in a bit.",
+  busy: "Live links are busy right now. Retrying…",
   limit: "Too many live links from this network for now. Try again later.",
   too_big: "This match is too long to share live.",
   forbidden: "This link was made in another browser, so it cannot be updated here. Turn on a new live link.",
@@ -634,15 +635,17 @@ const LIVE_FAULT: Record<LiveFault, string> = {
 
 function faultText(info: LiveInfo): string | null {
   if (!info.fault) return null;
-  // A link the server took writes for has hit its own cap, not the network's.
-  if (info.fault === "limit" && info.link?.sentRev) return "This live link has reached its limit. Turn on a new one to keep sharing.";
+  // Still on: the server took writes for this link and keeps showing them, so it stays until turned off.
+  if (info.on && info.fault === "limit") return "This live link has reached its limit. Turn it off, then turn on a new one to keep sharing.";
+  if (info.on && info.fault === "too_big") return "This match is too long to share live now. Friends see the score up to here until you turn the link off.";
   return LIVE_FAULT[info.fault];
 }
 
-const LIVE_STATUS: Record<"synced" | "sending" | "offline", { dot: string; text: string }> = {
+const LIVE_STATUS: Record<"synced" | "sending" | "offline" | "busy", { dot: string; text: string }> = {
   synced: { dot: "bg-green-500", text: "Live, all balls sent" },
   sending: { dot: "bg-amber-400", text: "Sending…" },
   offline: { dot: "bg-amber-400", text: "Offline. Balls are saved and will send when you are back online." },
+  busy: { dot: "bg-amber-400", text: LIVE_FAULT.busy },
 };
 
 const waLink = (text: string) => `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -660,7 +663,9 @@ function PrivacyNote() {
 
 function LiveLinkBlock({ live, text, onShared }: { live: ShareLive; text: string; onShared: (how: string) => void }) {
   const { info, url } = live;
-  const [copied, setCopied] = useState(false);
+  // The link that was copied: one turned on since has not been.
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const copied = url !== null && copiedUrl === url;
   const [confirmOff, setConfirmOff] = useState(false);
   const fault = faultText(info);
   const box = "rounded-2xl border-2 border-primary-200 p-3";
@@ -698,13 +703,15 @@ function LiveLinkBlock({ live, text, onShared }: { live: ShareLive; text: string
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
+      setCopiedUrl(url);
       onShared("live_copy");
     } catch {
-      setCopied(false);
+      setCopiedUrl(null);
     }
   };
-  const status = info.state === "synced" || info.state === "sending" || info.state === "offline" ? LIVE_STATUS[info.state] : null;
+  // Sending, but the server said busy and is being retried: say so rather than a plain "Sending…".
+  const shown = info.state === "sending" && info.fault === "busy" ? "busy" : info.state;
+  const status = shown === "synced" || shown === "sending" || shown === "offline" || shown === "busy" ? LIVE_STATUS[shown] : null;
   const stopping = info.mode === "stopping";
 
   return (

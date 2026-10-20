@@ -875,6 +875,58 @@ export function sanitizeMatch(raw: unknown): Match | null {
 }
 
 /* ------------------------------------------------------------------ */
+/* Handing a match to someone else                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The match as the live link serves it, with every player's earlier names
+ * folded into the one they have now. A rename changes the scorecard
+ * everywhere, but the match still carries the old name: in the roster, in
+ * the addPlayer, setBatter or setBowler that brought the player in, and in
+ * each rename before the last. Here all of those say the latest name. The
+ * renames stay, now renames to the same name, so the events line up one
+ * for one and derive() reads the same. The commentary never mentions a
+ * rename, and lastAction's "Renamed to X" is the last rename, already the
+ * latest name. The scorer's own match is not touched.
+ *
+ * A setBatter or setBowler is filed under the side batting or bowling in
+ * its innings, as fold() files it: the id's first letter for any id the
+ * engine makes, and still right for one that is not. A name is kept as it
+ * is when it already reads as the latest one (so a match sanitizeMatch read
+ * comes back exactly), when it is blank (so nothing fold() refused gets in),
+ * or when fold() never gave that player a name. The one change derive() can
+ * show: an addPlayer for a player already in the team, which check()
+ * refuses, says the latest name too, so as the last event its lastAction
+ * does.
+ */
+export function publicMatch(m: Match): Match {
+  const f = fold(m);
+  const second = f.inns[1]?.from ?? Infinity;
+  const latest = (side: Side, id: string, name: string): string => {
+    const now = isSide(side) ? f.roster[side].get(id) : undefined;
+    const was = cleanName(name);
+    return now && was && was !== now ? now : name;
+  };
+  const roster = (side: Side): Player[] => m.setup.players[side].map((p) => ({ ...p, name: latest(side, p.id, p.name) }));
+  const events = m.events.map((e, i): MatchEvent => {
+    switch (e.type) {
+      case "addPlayer":
+      case "renamePlayer":
+        return { ...e, name: latest(e.team, e.player, e.name) };
+      case "setBatter":
+      case "setBowler": {
+        if (e.name === undefined) return e;
+        const inn = i >= second ? f.inns[1] : f.inns[0];
+        return { ...e, name: latest(e.type === "setBatter" ? inn.batting : inn.bowling, e.player, e.name) };
+      }
+      default:
+        return e;
+    }
+  });
+  return { ...m, setup: { ...m.setup, players: { a: roster("a"), b: roster("b") } }, events };
+}
+
+/* ------------------------------------------------------------------ */
 /* The fold                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -936,6 +988,8 @@ type InnS = {
   deliveries: number;
   /** A retired out before the first ball of the innings, for the first over to carry. */
   pendingWkts: number;
+  /** Index of the first event read in this innings. */
+  from: number;
 };
 
 type Fold = {
@@ -951,7 +1005,7 @@ type Fold = {
 
 const newPart = (ids: string[] = []): PartS => ({ ids, runs: 0, balls: 0, extras: 0, by: {} });
 
-function newInn(index: 0 | 1, batting: Side, setup: MatchSetup, target: number | null): InnS {
+function newInn(index: 0 | 1, batting: Side, setup: MatchSetup, target: number | null, from: number): InnS {
   return {
     index,
     batting,
@@ -982,6 +1036,7 @@ function newInn(index: 0 | 1, batting: Side, setup: MatchSetup, target: number |
     dots: 0,
     deliveries: 0,
     pendingWkts: 0,
+    from,
   };
 }
 
@@ -1257,7 +1312,7 @@ function fold(match: Match): Fold {
   const setup = normalizeSetup(match.setup);
   const roster: Record<Side, Map<string, string>> = { a: new Map(), b: new Map() };
   for (const s of ["a", "b"] as const) for (const p of setup.players[s]) roster[s].set(p.id, p.name);
-  const f: Fold = { id: match.id, setup, roster, inns: [newInn(0, setup.battingFirst, setup, null)], abandoned: false, done: false, ignored: 0, lastLabel: null };
+  const f: Fold = { id: match.id, setup, roster, inns: [newInn(0, setup.battingFirst, setup, null, 0)], abandoned: false, done: false, ignored: 0, lastLabel: null };
   const events = Array.isArray(match.events) ? match.events : [];
 
   for (let i = 0; i < events.length; i++) {
@@ -1327,7 +1382,7 @@ function fold(match: Match): Fold {
     const last = f.inns[f.inns.length - 1];
     if (last.ended && !f.done) {
       if (f.abandoned || last.index === 1) f.done = true;
-      else f.inns.push(newInn(1, last.bowling, f.setup, last.runs + 1));
+      else f.inns.push(newInn(1, last.bowling, f.setup, last.runs + 1, i + 1));
     }
   }
   return f;

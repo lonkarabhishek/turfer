@@ -4,7 +4,16 @@ import { revalidateTag, unstable_cache } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createReadOnlyClient } from "../supabase/server";
 import { createGuardedFetch, defaultGuardOptions } from "../supabase/guard";
-import { LIVE_SECRET_RE, type LiveError, type LivePutBody, type LiveStatus, type LiveStopBody } from "./types";
+import { derive, publicMatch, sanitizeMatch, type Match } from "../cricket/scoring";
+import {
+  LIVE_MAX_MATCH_CHARS,
+  LIVE_MAX_REV,
+  LIVE_SECRET_RE,
+  type LiveError,
+  type LivePutBody,
+  type LiveStatus,
+  type LiveStopBody,
+} from "./types";
 
 /**
  * Server side of live scorecard links: the write key, the network hash
@@ -17,7 +26,8 @@ import { LIVE_SECRET_RE, type LiveError, type LivePutBody, type LiveStatus, type
 /**
  * The key the write RPCs check (private.app_secrets 'live_write'),
  * server only. Unset means live links are off: writes answer 503 and
- * every code 404s.
+ * every code 404s. Codes are tagged with it too, so rotating it ends
+ * every existing link (the migration says how).
  */
 export function liveWriteKey(): string | null {
   return process.env.LIVE_WRITE_KEY?.trim() || null;
@@ -69,8 +79,8 @@ function clientNetwork(req: Request): string {
 
 /**
  * A one-way hash of the client's network, keyed with the write key so
- * nobody without it can test addresses against stored hashes. Kept 2
- * days for the create limits, then cleared by the daily job.
+ * nobody without it can test addresses against stored hashes. Kept for
+ * the create limits until the hourly job clears it at 47 hours.
  */
 export function liveIpHash(req: Request, key: string): string {
   return createHash("sha256").update(`${key}|${clientNetwork(req)}`).digest("hex").slice(0, 32);
@@ -104,12 +114,17 @@ export type LiveRow = { match: unknown | null; rev: number; status: LiveStatus; 
 
 const STATUSES: readonly LiveStatus[] = ["live", "done", "stopped", "expired"];
 
-/** Throws on anything but a well formed row, so a bad read is never cached as "not found". */
-function toLiveRow(data: unknown): LiveRow {
+/**
+ * Throws on anything but a well formed row, so a bad read is never
+ * cached as "not found". Any whole rev is taken, even past
+ * MAX_SAFE_INTEGER: a rev the database holds must never turn every read
+ * of that link into a 503 that reaches the database again.
+ */
+export function toLiveRow(data: unknown): LiveRow {
   const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
   const rev = Number(d.rev);
   const at = typeof d.updated_at === "string" ? Date.parse(d.updated_at) : NaN;
-  if (!STATUSES.includes(d.status as LiveStatus) || !Number.isSafeInteger(rev) || !Number.isFinite(at)) {
+  if (!STATUSES.includes(d.status as LiveStatus) || !Number.isInteger(rev) || !Number.isFinite(at)) {
     throw new Error("live read: unexpected row");
   }
   // Postgres gives microseconds and +00:00; some browsers misread that.
@@ -177,6 +192,7 @@ const HTTP_STATUS: Record<"ok" | LiveError, number> = {
   forbidden: 403,
   gone: 410,
   limit: 429,
+  busy: 503,
   too_big: 413,
   bad: 400,
   unavailable: 503,
@@ -224,13 +240,28 @@ function secretOf(raw: unknown): string | null {
   return typeof s === "string" && LIVE_SECRET_RE.test(s) ? s : null;
 }
 
-/** PUT body: a 64 hex secret and a positive whole rev. The match is checked by sanitizeMatch. */
+/** PUT body: a 64 hex secret and a whole rev from 1 to LIVE_MAX_REV. The match is checked by liveMatchToStore. */
 export function parsePutBody(raw: unknown): LivePutBody | null {
   const secret = secretOf(raw);
   if (!secret) return null;
   const { match, rev } = raw as { match?: unknown; rev?: unknown };
-  if (typeof rev !== "number" || !Number.isSafeInteger(rev) || rev <= 0) return null;
+  if (typeof rev !== "number" || !Number.isSafeInteger(rev) || rev <= 0 || rev > LIVE_MAX_REV) return null;
   return { secret, match, rev };
+}
+
+/**
+ * The match a PUT stores and followers are served. Rebuilt from the
+ * engine's whitelist (sanitizeMatch), so only what the engine makes is
+ * kept, never the client's objects; then every player name is folded to
+ * its latest value (publicMatch), so a player renamed mid-match is not
+ * served under the old name. Size is checked on that, what is stored.
+ */
+export function liveMatchToStore(raw: unknown): { match: Match; status: "live" | "done" } | { error: "bad" | "too_big" } {
+  const clean = sanitizeMatch(raw);
+  if (!clean) return { error: "bad" };
+  const match = publicMatch(clean);
+  if (JSON.stringify(match).length > LIVE_MAX_MATCH_CHARS) return { error: "too_big" };
+  return { match, status: derive(match).status };
 }
 
 export function parseStopBody(raw: unknown): LiveStopBody | null {
@@ -242,7 +273,7 @@ export function parseStopBody(raw: unknown): LiveStopBody | null {
 export const LIVE_MIN_GAP_MS = 400;
 /** Writes and stops per network per minute, per instance. The scorer sends at most about 24. */
 export const LIVE_WRITES_PER_MIN = 60;
-/** New codes per network per 10 minutes, per instance. The database allows 10 links a day. */
+/** New codes per network per 10 minutes, per instance. The database allows 8 new links an hour and 30 a day per network. */
 export const LIVE_MINTS_PER_10_MIN = 20;
 
 /** Keys tracked per window at most: a soft limit must not grow memory without end under a flood of networks. */

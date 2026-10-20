@@ -3,6 +3,7 @@ import type { ScorecardFields } from "@/lib/cricket/scoring";
 /**
  * "Make the result card": the live scorer leaves the final scores here
  * and opens the scorecard maker with ?from=live-scorer, which reads them.
+ * A follower on /live/<code> does the same with ?from=live-follow&code=.
  * They stay for an hour, so a reload (Android often reloads the tab after
  * sharing to WhatsApp) fills the card again; the next handoff overwrites
  * them. Kept apart from storage.ts so the scorecard maker does not load

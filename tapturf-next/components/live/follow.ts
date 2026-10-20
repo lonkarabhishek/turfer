@@ -1,18 +1,20 @@
-import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
+import { LIVE_CODE_RE, LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
 
 /**
  * The follower page's rules (/live/<code>): which poll answer to show,
  * when to poll next, and how old the score is, worked out from the
- * server's clock, since budget phones are often minutes off.
+ * server's clock, since budget phones are often minutes off. Also the
+ * handoff to the scorecard maker for "Make the result card".
  * No React and relative imports only, so follow.test.ts can run it with
  * fake timers.
  */
 
 export type FollowStatus = LiveGetResponse["status"];
 
-/** Before the scorer's first update: this often, for this long after the page opened... */
+/** Before the scorer's first update: this often, for this long after the page opened, then this often while the tab is visible... */
 export const WAIT_POLL_MS = 15_000;
 export const WAIT_POLL_FOR_MS = 10 * 60_000;
+export const WAIT_SLOW_POLL_MS = 60_000;
 /** ...and after a failed poll (404, 5xx, no network), these, then the last one again. */
 export const FAIL_BACKOFF_MS = [6_000, 12_000, 30_000] as const;
 /** The live dot goes after this long without an update. */
@@ -64,7 +66,8 @@ export function nextPoll(status: FollowStatus, age: number | null, waited: numbe
     case "expired":
       return "stop";
     case "waiting":
-      return waited < WAIT_POLL_FOR_MS ? WAIT_POLL_MS : null;
+      // Still polled after the first 10 min, more slowly: the card says the score shows by itself, and the first update can be late.
+      return waited < WAIT_POLL_FOR_MS ? WAIT_POLL_MS : WAIT_SLOW_POLL_MS;
     case "done":
       // The last ball is often undone, so a finished match is watched a while.
       return age !== null && age >= LIVE_DONE_POLL_FOR_MS ? null : LIVE_DONE_POLL_MS;
@@ -88,14 +91,94 @@ export function ago(ms: number): string {
   return ms < 10_000 ? "just now" : `${span(ms)} ago`;
 }
 
-export type Freshness = { tone: "live" | "quiet" | "stopped" | "done"; text: string };
+/** A gap in a live match where no update is due: the innings break, or before the first ball of an innings. */
+export type Pause = "break" | "start" | null;
 
-/** The line under the score for a live or finished match. age is by the server's clock. */
-export function freshness(status: Extract<LiveStatus, "live" | "done">, age: number): Freshness {
+/**
+ * Whether a live match is in a planned gap, from its derived view.
+ * byOver gets its first over with the innings' first delivery, wides
+ * included, so an empty one means no ball yet. The break ends once
+ * anyone is picked for the chase, as derive() has it.
+ */
+export function pauseOf(v: { status: "live" | "done"; inningsBreak: boolean; current: { byOver: readonly unknown[] } }): Pause {
+  if (v.status !== "live") return null;
+  if (v.inningsBreak) return "break";
+  return v.current.byOver.length === 0 ? "start" : null;
+}
+
+const PAUSED: Record<Exclude<Pause, null>, string> = { break: "Innings break.", start: "Waiting for the first ball." };
+
+export type Freshness = { tone: "live" | "paused" | "quiet" | "stopped" | "done"; text: string };
+
+/**
+ * The line under the score for a live or finished match. age is by the
+ * server's clock. In a pause the scorer has nothing to send, so a quiet
+ * spell there is not called offline; past QUIET_MS it is called stopped
+ * all the same.
+ */
+export function freshness(status: Extract<LiveStatus, "live" | "done">, age: number, pause: Pause = null): Freshness {
   if (status === "done") return { tone: "done", text: `Final score. Last update ${ago(age)}.` };
   if (age < FRESH_MS) return { tone: "live", text: `Updated ${ago(age)}` };
+  if (age <= QUIET_MS && pause) return { tone: "paused", text: `${PAUSED[pause]} Last update ${ago(age)}.` };
   if (age <= QUIET_MS) return { tone: "quiet", text: `No update for ${span(age)}. The scorer may be offline.` };
   return { tone: "stopped", text: `This match stopped updating. Last update ${ago(age)}.` };
+}
+
+/* ------------------------------------------------------------------ */
+/* The server's clock                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Server time minus this phone's, kept for the whole visit, not per page. null until a follower page mounts. */
+let skew: number | null = null;
+
+/**
+ * Called when a follower page mounts, with the server's time at its
+ * render. The first one in this document is the server render, fresh at
+ * hydration, so its time sets the clock. A later one can be the router
+ * cache's copy (Back reuses one however old): its time is not trusted,
+ * the clock stays as the last poll left it, and the answer is true, so
+ * the page polls at once.
+ */
+export function joinClock(serverNow: number): boolean {
+  if (skew !== null) return true;
+  skew = serverNow - Date.now();
+  return false;
+}
+
+/** The server's time as of a poll's answer, from its Date and Age headers. */
+export function setClock(serverTime: number): void {
+  skew = serverTime - Date.now();
+}
+
+/** Server time now. Before any page has mounted, the phone's. */
+export function clockNow(): number {
+  return Date.now() + (skew ?? 0);
+}
+
+/* ------------------------------------------------------------------ */
+/* The result card                                                     */
+/* ------------------------------------------------------------------ */
+
+/** Where a follower's "Make the result card" goes: the scorecard maker, told which link it came from. */
+export function resultCardHref(code: string): string {
+  return `/tools/cricket-scorecard-maker?from=live-follow&code=${encodeURIComponent(code)}`;
+}
+
+/**
+ * Who handed the scorecard maker its card, from its query string: the
+ * live scorer (?from=live-scorer) or a follower (?from=live-follow), with
+ * the link to go back to when the code is well formed. null for anything
+ * else, which fills nothing in.
+ */
+export type CardFrom = { by: "scorer" } | { by: "follower"; code: string | null };
+
+export function cardFrom(search: string): CardFrom | null {
+  const q = new URLSearchParams(search);
+  const from = q.get("from");
+  if (from === "live-scorer") return { by: "scorer" };
+  if (from !== "live-follow") return null;
+  const code = q.get("code") ?? "";
+  return { by: "follower", code: LIVE_CODE_RE.test(code) ? code : null };
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,7 +1,30 @@
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { FAIL_BACKOFF_MS, FRESH_MS, QUIET_MS, WAIT_POLL_FOR_MS, WAIT_POLL_MS, ago, freshness, isNewer, nextPoll, readLive, serverTimeOf, span, startPolling, type Seen } from "./follow";
+import {
+  FAIL_BACKOFF_MS,
+  FRESH_MS,
+  QUIET_MS,
+  WAIT_POLL_FOR_MS,
+  WAIT_POLL_MS,
+  WAIT_SLOW_POLL_MS,
+  ago,
+  cardFrom,
+  clockNow,
+  freshness,
+  isNewer,
+  joinClock,
+  nextPoll,
+  pauseOf,
+  readLive,
+  resultCardHref,
+  serverTimeOf,
+  setClock,
+  span,
+  startPolling,
+  type Seen,
+} from "./follow";
 import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, type LiveGetResponse } from "../../lib/live/types";
+import { apply, check, derive, newMatch, type Match, type MatchEvent } from "../../lib/cricket/scoring";
 
 const MIN = 60_000;
 
@@ -64,7 +87,10 @@ test("polls fast while live, slower once done, and stop only when the link is of
 
   assert.equal(nextPoll("waiting", null, 0), WAIT_POLL_MS);
   assert.equal(nextPoll("waiting", null, WAIT_POLL_FOR_MS - 1), WAIT_POLL_MS);
-  assert.equal(nextPoll("waiting", null, WAIT_POLL_FOR_MS), null);
+  // After 10 min a waiting page is still polled, once a minute: the first update can be late.
+  assert.equal(nextPoll("waiting", null, WAIT_POLL_FOR_MS), WAIT_SLOW_POLL_MS);
+  assert.equal(nextPoll("waiting", null, 6 * 60 * MIN), WAIT_SLOW_POLL_MS);
+  assert.equal(WAIT_SLOW_POLL_MS, 60_000);
 
   assert.equal(nextPoll("stopped", 0, 0), "stop");
   assert.equal(nextPoll("expired", 0, 0), "stop");
@@ -92,9 +118,102 @@ test("the live line turns amber after 2 min and gives up after 3 hours", () => {
   assert.equal(freshness("done", 12 * MIN).text, "Final score. Last update 12 min ago.");
 });
 
+test("an innings break or a match before its first ball is not called offline", () => {
+  assert.deepEqual(freshness("live", 6 * MIN, "break"), { tone: "paused", text: "Innings break. Last update 6 min ago." });
+  assert.deepEqual(freshness("live", 6 * MIN, "start"), { tone: "paused", text: "Waiting for the first ball. Last update 6 min ago." });
+  // Fresh is fresh, paused or not.
+  assert.deepEqual(freshness("live", 20_000, "break"), { tone: "live", text: "Updated 20 s ago" });
+  assert.equal(freshness("live", QUIET_MS, "break").tone, "paused");
+  // A pause that lasts 3 hours is called stopped all the same.
+  assert.equal(freshness("live", QUIET_MS + MIN, "break").tone, "stopped");
+  assert.equal(freshness("live", QUIET_MS + MIN, "start").tone, "stopped");
+  // With balls bowled, a quiet scorer may be offline.
+  assert.equal(freshness("live", 6 * MIN, null).tone, "quiet");
+  assert.equal(freshness("done", 6 * MIN, "break").tone, "done");
+});
+
+const PLAYERS = { a: ["Amit", "Rahul", "Karan"], b: ["Sameer", "Vikas", "Nikhil"] };
+const ball = (runs = 0, extra: "none" | "wide" = "none", wicket = false): MatchEvent => ({ type: "ball", runs, extra, extraRuns: 0, ...(wicket ? { wicket: { kind: "bowled" as const } } : {}) });
+const bat = (player: string): MatchEvent => ({ type: "setBatter", player });
+const bowl = (player: string): MatchEvent => ({ type: "setBowler", player });
+/** Apply events, failing the test on any refused event. */
+function run(m: Match, ...events: MatchEvent[]): Match {
+  for (const e of events) {
+    assert.equal(check(m, e).error, null, JSON.stringify(e));
+    m = apply(m, e);
+  }
+  return m;
+}
+
+test("the pause comes from the match: before the first ball, and the innings break", () => {
+  let m = newMatch({ teamA: "Titans", teamB: "Strikers", overs: 2, playersPerSide: 3, players: PLAYERS }, { id: "p", now: 0 });
+  assert.equal(pauseOf(derive(m)), "start");
+  m = run(m, bat("a1"), bat("a2"), bowl("b1"));
+  assert.equal(pauseOf(derive(m)), "start");
+  // A wide is the first ball too.
+  m = run(m, ball(0, "wide"));
+  assert.equal(pauseOf(derive(m)), null);
+  m = run(m, ball(4), ball(0, "none", true), bat("a3"), ball(1), ball(0, "none", true));
+  assert.equal(derive(m).inningsBreak, true);
+  assert.equal(pauseOf(derive(m)), "break");
+  // The break ends once the chase has anyone picked, as derive() has it; the chase's first ball is still to come.
+  m = run(m, bat("b1"));
+  assert.equal(pauseOf(derive(m)), "start");
+  m = run(m, bat("b2"), bowl("a1"), ball(1));
+  assert.equal(pauseOf(derive(m)), null);
+  m = run(m, ball(6));
+  assert.equal(derive(m).status, "done");
+  assert.equal(pauseOf(derive(m)), null);
+});
+
 test("no copy uses a dash as punctuation", () => {
-  const lines = [freshness("live", 0), freshness("live", 6 * MIN), freshness("live", QUIET_MS * 2), freshness("done", MIN)].map((f) => f.text);
+  const lines = [
+    freshness("live", 0),
+    freshness("live", 6 * MIN),
+    freshness("live", 6 * MIN, "break"),
+    freshness("live", 6 * MIN, "start"),
+    freshness("live", QUIET_MS * 2),
+    freshness("done", MIN),
+  ].map((f) => f.text);
   for (const l of lines) assert.doesNotMatch(l, /[\u2013\u2014]/);
+});
+
+test("the server clock lasts the visit: only the first page's render time sets it", () => {
+  mock.timers.enable({ apis: ["Date"], now: T0 });
+  try {
+    // Before any page mounts, the phone's clock.
+    assert.equal(clockNow(), T0);
+    // The first page, server rendered, finds the server a minute ahead.
+    assert.equal(joinClock(T0 + MIN), false);
+    assert.equal(clockNow(), T0 + MIN);
+    mock.timers.tick(5 * MIN);
+    setClock(T0 + 5 * MIN + 90_000);
+    assert.equal(clockNow(), T0 + 5 * MIN + 90_000);
+    // Back, 10 min later: the router cache's copy has the old render time, which is not trusted.
+    mock.timers.tick(10 * MIN);
+    assert.equal(joinClock(T0 + MIN), true);
+    assert.equal(clockNow(), T0 + 15 * MIN + 90_000);
+    assert.equal(joinClock(T0 + 15 * MIN), true);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a follower's result card goes to the scorecard maker with the way back", () => {
+  const code = "ab12cd34ef56";
+  const href = resultCardHref(code);
+  assert.equal(href, "/tools/cricket-scorecard-maker?from=live-follow&code=ab12cd34ef56");
+  assert.deepEqual(cardFrom(new URL(href, "https://tapturf.in").search), { by: "follower", code });
+  // The scorer's own handoff is unchanged.
+  assert.deepEqual(cardFrom("?from=live-scorer"), { by: "scorer" });
+  assert.deepEqual(cardFrom("?from=live-scorer&code=ab12cd34ef56"), { by: "scorer" });
+  // A code that is not one gives no link back, but the card still fills in.
+  assert.deepEqual(cardFrom("?from=live-follow"), { by: "follower", code: null });
+  assert.deepEqual(cardFrom("?from=live-follow&code=..%2Ftools"), { by: "follower", code: null });
+  assert.deepEqual(cardFrom("?from=live-follow&code=AB12CD34EF56"), { by: "follower", code: null });
+  assert.deepEqual(cardFrom("?from=live-follow&code=ab12cd34ef567"), { by: "follower", code: null });
+  assert.equal(cardFrom(""), null);
+  assert.equal(cardFrom("?from=game"), null);
 });
 
 /* ------------------------------------------------------------------ */
@@ -270,15 +389,51 @@ describe("polling", () => {
     h.poller.stop();
   });
 
-  test("waiting: every 15 s for 10 min, then only when looked at", async () => {
+  test("waiting: every 15 s for 10 min, then every minute while visible, never while hidden", async () => {
     const waiting = { body: { status: "waiting", match: null, rev: 0, updatedAt: null } };
     const h = harness({ status: "waiting", rev: 0, updatedAt: null }, [waiting]);
-    await advance(WAIT_POLL_FOR_MS + 60_000, 5_000);
+    await advance(WAIT_POLL_FOR_MS, 5_000);
     const n = h.polls;
-    assert.ok(n >= WAIT_POLL_FOR_MS / WAIT_POLL_MS - 1 && n <= WAIT_POLL_FOR_MS / WAIT_POLL_MS, String(n));
-    await advance(10 * 60_000, 5_000);
+    assert.equal(n, WAIT_POLL_FOR_MS / WAIT_POLL_MS);
+    await advance(WAIT_SLOW_POLL_MS - 5_000, 5_000);
     assert.equal(h.polls, n);
+    await advance(5_000, 5_000);
+    assert.equal(h.polls, n + 1);
+    await advance(9 * WAIT_SLOW_POLL_MS, 5_000);
+    assert.equal(h.polls, n + 10);
+    // The tab goes to the background (visibilitychange wakes the poller): nothing at all.
+    h.hide(true);
+    h.poller.wake();
+    await advance(30 * 60_000, 5_000);
+    assert.equal(h.polls, n + 10);
+    // Back in front: at once, then every minute again.
+    h.hide(false);
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, n + 11);
+    await advance(WAIT_SLOW_POLL_MS, 5_000);
+    assert.equal(h.polls, n + 12);
     assert.equal(h.shown.length, 0);
+    h.poller.stop();
+  });
+
+  test("the first update after a late start still shows by itself", async () => {
+    const waiting = { body: { status: "waiting", match: null, rev: 0, updatedAt: null } };
+    const answers: Answer[] = Array.from({ length: WAIT_POLL_FOR_MS / WAIT_POLL_MS + 2 }, () => waiting);
+    const h = harness({ status: "waiting", rev: 0, updatedAt: null }, [...answers, live(3, T0 + 12 * MIN)]);
+    await advance(13 * MIN, 5_000);
+    assert.deepEqual(h.shown.map((r) => r.rev), [3]);
+    h.poller.stop();
+  });
+
+  test("a page back from the router cache polls at once, not after the first interval", async () => {
+    // What LiveFollow does when joinClock says the page is not the first: wake() right after start.
+    const h = harness({ status: "done", rev: 9, updatedAt: T0 - 30 * MIN }, [{ body: { status: "done", match: { v: 1 }, rev: 10, updatedAt: iso(T0 - 2 * MIN) } }]);
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, 1);
+    assert.equal(h.clocks.length, 1);
+    assert.deepEqual(h.shown.map((r) => r.rev), [10]);
     h.poller.stop();
   });
 

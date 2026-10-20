@@ -1,6 +1,7 @@
 // Run with: npm run test:scorer (compiled with tsc to .test-out/scorer-ui, then node --test)
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { Match } from "../../../lib/cricket/scoring";
 import { LIVE_KEEPALIVE_MAX_BYTES, LIVE_RETRY_MS, LIVE_SEND_EVERY_MS, type LiveLinkRecord } from "../../../lib/live/types";
 import {
   canKeepLink,
@@ -12,6 +13,7 @@ import {
   nextRev,
   pillTone,
   readNew,
+  readReminder,
   readReply,
   retryDelay,
   sendWait,
@@ -21,9 +23,11 @@ import {
   type LiveIo,
   type LiveNet,
 } from "./live";
+import { MAX_SAVED, saveMatch, type MatchMeta } from "./storage";
 
 const T0 = 1_760_000_000_000;
 const CODE = "abcdefgh1234";
+const CODE2 = "zzzzzzzz9999";
 const SECRET = "ab".repeat(32);
 const link = (over: Partial<LiveLinkRecord> = {}): LiveLinkRecord => ({ code: CODE, secret: SECRET, on: true, rev: T0, sentRev: 0, createdAt: T0, ...over });
 const net = (over: Partial<LiveNet> = {}): LiveNet => ({ offline: false, halted: false, fault: null, mode: null, ...over });
@@ -67,7 +71,7 @@ test("answers are read by their body; anything else is unavailable", () => {
   assert.deepEqual(readReply(200, { ok: true, rev: 5 }), { r: "ok", rev: 5 });
   assert.deepEqual(readReply(200, { ok: true }), { r: "ok", rev: undefined });
   assert.deepEqual(readReply(409, { error: "stale", rev: 9 }), { r: "stale", rev: 9 });
-  for (const e of ["slow", "forbidden", "gone", "limit", "too_big", "bad", "unavailable"]) assert.equal(readReply(400, { error: e }).r, e);
+  for (const e of ["slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "unavailable"]) assert.equal(readReply(400, { error: e }).r, e);
   assert.equal(readReply(502, null).r, "unavailable");
   assert.equal(readReply(404, "<html>").r, "unavailable");
   assert.equal(readReply(400, { error: "nope" }).r, "unavailable");
@@ -103,12 +107,24 @@ test("handleResult follows the LiveError table", () => {
   const slow = handleResult(l, T0 + 10, { r: "slow" }, 2, true);
   assert.deepEqual([slow.wait, slow.fails, slow.link], [LIVE_SEND_EVERY_MS / 2, 2, l]);
 
-  for (const r of ["forbidden", "gone", "limit", "too_big"] as const) {
+  for (const r of ["forbidden", "gone"] as const) {
     const s = handleResult(l, T0 + 10, { r }, 0, true);
     assert.equal(s.link.on, false, r);
     assert.equal(s.link.stopped, r);
     assert.equal(s.fault, r);
   }
+
+  // limit and too_big: off here only while the server has nothing; once it has taken a write, stay on (to be turned off) and halt.
+  for (const r of ["limit", "too_big"] as const) {
+    const first = handleResult(link(), T0, { r }, 0, true);
+    assert.deepEqual([first.link.on, first.link.stopped, first.fault, first.halt], [false, r, r, false], r);
+    const later = handleResult(l, T0 + 10, { r }, 0, true);
+    assert.deepEqual([later.link, later.fault, later.halt], [l, r, true], r);
+  }
+
+  // busy: the site-wide cap. Back off like a 5xx and keep the link on.
+  const busy = handleResult(l, T0 + 10, { r: "busy" }, 1, true);
+  assert.deepEqual([busy.link, busy.wait, busy.fails, busy.offline, busy.fault, busy.halt], [l, LIVE_RETRY_MS[1], 2, false, "busy", false]);
 
   const bad = handleResult(l, T0 + 10, { r: "bad" }, 0, true);
   assert.equal(bad.halt, true);
@@ -164,6 +180,32 @@ test("keep the same link only while it can still take writes", () => {
   assert.equal(canKeepLink(link(), T0 + 25 * 3_600_000), false);
   assert.equal(canKeepLink(link({ on: false, stopped: "off" }), T0), false);
   assert.equal(canKeepLink(null, T0), false);
+});
+
+test("a game reminder's venue and from=game are read, and left out of the query", () => {
+  assert.deepEqual(readReminder("?venue=%20Turf%20Park%20&from=game"), { venue: "Turf Park", fromGame: true, rest: "" });
+  assert.deepEqual(readReminder("?utm_source=wa&venue=X&from=game&tab=1"), { venue: "X", fromGame: true, rest: "?utm_source=wa&tab=1" });
+  assert.deepEqual(readReminder("?from=other"), { venue: "", fromGame: false, rest: "" });
+  assert.deepEqual(readReminder(""), { venue: "", fromGame: false, rest: "" });
+  assert.equal(readReminder(`?venue=${"v".repeat(60)}`).venue.length, 48);
+});
+
+test("saving past the cap names the matches it dropped", () => {
+  const store = new Map<string, string>();
+  const ls = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+  Object.defineProperty(globalThis, "localStorage", { value: ls, configurable: true });
+  try {
+    const meta = (i: number): MatchMeta => ({ id: `m${i}`, teamA: "A", teamB: "B", headline: "", status: "done", createdAt: i, updatedAt: i });
+    const save = (i: number) => saveMatch({ id: `m${i}` } as unknown as Match, meta(i));
+    for (let i = 1; i <= MAX_SAVED; i++) assert.deepEqual(save(i).dropped, []);
+    const full = save(MAX_SAVED + 1);
+    assert.deepEqual(full.dropped, ["m1"], "the oldest goes");
+    assert.equal(full.index.list.length, MAX_SAVED);
+    assert.equal(store.has("tapturf_scorer_m_m1"), false);
+    assert.deepEqual(save(MAX_SAVED + 1).dropped, [], "saving the same match again drops nothing");
+  } finally {
+    Reflect.deleteProperty(globalThis, "localStorage");
+  }
 });
 
 test("secret is 64 hex; short url drops the scheme", () => {
@@ -253,7 +295,7 @@ function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<s
     matches[id] = { n };
     sync.changed(id, shape);
   };
-  return { sync, links, matches, calls, advance, edit };
+  return { io, sync, links, matches, calls, advance, edit };
 }
 
 const ok = (c: Call, rev = c.body?.rev) => c.answer(200, { ok: true, rev });
@@ -480,33 +522,37 @@ test("engine: move hands the link to the next match", async () => {
   assert.equal(t.sync.move("m1", "m3"), false);
 });
 
-test("engine: deleting a live match stops its link; a done one keeps its final card", async () => {
-  const t = rig({ links: { m1: link({ rev: T0, sentRev: T0 }), m2: link({ code: "zzzzzzzz9999", rev: T0, sentRev: T0 }) }, matches: { m1: { n: 1 }, m2: { n: 2 } } });
-  t.sync.remove("m1", true);
+test("engine: deleting a match turns its link off, live or done", async () => {
+  const t = rig({ links: { m1: link({ rev: T0, sentRev: T0 }), m2: link({ code: CODE2, rev: T0, sentRev: T0 }) }, matches: { m1: { n: 1 }, m2: { n: 2 } } });
+  t.sync.remove("m1");
+  await tickOver();
   assert.equal(t.calls[0].method, "DELETE");
   assert.equal(t.calls[0].keepalive, true);
   assert.equal(t.links.m1.stopped, "off", "kept until the server has the stop");
   await drop(t.calls[0]);
   assert.ok(t.links.m1, "network error: still kept");
   t.sync.wake();
+  await tickOver();
   const retry = t.calls.find((c, i) => i > 0 && c.method === "DELETE");
   assert.ok(retry, "tried again on wake");
   await ok(retry);
   assert.equal(t.links.m1, undefined);
 
-  // m2 is done, with its last ball waiting out the throttle.
+  // m2 is done, with its last ball still out: nothing here could turn its link off once the match is gone.
   t.edit("m2", 3, DONE2);
   const lead = t.calls[t.calls.length - 1];
-  assert.equal(lead.body?.match?.n, 3);
-  await ok(lead);
-  await t.advance(1000);
-  t.edit("m2", 4, DONE2);
+  assert.deepEqual([lead.method, lead.body?.match?.n], ["PUT", 3]);
   const before = t.calls.length;
-  t.sync.remove("m2", false);
-  assert.equal(t.links.m2, undefined, "done: dropped here, left up on the server");
-  const sent = t.calls.slice(before);
-  assert.equal(sent.length, 1, "its unsent last ball goes first");
-  assert.deepEqual([sent[0].method, sent[0].keepalive, sent[0].body?.match?.n], ["PUT", true, 4]);
+  t.sync.remove("m2");
+  assert.equal(t.links.m2.stopped, "off", "kept until the server has the stop");
+  await tickOver();
+  assert.equal(t.calls.length, before, "not while its last ball is out");
+  await ok(lead);
+  const stop = t.calls[before];
+  assert.deepEqual([stop?.method, stop?.keepalive, stop?.url, stop?.body], ["DELETE", true, `/api/live/${CODE2}`, { secret: SECRET }]);
+  await ok(stop);
+  assert.equal(t.links.m2, undefined);
+  assert.equal(t.calls.length, before + 1);
 });
 
 test("engine: an answer for a link that was turned off meanwhile is ignored", async () => {
@@ -516,4 +562,163 @@ test("engine: an answer for a link that was turned off meanwhile is ignored", as
   await fail(t.calls[0], 410, { error: "gone" });
   assert.equal(t.links.m1.on, true);
   assert.equal(t.links.m1.code, "zzzzzzzz9999");
+});
+
+test("engine: limit or too_big once the server has taken writes: sending stops, the link stays on and still turns off", async () => {
+  for (const [status, error] of [
+    [429, "limit"],
+    [413, "too_big"],
+  ] as const) {
+    const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+    t.edit("m1", 1);
+    await fail(t.calls[0], status, { error });
+    const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+    assert.deepEqual([info.on, info.state, info.fault, info.link?.stopped], [true, "error", error, undefined], error);
+    t.edit("m1", 2);
+    t.sync.wake();
+    await t.advance(60_000);
+    assert.equal(t.calls.length, 1, "nothing more is sent");
+
+    const off = t.sync.stop("m1");
+    await tickOver();
+    assert.deepEqual([t.calls[1]?.method, t.calls[1]?.body], ["DELETE", { secret: SECRET }], "the old card can still come down");
+    await ok(t.calls[1]);
+    assert.equal(await off, true);
+    const after = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+    assert.deepEqual([after.link?.on, after.link?.stopped, after.state, after.fault, pillTone(after)], [false, "off", "off", null, null]);
+  }
+});
+
+test("engine: stop waits for every PUT that is out, keepalive ones too, before the DELETE", async () => {
+  // The first PUT, which creates the link: a DELETE that got there first would find nothing, and the PUT would then make it.
+  const t = rig({ links: { m1: link() }, matches: { m1: { n: 1 } } });
+  t.sync.wake();
+  t.sync.flushAll(true);
+  assert.deepEqual(
+    t.calls.map((c) => [c.method, c.keepalive]),
+    [
+      ["PUT", false],
+      ["PUT", true],
+    ],
+  );
+  const off = t.sync.stop("m1");
+  assert.equal(t.sync.snapshot().net.m1.mode, "stopping");
+  await tickOver();
+  assert.equal(t.calls.length, 2, "no DELETE while a PUT is out");
+  await ok(t.calls[0]);
+  assert.equal(t.calls.length, 2, "nor while the keepalive one is");
+  await ok(t.calls[1]);
+  assert.equal(t.calls[2]?.method, "DELETE");
+  await ok(t.calls[2]);
+  assert.equal(await off, true);
+  assert.deepEqual([t.links.m1.on, t.links.m1.stopped], [false, "off"]);
+
+  // The PUT that was out came back gone: off already, nothing to tell the server.
+  const t2 = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  t2.edit("m1", 1);
+  const off2 = t2.sync.stop("m1");
+  await fail(t2.calls[0], 410, { error: "gone" });
+  assert.equal(await off2, true);
+  assert.equal(t2.calls.length, 1);
+  const info = liveInfo(t2.links.m1, t2.sync.snapshot().net.m1);
+  assert.deepEqual([info.link?.stopped, info.state, info.fault, pillTone(info)], ["off", "off", null, null]);
+});
+
+test("engine: a late gone for a link turned off meanwhile leaves it off, with no pill", async () => {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  // A second tab on the same storage turns the link off while this tab's PUT is out.
+  const other = createLiveSync(t.io);
+  t.edit("m1", 1);
+  const off = other.stop("m1");
+  await tickOver();
+  assert.equal(t.calls[1]?.method, "DELETE");
+  await ok(t.calls[1]);
+  assert.equal(await off, true);
+  await fail(t.calls[0], 410, { error: "gone" });
+  const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.link?.on, info.link?.stopped, info.state, info.fault, pillTone(info)], [false, "off", "off", null, null]);
+});
+
+test("engine: a link turned on again while the old one's PUT is out sends its first update once that PUT is back", async () => {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  t.edit("m1", 1);
+  t.sync.flushAll(true);
+  // The keepalive one finds the link expired; the page's own PUT is still out.
+  await fail(t.calls[1], 410, { error: "gone" });
+  assert.equal(t.links.m1.stopped, "gone");
+  const on = t.sync.start("m1");
+  await fail(t.calls[2], 200, { code: CODE2 });
+  assert.equal(await on, null);
+  assert.equal(t.calls.length, 3, "one request per match at a time");
+  await drop(t.calls[0]);
+  await t.advance(1000);
+  const first = t.calls[3];
+  assert.deepEqual([first?.method, first?.url, first?.body?.rev], ["PUT", `/api/live/${CODE2}`, t.links.m1.rev]);
+  await ok(first);
+  assert.equal(liveInfo(t.links.m1, t.sync.snapshot().net.m1).state, "synced");
+});
+
+test("engine: busy backs off on the retry steps and keeps the link on", async () => {
+  // The first send, the one that makes the link: the site-wide cap on new links answers busy.
+  const t = rig({ links: { m1: link({ rev: T0 - 1 }) } });
+  t.edit("m1", 1);
+  await fail(t.calls[0], 503, { error: "busy" });
+  const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.on, info.state, info.fault, pillTone(info)], [true, "sending", "busy", "amber"]);
+  await t.advance(LIVE_RETRY_MS[0] - 1);
+  assert.equal(t.calls.length, 1);
+  await t.advance(1);
+  assert.equal(t.calls.length, 2, "retry after 2 s");
+  await fail(t.calls[1], 503, { error: "busy" });
+  await t.advance(LIVE_RETRY_MS[1] - 1);
+  assert.equal(t.calls.length, 2, "then 4 s");
+  await t.advance(1);
+  assert.equal(t.calls.length, 3);
+  await ok(t.calls[2]);
+  const after = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([after.on, after.state, after.fault], [true, "synced", null]);
+});
+
+test("engine: a match deleted while its turn-off waits for a PUT still gets the DELETE", async () => {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  t.edit("m1", 1);
+  const off = t.sync.stop("m1");
+  t.sync.remove("m1");
+  await ok(t.calls[0]);
+  assert.equal(t.calls[1]?.method, "DELETE");
+  await ok(t.calls[1]);
+  assert.equal(await off, true);
+  assert.equal(t.links.m1, undefined, "dropped with the match");
+  assert.equal(t.calls.length, 2);
+});
+
+test("engine: a turn-off is saved before it waits, so a killed tab still turns the link off on the next visit", async () => {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  t.edit("m1", 1);
+  void t.sync.stop("m1");
+  await tickOver();
+  assert.deepEqual([t.links.m1.on, t.links.m1.stopped], [true, "off"], "pending before the PUT is back");
+  assert.equal(t.calls.length, 1, "no DELETE yet");
+  // The tab dies here. Next visit: a fresh engine on what was saved.
+  const next = rig({ links: JSON.parse(JSON.stringify(t.links)), matches: { m1: { n: 1 } } });
+  next.sync.wake();
+  assert.deepEqual(
+    next.calls.map((c) => c.method),
+    ["DELETE"],
+    "no PUT for a link being turned off",
+  );
+  await ok(next.calls[0]);
+  assert.equal(next.links.m1, undefined);
+});
+
+test("engine: a turn-off the server did not get puts the link back on, to try again", async () => {
+  const t = rig({ links: { m1: link({ rev: T0, sentRev: T0 }) } });
+  const off = t.sync.stop("m1");
+  await tickOver();
+  assert.equal(t.calls[0]?.method, "DELETE");
+  await fail(t.calls[0], 503, { error: "unavailable" });
+  assert.equal(await off, false);
+  assert.deepEqual([t.links.m1.on, t.links.m1.stopped], [true, undefined]);
+  const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.on, info.fault], [true, "not_off"]);
 });

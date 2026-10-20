@@ -6,6 +6,7 @@ import { Activity, ArrowRight, Download, Share2 } from "lucide-react";
 import { parseOvers } from "@/lib/cricket/overs";
 import { describeResult } from "@/lib/cricket/nrr";
 import { trackTool } from "@/lib/analytics/tools";
+import { cardFrom, type CardFrom } from "@/components/live/follow";
 import { ToolCta } from "./ToolCta";
 import { Field, NumberInput, OversInput, PrimaryButton, SecondaryButton, Segmented, TextInput } from "./inputs";
 import { takeHandoff } from "./scorer/handoff";
@@ -177,7 +178,7 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
   const [resultEdited, setResultEdited] = useState(false);
   const [more, setMore] = useState(false);
   const [canShare, setCanShare] = useState(false);
-  const [fromLive, setFromLive] = useState(false);
+  const [fromLive, setFromLive] = useState<CardFrom | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const used = useRef(false);
   const reported = useRef(false);
@@ -192,17 +193,18 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
       } catch {
         setCanShare(false);
       }
-      // Arriving from the live scorer's "Make the result card": fill the card in (again after a reload, within the hour).
-      if (new URLSearchParams(window.location.search).get("from") === "live-scorer") {
+      // Arriving from "Make the result card" in the live scorer or on a live link: fill the card in (again after a reload, within the hour).
+      const from = cardFrom(window.location.search);
+      if (from) {
         const h = takeHandoff(Date.now());
         if (h) {
           setC(h);
           setBattedFirst("a");
           setResultEdited(h.result.trim() !== "");
           setMore(!!(h.potm || h.topScorer || h.bestBowler || h.venue));
-          setFromLive(true);
+          setFromLive(from);
           used.current = true;
-          trackTool("tool_used", TOOL, { from: "live_scorer" });
+          trackTool("tool_used", TOOL, { from: from.by === "scorer" ? "live_scorer" : "live_follow" });
         }
       }
     }, 0);
@@ -291,8 +293,8 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
 
   return (
     <>
-      {/* The promo is for people scoring by hand; someone who just came from the live scorer does not need it. */}
-      {!fromLive && (
+      {/* The promo is for people scoring by hand or following someone else's match; someone who just came from the live scorer does not need it. */}
+      {fromLive?.by !== "scorer" && (
         <Link
           href="/tools/cricket-live-scorer"
           className="press-tight mb-3 flex items-center gap-3 rounded-2xl border border-accent-200 bg-accent-50 px-4 py-3 hover:border-accent-400 transition-colors"
@@ -308,12 +310,25 @@ export function ScorecardMaker({ cta }: { cta: { label: string; href: string } }
         </Link>
       )}
       <div className="rounded-3xl border border-primary-200 bg-white p-4 sm:p-6 shadow-soft">
-        {fromLive && (
+        {fromLive?.by === "scorer" && (
           <p role="status" className="mb-4 rounded-2xl bg-accent-50 border border-accent-200 px-4 py-3 text-[14px] text-accent-800">
             Filled in from your live match. Check it, change anything you like, then download or share.{" "}
             <Link href="/tools/cricket-live-scorer" className="font-semibold underline underline-offset-2">
               Back to the scorer
             </Link>
+          </p>
+        )}
+        {fromLive?.by === "follower" && (
+          <p role="status" className="mb-4 rounded-2xl bg-accent-50 border border-accent-200 px-4 py-3 text-[14px] text-accent-800">
+            Filled in from the live score. Check it, change anything you like, then download or share.
+            {fromLive.code && (
+              <>
+                {" "}
+                <Link href={`/live/${fromLive.code}`} className="font-semibold underline underline-offset-2">
+                  Back to the live score
+                </Link>
+              </>
+            )}
           </p>
         )}
         <div className="grid lg:grid-cols-[1fr_360px] gap-5">

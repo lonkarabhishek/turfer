@@ -33,7 +33,7 @@ import { loadLinks, loadMatch, saveLink } from "./storage";
  */
 
 /** Why a link is not live, or why the last try to change it failed. Shown in the share sheet. */
-export type LiveFault = "offline" | "unavailable" | "limit" | "too_big" | "forbidden" | "gone" | "bad" | "not_off";
+export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "bad" | "not_off";
 
 /** The server takes one write per link every 500 ms; a send sooner after the last answer comes back slow. */
 const MIN_GAP_MS = 600;
@@ -78,7 +78,7 @@ export function retryDelay(fails: number): number {
 /** A write's answer: ok, a LiveError, or network when the request never got one. */
 export type Reply = { r: "ok" | LiveError | "network"; rev?: number };
 
-const ERRORS = new Set<string>(["stale", "slow", "forbidden", "gone", "limit", "too_big", "bad", "unavailable"] satisfies LiveError[]);
+const ERRORS = new Set<string>(["stale", "slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "unavailable"] satisfies LiveError[]);
 
 /** Read a PUT or DELETE answer. Anything that is not ours (a proxy's page, a 5xx without a body) counts as unavailable. */
 export function readReply(status: number, body: unknown): Reply {
@@ -120,11 +120,17 @@ export function handleResult(link: LiveLinkRecord, sent: number, reply: Reply, f
       return { ...step, wait: LIVE_SEND_EVERY_MS / 2, fails };
     case "forbidden":
     case "gone":
+      return { ...step, link: { ...link, on: false, stopped: reply.r }, fault: reply.r };
     case "limit":
     case "too_big":
+      // Once the server has taken a write it keeps showing it: stay on, so the link can still be turned off, but stop sending.
+      if (link.sentRev > 0) return { ...step, fault: reply.r, halt: true };
       return { ...step, link: { ...link, on: false, stopped: reply.r }, fault: reply.r };
     case "bad":
       return { ...step, fault: "bad", halt: true };
+    case "busy":
+      // The site-wide cap on new links, not this network's doing: retry like a 5xx, and say why.
+      return { ...step, wait: retryDelay(fails), fails: fails + 1, fault: "busy" };
     default:
       // network or unavailable.
       return { ...step, wait: retryDelay(fails), fails: fails + 1, offline: reply.r === "network" || !online };
@@ -189,6 +195,21 @@ export function linkUrl(code: string): string {
   return liveUrl(window.location.origin, code);
 }
 
+/**
+ * A game reminder's ?venue and ?from=game (which turns the live link
+ * on), and the query string without them: read once, so a reload in
+ * the middle of the match resumes it instead of offering a new one.
+ */
+export function readReminder(search: string): { venue: string; fromGame: boolean; rest: string } {
+  const q = new URLSearchParams(search);
+  const venue = (q.get("venue") ?? "").trim().slice(0, 48);
+  const fromGame = q.get("from") === "game";
+  q.delete("venue");
+  q.delete("from");
+  const rest = q.toString();
+  return { venue, fromGame, rest: rest ? `?${rest}` : "" };
+}
+
 /* ------------------------------------------------------------------ */
 /* The engine                                                          */
 /* ------------------------------------------------------------------ */
@@ -214,6 +235,8 @@ export type LiveSnapshot = { links: Record<string, LiveLinkRecord>; net: Record<
 type Run = LiveNet & {
   /** The page's own send is out. A flush may go alongside it. */
   busy: boolean;
+  /** Every PUT still out, the page's own and keepalive ones. A stop waits for them. */
+  out: Set<Promise<void>>;
   inFlightRev: number;
   lastStart: number;
   lastDone: number;
@@ -223,6 +246,8 @@ type Run = LiveNet & {
   /** shapeOf the latest local edit, and of the last match the server took. */
   shape: string | null;
   sentShape: string | null;
+  /** The match was deleted while stop() was under way: drop the record, do not keep it as off. */
+  removed: boolean;
 };
 
 const putBody = (link: LiveLinkRecord, match: unknown) => JSON.stringify({ secret: link.secret, match, rev: link.rev } satisfies LivePutBody);
@@ -241,7 +266,7 @@ export function createLiveSync(io: LiveIo) {
   const run = (id: string): Run => {
     let r = runs.get(id);
     if (!r) {
-      r = { offline: false, halted: false, fault: null, mode: null, busy: false, inFlightRev: 0, lastStart: 0, lastDone: 0, retryAt: 0, fails: 0, timer: null, shape: null, sentShape: null };
+      r = { offline: false, halted: false, fault: null, mode: null, busy: false, out: new Set(), inFlightRev: 0, lastStart: 0, lastDone: 0, retryAt: 0, fails: 0, timer: null, shape: null, sentShape: null, removed: false };
       runs.set(id, r);
     }
     return r;
@@ -279,10 +304,10 @@ export function createLiveSync(io: LiveIo) {
       return;
     }
     const match = io.match(id);
-    if (match) void put(id, link, putBody(link, match), false);
+    if (match) put(id, link, putBody(link, match), false);
   };
 
-  const put = async (id: string, link: LiveLinkRecord, body: string, keepalive: boolean) => {
+  const put = (id: string, link: LiveLinkRecord, body: string, keepalive: boolean) => {
     const r = run(id);
     const own = !r.busy;
     const shape = r.shape;
@@ -293,23 +318,30 @@ export function createLiveSync(io: LiveIo) {
     }
     if (keepalive) keepaliveOut = true;
     io.emit();
-    const reply = await call("PUT", link.code, body, keepalive);
-    if (keepalive) keepaliveOut = false;
-    if (own) {
-      r.busy = false;
-      r.inFlightRev = 0;
-      r.lastDone = io.now();
-    }
-    settle(id, link, shape, reply);
+    const out = call("PUT", link.code, body, keepalive).then((reply) => {
+      if (keepalive) keepaliveOut = false;
+      if (own) {
+        r.busy = false;
+        r.inFlightRev = 0;
+        r.lastDone = io.now();
+      }
+      r.out.delete(out);
+      settle(id, link, shape, reply);
+    });
+    r.out.add(out);
   };
 
   /** shape: what the send carried. It counts as sent only once the server has it, so a failed innings end stays urgent. */
   const settle = (id: string, sent: LiveLinkRecord, shape: string | null, reply: Reply) => {
     const r = run(id);
     const link = linkOf(id);
-    // Turned off, moved to another match or replaced while the send was out: the answer is not this link's.
-    if (!link || link.code !== sent.code || link.secret !== sent.secret) {
+    // Turned off (here or in another tab), moved to another match or replaced while the send was out: the answer is
+    // not this link's. A link turned on again meanwhile has its first send waiting for this one to finish.
+    if (!link || link.code !== sent.code || link.secret !== sent.secret || link.stopped === "off") {
+      // A stop on its way, and the server says the link is off or not ours already: nothing left to tell it.
+      if (link && pendingStop(link) && link.code === sent.code && (reply.r === "gone" || reply.r === "forbidden")) io.saveLink(id, { ...link, on: false });
       io.emit();
+      pump(id);
       return;
     }
     const step = handleResult(link, sent.rev, reply, r.fails, io.online());
@@ -324,15 +356,21 @@ export function createLiveSync(io: LiveIo) {
     pump(id);
   };
 
-  /** A stop that has not reached the server yet (the match was deleted while live). Tried again on wake. */
+  /** On, with a stop on its way: remove() took the match while its link was on. */
+  const pendingStop = (link: LiveLinkRecord | null): boolean => !!link?.on && link.stopped === "off";
+
+  /** A stop that has not reached the server yet (remove()). Tried again on wake. */
   const finishStop = async (id: string, keepalive: boolean) => {
     const r = run(id);
-    const link = linkOf(id);
-    if (r.mode || !link?.on || link.stopped !== "off") return;
+    if (r.mode || !pendingStop(linkOf(id))) return;
     r.mode = "stopping";
-    const reply = await call("DELETE", link.code, stopBody(link), keepalive);
+    cancel(r);
+    // As in stop().
+    while (r.out.size) await Promise.allSettled([...r.out]);
+    const link = linkOf(id);
+    const reply = link && pendingStop(link) ? await call("DELETE", link.code, stopBody(link), keepalive) : null;
     r.mode = null;
-    if (stopTook(reply) && linkOf(id)?.code === link.code) io.saveLink(id, null);
+    if (link && reply && stopTook(reply) && linkOf(id)?.code === link.code) io.saveLink(id, null);
     io.emit();
   };
 
@@ -346,7 +384,7 @@ export function createLiveSync(io: LiveIo) {
     const body = putBody(link, match);
     if (!keepaliveAllowed({ link, inFlightRev: r.inFlightRev, busy: keepaliveOut, bytes: byteLength(body), unloading })) return;
     cancel(r);
-    void put(id, link, body, true);
+    put(id, link, body, true);
   };
 
   return {
@@ -388,17 +426,29 @@ export function createLiveSync(io: LiveIo) {
     /** Turn the link off. Resolves false if the server could not be told; the link then stays on. */
     async stop(id: string): Promise<boolean> {
       const r = run(id);
-      const link = linkOf(id);
-      if (!sendable(link)) return true;
+      if (!sendable(linkOf(id))) return true;
       if (r.mode) return false;
       r.mode = "stopping";
       r.fault = null;
+      r.removed = false;
       cancel(r);
+      // Saved as a pending stop first: if the tab is killed during the wait below (up to a send timeout on a bad
+      // network), the next visit's wake() still sends the DELETE instead of carrying on with the link.
+      const before = linkOf(id)!;
+      io.saveLink(id, { ...before, stopped: "off" });
       io.emit();
-      const reply = await call("DELETE", link.code, stopBody(link), false);
+      // After every PUT still out (mode holds new ones back): a PUT that landed after the DELETE could make the link again.
+      while (r.out.size) await Promise.allSettled([...r.out]);
+      const link = linkOf(id);
+      // Off here already: a PUT that was out came back gone or forbidden, which counts as off just the same.
+      const reply: Reply = link?.on ? await call("DELETE", link.code, stopBody(link), false) : { r: "gone" };
       const done = stopTook(reply);
       const cur = linkOf(id);
-      if (done && cur?.code === link.code) io.saveLink(id, { ...cur, on: false, stopped: "off" });
+      if (link && cur?.code === link.code) {
+        // The match was deleted meanwhile: its record goes with it. Not through: back on, as it was, to try again.
+        if (done) io.saveLink(id, r.removed ? null : { ...cur, on: false, stopped: "off" });
+        else if (!r.removed) io.saveLink(id, { ...cur, on: true, stopped: undefined });
+      }
       Object.assign(r, done ? { mode: null, fault: null, halted: false, offline: false, fails: 0 } : { mode: null, fault: "not_off" });
       io.emit();
       if (!done) pump(id);
@@ -418,20 +468,20 @@ export function createLiveSync(io: LiveIo) {
     },
 
     /**
-     * The match is being deleted (call before it goes from storage).
-     * Live: turn its link off, and drop the record once the server has
-     * it. Done: the final card stays up; send what is unsent and drop it.
+     * The match is being deleted, or pushed out of storage. Live or done,
+     * nothing here could turn its link off afterwards, so it goes off
+     * too, and the record goes once the server has the stop.
      */
-    remove(id: string, matchLive: boolean) {
+    remove(id: string) {
       cancel(run(id));
       const link = linkOf(id);
       if (!link) return;
-      if (sendable(link) && matchLive) {
+      // Off already: nothing to stop. A stop already on its way is left for finishStop, or for stop() (which then drops the record).
+      if (!link.on) io.saveLink(id, null);
+      else if (link.stopped === "off") run(id).removed = true;
+      else if (!link.stopped) {
         io.saveLink(id, { ...link, stopped: "off" });
         void finishStop(id, true);
-      } else if (!link.on || !link.stopped) {
-        if (sendable(link)) flush(id);
-        io.saveLink(id, null);
       }
       io.emit();
     },
@@ -449,7 +499,7 @@ export function createLiveSync(io: LiveIo) {
     /** Mount, online, pageshow, visible: send what waits at once, and finish stops that did not get through. */
     wake() {
       for (const [id, link] of Object.entries(io.links())) {
-        if (link.on && link.stopped === "off") void finishStop(id, false);
+        if (pendingStop(link)) void finishStop(id, false);
         else if (sendable(link) && link.rev > link.sentRev) pump(id, true);
       }
       io.emit();
@@ -551,6 +601,6 @@ export function useLiveSync(enabled: boolean) {
     stop: async (id: string): Promise<boolean> => (ref.current ? ref.current.stop(id) : false),
     move: (from: string, to: string): boolean => ref.current?.move(from, to) ?? false,
     flush: (id: string) => ref.current?.flush(id),
-    remove: (id: string, matchLive: boolean) => ref.current?.remove(id, matchLive),
+    remove: (id: string) => ref.current?.remove(id),
   };
 }

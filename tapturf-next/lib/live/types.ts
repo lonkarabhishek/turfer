@@ -56,6 +56,8 @@ export type LiveNewResponse = { code: string } | { error: LiveError };
 
 /** PUT /api/live/<code> body. match is the scorer's whole Match. */
 export type LivePutBody = { secret: string; match: unknown; rev: number };
+/** The highest rev a PUT may carry (2^52), so the +1 a stop or an expiry adds stays a safe integer. Date.now() is far below it. */
+export const LIVE_MAX_REV = 2 ** 52;
 /** DELETE /api/live/<code> body. */
 export type LiveStopBody = { secret: string };
 
@@ -66,12 +68,13 @@ export type LiveStopBody = { secret: string };
  * slow (429)      retry after LIVE_SEND_EVERY_MS / 2.
  * forbidden (403) this browser's secret is not the link's: turn the link off locally, offer a new one.
  * gone (410)      the link was turned off or expired: turn it off locally.
- * limit (429)     too many links from this network today, or this link has hit its write cap: stop, say so.
+ * limit (429)     too many new links from this network (8 an hour, 30 a day), or this link has hit its write cap: stop, say so.
+ * busy (503)      too many new links site-wide this hour (not this network's doing): back off and retry, keep the link on.
  * too_big (413)   the match is too long to share live: stop, say so.
  * bad (400)       malformed request: stop, report.
- * unavailable (503) not configured or the database is down: back off and retry.
+ * unavailable (503) not configured, a wrong write key or the database is down: back off and retry.
  */
-export type LiveError = "stale" | "slow" | "forbidden" | "gone" | "limit" | "too_big" | "bad" | "unavailable";
+export type LiveError = "stale" | "slow" | "forbidden" | "gone" | "limit" | "busy" | "too_big" | "bad" | "unavailable";
 
 export type LivePutResponse = { ok: true; rev: number } | { error: LiveError; rev?: number };
 

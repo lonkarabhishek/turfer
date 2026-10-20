@@ -12,7 +12,7 @@ import { ScoringScreen, TOOL } from "./scorer/ScoringScreen";
 import type { ShareLive } from "./scorer/Sheets";
 import { deleteMatch, loadIndex, loadMatch, metaOf, saveMatch, setCurrent, type MatchMeta, type ScorerIndex } from "./scorer/storage";
 import { writeHandoff } from "./scorer/handoff";
-import { canKeepLink, linkUrl, shortUrl, useLiveSync, type LiveInfo } from "./scorer/live";
+import { canKeepLink, linkUrl, readReminder, shortUrl, useLiveSync, type LiveInfo } from "./scorer/live";
 
 /** A live match touched within this long is reopened straight into scoring on reload. */
 const RESUME_MS = 12 * 60 * 60 * 1000;
@@ -47,7 +47,8 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const [now, setNow] = useState(0);
   /** From a game reminder (?venue, ?from=game): start a new match there rather than resume. */
   const [prefill, setPrefill] = useState({ venue: "", live: false });
-  const [copied, setCopied] = useState(false);
+  /** The link last copied from the page card: one turned on since shows "Copy link" again. */
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const live = useLiveSync(liveLinks);
   const pushed = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -73,12 +74,19 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
   useEffect(() => {
     // Read here, not with useSearchParams: the page is static.
-    const q = new URLSearchParams(window.location.search);
-    const venue = (q.get("venue") ?? "").trim().slice(0, 48);
-    const fromGame = q.get("from") === "game";
+    const { venue, fromGame, rest } = readReminder(window.location.search);
     trackTool("tool_opened", TOOL, fromGame ? { from: "game" } : {});
     // Restore after mount so the server and first client render agree.
     const t = setTimeout(() => {
+      // Take the reminder out of the address, so a reload mid-match resumes it. Here, not above, so Strict Mode's
+      // second run still reads it; and before openScorer, whose pushState would carry it on.
+      if (venue || fromGame) {
+        try {
+          window.history.replaceState(window.history.state, "", window.location.pathname + rest + window.location.hash);
+        } catch {
+          /* history not available: a reload just offers the new match again */
+        }
+      }
       const ix = loadIndex();
       const t0 = Date.now();
       setNow(t0);
@@ -138,7 +146,10 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
   const persist = (m: Match, v?: MatchView) => {
     const view = v ?? derive(m);
-    setIndex(saveMatch(m, metaOf(m, view, Date.now())));
+    const saved = saveMatch(m, metaOf(m, view, Date.now()));
+    setIndex(saved.index);
+    // Old matches dropped to make room can no longer be opened to turn their links off: those go off now.
+    for (const id of saved.dropped) live.remove(id);
     // After the save: a live send reads the match from storage.
     live.changed(m.id, view);
   };
@@ -187,10 +198,10 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   };
 
   const remove = (meta: MatchMeta) => {
-    const stopsLink = liveLinks && meta.status === "live" && live.info(meta.id).on;
+    // Live or done: once the match is gone nothing here could turn its link off.
+    const stopsLink = liveLinks && live.info(meta.id).on;
     if (!window.confirm(`Delete ${meta.teamA} vs ${meta.teamB}? This cannot be undone.${stopsLink ? " Its live link turns off too." : ""}`)) return;
-    // While the match is still in storage: a finished one's last ball may still need sending.
-    live.remove(meta.id, meta.status === "live");
+    live.remove(meta.id);
     setIndex(deleteMatch(meta.id));
     if (match?.id === meta.id) setMatch(null);
   };
@@ -223,15 +234,16 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const others = index.list.filter((m) => !(inPlay && m.id === match?.id));
   const cardLink = liveLinks && match ? live.info(match.id) : null;
   const cardUrl = cardLink ? urlOf(cardLink) : null;
+  const copied = cardUrl !== null && copiedUrl === cardUrl;
   const keepFrom = view && canKeepLink(cardLink?.link, now) ? `${view.setup.teamA} vs ${view.setup.teamB}` : null;
 
   const copyLink = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
+      setCopiedUrl(url);
       trackTool("tool_cta_clicked", TOOL, { href: "share", how: "live_copy", status: view?.status ?? "none" });
     } catch {
-      setCopied(false);
+      setCopiedUrl(null);
     }
   };
 

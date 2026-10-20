@@ -11,7 +11,7 @@ import { LIVE_CODE_RE, LIVE_LINKS_KEY, LIVE_SECRET_RE, type LiveLinkRecord, type
 
 const INDEX = "tapturf_scorer_v1";
 const matchKey = (id: string) => `tapturf_scorer_m_${id}`;
-const MAX_SAVED = 25;
+export const MAX_SAVED = 25;
 
 export type MatchMeta = {
   id: string;
@@ -61,15 +61,15 @@ export function metaOf(m: Match, view: MatchView, now: number): MatchMeta {
   return { id: m.id, teamA: view.setup.teamA, teamB: view.setup.teamB, headline: view.headline, status: view.status, createdAt: m.createdAt, updatedAt: now };
 }
 
-/** Save a match and make it the current one. Returns the new index. */
-export function saveMatch(m: Match, meta: MatchMeta): ScorerIndex {
+/** Save a match and make it the current one. Returns the new index, and the ids of old matches dropped to make room. */
+export function saveMatch(m: Match, meta: MatchMeta): { index: ScorerIndex; dropped: string[] } {
   const ix = loadIndex();
   let list = [meta, ...ix.list.filter((x) => x.id !== m.id)];
   // Keep the newest few; drop the oldest beyond that.
-  if (list.length > MAX_SAVED) {
-    const drop = list.slice(MAX_SAVED);
+  const dropped = list.slice(MAX_SAVED).map((d) => d.id);
+  if (dropped.length) {
     list = list.slice(0, MAX_SAVED);
-    for (const d of drop) removeKey(matchKey(d.id));
+    for (const id of dropped) removeKey(matchKey(id));
   }
   const next: ScorerIndex = { v: 1, current: m.id, list };
   try {
@@ -78,7 +78,7 @@ export function saveMatch(m: Match, meta: MatchMeta): ScorerIndex {
     /* storage full or blocked: the match still works for this visit */
   }
   writeIndex(next);
-  return next;
+  return { index: next, dropped };
 }
 
 export function setCurrent(id: string | null): ScorerIndex {

@@ -7,7 +7,8 @@ import { LIVE_CODE_RE } from "./types";
  * mints codes, so a code whose tag does not match was made up, and the
  * routes and the page refuse it without a cache or database lookup. A
  * guess passes about 1 time in 1.7 million (36^4), so scanning random
- * codes cannot turn into one database read per code.
+ * codes cannot turn into one database read per code. Rotating the key
+ * changes every tag, so it ends every existing link.
  * Pure, no "@/" imports, tested in codes.test.ts (npm run test:live).
  */
 

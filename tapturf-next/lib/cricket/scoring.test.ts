@@ -11,6 +11,7 @@ import {
   describeBall,
   newMatch,
   newPlayerId,
+  publicMatch,
   restoreMatch,
   sanitizeMatch,
   shareText,
@@ -1266,4 +1267,120 @@ test("sanitizeMatch: junk anywhere never throws, derives cleanly and reads back 
   }
   assert.ok(checked >= 30, `${checked} junked matches checked`);
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});
+
+/* ------------------------------------------------------------------ */
+/* publicMatch: what the live link serves                              */
+/* ------------------------------------------------------------------ */
+
+/** Every player name a match carries, with the side and id it names. The engine's setBatter and setBowler ids start with their side. */
+function namesIn(m: Match): { side: Side; id: string; name: string }[] {
+  const out = (["a", "b"] as const).flatMap((side) => m.setup.players[side].map((p) => ({ side, id: p.id, name: p.name })));
+  for (const e of m.events) {
+    if (e.type === "addPlayer" || e.type === "renamePlayer") out.push({ side: e.team, id: e.player, name: e.name });
+    else if ((e.type === "setBatter" || e.type === "setBowler") && e.name !== undefined) out.push({ side: e.player[0] as Side, id: e.player, name: e.name });
+  }
+  return out;
+}
+
+/** Names a match carries that are not that player's name now: what renames leave behind. */
+function earlierNames(m: Match): string[] {
+  const v = derive(m);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 40);
+  return namesIn(m)
+    .filter((n) => {
+      const now = v.teams[n.side].players.find((p) => p.id === n.id)?.name;
+      return now !== undefined && clean(n.name) !== now;
+    })
+    .map((n) => `${n.side}:${n.id} ${n.name}`);
+}
+
+test("publicMatch: no earlier names, and the match reads the same", () => {
+  let renamed = 0;
+  for (let seed = 1; seed <= 150; seed++) {
+    const m = anyMatch(seed, new Map());
+    const before = JSON.stringify(m);
+    const p = publicMatch(m);
+    assert.equal(JSON.stringify(m), before, `seed ${seed} scorer's match untouched`);
+    if (earlierNames(m).length) renamed++;
+    else assert.deepEqual(p, m, `seed ${seed} nothing to fold`);
+    assert.deepEqual(earlierNames(p), [], `seed ${seed}`);
+    assert.deepEqual(derive(p), derive(m), `seed ${seed} derive`);
+    assert.deepEqual(sanitizeMatch(wire(p)), p, `seed ${seed} reads back the same`);
+    assert.deepEqual(publicMatch(p), p, `seed ${seed} once is enough`);
+    // Same events in the same order, so undo steps through both alike.
+    assert.deepEqual(
+      p.events.map((e) => e.type),
+      m.events.map((e) => e.type),
+    );
+  }
+  assert.ok(renamed >= 50, `${renamed} matches with an earlier name`);
+  // Nothing renamed, nothing to fold: the match comes back as it was.
+  for (let seed = 1; seed <= 30; seed++) {
+    const m = randomMatch(seed, { overs: 3 + (seed % 5), playersPerSide: 4 + (seed % 7) });
+    assert.deepEqual(publicMatch(m), m, `soak seed ${seed}`);
+  }
+  assert.deepEqual(publicMatch(finished()), finished());
+});
+
+test("publicMatch: players renamed twice leave no earlier name in what the live link serves", () => {
+  const rename = (team: Side, player: string, name: string): MatchEvent => ({ type: "renamePlayer", team, player, name });
+  // Rahul Sharma is in the roster from the start, Vikram Joshi walks in to bat, Sunil Gavaskar is added and bats in the chase, Imran Khan walks in to bowl it.
+  let m = make({ overs: 1, playersPerSide: 3, players: { a: ["Rahul Sharma", "Karan"], b: ["Sameer", "Vikas"] } });
+  m = run(m, bat("a1"), bat("a2"), bowl("b1"), dot(), rename("a", "a1", "Rohit Verma"), out("bowled"), bat("a3", undefined, "Vikram Joshi"));
+  m = run(m, { type: "addPlayer", team: "b", player: "b3", name: "Sunil Gavaskar" }, rename("a", "a3", "Vicky"), ...times(4, dot));
+  m = run(m, bat("b1"), bat("b3"), { type: "setBowler", player: "a4", name: "Imran Khan" }, ball(1));
+  m = run(m, rename("b", "b3", "Sunny G"), rename("a", "a4", "Ishan"), rename("a", "a1", "Player 1"), rename("a", "a3", "Player 3"), rename("a", "a4", "Player 4"), rename("b", "b3", "Player 9"));
+  const v = derive(m);
+  assert.equal(v.innings.length, 2);
+  assert.deepEqual(
+    v.innings[0].batters.map((b) => b.name),
+    ["Player 1", "Karan", "Player 3"],
+  );
+  assert.equal(v.status, "done");
+  assert.deepEqual(
+    v.innings[1].batters.map((b) => b.name),
+    ["Sameer", "Player 9"],
+  );
+  assert.deepEqual(
+    v.innings[1].bowlers.map((b) => b.name),
+    ["Player 4"],
+  );
+
+  const sent = publicMatch(sanitizeMatch(wire(m))!);
+  const json = JSON.stringify(sent);
+  for (const old of ["Rahul Sharma", "Rohit Verma", "Vikram Joshi", "Vicky", "Sunil Gavaskar", "Sunny G", "Imran Khan", "Ishan"]) assert.ok(!json.includes(old), `${old} is still in the live copy`);
+  assert.ok(JSON.stringify(m).includes("Rahul Sharma"), "the scorer's own match keeps its history");
+  assert.deepEqual(derive(sent), v);
+  assert.equal(derive(sent).lastAction, "Renamed to Player 9");
+  assert.deepEqual(sent.setup.players.a, [
+    { id: "a1", name: "Player 1" },
+    { id: "a2", name: "Karan" },
+  ]);
+  assert.deepEqual(
+    sent.events.filter((e) => e.type === "renamePlayer").map((e) => `${e.player} ${e.name}`),
+    ["a1 Player 1", "a3 Player 3", "b3 Player 9", "a4 Player 4", "a1 Player 1", "a3 Player 3", "a4 Player 4", "b3 Player 9"],
+  );
+
+  // A hand-made match can bring in a batter whose id has the other side's letter. fold() files the name under
+  // the batting side, so it is that side's player, not the bowler with the same id, and nothing changes.
+  const odd = run(make(), bat("a1"), bat("b1", undefined, "Zara Ali"), bowl("b2"), ball(1));
+  assert.deepEqual(publicMatch(odd), odd);
+  assert.equal(derive(odd).teams.b.players[0].name, "Sameer");
+
+  // A name cut at a space keeps that space in the roster: it already reads as the latest name, so it stays as it is.
+  const long = make({ players: { a: ["Very Long Name Very Long Name Very Long Name"], b: [] } });
+  assert.equal(long.setup.players.a[0].name.length, 40);
+  assert.deepEqual(publicMatch(long), long);
+
+  // A blank rename is refused, and stays refused: it is not filled in with the latest name.
+  const blank: Match = { ...start(), events: [...start().events, rename("a", "a1", "   ")] };
+  assert.equal(derive(blank).ignored, 1);
+  assert.deepEqual(derive(publicMatch(blank)), derive(blank));
+
+  // An addPlayer for a player already in the team (check() refuses it) says the latest name too, and so does its lastAction.
+  const again: Match = { ...start(), events: [...start().events, rename("a", "a1", "Player 1"), { type: "addPlayer", team: "a", player: "a1", name: "Amit Again" }] };
+  assert.equal(derive(again).lastAction, "Amit Again added");
+  assert.ok(!JSON.stringify(publicMatch(again)).includes("Amit"));
+  assert.deepEqual(derive(publicMatch(again)), { ...derive(again), lastAction: "Player 1 added" });
 });

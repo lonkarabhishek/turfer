@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Copy, Loader2, Share2 } from "lucide-react";
@@ -10,7 +10,7 @@ import { CONTACT_EMAIL } from "@/lib/contact";
 import { liveUrl, type LiveGetResponse } from "@/lib/live/types";
 import { MatchTabs, ScoreHeader } from "@/components/tools/scorer/MatchHeader";
 import { writeHandoff } from "@/components/tools/scorer/handoff";
-import { FRESH_MS, freshness, startPolling, type FollowStatus } from "./follow";
+import { FRESH_MS, clockNow, freshness, joinClock, pauseOf, resultCardHref, setClock, startPolling, type FollowStatus, type Pause } from "./follow";
 
 const TOOL = "live_follow";
 
@@ -29,23 +29,23 @@ function toShown(r: LiveGetResponse): Shown | null {
  * a new update lands. Starts at the page's render time, so the server
  * and the first client render agree.
  */
-function useServerNow(serverTime: () => number, serverNow: number, every: number, since: number): number {
+function useServerNow(serverNow: number, every: number, since: number): number {
   const [now, setNow] = useState(serverNow);
   useEffect(() => {
-    const tick = () => setNow(serverTime());
+    const tick = () => setNow(clockNow());
     const first = setTimeout(tick, 0);
     const t = setInterval(tick, every);
     return () => {
       clearTimeout(first);
       clearInterval(t);
     };
-  }, [serverTime, every, since]);
+  }, [every, since]);
   return now;
 }
 
 /** The red LIVE pill by the team names, only while updates keep coming. */
-function LiveBadge({ updatedAt, serverTime, serverNow }: { updatedAt: number; serverTime: () => number; serverNow: number }) {
-  const now = useServerNow(serverTime, serverNow, 15_000, updatedAt);
+function LiveBadge({ updatedAt, serverNow }: { updatedAt: number; serverNow: number }) {
+  const now = useServerNow(serverNow, 15_000, updatedAt);
   if (now - updatedAt >= FRESH_MS) return null;
   return (
     <span className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full bg-red-600 text-[10px] font-extrabold tracking-wide">
@@ -56,9 +56,9 @@ function LiveBadge({ updatedAt, serverTime, serverNow }: { updatedAt: number; se
 }
 
 /** How old the score is. Ticks on its own, so the rest of the page does not re-render every few seconds. */
-function Freshness({ status, updatedAt, serverTime, serverNow }: { status: "live" | "done"; updatedAt: number; serverTime: () => number; serverNow: number }) {
-  const now = useServerNow(serverTime, serverNow, 5_000, updatedAt);
-  const f = freshness(status, Math.max(0, now - updatedAt));
+function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "done"; updatedAt: number; pause: Pause; serverNow: number }) {
+  const now = useServerNow(serverNow, 5_000, updatedAt);
+  const f = freshness(status, Math.max(0, now - updatedAt), pause);
   if (f.tone === "quiet" || f.tone === "stopped") {
     return <p className={`rounded-2xl border px-3 py-2 text-[14px] ${f.tone === "quiet" ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-primary-50 border-primary-200 text-primary-700"}`}>{f.text}</p>;
   }
@@ -84,13 +84,6 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   const [trouble, setTrouble] = useState(false);
   const [copied, setCopied] = useState(false);
   const latest = useRef(shown);
-  // Server time minus this phone's. Set from the page's render time on
-  // first use, then from every poll's Date and Age headers.
-  const skew = useRef<number | null>(null);
-  const serverTime = useCallback(() => {
-    if (skew.current === null) skew.current = serverNow - Date.now();
-    return Date.now() + skew.current;
-  }, [serverNow]);
 
   const openedAs = initial?.status ?? "unavailable";
   useEffect(() => {
@@ -98,8 +91,10 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   }, [openedAs]);
 
   useEffect(() => {
-    // Set the clock while the page's render time is still close.
-    serverTime();
+    // Set the clock while the page's render time is still close. A page
+    // mounted again from the router cache (Back) keeps the clock it has
+    // and polls at once, so an old score is never shown as fresh.
+    const restored = joinClock(serverNow);
     const poller = startPolling({
       // No query string: every follower must share the one CDN copy.
       get: (signal) => fetch(`/api/live/${code}`, { cache: "no-store", signal }),
@@ -112,13 +107,12 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         return true;
       },
       trouble: setTrouble,
-      clock: (at) => {
-        skew.current = at - Date.now();
-      },
-      serverTime,
+      clock: setClock,
+      serverTime: clockNow,
       hidden: () => document.visibilityState === "hidden",
     });
     const wake = () => poller.wake();
+    if (restored) wake();
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("focus", wake);
     window.addEventListener("online", wake);
@@ -130,7 +124,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
       window.removeEventListener("online", wake);
       window.removeEventListener("pageshow", wake);
     };
-  }, [code, serverTime]);
+  }, [code, serverNow]);
 
   const match = shown?.match ?? null;
   const view = useMemo(() => (match ? derive(match) : null), [match]);
@@ -163,7 +157,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   const resultCard = (v: MatchView) => {
     writeHandoff(toScorecard(v), Date.now());
     trackTool("tool_cta_clicked", TOOL, { href: "/tools/cricket-scorecard-maker", status: v.status });
-    router.push("/tools/cricket-scorecard-maker?from=live-scorer");
+    router.push(resultCardHref(code));
   };
 
   const shareBar = (
@@ -206,10 +200,10 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
           className="sm:rounded-3xl sm:overflow-hidden"
           venue
           onShare={share}
-          badge={status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverTime={serverTime} serverNow={serverNow} /> : undefined}
+          badge={status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} /> : undefined}
         />
         <div className="px-3 py-2.5 sm:px-1 space-y-2">
-          {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} serverTime={serverTime} serverNow={serverNow} />}
+          {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pauseOf(view)} serverNow={serverNow} />}
           {trouble && (
             <p role="status" className="text-[13px] font-semibold text-red-700">
               Can&rsquo;t get the latest score. Trying again.

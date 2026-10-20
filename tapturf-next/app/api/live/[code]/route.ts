@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { derive, sanitizeMatch } from "@/lib/cricket/scoring";
+import { sanitizeMatch } from "@/lib/cricket/scoring";
 import { verifyLiveCode } from "@/lib/live/codes";
 import {
   createLiveLimiter,
   getLive,
   liveHttpStatus,
   liveIpHash,
+  liveMatchToStore,
   liveResult,
   liveWriteClient,
   liveWriteKey,
@@ -15,7 +16,7 @@ import {
   readLiveBody,
   type LiveRow,
 } from "@/lib/live/server";
-import { LIVE_MAX_BODY_BYTES, LIVE_MAX_MATCH_CHARS, type LiveError, type LiveGetResponse } from "@/lib/live/types";
+import { LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib/live/types";
 
 // One live scorecard link (lib/live/types.ts has the whole flow).
 //   GET    -> LiveGetResponse, what followers poll. Served by the CDN and
@@ -85,11 +86,11 @@ export async function PUT(req: Request, { params }: Ctx) {
   if ("error" in read) return reply(read.error);
   const body = parsePutBody(read.body);
   if (!body) return reply("bad");
-  // Rebuilt from a whitelist: only what the engine makes is stored and
-  // served, never the client's objects.
-  const match = sanitizeMatch(body.match);
-  if (!match) return reply("bad");
-  if (JSON.stringify(match).length > LIVE_MAX_MATCH_CHARS) return reply("too_big");
+  // Rebuilt from a whitelist with names folded to their latest values,
+  // so only what the engine makes is stored and served, and a renamed
+  // player is not served under the old name, whichever client sent it.
+  const store = liveMatchToStore(body.match);
+  if ("error" in store) return reply(store.error);
 
   let data: unknown;
   try {
@@ -97,8 +98,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       p_key: key,
       p_code: code,
       p_secret: body.secret,
-      p_match: match,
-      p_status: derive(match).status,
+      p_match: store.match,
+      p_status: store.status,
       p_rev: body.rev,
       p_ip_hash: ipHash,
     });
@@ -110,7 +111,10 @@ export async function PUT(req: Request, { params }: Ctx) {
   }
   const out = (data && typeof data === "object" ? data : {}) as { r?: unknown; rev?: unknown };
   const r = liveResult(out.r);
+  // unavailable here is a wrong write key or an answer we do not know;
+  // busy is the site-wide cap on new links. Both are worth a look.
   if (r === "unavailable") console.warn("live: unexpected put result", code, data);
+  if (r === "busy") console.warn("live: site-wide new link cap reached", code);
   const rev = Number.isSafeInteger(out.rev) ? (out.rev as number) : undefined;
   if (r === "ok") {
     purgeLive(code);

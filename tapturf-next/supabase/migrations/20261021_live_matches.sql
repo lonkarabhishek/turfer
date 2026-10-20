@@ -19,8 +19,10 @@
 -- cache holds until the scorer's next write purges it, so reads per
 -- match follow the scorer's writes, not the number of people watching.
 -- Writes are bounded here as well as in the routes: one per 500 ms per
--- link, 4000 per link, 36 hours per link, 200 KB per match, and new
--- links per network and per hour (see live_match_put).
+-- link, 4000 per link, 36 hours per link, 250 KB per match, and new
+-- links: 8 an hour and 30 a day per network, 200 an hour site-wide (see
+-- live_match_put). 30 a day rather than fewer on purpose: a carrier's
+-- NAT puts a whole town's phones behind a few addresses.
 --
 -- Access: RLS is on with no policies, so the table is reachable only
 -- through the functions below.
@@ -38,7 +40,8 @@ create table if not exists public.live_matches (
   -- Accepted writes, for the per-link cap.
   writes integer not null default 0,
   -- sha256 of the write key and the client's network (the /64 for
-  -- IPv6), for the create limits. Cleared after 2 days.
+  -- IPv6), for the create limits. The hourly job clears it at 47 hours,
+  -- so it is never kept past 2 days.
   ip_hash text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -50,12 +53,19 @@ revoke all on table public.live_matches from anon, authenticated;
 create index if not exists live_matches_created_idx on public.live_matches (created_at);
 create index if not exists live_matches_ip_created_idx on public.live_matches (ip_hash, created_at);
 create index if not exists live_matches_updated_idx on public.live_matches (updated_at) where match is not null;
+-- For the hourly hash clearing: only rows still holding a hash, so the
+-- scan stays at about two days of links however many rows pile up.
+create index if not exists live_matches_iphash_created_idx on public.live_matches (created_at) where ip_hash is not null;
 
 -- The routes' write key, in the private table from
 -- 20260930_revalidate_secret_check.sql. Copy it into Vercel as
 -- LIVE_WRITE_KEY (never NEXT_PUBLIC):
 --   select value from private.app_secrets where name = 'live_write';
--- Rotate by updating the row and the env var together.
+-- Rotate by updating the row and the env var together. Rotating ends
+-- every existing live link: code tags are HMACs of this key, so old
+-- /live/<code> links 404 (the CDN keeps that a day) and their scorers
+-- get 'gone'. Until the redeploy picks up the new env var, writes answer
+-- 'unavailable' and scorers retry. Rotate when no match is live.
 insert into private.app_secrets (name, value)
 values ('live_write', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
 on conflict (name) do nothing;
@@ -65,8 +75,10 @@ on conflict (name) do nothing;
 -- it). r is one of:
 --   ok, stale (rev not newer), slow (under 500 ms since the last write),
 --   forbidden (wrong secret), gone (stopped or expired), limit (link or
---   network caps), too_big, bad.
--- The first send for a code creates the row.
+--   network caps), busy (the site-wide cap on new links), too_big, bad,
+--   unavailable (wrong write key: the routes' env var is out of step).
+-- The first send for a code creates the row. rev is capped at 2^52 so
+-- the +1 of a stop or an expiry stays a safe integer in JavaScript.
 create or replace function public.live_match_put(
   p_key text,
   p_code text,
@@ -84,17 +96,23 @@ as $$
 declare
   v_hash bytea;
   v_rev bigint;
+  v_marker boolean;
   r public.live_matches;
 begin
+  -- The key on its own, first: a wrong one is the server's mistake (a
+  -- rotation half done), so the scorer backs off and retries instead of
+  -- giving up on a request it cannot fix.
+  if p_key is null
+     or p_key is distinct from (select s.value from private.app_secrets s where s.name = 'live_write') then
+    return jsonb_build_object('r', 'unavailable');
+  end if;
   -- Every null is spelled out: a null comparison would make the whole
   -- condition null, and plpgsql treats that as false.
-  if p_key is null
-     or p_key is distinct from (select s.value from private.app_secrets s where s.name = 'live_write')
-     or p_code is null or p_code !~ '^[a-z0-9]{12}$'
+  if p_code is null or p_code !~ '^[a-z0-9]{12}$'
      or p_secret is null or p_secret !~ '^[0-9a-f]{64}$'
      or p_match is null or jsonb_typeof(p_match) <> 'object'
      or p_status is null or p_status not in ('live', 'done')
-     or p_rev is null or p_rev <= 0
+     or p_rev is null or p_rev <= 0 or p_rev > 4503599627370496
      or p_ip_hash is null or p_ip_hash !~ '^[0-9a-f]{32}$' then
     return jsonb_build_object('r', 'bad');
   end if;
@@ -130,7 +148,12 @@ begin
 
     -- Refused or new: a plain read (no lock) says which.
     select * into r from public.live_matches m where m.code = p_code;
-    if found then
+    -- A stop marker someone else left (another secret, nothing ever
+    -- written) does not block the scorer: anyone who saw the link before
+    -- its first send landed could otherwise kill it. The scorer's own
+    -- marker (same secret) still answers 'gone' below.
+    v_marker := found and r.status = 'stopped' and r.writes = 0 and r.match is null and r.secret_hash <> v_hash;
+    if found and not v_marker then
       if r.status in ('stopped', 'expired') then
         return jsonb_build_object('r', 'gone');
       end if;
@@ -149,25 +172,40 @@ begin
     end if;
 
     -- A new link. Counts stop at the cap, so each is a short index scan.
+    -- Per network: every link made in the window counts, whatever its
+    -- status, so finishing or stopping links does not make room.
     if (select count(*) from (
           select 1 from public.live_matches m
            where m.ip_hash = p_ip_hash and m.created_at > now() - interval '24 hours'
            limit 30) x) >= 30
        or (select count(*) from (
           select 1 from public.live_matches m
-           where m.ip_hash = p_ip_hash and m.status = 'live' and m.updated_at > now() - interval '1 hour'
-           limit 8) x) >= 8
-       or (select count(*) from (
-          select 1 from public.live_matches m
-           where m.created_at > now() - interval '1 hour'
-           limit 200) x) >= 200 then
+           where m.ip_hash = p_ip_hash and m.created_at > now() - interval '1 hour'
+           limit 8) x) >= 8 then
       return jsonb_build_object('r', 'limit');
     end if;
+    -- Site-wide: its own answer, so scorers retry later instead of being
+    -- told their network made too many. Stop markers (writes 0, below)
+    -- are not new links: a stop must not use up everyone's budget.
+    if (select count(*) from (
+          select 1 from public.live_matches m
+           where m.created_at > now() - interval '1 hour' and m.writes > 0
+           limit 200) x) >= 200 then
+      return jsonb_build_object('r', 'busy');
+    end if;
 
-    insert into public.live_matches (code, secret_hash, match, rev, status, writes, ip_hash)
-    values (p_code, v_hash, p_match, p_rev, p_status, 1, p_ip_hash)
-    on conflict (code) do nothing;
-    -- found is false when the conflict skipped the insert.
+    if v_marker then
+      update public.live_matches m
+         set secret_hash = v_hash, match = p_match, status = p_status, rev = p_rev,
+             writes = 1, ip_hash = p_ip_hash, created_at = now(), updated_at = now()
+       where m.code = p_code and m.status = 'stopped' and m.writes = 0 and m.secret_hash = r.secret_hash;
+    else
+      insert into public.live_matches (code, secret_hash, match, rev, status, writes, ip_hash)
+      values (p_code, v_hash, p_match, p_rev, p_status, 1, p_ip_hash)
+      on conflict (code) do nothing;
+    end if;
+    -- found is false when the conflict skipped the insert, or the marker
+    -- changed in between.
     if found then
       return jsonb_build_object('r', 'ok', 'rev', p_rev);
     end if;
@@ -177,8 +215,14 @@ end;
 $$;
 
 -- Turn the link off: the match is cleared and followers see that it is
--- off. 'ok' | 'forbidden' | 'gone' | 'bad'. rev moves on so followers,
--- who skip a response whose rev they have seen, notice.
+-- off. 'ok' | 'forbidden' | 'gone' | 'slow' | 'bad' | 'unavailable' (as
+-- for live_match_put). rev moves on so followers, who skip a response
+-- whose rev they have seen, notice.
+-- A link that has no row yet gets a stop marker: a stopped row with no
+-- match, no writes and no network hash. The scorer's first send may
+-- still be on its way (or may commit after its request timed out), and
+-- it then finds the link stopped ('gone') instead of making the match
+-- public after the scorer turned the link off.
 create or replace function public.live_match_stop(p_key text, p_code text, p_secret text)
 returns text
 language plpgsql
@@ -190,32 +234,45 @@ declare
   r public.live_matches;
 begin
   if p_key is null
-     or p_key is distinct from (select s.value from private.app_secrets s where s.name = 'live_write')
-     or p_code is null or p_code !~ '^[a-z0-9]{12}$'
+     or p_key is distinct from (select s.value from private.app_secrets s where s.name = 'live_write') then
+    return 'unavailable';
+  end if;
+  if p_code is null or p_code !~ '^[a-z0-9]{12}$'
      or p_secret is null or p_secret !~ '^[0-9a-f]{64}$' then
     return 'bad';
   end if;
   v_hash := sha256(convert_to(p_secret, 'UTF8'));
 
-  update public.live_matches m
-     set match = null, status = 'stopped', rev = m.rev + 1, updated_at = now()
-   where m.code = p_code
-     and m.secret_hash = v_hash
-     and m.status in ('live', 'done');
-  if found then
-    return 'ok';
-  end if;
+  -- Twice at most: a first send that makes the row between these
+  -- statements is stopped on the second pass.
+  for i in 1..2 loop
+    update public.live_matches m
+       set match = null, status = 'stopped', rev = m.rev + 1, updated_at = now()
+     where m.code = p_code
+       and m.secret_hash = v_hash
+       and m.status in ('live', 'done');
+    if found then
+      return 'ok';
+    end if;
 
-  select * into r from public.live_matches m where m.code = p_code;
-  -- No row: the link never got its first send. Nothing to turn off.
-  if not found or r.status in ('stopped', 'expired') then
-    return 'gone';
-  end if;
-  if r.secret_hash <> v_hash then
-    return 'forbidden';
-  end if;
-  -- Stopped by another request between the two statements.
-  return 'gone';
+    select * into r from public.live_matches m where m.code = p_code;
+    if not found then
+      -- No first send yet: leave the stop marker.
+      insert into public.live_matches (code, secret_hash, match, rev, status, writes, ip_hash)
+      values (p_code, v_hash, null, 1, 'stopped', 0, null)
+      on conflict (code) do nothing;
+      if found then
+        return 'ok';
+      end if;
+      -- The first send made the row meanwhile: go round and stop it.
+    elsif r.status in ('stopped', 'expired') then
+      return 'gone';
+    elsif r.secret_hash <> v_hash then
+      return 'forbidden';
+    end if;
+    -- Live with this secret: made by a first send after the update ran.
+  end loop;
+  return 'slow';
 end;
 $$;
 
@@ -251,19 +308,23 @@ grant execute on function public.live_match_put(text, text, text, jsonb, text, b
 grant execute on function public.live_match_stop(text, text, text) to anon, authenticated;
 grant execute on function public.live_match_get(text) to anon, authenticated;
 
--- Daily at a quiet hour (03:17 UTC), one job (cron.schedule replaces a
--- job of the same name):
+-- Hourly at 17 past, one job (cron.schedule replaces a job of the same
+-- name). Hourly so the privacy page's 30 days and 2 days hold to within
+-- the hour:
 -- * matches untouched for 30 days stop being shown: their data is
 --   cleared and the link says it has expired (rev moves on, as for a stop);
--- * network hashes older than 2 days are cleared: the create limits only
---   look back 24 hours.
+-- * network hashes are cleared at 47 hours, so none is kept past 2 days.
+--   The create limits look back 24 hours at most.
+-- Each update reads its own partial index (updated_at where match is not
+-- null, created_at where ip_hash is not null), so a run reads only the
+-- rows it changes, not every row ever made.
 select cron.schedule(
   'live-matches-expire',
-  '17 3 * * *',
+  '17 * * * *',
   $$update public.live_matches
        set match = null, status = 'expired', rev = rev + 1
      where match is not null and updated_at < now() - interval '30 days';
     update public.live_matches
        set ip_hash = null
-     where ip_hash is not null and created_at < now() - interval '2 days'$$
+     where ip_hash is not null and created_at < now() - interval '47 hours'$$
 );
