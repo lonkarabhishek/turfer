@@ -17,27 +17,29 @@ export interface TrendingPick {
 /**
  * Live picks for every city, keyed by city. A pick is live between
  * starts_at and ends_at; if windows overlap the latest start wins.
- * Never throws: a failed lookup just means no spotlight.
+ * Throws on a failed read: for callers that cache the answer
+ * (lib/home/data.ts), which must not store "no picks" for a failure.
  */
-export async function getTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
-  try {
-    const now = new Date().toISOString();
-    const { data, error } = await createReadOnlyClient()
-      .from("trending_turfs")
-      .select("city, turf_id, tagline, starts_at, ends_at")
-      .lte("starts_at", now)
-      .gt("ends_at", now)
-      .order("starts_at", { ascending: false });
-    if (error || !data) return {};
-    const out: Partial<Record<CityId, TrendingPick>> = {};
-    for (const r of data as { city: CityId; turf_id: string; tagline: string | null; starts_at: string; ends_at: string }[]) {
-      if (out[r.city]) continue;
-      out[r.city] = { city: r.city, turfId: r.turf_id, tagline: r.tagline, startsAt: r.starts_at, endsAt: r.ends_at };
-    }
-    return out;
-  } catch {
-    return {};
+export async function readTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
+  const now = new Date().toISOString();
+  const { data, error } = await createReadOnlyClient()
+    .from("trending_turfs")
+    .select("city, turf_id, tagline, starts_at, ends_at")
+    .lte("starts_at", now)
+    .gt("ends_at", now)
+    .order("starts_at", { ascending: false });
+  if (error || !data) throw new Error(`trending picks read failed: ${error?.message ?? "no data"}`);
+  const out: Partial<Record<CityId, TrendingPick>> = {};
+  for (const r of data as { city: CityId; turf_id: string; tagline: string | null; starts_at: string; ends_at: string }[]) {
+    if (out[r.city]) continue;
+    out[r.city] = { city: r.city, turfId: r.turf_id, tagline: r.tagline, startsAt: r.starts_at, endsAt: r.ends_at };
   }
+  return out;
+}
+
+/** The same, but never throws: a failed lookup just means no spotlight. */
+export async function getTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
+  return readTrendingPicks().catch(() => ({}));
 }
 
 /** The pick for one city, or null. */

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getLiveCities, HOME_CITIES } from "@/lib/queries/cities";
+import { getFooterCities, HOME_CITIES } from "@/lib/queries/cities";
+import { CITIES } from "@/lib/city";
 import { SPORT_PAGES } from "@/lib/sports";
 import { CONTACT_EMAIL, CONTACT_MAILTO, WHATSAPP_URL } from "@/lib/contact";
 
@@ -8,11 +9,17 @@ const LINKED_CITIES = 12;
 
 /**
  * Server component (rendered inside the client providers, which is
- * allowed). Reads the live city list, cached for an hour, so the city
- * count and the biggest-first order stay honest without a code change.
+ * allowed). Reads the live city list, cached for a day (getFooterCities:
+ * an hourly copy here made every page, turf pages included, refresh
+ * hourly), so the city count and the biggest-first order stay honest
+ * without a code change.
  */
 export async function Footer() {
-  const cities = await getLiveCities();
+  // The footer is on every page, including ones that read nothing else
+  // from the database: if the live list cannot be read and nothing is
+  // cached, link the curated cities for this render rather than fail the
+  // page (getFooterCities caches nothing when it throws).
+  const cities = await getFooterCities().catch(() => CITIES.map((c) => ({ ...c, n: 0 })));
   // Biggest cities first, plus the home cities (where TapTurf started
   // and launched next) when they fall outside the cut, so no city page
   // that had a sitewide link loses it.

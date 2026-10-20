@@ -26,7 +26,12 @@ function istToday(): Date {
 }
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export async function loadOpenGames(): Promise<Game[]> {
+/**
+ * A failed read returns [] (Ask just finds no games), or throws with
+ * `strict` for callers that cache the answer: the home's shared copy
+ * must not store "no games" for a failure (20 Oct follow-up).
+ */
+export async function loadOpenGames({ strict = false }: { strict?: boolean } = {}): Promise<Game[]> {
   const supabase = createReadOnlyClient();
   const { data, error } = await supabase
     .from("games")
@@ -35,11 +40,16 @@ export async function loadOpenGames(): Promise<Game[]> {
     .gte("date", ymd(istToday()))
     .order("date", { ascending: true })
     .limit(300);
-  if (error || !data) return [];
+  if (error || !data) {
+    if (strict) throw new Error(`open games read failed: ${error?.message ?? "no data"}`);
+    return [];
+  }
   const turfIds = [...new Set(data.map((g) => g.turf_id).filter(Boolean))];
   const turfsMap: Record<string, Game["turfs"]> = {};
   if (turfIds.length) {
-    const { data: turfs } = await supabase.from("turfs").select(TURF_COLS).in("id", turfIds);
+    const { data: turfs, error: turfsError } = await supabase.from("turfs").select(TURF_COLS).in("id", turfIds);
+    // Without their turfs the games have no city, so the home would list none.
+    if (turfsError && strict) throw new Error(`open games turfs read failed: ${turfsError.message}`);
     for (const t of turfs ?? []) turfsMap[(t as { id: string }).id] = t as Game["turfs"];
   }
   return (data as Game[])

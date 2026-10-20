@@ -6,32 +6,71 @@ import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 
 export type LiveCity = CityInfo & { n: number };
 
+// One read of the city_turf_counts view (see getLiveCities).
+async function readLiveCities(): Promise<LiveCity[]> {
+  const supabase = createReadOnlyClient();
+  const { data, error } = await supabase.from("city_turf_counts").select("city, n");
+  if (error || !data) {
+    console.error("getLiveCities failed", error);
+    throw new Error("Live cities read failed");
+  }
+  const rows = (data as { city: string; n: number }[]).filter((r) => /^[a-z][a-z-]{1,30}$/.test(r.city));
+  const order = new Map(CITIES.map((c, i) => [c.id, i]));
+  return rows
+    .map((r) => ({ ...cityInfo(r.city), n: r.n }))
+    .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+}
+
 /**
  * Cities that actually have active turfs, from the city_turf_counts
  * view, biggest first. Curated cities keep their label and state; a
  * city the data team added that is not in lib/city.ts yet gets a
  * title-cased label, so its page, sitemap entry and picker row appear
  * without a code change. Cached for an hour.
+ *
+ * A failed read throws instead of returning the curated list: that
+ * fallback was cached for an hour, so every city missing from it 404'd
+ * and counts read 0 until the next refresh. A throw caches nothing; a
+ * stale copy keeps serving, and a page with none fails its rebuild and
+ * keeps its last good version.
  */
-export const getLiveCities = unstable_cache(
-  async (): Promise<LiveCity[]> => {
-    try {
-      const supabase = createReadOnlyClient();
-      const { data, error } = await supabase.from("city_turf_counts").select("city, n");
-      if (error || !data) throw error ?? new Error("no data");
-      const rows = (data as { city: string; n: number }[]).filter((r) => /^[a-z][a-z-]{1,30}$/.test(r.city));
-      const order = new Map(CITIES.map((c, i) => [c.id, i]));
-      return rows
-        .map((r) => ({ ...cityInfo(r.city), n: r.n }))
-        .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
-    } catch (e) {
-      console.error("getLiveCities failed, using the curated list", e);
-      return CITIES.map((c) => ({ ...c, n: 0 }));
-    }
-  },
-  ["live-cities"],
-  { revalidate: 3600 },
-);
+export const getLiveCities = unstable_cache(readLiveCities, ["live-cities"], { revalidate: 3600 });
+
+/**
+ * The same list for the footer, which is on every page: its own copy,
+ * cached for a day and untagged. unstable_cache lowers the revalidate of
+ * every page that reads it to its own, so the footer reading the hourly
+ * copy made the day-long turf pages (2.6k of them, one turf_page call per
+ * refresh) refresh every hour. Tagging it "turf-data" would mark every
+ * turf page stale on each list purge.
+ *
+ * A warm instance also keeps it in memory for an hour: a purged turf page
+ * rebuilds with the data cache bypassed, and without the memo each of
+ * those rebuilds re-ran the city_turf_counts query (20 Oct follow-up).
+ * Throws like getLiveCities; the footer falls back for that render.
+ */
+const getFooterCitiesCached = unstable_cache(readLiveCities, ["live-cities-footer"], { revalidate: 86400 });
+const FOOTER_MEMO_MS = 3_600_000;
+let footerMemo: { at: number; cities: LiveCity[] } | null = null;
+let footerPending: Promise<LiveCity[]> | null = null;
+
+export function getFooterCities(): Promise<LiveCity[]> {
+  if (footerMemo && Date.now() - footerMemo.at < FOOTER_MEMO_MS) return Promise.resolve(footerMemo.cities);
+  footerPending ??= getFooterCitiesCached()
+    .then((cities) => {
+      footerMemo = { at: Date.now(), cities };
+      return cities;
+    })
+    .catch((e) => {
+      // An hour-old list beats the curated fallback.
+      if (!footerMemo) throw e;
+      return footerMemo.cities;
+    })
+    .finally(() => {
+      footerPending = null;
+    });
+  return footerPending;
+}
 
 /** True when the slug has active turfs. */
 export async function isLiveCity(slug: string): Promise<boolean> {
@@ -56,45 +95,46 @@ export async function getCityCopy(): Promise<CityCopy> {
  * Cities with enough turfs for an indexable "<sport> in <city>" page,
  * per sport, biggest first: the same rule the sitemap applies, so
  * cross-links and the sitemap name the same pages. One fetch of
- * (city, sports) for every active turf, cached for an hour.
+ * (city, sports) for every active turf, cached for an hour. A failed
+ * read throws (see getLiveCities): it used to cache an empty or partial
+ * map for an hour.
  */
 const getSportCityCounts = unstable_cache(
   async (): Promise<Record<string, LiveCity[]>> => {
     const out: Record<string, LiveCity[]> = {};
-    try {
-      const supabase = createReadOnlyClient();
-      const rows: { city: string | null; sports: unknown }[] = [];
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await supabase
-          .from("turfs")
-          .select("city, sports")
-          .eq("is_active", true)
-          .order("id")
-          .range(from, from + 999);
-        if (error) throw error;
-        rows.push(...((data ?? []) as { city: string | null; sports: unknown }[]));
-        if (!data || data.length < 1000) break;
+    const supabase = createReadOnlyClient();
+    const rows: { city: string | null; sports: unknown }[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase
+        .from("turfs")
+        .select("city, sports")
+        .eq("is_active", true)
+        .order("id")
+        .range(from, from + 999);
+      if (error) {
+        console.error("getSportCityCounts failed", error);
+        throw new Error("Sport city counts read failed");
       }
-      const split = (raw: unknown): string[] =>
-        (Array.isArray(raw) ? raw : [])
-          .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
-          .map((x) => x.trim())
-          .filter(Boolean);
-      const order = new Map(CITIES.map((c, i) => [c.id, i]));
-      for (const sp of SPORT_PAGES) {
-        const counts = new Map<string, number>();
-        for (const r of rows) {
-          if (!r.city || !/^[a-z][a-z-]{1,30}$/.test(r.city)) continue;
-          if (!turfPlaysSport(split(r.sports), sp)) continue;
-          counts.set(r.city, (counts.get(r.city) ?? 0) + 1);
-        }
-        out[sp.slug] = [...counts.entries()]
-          .filter(([, n]) => n >= MIN_TURFS_TO_INDEX)
-          .map(([city, n]) => ({ ...cityInfo(city), n }))
-          .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+      rows.push(...((data ?? []) as { city: string | null; sports: unknown }[]));
+      if (!data || data.length < 1000) break;
+    }
+    const split = (raw: unknown): string[] =>
+      (Array.isArray(raw) ? raw : [])
+        .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
+        .map((x) => x.trim())
+        .filter(Boolean);
+    const order = new Map(CITIES.map((c, i) => [c.id, i]));
+    for (const sp of SPORT_PAGES) {
+      const counts = new Map<string, number>();
+      for (const r of rows) {
+        if (!r.city || !/^[a-z][a-z-]{1,30}$/.test(r.city)) continue;
+        if (!turfPlaysSport(split(r.sports), sp)) continue;
+        counts.set(r.city, (counts.get(r.city) ?? 0) + 1);
       }
-    } catch (e) {
-      console.error("getSportCityCounts failed", e);
+      out[sp.slug] = [...counts.entries()]
+        .filter(([, n]) => n >= MIN_TURFS_TO_INDEX)
+        .map(([city, n]) => ({ ...cityInfo(city), n }))
+        .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
     }
     return out;
   },

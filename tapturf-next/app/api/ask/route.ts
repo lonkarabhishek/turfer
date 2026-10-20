@@ -24,7 +24,7 @@ import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
 import type { Turf } from "@/types/turf";
 import { toolBySlug, toolPath } from "@/lib/tools/registry";
-import { getHomeData } from "@/lib/home/data";
+import { getHomeDataShared } from "@/lib/home/data";
 import { askChipsFor } from "@/lib/home/select";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
@@ -279,7 +279,7 @@ export async function GET(req: Request) {
       case "other": {
         // Unclear or off-topic: offer what Ask can do, for this city.
         body = { ...base, relaxed: [], total: 0 };
-        if (!filters.followups.length) body.followups = askChipsFor(await getHomeData(), filters.city ?? prefCity).slice(0, 5);
+        if (!filters.followups.length) body.followups = askChipsFor(await getHomeDataShared(), filters.city ?? prefCity).slice(0, 5);
         break;
       }
       default: {

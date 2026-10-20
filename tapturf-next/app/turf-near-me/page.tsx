@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { ChevronRight, MapPin } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
@@ -37,8 +38,9 @@ type CityBlock = {
   sports: { slug: string; label: string; icon: string; count: number }[];
 };
 
-
-async function load() {
+// Built once per render: generateMetadata and the page share it (React
+// cache), instead of each grouping every city's turfs again.
+const load = cache(async () => {
   // Every live city, biggest first; one block per city with turfs.
   const cities = await getLiveCities();
   const blocks: CityBlock[] = (
@@ -87,7 +89,7 @@ async function load() {
     footballCount: football ? all.filter((t) => turfPlaysSport(t.sports, football)).length : 0,
     boxCricketCount: boxCricket ? all.filter((t) => turfPlaysSport(t.sports, boxCricket)).length : 0,
   };
-}
+});
 
 /** Five biggest cities by name, the rest counted: "Hyderabad, Bangalore, Mumbai, Pune, Delhi and 49 more cities". */
 function cityLine(blocks: { label: string }[]) {

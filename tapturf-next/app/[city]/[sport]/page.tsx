@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
-import { CITIES, isCity, labelFor, type CityId } from "@/lib/city";
+import { isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
@@ -17,11 +18,16 @@ import { turfUrl } from "@/lib/utils/turfPath";
 // queries people actually search. Built from the listings only.
 export const revalidate = 3600;
 
-export function generateStaticParams() {
-  return CITIES.flatMap((c) => SPORT_PAGES.map((s) => ({ city: c.id, sport: s.slug })));
+// None built at deploy: about 750 city and sport pairs, many of them
+// 404s or thin pages, each rendered against the database on every build
+// and preview. Each now renders on its first visit (from the cached turf
+// rows) and is cached from then on.
+export function generateStaticParams(): { city: string; sport: string }[] {
+  return [];
 }
 
-async function load(cityParam: string, sportParam: string) {
+// Once per render: generateMetadata and the page share it (React cache).
+const load = cache(async (cityParam: string, sportParam: string) => {
   if (!isCity(cityParam) || !(await isLiveCity(cityParam))) return null;
   const sport = sportBySlug(sportParam);
   if (!sport) return null;
@@ -29,7 +35,7 @@ async function load(cityParam: string, sportParam: string) {
   const cityTurfs = await getAllActiveTurfs(city);
   const turfs = cityTurfs.filter((t) => turfPlaysSport(t.sports, sport));
   return { city, sport, turfs, cityTurfs };
-}
+});
 
 export async function generateMetadata({
   params,

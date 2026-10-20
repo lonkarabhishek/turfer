@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
@@ -28,7 +29,9 @@ const CARD_COLUMNS = [
   "image_review",
 ].join(", ");
 
-function transformTurf(raw: any): Turf {
+// Exported for lib/queries/turfPage.ts (turf pages read the row through
+// the turf_page RPC).
+export function transformTurf(raw: any): Turf {
   // Parse sports - handle both ["Cricket, Football"] and ["Cricket", "Football"]
   let sports: string[] = [];
   if (Array.isArray(raw.sports)) {
@@ -208,23 +211,25 @@ const PAGE = 500;
  * The page function must apply a stable order (rating, then id) so
  * rows never straddle two pages.
  *
- * A failed page is retried three times with a growing wait (a busy
- * database answers with a statement timeout; one failed a production
- * build); if it still fails this throws rather than return part of the
- * list, because a partial list gets cached and shows wrong counts (a
- * home title once said 51 cities instead of 54). A throw keeps the last
- * good cached page or snapshot in place.
+ * A failed page throws rather than return part of the list, because a
+ * partial list gets cached and shows wrong counts (a home title once
+ * said 51 cities instead of 54). A throw keeps the last good cached page
+ * or snapshot in place. No retries while serving: on 20 Oct three
+ * retries per page turned one slow statement into four against a
+ * database that was already overloaded. A production build retries a
+ * page once, since a failed page there fails the whole deploy.
  */
 export async function fetchAllRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const retries = process.env.NEXT_PHASE === "phase-production-build" ? 1 : 0;
   const out: T[] = [];
   for (let from = 0; ; from += PAGE) {
     let res = await page(from, from + PAGE - 1);
-    for (let attempt = 1; res.error && attempt <= 3; attempt++) {
-      await new Promise((r) => setTimeout(r, [500, 1500, 3000][attempt - 1]));
+    for (let attempt = 1; res.error && attempt <= retries; attempt++) {
+      await new Promise((r) => setTimeout(r, 1500));
       res = await page(from, from + PAGE - 1);
     }
     if (res.error) {
-      console.error("Paged fetch failed after retries:", res.error);
+      console.error("Paged fetch failed:", res.error);
       throw new Error(`Paged fetch failed at row ${from}`);
     }
     const rows = res.data ?? [];
@@ -240,16 +245,23 @@ export async function fetchAllRows<T>(page: (from: number, to: number) => Promis
 let inflight: Promise<Record<string, unknown>[]> | null = null;
 
 function readActiveRows(): Promise<Record<string, unknown>[]> {
-  inflight ??= fetchAllRows<Record<string, unknown>>((from, to) => {
-    const supabase = createServerClient();
-    return supabase
-      .from("turfs")
-      .select(CARD_COLUMNS)
-      .eq("is_active", true)
-      .order("rating", { ascending: false })
-      .order("id")
-      .range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
-  }).finally(() => {
+  inflight ??= (async () => {
+    const t0 = Date.now();
+    const rows = await fetchAllRows<Record<string, unknown>>((from, to) => {
+      const supabase = createServerClient();
+      return supabase
+        .from("turfs")
+        .select(CARD_COLUMNS)
+        .eq("is_active", true)
+        .order("rating", { ascending: false })
+        .order("id")
+        .range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
+    });
+    // One line per full read, so the logs show how often it happens
+    // (should be about once per instance per purge or hour).
+    console.info("turf full read", { rows: rows.length, ms: Date.now() - t0 });
+    return rows;
+  })().finally(() => {
     inflight = null;
   });
   return inflight;
@@ -261,17 +273,23 @@ function readActiveRows(): Promise<Record<string, unknown>[]> {
  * from Supabase (the heaviest query we run: about 2,500 wide rows,
  * sorted on disk). On 20 Oct those reads timed out, the rebuilds retried,
  * and the database stayed overloaded for hours. Now the database sees
- * one full read per 10 minutes, or when the turf webhook expires the
- * "turf-data" tag; while a refresh fails the last copy keeps serving.
+ * one full read an hour, or after a turf change marks the "turf-data"
+ * tag stale; while a refresh fails the last copy keeps serving.
  *
- * The rows (about 2.7 KB each) are split by id into 16 pieces, each
- * cached on its own, because the data cache refuses anything over 2 MB.
+ * The rows (about 2.7 KB each) are split by id into 32 pieces, each
+ * cached on its own, because the data cache refuses anything over 2 MB
+ * (16 pieces would hit that at about 13k turfs, 32 at about 25k).
+ * 3600 s, not 600: unstable_cache lowers the revalidate of every page
+ * that reads it to its own, so 600 made the hourly pages rebuild every
+ * 10 minutes. Changes no longer wait for the timer: the cache queue
+ * (supabase/migrations/20261020_cache_queue.sql) purges within minutes.
+ * Bump the key when the row shape or the piece count changes.
  */
-const SHARDS = 16;
+const SHARDS = 32;
 const shardOf = (id: unknown) => (parseInt(String(id).slice(0, 2), 16) || 0) % SHARDS;
 const rowPieces = Array.from({ length: SHARDS }, (_, i) =>
-  unstable_cache(async () => (await readActiveRows()).filter((r) => shardOf(r.id) === i), ["turf-rows-v1", String(i)], {
-    revalidate: 600,
+  unstable_cache(async () => (await readActiveRows()).filter((r) => shardOf(r.id) === i), ["turf-rows-v2", String(i)], {
+    revalidate: 3600,
     tags: ["turf-data"],
   }),
 );
@@ -284,10 +302,18 @@ function byRatingThenId(a: Record<string, unknown>, b: Record<string, unknown>):
   return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
 }
 
-async function activeRows(): Promise<Record<string, unknown>[]> {
+/**
+ * The merged rows, once per render: React cache() shares them between
+ * generateMetadata, the page and every getAllActiveTurfs(city) call in
+ * it. /turf-near-me asked once per city (54) in both, which was 108
+ * merges of every piece, each one parsing all the rows again. Callers
+ * must not mutate the array. Outside a render (route handlers) this is
+ * a plain call.
+ */
+const activeRows = cache(async (): Promise<Record<string, unknown>[]> => {
   const parts = await Promise.all(rowPieces.map((p) => p()));
   return parts.flat().sort(byRatingThenId);
-}
+});
 
 export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
   const city = cityFilter && isCity(cityFilter) ? cityFilter : null;

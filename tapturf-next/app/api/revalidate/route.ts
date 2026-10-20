@@ -1,22 +1,42 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { turfPagePaths } from "@/lib/queries/turfs";
+import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
 
 /**
  * On-demand cache invalidation for turf writes.
  *
- * Wired to a Supabase Database Webhook on public.turfs (INSERT /
- * UPDATE / DELETE) so a data-ops row change reflects on prod within
- * ~10s instead of after the 10-min revalidate window naturally ticks.
+ * The database notes what changed as keys in private.cache_dirty and a
+ * pg_cron job posts them here in one batch, at most once a minute:
+ * { keys: ["list:pune", "turf:turf-up-hinjewadi", ...] } (see
+ * lib/cache/keys.ts and supabase/migrations/20261020_cache_queue.sql).
+ * The old per-row webhook payload ({ type, table, record, old_record })
+ * is still accepted until notify_turf_change() is dropped.
+ *
+ * Until 20 Oct each changed row expired every turf cache and about 990
+ * pages at once. An expired page rebuilds with the data cache bypassed,
+ * so every rebuild read the whole turf table again; with imports and
+ * admin batches that load took the database down. Now:
+ * - any list:* key marks the "turf-data" tag stale ('max'), not expired.
+ *   Every list page carries that tag (unstable_cache copies it from the
+ *   turf rows), so they all keep serving their copy while one refresh of
+ *   the rows rebuilds them in the background. No per-city path purges:
+ *   those were hard expiries.
+ * - turf:<key> purges that one turf page, /turf/<key>. revalidatePath
+ *   with no profile is a hard expiry, not 'max': the next visitor waits
+ *   for one render (a single turf_page call) and that render skips the
+ *   data cache. That is one page, and on a warm instance the footer's
+ *   in-memory city list (getFooterCities) keeps it from re-running
+ *   city_turf_counts. To serve these stale as well, the candidate is
+ *   revalidateTag(`_N_T_/turf/${key}`, 'max') (the page's implicit tag);
+ *   check it on a preview first.
+ * - games is accepted and ignored: game pages run on a timer.
  *
  * Auth: shared secret in the x-revalidate-secret header. If
  * REVALIDATE_SECRET is set in Vercel it's matched directly; otherwise
  * the header is checked by Supabase (check_revalidate_secret), which
- * holds the same secret the notify_turf_change() trigger sends. Until
- * this fallback existed, a missing env var meant every webhook 500'd
- * and data changes waited for the time-based cache instead.
- * Anything else 401s.
+ * holds the same secret the database sends. With the batched queue that
+ * check runs at most about once a minute. Anything else 401s.
  */
 async function isAuthorized(header: string | null): Promise<boolean> {
   if (!header) return false;
@@ -32,107 +52,64 @@ async function isAuthorized(header: string | null): Promise<boolean> {
   }
 }
 
+type Body = {
+  keys?: unknown;
+  type?: string;
+  table?: string;
+  record?: Record<string, unknown> | null;
+  old_record?: Record<string, unknown> | null;
+};
+
 export async function POST(req: Request) {
   if (!(await isAuthorized(req.headers.get("x-revalidate-secret")))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: unknown;
+  let body: Body;
   try {
-    body = await req.json();
+    body = (await req.json()) as Body;
   } catch {
     return NextResponse.json({ ok: false, error: "Bad JSON" }, { status: 400 });
   }
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ ok: false, error: "Bad body" }, { status: 400 });
+  }
 
-  // Supabase DB webhook payload shape: { type, table, record, old_record, schema }
-  const b = body as {
-    table?: string;
-    record?: { id?: string; slug?: string | null; city?: string; is_active?: boolean; turf_id?: string };
-    old_record?: { id?: string; slug?: string | null; city?: string; turf_id?: string };
-  };
-  const row = b.record ?? b.old_record;
-  // trending_turfs rows point at a turf via turf_id, not their own id.
-  const isTrending = b.table === "trending_turfs";
-
-  const paths = new Set<string>();
-  // Always kick the landing surfaces + sitemap so counts stay honest
-  // and the sitemap reflects the new updated_at.
-  paths.add("/");
-  paths.add("/turfs");
-  paths.add("/sitemap.xml");
-
-  // Turf pages live at /turf/<slug>; /turf/<id> redirects there.
-  const turfPaths = async (id: string, slug?: string | null) => {
-    try {
-      for (const p of await turfPagePaths(id, slug)) paths.add(p);
-    } catch {
-      paths.add(`/turf/${id}`);
+  let keys: unknown[];
+  if (Array.isArray(body.keys)) {
+    // The flush never sends more; a bigger batch is a bug, not a retry.
+    if (body.keys.length > MAX_KEYS) {
+      return NextResponse.json({ ok: false, error: `At most ${MAX_KEYS} keys` }, { status: 400 });
     }
-  };
-  if (isTrending) {
-    if (b.record?.turf_id) await turfPaths(b.record.turf_id);
-    if (b.old_record?.turf_id) await turfPaths(b.old_record.turf_id);
-  } else if (row?.id) {
-    await turfPaths(row.id, row.slug ?? (b.old_record?.slug || undefined));
-    if (b.old_record?.slug && b.old_record.slug !== row.slug) paths.add(`/turf/${b.old_record.slug}`);
-  }
-  if (row?.city) {
-    paths.add(`/${row.city}`);
-    // Old marketing URLs still 301 to /<city>, but Next needs the
-    // redirect entry to be regenerated on the sitemap too.
-    paths.add(`/turf-in-${row.city}`);
-  }
-  // If the old_record was in a different city (rare — a city move),
-  // bust that city too so the old listing drops.
-  if (b.old_record?.city && b.old_record.city !== row?.city) {
-    paths.add(`/${b.old_record.city}`);
+    keys = body.keys;
+  } else {
+    // Legacy per-row payload from notify_turf_change(), same rules as the
+    // queue's triggers (a trending row purges /turf/<turf_id>).
+    keys = keysForRow(body.table, body.type, body.record ?? null, body.old_record ?? null);
   }
 
-  // Sport listing pages show turf cards too; refresh all of them.
-  try {
-    revalidatePath("/sport/[sport]", "page");
-  } catch (e) {
-    console.warn("revalidatePath(/sport/[sport]) failed", e);
-  }
+  const plan = planPurge(keys);
+  if (plan.rejected.length) console.warn("revalidate: skipped keys", plan.rejected.slice(0, 10));
 
-  for (const p of paths) {
+  if (plan.cities.length) {
     try {
-      revalidatePath(p);
+      revalidateTag("turf-data", "max");
     } catch (e) {
-      // Don't fail the whole webhook over one bad path; Supabase will
-      // retry the delivery which would just amplify a real problem.
-      console.warn(`revalidatePath(${p}) failed`, e);
+      console.warn("revalidateTag(turf-data) failed", e);
     }
   }
-
-  // proxy.ts rewrites /, /turfs and /games to per-city pages under
-  // app/c/[city] and to the ask pages under app/c/ask;
-  // revalidatePath("/") and ("/turfs") do not follow rewrites, so bust
-  // the variants and the shared home snapshot too. (/games and its
-  // variants run on a 60 s timer.)
-  for (const [path, type] of [
-    ["/c/[city]", "page"],
-    ["/c/[city]/turfs", "page"],
-    ["/c/ask", undefined],
-    ["/c/ask/turfs", undefined],
-  ] as const) {
+  for (const key of plan.turfs) {
     try {
-      if (type) revalidatePath(path, type);
-      else revalidatePath(path);
+      revalidatePath(`/turf/${key}`);
     } catch (e) {
-      console.warn(`revalidatePath(${path}) failed`, e);
+      // Don't fail the batch over one bad path: the flush would resend
+      // all of it.
+      console.warn(`revalidatePath(/turf/${key}) failed`, e);
     }
   }
-  try {
-    // Expire now (not stale-while-revalidate), so the pages regenerated
-    // just above read the fresh home snapshot instead of caching the old
-    // one for another window.
-    revalidateTag("turf-data", { expire: 0 });
-  } catch (e) {
-    console.warn("revalidateTag(turf-data) failed", e);
-  }
 
-  return NextResponse.json({ ok: true, revalidated: Array.from(paths) });
+  console.info("revalidate", { lists: plan.cities.length, turfs: plan.turfs.length, games: plan.games, legacy: !Array.isArray(body.keys) });
+  return NextResponse.json({ ok: true, lists: plan.cities, turfs: plan.turfs.length });
 }
 
 // The webhook also fires GET as a health check from Supabase's UI.

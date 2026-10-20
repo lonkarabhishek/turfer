@@ -1,7 +1,7 @@
 "use client";
 
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -22,7 +22,7 @@ import {
 import { useAuth } from "@/components/auth/AuthProvider";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
 import { generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
-import { logContactClick, turfPageUrl, type ContactKind } from "@/lib/analytics/contactClicks";
+import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
 import {
   getMyTurfSuggestion,
   getTurfSuggestions,
@@ -41,6 +41,8 @@ const OPEN_EVENT = "tapturf:open-suggest";
 function openSuggestSheet() {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
 }
+
+const noop = () => () => {};
 
 const SPORT_OPTIONS = [
   "Football",
@@ -184,62 +186,75 @@ export function TurfSuggestions({
   turfId,
   turfName,
   hasPhone,
+  turfUrl,
+  initial,
 }: {
   turfId: string;
   turfName: string;
   hasPhone: boolean;
+  /** The page's canonical URL for the WhatsApp message. Passed in, not
+   *  read from window, so the server-rendered link matches the client's. */
+  turfUrl: string;
+  /** From the server render (turf_page): get_turf_suggestions' rows, phones masked. */
+  initial: TurfSuggestion[];
 }) {
   const { user, login } = useAuth();
-  const [items, setItems] = useState<TurfSuggestion[] | null>(null);
+  // In the page since the 20 Oct outage instead of a browser call per
+  // view; reloaded only after the visitor's own save.
+  const [items, setItems] = useState<TurfSuggestion[]>(initial);
   // The viewer's own suggestion (one per person per turf). When set,
-  // "Suggest" becomes "Edit" and the form opens prefilled.
-  const [mine, setMine] = useState<MyTurfSuggestion | null>(null);
+  // "Suggest" becomes "Edit" and the form opens prefilled. Signed-in
+  // only, so never in the cached page; tagged with whose it is.
+  const [mineFor, setMineFor] = useState<{ userId: string; row: MyTurfSuggestion | null } | null>(null);
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const userId = user?.id ?? null;
+  const mine = mineFor && mineFor.userId === userId ? mineFor.row : null;
+  const hasItems = items.length > 0;
 
   const load = useCallback(() => {
     getTurfSuggestions(turfId).then(setItems);
-    if (userId) getMyTurfSuggestion(turfId, userId).then(setMine);
+    if (userId) getMyTurfSuggestion(turfId, userId).then((row) => setMineFor({ userId, row }));
   }, [turfId, userId]);
 
+  // "You" and "Edit yours" need theirs: ask only when a signed-in
+  // visitor sees a list that could hold it. Otherwise it waits for the form.
   useEffect(() => {
+    if (!userId || !hasItems) return;
     let alive = true;
-    const req = userId ? getMyTurfSuggestion(turfId, userId) : Promise.resolve(null);
-    req.then((row) => {
-      if (alive) setMine(row);
+    getMyTurfSuggestion(turfId, userId).then((row) => {
+      if (alive) setMineFor({ userId, row });
     });
     return () => {
       alive = false;
     };
-  }, [turfId, userId]);
-
-  useEffect(() => {
-    let alive = true;
-    getTurfSuggestions(turfId).then((rows) => {
-      if (alive) setItems(rows);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [turfId]);
+  }, [turfId, userId, hasItems]);
 
   // Anyone on the page can ask for the sheet. Signed-out visitors go
   // through the quick login first (same pattern as Call / WhatsApp).
+  // The form opens prefilled with their earlier suggestion, so fetch it
+  // first if it is not known yet.
   useEffect(() => {
     const onOpen = () => {
       if (!user) {
         login();
         return;
       }
-      setOpen(true);
+      if (mineFor?.userId === user.id) {
+        setOpen(true);
+        return;
+      }
+      getMyTurfSuggestion(turfId, user.id).then((row) => {
+        setMineFor({ userId: user.id, row });
+        setOpen(true);
+      });
     };
     window.addEventListener(OPEN_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_EVENT, onOpen);
-  }, [user, login]);
+  }, [user, login, mineFor, turfId]);
 
   const summary = useMemo(() => {
-    const list = items ?? [];
+    const list = items;
     const phones = new Map<string, { call: string | null; wa: string | null }>();
     for (const s of list) {
       if (s.contact_phone || s.whatsapp_phone) {
@@ -272,8 +287,8 @@ export function TurfSuggestions({
     login();
   };
 
-  const count = items?.length ?? 0;
-  const visible = showAll ? items ?? [] : (items ?? []).slice(0, 3);
+  const count = items.length;
+  const visible = showAll ? items : items.slice(0, 3);
   const hasSummary =
     summary.phones.length > 0 ||
     summary.price ||
@@ -300,9 +315,7 @@ export function TurfSuggestions({
         Shared by people who know this turf. Not verified by TapTurf.
       </p>
 
-      {items === null ? (
-        <div className="h-24 rounded-2xl bg-primary-50 animate-pulse" />
-      ) : count === 0 ? (
+      {count === 0 ? (
         hasPhone ? (
           <SuggestRow turfName={turfName} />
         ) : (
@@ -345,7 +358,7 @@ export function TurfSuggestions({
                         {waN && (
                           <a
                             href={`https://wa.me/${waN.digits}?text=${encodeURIComponent(
-                              generateTurfInquiryMessage({ name: turfName, url: turfPageUrl(turfId) }),
+                              generateTurfInquiryMessage({ name: turfName, url: turfUrl }),
                             )}`}
                             onClick={guard("whatsapp")}
                             target="_blank"
@@ -530,6 +543,9 @@ function changeRows(s: TurfSuggestion): { label: string; from: string; to: strin
 
 function SuggestionItem({ s, isMine }: { s: TurfSuggestion; isMine: boolean }) {
   const [showChanges, setShowChanges] = useState(false);
+  // "2h ago" reads the visitor's clock, and the HTML can be hours old:
+  // shown once hydrated, so server and browser never disagree.
+  const hydrated = useSyncExternalStore(noop, () => true, () => false);
   const price = priceText(s.price_min, s.price_max);
   const facts: { icon: React.ReactNode; text: string }[] = [];
   if (s.opening_hours) facts.push({ icon: <Clock className="w-3.5 h-3.5" />, text: s.opening_hours });
@@ -563,7 +579,9 @@ function SuggestionItem({ s, isMine }: { s: TurfSuggestion; isMine: boolean }) {
             )}
           </p>
           <p className="text-[13px] text-primary-400">
-            {edited ? (
+            {!hydrated ? (
+              "\u00a0"
+            ) : edited ? (
               <>Edited {timeAgo(s.updated_at!)}</>
             ) : (
               timeAgo(s.created_at)

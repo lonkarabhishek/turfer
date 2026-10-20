@@ -1,6 +1,7 @@
 import { createServerClient as createSSRClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createPlainClient } from "@supabase/supabase-js";
+import { guardedFetch } from "./guard";
 
 /**
  * Server-side Supabase client with cookie-based auth (for Route Handlers, Server Components).
@@ -34,6 +35,11 @@ export async function createServerClient() {
 /**
  * Read-only Supabase client for SSG/ISR (no auth, no cookies).
  * Use this for static page generation and revalidation.
+ *
+ * Requests go through guardedFetch (lib/supabase/guard.ts): abandoned
+ * after 5 s, and failed at once for 30 s after repeated failures, so a
+ * slow database (20 Oct) gets less traffic instead of a queue of waiting
+ * renders. Cached pages keep their last copy while it is open.
  */
 export function createReadOnlyClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,5 +54,6 @@ export function createReadOnlyClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: { fetch: guardedFetch },
   });
 }

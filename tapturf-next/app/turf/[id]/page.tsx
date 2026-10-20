@@ -5,7 +5,8 @@ import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
-import { getTopTurfKeys, getTurfBySlugOrId } from "@/lib/queries/turfs";
+import { getTopTurfKeys } from "@/lib/queries/turfs";
+import { loadTurfPage } from "@/lib/queries/turfPage";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
@@ -22,19 +23,26 @@ import { TurfReviews } from "@/components/turf/TurfReviews";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
-import { getTrendingPick } from "@/lib/queries/trending";
 import { courtType, sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
-import { isTurfClaimed } from "@/lib/queries/owners";
 
-export const revalidate = 3600;
+// A day: since the 20 Oct outage the cache queue purges a turf's page
+// when the turf, its reviews or their votes, suggestions, games, claim or
+// trending pick change, so the timer is only a backstop. A refresh is one
+// turf_page call. Nothing the page renders may be cached for less than a
+// day, or the page refreshes that often (the footer has its own day-long
+// city list for this reason, see getFooterCities).
+export const revalidate = 86400;
 
 // The [id] segment is the turf's slug (/turf/turf-up-hinjewadi). Old
 // links by id still resolve and 308 to the slug URL. Only the 300 most
 // reviewed turfs are built at deploy; the rest render on first visit
-// and are cached (all of them are in the sitemap either way).
+// and are cached (all of them are in the sitemap either way). Previews
+// and local builds build none, so they never render against the
+// production database.
 export async function generateStaticParams() {
+  if (process.env.VERCEL_ENV !== "production") return [];
   const keys = await getTopTurfKeys(300);
   return keys.map((id) => ({ id }));
 }
@@ -45,7 +53,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const turf = await getTurfBySlugOrId(decodeURIComponent(id));
+  const turf = (await loadTurfPage(decodeURIComponent(id)))?.turf;
   if (!turf) return { title: "Turf not found", robots: { index: false } };
 
   const priceSummary = summarisePrice(turf);
@@ -154,10 +162,12 @@ export default async function TurfDetailPage({
 }) {
   const { id } = await params;
   const key = decodeURIComponent(id);
-  const turf = await getTurfBySlugOrId(key);
-  if (!turf) notFound();
+  // One call for the turf, claim, trending pick, reviews, suggestions and
+  // games (shared with generateMetadata above).
+  const page = await loadTurfPage(key);
+  if (!page) notFound();
+  const { turf, claimed } = page;
   if (turf.slug && key !== turf.slug) permanentRedirect(turfPath(turf));
-  const claimed = await isTurfClaimed(turf.id);
 
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);
@@ -165,9 +175,8 @@ export default async function TurfDetailPage({
   // Members-only clubs (NIWEC): no "Call to Book", show how to get in.
   const membersOnly = turf.membership_required === true;
   // Is this turf its city's Most Trending Turf this week?
-  const trending =
-    turf.city && isCity(turf.city) ? await getTrendingPick(turf.city) : null;
-  const isTrending = trending?.turfId === turf.id;
+  const trending = turf.city && isCity(turf.city) ? page.trending : null;
+  const isTrending = !!trending;
 
   return (
     <div className="has-bottom-cta">
@@ -319,11 +328,23 @@ export default async function TurfDetailPage({
             <TurfPricing turf={turf} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
-            <TurfGames turfId={turf.id} turfName={turf.name} turfAddress={turf.address} />
+            <TurfGames
+              turfId={turf.id}
+              turfName={turf.name}
+              initialGames={page.games}
+              renderedAt={page.renderedAt}
+            />
 
             {/* Player-suggested info (contact, prices, hours, facilities).
-                Fetched client-side so a fresh suggestion shows at once. */}
-            <TurfSuggestions turfId={turf.id} turfName={turf.name} hasPhone={!!phone} />
+                In the HTML; the browser reloads it only after the
+                visitor's own suggestion, so theirs shows at once. */}
+            <TurfSuggestions
+              turfId={turf.id}
+              turfName={turf.name}
+              hasPhone={!!phone}
+              turfUrl={turfUrl(turf)}
+              initial={page.suggestions}
+            />
             {claimed ? (
               <p className="mt-3 text-[13px] text-primary-500">
                 Also manage this turf?{" "}
@@ -373,6 +394,8 @@ export default async function TurfDetailPage({
                 into TurfReviews so there's a single reviews section. */}
             <TurfReviews
               turfId={turf.id}
+              initialReviews={page.reviews}
+              initialSummary={page.reviewStats}
               googleRating={turf.rating}
               googleReviewCount={turf.total_reviews}
               googleReviewUrl={turf.external_review_url}

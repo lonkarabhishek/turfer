@@ -20,7 +20,12 @@ import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 // local queries.
 export const revalidate = 600;
 
+// Production builds render every city up front; previews and local
+// builds render none (each page renders on its first visit instead), so a
+// preview of a branch no longer renders pages against the production
+// database (about 1,300 per preview before 20 Oct).
 export function generateStaticParams() {
+  if (process.env.VERCEL_ENV !== "production") return [];
   return CITIES.map((c) => ({ city: c.id }));
 }
 

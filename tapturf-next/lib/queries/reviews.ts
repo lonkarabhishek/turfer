@@ -83,6 +83,28 @@ export async function getReviewsForTurf(
 }
 
 /**
+ * Which of these reviews the viewer has upvoted. Per viewer, so it is not
+ * in the cached turf page (turf_page); the page asks only for a signed-in
+ * visitor and only for reviews that have votes. Null on error.
+ */
+export async function getViewerUpvotes(
+  reviewIds: string[],
+  viewerId: string,
+): Promise<Set<string> | null> {
+  try {
+    const { data, error } = await supa()
+      .from("review_votes")
+      .select("review_id")
+      .eq("user_id", viewerId)
+      .in("review_id", reviewIds);
+    if (error) return null;
+    return new Set((data || []).map((v) => v.review_id as string));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Toggle an upvote. Returns the new state so the caller can update
  * optimistically without a follow-up fetch. Idempotent: repeated
  * calls flip between voted and not-voted.

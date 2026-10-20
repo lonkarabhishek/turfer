@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/cache",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": ["es2023", "dom"],
+    "types": ["node"]
+  },
+  "files": ["lib/cache/keys.test.ts", "lib/supabase/guard.test.ts"]
+}

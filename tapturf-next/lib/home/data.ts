@@ -2,7 +2,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getLiveCities } from "@/lib/queries/cities";
-import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
+import { readTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { loadOpenGames } from "@/lib/ai/games";
 import { sortGamesByDateTime } from "@/lib/utils/game";
 import { CITIES, cityInfo, guessCityFromAddress, isCity } from "@/lib/city";
@@ -102,12 +102,35 @@ function modeOf(values: (string | null)[]): string | null {
   return best;
 }
 
+/**
+ * The home's small non-turf reads (live trending picks, open games),
+ * one shared copy for the home window. Kept apart from the turf rows so
+ * this entry never wraps another unstable_cache (see getHomeData), and
+ * so each home render (54 city variants plus all-India) does not query
+ * them again. Tagged "turf-data": a trending change or a pick's window
+ * opening or closing purges it through the cache queue.
+ *
+ * Both reads throw on failure, so a failure is never stored: with the
+ * database breaker open both used to return empty, and every home
+ * variant then rendered (and cached) without spotlights or games for
+ * the whole window. Now a refresh that fails keeps serving the last copy
+ * (unstable_cache returns the stale value), and a first read that fails
+ * fails the render, so ISR keeps the last good page.
+ */
+const getHomeExtras = unstable_cache(
+  async () => {
+    const [picks, games] = await Promise.all([readTrendingPicks(), loadOpenGames({ strict: true })]);
+    return { picks, games };
+  },
+  ["home-extras-v1"],
+  { revalidate: HOME_REVALIDATE, tags: ["turf-data"] },
+);
+
 async function buildHomeData(): Promise<HomeData> {
-  const [turfs, live, picks, games] = await Promise.all([
+  const [turfs, live, { picks, games }] = await Promise.all([
     getAllActiveTurfs(),
     getLiveCities().catch(() => []),
-    getTrendingPicks(),
-    loadOpenGames().catch(() => [] as Game[]),
+    getHomeExtras(),
   ]);
 
   // One pass: group by city. Rows come back in compareTopRated order,
@@ -268,19 +291,45 @@ async function buildHomeData(): Promise<HomeData> {
   };
 }
 
-const cached = unstable_cache(buildHomeData, ["home-data-v3"], { revalidate: HOME_REVALIDATE, tags: ["turf-data"] });
+/**
+ * Everything the home page shows, shaped once per render from the cached
+ * turf rows, live cities and home extras: generateMetadata and the page
+ * share it through React cache(). No database read on a warm cache.
+ *
+ * This used to be its own unstable_cache entry (home-data-v3) around
+ * getAllActiveTurfs(). Next skips the cache read for an unstable_cache
+ * called inside another one (unstable-cache.js, isNestedUnstableCache),
+ * so every refill of the home entry read the whole turf table from the
+ * database, and a failed refill built it again uncached. On 20 Oct that
+ * was two more full reads per purge per instance.
+ */
+export const getHomeData = cache(buildHomeData);
+
+const API_MEMO_MS = 60_000;
+let apiMemo: { at: number; data: HomeData } | null = null;
+let apiPending: Promise<HomeData> | null = null;
 
 /**
- * Everything the home page shows, shaped once. generateMetadata and the
- * page both call this: React cache() dedupes them within a render and
- * unstable_cache keeps the shaped payload (not the raw turf rows)
- * between regenerations. Six PostgREST requests instead of about 108.
+ * The same data for API routes (Ask chips and follow-ups), which run
+ * outside a page render and so get no React cache(): kept in memory on
+ * a warm instance for a minute. Pages must use getHomeData(): a page
+ * rebuilt after a purge has to read the fresh rows, not this copy.
  */
-export const getHomeData = cache(async (): Promise<HomeData> => {
-  try {
-    return await cached();
-  } catch (e) {
-    console.error("home-data cache failed, building uncached", e);
-    return buildHomeData();
-  }
-});
+export function getHomeDataShared(): Promise<HomeData> {
+  if (apiMemo && Date.now() - apiMemo.at < API_MEMO_MS) return Promise.resolve(apiMemo.data);
+  apiPending ??= buildHomeData()
+    .then((data) => {
+      apiMemo = { at: Date.now(), data };
+      return data;
+    })
+    .catch((e) => {
+      // A minute-old answer beats a failed one.
+      if (!apiMemo) throw e;
+      console.error("home data: refresh failed, serving the last copy", e);
+      return apiMemo.data;
+    })
+    .finally(() => {
+      apiPending = null;
+    });
+  return apiPending;
+}

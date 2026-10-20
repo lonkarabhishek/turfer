@@ -7,18 +7,52 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
 import { notify } from "@/lib/notifications/browser";
+import { unreadWait, wakeWait } from "@/lib/notifications/unreadPoll";
 import { HeaderMenu } from "@/components/layout/HeaderMenu";
 
 export function Header() {
   const { user, loading, login } = useAuth();
-  const [unread, setUnread] = useState(0);
+  // Tagged with whose count it is, so signing out shows 0 without a reset.
+  const [unreadFor, setUnreadFor] = useState<{ userId: string; n: number } | null>(null);
   const prevUnreadRef = useRef<number | null>(null);
 
+  const userId = user?.id ?? null;
+  const unread = unreadFor && unreadFor.userId === userId ? unreadFor.n : 0;
+
+  // Unread count: on load, when the tab comes back or gets focus, then
+  // every 5 min while visible, backing off when the database fails (was
+  // every 30 s in every tab, hidden or not; see lib/notifications/unreadPoll.ts).
+  // Keyed on the id, so a profile refresh (a new user object) does not
+  // restart it with an extra check.
   useEffect(() => {
-    if (!user) { setUnread(0); prevUnreadRef.current = null; return; }
+    prevUnreadRef.current = null;
+    if (!userId) return;
+
+    let alive = true;
+    let busy = false;
+    let lastAt = 0;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const visible = () => document.visibilityState === "visible";
+    // No timer while the tab is hidden; showing it again checks.
+    const schedule = (ms: number) => {
+      clearTimeout(timer);
+      if (alive && visible()) timer = setTimeout(poll, ms);
+    };
 
     const poll = async () => {
-      const { data: nextCount } = await getUnreadCount(user.id);
+      if (busy || !alive) return;
+      busy = true;
+      lastAt = Date.now();
+      const { data: nextCount, error } = await getUnreadCount(userId).catch(() => ({ data: 0, error: "network" }));
+      busy = false;
+      if (!alive) return;
+      if (error) {
+        failures += 1;
+        schedule(unreadWait(failures));
+        return;
+      }
+      failures = 0;
       const prev = prevUnreadRef.current;
       // Only fire a browser notification when the count grew, and only
       // after the first successful load (so we don't ping on page open).
@@ -31,13 +65,28 @@ export function Header() {
         );
       }
       prevUnreadRef.current = nextCount;
-      setUnread(nextCount);
+      setUnreadFor({ userId, n: nextCount });
+      schedule(unreadWait(0));
+    };
+
+    const onWake = () => {
+      if (!visible()) { clearTimeout(timer); return; }
+      if (busy) return;
+      const wait = wakeWait(Date.now(), lastAt, failures);
+      if (wait === 0) poll();
+      else schedule(wait);
     };
 
     poll();
-    const interval = setInterval(poll, 30000);
-    return () => clearInterval(interval);
-  }, [user]);
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
+  }, [userId]);
 
   return (
     <header className="sticky top-0 z-40 material-thin border-b border-primary-100/60">

@@ -47,7 +47,10 @@ function placeFor(cities: { label: string }[]) {
   return { title: `in ${amp}`, prose: `in ${and}`, short: and };
 }
 
+// Production builds render every sport page; previews and local builds
+// render them on first visit instead of against the production database.
 export async function generateStaticParams() {
+  if (process.env.VERCEL_ENV !== "production") return [];
   return SPORT_PAGES.map((s) => ({ sport: s.slug }));
 }
 

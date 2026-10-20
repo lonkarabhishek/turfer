@@ -10,6 +10,8 @@
  * Everything here is best effort: storage errors are swallowed.
  */
 
+import { isLikelyBot } from "./bot";
+
 const FIRST = "tt_first_v1";
 const VISITS = "tt_visits_v1";
 const INTEREST = "tt_interest_v1";
@@ -98,15 +100,26 @@ export function noteInterest(i: { city?: string | null; sports?: string[] | null
   write(INTEREST, cur);
 }
 
-/** Count a turf page view for the owner's myTapturf numbers, once per turf per session. */
+/** Turfs counted in this page's lifetime, for when sessionStorage is unavailable. */
+const viewedHere = new Set<string>();
+
+/**
+ * Count a turf page view for the owner's myTapturf numbers, once per turf
+ * per session, and never for crawlers or headless browsers (see
+ * lib/analytics/bot.ts). The only database call an anonymous turf view
+ * makes since the 20 Oct outage.
+ */
 export function logTurfView(turfId: string) {
   if (typeof window === "undefined") return;
+  if (isLikelyBot(navigator.userAgent, navigator.webdriver)) return;
+  if (viewedHere.has(turfId)) return;
+  viewedHere.add(turfId);
   try {
     const k = `tt_viewed_${turfId}`;
     if (sessionStorage.getItem(k)) return;
     sessionStorage.setItem(k, "1");
   } catch {
-    /* no sessionStorage: count it anyway */
+    /* no sessionStorage: once per page lifetime (viewedHere) */
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

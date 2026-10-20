@@ -1,33 +1,42 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
 import { Star, User, ExternalLink, ChevronUp } from "lucide-react";
 import {
   getReviewsForTurf,
   getReviewSummary,
+  getViewerUpvotes,
   submitReview,
   toggleReviewUpvote,
 } from "@/lib/queries/reviews";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { ReviewWithUser, ReviewSummary } from "@/types/review";
 
+const noop = () => () => {};
+
 /**
- * Reviews block on the turf detail page. Client-side because:
- * - We rely on the logged-in user to gate the write form (server would
- *   need the SSR-cookie plumbing we already skip for phone-auth users).
- * - Reviews are low-volume today (table just added, 0 rows) and don't
- *   need SEO indexing on the first render; SEO already gets the
- *   aggregate rating from turfs.rating + turfs.total_reviews.
- * Fetches on mount, refetches after a successful post.
+ * Reviews block on the turf detail page. A client component because the
+ * logged-in user gates the write form (the server would need the
+ * SSR-cookie plumbing we already skip for phone-auth users).
+ * The list and in-app stats come with the page (turf_page) instead of 2
+ * to 4 browser queries per view, Googlebot's and scrapers' included (20
+ * Oct outage). The browser reads again only after the visitor's own
+ * review, and for a signed-in visitor, which reviews they upvoted.
  */
 export function TurfReviews({
   turfId,
+  initialReviews,
+  initialSummary,
   googleRating,
   googleReviewCount,
   googleReviewUrl,
   playersSay,
 }: {
   turfId: string;
+  /** Latest reviews from the server render, players' own first. */
+  initialReviews: ReviewWithUser[];
+  /** In-app review count and average from the server render. */
+  initialSummary: ReviewSummary;
   /** Summary of written reviews made by the admin pass; null until it runs. */
   playersSay?: { summary: string; likes: string[]; gripes: string[]; based_on: number; sources: string[] } | null;
   // Pass Google's public rating so the block has something to show
@@ -39,29 +48,55 @@ export function TurfReviews({
   googleReviewUrl?: string | null;
 }) {
   const { user, login } = useAuth();
-  const [reviews, setReviews] = useState<ReviewWithUser[]>([]);
-  const [summary, setSummary] = useState<ReviewSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const userId = user?.id ?? null;
+  const [reviews, setReviews] = useState<ReviewWithUser[]>(initialReviews);
+  const [summary, setSummary] = useState<ReviewSummary | null>(initialSummary);
+  const [loading, setLoading] = useState(false);
   const [posting, setPosting] = useState(false);
   const [rating, setRating] = useState<number>(0);
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
+  // Dates read the visitor's clock and locale, so they appear after
+  // hydration; the server's (UTC, its own ICU) could differ and break it.
+  const hydrated = useSyncExternalStore(noop, () => true, () => false);
+
+  // Reload from the database after the visitor's own review only; the
+  // cached page catches up when the queue next refreshes it.
   const load = useCallback(async () => {
     setLoading(true);
     const [list, sum] = await Promise.all([
-      getReviewsForTurf(turfId, 20, user?.id ?? null),
+      getReviewsForTurf(turfId, 20, userId),
       getReviewSummary(turfId),
     ]);
     setReviews(list);
     setSummary(sum);
     setLoading(false);
-  }, [turfId, user?.id]);
+  }, [turfId, userId]);
 
+  // Which reviews this signed-in visitor upvoted is theirs alone, so it
+  // is not in the cached page. One read, for every in-app review: the
+  // cached count can still read 0 for a minute after their own vote, and
+  // skipping those showed the button off, so the next tap removed the
+  // vote. Their own vote counts at least once until the page refreshes.
+  const votedOn = initialReviews
+    .filter((r) => !r.source)
+    .map((r) => r.id)
+    .join(",");
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!userId || !votedOn) return;
+    let alive = true;
+    getViewerUpvotes(votedOn.split(","), userId).then((ids) => {
+      if (!alive || !ids) return;
+      setReviews((prev) =>
+        prev.map((r) => ({ ...r, viewer_has_upvoted: ids.has(r.id), upvotes: ids.has(r.id) ? Math.max(r.upvotes, 1) : r.upvotes })),
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId, votedOn]);
 
   /**
    * Optimistic upvote toggle. Updates local state instantly, then
@@ -381,95 +416,99 @@ export function TurfReviews({
         <div className="text-sm text-primary-400">Loading reviews…</div>
       ) : (
         <ul className="space-y-4">
-          {reviews.map((r) => (
-            <li
-              key={r.id}
-              className="rounded-2xl border border-primary-100 bg-white p-4"
-            >
-              <div className="flex items-center gap-3 mb-2">
-                {r.user_avatar ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={r.user_avatar}
-                    alt=""
-                    className="w-9 h-9 rounded-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center">
-                    <User className="w-4 h-4 text-primary-500" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-primary-800 truncate flex items-center gap-1.5">
-                    <span className="truncate">
-                      {r.source ? r.author_name || "Google user" : r.user_name || "TapTurf player"}
-                    </span>
-                    {r.source === "google" && (
-                      <GoogleBadge href={r.author_url || r.source_url} />
-                    )}
-                  </p>
-                  <p className="text-[11px] text-primary-400">
-                    {r.source ? r.source_date_label || "on Google" : formatDate(r.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-0.5 text-accent-500">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-4 h-4 ${
-                        i < r.rating
-                          ? "fill-accent-500"
-                          : "fill-none text-primary-200"
-                      }`}
+          {reviews.map((r) => {
+            // Signed out, nothing is "yours" (the flags belong to the last viewer).
+            const voted = !!user && r.viewer_has_upvoted;
+            return (
+              <li
+                key={r.id}
+                className="rounded-2xl border border-primary-100 bg-white p-4"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  {r.user_avatar ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={r.user_avatar}
+                      alt=""
+                      className="w-9 h-9 rounded-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
-                  ))}
-                </div>
-              </div>
-              {r.comment && (
-                <p className="text-[15px] leading-snug text-primary-700 whitespace-pre-line">
-                  {r.comment}
-                </p>
-              )}
-
-              {/* Upvote row — 'Helpful' style. Filled on viewer's own
-                  upvote. Tapping while signed-out routes to /login.
-                  Not shown on imported reviews. */}
-              {!r.source && (
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  onClick={() => handleUpvote(r.id)}
-                  aria-pressed={r.viewer_has_upvoted}
-                  aria-label={
-                    r.viewer_has_upvoted
-                      ? "Remove your upvote"
-                      : "Upvote this review"
-                  }
-                  className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
-                    r.viewer_has_upvoted
-                      ? "bg-accent-500 border-accent-500 text-white hover:bg-accent-600"
-                      : "bg-white border-primary-200 text-primary-700 hover:border-accent-400 hover:text-accent-700"
-                  }`}
-                >
-                  <ChevronUp
-                    className="w-4 h-4"
-                    strokeWidth={r.viewer_has_upvoted ? 3 : 2.5}
-                  />
-                  <span>Helpful</span>
-                  {r.upvotes > 0 && (
-                    <span
-                      className={`font-mono tabular-nums ${
-                        r.viewer_has_upvoted ? "text-white" : "text-primary-500"
-                      }`}
-                    >
-                      · {r.upvotes}
-                    </span>
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center">
+                      <User className="w-4 h-4 text-primary-500" />
+                    </div>
                   )}
-                </button>
-              </div>
-              )}
-            </li>
-          ))}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-primary-800 truncate flex items-center gap-1.5">
+                      <span className="truncate">
+                        {r.source ? r.author_name || "Google user" : r.user_name || "TapTurf player"}
+                      </span>
+                      {r.source === "google" && (
+                        <GoogleBadge href={r.author_url || r.source_url} />
+                      )}
+                    </p>
+                    <p className="text-[11px] text-primary-400">
+                      {r.source ? r.source_date_label || "on Google" : hydrated ? formatDate(r.created_at) : "\u00a0"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-0.5 text-accent-500">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-4 h-4 ${
+                          i < r.rating
+                            ? "fill-accent-500"
+                            : "fill-none text-primary-200"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {r.comment && (
+                  <p className="text-[15px] leading-snug text-primary-700 whitespace-pre-line">
+                    {r.comment}
+                  </p>
+                )}
+
+                {/* Upvote row — 'Helpful' style. Filled on viewer's own
+                    upvote. Tapping while signed-out routes to /login.
+                    Not shown on imported reviews. */}
+                {!r.source && (
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => handleUpvote(r.id)}
+                    aria-pressed={voted}
+                    aria-label={
+                      voted
+                        ? "Remove your upvote"
+                        : "Upvote this review"
+                    }
+                    className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
+                      voted
+                        ? "bg-accent-500 border-accent-500 text-white hover:bg-accent-600"
+                        : "bg-white border-primary-200 text-primary-700 hover:border-accent-400 hover:text-accent-700"
+                    }`}
+                  >
+                    <ChevronUp
+                      className="w-4 h-4"
+                      strokeWidth={voted ? 3 : 2.5}
+                    />
+                    <span>Helpful</span>
+                    {r.upvotes > 0 && (
+                      <span
+                        className={`font-mono tabular-nums ${
+                          voted ? "text-white" : "text-primary-500"
+                        }`}
+                      >
+                        · {r.upvotes}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
