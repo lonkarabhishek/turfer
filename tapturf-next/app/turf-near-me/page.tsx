@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import Link from "next/link";
 import { ChevronRight, MapPin } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
@@ -26,6 +26,11 @@ const LIST =
 
 /** Photo cards per city; every other turf is still linked by area. */
 const CARDS_PER_CITY = 8;
+// Photo cards (each a client slider) only for the biggest cities; the
+// rest list their top turfs as plain links. All 54 cities as cards made
+// this page 4.2 MB with 392 sliders, and on a phone the photos could not
+// be swiped until all of it had loaded (20 Oct).
+const CARD_CITIES = 6;
 
 type CityBlock = {
   id: CityId;
@@ -266,8 +271,12 @@ export default async function TurfNearMePage() {
         </div>
       </nav>
 
-      {blocks.map((b) => (
-        <section key={b.id} id={b.id} className="max-w-7xl mx-auto px-4 sm:px-6 pt-10 scroll-mt-20">
+      {blocks.map((b, bi) => (
+        // A Suspense boundary per city: React hydrates each on its own and
+        // first where the player touches, so the top cards swipe before
+        // the rest of the page has hydrated.
+        <Suspense key={b.id}>
+        <section id={b.id} className="max-w-7xl mx-auto px-4 sm:px-6 pt-10 scroll-mt-20">
           <div className="flex items-end justify-between gap-4 mb-6">
             <div>
               <h2 className="font-display text-[26px] md:text-[34px] text-primary-900 tracking-tight leading-tight">
@@ -285,16 +294,46 @@ export default async function TurfNearMePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-            {b.turfs.slice(0, CARDS_PER_CITY).map((t, i) => (
-              <TurfCard key={t.id} turf={forCard(t)} priority={b === blocks[0] && i < 2} />
-            ))}
-          </div>
+          {bi < CARD_CITIES ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
+              {b.turfs.slice(0, CARDS_PER_CITY).map((t, i) => (
+                <TurfCard key={t.id} turf={forCard(t)} priority={bi === 0 && i < 2} />
+              ))}
+            </div>
+          ) : (
+            <ol className={`${LIST} rounded-2xl bg-white ring-1 ring-primary-200 p-5 sm:columns-2 gap-x-8`}>
+              {b.turfs.slice(0, CARDS_PER_CITY).map((t) => (
+                <li key={t.id} className="break-inside-avoid">
+                  <Link href={turfPath(t)}>
+                    <span>
+                      {t.name}
+                      {areaFor(t) && <small>, {areaFor(t)}</small>}
+                    </span>
+                    {t.rating > 0 && t.total_reviews > 0 && <i>★ {t.rating.toFixed(1)}</i>}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          )}
 
-          {/* By area: every turf in the city, linked. */}
+          {/* By area: every turf in the city, linked (the biggest cities;
+              the rest name their areas and link to the city page, which
+              lists every turf, so this page stays light on a phone). */}
           <h3 className="font-display text-[20px] md:text-[22px] text-primary-900 mt-12 mb-4">
             Find a turf by area in {b.label}
           </h3>
+          {bi >= CARD_CITIES ? (
+            <p className="text-[15px] leading-relaxed text-primary-700">
+              {b.areas.length > 0 && (
+                <>
+                  {b.areas.map((a) => `${a.area} (${a.turfs.length})`).join(", ")}.{" "}
+                </>
+              )}
+              <Link href={`/${b.id}`} className="font-semibold text-accent-600 hover:text-accent-700">
+                See all {b.turfs.length} turfs in {b.label}
+              </Link>
+            </p>
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {b.areas.map(({ area, turfs }) => (
               <div key={area} id={`${b.id}-${slugify(area)}`} className="rounded-2xl bg-primary-50 p-5 scroll-mt-20">
@@ -336,6 +375,7 @@ export default async function TurfNearMePage() {
               </div>
             )}
           </div>
+          )}
 
           {/* By sport in this city */}
           {b.sports.length > 0 && (
@@ -354,6 +394,7 @@ export default async function TurfNearMePage() {
             </div>
           )}
         </section>
+        </Suspense>
       ))}
 
       {/* FAQ: visible text matches the FAQPage JSON-LD */}

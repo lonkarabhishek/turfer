@@ -1,8 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
-
-const subscribeNoop = () => () => {};
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
@@ -50,9 +48,30 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
   const [idx, setIdx] = useState(0);
   const activeIdx = Math.min(idx, Math.max(0, shown.length - 1));
   // Server HTML carries only the first photo per card (240 cards x 9
-  // photos was 2,000 <img> tags on /turfs); the rest mount on the client.
-  const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false);
-  const rendered = hydrated ? shown : shown.slice(0, 1);
+  // photos was 2,000 <img> tags on /turfs). The rest mount when the card
+  // comes near the screen, or on the first touch or hover: mounting
+  // every card's photos straight after hydration made long lists (the
+  // near-me page had 392 cards) busy loading ~1,500 images just when a
+  // player tried to swipe, so swipes stalled or landed on blank frames.
+  const frame = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  const many = shown.length > 1;
+  useEffect(() => {
+    const el = frame.current;
+    if (near || !many || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near, many]);
+  const rendered = near ? shown : shown.slice(0, 1);
 
   // Swipe to change photo. No auto-play: the strip only moves when the
   // player drags it. Touch handling is done by hand rather than with
@@ -64,6 +83,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
   const go = (next: number) => setIdx(Math.max(0, Math.min(shown.length - 1, next)));
   const onTouchStart = (e: React.TouchEvent) => {
     if (shown.length <= 1) return;
+    setNear(true);
     const t = e.touches[0];
     touch.current = { x: t.clientX, y: t.clientY, horizontal: null };
   };
@@ -129,7 +149,9 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
         <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
         <div
           className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100"
+          ref={frame}
           style={{ touchAction: "pan-y" }}
+          onMouseEnter={many ? () => setNear(true) : undefined}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -156,9 +178,10 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                   src={imageUrlForCard(src)}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
                   className="w-full h-full shrink-0 object-cover"
-                  loading={priority && i === 0 ? "eager" : "lazy"}
-                  // @ts-expect-error — fetchpriority is a valid HTML attr not yet in React types
-                  fetchpriority={priority && i === 0 ? "high" : "auto"}
+                  // The photo on screen and the next one load straight away, so
+                  // a swipe never lands on a blank frame; the rest wait.
+                  loading={(i === 0 && priority) || (i > 0 && i <= activeIdx + 1) ? "eager" : "lazy"}
+                  fetchPriority={priority && i === 0 ? "high" : "auto"}
                   decoding="async"
                   referrerPolicy="no-referrer"
                   onError={() => setBroken((b) => (b.includes(src) ? b : [...b, src]))}
