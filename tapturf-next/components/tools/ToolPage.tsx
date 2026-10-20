@@ -112,7 +112,7 @@ export function ToolPage({ tool, intro, children, explainer, faq }: { tool: Tool
             ))}
             <li>
               <Link href="/tools" className="press-tight block rounded-2xl border border-dashed border-primary-300 px-4 py-3.5 text-[15px] font-semibold text-primary-700 hover:border-accent-400 hover:text-accent-700 transition-colors">
-                All TapTurf tools
+                All Turf Tools in a Tap!
               </Link>
             </li>
           </ul>

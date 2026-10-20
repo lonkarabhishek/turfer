@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: TOOLS_BASE },
   robots: { index: true, follow: true },
   openGraph: {
-    title: "Free Cricket Tools | TapTurf",
+    title: "Turf Tools in a Tap! Free cricket tools | TapTurf",
     description: "Live ball by ball scorer, NRR calculator, online toss, scorecard maker, tournament scorer and team generator. Free, no sign-up.",
     url: TOOLS_BASE,
     siteName: "TapTurf",
@@ -31,7 +31,7 @@ export default function ToolsHub() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: "TapTurf cricket tools",
+    name: "Turf Tools in a Tap!",
     itemListElement: TOOLS.map((t, i) => ({ "@type": "ListItem", position: i + 1, name: t.name, url: `${TOOLS_BASE}/${t.slug}` })),
   };
   return (
@@ -39,7 +39,7 @@ export default function ToolsHub() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <header className="mb-8">
         <p className="text-[11px] font-bold tracking-[0.14em] uppercase text-accent-600">Free</p>
-        <h1 className="font-display tracking-tight text-primary-900 text-3xl sm:text-4xl md:text-5xl leading-[1.05] mt-2">TapTurf Tools</h1>
+        <h1 className="font-display tracking-tight text-primary-900 text-3xl sm:text-4xl md:text-5xl leading-[1.05] mt-2">Turf Tools in a Tap!</h1>
         <p className="mt-3 text-[17px] text-primary-600 leading-relaxed">Free tools for cricket players and tournament organizers. No sign-up, nothing to install, built to work on a phone at the ground.</p>
       </header>
 
