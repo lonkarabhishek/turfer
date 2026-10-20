@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpDown, Check, Copy, MessageCircle, Share2 } from "lucide-react";
+import { ArrowUpDown, Check, Copy, Link2, Loader2, MessageCircle, Radio, Share2 } from "lucide-react";
 import {
   WICKET_LABELS,
   allowedWicketKinds,
@@ -23,6 +23,7 @@ import {
   type Side,
 } from "@/lib/cricket/scoring";
 import { buildBall, cleanName, defaultName, placeholderOf, resolvePlayer, type NbSource } from "./logic";
+import { shortUrl, type LiveFault, type LiveInfo } from "./live";
 import { NameInput, Options, Pick, Sheet, SheetLabel } from "./ui";
 
 type Commit = (events: MatchEvent[]) => boolean;
@@ -611,9 +612,166 @@ export function SettingsSheet({ match, view, onCommit, onClose }: { match: Match
 }
 
 /** Preview of the WhatsApp text, then WhatsApp, copy, or the phone's share sheet. */
-export function ShareSheet({ text, title, onShared, onClose }: { text: string; title: string; onShared: (how: string) => void; onClose: () => void }) {
+/** The share sheet's live link block, when live links are on for this site. */
+export type ShareLive = {
+  info: LiveInfo;
+  /** The follower link while the link is on. */
+  url: string | null;
+  onStart: () => void;
+  onStop: () => void;
+};
+
+const LIVE_FAULT: Record<LiveFault, string> = {
+  offline: "No internet? Try again.",
+  unavailable: "Live links are not working right now. Try again in a bit.",
+  limit: "Too many live links from this network for now. Try again later.",
+  too_big: "This match is too long to share live.",
+  forbidden: "This link was made in another browser, so it cannot be updated here. Turn on a new live link.",
+  gone: "This live link was turned off or has expired. Turn on a new one to keep sharing.",
+  bad: "The live link could not take this update. Turn it off and on again.",
+  not_off: "Could not turn it off. Check your internet and try again.",
+};
+
+function faultText(info: LiveInfo): string | null {
+  if (!info.fault) return null;
+  // A link the server took writes for has hit its own cap, not the network's.
+  if (info.fault === "limit" && info.link?.sentRev) return "This live link has reached its limit. Turn on a new one to keep sharing.";
+  return LIVE_FAULT[info.fault];
+}
+
+const LIVE_STATUS: Record<"synced" | "sending" | "offline", { dot: string; text: string }> = {
+  synced: { dot: "bg-green-500", text: "Live, all balls sent" },
+  sending: { dot: "bg-amber-400", text: "Sending…" },
+  offline: { dot: "bg-amber-400", text: "Offline. Balls are saved and will send when you are back online." },
+};
+
+const waLink = (text: string) => `https://wa.me/?text=${encodeURIComponent(text)}`;
+
+function PrivacyNote() {
+  return (
+    <p className="mt-1 flex items-center gap-1 text-[12px] leading-snug text-primary-500">
+      <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>
+      <a href="/privacy#live-links" target="_blank" rel="noopener" className="shrink-0 min-h-12 px-2 inline-flex items-center font-semibold text-accent-700 underline underline-offset-2">
+        Privacy
+      </a>
+    </p>
+  );
+}
+
+function LiveLinkBlock({ live, text, onShared }: { live: ShareLive; text: string; onShared: (how: string) => void }) {
+  const { info, url } = live;
+  const [copied, setCopied] = useState(false);
+  const [confirmOff, setConfirmOff] = useState(false);
+  const fault = faultText(info);
+  const box = "rounded-2xl border-2 border-primary-200 p-3";
+  const heading = <h3 className="text-[16px] font-bold text-primary-900">Live link</h3>;
+
+  if (info.mode === "starting") {
+    return (
+      <section className={box} aria-busy="true">
+        {heading}
+        <p role="status" className="min-h-14 flex items-center gap-2 text-[15px] font-semibold text-primary-800">
+          <Loader2 className="w-5 h-5 shrink-0 text-accent-600 animate-spin" aria-hidden /> Getting your link…
+        </p>
+      </section>
+    );
+  }
+
+  if (!info.on || !url) {
+    return (
+      <section className={box}>
+        {heading}
+        <p className="mt-0.5 text-[14px] leading-snug text-primary-700">Friends open the link and follow every ball. No app or sign-up.</p>
+        {fault && (
+          <p role="alert" className="mt-2 text-[14px] font-semibold leading-snug text-red-700">
+            {fault}
+          </p>
+        )}
+        <button type="button" onClick={live.onStart} className="press-tight mt-3 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[17px] font-bold hover:bg-primary-800">
+          <Radio className="w-5 h-5" aria-hidden /> Turn on live link
+        </button>
+        <PrivacyNote />
+      </section>
+    );
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      onShared("live_copy");
+    } catch {
+      setCopied(false);
+    }
+  };
+  const status = info.state === "synced" || info.state === "sending" || info.state === "offline" ? LIVE_STATUS[info.state] : null;
+  const stopping = info.mode === "stopping";
+
+  return (
+    <section className={box}>
+      {heading}
+      <p className="mt-0.5 text-[15px] font-bold text-primary-900 break-all">{shortUrl(url)}</p>
+      <a
+        href={waLink(text)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onShared("live_whatsapp")}
+        className="press-tight mt-3 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600"
+      >
+        <MessageCircle className="w-5 h-5" aria-hidden /> Send link on WhatsApp
+      </a>
+      <button type="button" onClick={copy} className="press-tight mt-2 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full border-2 border-primary-200 text-[15px] font-bold text-primary-800">
+        {copied ? <Check className="w-4 h-4" aria-hidden /> : <Link2 className="w-4 h-4" aria-hidden />} {copied ? "Copied" : "Copy link"}
+      </button>
+      <p role="status" className="mt-3 flex items-start gap-2 text-[14px] leading-snug">
+        <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${status ? status.dot : "bg-red-500"}`} aria-hidden />
+        <span className={status ? "text-primary-700" : "font-semibold text-red-700"}>{status ? status.text : (fault ?? "Live link stopped.")}</span>
+      </p>
+      {info.fault === "not_off" && (
+        <p role="alert" className="mt-2 text-[14px] font-semibold leading-snug text-red-700">
+          {fault}
+        </p>
+      )}
+      {confirmOff ? (
+        <div className="mt-3 rounded-2xl bg-red-50 p-3">
+          <p className="text-[14px] font-semibold leading-snug text-red-800">Turn off the live link? Friends will see that it is off.</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setConfirmOff(false)} className="press-tight h-12 rounded-full border-2 border-primary-200 bg-white text-[15px] font-bold text-primary-800">
+              Keep it on
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmOff(false);
+                live.onStop();
+              }}
+              className="press-tight h-12 rounded-full bg-red-600 text-white text-[15px] font-bold hover:bg-red-700"
+            >
+              Turn off
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setConfirmOff(true)} disabled={stopping} className="press-tight mt-2 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full text-[15px] font-bold text-red-700 hover:bg-red-50 disabled:opacity-60">
+          {stopping && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {stopping ? "Turning off…" : "Turn off live link"}
+        </button>
+      )}
+      <span className="sr-only" aria-live="polite">
+        {copied ? "Link copied" : ""}
+      </span>
+    </section>
+  );
+}
+
+/**
+ * Score as WhatsApp text, and the live link on top when the site has
+ * live links. With the link on, the text carries it and the block's own
+ * WhatsApp button sends it, so the one below goes.
+ */
+export function ShareSheet({ text, title, live, onShared, onClose }: { text: string; title: string; live?: ShareLive; onShared: (how: string) => void; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const canNative = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const linkOn = !!live?.info.on && !!live.url;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -625,17 +783,24 @@ export function ShareSheet({ text, title, onShared, onClose }: { text: string; t
   };
   return (
     <Sheet title={title} subtitle="Bold bits show as bold in WhatsApp." onClose={onClose}>
+      {live && (
+        <div className="mb-4">
+          <LiveLinkBlock live={live} text={text} onShared={onShared} />
+        </div>
+      )}
       <pre className="whitespace-pre-wrap break-words rounded-2xl bg-primary-50 p-3 text-[14px] leading-relaxed text-primary-800 font-sans">{text}</pre>
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <a
-          href={`https://wa.me/?text=${encodeURIComponent(text)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => onShared("whatsapp")}
-          className="press-tight col-span-2 inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600"
-        >
-          <MessageCircle className="w-5 h-5" aria-hidden /> Send on WhatsApp
-        </a>
+        {!linkOn && (
+          <a
+            href={waLink(text)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onShared("whatsapp")}
+            className="press-tight col-span-2 inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600"
+          >
+            <MessageCircle className="w-5 h-5" aria-hidden /> Send on WhatsApp
+          </a>
+        )}
         <button type="button" onClick={copy} className="press-tight inline-flex items-center justify-center gap-2 h-12 rounded-full border-2 border-primary-200 text-[15px] font-bold text-primary-800">
           {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />} {copied ? "Copied" : "Copy text"}
         </button>

@@ -71,8 +71,25 @@ const names = (s: string) =>
     .filter(Boolean)
     .slice(0, 30);
 
-/** Teams, overs, players, who bats. Everything else has a sensible default. */
-export function Setup({ onStart }: { onStart: (m: Match) => void }) {
+/** What Setup asks of the live link. keep: give the previous match's link to this one. */
+export type SetupLive = { on: boolean; keep: boolean };
+
+/** On/off switch drawn as a track and knob; the row around it is the tap target. */
+function SwitchKnob({ on }: { on: boolean }) {
+  return (
+    <span className={`relative w-[51px] h-[31px] rounded-full shrink-0 transition-colors ${on ? "bg-accent-500" : "bg-primary-300"}`} aria-hidden>
+      <span className={`absolute top-[2px] left-[2px] w-[27px] h-[27px] bg-white rounded-full shadow-sm motion-safe:transition-transform motion-safe:duration-200 ${on ? "translate-x-[20px]" : ""}`} />
+    </span>
+  );
+}
+
+/**
+ * Teams, overs, players, who bats. Everything else has a sensible
+ * default. initialVenue comes from a game reminder (?venue). live is
+ * left out when the site has no live links; keepFrom names the previous
+ * match when its link can move to this one.
+ */
+export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match, live: SetupLive) => void; initialVenue?: string; live?: { on: boolean; keepFrom: string | null } }) {
   const [teamA, setTeamA] = useState("Team A");
   const [teamB, setTeamB] = useState("Team B");
   const [overs, setOvers] = useState(6);
@@ -84,7 +101,11 @@ export function Setup({ onStart }: { onStart: (m: Match) => void }) {
   const [namesA, setNamesA] = useState("");
   const [namesB, setNamesB] = useState("");
   const [title, setTitle] = useState("");
-  const [venue, setVenue] = useState("");
+  const [venue, setVenue] = useState(initialVenue);
+  // Until they choose, follow the page: on from a game reminder, or when the last match's link is going.
+  const [liveChoice, setLiveChoice] = useState<boolean | null>(null);
+  const liveOn = !!live && (liveChoice ?? (live.on || !!live.keepFrom));
+  const [keep, setKeep] = useState(true);
 
   const set = <K extends keyof Rules>(k: K, v: Rules[K]) => setRules((r) => ({ ...r, [k]: v }));
   const a = teamA.trim() || "Team A";
@@ -103,6 +124,7 @@ export function Setup({ onStart }: { onStart: (m: Match) => void }) {
         title,
         venue,
       }),
+      { on: !!live && liveOn, keep: !!live?.keepFrom && liveOn && keep },
     );
   };
 
@@ -244,7 +266,7 @@ export function Setup({ onStart }: { onStart: (m: Match) => void }) {
         <button type="button" onClick={() => setShowMore((v) => !v)} aria-expanded={showMore} className="w-full min-h-14 px-4 py-2 flex items-center justify-between gap-3 text-left">
           <span className="min-w-0">
             <span className="block text-[15px] font-semibold text-primary-900">Player names and venue</span>
-            <span className="block text-[12px] text-primary-500 truncate">Optional. Skip it and name players as they come in.</span>
+            <span className="block text-[12px] text-primary-500 truncate">{venue.trim() ? `Venue: ${venue.trim()}` : "Optional. Skip it and name players as they come in."}</span>
           </span>
           <ChevronDown className={`w-5 h-5 shrink-0 text-primary-500 motion-safe:transition-transform ${showMore ? "rotate-180" : ""}`} aria-hidden />
         </button>
@@ -280,6 +302,37 @@ export function Setup({ onStart }: { onStart: (m: Match) => void }) {
           </div>
         )}
       </div>
+
+      {live && (
+        <div className="rounded-2xl border border-primary-200">
+          <button type="button" role="switch" aria-checked={liveOn} onClick={() => setLiveChoice(!liveOn)} className="w-full min-h-14 px-4 py-2 flex items-center justify-between gap-3 text-left">
+            <span className="min-w-0">
+              <span className="block text-[15px] font-semibold text-primary-900">Live link: let others follow the score</span>
+              <span className="block text-[12px] text-primary-500">One link for the group. No app or sign-up.</span>
+            </span>
+            <SwitchKnob on={liveOn} />
+          </button>
+          {liveOn && (
+            <div className="px-4 pb-2">
+              {live.keepFrom && (
+                <label className="min-h-12 py-2 flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="w-5 h-5 shrink-0 accent-accent-600" />
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-semibold text-primary-900">Keep the same live link</span>
+                    <span className="block text-[12px] text-primary-500">{keep ? `Friends following ${live.keepFrom} move to this match.` : "This match gets a new link."}</span>
+                  </span>
+                </label>
+              )}
+              <p className="flex items-center gap-1 text-[12px] leading-snug text-primary-500">
+                <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>
+                <a href="/privacy#live-links" target="_blank" rel="noopener" className="shrink-0 min-h-12 px-2 inline-flex items-center font-semibold text-accent-700 underline underline-offset-2">
+                  Privacy
+                </a>
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <PrimaryButton onClick={start} className="w-full h-14 text-[17px]">
         <Play className="w-5 h-5" aria-hidden /> Start match

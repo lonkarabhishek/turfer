@@ -162,10 +162,14 @@ function InningsSwitch({ view, value, onChange }: { view: MatchView; value: numb
 
 export type PanelActions = { onStartChase: () => void; onResultCard: () => void; onShare: () => void; onNewMatch: () => void };
 
-export function LiveTab({ view, onPlayer, actions }: { view: MatchView; onPlayer: OnPlayer; actions: PanelActions }) {
+/**
+ * readOnly is the follower page (/live/<code>): what is going on instead
+ * of what to pick, no scorer advice, and only the actions it passes.
+ */
+export function LiveTab({ view, onPlayer, actions, readOnly }: { view: MatchView; onPlayer?: OnPlayer; actions?: Partial<PanelActions>; readOnly?: boolean }) {
   const inn = view.current;
-  if (view.status === "done") return <ResultPanel view={view} onPlayer={onPlayer} actions={actions} />;
-  if (view.inningsBreak) return <BreakPanel view={view} actions={actions} />;
+  if (view.status === "done") return <ResultPanel view={view} onPlayer={onPlayer} actions={actions} readOnly={readOnly} />;
+  if (view.inningsBreak) return <BreakPanel view={view} actions={actions} readOnly={readOnly} />;
 
   const atCrease = [inn.striker, inn.nonStriker].filter((b): b is BatterLine => !!b);
   const recent = inn.byOver.slice(-3).reverse();
@@ -195,14 +199,14 @@ export function LiveTab({ view, onPlayer, actions }: { view: MatchView; onPlayer
       )}
 
       <Card title="Batting" right={inn.partnership ? `Partnership ${inn.partnership.runs} (${inn.partnership.balls})` : undefined}>
-        {atCrease.length ? <BattingTable rows={atCrease} side={inn.batting} onPlayer={onPlayer} /> : <p className="text-[14px] text-primary-500">Pick the batters to start.</p>}
+        {atCrease.length ? <BattingTable rows={atCrease} side={inn.batting} onPlayer={onPlayer} /> : <p className="text-[14px] text-primary-500">{readOnly ? "Waiting for the batters" : "Pick the batters to start."}</p>}
       </Card>
 
       <Card title="Bowling" right={view.onHatTrick ? <span className="font-bold text-red-600">On a hat-trick</span> : undefined}>
-        {inn.bowler ? <BowlingTable rows={[inn.bowler]} side={inn.bowling} onPlayer={onPlayer} /> : <p className="text-[14px] text-primary-500">Pick who bowls this over.</p>}
+        {inn.bowler ? <BowlingTable rows={[inn.bowler]} side={inn.bowling} onPlayer={onPlayer} /> : <p className="text-[14px] text-primary-500">{readOnly ? "Waiting for the bowler" : "Pick who bowls this over."}</p>}
       </Card>
 
-      {view.warnings.length > 0 && (
+      {!readOnly && view.warnings.length > 0 && (
         <div role="note" className="rounded-2xl bg-amber-50 border border-amber-300 px-3 py-2 text-[14px] text-amber-900 space-y-1">
           {view.warnings.map((w) => (
             <p key={w}>{w}</p>
@@ -266,7 +270,7 @@ function topBowlers(inn: InningsView, n = 2) {
   return [...inn.bowlers].filter((b) => b.balls > 0).sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, n);
 }
 
-function BreakPanel({ view, actions }: { view: MatchView; actions: PanelActions }) {
+function BreakPanel({ view, actions, readOnly }: { view: MatchView; actions?: Partial<PanelActions>; readOnly?: boolean }) {
   const first = view.innings[0];
   const chase = view.chase;
   return (
@@ -279,9 +283,11 @@ function BreakPanel({ view, actions }: { view: MatchView; actions: PanelActions 
             {view.current.battingName} need <span className="font-bold text-white">{chase.target}</span> to win from {chase.ballsLeft} balls, at {rate(chase.rrr)} an over.
           </p>
         )}
-        <button type="button" onClick={actions.onStartChase} className="press-tight mt-4 w-full h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600">
-          Start the chase
-        </button>
+        {!readOnly && actions?.onStartChase && (
+          <button type="button" onClick={actions.onStartChase} className="press-tight mt-4 w-full h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600">
+            Start the chase
+          </button>
+        )}
       </section>
       <Card title={`${first.battingName}: best with the bat`}>
         <ul className="text-[15px] text-primary-800 space-y-1">
@@ -315,8 +321,9 @@ function BreakPanel({ view, actions }: { view: MatchView; actions: PanelActions 
   );
 }
 
-function ResultPanel({ view, onPlayer, actions }: { view: MatchView; onPlayer: OnPlayer; actions: PanelActions }) {
+function ResultPanel({ view, onPlayer, actions, readOnly }: { view: MatchView; onPlayer?: OnPlayer; actions?: Partial<PanelActions>; readOnly?: boolean }) {
   const { potm, topScorer, bestBowler } = view.awards;
+  const onNewMatch = readOnly ? undefined : actions?.onNewMatch;
   return (
     <div className="space-y-3">
       <section className="rounded-2xl bg-primary-900 text-white p-4">
@@ -327,17 +334,25 @@ function ResultPanel({ view, onPlayer, actions }: { view: MatchView; onPlayer: O
             <li key={i.index}>{i.summary}</li>
           ))}
         </ul>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button type="button" onClick={actions.onResultCard} className="press-tight col-span-2 inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600">
-            <ImageIcon className="w-5 h-5" aria-hidden /> Make the result card
-          </button>
-          <button type="button" onClick={actions.onShare} className="press-tight inline-flex items-center justify-center gap-2 h-12 rounded-full bg-white/10 text-white text-[15px] font-bold hover:bg-white/20">
-            <Share2 className="w-4 h-4" aria-hidden /> Share result
-          </button>
-          <button type="button" onClick={actions.onNewMatch} className="press-tight inline-flex items-center justify-center gap-2 h-12 rounded-full bg-white/10 text-white text-[15px] font-bold hover:bg-white/20">
-            <Plus className="w-4 h-4" aria-hidden /> New match
-          </button>
-        </div>
+        {(actions?.onResultCard || actions?.onShare || onNewMatch) && (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {actions?.onResultCard && (
+              <button type="button" onClick={actions.onResultCard} className="press-tight col-span-2 inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600">
+                <ImageIcon className="w-5 h-5" aria-hidden /> Make the result card
+              </button>
+            )}
+            {actions?.onShare && (
+              <button type="button" onClick={actions.onShare} className={`press-tight ${onNewMatch ? "" : "col-span-2 "}inline-flex items-center justify-center gap-2 h-12 rounded-full bg-white/10 text-white text-[15px] font-bold hover:bg-white/20`}>
+                <Share2 className="w-4 h-4" aria-hidden /> {readOnly ? "Share this link" : "Share result"}
+              </button>
+            )}
+            {onNewMatch && (
+              <button type="button" onClick={onNewMatch} className={`press-tight ${actions?.onShare ? "" : "col-span-2 "}inline-flex items-center justify-center gap-2 h-12 rounded-full bg-white/10 text-white text-[15px] font-bold hover:bg-white/20`}>
+                <Plus className="w-4 h-4" aria-hidden /> New match
+              </button>
+            )}
+          </div>
+        )}
       </section>
       {(potm || topScorer || bestBowler) && (
         <Card title="Stars of the match">
@@ -383,7 +398,7 @@ function ResultPanel({ view, onPlayer, actions }: { view: MatchView; onPlayer: O
 /* Scorecard, overs, commentary                                        */
 /* ------------------------------------------------------------------ */
 
-function InningsCard({ view, inn, onPlayer }: { view: MatchView; inn: InningsView; onPlayer: OnPlayer }) {
+function InningsCard({ view, inn, onPlayer }: { view: MatchView; inn: InningsView; onPlayer?: OnPlayer }) {
   const maxPart = Math.max(1, ...inn.partnerships.map((p) => p.runs));
   return (
     <div className="space-y-3">
@@ -435,7 +450,7 @@ function InningsCard({ view, inn, onPlayer }: { view: MatchView; inn: InningsVie
   );
 }
 
-export function ScorecardTab({ view, onPlayer }: { view: MatchView; onPlayer: OnPlayer }) {
+export function ScorecardTab({ view, onPlayer }: { view: MatchView; onPlayer?: OnPlayer }) {
   const [pick, setPick] = useState<number | null>(null);
   const i = pick ?? view.current.index;
   const inn = view.innings[i] ?? view.current;
@@ -468,9 +483,9 @@ export function OversTab({ view }: { view: MatchView }) {
   );
 }
 
-export function CommentaryTab({ view }: { view: MatchView }) {
+export function CommentaryTab({ view, readOnly }: { view: MatchView; readOnly?: boolean }) {
   const list = [...view.innings].reverse().filter((i) => i.commentary.length);
-  if (!list.length) return <p className="text-[14px] text-primary-500">Ball by ball commentary appears here as you score.</p>;
+  if (!list.length) return <p className="text-[14px] text-primary-500">{readOnly ? "Ball by ball commentary shows here once the match starts." : "Ball by ball commentary appears here as you score."}</p>;
   return (
     <div className="space-y-4">
       {list.map((inn) => (

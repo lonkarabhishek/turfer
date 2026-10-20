@@ -1,26 +1,18 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, MoreHorizontal, Redo2, Share2, Undo2, X } from "lucide-react";
+import { Redo2, Undo2, X } from "lucide-react";
 import { apply, check, derive, shareText, type Extra, type Match, type MatchEvent, type MatchView, type Side } from "@/lib/cricket/scoring";
 import { trackTool, type ToolEvent } from "@/lib/analytics/tools";
-import { buildBall, chipText, keyHint, plainRuns, rate, runAllowed, smartUndo, stamp, tapClock, vibrate, wallClock, type NbSource } from "./logic";
+import { buildBall, chipText, keyHint, plainRuns, runAllowed, smartUndo, stamp, tapClock, vibrate, wallClock, type NbSource } from "./logic";
 import { BallChip } from "./ui";
-import { BatterSheet, BowlerSheet, ConfirmSheet, MoreSheet, OpenersSheet, PlayerSheet, SettingsSheet, ShareSheet, WicketSheet, type MoreAction } from "./Sheets";
-import { CommentaryTab, LiveTab, OversTab, ScorecardTab, type PanelActions } from "./Tabs";
-import { Manhattan, Worm } from "./Charts";
+import { BatterSheet, BowlerSheet, ConfirmSheet, MoreSheet, OpenersSheet, PlayerSheet, SettingsSheet, ShareSheet, WicketSheet, type MoreAction, type ShareLive } from "./Sheets";
+import type { PanelActions } from "./Tabs";
+import { MatchTabs, ScoreHeader, type MatchTab } from "./MatchHeader";
+import { pillTone, type LiveInfo } from "./live";
 
 export const TOOL = "live_scorer";
 const SHEET_FLAG = "tapturfSheet";
-
-type Tab = "live" | "card" | "overs" | "graphs" | "comms";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "live", label: "Live" },
-  { id: "card", label: "Scorecard" },
-  { id: "overs", label: "Overs" },
-  { id: "graphs", label: "Graphs" },
-  { id: "comms", label: "Commentary" },
-];
 
 type SheetState =
   | null
@@ -57,9 +49,51 @@ function scoreLine(v: MatchView): string {
 
 const SPOKEN_EXTRA: Partial<Record<Extra, string>> = { wide: "Wide", noBall: "No-ball", bye: "Byes", legBye: "Leg byes" };
 
-export function ScoringScreen({ match, onChange, onExit, onNewMatch, onResultCard }: { match: Match; onChange: (m: Match) => void; onExit: () => void; onNewMatch: () => void; onResultCard: (v: MatchView) => void }) {
+const PILL_DOT = { green: "bg-green-400", amber: "bg-amber-400", red: "bg-red-500" } as const;
+
+function pillLabel(info: LiveInfo): string {
+  if (info.mode === "starting") return "Live link: getting your link";
+  if (info.state === "synced") return "Live link on, all balls sent";
+  if (info.state === "sending") return "Live link on, sending";
+  if (info.state === "offline") return "Live link on, offline";
+  return "Live link stopped";
+}
+
+/** By the team names while the match has a live link. Tapping it opens the share sheet. */
+function LivePill({ info, onClick }: { info: LiveInfo; onClick: () => void }) {
+  const tone = pillTone(info);
+  if (!tone) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`${pillLabel(info)}. Open sharing.`}
+      className="relative shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full bg-white/15 text-[10px] font-extrabold tracking-wide hover:bg-white/25 after:absolute after:-inset-x-1.5 after:-inset-y-3 after:content-['']"
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${PILL_DOT[tone]}`} aria-hidden />
+      LIVE
+    </button>
+  );
+}
+
+export function ScoringScreen({
+  match,
+  onChange,
+  onExit,
+  onNewMatch,
+  onResultCard,
+  live,
+}: {
+  match: Match;
+  onChange: (m: Match) => void;
+  onExit: () => void;
+  onNewMatch: () => void;
+  onResultCard: (v: MatchView) => void;
+  /** Left out when the site has no live links. */
+  live?: ShareLive;
+}) {
   const view = useMemo(() => derive(match), [match]);
-  const [tab, setTab] = useState<Tab>("live");
+  const [tab, setTab] = useState<MatchTab>("live");
   const [armed, setArmed] = useState<Extra | null>(null);
   const [nb, setNb] = useState<NbSource>("bat");
   const [sheet, setSheet] = useState<SheetState>(() => sheetFor(view));
@@ -335,131 +369,18 @@ export function ScoringScreen({ match, onChange, onExit, onNewMatch, onResultCar
     <div ref={rootRef} tabIndex={-1} className="fixed inset-0 z-[70] bg-primary-100 outline-none" role="dialog" aria-modal="true" aria-label={`Live scorer, ${s.teamA} vs ${s.teamB}`}>
       <div className="mx-auto h-full w-full max-w-6xl grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[420px_minmax(0,1fr)] lg:gap-4 lg:p-4">
         {/* Score header */}
-        <header className="bg-primary-900 text-white lg:col-start-1 lg:row-start-1 lg:rounded-3xl lg:overflow-hidden">
-          <div className="flex items-center gap-1 px-1.5 h-12">
-            <button type="button" onClick={onExit} aria-label="Leave the scorer. The match is saved." className="w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-white/10">
-              <ChevronLeft className="w-6 h-6" />
-            </button>
-            <div className="flex-1 min-w-0 text-center">
-              <p className="text-[13px] font-semibold truncate">
-                {s.teamA} v {s.teamB}
-              </p>
-              <p className="text-[11px] text-white/60 truncate">
-                {view.status === "done" ? "Match over" : `${inn.index === 0 ? "1st" : "2nd"} innings`} · {s.overs} overs{s.title ? ` · ${s.title}` : ""}
-              </p>
-            </div>
-            <button type="button" onClick={() => openSheet({ k: "share" })} aria-label="Share live score" className="w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-white/10">
-              <Share2 className="w-5 h-5" />
-            </button>
-            <button type="button" onClick={() => openSheet({ k: "more" })} aria-label="More options" className="w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-white/10">
-              <MoreHorizontal className="w-6 h-6" />
-            </button>
-          </div>
-
-          <div className="px-4 pb-2 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[12px] font-bold uppercase tracking-wide text-accent-300 truncate">{inn.battingName}</p>
-              <p className="font-display text-[46px] [@media(max-height:700px)]:text-[38px] leading-[0.95] font-bold tabular-nums">
-                {inn.runs}
-                <span className="text-white/50">/</span>
-                {inn.wickets}
-              </p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-[24px] font-bold tabular-nums leading-tight">
-                {inn.overs}
-                <span className="text-[14px] font-semibold text-white/60"> / {Math.round(inn.maxBalls / 6)} ov</span>
-              </p>
-              {inn.crr !== null && <p className="text-[14px] text-white/75 tabular-nums">CRR {rate(inn.crr)}</p>}
-            </div>
-          </div>
-          {view.status === "done" ? (
-            <p className="px-4 py-2 bg-accent-600 text-[16px] font-bold">{view.result?.text}</p>
-          ) : view.chase && !view.inningsBreak ? (
-            <p className="px-4 py-2 bg-accent-600 text-[16px] font-bold tabular-nums">
-              {view.chase.runsNeeded <= 0 ? "Target reached" : `Need ${view.chase.runsNeeded} from ${view.chase.ballsLeft}`}
-              <span className="font-semibold text-white/85"> · RRR {rate(view.chase.rrr)}</span>
-            </p>
-          ) : view.inningsBreak && view.chase ? (
-            <p className="px-4 py-2 bg-accent-600 text-[16px] font-bold">Target {view.chase.target} from {view.chase.ballsLeft} balls</p>
-          ) : (
-            <p className="px-4 py-1.5 bg-white/10 text-[14px] text-white/85 tabular-nums [@media(max-height:700px)]:hidden">{inn.projected !== null ? `Projected ${inn.projected} at this rate` : inn.byOver.length ? `${s.overs} overs a side. No legal ball yet.` : `${s.overs} overs a side. First ball coming up.`}</p>
-          )}
-
-          {/* Batters and bowler, tap a name to rename or act */}
-          {view.status === "live" && !view.inningsBreak && (
-            <div className="bg-white text-primary-900 border-b border-primary-200">
-              <div className="grid grid-cols-2 divide-x divide-primary-100">
-                {[inn.striker, inn.nonStriker].map((b, i) =>
-                  b ? (
-                    <button key={b.id} type="button" onClick={() => onPlayer(inn.batting, b.id)} className="min-h-12 px-3 py-1.5 text-left flex items-center gap-2 hover:bg-primary-50" aria-label={`${b.name}${b.onStrike ? ", on strike" : ""}, ${b.runs} off ${b.balls}`}>
-                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${b.onStrike ? "bg-accent-500" : "bg-transparent"}`} aria-hidden />
-                      <span className="min-w-0 flex-1">
-                        <span className={`block truncate text-[15px] ${b.onStrike ? "font-bold" : "font-semibold text-primary-700"}`}>{b.name}</span>
-                      </span>
-                      <span className="text-[16px] font-bold tabular-nums shrink-0">
-                        {b.runs}
-                        <span className="text-[13px] font-semibold text-primary-500"> ({b.balls})</span>
-                      </span>
-                    </button>
-                  ) : (
-                    <div key={i} className="min-h-12 px-3 py-1.5 flex items-center text-[14px] text-primary-500">{i === 1 && inn.striker && s.rules.lastManStands ? "Batting alone" : "Next batter"}</div>
-                  ),
-                )}
-              </div>
-              <div className="border-t border-primary-100">
-                {inn.bowler ? (
-                  <button type="button" onClick={() => onPlayer(inn.bowling, inn.bowler!.id)} className="w-full min-h-10 px-3 py-1 text-left flex items-center gap-2 hover:bg-primary-50">
-                    <span className="text-[12px] font-bold uppercase text-primary-500">Bowling</span>
-                    <span className="flex-1 min-w-0 truncate text-[15px] font-semibold">{inn.bowler.name}</span>
-                    {view.onHatTrick && <span className="text-[12px] font-bold text-red-600">Hat-trick ball</span>}
-                    <span className="text-[14px] font-bold tabular-nums">
-                      {inn.bowler.overs}-{inn.bowler.maidens}-{inn.bowler.runs}-{inn.bowler.wickets}
-                    </span>
-                  </button>
-                ) : (
-                  <p className="min-h-10 px-3 py-2 text-[14px] text-primary-500">Bowler for the next over</p>
-                )}
-              </div>
-            </div>
-          )}
-        </header>
+        <ScoreHeader
+          view={view}
+          className="lg:col-start-1 lg:row-start-1 lg:rounded-3xl lg:overflow-hidden"
+          onExit={onExit}
+          onShare={() => openSheet({ k: "share" })}
+          onMore={() => openSheet({ k: "more" })}
+          onPlayer={onPlayer}
+          badge={live && pillTone(live.info) ? <LivePill info={live.info} onClick={() => openSheet({ k: "share" })} /> : undefined}
+        />
 
         {/* Tabs */}
-        <div className="flex flex-col min-h-0 bg-primary-50 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:rounded-3xl lg:overflow-hidden lg:border lg:border-primary-200">
-          <div role="tablist" aria-label="Match details" className="flex gap-0.5 overflow-x-auto scrollbar-hide px-2 bg-white border-b border-primary-200 shrink-0">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                id={`ls-tab-${t.id}`}
-                aria-selected={tab === t.id}
-                aria-controls="ls-panel"
-                onClick={() => setTab(t.id)}
-                className={`h-11 px-1.5 min-[380px]:px-2 shrink-0 grow text-[12px] min-[380px]:text-[13px] sm:text-[14px] font-semibold border-b-[3px] transition-colors ${tab === t.id ? "border-accent-500 text-primary-900" : "border-transparent text-primary-500 hover:text-primary-800"}`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div id="ls-panel" role="tabpanel" aria-labelledby={`ls-tab-${tab}`} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3">
-            {tab === "live" && <LiveTab view={view} onPlayer={onPlayer} actions={actions} />}
-            {tab === "card" && <ScorecardTab view={view} onPlayer={onPlayer} />}
-            {tab === "overs" && <OversTab view={view} />}
-            {tab === "graphs" && (
-              <div className="space-y-4">
-                <section className="rounded-2xl bg-white border border-primary-200 p-3">
-                  <Manhattan view={view} />
-                </section>
-                <section className="rounded-2xl bg-white border border-primary-200 p-3">
-                  <Worm view={view} />
-                </section>
-              </div>
-            )}
-            {tab === "comms" && <CommentaryTab view={view} />}
-          </div>
-        </div>
+        <MatchTabs view={view} tab={tab} onTab={setTab} onPlayer={onPlayer} actions={actions} className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:rounded-3xl lg:overflow-hidden lg:border lg:border-primary-200" />
 
         {/* Tap pad */}
         <footer className="relative bg-white border-t border-primary-200 px-3 pt-2 lg:col-start-1 lg:row-start-2 lg:self-start lg:rounded-3xl lg:border" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
@@ -507,8 +428,9 @@ export function ScoringScreen({ match, onChange, onExit, onNewMatch, onResultCar
       {sheet?.k === "settings" && <SettingsSheet match={match} view={view} onCommit={commit} onClose={closeSheet} />}
       {sheet?.k === "share" && (
         <ShareSheet
-          text={shareText(view)}
+          text={shareText(view, live?.url ? { link: live.url } : {})}
           title={view.status === "done" ? "Share the result" : "Share live score"}
+          live={live}
           onShared={(how) => trackTool("tool_cta_clicked", TOOL, { href: "share", how, status: view.status })}
           onClose={closeSheet}
         />

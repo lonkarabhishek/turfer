@@ -1,0 +1,324 @@
+import { afterEach, beforeEach, describe, mock, test } from "node:test";
+import assert from "node:assert/strict";
+import { FAIL_BACKOFF_MS, FRESH_MS, QUIET_MS, WAIT_POLL_FOR_MS, WAIT_POLL_MS, ago, freshness, isNewer, nextPoll, readLive, serverTimeOf, span, startPolling, type Seen } from "./follow";
+import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, type LiveGetResponse } from "../../lib/live/types";
+
+const MIN = 60_000;
+
+test("readLive keeps well formed answers and refuses the rest", () => {
+  const ok = { status: "live", match: { v: 1 }, rev: 12, updatedAt: "2026-10-20T10:00:00.000Z" };
+  assert.deepEqual(readLive(ok), ok);
+  assert.deepEqual(readLive({ status: "waiting", match: null, rev: 0, updatedAt: null }), { status: "waiting", match: null, rev: 0, updatedAt: null });
+  assert.equal(readLive(null), null);
+  assert.equal(readLive("live"), null);
+  assert.equal(readLive({ ...ok, status: "paused" }), null);
+  assert.equal(readLive({ ...ok, rev: "12" }), null);
+  assert.equal(readLive({ ...ok, rev: -1 }), null);
+  assert.equal(readLive({ ...ok, rev: 1.5 }), null);
+  assert.equal(readLive({ error: "not_found" }), null);
+  // A time that does not parse is dropped, not trusted.
+  assert.equal(readLive({ ...ok, updatedAt: "yesterday" })?.updatedAt, null);
+  assert.equal(readLive({ ...ok, match: undefined })?.match, null);
+});
+
+test("only a higher rev replaces the score", () => {
+  assert.ok(isNewer({ status: "live", rev: 5 }, null));
+  assert.ok(isNewer({ status: "live", rev: 6 }, { status: "live", rev: 5 }));
+  assert.ok(!isNewer({ status: "live", rev: 5 }, { status: "live", rev: 5 }));
+  // An old CDN copy after a newer answer.
+  assert.ok(!isNewer({ status: "live", rev: 4 }, { status: "live", rev: 5 }));
+  assert.ok(!isNewer({ status: "waiting", rev: 0 }, { status: "live", rev: 5 }));
+  // Undo of the last ball: done goes back to live with a higher rev.
+  assert.ok(isNewer({ status: "live", rev: 9 }, { status: "done", rev: 8 }));
+  assert.ok(!isNewer({ status: "waiting", rev: 0 }, { status: "waiting", rev: 0 }));
+});
+
+test("turning a link off keeps the rev and still counts", () => {
+  assert.ok(isNewer({ status: "stopped", rev: 5 }, { status: "live", rev: 5 }));
+  assert.ok(isNewer({ status: "expired", rev: 5 }, { status: "done", rev: 5 }));
+  assert.ok(!isNewer({ status: "live", rev: 5 }, { status: "stopped", rev: 5 }));
+  assert.ok(!isNewer({ status: "expired", rev: 5 }, { status: "stopped", rev: 5 }));
+  assert.ok(!isNewer({ status: "stopped", rev: 4 }, { status: "live", rev: 5 }));
+});
+
+test("server time is Date plus Age", () => {
+  const date = "Tue, 20 Oct 2026 10:00:00 GMT";
+  assert.equal(serverTimeOf(date, null), Date.parse(date));
+  assert.equal(serverTimeOf(date, "3"), Date.parse(date) + 3000);
+  assert.equal(serverTimeOf(date, "junk"), Date.parse(date));
+  assert.equal(serverTimeOf(date, "-5"), Date.parse(date));
+  assert.ok(Number.isNaN(serverTimeOf(null, "3")));
+  assert.ok(Number.isNaN(serverTimeOf("not a date", null)));
+});
+
+test("polls fast while live, slower once done, and stop only when the link is off", () => {
+  assert.equal(nextPoll("live", 10_000, 0), LIVE_POLL_MS);
+  assert.equal(nextPoll("live", null, 0), LIVE_POLL_MS);
+  assert.equal(nextPoll("live", NaN, 0), LIVE_POLL_MS);
+  assert.equal(nextPoll("live", QUIET_MS, 0), LIVE_POLL_MS);
+  assert.equal(nextPoll("live", QUIET_MS + 1, 0), null);
+
+  assert.equal(nextPoll("done", 0, 0), LIVE_DONE_POLL_MS);
+  assert.equal(nextPoll("done", LIVE_DONE_POLL_FOR_MS - 1, 0), LIVE_DONE_POLL_MS);
+  assert.equal(nextPoll("done", LIVE_DONE_POLL_FOR_MS, 0), null);
+
+  assert.equal(nextPoll("waiting", null, 0), WAIT_POLL_MS);
+  assert.equal(nextPoll("waiting", null, WAIT_POLL_FOR_MS - 1), WAIT_POLL_MS);
+  assert.equal(nextPoll("waiting", null, WAIT_POLL_FOR_MS), null);
+
+  assert.equal(nextPoll("stopped", 0, 0), "stop");
+  assert.equal(nextPoll("expired", 0, 0), "stop");
+  assert.deepEqual([...FAIL_BACKOFF_MS], [6_000, 12_000, 30_000]);
+});
+
+test("ages read in plain words", () => {
+  assert.equal(span(-500), "0 s");
+  assert.equal(span(45_000), "45 s");
+  assert.equal(span(6 * MIN + 59_000), "6 min");
+  assert.equal(span(60 * MIN), "1 hour");
+  assert.equal(span(5 * 60 * MIN), "5 hours");
+  assert.equal(span(3 * 24 * 60 * MIN), "3 days");
+  assert.equal(ago(3_000), "just now");
+  assert.equal(ago(25_000), "25 s ago");
+});
+
+test("the live line turns amber after 2 min and gives up after 3 hours", () => {
+  assert.deepEqual(freshness("live", 20_000), { tone: "live", text: "Updated 20 s ago" });
+  assert.equal(freshness("live", FRESH_MS - 1).tone, "live");
+  assert.deepEqual(freshness("live", 6 * MIN), { tone: "quiet", text: "No update for 6 min. The scorer may be offline." });
+  assert.equal(freshness("live", QUIET_MS).tone, "quiet");
+  assert.equal(freshness("live", QUIET_MS + MIN).tone, "stopped");
+  assert.match(freshness("live", QUIET_MS + MIN).text, /^This match stopped updating/);
+  assert.equal(freshness("done", 12 * MIN).text, "Final score. Last update 12 min ago.");
+});
+
+test("no copy uses a dash as punctuation", () => {
+  const lines = [freshness("live", 0), freshness("live", 6 * MIN), freshness("live", QUIET_MS * 2), freshness("done", MIN)].map((f) => f.text);
+  for (const l of lines) assert.doesNotMatch(l, /[\u2013\u2014]/);
+});
+
+/* ------------------------------------------------------------------ */
+/* Polling, with fake timers                                           */
+/* ------------------------------------------------------------------ */
+
+type Answer = { status?: number; body?: unknown; age?: string; hang?: boolean };
+
+/** A page around startPolling: answers come from a queue, the last one repeats. */
+function harness(first: Seen | null, answers: Answer[]) {
+  const shown: LiveGetResponse[] = [];
+  const troubles: boolean[] = [];
+  const clocks: number[] = [];
+  let cur = first;
+  let hidden = false;
+  let polls = 0;
+  let aborted = 0;
+  let next = 0;
+  const poller = startPolling({
+    get: (signal) => {
+      polls++;
+      const a = answers[Math.min(next++, answers.length - 1)];
+      if (a.hang) {
+        return new Promise((_, reject) =>
+          signal.addEventListener("abort", () => {
+            aborted++;
+            reject(new Error("aborted"));
+          }),
+        );
+      }
+      const status = a.status ?? 200;
+      const headers = new Headers({ date: new Date(Date.now()).toUTCString(), ...(a.age ? { age: a.age } : {}) });
+      return Promise.resolve({ ok: status >= 200 && status < 300, status, headers, json: async () => a.body });
+    },
+    current: () => cur,
+    show: (r) => {
+      if (r.match === "broken") return false;
+      shown.push(r);
+      cur = { status: r.status, rev: r.rev, updatedAt: r.updatedAt ? Date.parse(r.updatedAt) : null };
+      return true;
+    },
+    trouble: (on) => troubles.push(on),
+    clock: (at) => clocks.push(at),
+    serverTime: () => Date.now(),
+    hidden: () => hidden,
+  });
+  return {
+    poller,
+    shown,
+    troubles,
+    clocks,
+    get polls() {
+      return polls;
+    },
+    get aborted() {
+      return aborted;
+    },
+    hide(h: boolean) {
+      hidden = h;
+    },
+  };
+}
+
+const T0 = Date.parse("2026-10-20T10:00:00Z");
+const iso = (ms: number) => new Date(ms).toISOString();
+const live = (rev: number, at = Date.now()) => ({ body: { status: "live", match: { v: 1 }, rev, updatedAt: iso(at) } });
+const flush = () => new Promise<void>((r) => setImmediate(r));
+/** Move fake time on in steps, letting each poll's promises settle. */
+async function advance(ms: number, step = 1_000) {
+  for (let t = 0; t < ms; t += step) {
+    mock.timers.tick(Math.min(step, ms - t));
+    for (let i = 0; i < 5; i++) await flush();
+  }
+}
+
+describe("polling", () => {
+  beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"], now: T0 }));
+  afterEach(() => mock.timers.reset());
+
+  test("live: every 6 s, and only a higher rev is shown", async () => {
+    const h = harness({ status: "live", rev: 5, updatedAt: T0 }, [live(5), live(4), live(6), live(6)]);
+    await advance(LIVE_POLL_MS - 1_000);
+    assert.equal(h.polls, 0);
+    await advance(1_000);
+    assert.equal(h.polls, 1);
+    await advance(LIVE_POLL_MS * 3);
+    assert.equal(h.polls, 4);
+    assert.deepEqual(h.shown.map((r) => r.rev), [6]);
+    assert.deepEqual(h.troubles, []);
+    assert.equal(h.clocks.length, 4);
+    h.poller.stop();
+  });
+
+  test("failures keep the score and back off 6, 12, 30, 30 s, then recover", async () => {
+    const h = harness({ status: "live", rev: 5, updatedAt: T0 }, [{ status: 503 }, { status: 404 }, { status: 500 }, { status: 503 }, live(7)]);
+    await advance(LIVE_POLL_MS);
+    assert.equal(h.polls, 1);
+    assert.deepEqual(h.troubles, [true]);
+    await advance(6_000);
+    assert.equal(h.polls, 2);
+    await advance(12_000);
+    assert.equal(h.polls, 3);
+    await advance(29_000);
+    assert.equal(h.polls, 3);
+    await advance(1_000);
+    assert.equal(h.polls, 4);
+    await advance(30_000);
+    assert.equal(h.polls, 5);
+    assert.deepEqual(h.troubles, [true, false]);
+    assert.deepEqual(h.shown.map((r) => r.rev), [7]);
+    await advance(LIVE_POLL_MS);
+    assert.equal(h.polls, 6);
+    h.poller.stop();
+  });
+
+  test("a broken body or match counts as a failed poll", async () => {
+    const h = harness(null, [{ body: { error: "x" } }, { body: { status: "live", match: "broken", rev: 3, updatedAt: iso(T0) } }, live(3)]);
+    await advance(FAIL_BACKOFF_MS[0]);
+    assert.equal(h.polls, 1);
+    await advance(FAIL_BACKOFF_MS[0]);
+    assert.equal(h.polls, 2);
+    await advance(FAIL_BACKOFF_MS[1]);
+    assert.equal(h.polls, 3);
+    assert.deepEqual(h.shown.map((r) => r.rev), [3]);
+    assert.deepEqual(h.troubles, [true, false]);
+    h.poller.stop();
+  });
+
+  test("a hung poll is given up after 8 s and only one runs at a time", async () => {
+    const h = harness({ status: "live", rev: 1, updatedAt: T0 }, [{ hang: true }, live(2)]);
+    await advance(LIVE_POLL_MS);
+    assert.equal(h.polls, 1);
+    h.poller.wake();
+    assert.equal(h.polls, 1);
+    await advance(8_000);
+    assert.equal(h.aborted, 1);
+    assert.deepEqual(h.troubles, [true]);
+    await advance(FAIL_BACKOFF_MS[0]);
+    assert.equal(h.polls, 2);
+    h.poller.stop();
+  });
+
+  test("a hidden tab does not poll; coming back polls at once, but not twice", async () => {
+    const h = harness({ status: "live", rev: 1, updatedAt: T0 }, [live(1)]);
+    h.hide(true);
+    h.poller.wake();
+    await advance(60_000);
+    assert.equal(h.polls, 0);
+    h.hide(false);
+    h.poller.wake();
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, 1);
+    // A focus right after the poll does not poll again; the chain carries on.
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, 1);
+    await advance(LIVE_POLL_MS);
+    assert.equal(h.polls, 2);
+    h.poller.stop();
+  });
+
+  test("done: every 30 s for 30 min after the last update, then only when looked at", async () => {
+    const h = harness({ status: "done", rev: 9, updatedAt: T0 }, [{ body: { status: "done", match: { v: 1 }, rev: 9, updatedAt: iso(T0) } }]);
+    await advance(LIVE_DONE_POLL_FOR_MS + LIVE_DONE_POLL_MS, 5_000);
+    const n = h.polls;
+    assert.equal(n, LIVE_DONE_POLL_FOR_MS / LIVE_DONE_POLL_MS);
+    await advance(10 * 60_000, 5_000);
+    assert.equal(h.polls, n);
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, n + 1);
+    h.poller.stop();
+  });
+
+  test("waiting: every 15 s for 10 min, then only when looked at", async () => {
+    const waiting = { body: { status: "waiting", match: null, rev: 0, updatedAt: null } };
+    const h = harness({ status: "waiting", rev: 0, updatedAt: null }, [waiting]);
+    await advance(WAIT_POLL_FOR_MS + 60_000, 5_000);
+    const n = h.polls;
+    assert.ok(n >= WAIT_POLL_FOR_MS / WAIT_POLL_MS - 1 && n <= WAIT_POLL_FOR_MS / WAIT_POLL_MS, String(n));
+    await advance(10 * 60_000, 5_000);
+    assert.equal(h.polls, n);
+    assert.equal(h.shown.length, 0);
+    h.poller.stop();
+  });
+
+  test("a live match quiet for 3 hours is polled only when looked at", async () => {
+    const h = harness({ status: "live", rev: 2, updatedAt: T0 - QUIET_MS - 1 }, [live(2, T0 - QUIET_MS - 1)]);
+    await advance(60_000);
+    assert.equal(h.polls, 0);
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, 1);
+    await advance(60_000);
+    assert.equal(h.polls, 1);
+    h.poller.stop();
+  });
+
+  test("turned off: shown once, then never polled again", async () => {
+    const h = harness({ status: "live", rev: 4, updatedAt: T0 }, [{ body: { status: "stopped", match: null, rev: 4, updatedAt: iso(T0) } }, live(5)]);
+    await advance(LIVE_POLL_MS);
+    assert.deepEqual(h.shown.map((r) => r.status), ["stopped"]);
+    h.poller.wake();
+    await advance(10 * 60_000, 5_000);
+    assert.equal(h.polls, 1);
+    h.poller.stop();
+  });
+
+  test("the server clock comes from Date plus Age", async () => {
+    const h = harness({ status: "live", rev: 1, updatedAt: T0 }, [{ ...live(1), age: "4" }]);
+    await advance(LIVE_POLL_MS);
+    // Date has whole seconds; Age adds the CDN copy's age.
+    assert.equal(h.clocks[0], Math.floor((T0 + LIVE_POLL_MS) / 1000) * 1000 + 4_000);
+    h.poller.stop();
+  });
+
+  test("stop() cancels the poll in flight and the chain", async () => {
+    const h = harness({ status: "live", rev: 1, updatedAt: T0 }, [{ hang: true }]);
+    await advance(LIVE_POLL_MS);
+    h.poller.stop();
+    assert.equal(h.aborted, 1);
+    await advance(60_000);
+    assert.equal(h.polls, 1);
+    assert.deepEqual(h.troubles, []);
+  });
+});
