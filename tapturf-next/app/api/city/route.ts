@@ -6,15 +6,19 @@ import { detectCityFromHeaders } from "@/lib/cityRouting";
  * POST /api/city: store the visitor's city choice in the tt_city cookie.
  *
  * Two callers:
- * - Native <form method="post"> buttons (the first-visit ask and "Make
- *   this my city") before the page hydrates: form fields choice and
- *   next, answered with a 303 back to next so the proxy serves the city.
+ * - Native <form method="post"> buttons (the city-first pick screen and
+ *   "Make this my city") before the page hydrates: form fields choice
+ *   and next, answered with a 303 back to next so the proxy serves the
+ *   city.
  * - setCityPref on the client (JSON { choice }, keepalive): the server
  *   re-issues the cookie so Safari's 7-day cap on script-written
  *   cookies does not drop it. Answered with { value }.
  *
- * choice is "all", a curated city id, or "reset" (detect again from the
- * IP headers, giving geo.<id> or unknown). Same-origin only.
+ * choice is a curated city id (a confirmed pick), or "reset" (detect
+ * again from the IP headers, giving geo.<id> or unknown; only tabs on an
+ * old bundle still send it). "all" is retired and never written: a form
+ * post with it goes back to next unchanged (the pick screen asks again),
+ * JSON gets a 400. Same-origin only.
  */
 export const dynamic = "force-dynamic";
 
@@ -65,8 +69,11 @@ export async function POST(req: Request) {
   }
 
   let value: string;
-  if (choice === "all" || isKnownCity(choice)) value = choice as string;
-  else if (choice === "reset") {
+  if (isKnownCity(choice)) value = choice;
+  else if (choice === "all" && isForm) {
+    // A cached page from before 20 Oct may still post "Show all of India".
+    return new NextResponse(null, { status: 303, headers: { Location: safeNext(next), ...NO_STORE } });
+  } else if (choice === "reset") {
     const city = detectCityFromHeaders((n) => req.headers.get(n));
     value = serializeCityChoice(city ? { kind: "city", city, src: "geo" } : { kind: "unknown" });
   } else {

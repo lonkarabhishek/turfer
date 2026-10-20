@@ -2,17 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Globe, LocateFixed, Navigation, Search, X, Loader2 } from "lucide-react";
-import {
-  CITIES,
-  applyCityToDocument,
-  isKnownCity,
-  labelFor,
-  locateCity,
-  matchCities,
-  parseCityCookie,
-  setCityPref,
-} from "@/lib/city";
+import { Check, LocateFixed, Navigation, Search, X, Loader2 } from "lucide-react";
+import { CITIES, isKnownCity, labelFor, locateCity, matchCities, setCityPref, type CitySource } from "@/lib/city";
 import { useCityChoice } from "./useCityChoice";
 
 type Row = { id: string; label: string; state?: string; n: number };
@@ -28,12 +19,12 @@ const PILL =
   "shrink-0 h-11 px-4 inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white text-[14px] font-semibold text-primary-900 press-tight focus-neon hover:border-primary-900";
 
 /**
- * The one city picker: "Change" on the city line, "Pick a city", the
- * menu's city row and the ask's search all open it through
- * openCityPicker(). Search across every city, popular cities with
- * counts, precise location, "Show all of India" and "Detect my city
- * again". A modal sheet: focus is trapped, Esc closes without choosing,
- * focus goes back to whatever opened it.
+ * The one city picker: "Change" on the city line, "Pick a city" and the
+ * menu's city row open it through openCityPicker(). Search across every
+ * city, popular cities with counts, precise location and "Detect my city
+ * again". Every answer is one city: there is no "all of India" choice.
+ * A modal sheet: focus is trapped, Esc closes without choosing, focus
+ * goes back to whatever opened it.
  */
 export function CityPickerSheet() {
   const [open, setOpen] = useState(false);
@@ -123,7 +114,7 @@ export function CityPickerSheet() {
     };
   }, [open, mode, close]);
 
-  const pick = (id: string, source: "picker" | "gps") => {
+  const pick = (id: string, source: CitySource) => {
     setCityPref(id, { source });
     close();
   };
@@ -142,27 +133,16 @@ export function CityPickerSheet() {
     else setStatus("Couldn't get your location. Pick your city below.");
   };
 
+  // The IP's city, stored as a confirmed pick: the person asked for it.
+  // Nothing found leaves the current city as it is.
   const detectAgain = async () => {
     setResetting(true);
     setStatus("");
     try {
-      const r = await fetch("/api/city", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ choice: "reset" }),
-      });
-      const { value } = (await r.json()) as { value?: string };
-      if (!value) throw new Error("no value");
-      const c = parseCityCookie(value);
-      try {
-        if (c?.kind === "city") localStorage.setItem("tapturf_city_v1", c.city);
-        else localStorage.removeItem("tapturf_city_v1");
-        localStorage.setItem("tapturf_city_ts", String(Date.now()));
-      } catch { /* ignore */ }
-      applyCityToDocument(c);
-      window.dispatchEvent(new CustomEvent("tapturf:city-changed", { detail: { value, source: "reset", stuck: true } }));
-      if (c?.kind === "unknown") setStatus("We couldn't tell your city from your connection. Pick one above.");
-      else close();
+      const r = await fetch("/api/geo", { cache: "no-store" });
+      const { city } = (await r.json()) as { city?: string | null };
+      if (isKnownCity(city)) pick(city, "reset");
+      else setStatus("We couldn't tell your city from your connection. Pick one above.");
     } catch {
       setStatus("Couldn't check right now. Pick your city above.");
     } finally {
@@ -268,7 +248,7 @@ export function CityPickerSheet() {
                   </button>
                 ))}
               </div>
-              <p className="mt-5 px-2 text-[13px] font-semibold text-primary-500">All cities</p>
+              <p className="mt-5 px-2 text-[13px] font-semibold text-primary-500">Cities A to Z</p>
               <ul className="mt-1">
                 {az.map(cityRow)}
               </ul>
@@ -276,18 +256,7 @@ export function CityPickerSheet() {
           )}
         </div>
 
-        <div className="border-t border-primary-200 px-3 py-2 flex flex-wrap items-center justify-between gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              setCityPref("all", { source: "picker" });
-              close();
-            }}
-            className="h-11 px-3 inline-flex items-center gap-2 rounded-full text-[14px] font-semibold text-accent-700 hover:bg-primary-50 focus-neon"
-          >
-            <Globe className="w-4 h-4" />
-            Show all of India
-          </button>
+        <div className="border-t border-primary-200 px-3 py-2 flex flex-wrap items-center justify-end gap-1">
           <button
             type="button"
             onClick={detectAgain}

@@ -5,15 +5,17 @@ import { setCityPref } from "@/lib/city";
 
 /**
  * "Make Pune my city" on a city page. Which of the two pills shows is
- * decided by CSS from <html data-city>, set before the first paint, so
- * a visitor whose city this already is sees "Pune is your city" with no
- * swap. Works before hydration as a native form post. `city` must be
- * validated by the server page before it reaches the inline style.
+ * decided by CSS from <html data-city data-city-src>, set before the
+ * first paint, so a visitor who picked this city sees "Pune is your
+ * city" with no swap. An IP guess (geo.pune) is not a pick: it still
+ * gets the button, since /, /turfs and /games ask until a city is
+ * confirmed. Works before hydration as a native form post. `city` must
+ * be validated by the server page before it reaches the inline style.
  */
 export function MakeMyCity({ city, label }: { city: string; label: string }) {
   return (
     <span data-mine={city} className="inline-flex">
-      <style>{`html[data-city="${city}"] [data-mine="${city}"] .mine-no{display:none}html[data-city="${city}"] [data-mine="${city}"] .mine-yes{display:inline-flex}`}</style>
+      <style>{`html[data-city="${city}"][data-city-src="pick"] [data-mine="${city}"] .mine-no{display:none}html[data-city="${city}"][data-city-src="pick"] [data-mine="${city}"] .mine-yes{display:inline-flex}`}</style>
       <form
         method="post"
         action="/api/city"

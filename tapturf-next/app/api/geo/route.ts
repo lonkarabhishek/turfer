@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { detectCityFromHeaders } from "@/lib/cityRouting";
 
 // GET /api/geo -> { city: "pune" | null }
-// Kept for tabs still running an old bundle. proxy.ts now detects the
-// city from the same Vercel headers on the first document request and
-// stores it in the tt_city cookie, so nothing new calls this.
+// The city from Vercel's IP headers, without touching the cookie.
+// proxy.ts detects the same way on the first document request (geo.<city>,
+// an unconfirmed guess). The picker's "Detect my city again" calls this
+// and then stores the answer as a confirmed pick with setCityPref, so a
+// person who asked for detection is never sent back to the pick screen.
+// Old bundles call it too.
 export async function GET(req: Request) {
   return NextResponse.json(
     { city: detectCityFromHeaders((n) => req.headers.get(n)) },

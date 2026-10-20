@@ -6,6 +6,9 @@
 import {
   CITIES,
   CITY_ALIASES,
+  CITY_COOKIE,
+  PICK_LEFT_KEY,
+  confirmedCity,
   nearestCity,
   parseCityCookie,
   serializeCityChoice,
@@ -13,16 +16,42 @@ import {
   type CityId,
 } from "./city";
 
-/** Public URLs that have a per-city ISR twin under app/c/[city], and that twin's suffix. */
+/**
+ * Public URLs that have a per-city ISR twin under app/c/[city] and a
+ * pick-screen twin under app/c/pick/[city], and that twin's suffix.
+ */
 export const PERSONALISED: Record<string, string> = { "/": "", "/turfs": "/turfs", "/games": "/games" };
 
 /**
- * The internal segment of the "ask" twins (app/c/ask): the all-India
- * page plus the first-visit "Where do you play?" ask. Only humans whose
- * city is unknown are rewritten there, so crawlers and "all of India"
- * visitors never receive the ask's markup. Never a city id.
+ * The internal segment of the city-first pick screen (app/c/pick): a
+ * tiny static "Where do you play?" page with no turf data. Every human
+ * whose city is not confirmed gets it on /, /turfs and /games. Never a
+ * city id.
  */
-export const ASK_SEGMENT = "ask";
+export const PICK_SEGMENT = "pick";
+
+/** The pick screen's variant with no detected city: /c/pick/none. Never a city id. */
+export const PICK_NONE = "none";
+
+/**
+ * Inline script at the top of the pick screen (app/c/pick/[city]/layout.tsx),
+ * run while the HTML is parsed, before the screen paints. If the cookie
+ * already holds a confirmed pick, the page served is stale: the pre-paint
+ * script (lib/cityPrePaint.ts) has just moved a legacy pick into the
+ * cookie, or a pick landed while the request was in flight. It hides the
+ * page and reloads once, so the proxy serves the city's page instead of
+ * the pick screen painting and leaving after hydration. Skipped when the
+ * pre-paint script is already reloading (it hides <html> first). Once
+ * per value and URL per session, under the same key CitySync uses, so a
+ * cookie the server cannot see never loops. ES5, no other side effects.
+ */
+export const PICK_GUARD_JS = `(function(){try{
+var d=document.documentElement;if(d.style.visibility==="hidden")return;
+var m=document.cookie.match(/(?:^|;\\s*)${CITY_COOKIE}=([^;]*)/),v=m?m[1]:"";
+if(!/^[a-z][a-z-]{1,30}$/.test(v)||v==="unknown"||v==="all")return;
+var k=v+"|"+location.pathname+location.search,S=window.sessionStorage;
+if(S.getItem("${PICK_LEFT_KEY}")===k)return;S.setItem("${PICK_LEFT_KEY}",k);
+d.style.visibility="hidden";location.reload()}catch(e){}})();`;
 
 /**
  * Crawlers, link unfurlers, audit tools and scripts. Generic "bot" covers
@@ -77,10 +106,13 @@ export function detectCityFromHeaders(get: Get): CityId | null {
   return CITY_ALIASES[name] ?? CITIES.find((c) => c.id === name || c.label.toLowerCase() === name)?.id ?? null;
 }
 
-/** "/c" -> "/", "/c/pune" -> "/", "/c/pune/turfs" -> "/turfs". */
+/**
+ * "/c" -> "/", "/c/pune" -> "/", "/c/pune/turfs" -> "/turfs",
+ * "/c/pick/pune/games" -> "/games".
+ */
 export function publicPathFromInternal(pathname: string): string {
-  const parts = pathname.split("/").filter(Boolean); // ["c", city?, ...rest]
-  const rest = parts.slice(2);
+  const parts = pathname.split("/").filter(Boolean); // ["c", city | "pick", city?, ...rest]
+  const rest = parts.slice(parts[1] === PICK_SEGMENT ? 3 : 2);
   return rest.length ? `/${rest.join("/")}` : "/";
 }
 
@@ -94,13 +126,20 @@ export type ProxyDecision =
  * One request in, one routing decision out:
  * 1. Internal /c paths 308 to their public URL (except ISR revalidation).
  * 2. Only GET and HEAD are personalised.
- * 3. A valid cookie wins. Without one (or with "unknown"), a human gets
- *    IP detection; the cookie is written only on documents.
- * 4. A city choice rewrites /, /turfs (without ?q=) and /games to the
- *    city's ISR twin; an unknown city rewrites them to the ask twin.
- *    Everything else passes through.
- * Crawlers never get detection, a cookie or a rewrite (unless they send
- * a cookie, which only a lab tool set up on purpose does).
+ * 3. A confirmed pick wins. Without one (no cookie, an IP guess
+ *    geo.<city>, "unknown" or the retired "all"), a human gets IP
+ *    detection, so the pick screen offers the city they are in today; an
+ *    IP that gives nothing away keeps an earlier guess. The cookie
+ *    (geo.<city> or unknown) is written only on documents, and only when
+ *    it changes.
+ * 4. On /, /turfs (without ?q=) and /games: a confirmed pick rewrites to
+ *    the city's ISR twin; anything else (no cookie, geo.<city>, unknown,
+ *    the old "all") rewrites to the static pick screen, /c/pick/<city>
+ *    with the detected city as its one-tap answer, or /c/pick/none.
+ *    Everything else passes through, never gated.
+ * Crawlers never get detection, a cookie or a rewrite: the all-India
+ * page at the canonical URL. Only a cookie sent on purpose (a lab tool)
+ * routes a crawler UA like a human with that cookie; "all" is ignored.
  */
 export function decide(i: ProxyInput): ProxyDecision {
   const { pathname, search, header } = i;
@@ -113,9 +152,12 @@ export function decide(i: ProxyInput): ProxyDecision {
   const raw = i.cookie;
   let choice: CityChoice | null = parseCityCookie(raw);
   let setCookie: string | undefined;
-  if ((choice === null || choice.kind === "unknown") && !isCrawler(header)) {
+  if (isCrawler(header)) {
+    if (choice?.kind === "all") choice = null;
+  } else if (!confirmedCity(choice)) {
     const city = detectCityFromHeaders(header);
-    const detected: CityChoice = city ? { kind: "city", city, src: "geo" } : { kind: "unknown" };
+    const kept = choice?.kind === "city" ? choice : null;
+    const detected: CityChoice = city ? { kind: "city", city, src: "geo" } : (kept ?? { kind: "unknown" });
     const value = serializeCityChoice(detected);
     if (isDocument(header) && value !== raw) setCookie = value;
     choice = detected;
@@ -124,11 +166,11 @@ export function decide(i: ProxyInput): ProxyDecision {
   const suffix = PERSONALISED[pathname];
   const city = choice?.kind === "city" ? choice.city : null;
   const bypass = pathname === "/turfs" && !!new URLSearchParams(search).get("q");
-  if (suffix !== undefined && !bypass) {
-    if (city) return { action: "rewrite", pathname: `/c/${city}${suffix}`, setCookie, debug: city };
-    if (choice?.kind === "unknown") {
-      return { action: "rewrite", pathname: `/c/${ASK_SEGMENT}${suffix}`, setCookie, debug: ASK_SEGMENT };
-    }
+  if (suffix !== undefined && !bypass && choice) {
+    const confirmed = confirmedCity(choice);
+    if (confirmed) return { action: "rewrite", pathname: `/c/${confirmed}${suffix}`, setCookie, debug: confirmed };
+    const pre = city ?? PICK_NONE;
+    return { action: "rewrite", pathname: `/c/${PICK_SEGMENT}/${pre}${suffix}`, setCookie, debug: `${PICK_SEGMENT}.${pre}` };
   }
   return { action: "next", setCookie, debug: city ?? "default" };
 }

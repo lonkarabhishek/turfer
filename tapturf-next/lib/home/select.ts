@@ -1,5 +1,5 @@
 import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
-import { byDistanceFrom, isKnownCity, resolveCityScope, type CityScope } from "@/lib/city";
+import { byDistanceFrom, resolveCityScope, type CityScope } from "@/lib/city";
 import { askChips, chipName } from "@/lib/ask/chips";
 import type { HeroCity, HomeCityRow, HomeData, HomeGame, HomeHeroProps, HomeTile } from "./types";
 
@@ -22,9 +22,6 @@ export type ScopedHome = {
   /** inCity false: the national grid (all-India view, or a city with no indexable sport page). */
   sports: { primary: { slug: string; name: string; count: number }[]; more: { slug: string; name: string }[]; inCity: boolean };
   cityList: { rows: (HomeCityRow & { km: number | null })[]; total: number };
-  /** Ask sheet pills, india scope only. */
-  askCities: { id: string; label: string; n: number }[];
-  askCityCount: number;
 };
 
 /** Ask TapTurf chips for one city (or all of India) from the cached home snapshot. */
@@ -53,8 +50,6 @@ export function scopeHome(d: HomeData, requested: string | null): ScopedHome {
     sportCount: d.hero.sportCount,
     topCities: d.hero.topCities,
   };
-  const askCityCount = d.cityRows.filter((r) => isKnownCity(r.id)).length;
-
   if (scope.kind === "city") {
     const id = scope.id;
     const hc = d.hero.cities[id];
@@ -80,8 +75,6 @@ export function scopeHome(d: HomeData, requested: string | null): ScopedHome {
             }
           : { primary: d.sports, more: [], inCity: false },
       cityList: { rows: byDistanceFrom(id, d.cityRows.filter((r) => r.id !== id)), total: d.cityRows.length - 1 },
-      askCities: [],
-      askCityCount,
     };
   }
 
@@ -93,7 +86,5 @@ export function scopeHome(d: HomeData, requested: string | null): ScopedHome {
     games: { rows: d.games, inScope: d.openGamesTotal, total: d.openGamesTotal },
     sports: { primary: d.sports, more: [], inCity: false },
     cityList: { rows: d.cityRows.map((r) => ({ ...r, km: null })), total: d.cityRows.length },
-    askCities: d.hero.topCities.filter((c) => isKnownCity(c.id)).slice(0, 8),
-    askCityCount,
   };
 }

@@ -198,16 +198,27 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
 // ── City cookie: one value that the proxy, the server pages and the client share ──
 //
 // tt_city holds the visitor's city choice, first-party, readable by JS:
-//   "pune"       explicit pick (ask sheet, picker, GPS, "Make this my city")
-//   "geo.pune"   detected from the IP by proxy.ts, never re-detected
-//   "all"        chose "Show all of India" or closed the ask; never asked again
-//   "unknown"    detection ran and found nothing; the ask shows
+//   "pune"       confirmed pick (pick screen, picker, GPS, "Make this my city")
+//   "geo.pune"   detected from the IP by proxy.ts, detected again on every
+//                request (a new IP city replaces it); not confirmed, so /,
+//                /turfs and /games show the pick screen with Pune as the
+//                one-tap answer
+//   "unknown"    detection ran and found nothing; the pick screen shows
+//   "all"        retired 20 Oct 2026 ("Show all of India" is gone). Still
+//                parsed, never written: the proxy treats it as unconfirmed,
+//                detects again and replaces it
 //   missing      crawler, cookies blocked, or never seen
+// Only a confirmed pick unlocks the city twins of /, /turfs and /games.
 // Every value uses only [a-z.-], so it is never percent-encoded.
 // This file stays import-free and pure: proxy.ts bundles it.
 
 export const CITY_COOKIE = "tt_city";
 export const CITY_COOKIE_MAX_AGE = 31536000;
+
+/** sessionStorage: the confirmed pick the server last re-issued this session (setCityPref, CitySync). */
+export const CITY_REISSUED_KEY = "tt_city_reissued";
+/** sessionStorage: "<city>|<url>" of the last pick screen left for a confirmed pick (pick guard, CitySync). */
+export const PICK_LEFT_KEY = "tt_pick_left";
 
 export type CityChoice =
   | { kind: "city"; city: CityId; src: "pick" | "geo" }
@@ -239,6 +250,11 @@ export function serializeCityChoice(c: CityChoice): string {
 /** The city a choice scopes pages to, or null for all of India. */
 export function scopeOf(c: CityChoice | null): CityId | null {
   return c && c.kind === "city" ? c.city : null;
+}
+
+/** The city a person confirmed (src "pick"), or null: IP guesses, unknown and the old "all" are not confirmed. */
+export function confirmedCity(c: CityChoice | null): CityId | null {
+  return c && c.kind === "city" && c.src === "pick" ? c.city : null;
 }
 
 /** Common and old names a visitor (or Vercel's IP city header) may use. */
@@ -460,7 +476,8 @@ const KEY = "tapturf_city_v1";
 const TS_KEY = "tapturf_city_ts";
 const MIG_KEY = "tapturf_city_mig_v2";
 
-export type CitySource = "ask" | "ask_dismiss" | "picker" | "gps" | "make_my_city" | "near_me" | "reset";
+/** Where a pick came from (GA4 city_chosen). "ask" is the city-first pick screen. */
+export type CitySource = "ask" | "picker" | "gps" | "make_my_city" | "near_me" | "reset";
 
 function rawCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -520,23 +537,23 @@ export function applyCityToDocument(c: CityChoice | null): void {
 }
 
 /**
- * Store a choice: a city id, "all" (or null) for all of India. Writes
- * the cookie and the localStorage mirror, updates <html>, tells the page
- * (tapturf:city-changed) and asks the server to re-issue the cookie.
- * Returns true when the cookie stuck (false when cookies are blocked).
+ * Store a confirmed city pick. Writes the cookie and the localStorage
+ * mirror, updates <html>, tells the page (tapturf:city-changed) and asks
+ * the server to re-issue the cookie. Returns true when the cookie stuck
+ * (false when cookies are blocked). There is no "all of India" choice any
+ * more, so only a curated city id is accepted.
  */
-export function setCityPref(next: CityId | "all" | null, opts: { source?: CitySource } = {}): boolean {
+export function setCityPref(next: CityId, opts: { source?: CitySource } = {}): boolean {
   if (typeof window === "undefined") return false;
-  const value = next ?? "all";
-  if (value !== "all" && !isKnownCity(value)) return false;
+  const value = next;
+  if (!isKnownCity(value)) return false;
   const prior = readCityChoice();
   const previous = prior ? serializeCityChoice(prior) : "none";
   writeCookie(value);
   const after = readCityChoice();
   const stuck = Boolean(after && serializeCityChoice(after) === value);
   try {
-    if (value === "all") localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, value);
+    localStorage.setItem(KEY, value);
   } catch { /* ignore */ }
   try {
     localStorage.setItem(TS_KEY, String(Date.now()));
@@ -552,6 +569,10 @@ export function setCityPref(next: CityId | "all" | null, opts: { source?: CitySo
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ choice: value }),
   }).catch(() => {});
+  // Re-issued just now: CitySync's once-per-session re-issue skips it.
+  try {
+    sessionStorage.setItem(CITY_REISSUED_KEY, value);
+  } catch { /* ignore */ }
   track("city_chosen", { city: value, source: opts.source ?? "unknown", previous });
   return stuck;
 }

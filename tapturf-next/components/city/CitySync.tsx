@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   applyCityToDocument,
+  CITY_REISSUED_KEY,
+  confirmedCity,
   isKnownCity,
   labelFor,
   parseCityCookie,
+  PICK_LEFT_KEY,
   readCityChoice,
   scopeOf,
   serializeCityChoice,
   type CitySource,
 } from "@/lib/city";
 import { trackCity } from "@/lib/analytics/city";
-import { ASK_SEEN_KEY } from "@/lib/cityPrePaint";
 import { setPendingCity } from "./cityPending";
 
 const MIRROR = "tapturf_city_v1";
@@ -30,6 +32,21 @@ function personalisedHere(): boolean {
   return !(location.pathname === "/turfs" && new URLSearchParams(location.search).get("q"));
 }
 
+/** True while the city-first pick screen (components/city/CityPick.tsx) is on show. */
+function onPickScreen(): boolean {
+  return document.getElementById("tt-pick") !== null;
+}
+
+/**
+ * Leave the pick screen for the page the proxy now serves at this same
+ * URL: a full load, so nothing of the pick screen (or a prefetch made
+ * before the pick) survives in the client router. A timeout, so the
+ * caller's cookie write, analytics and re-issue run first.
+ */
+function reloadHere() {
+  window.setTimeout(() => location.replace(location.pathname + location.search), 0);
+}
+
 function idle(fn: () => void) {
   const w = window as unknown as { requestIdleCallback?: (cb: () => void) => number };
   if (w.requestIdleCallback) w.requestIdleCallback(fn);
@@ -41,14 +58,18 @@ type ChangeDetail = { value: string | null; source?: CitySource; stuck?: boolean
 /**
  * Keeps every surface in step with the city cookie. Renders nothing.
  * - On mount: mirrors the cookie into localStorage, logs a detection
- *   once, and has the server re-issue an explicit choice once per
- *   session (Safari caps script-written cookies at 7 days).
- * - On tapturf:city-changed: one router.refresh(), so the proxy serves
- *   the new city's page and the client router drops old-city prefetches.
- *   A pick from the picker while on a city page goes to the new city.
+ *   once, and has the server re-issue a confirmed pick once per session
+ *   (Safari caps script-written cookies at 7 days).
+ * - On tapturf:city-changed: on the pick screen, a full load of the same
+ *   URL (the proxy now serves the city's page). Elsewhere one
+ *   router.refresh(), so the proxy serves the new city's page and the
+ *   client router drops old-city prefetches; also when a guessed city is
+ *   confirmed, since prefetches made before it hold the pick screen. A
+ *   pick from the picker while on a city page goes to the new city.
  * - On route changes (Back and Forward included), other tabs, bfcache
  *   restores and tab returns: refresh only when the page on screen was
- *   rendered for a different city.
+ *   rendered for a different city, or leave a pick screen that a pick in
+ *   another tab (or before a Back) already answered.
  */
 export function CitySync() {
   const router = useRouter();
@@ -67,20 +88,6 @@ export function CitySync() {
     refreshedFor.current = "";
     const id = requestAnimationFrame(() => staleCheck.current());
     return () => cancelAnimationFrame(id);
-  }, [pathname]);
-
-  // The first-visit ask is asked once: after a client navigation away
-  // from the page that showed it, fold it on every later page (before
-  // paint, so it never flashes). Reloads get the same from the pre-paint
-  // script.
-  const firstPath = useRef(pathname);
-  useLayoutEffect(() => {
-    if (pathname === firstPath.current) return;
-    try {
-      if (sessionStorage.getItem(ASK_SEEN_KEY)) document.documentElement.setAttribute("data-city-ask", "seen");
-    } catch {
-      /* ignore */
-    }
   }, [pathname]);
 
   useEffect(() => {
@@ -113,10 +120,10 @@ export function CitySync() {
           }
         } catch { /* ignore */ }
       }
-      if ((c.kind === "city" && c.src === "pick") || c.kind === "all") {
+      if (confirmedCity(c)) {
         try {
-          if (sessionStorage.getItem("tt_city_reissued") !== raw) {
-            sessionStorage.setItem("tt_city_reissued", raw);
+          if (sessionStorage.getItem(CITY_REISSUED_KEY) !== raw) {
+            sessionStorage.setItem(CITY_REISSUED_KEY, raw);
             fetch("/api/city", {
               method: "POST",
               keepalive: true,
@@ -133,6 +140,22 @@ export function CitySync() {
     const refresh = () => startTransition(() => router.refresh());
 
     const refreshIfStale = () => {
+      if (onPickScreen()) {
+        // Answered already (another tab, or a pick screen restored by Back):
+        // load the city's page. Once per value and path, so a cookie the
+        // server cannot see never loops.
+        const picked = confirmedCity(readCityChoice());
+        if (!picked) return;
+        const key = `${picked}|${location.pathname}${location.search}`;
+        try {
+          if (sessionStorage.getItem(PICK_LEFT_KEY) === key) return;
+          sessionStorage.setItem(PICK_LEFT_KEY, key);
+        } catch {
+          return;
+        }
+        reloadHere();
+        return;
+      }
       if (!personalisedHere()) return;
       const c = readCityChoice();
       // No cookie (blocked): the server routes by IP alone, nothing to compare.
@@ -154,12 +177,20 @@ export function CitySync() {
       const d = ((e as CustomEvent).detail ?? {}) as ChangeDetail;
       const newScope = d.value ? scopeOf(parseCityCookie(d.value)) : null;
       const stuck = d.stuck !== false;
-      if (newScope === lastScope.current && stuck) return;
       if (!stuck) {
         // Cookies blocked: the server can never know the city, so go to its page.
         if (newScope) router.push(`/${newScope}`);
         return;
       }
+      // Any pick on the pick screen: load the city's page at this URL.
+      if (onPickScreen()) {
+        lastScope.current = newScope;
+        if (newScope) reloadHere();
+        return;
+      }
+      // geo.pune -> pune shows the same city but unlocks the city pages.
+      const confirmedNow = Boolean(d.value && confirmedCity(parseCityCookie(d.value)) && d.previous !== d.value);
+      if (newScope === lastScope.current && !confirmedNow) return;
       const m = location.pathname.match(/^\/([a-z][a-z-]{1,30})(?:\/[a-z-]+)?\/?$/);
       // From the picker (a list pick or its precise location) on a city
       // page: go to the new city's page. Its sport pages can be empty for

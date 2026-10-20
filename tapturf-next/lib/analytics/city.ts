@@ -3,7 +3,7 @@
  * uses; no new provider. GA loads only in production, so these are
  * no-ops locally.
  *   city_detected {city, method:"ip"}   once per cookie value (CitySync)
- *   city_ask_shown {page}               once per page load while visible (CityAsk)
+ *   city_ask_shown {page, detected}     once per page load of the pick screen (CityPick)
  *   city_chosen {city, source, previous} from setCityPref (lib/city.ts)
  */
 export type CityEvent = "city_detected" | "city_ask_shown" | "city_chosen";

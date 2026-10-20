@@ -29,39 +29,47 @@ import { decide } from "./lib/cityRouting";
  * then rewrites or passes through. No network, no Supabase, no route
  * segment config (Next fails the build on it in the proxy file).
  *
- * - A visitor with a city (cookie, or detected from Vercel's IP headers
- *   on this request) is rewritten from /, /turfs (without ?q=) and
- *   /games to that city's static ISR twin under app/c/[city]. The URL in
- *   the browser, the metadata and the canonical stay the public ones.
- * - A human whose city is unknown (no IP match, VPN, abroad) is
- *   rewritten to the ask twin under app/c/ask: the all-India page plus
- *   the first-visit "Where do you play?" ask.
+ * City first (20 Oct 2026): nobody gets the heavy all-India page by
+ * default any more.
+ * - A visitor who confirmed a city (tt_city=<city>: a tap on the pick
+ *   screen, the picker, GPS, "Make this my city") is rewritten from /,
+ *   /turfs (without ?q=) and /games to that city's static ISR twin under
+ *   app/c/[city].
+ * - Every other human (no cookie, an IP guess geo.<city>, unknown, or
+ *   the retired "all") is rewritten to the static pick screen under
+ *   app/c/pick: /c/pick/<city> with the city from Vercel's IP headers as
+ *   the one-tap answer, or /c/pick/none. No turf data, no database read.
+ *   The IP guess is still stored (geo.<city> or unknown) on documents.
+ * - In both cases the URL in the browser, the title and the canonical
+ *   stay the public ones.
  * - Crawlers (no cookie) get no detection, no cookie and no rewrite: the
- *   all-India page at the canonical URL, with no ask markup at all.
- *   Lighthouse and PageSpeed lab runs count as crawlers too, so they
- *   measure that page. To lab-test what people get, send a tt_city
- *   cookie (pune, or unknown for the ask): a valid cookie wins over the
- *   crawler check.
+ *   all-India page at the canonical URL. Lighthouse and PageSpeed lab
+ *   runs count as crawlers too, so they measure that page. To lab-test
+ *   what people get, send a tt_city cookie (pune for a city home,
+ *   unknown or geo.pune for the pick screen): a valid cookie wins over
+ *   the crawler check ("all" does not).
+ * - Every other page (turf pages, /<city>, sport pages, blog, tools,
+ *   /turfs?q= search) is never gated.
  * - Direct hits on /c are 308'd to the public URL.
  *
  * Caching: one public URL now returns different bodies by cookie and IP,
  * yet keeps Next's s-maxage and has no Vary: Cookie (that would split
  * Vercel's cache by every analytics and auth cookie). This is only
  * correct because Vercel runs this proxy before its edge cache and
- * caches the rewritten /c path. No other CDN or shared cache may sit in
- * front of Vercel for /, /turfs and /games. If the site is ever
- * self-hosted or put behind another CDN, these three responses must be
- * marked private there.
+ * caches the rewritten /c path (/c/pune, /c/pick/pune, ...). No other
+ * CDN or shared cache may sit in front of Vercel for /, /turfs and
+ * /games. If the site is ever self-hosted or put behind another CDN,
+ * these three responses must be marked private there.
  *
  * Matcher:
  * - "/", "/turfs", "/games" match every request kind (document, RSC
  *   navigation, prefetch). If their RSC or prefetch requests were
- *   skipped, the client router would cache the all-India payload and
- *   lose the city after the first client navigation. The cookie is still
- *   written only on documents: a prefetch sent before a pick but answered
- *   after it must not overwrite the pick; clients that block cookies
- *   would otherwise get Set-Cookie on every prefetch; and the first
- *   request of every visit is a document anyway.
+ *   skipped, the client router would cache the wrong payload and skip
+ *   the pick screen or lose the city after the first client navigation.
+ *   The cookie is still written only on documents: a prefetch sent
+ *   before a pick but answered after it must not overwrite the pick;
+ *   clients that block cookies would otherwise get Set-Cookie on every
+ *   prefetch; and the first request of every visit is a document anyway.
  * - "/c/:path*" always matches, so RSC hits on internal paths also 308.
  * - Every other page path runs only for real document loads: `missing`
  *   is evaluated on the raw headers before Next strips the flight

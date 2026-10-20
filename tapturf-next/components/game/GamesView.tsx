@@ -4,7 +4,6 @@ import { getLiveCities } from "@/lib/queries/cities";
 import { guessCityFromAddress, isKnownCity, resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
 import { gamesJsonLd } from "@/lib/seo/pageMetadata";
-import { CityAsk } from "@/components/city/CityAsk";
 import { GamesListingClient } from "./GamesListingClient";
 import type { Game } from "@/types/game";
 
@@ -15,13 +14,12 @@ function cityOf(g: Game): string | null {
 /**
  * /games for one city or all of India, with the games in the HTML (no
  * client fetch, no skeleton). `requested` is the city from the URL the
- * proxy rewrote to (app/c/[city]/games), or null for the public page;
- * `ask` (app/c/ask/games) adds the first-visit city ask for humans whose
- * city is unknown.
+ * proxy rewrote to (app/c/[city]/games), or null for the public page
+ * (crawlers).
  * City view: that city's games, then "Open games in other cities".
  * Never reads cookies, headers or the query string.
  */
-export async function GamesView({ requested, ask = false }: { requested: string | null; ask?: boolean }) {
+export async function GamesView({ requested }: { requested: string | null }) {
   const [{ games, at }, liveAll] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
   const live = liveAll.filter((c) => isKnownCity(c.id));
   const scope = resolveCityScope(requested, live);
@@ -37,7 +35,7 @@ export async function GamesView({ requested, ask = false }: { requested: string 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(gamesJsonLd(games)) }} />
-      <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
+      <div id="tt-scope" data-scope={requested ?? ""} hidden />
       {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
       <AskPageContext city={scope.kind === "city" ? scope.id : null} />
       <GamesListingClient
@@ -46,17 +44,6 @@ export async function GamesView({ requested, ask = false }: { requested: string 
         scope={scope}
         renderedAt={at}
         line={cityLineFor(scope, "/#all-cities", "/games")}
-        ask={
-          ask ? (
-            <CityAsk
-              cities={live.slice(0, 8).map((c) => ({ id: c.id, label: c.label, n: c.n }))}
-              cityCount={live.length}
-              page="/games"
-              changeHref="/#all-cities"
-              variant="inline"
-            />
-          ) : null
-        }
       />
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { GameCard } from "./GameCard";
@@ -32,15 +32,12 @@ export function GamesListingClient({
   otherGames,
   scope,
   line,
-  ask,
   renderedAt,
 }: {
   initialGames: Game[];
   otherGames: Game[];
   scope: CityScope;
   line: CityLineProps;
-  /** The first-visit city ask (ask variant only). */
-  ask: ReactNode;
   /** When the server rendered this list: dates read relative to it until hydration. */
   renderedAt: number;
 }) {
@@ -109,7 +106,6 @@ export function GamesListingClient({
         </Link>
       </div>
 
-      {ask}
 
       {/* Search bar */}
       <div className="relative mb-3">

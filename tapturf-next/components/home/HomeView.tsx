@@ -3,7 +3,6 @@ import { AskPageContext } from "@/components/ask/AskPageContext";
 import { scopeHome } from "@/lib/home/select";
 import { homeJsonLd } from "@/lib/seo/pageMetadata";
 import { cityLineFor } from "@/lib/cityLine";
-import { CityAsk } from "@/components/city/CityAsk";
 import { HomeShell } from "./HomeShell";
 import { TopTurfsByCity } from "./TopTurfsByCity";
 import { EveryCityList } from "./EveryCityList";
@@ -18,16 +17,15 @@ import { plural } from "@/lib/home/format";
 /**
  * The home, for one city or all of India. `requested` is the city from
  * the URL the proxy rewrote to (app/c/[city]), or null for the public
- * all-India page that crawlers and "all of India" visitors get. `ask`
- * (app/c/ask, humans whose city is unknown only) adds the first-visit
- * city ask, so crawler HTML never carries it. Never reads cookies or
- * headers, so every variant stays a static ISR page.
+ * all-India page, which only crawlers get at /: humans without a
+ * confirmed city get the pick screen (app/c/pick) instead. Never reads
+ * cookies or headers, so every variant stays a static ISR page.
  *
  * City view: that city's hero, top turfs, games and sports, then every
  * other city nearest first under "Other cities". All-India view: the
  * national picks with each city named, then every city biggest first.
  */
-export async function HomeView({ requested, ask = false }: { requested: string | null; ask?: boolean }) {
+export async function HomeView({ requested }: { requested: string | null }) {
   const d = await getHomeData();
   const s = scopeHome(d, requested);
   const line = cityLineFor(s.scope, "#all-cities", "/");
@@ -36,16 +34,12 @@ export async function HomeView({ requested, ask = false }: { requested: string |
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd(d)) }} />
-      <div id="tt-scope" data-scope={requested ?? ""} data-ask={ask ? "" : undefined} hidden />
+      <div id="tt-scope" data-scope={requested ?? ""} hidden />
       {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
       <AskPageContext city={s.scope.kind === "city" ? s.scope.id : null} />
 
       {/* Visitors: the hero. Signed in: LoggedInHome. Everything below is shared. */}
       <HomeShell hero={s.hero} scope={s.scope} line={line} />
-
-      {ask && (
-        <CityAsk cities={s.askCities} cityCount={s.askCityCount} page="/" changeHref="#all-cities" variant="sheet" />
-      )}
 
       {s.strip.tiles.length > 0 && (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6 md:mt-10">
@@ -82,7 +76,6 @@ export async function HomeView({ requested, ask = false }: { requested: string |
       <ToolsRow />
       <GuidesRow posts={d.posts} />
       <FinalBand />
-      {ask && <div className="city-ask-spacer" aria-hidden />}
     </>
   );
 }

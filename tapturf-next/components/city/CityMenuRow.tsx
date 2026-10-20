@@ -7,18 +7,13 @@ import { useCityChoice } from "./useCityChoice";
 /**
  * The city row in the header menu. Rendered only while the menu is
  * open, so reading the cookie here never affects the first paint.
- * "Change" closes the menu and opens the city picker.
+ * "Change" closes the menu and opens the city picker. The retired "all"
+ * cookie reads as "Not set", like unknown: there is no all-India choice.
  */
 export function CityMenuRow({ onChange }: { onChange: () => void }) {
   const c = useCityChoice();
   const label =
-    c?.kind === "city"
-      ? c.src === "geo"
-        ? `${labelFor(c.city)}, from your location`
-        : labelFor(c.city)
-      : c?.kind === "all"
-        ? "All of India"
-        : "Not set";
+    c?.kind === "city" ? (c.src === "geo" ? `${labelFor(c.city)}, from your location` : labelFor(c.city)) : "Not set";
 
   return (
     <button
