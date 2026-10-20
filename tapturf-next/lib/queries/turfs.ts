@@ -331,12 +331,23 @@ export async function getTurfBySlugOrId(key: string): Promise<Turf | null> {
 }
 
 /** URL keys for the active turf pages built at deploy: the slug, or the id for a turf without one. */
-export async function getAllTurfKeys(): Promise<string[]> {
+/**
+ * URL keys of the turf pages built at deploy: the most reviewed active
+ * turfs (the ones people and Google open most). Every other turf page
+ * renders on its first visit and is cached from then on, so a deploy no
+ * longer renders some 2,500 pages against the database.
+ */
+export async function getTopTurfKeys(limit: number): Promise<string[]> {
   const supabase = createServerClient();
-  const data = await fetchAllRows<{ id: string; slug: string | null }>((from, to) =>
-    supabase.from("turfs").select("id, slug").eq("is_active", true).order("id").range(from, to),
-  );
-  return data.map((t) => t.slug || t.id);
+  const { data, error } = await supabase
+    .from("turfs")
+    .select("id, slug")
+    .eq("is_active", true)
+    .order("total_reviews", { ascending: false, nullsFirst: false })
+    .order("id")
+    .limit(limit);
+  if (error) throw new Error(`Top turf keys failed: ${JSON.stringify(error)}`);
+  return (data ?? []).map((t) => t.slug || t.id);
 }
 
 /**

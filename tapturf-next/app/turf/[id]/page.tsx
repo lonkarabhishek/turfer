@@ -5,7 +5,7 @@ import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
-import { getAllTurfKeys, getTurfBySlugOrId } from "@/lib/queries/turfs";
+import { getTopTurfKeys, getTurfBySlugOrId } from "@/lib/queries/turfs";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
@@ -31,9 +31,11 @@ import { isTurfClaimed } from "@/lib/queries/owners";
 export const revalidate = 3600;
 
 // The [id] segment is the turf's slug (/turf/turf-up-hinjewadi). Old
-// links by id still resolve and 308 to the slug URL.
+// links by id still resolve and 308 to the slug URL. Only the 300 most
+// reviewed turfs are built at deploy; the rest render on first visit
+// and are cached (all of them are in the sitemap either way).
 export async function generateStaticParams() {
-  const keys = await getAllTurfKeys();
+  const keys = await getTopTurfKeys(300);
   return keys.map((id) => ({ id }));
 }
 
