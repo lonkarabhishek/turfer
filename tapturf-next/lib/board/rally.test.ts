@@ -540,3 +540,25 @@ test("timeline, headline mid-game and a board with junk events", () => {
   assert.equal(v.lastAction, null, "the last event was skipped");
   assert.doesNotThrow(() => e.pad(junk, v));
 });
+
+test("volleyball: best of 3 at 1-1 changed to best of 5 before set 3: no toss, the set 2 receivers serve", () => {
+  const e = volleyballEngine;
+  let b = add(e, board(e), serve("a"), ...game(25, 0), ...game(0, 25));
+  let v = e.derive(b);
+  assert.equal(v.needsServe, true, "deciding set: a new toss");
+  b = add(e, b, { type: "rules", rules: { bestOf: 5 } });
+  v = e.derive(b);
+  assert.equal(v.needsServe, false, "set 3 of 5 is not the deciding set");
+  assert.equal(v.server, "a", "FIVB 12.1.2: Ravi served first in set 2, so Asha serves set 3");
+  assert.equal(v.gameJustEnded?.changeEnds, true, "and the teams change ends");
+  assert.ok(v.notices.includes("Change ends"));
+  // And back: best of 3 again makes it the deciding set, with a toss and no change of ends before it.
+  b = add(e, b, { type: "rules", rules: { bestOf: 3 } });
+  v = e.derive(b);
+  assert.equal(v.needsServe, true);
+  assert.equal(v.gameJustEnded?.changeEnds, false);
+  assert.ok(!v.notices.includes("Change ends"));
+  // A toss picked, then a rules change that keeps it deciding: the pick stays.
+  b = add(e, b, serve("b"), { type: "rules", rules: { decidingPoints: 15 } });
+  assert.equal(e.derive(b).server, "b");
+});

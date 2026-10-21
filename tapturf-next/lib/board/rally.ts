@@ -327,12 +327,15 @@ function step<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, e: BoardEvent, i:
       line(e.side, `Name changed to ${cleanName(e.name)}`, "info", null);
       f.lastAction = `Renamed ${cleanName(e.name)}`;
       return;
-    case "rules":
+    case "rules": {
+      const was = f.rules;
       f.rules = kit.normalizeRules({ ...f.rules, ...e.rules });
-      if (f.serving) f.serving = kit.resync(f, g);
+      if (g.rallies === 0) restartGame(kit, f, g, was);
+      else if (f.serving) f.serving = kit.resync(f, g);
       line(null, `Rules changed: ${kit.describe(f.rules)}`, "info", null);
       f.lastAction = "Rules changed";
       return;
+    }
     case "end": {
       const r = e.reason;
       // retired, walkover, conceded: e.side stops and the other side wins (BWF and ITTF: a player who cannot go on loses).
@@ -355,6 +358,38 @@ function step<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, e: BoardEvent, i:
       f.changeEnds = false;
       line(f.over.winner, resultOf(kit, f).text, "end", null);
       return;
+    }
+  }
+}
+
+/**
+ * A rules change before a game's first rally: the game starts as the new
+ * rules would have started it. The server number comes from the new
+ * rules (side-out doubles pickleball starts 0-0-2), a set that is now the
+ * deciding one asks for a toss, one that no longer is takes the usual
+ * alternation, and the change of ends before it follows the new rules. A
+ * server the scorer picked (game 1, or a toss) stays picked.
+ */
+function restartGame<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, g: GameS, was: R) {
+  const picked = g.first;
+  let want: Serving | null = null;
+  let tossed = true;
+  if (g.index > 0) {
+    const prev = f.games[g.index - 1];
+    want = kit.nextGame(f, prev);
+    const now = f.rules;
+    f.rules = was;
+    tossed = kit.nextGame(f, prev) === null;
+    f.rules = now;
+  }
+  g.first = want ?? (picked && tossed ? kit.firstServe(f, { type: "serve", side: picked.side }) : null);
+  f.serving = g.first;
+  f.needsServe = g.first === null;
+  if (g.index > 0 && f.justEnded) {
+    const ends = kit.endsBefore(f, g.index);
+    if (ends !== f.justEnded.changeEnds) {
+      f.justEnded = { ...f.justEnded, changeEnds: ends };
+      f.said = ends ? [...f.said, "Change ends"] : f.said.filter((n) => n !== "Change ends");
     }
   }
 }

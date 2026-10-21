@@ -274,3 +274,14 @@ test("pad: what each won-the-rally tap will do", () => {
   }
   assert.deepEqual(pad.map((p) => p.id), ["point-a", "point-b", "timeout-a", "timeout-b", "fix-serve", "fix-number", "retire-a", "retire-b", "end", "abandon"]);
 });
+
+test("rules changed before the first rally: the game starts as the new rules start it", () => {
+  // Set up as singles, Asha serving: "0-0". Switched to doubles before a rally: "0-0-2", and losing the first rally is a side out.
+  let b = add(board({ doubles: false }), serve("a"));
+  assert.equal(call(b), "0-0");
+  b = add(b, { type: "rules", rules: { doubles: true } });
+  assert.equal(call(b), "0-0-2");
+  b = add(b, ...rallies("b"));
+  assert.equal(e.derive(b).server, "b", "side out: the first serving side has one server only");
+  assert.equal(call(b), "0-0-1");
+});
