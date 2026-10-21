@@ -4,22 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { User, Save, Phone, Mail, AtSign } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { checkUsername, errorOf, patchMe, profileOf } from "@/lib/account/client";
-import { usernameProblem } from "@/lib/account/usernames";
+import { errorOf, patchMe, profileOf } from "@/lib/account/client";
+import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "@/components/account/useUsernameCheck";
 import type { AccountError } from "@/lib/account/types";
 import type { AppUser } from "@/types/user";
-
-type Availability = "idle" | "checking" | "ok" | "taken" | "reserved" | "bad" | "unknown";
-
-const AVAILABILITY_TEXT: Record<Availability, string> = {
-  idle: "",
-  checking: "Checking…",
-  ok: "Available",
-  taken: "Someone already has this username.",
-  reserved: "This username is not allowed.",
-  bad: "3 to 20 letters, digits or _, starting with a letter.",
-  unknown: "",
-};
 
 const SAVE_ERROR: Partial<Record<AccountError, string>> = {
   taken: "Someone already has this username.",
@@ -37,7 +25,6 @@ export function ProfileSection({ user }: { user: AppUser }) {
   const name = draft.name ?? (user.name || "");
   const username = draft.username ?? (user.username ?? "");
   const taggable = draft.taggable ?? (user.taggable ?? true);
-  const [checked, setChecked] = useState<{ u: string; r: Availability } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -49,32 +36,9 @@ export function ProfileSection({ user }: { user: AppUser }) {
 
   const u = username.trim();
   const usernameChanged = u !== (user.username ?? "");
-  const problem = u ? usernameProblem(u) : null;
-  const availability: Availability = !u || !usernameChanged ? "idle" : problem ? problem : checked?.u === u ? checked.r : "checking";
+  const availability = useUsernameCheck(u, user.username, getToken);
 
-  // Availability, a moment after typing stops.
-  useEffect(() => {
-    if (availability !== "checking") return;
-    let live = true;
-    const t = setTimeout(async () => {
-      const tok = await getToken();
-      if (!live) return;
-      if (!("token" in tok)) {
-        setChecked({ u, r: "unknown" });
-        return;
-      }
-      const a = await checkUsername(tok.token, u);
-      if (!live) return;
-      const e = errorOf(a);
-      setChecked({ u, r: e === "taken" || e === "reserved" || e === "bad" ? e : e ? "unknown" : "ok" });
-    }, 450);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [availability, u, getToken]);
-
-  const canSave = !saving && !!name.trim() && (!usernameChanged || (!!u && (availability === "ok" || availability === "unknown")));
+  const canSave = !saving && !!name.trim() && (!usernameChanged || (!!u && usernameSavable(availability)));
 
   const handleSave = async () => {
     setError("");
