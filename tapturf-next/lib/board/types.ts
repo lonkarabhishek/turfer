@@ -1,0 +1,308 @@
+/**
+ * Live Scoreboard: keep score for any turf or court sport other than
+ * cricket (which has its own ball by ball scorer), and share it live on
+ * the same live links (lib/live). The contract every part builds on:
+ * the board, its events, what derive shows, the pad and the engines.
+ *
+ * Event sourced, like lib/cricket/scoring.ts: a board is its setup plus
+ * an append-only list of events. Everything shown comes from
+ * deriveBoard(board), one pass over the events, so undo is dropping the
+ * last event and a board read back from storage or a live link shows
+ * exactly what the scorer saw. Engines are pure: no Date.now(), no
+ * randomness; time comes in on the events (`at`) or as an argument.
+ */
+
+export const BOARD_SPORTS = ["football", "basketball", "volleyball", "badminton", "pickleball", "tennis", "table-tennis", "padel", "other"] as const;
+export type BoardSport = (typeof BOARD_SPORTS)[number];
+export type Side = "a" | "b";
+
+/* ------------------------------------------------------------------ */
+/* Rules, one shape per sport (every field filled by normalizeRules)   */
+/* ------------------------------------------------------------------ */
+
+/** Football and futsal on a turf. The clock counts up; time past a half's length is stoppage time. */
+export type FootballRules = {
+  /** 1 or 2 halves. */
+  halves: number;
+  /** Minutes per half, 5 to 60. Turf games are often 2 x 20 or 2 x 25. */
+  halfMinutes: number;
+  /** Track yellow and red cards. */
+  cards: boolean;
+  /** A level score at full time goes to penalties (a shootout of rounds of one kick each side). */
+  penalties: boolean;
+};
+
+/** Basketball. Quarters or halves; the clock counts down when used. */
+export type BasketballRules = {
+  /** 4 quarters or 2 halves. */
+  periods: number;
+  /** Minutes per period, 1 to 20. */
+  periodMinutes: number;
+  /** Run a game clock. Pickup games often play to a score with no clock. */
+  clock: boolean;
+  /** Pickup: first to this many points wins (with clock false). null: play the periods. */
+  target: number | null;
+  /** Team fouls in a period before the other side shoots free throws (the bonus). 5 by FIBA. */
+  foulLimit: number;
+};
+
+/**
+ * Rally point sports: badminton, volleyball, table tennis, and
+ * pickleball when played with rally scoring. A game (set) is won at
+ * `points` with a lead of `winBy`, or at `cap` outright.
+ */
+export type RallyRules = {
+  points: number;
+  winBy: number;
+  /** Badminton's 30: at 29-29 the next point wins. null: no cap. */
+  cap: number | null;
+  /** Games (sets) in the match: 1, 3, 5 or 7. The match ends when one side cannot be caught. */
+  bestOf: number;
+  /** Points in the deciding game when it differs (volleyball's 5th set to 15). null: same as `points`. */
+  decidingPoints: number | null;
+  /**
+   * Who serves. "winner": the side that won the rally (badminton,
+   * volleyball, rally pickleball). A number: the serve changes every
+   * that many points, and every point once both reach points - 1
+   * (table tennis: 2).
+   */
+  serve: "winner" | number;
+  doubles: boolean;
+};
+
+/** Pickleball with traditional side-out scoring: only the serving side scores; doubles has server 1 and 2 and starts at 0-0-2. */
+export type PickleballRules = {
+  scoring: "sideout" | "rally";
+  /** 11, 15 or 21. */
+  points: number;
+  winBy: number;
+  bestOf: number;
+  doubles: boolean;
+};
+
+/** Tennis and padel: points, games, sets. */
+export type TennisRules = {
+  /** Sets in the match: 1, 3 or 5. */
+  bestOf: number;
+  /** Games to win a set: 6, or 4 for short sets. */
+  games: number;
+  /** At games-all (6-6) play a tiebreak to 7, win by 2. false: play on until two clear. */
+  tiebreak: boolean;
+  /** The deciding set: a normal set, or a 10 point match tiebreak in its place (common in padel and club doubles). */
+  finalSet: "normal" | "match-tiebreak";
+  /** At deuce: advantage, or one deciding point (padel's golden point, no-ad). */
+  deuce: "advantage" | "golden";
+  doubles: boolean;
+};
+
+/** Anything else: points for each side, optionally to a target, optionally in periods. */
+export type OtherRules = {
+  /** The sport's name, shown in place of a sport ("Kabaddi", "Ultimate frisbee"). */
+  name: string;
+  /** First to this many wins. null: no target. */
+  target: number | null;
+  /** Periods (halves, rounds) to play, or null for one continuous game. */
+  periods: number | null;
+  /** Point buttons offered: [1] for most, [1, 2, 3] for basketball-like games. */
+  values: number[];
+};
+
+export type RulesFor = {
+  football: FootballRules;
+  basketball: BasketballRules;
+  volleyball: RallyRules;
+  badminton: RallyRules;
+  "table-tennis": RallyRules;
+  pickleball: PickleballRules;
+  tennis: TennisRules;
+  padel: TennisRules;
+  other: OtherRules;
+};
+export type AnyRules = RulesFor[BoardSport];
+
+/* ------------------------------------------------------------------ */
+/* The board                                                           */
+/* ------------------------------------------------------------------ */
+
+export type BoardSetup = {
+  /** Team or player names, cleaned, at most 32 characters. Doubles: "Asha / Ravi". */
+  teamA: string;
+  teamB: string;
+  /** Tournament or series, optional, at most 48. */
+  title: string;
+  venue: string;
+  rules: AnyRules;
+};
+
+/** kind tells a board from a cricket match wherever both travel (storage, live links, the follower page). */
+export type Board = {
+  v: 1;
+  kind: "board";
+  id: string;
+  createdAt: number;
+  sport: BoardSport;
+  setup: BoardSetup;
+  events: BoardEvent[];
+};
+
+/** What the setup screen hands newBoard. Everything optional. */
+export type BoardInput = {
+  teamA?: string;
+  teamB?: string;
+  title?: string;
+  venue?: string;
+  rules?: Partial<AnyRules>;
+  /** Racquet sports: who serves first. Asked before the first point when left out. */
+  firstServe?: Side;
+};
+
+/* ------------------------------------------------------------------ */
+/* Events                                                              */
+/* ------------------------------------------------------------------ */
+
+/** Every event may carry `at`: the scorer's wall clock in ms. Only clock maths and minutes use it. */
+type Stamp = { at?: number };
+
+/**
+ * Points for a side. value: 1 by default; basketball 1, 2 or 3. how:
+ * football "goal" | "penalty" | "own-goal" (an own goal is scored for
+ * `side` by the other team; player is the one who put it in);
+ * basketball "free-throw" | "two" | "three"; a penalty shootout kick
+ * "shootout-goal" | "shootout-miss". player: an optional name typed by
+ * the scorer, at most 40 characters.
+ */
+export type PointEvent = Stamp & { type: "point"; side: Side; value?: number; how?: string; player?: string };
+/** Football cards. */
+export type CardEvent = Stamp & { type: "card"; side: Side; color: "yellow" | "red"; player?: string };
+/** Basketball team fouls (player optional). */
+export type FoulEvent = Stamp & { type: "foul"; side: Side; player?: string };
+/** Start (run true) or stop the clock. `at` is required on clock events. */
+export type ClockEvent = { type: "clock"; run: boolean; at: number };
+/** End the current half, quarter or period (timed and "other" sports). Sets and games end by themselves. */
+export type PeriodEvent = Stamp & { type: "period" };
+/** Racquet sports: who serves now (first serve, or a correction). */
+export type ServeEvent = Stamp & { type: "serve"; side: Side };
+/** End the match now (reason "abandoned" for no result). */
+export type EndEvent = Stamp & { type: "end"; reason?: "abandoned" };
+/** Rename a team or player. */
+export type RenameEvent = Stamp & { type: "rename"; side: Side; name: string };
+export type TimeoutEvent = Stamp & { type: "timeout"; side: Side };
+
+export type BoardEvent = PointEvent | CardEvent | FoulEvent | ClockEvent | PeriodEvent | ServeEvent | EndEvent | RenameEvent | TimeoutEvent;
+
+/* ------------------------------------------------------------------ */
+/* The view                                                            */
+/* ------------------------------------------------------------------ */
+
+export type TimelineLine = {
+  /** Stable for React keys: the event's index. */
+  key: number;
+  side: Side | null;
+  /** "Goal! Ravi", "Yellow card, Arjun", "Set 2 to Asha, 21-17", "Half time". */
+  text: string;
+  /** Football minute ("34'", "45+2'"), basketball "Q3 4:12", or null. */
+  when: string | null;
+  /** 0-based period, set or game the line belongs to. */
+  period: number;
+  tone: "score" | "card" | "info" | "end";
+  /** The score after this line, "2-1" or "21-19". */
+  score: string | null;
+};
+
+export type BoardView = {
+  sport: BoardSport;
+  /** "Football", or OtherRules.name. */
+  sportName: string;
+  status: "live" | "done";
+  setup: BoardSetup;
+  teams: Record<Side, { name: string; score: number }>;
+  /** What teams[x].score counts: "Goals", "Points", "Sets", "Games". */
+  scoreUnit: string;
+  /** Racquet and set sports: the score inside the current game or set ("40" / "AD", "18" / "20"). null when the main score says it all. */
+  current: Record<Side, string> | null;
+  /** "Set 3", "Game 5, set 2", "Tiebreak", "Match tiebreak", or null. */
+  currentLabel: string | null;
+  /** Halves, quarters, periods: "1st half", "Q3", "Half time", "Full time". null for set sports. */
+  period: { index: number; of: number | null; label: string; break: boolean } | null;
+  /**
+   * The clock as of `at` (the scorer's wall clock, ms): ms elapsed in
+   * this period (counting up) or left (down). Shown time: running ?
+   * ms +/- (now - at) : ms. null when the sport or rules have no clock.
+   */
+  clock: { running: boolean; ms: number; at: number | null; limitMs: number | null; down: boolean } | null;
+  server: Side | null;
+  /** Pickleball's call "4-2-1", badminton's "Right court", or null. */
+  serveNote: string | null;
+  /** Racquet sports: the first serve has not been picked yet. Points wait for it. */
+  needsServe: boolean;
+  /** Finished sets or games and the one in play (last), with tiebreak points when one was played. */
+  sets: { a: number; b: number; winner: Side | null; tiebreak: { a: number; b: number } | null }[];
+  timeline: TimelineLine[];
+  /** Per sport: goals, cards, fouls, timeouts, points won, longest run, aces... a: and b: as shown. */
+  stats: { label: string; a: string; b: string }[];
+  /** Scorers and cards for football; top scorers for basketball. Empty when no names were typed. */
+  players: { side: Side; name: string; text: string }[];
+  /** "Set point Asha", "Match point", "Deuce", "Golden point", "Blue in the bonus", "Stoppage time". */
+  notices: string[];
+  /** One line for lists and link previews: "Red FC 2-1 Blue FC, 2nd half", "Asha leads Ravi 1-0 (21-17, 8-6)". */
+  headline: string;
+  result: { winner: Side | null; text: string } | null;
+  /** What the last event did, for the undo toast: "Goal, Red FC". */
+  lastAction: string | null;
+  /** The newest event's `at`, for the follower's clock (see LiveFollow). */
+  lastAt: number | null;
+  eventCount: number;
+};
+
+/* ------------------------------------------------------------------ */
+/* The pad                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One button on the scorer's pad. The UI renders actions grouped by
+ * side (a, b, then null for match-wide ones) in order, and on tap
+ * commits `event` (stamping `at`). ask "player": first offer an
+ * optional name sheet ("Who scored? Skip"), then commit with player set.
+ */
+export type PadAction = {
+  id: string;
+  side: Side | null;
+  label: string;
+  /** Smaller second line ("+2", "Penalty"). */
+  sub?: string;
+  /** primary: the big main button (Point, Goal, +2). */
+  tone: "primary" | "plain" | "warn" | "danger";
+  event: BoardEvent;
+  ask?: "player";
+  /** Shown but not tappable, with the reason as its label's title. */
+  disabled?: string;
+};
+
+/* ------------------------------------------------------------------ */
+/* Engines                                                             */
+/* ------------------------------------------------------------------ */
+
+/** One preset row on the setup screen: chips that set some rules ("2 x 20", "2 x 25", "Custom"). */
+export type RulePreset<R> = { key: string; label: string; options: { label: string; rules: Partial<R> }[] };
+
+/**
+ * One sport. lib/board/<family>.ts export these; lib/board/index.ts
+ * dispatches by board.sport. Everything pure.
+ */
+export type SportEngine<R> = {
+  sport: BoardSport;
+  label: string;
+  /** Emoji used in lists, matching lib/sports.ts. */
+  icon: string;
+  defaults: R;
+  /** Fill every field, clamp numbers, drop unknown keys. Never throws. */
+  normalizeRules(raw: unknown): R;
+  presets: RulePreset<R>[];
+  /** Why this event cannot go in now, or null. apply() refuses events check() refuses. */
+  check(board: Board, event: BoardEvent): string | null;
+  derive(board: Board): BoardView;
+  pad(board: Board, view: BoardView): PadAction[];
+};
+
+/** Live sync urgency: an end of period, set or match skips the send throttle (see components/tools/scorer/live.ts shapeOf). */
+export type BoardShape = { status: BoardView["status"]; innings: readonly unknown[] };
