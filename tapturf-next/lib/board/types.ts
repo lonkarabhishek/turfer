@@ -30,6 +30,8 @@ export type FootballRules = {
   cards: boolean;
   /** A level score at full time goes to penalties (a shootout of rounds of one kick each side). */
   penalties: boolean;
+  /** Kicks each in the shootout before sudden death: 5 (IFAB Law 10), 3 on many 5-a-side turfs. */
+  shootoutKicks: number;
 };
 
 /** Basketball. Quarters or halves; the clock counts down when used. */
@@ -40,43 +42,55 @@ export type BasketballRules = {
   periodMinutes: number;
   /** Run a game clock. Pickup games often play to a score with no clock. */
   clock: boolean;
-  /** Pickup: first to this many points wins (with clock false). null: play the periods. */
+  /** First to this many points ends the game, with or without the clock (pickup "to 21", FIBA 3x3 21). null: play the periods. */
   target: number | null;
-  /** Team fouls in a period before the other side shoots free throws (the bonus). 5 by FIBA. */
+  /** With target: lead needed to win (pickup "win by 2"). 1 or 2. */
+  winBy: number;
+  /** "2s-3s": +1 free throw, +2, +3. "1s-2s" (3x3 and pickup): +1 inside, +2 outside, +1 free throw. */
+  scoring: "2s-3s" | "1s-2s";
+  /** Team fouls in a period after which every further foul gives free throws (FIBA Art. 41.1.1: 4; 3x3: 6). The notice shows once fouls >= foulLimit. Overtime continues the last period's count (Art. 41.1.3). */
   foulLimit: number;
 };
 
 /**
- * Rally point sports: badminton, volleyball, table tennis, and
- * pickleball when played with rally scoring. A game (set) is won at
- * `points` with a lead of `winBy`, or at `cap` outright.
+ * Rally point sports: badminton, volleyball, table tennis. A game (set)
+ * is won at `points` with a lead of `winBy`, or at `cap` outright. The
+ * deciding game is game number bestOf, and only when bestOf > 1:
+ * decidingPoints, decidingToss and the deciding-game notices ignore
+ * bestOf 1.
  */
 export type RallyRules = {
   points: number;
   winBy: number;
-  /** Badminton's 30: at 29-29 the next point wins. null: no cap. */
+  /** The next point wins at cap-1 all. Badminton: 30 for 21-point games, 21 for 15-point games (BWF 3x15). null: no cap. */
   cap: number | null;
   /** Games (sets) in the match: 1, 3, 5 or 7. The match ends when one side cannot be caught. */
   bestOf: number;
   /** Points in the deciding game when it differs (volleyball's 5th set to 15). null: same as `points`. */
   decidingPoints: number | null;
   /**
-   * Who serves. "winner": the side that won the rally (badminton,
-   * volleyball, rally pickleball). A number: the serve changes every
-   * that many points, and every point once both reach points - 1
-   * (table tennis: 2).
+   * Who serves during a game. "winner": the side that won the rally
+   * (badminton, volleyball). A number: the serve changes every that
+   * many points, and every point once both reach points - 1 (table
+   * tennis: 2).
    */
   serve: "winner" | number;
+  /** First server of the next game: "winner" of the last game (badminton Law 7.6) or "alternate": the side that received first in the last game (volleyball FIVB 12.1.2, table tennis ITTF 2.13.6). */
+  nextGame: "winner" | "alternate";
+  /** Volleyball: a new toss for the deciding set (FIVB 12.1.1): needsServe is true again at its start. */
+  decidingToss: boolean;
   doubles: boolean;
 };
 
 /** Pickleball with traditional side-out scoring: only the serving side scores; doubles has server 1 and 2 and starts at 0-0-2. */
 export type PickleballRules = {
   scoring: "sideout" | "rally";
-  /** 11, 15 or 21. */
+  /** 11, 15 or 21 (rally games are usually 15 or 21). Every game of side-out doubles starts 0-0-2. */
   points: number;
   winBy: number;
   bestOf: number;
+  /** Rally scoring: a point that would win the game counts only for the serving side; a receiving side that wins that rally just gets the serve (USA Pickleball provisional rally rule). */
+  gamePointOnServe: boolean;
   doubles: boolean;
 };
 
@@ -88,10 +102,15 @@ export type TennisRules = {
   games: number;
   /** At games-all (6-6) play a tiebreak to 7, win by 2. false: play on until two clear. */
   tiebreak: boolean;
-  /** The deciding set: a normal set, or a 10 point match tiebreak in its place (common in padel and club doubles). */
+  /** The deciding set: a normal set, or a 10 point match tiebreak in its place (common in padel and club doubles). Always "normal" when bestOf is 1. */
   finalSet: "normal" | "match-tiebreak";
-  /** At deuce: advantage, or one deciding point (padel's golden point, no-ad). */
-  deuce: "advantage" | "golden";
+  /**
+   * advantage: win by 2 points after 40-40. golden: at the first deuce
+   * the next point wins (tennis "no-ad"). star: advantage at the first
+   * two deuces, and at the third deuce the next point wins (FIP 2026).
+   * Receivers pick the side for a golden or star point.
+   */
+  deuce: "advantage" | "golden" | "star";
   doubles: boolean;
 };
 
@@ -143,6 +162,8 @@ export type Board = {
   sport: BoardSport;
   setup: BoardSetup;
   events: BoardEvent[];
+  /** Only on the copy sent to a live link: the scorer's Date.now() at send. The follower's clock ticks from it. derive ignores it. */
+  sentAt?: number;
 };
 
 /** What the setup screen hands newBoard. Everything optional. */
@@ -167,28 +188,45 @@ type Stamp = { at?: number };
  * Points for a side. value: 1 by default; basketball 1, 2 or 3. how:
  * football "goal" | "penalty" | "own-goal" (an own goal is scored for
  * `side` by the other team; player is the one who put it in);
- * basketball "free-throw" | "two" | "three"; a penalty shootout kick
- * "shootout-goal" | "shootout-miss". player: an optional name typed by
- * the scorer, at most 40 characters.
+ * basketball "free-throw" | "two" | "three" (2s-3s) or "free-throw" |
+ * "inside" | "outside" (1s-2s); a penalty shootout kick "shootout-goal"
+ * | "shootout-miss" (does not change the score; side = the kicking
+ * team); racquet sports optionally "ace" (side = server) or
+ * "double-fault" (side = receiver), for stats only. player: an optional
+ * name typed by the scorer, at most 40 characters.
  */
 export type PointEvent = Stamp & { type: "point"; side: Side; value?: number; how?: string; player?: string };
 /** Football cards. */
 export type CardEvent = Stamp & { type: "card"; side: Side; color: "yellow" | "red"; player?: string };
 /** Basketball team fouls (player optional). */
 export type FoulEvent = Stamp & { type: "foul"; side: Side; player?: string };
-/** Start (run true) or stop the clock. `at` is required on clock events. */
-export type ClockEvent = { type: "clock"; run: boolean; at: number };
+/** Start (run true) or stop the clock. `at` is required. ms sets the period clock to that value at `at` (elapsed counting up, left counting down): "Set time". A period or end event stops a running clock at its own `at`. */
+export type ClockEvent = { type: "clock"; run: boolean; at: number; ms?: number };
 /** End the current half, quarter or period (timed and "other" sports). Sets and games end by themselves. */
 export type PeriodEvent = Stamp & { type: "period" };
-/** Racquet sports: who serves now (first serve, or a correction). */
-export type ServeEvent = Stamp & { type: "serve"; side: Side };
-/** End the match now (reason "abandoned" for no result). */
-export type EndEvent = Stamp & { type: "end"; reason?: "abandoned" };
+/**
+ * Racquet sports and volleyball: who serves now (first serve, or a
+ * correction). Mid-game it means the scorer had the first server wrong:
+ * table tennis and tiebreaks flip that game's first server (so the next
+ * game's first server follows from it); other sports set the server from
+ * now and carry on the normal order. server: side-out doubles
+ * pickleball's server 1 or 2.
+ */
+export type ServeEvent = Stamp & { type: "serve"; side: Side; server?: 1 | 2 };
+/**
+ * End the match now. No reason: time up (court hour over): decided on
+ * the score (set sports: sets, then games in the unfinished set, then
+ * points; level: drawn). "abandoned": no result. "retired", "walkover",
+ * "conceded": `side` is the side that stops, and the other side wins.
+ */
+export type EndEvent = Stamp & { type: "end"; reason?: "abandoned" | "retired" | "walkover" | "conceded"; side?: Side };
 /** Rename a team or player. */
 export type RenameEvent = Stamp & { type: "rename"; side: Side; name: string };
 export type TimeoutEvent = Stamp & { type: "timeout"; side: Side };
+/** Change rules from here on; earlier games, sets and periods stay as played. check() refuses a change the current state cannot take ("Score is 16-12 already; pick 21"). */
+export type RulesEvent = Stamp & { type: "rules"; rules: Partial<AnyRules> };
 
-export type BoardEvent = PointEvent | CardEvent | FoulEvent | ClockEvent | PeriodEvent | ServeEvent | EndEvent | RenameEvent | TimeoutEvent;
+export type BoardEvent = PointEvent | CardEvent | FoulEvent | ClockEvent | PeriodEvent | ServeEvent | EndEvent | RenameEvent | TimeoutEvent | RulesEvent;
 
 /* ------------------------------------------------------------------ */
 /* The view                                                            */
@@ -210,10 +248,13 @@ export type TimelineLine = {
 };
 
 export type BoardView = {
+  /** The board's id, so views key per match (a live link can move to the next match). */
+  id: string;
   sport: BoardSport;
   /** "Football", or OtherRules.name. */
   sportName: string;
   status: "live" | "done";
+  /** Names as now (after renames) and the rules in force now (after rules events). */
   setup: BoardSetup;
   teams: Record<Side, { name: string; score: number }>;
   /** What teams[x].score counts: "Goals", "Points", "Sets", "Games". */
@@ -229,24 +270,37 @@ export type BoardView = {
    * this period (counting up) or left (down). Shown time: running ?
    * ms +/- (now - at) : ms. null when the sport or rules have no clock.
    */
-  clock: { running: boolean; ms: number; at: number | null; limitMs: number | null; down: boolean } | null;
+  clock: {
+    running: boolean;
+    ms: number;
+    at: number | null;
+    /** Length of this period, or null with no limit. Up clocks past it are in stoppage time. */
+    limitMs: number | null;
+    down: boolean;
+    /** Added to the shown value for the match clock: football's earlier halves (2nd half starts at 20:00 in 2 x 20). 0 otherwise. */
+    baseMs: number;
+  } | null;
   server: Side | null;
   /** Pickleball's call "4-2-1", badminton's "Right court", or null. */
   serveNote: string | null;
   /** Racquet sports: the first serve has not been picked yet. Points wait for it. */
   needsServe: boolean;
-  /** Finished sets or games and the one in play (last), with tiebreak points when one was played. */
-  sets: { a: number; b: number; winner: Side | null; tiebreak: { a: number; b: number } | null }[];
+  /** Finished sets or games and the one in play (last), with tiebreak points when one was played. A match tiebreak (in place of the deciding set) has a and b as its points and matchTiebreak true, written [10-8]. */
+  sets: { a: number; b: number; winner: Side | null; tiebreak: { a: number; b: number } | null; matchTiebreak?: boolean }[];
   timeline: TimelineLine[];
   /** Per sport: goals, cards, fouls, timeouts, points won, longest run, aces... a: and b: as shown. */
   stats: { label: string; a: string; b: string }[];
   /** Scorers and cards for football; top scorers for basketball. Empty when no names were typed. */
   players: { side: Side; name: string; text: string }[];
-  /** "Set point Asha", "Match point", "Deuce", "Golden point", "Blue in the bonus", "Stoppage time". */
+  /** "Set point Asha", "Match point", "Deuce", "Golden point", "Change ends", "Blue in the bonus", "Interval". Shown until the next point. Time-based ones ("Stoppage time", "Time up") are the UI's, from clockMs. */
   notices: string[];
+  /** Racquet sports and volleyball: a game or set just ended; the pad waits for "Start game N" (optionally with "Swap sides"). Never stored: the next point clears it. */
+  gameJustEnded: { label: string; changeEnds: boolean } | null;
+  /** The mid-game change of ends just came up (11 in badminton's deciding game, 5 in table tennis, 8 in volleyball, odd games in tennis): the UI offers "Swap sides". */
+  changeEnds: boolean;
   /** One line for lists and link previews: "Red FC 2-1 Blue FC, 2nd half", "Asha leads Ravi 1-0 (21-17, 8-6)". */
   headline: string;
-  result: { winner: Side | null; text: string } | null;
+  result: { winner: Side | null; kind: "win" | "draw" | "abandoned"; text: string } | null;
   /** What the last event did, for the undo toast: "Goal, Red FC". */
   lastAction: string | null;
   /** The newest event's `at`, for the follower's clock (see LiveFollow). */
