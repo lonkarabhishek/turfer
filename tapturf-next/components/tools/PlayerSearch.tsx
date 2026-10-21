@@ -62,7 +62,8 @@ export function TagLine({ tag, onRemove }: { tag: Tag; onRemove: () => void }) {
   );
 }
 
-export function PlayerSearch({ onPick, exclude }: { onPick: (p: PlayerHit) => void; exclude?: string | null }) {
+/** exclude: usernames already on show (chips of players tagged in this match): not offered again as recent ones. */
+export function PlayerSearch({ onPick, exclude = [] }: { onPick: (p: PlayerHit) => void; exclude?: readonly (string | null | undefined)[] }) {
   const { user, getToken } = useAuth();
   const id = useId();
   const [recent] = useState(readRecent);
@@ -111,7 +112,7 @@ export function PlayerSearch({ onPick, exclude }: { onPick: (p: PlayerHit) => vo
     onPick(p);
   };
 
-  const recentShown = recent.filter((p) => p.u !== exclude).slice(0, 6);
+  const recentShown = recent.filter((p) => !exclude.includes(p.u)).slice(0, 6);
   const canSearch = !!user && online;
   const current = result && result.q === query ? result : null;
 
@@ -155,7 +156,9 @@ export function PlayerSearch({ onPick, exclude }: { onPick: (p: PlayerHit) => vo
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden />
             <input
               id={`${id}-q`}
-              type="search"
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
               value={q}
               autoFocus
               maxLength={30}

@@ -48,12 +48,15 @@ function PlayerPicker({
   onPick,
   newLabel,
   onProfile,
+  shownTags = [],
 }: {
   options: { id: string; name: string; tag?: Tag; detail?: string; muted?: boolean }[];
   newName: string;
   onPick: (name: string, id?: string) => void;
   newLabel: string;
   onProfile?: (p: PlayerHit, typed: string) => void;
+  /** Tags on chips shown outside the picker (the bowler sheet's), so recent profiles do not repeat them. */
+  shownTags?: (string | undefined)[];
 }) {
   const [typed, setTyped] = useState("");
   const name = cleanName(typed);
@@ -77,7 +80,7 @@ function PlayerPicker({
           )}
         </div>
       </div>
-      {onProfile && <PlayerSearch onPick={(p) => onProfile(p, typed)} />}
+      {onProfile && <PlayerSearch exclude={[...options.map((o) => o.tag?.u), ...shownTags]} onPick={(p) => onProfile(p, typed)} />}
     </div>
   );
 }
@@ -251,7 +254,7 @@ export function BowlerSheet({ match, view, mode, onCommit, onClose }: { match: M
         </div>
       )}
       <div className={opts.length ? "mt-3" : ""}>
-        <PlayerPicker options={[]} newName={defaultName(view, side, "Bowler")} newLabel="New bowler" onPick={pick} onProfile={profile} />
+        <PlayerPicker options={[]} newName={defaultName(view, side, "Bowler")} newLabel="New bowler" onPick={pick} onProfile={profile} shownTags={opts.map((o) => o.tag?.u)} />
       </div>
     </Sheet>
   );
@@ -572,6 +575,7 @@ export function PlayerSheet({ view, side, id, onCommit, onAction, onClose }: { v
         <TagLine tag={shown} onRemove={() => setTag(null)} />
       ) : (
         <PlayerSearch
+          exclude={[...others]}
           onPick={(hit) => {
             if (others.has(hit.u)) return setTagErr(`@${hit.u} is already on another ${view.teams[side].name} player.`);
             setTagErr(null);

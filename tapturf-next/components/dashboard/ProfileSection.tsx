@@ -6,6 +6,7 @@ import { User, Save, Phone, Mail, AtSign } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "@/components/account/useUsernameCheck";
+import { TagSwitch } from "@/components/account/TagSwitch";
 import type { AccountError } from "@/lib/account/types";
 import type { AppUser } from "@/types/user";
 
@@ -144,23 +145,13 @@ export function ProfileSection({ user }: { user: AppUser }) {
         </div>
 
         {/* Find and tag */}
-        <div className={username.trim() ? "" : "opacity-50"}>
-          <label className="flex items-start justify-between gap-4 cursor-pointer">
-            <span>
-              <span className="block text-sm font-medium text-gray-700">Let others find and tag me</span>
-              <span className="block text-xs text-gray-500 mt-0.5">
-                Friends who score live matches can tag you as a player. Off also hides your profile page.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={taggable}
-              disabled={!username.trim()}
-              onChange={(e) => setDraft((d) => ({ ...d, taggable: e.target.checked }))}
-              className="mt-1 w-10 h-6 shrink-0 accent-accent-600 cursor-pointer"
-            />
-          </label>
+        <div>
+          <TagSwitch
+            on={taggable}
+            disabled={!username.trim()}
+            onChange={(on) => setDraft((d) => ({ ...d, taggable: on }))}
+            detail="Friends who score live matches can tag you as a player. Off also hides your profile page."
+          />
           {user.username && user.taggable !== false && (
             <Link href={`/u/${user.username}`} className="inline-block mt-2 text-sm font-semibold text-accent-700 underline underline-offset-2">
               See your public profile

@@ -109,7 +109,7 @@ export function NamesSheet({ view, onCommit, onClose }: { view: BoardView; onCom
               <TagLine tag={tags[s]!} onRemove={() => setTags((t) => ({ ...t, [s]: null }))} />
             ) : (
               <PlayerSearch
-                exclude={tags[s === "a" ? "b" : "a"]?.u}
+                exclude={[tags[s === "a" ? "b" : "a"]?.u]}
                 onPick={(p) => {
                   setErr(null);
                   setTags((t) => ({ ...t, [s]: { u: p.u } }));
@@ -302,7 +302,7 @@ export function PlayerSheet({ title, team, known, onSave, onClose }: { title: st
         </button>
       </div>
       {/* A typed name stays with the profile picked; with none typed, the profile's name is used. */}
-      <PlayerSearch onPick={(p) => onSave((clean || p.name).slice(0, 40), { u: p.u })} />
+      <PlayerSearch exclude={known.map((n) => n.tag?.u)} onPick={(p) => onSave((clean || p.name).slice(0, 40), { u: p.u })} />
       <p className="mt-2 text-[12px] text-primary-500">The score already counts. This only adds the name.</p>
     </Sheet>
   );

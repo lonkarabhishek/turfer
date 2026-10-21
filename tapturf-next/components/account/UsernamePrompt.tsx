@@ -7,6 +7,7 @@ import { AtSign } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf, suggestUsername } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "./useUsernameCheck";
+import { TagSwitch } from "./TagSwitch";
 
 /** User ids this device has asked already, newest last. Asked once, whatever the answer. */
 const ASKED_KEY = "tapturf_username_asked_v1";
@@ -196,19 +197,9 @@ export function UsernamePrompt() {
             {error || status}
           </p>
 
-          <label className="mt-3 flex items-start justify-between gap-4 cursor-pointer">
-            <span>
-              <span className="block text-[14px] font-semibold text-primary-800">Let others find and tag me</span>
-              <span className="block text-[12px] text-primary-500 mt-0.5">Off also hides your profile page.</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={taggable}
-              onChange={(e) => setTaggable(e.target.checked)}
-              className="mt-1 w-10 h-6 shrink-0 accent-accent-600 cursor-pointer"
-            />
-          </label>
+          <div className="mt-2">
+            <TagSwitch on={taggable} onChange={setTaggable} detail="Off also hides your profile page." />
+          </div>
 
           <div className="mt-5 flex gap-3">
             <button
