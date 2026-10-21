@@ -125,6 +125,14 @@ function humanDate(dateStr: string): string {
 /** The last WhatsApp number this device gave players, 10 digits. */
 const HOST_PHONE_KEY = "tapturf_host_phone_v1";
 
+/** A typed or pasted Indian mobile number as its 10 digits: "+91 98765 43210", "919876543210" and "09876543210" all work. */
+function tenDigits(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d.slice(0, 10);
+}
+
 /** The number to offer: the profile's Indian number, else the one given last time. */
 function defaultHostPhone(profilePhone: string | undefined): string {
   const m = /^\+91([6-9]\d{9})$/.exec(profilePhone ?? "");
@@ -828,15 +836,14 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     id="host-phone"
                     type="tel"
                     inputMode="numeric"
-                    maxLength={10}
                     value={hostPhone}
-                    onChange={(e) => setHostPhoneTyped(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    onChange={(e) => setHostPhoneTyped(tenDigits(e.target.value))}
                     placeholder="10-digit number"
                     aria-describedby="host-phone-note"
                     className="flex-1 pr-4 py-3.5 min-h-[56px] text-[15px] text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
                   />
                 </div>
-                <p id="host-phone-note" className="text-[12px] text-primary-500 px-1 pt-1.5">Shown to signed-in players on this game.</p>
+                <p id="host-phone-note" className="text-[12px] text-primary-500 px-1 pt-1.5">Players see it on this game&apos;s page. Leave it empty to keep your number to yourself.</p>
 
                 {submitError && (
                   <div className="mt-4 p-3.5 bg-hot-500/10 border border-hot-500/40 rounded-2xl">

@@ -39,7 +39,11 @@ export function ProfileSection({ user }: { user: AppUser }) {
   const usernameChanged = u !== (user.username ?? "");
   const availability = useUsernameCheck(u, user.username, getToken);
 
-  const canSave = !saving && !!name.trim() && (!usernameChanged || (!!u && usernameSavable(availability)));
+  // Only what the person changed is sent: a copy loaded earlier must never put back a switch or a username changed since.
+  const nameChanged = draft.name !== undefined && name.trim() !== user.name;
+  const taggableChanged = draft.taggable !== undefined && taggable !== (user.taggable ?? true);
+  const anyChange = nameChanged || (usernameChanged && !!u) || taggableChanged;
+  const canSave = !saving && !!name.trim() && anyChange && (!usernameChanged || (!!u && usernameSavable(availability)));
 
   const handleSave = async () => {
     setError("");
@@ -50,11 +54,10 @@ export function ProfileSection({ user }: { user: AppUser }) {
         if ("unknown" in tok) setError("Couldn't reach TapTurf. Check your connection and try again.");
         return;
       }
-      const patch: { name?: string; username?: string; taggable?: boolean } = { name: name.trim() };
-      if (u) {
-        patch.username = u;
-        patch.taggable = taggable;
-      }
+      const patch: { name?: string; username?: string; taggable?: boolean } = {};
+      if (nameChanged) patch.name = name.trim();
+      if (usernameChanged && u) patch.username = u;
+      if (taggableChanged) patch.taggable = taggable;
       const a = await patchMe(tok.token, patch);
       const p = profileOf(a);
       if (p) applyProfile(p);

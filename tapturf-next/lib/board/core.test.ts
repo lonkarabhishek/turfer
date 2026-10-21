@@ -1087,16 +1087,16 @@ test("racquet singles: a tag per player at setup; a rename leaving it out keeps 
   assert.deepEqual([v.teams.a.tag, v.teams.b.tag], [{ u: "asha_kumar" }, { u: "ravi" }]);
   assert.deepEqual(sanitizeBoard(wire(b)), b);
 
-  // The live copy: the setup and every rename carry each side's final tag.
+  // The live copy: the setup and every rename that changed a tag carry each side's final tag; a plain rename stays plain.
   const p = publicBoard(b);
   assert.deepEqual(p.setup.tags, { a: { u: "asha_kumar" }, b: { u: "ravi" } });
   assert.deepEqual(
     p.events.filter((e) => e.type === "rename"),
     [
-      { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
+      { type: "rename", side: "a", name: "Asha Kumar" },
       { type: "rename", side: "b", name: "Ravi", tag: { u: "ravi" } },
       { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
-      { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
+      { type: "rename", side: "a", name: "Asha Kumar" },
       { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
     ],
   );
@@ -1110,11 +1110,12 @@ test("racquet singles: a tag per player at setup; a rename leaving it out keeps 
   const cleared = publicBoard(run(b, { type: "rename", side: "a", name: "Asha Kumar", tag: null }));
   assert.deepEqual(cleared.setup.tags, { b: { u: "ravi" } });
   assert.ok(!JSON.stringify(cleared).includes("asha_"));
-  for (const e of cleared.events) if (e.type === "rename" && e.side === "a") assert.equal("tag" in e, false);
+  // A rename that changed the tag keeps its key, now null (cleared); a plain rename has none.
+  for (const e of cleared.events) if (e.type === "rename" && e.side === "a") assert.ok(!("tag" in e) || e.tag === null);
   // Both cleared: no tags key at all.
   const none = publicBoard(run(b, { type: "rename", side: "a", name: "Asha Kumar", tag: null }, { type: "rename", side: "b", name: "Ravi", tag: null }));
   assert.equal("tags" in none.setup, false);
-  assert.ok(!JSON.stringify(none).includes('"tag"'));
+  assert.ok(!/"tag":\{/.test(JSON.stringify(none)), "no tag value left anywhere");
 });
 
 test("racquet sides: a bad tag is refused from the pad and dropped from a stored board", () => {
@@ -1367,4 +1368,35 @@ test("tags: a tag-only rename in singles adds no name-change line and no usernam
     const v3 = deriveBoard(run(b0, { type: "rename", side: "a", name: "Asha P", tag: { u: "asha_p" } }));
     assert.equal(v3.timeline.filter((l) => /Name changed to Asha P/.test(l.text)).length, 1, sport);
   }
+});
+
+test("tags: the live copy keeps tag-only renames as they were, and replays every card", async () => {
+  const { withTags } = await import("../live/tags");
+  // Singles: tag, then remove it, with no name change.
+  const b0 = newBoard("badminton", { teamA: "Asha", teamB: "Ravi", rules: { doubles: false } }, { id: "pub-tags", now: T0 });
+  const b1 = run(b0, { type: "rename", side: "a", name: "Asha", tag: { u: "asha_p" } }, { type: "rename", side: "a", name: "Asha", tag: null });
+  const mine = deriveBoard(b1);
+  const live = deriveBoard(publicBoard(b1));
+  assert.deepEqual(live.timeline.map((l) => l.text), mine.timeline.map((l) => l.text));
+  assert.equal(live.lastAction, mine.lastAction);
+  assert.equal(live.timeline.filter((l) => /Name changed/.test(l.text)).length, 0);
+
+  // Football: a tagged and an untagged Rahul on one team. Stripping the tag (opt-out) joins them on the live copy,
+  // which must still count every card the scorer gave.
+  const f = run(
+    fb({ cards: true }),
+    clock(true, T0),
+    { type: "card", side: "a", color: "yellow", player: "Rahul", tag: { u: "rahul_k" }, at: T0 + MIN },
+    { type: "card", side: "a", color: "red", player: "Rahul", at: T0 + 2 * MIN },
+    { type: "card", side: "a", color: "yellow", player: "Rahul", tag: { u: "rahul_k" }, at: T0 + 3 * MIN },
+  );
+  const scorer = deriveBoard(f);
+  const stripped = sanitizeBoard(withTags(publicBoard(f), new Map()));
+  assert.ok(stripped);
+  const follower = deriveBoard(stripped!);
+  const cardStats = (v: BoardView) => v.stats.filter((s) => /card/i.test(s.label)).map((s) => `${s.label}:${s.a}-${s.b}`);
+  assert.deepEqual(cardStats(follower), cardStats(scorer));
+  assert.equal(follower.timeline.filter((l) => l.tone === "card").length, 3);
+  // A new card for a player sent off is still refused on the scorer's pad.
+  refuse(f, { type: "card", side: "a", color: "yellow", player: "Rahul", at: T0 + 4 * MIN }, /sent off already/);
 });

@@ -64,7 +64,9 @@ export async function firebaseToken(): Promise<TokenCheck> {
 export async function supabaseToken(): Promise<TokenCheck> {
   try {
     const { createClient } = await import("@/lib/supabase/client");
-    const { data } = await createClient().auth.getSession();
+    const { data, error } = await createClient().auth.getSession();
+    // A failed refresh (offline, a timeout) is not a sign-out: Supabase's own events say when the session ends.
+    if (error) return { unknown: true };
     const t = data.session?.access_token;
     return t ? { token: t } : { none: true };
   } catch {

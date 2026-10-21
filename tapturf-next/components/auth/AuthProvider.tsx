@@ -336,8 +336,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (sourceRef.current === "oauth") return supabaseToken();
     if (sourceRef.current !== "phone") return { none: true };
     const t = await firebaseToken();
-    if ("none" in t) await forcePhoneSignOut("Your login ended. Please log in again with your phone number.");
-    else if ("token" in t) store(FB_MISSING_KEY, null);
+    if ("none" in t) {
+      // Never mid-match: on live and tools pages it only counts as a sighting; the caller shows its own error.
+      if (quietPath()) {
+        if (!read(FB_MISSING_KEY)) store(FB_MISSING_KEY, String(Date.now()));
+      } else await forcePhoneSignOut("Your login ended. Please log in again with your phone number.");
+    } else if ("token" in t) store(FB_MISSING_KEY, null);
     return t;
   }, [forcePhoneSignOut]);
 
@@ -355,7 +359,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if ("none" in t) {
       const first = Number(read(FB_MISSING_KEY) || 0);
       if (!first) store(FB_MISSING_KEY, String(Date.now()));
-      else if (Date.now() - first >= FB_MISSING_GRACE_MS) await forcePhoneSignOut("Your login ended. Please log in again with your phone number.");
+      else if (Date.now() - first >= FB_MISSING_GRACE_MS && !quietPath()) await forcePhoneSignOut("Your login ended. Please log in again with your phone number.");
       return;
     }
     store(FB_MISSING_KEY, null);
@@ -371,8 +375,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const e = errorOf(a);
-    if (e === "new") {
-      await forcePhoneSignOut("This phone number has no TapTurf account. Log in with the number on your profile.");
+    // The page may have changed while the check ran: never sign out on live or tools pages; a later visit tries again.
+    if (e === "new" && !quietPath()) {
+      const tail = (local.phone ?? "").slice(-2);
+      await forcePhoneSignOut(
+        `This phone number has no TapTurf account. Log in with the number on your profile${/^\d{2}$/.test(tail) ? `, ending in ${tail}` : ""}.`,
+      );
     } else if (e === "conflict") {
       store(PROFILE_CHECKED_KEY, String(Date.now()));
     }

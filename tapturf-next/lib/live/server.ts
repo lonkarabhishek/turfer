@@ -119,16 +119,23 @@ export function liveTagsChecked<T>(match: T): Promise<T> {
 async function readLive(code: string): Promise<LiveRow | null> {
   const key = liveWriteKey();
   if (!key) throw new Error("live read: no write key");
-  // The keyed read: stored tags reach followers only through here, checked.
+  // The keyed read: stored tags reach followers only through getLive, which checks them.
   const { data, error } = await createReadOnlyClient().rpc("live_match_get_k", { p_key: key, p_code: code });
   // supabase-js returns errors (timeouts, the open breaker) instead of
   // throwing. Throw them: unstable_cache then stores nothing and keeps
   // serving its last copy, where returning null would cache "waiting"
   // for a match that is live (the lib/home/data.ts lesson).
   if (error) throw new Error(`live read failed: ${error.message}`);
-  if (data == null) return null;
-  const row = toLiveRow(data);
-  return row.match == null ? row : { ...row, match: await liveTagsChecked(row.match) };
+  return data == null ? null : toLiveRow(data);
+}
+
+/**
+ * The row with its tags checked now. Done on every read, outside the data
+ * cache: a copy cached before someone turned tagging off must not keep
+ * their tag. The lookup's own 30 s memory keeps this cheap.
+ */
+async function withCheckedTags(row: LiveRow | null): Promise<LiveRow | null> {
+  return row && row.match != null ? { ...row, match: await liveTagsChecked(row.match) } : row;
 }
 
 // Polls that miss the cache together share one lookup per instance.
@@ -139,8 +146,9 @@ const inflight = new Map<string, Promise<LiveRow | null>>();
  * One match as followers see it, from Next's data cache. Each accepted
  * write purges the tag (purgeLive), so the database sees about one read
  * per write per region however many people follow; 10 s caps how long a
- * copy read just before a write can outlive the purge. Throws when the
- * database could not be read; null means no write has arrived yet.
+ * copy read just before a write can outlive the purge. Tags are checked
+ * after the cache, on every read. Throws when the database could not be
+ * read; null means no write has arrived yet.
  */
 export function getLive(code: string): Promise<LiveRow | null> {
   let p = inflight.get(code);
@@ -150,7 +158,7 @@ export function getLive(code: string): Promise<LiveRow | null> {
     });
     inflight.set(code, p);
   }
-  return p;
+  return p.then(withCheckedTags);
 }
 
 /** The same, once per render: generateMetadata and the page share one call. */

@@ -186,8 +186,8 @@ function minuteAt(s: S, at: number | undefined): string | null {
   return footballMinute(s.base, s.rules.halfMinutes, clockValue(c, at));
 }
 
-/** Why this event cannot go in now, or null. */
-function why(s: S, e: BoardEvent): string | null {
+/** Why an event cannot go in, or null. replay: folding events already stored, where a card is never refused (see "card"). */
+function why(s: S, e: BoardEvent, replay = false): string | null {
   const res = result(s);
   if (e.type === "rename") return cleanName(e.name) ? null : "Type a name";
   if (e.type === "rules") {
@@ -221,6 +221,10 @@ function why(s: S, e: BoardEvent): string | null {
     }
     case "card": {
       if (!s.rules.cards) return "Cards are off in settings";
+      // Only a new tap is refused. A stored card always counts: a live copy
+      // whose tags were removed (someone turned tagging off) can join two
+      // players into one, and must not drop a card the scorer gave.
+      if (replay) return null;
       const b = e.player ? s.bookings.get(playerKey(e.side, e.player, tagIn(e))) : undefined;
       return b?.off ? `${b.name} is sent off already` : null;
     }
@@ -348,7 +352,7 @@ function step(s: S, e: BoardEvent, i: number): void {
 function fold(board: Board): S {
   const s = start(board);
   board.events.forEach((e, i) => {
-    if (!why(s, e)) step(s, e, i);
+    if (!why(s, e, true)) step(s, e, i);
     else if (i === board.events.length - 1) s.lastAction = null;
   });
   return s;

@@ -82,6 +82,8 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       return;
     }
     setError("");
+    // A new code is for a new sign-in: never retry the one verified before.
+    setRetry(false);
     setLoading(true);
     try {
       recaptchaRef.current = await phoneAuthHelpers.setupRecaptcha(recaptchaId, recaptchaRef.current);
@@ -306,7 +308,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
               Six digits sent to <span className="font-mono font-semibold text-primary-800">+91 {phone}</span>
             </p>
             <button
-              onClick={() => { setStep("phone"); setError(""); }}
+              onClick={() => { setStep("phone"); setError(""); setRetry(false); }}
               className="text-[11px] font-semibold text-primary-500 hover:text-accent-600 transition-colors mt-1"
             >
               change number

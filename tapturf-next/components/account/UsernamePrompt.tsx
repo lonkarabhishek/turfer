@@ -12,8 +12,11 @@ import { TagSwitch } from "./TagSwitch";
 /** User ids this device has asked already, newest last. Asked once, whatever the answer. */
 const ASKED_KEY = "tapturf_username_asked_v1";
 const ASKED_KEPT = 20;
+/** Asked in this tab, kept even when storage is blocked, so Later is never answered by a new prompt. */
+const askedHere = new Set<string>();
 
 function askedBefore(id: string): boolean {
+  if (askedHere.has(id)) return true;
   try {
     const list = JSON.parse(localStorage.getItem(ASKED_KEY) ?? "[]");
     return Array.isArray(list) && list.includes(id);
@@ -23,6 +26,7 @@ function askedBefore(id: string): boolean {
 }
 
 function markAsked(id: string) {
+  askedHere.add(id);
   try {
     const list = JSON.parse(localStorage.getItem(ASKED_KEY) ?? "[]");
     const next = (Array.isArray(list) ? list.filter((x) => x !== id) : []).concat(id).slice(-ASKED_KEPT);
@@ -46,6 +50,15 @@ const SAVE_ERROR: Record<string, string> = {
   limit: "You can't change your username right now.",
 };
 
+/** Something else has the person's attention: another dialog, or a field they are typing in. */
+function busy(): boolean {
+  if (document.querySelector('[aria-modal="true"], [role="dialog"], [role="alertdialog"]')) return true;
+  const el = document.activeElement as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /**
  * Asks a signed-in person without a username to pick one, once per
  * device, prefilled with a free one made from their name. Only after the
@@ -53,9 +66,10 @@ const SAVE_ERROR: Record<string, string> = {
  * dialog. This is also where people first hear about tagging.
  */
 export function UsernamePrompt() {
-  const { user, profileFresh, getToken, applyProfile } = useAuth();
+  const { user, profileFresh, getToken, applyProfile, notice } = useAuth();
   const path = usePathname() ?? "";
-  const [open, setOpen] = useState(false);
+  // The account it was opened for: a sign-in in another tab closes it.
+  const [open, setOpen] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [taggable, setTaggable] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,24 +78,27 @@ export function UsernamePrompt() {
   const lastFocus = useRef<HTMLElement | null>(null);
   const availability = useUsernameCheck(username, null, getToken);
 
-  const eligible = !!user && profileFresh && !user.username && askHere(path);
+  // Not while a sign-in notice is up: closing that must not close this.
+  const eligible = !!user && profileFresh && !user.username && askHere(path) && !notice;
   const userId = user?.id ?? null;
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Wait a moment after the page settles, then ask (unless a dialog is open or this device asked before).
   useEffect(() => {
     if (!eligible || !userId || open) return;
     let live = true;
     const t = setTimeout(async () => {
-      if (!live || askedBefore(userId) || document.querySelector('[aria-modal="true"]')) return;
+      if (!live || askedBefore(userId) || busy()) return;
       const tok = await getToken();
       if (!live || !("token" in tok)) return;
       const a = await suggestUsername(tok.token);
       if (!live || errorOf(a)) return;
       const suggestion = (a.body as { username?: string | null }).username ?? "";
-      if (document.querySelector('[aria-modal="true"]')) return;
+      if (busy()) return;
       lastFocus.current = document.activeElement as HTMLElement | null;
       setUsername(suggestion);
-      setOpen(true);
+      setError("");
+      setOpen(userId);
     }, 2500);
     return () => {
       live = false;
@@ -90,7 +107,7 @@ export function UsernamePrompt() {
   }, [eligible, userId, open, getToken]);
 
   // Someone else's sign-in, or a username set elsewhere: close.
-  const shown = open && eligible;
+  const shown = open !== null && open === userId && eligible;
 
   useEffect(() => {
     if (!shown) return;
@@ -100,14 +117,28 @@ export function UsernamePrompt() {
 
   const close = () => {
     if (userId) markAsked(userId);
-    setOpen(false);
+    setOpen(null);
     lastFocus.current?.focus?.();
   };
 
   useEffect(() => {
     if (!shown) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") return close();
+      // Keep Tab inside the dialog.
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const items = [...dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (!items.length) return;
+      const firstEl = items[0];
+      const lastEl = items[items.length - 1];
+      const inside = dialogRef.current.contains(document.activeElement);
+      if (e.shiftKey && (document.activeElement === firstEl || !inside)) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && (document.activeElement === lastEl || !inside)) {
+        e.preventDefault();
+        firstEl.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -134,7 +165,8 @@ export function UsernamePrompt() {
         return;
       }
       if (userId) markAsked(userId);
-      setOpen(false);
+      setOpen(null);
+      lastFocus.current?.focus?.();
       if (p) applyProfile(p);
     } finally {
       setSaving(false);
@@ -148,6 +180,7 @@ export function UsernamePrompt() {
     <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-primary-900/40" onClick={close} aria-hidden />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="username-prompt-title"

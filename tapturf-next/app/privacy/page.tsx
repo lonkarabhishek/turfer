@@ -74,8 +74,9 @@ const SECTIONS: LegalSection[] = [
           name and photo then show on your public profile page, tapturf.in/u/your-username, with the month you
           joined. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
           matches can find you by username or name and tag you as a player, and the tag links to your profile.
-          Turning it off hides your profile page, takes you out of search and removes your tags from live
-          scores; open live links catch up within about a minute.
+          Turning it off hides your profile page and takes you out of search within about a minute. New views
+          of a live score stop showing your tag within about a minute too; a live score page someone already
+          has open drops it at its next score update or when it is reloaded.
         </p>
         <p id="live-links" className="scroll-mt-24">
           <strong>Live score links.</strong> The free Live Cricket Scorer and Live Scoreboard keep your match
@@ -128,8 +129,8 @@ const SECTIONS: LegalSection[] = [
       <>
         <p>
           <strong>Other players.</strong> When you host a game, your name and profile photo appear on that
-          game&rsquo;s page, and your phone number is shown to signed-in players so they can coordinate with
-          you. Only host a game if you are comfortable with that. When you ask to join a game, the host sees
+          game&rsquo;s page, and so does the WhatsApp number you give for that game, if any, so players can
+          coordinate with you. Leave the number out if you would rather not share it. When you ask to join a game, the host sees
           your name, photo and any note you wrote. Reviews show your name.
         </p>
         <p>
@@ -212,7 +213,8 @@ const SECTIONS: LegalSection[] = [
       <p>
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
         banners you closed, whether you dismissed the &ldquo;install app&rdquo; prompt, whether we already
-        asked you to pick a username, the TapTurf profiles you tagged recently, the short visit note
+        asked you to pick a username, the TapTurf profiles you tagged recently, the WhatsApp number you last
+        gave players for a game, the short visit note
         described under &ldquo;When you sign up&rdquo;, and the matches and tournaments you score with our
         free tools. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in

@@ -292,9 +292,10 @@ export function publicBoard(board: Board): Board {
   const events = board.events.map((e): BoardEvent => {
     if (e.type !== "rename") return e;
     const out: RenameEvent = { ...e, name: names[e.side] };
+    // The tag key only where the scorer's rename had one (a tag change): a
+    // rename without it must stay one, so the follower's lines match.
     delete out.tag;
-    const t = tags[e.side];
-    if (t) out.tag = t;
+    if (e.tag !== undefined) out.tag = tags[e.side] ?? null;
     return out;
   });
   return { ...board, setup: setupWithTags({ ...board.setup, teamA: names.a, teamB: names.b }, tags), events };

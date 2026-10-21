@@ -112,43 +112,53 @@ export function OpenersSheet({ match, view, onCommit, onClose }: { match: Match;
   // Defaults: named players in order; a side with only placeholders gets fresh ones for the role.
   const batPick = bat.filter((b) => placeholderOf(b.name) !== "Bowler");
   const firstBowler = view.bowlerOptions.find((b) => !b.blocked && placeholderOf(b.name) !== "Batter");
-  const d1 = batPick[0]?.name ?? defaultName(view, inn.batting, "Batter");
-  const d2 = batPick.find((b) => b.name !== d1)?.name ?? defaultName(view, inn.batting, "Batter", [d1]);
-  const [s, setS] = useState(needS ? d1 : "");
-  const [n, setN] = useState(needN ? (needS ? d2 : d1) : "");
-  const [b, setB] = useState(needB ? (firstBowler?.name ?? defaultName(view, inn.bowling, "Bowler")) : "");
+  // Each box holds a name, and the player's id while it still shows a chip's name: two players can share a name (one tagged).
+  type Slot = { name: string; id?: string };
+  const chip = (o?: { id: string; name: string }): Slot | null => (o ? { name: o.name, id: o.id } : null);
+  const first = batPick[0];
+  const d1: Slot = chip(first) ?? { name: defaultName(view, inn.batting, "Batter") };
+  const d2: Slot = chip(batPick.find((x) => x.id !== first?.id && x.name !== d1.name)) ?? { name: defaultName(view, inn.batting, "Batter", [d1.name]) };
+  const [s, setS] = useState<Slot>(needS ? d1 : { name: "" });
+  const [n, setN] = useState<Slot>(needN ? (needS ? d2 : d1) : { name: "" });
+  const [b, setB] = useState<Slot>(needB ? (chip(firstBowler) ?? { name: defaultName(view, inn.bowling, "Bowler") }) : { name: "" });
   const [err, setErr] = useState<string | null>(null);
 
   const go = () => {
-    const sN = cleanName(s);
-    const nN = cleanName(n);
-    const bN = cleanName(b);
+    const sN = cleanName(s.name);
+    const nN = cleanName(n.name);
+    const bN = cleanName(b.name);
     if ((needS && !sN) || (needN && !nN) || (needB && !bN)) return setErr("Fill in every name, or keep the ones given.");
-    if (needS && needN && sN.toLowerCase() === nN.toLowerCase()) return setErr("Pick two different batters.");
+    if (needS && needN && (s.id && n.id ? s.id === n.id : sN.toLowerCase() === nN.toLowerCase())) return setErr("Pick two different batters.");
     let m = match;
     const evs: MatchEvent[] = [];
     const push = (e: MatchEvent) => {
       evs.push(e);
       m = apply(m, e);
     };
-    // A name that is one of the players on show is that player, tagged or not; anything else is resolved as typed.
-    if (needS) push({ type: "setBatter", ...resolveOption(m, inn.batting, sN, bat), end: "striker" });
-    if (needN) push({ type: "setBatter", ...resolveOption(m, inn.batting, nN, bat), end: "nonStriker" });
-    if (needB) push({ type: "setBowler", ...resolveOption(m, inn.bowling, bN, view.bowlerOptions) });
+    // A chip picked is that player; a name typed is resolved against the players on show, then as typed.
+    const pick = (slot: Slot, side: Side, options: readonly { id: string; name: string; tag?: Tag }[], name: string): PlayerPick =>
+      slot.id && options.some((o) => o.id === slot.id && o.name === name) ? { player: slot.id } : resolveOption(m, side, name, options);
+    if (needS) push({ type: "setBatter", ...pick(s, inn.batting, bat, sN), end: "striker" });
+    if (needN) push({ type: "setBatter", ...pick(n, inn.batting, bat, nN), end: "nonStriker" });
+    if (needB) push({ type: "setBowler", ...pick(b, inn.bowling, view.bowlerOptions, bN) });
     if (!onCommit(evs)) setErr("Could not start. Check the names.");
   };
 
-  const chips = (side: Side, value: string, setValue: (v: string) => void, exclude: string[]) => {
-    const list = side === inn.batting ? bat.map((p) => p.name) : view.bowlerOptions.map((p) => p.name);
-    const shown = list.filter((x) => !exclude.includes(x));
+  const chips = (side: Side, value: Slot, setValue: (v: Slot) => void, exclude: Slot[]) => {
+    const list: { id: string; name: string; tag?: Tag }[] = side === inn.batting ? bat : view.bowlerOptions;
+    const shown = list.filter((x) => !exclude.some((e) => (e.id ? e.id === x.id : e.name === x.name)));
     if (!shown.length) return null;
     return (
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {shown.slice(0, 12).map((x) => (
-          <button key={x} type="button" onClick={() => setValue(x)} aria-pressed={x === value} className={`press-tight h-10 px-3 rounded-full border text-[14px] font-semibold ${x === value ? "border-primary-900 bg-primary-900 text-white" : "border-primary-200 bg-white text-primary-800"}`}>
-            {x}
-          </button>
-        ))}
+        {shown.slice(0, 12).map((x) => {
+          const on = value.id ? value.id === x.id : value.name === x.name && !x.tag;
+          return (
+            <button key={x.id} type="button" onClick={() => setValue({ name: x.name, id: x.id })} aria-pressed={on} className={`press-tight h-10 px-3 rounded-full border text-[14px] font-semibold ${on ? "border-primary-900 bg-primary-900 text-white" : "border-primary-200 bg-white text-primary-800"}`}>
+              {x.name}
+              {x.tag && <span className={`ml-1 text-[12px] font-medium ${on ? "text-accent-200" : "text-accent-700"}`}>@{x.tag.u}</span>}
+            </button>
+          );
+        })}
       </div>
     );
   };
@@ -158,7 +168,7 @@ export function OpenersSheet({ match, view, onCommit, onClose }: { match: Match;
       {needS && (
         <div className="mt-1">
           <SheetLabel>{inn.battingName}: on strike</SheetLabel>
-          <NameInput id="op-s" value={s} onChange={setS} label="Batter on strike" />
+          <NameInput id="op-s" value={s.name} onChange={(v) => setS({ name: v })} label="Batter on strike" />
           {chips(inn.batting, s, setS, [n])}
         </div>
       )}
@@ -179,14 +189,14 @@ export function OpenersSheet({ match, view, onCommit, onClose }: { match: Match;
       {needN && (
         <div className="mt-1">
           <SheetLabel>{inn.battingName}: non-striker</SheetLabel>
-          <NameInput id="op-n" value={n} onChange={setN} label="Non-striker" />
+          <NameInput id="op-n" value={n.name} onChange={(v) => setN({ name: v })} label="Non-striker" />
           {chips(inn.batting, n, setN, [s])}
         </div>
       )}
       {needB && (
         <div className={needS || needN ? "mt-5" : "mt-1"}>
           <SheetLabel>{inn.bowlingName}: bowling first</SheetLabel>
-          <NameInput id="op-b" value={b} onChange={setB} label="Opening bowler" />
+          <NameInput id="op-b" value={b.name} onChange={(v) => setB({ name: v })} label="Opening bowler" />
           {chips(inn.bowling, b, setB, [])}
         </div>
       )}
