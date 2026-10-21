@@ -1,4 +1,5 @@
-import type { Board, BoardEvent, BoardView, Side } from "./types";
+import { readTag, type Tag } from "../account/tag";
+import type { Board, BoardEvent, BoardSetup, BoardSport, BoardView, Side } from "./types";
 
 /**
  * Small helpers every board engine shares. Relative imports only, so the
@@ -6,6 +7,9 @@ import type { Board, BoardEvent, BoardView, Side } from "./types";
  */
 
 export const SIDES: readonly Side[] = ["a", "b"];
+
+/** Singles racquet games name players, not teams: the only sports whose sides carry a tag. */
+export const PLAYER_SPORTS: readonly BoardSport[] = ["badminton", "pickleball", "tennis", "table-tennis", "padel"];
 
 export const other = (s: Side): Side => (s === "a" ? "b" : "a");
 
@@ -71,6 +75,61 @@ export function namesNow(board: Board): Record<Side, string> {
   return names;
 }
 
+/* ------------------------------------------------------------------ */
+/* TapTurf profile tags                                                */
+/* ------------------------------------------------------------------ */
+
+/** A clean copy of a tag ({ u } only), or undefined. Engines read tags through it, so a hand-built board never puts junk in a view. */
+export const tagOf = (x: unknown): Tag | undefined => readTag(x) ?? undefined;
+
+/**
+ * Side tags as now, racquet sports only: the setup's, then each rename's
+ * in order (a tag sets it, null clears it, none keeps it). Empty on
+ * every other sport.
+ */
+export function tagsNow(board: Board): Partial<Record<Side, Tag>> {
+  const tags: Partial<Record<Side, Tag>> = {};
+  if (!PLAYER_SPORTS.includes(board.sport)) return tags;
+  for (const s of SIDES) {
+    const t = tagOf(board.setup.tags?.[s]);
+    if (t) tags[s] = t;
+  }
+  for (const e of board.events) {
+    if (e.type !== "rename" || e.tag === undefined) continue;
+    const t = tagOf(e.tag);
+    if (t) tags[e.side] = t;
+    else if (e.tag === null) delete tags[e.side];
+  }
+  return tags;
+}
+
+/** The setup with these side tags: the tags key only when a side is tagged, so an untagged setup keeps its exact keys. */
+export function setupWithTags(setup: BoardSetup, tags: Partial<Record<Side, Tag>>): BoardSetup {
+  const out: BoardSetup = { ...setup };
+  delete out.tags;
+  const kept: Partial<Record<Side, Tag>> = {};
+  for (const s of SIDES) {
+    const t = tagOf(tags[s]);
+    if (t) kept[s] = t;
+  }
+  if (kept.a || kept.b) out.tags = kept;
+  return out;
+}
+
+/**
+ * Racquet sports: each tagged side's tag on v.teams, only while the rules
+ * in force (v.setup.rules, so call it once they are on the view) are
+ * singles. Doubles keeps the tags in setup but shows none: one name
+ * stands for two people.
+ */
+export function showSideTags(v: BoardView): void {
+  if (!PLAYER_SPORTS.includes(v.sport) || (v.setup.rules as { doubles?: unknown }).doubles !== false) return;
+  for (const s of SIDES) {
+    const t = tagOf(v.setup.tags?.[s]);
+    if (t) v.teams[s].tag = t;
+  }
+}
+
 /** The newest `at` among the events, or null. */
 export function lastAt(events: readonly BoardEvent[]): number | null {
   for (let i = events.length - 1; i >= 0; i--) {
@@ -91,7 +150,7 @@ export function blankView(board: Board, sportName: string, scoreUnit: string): B
     sport: board.sport,
     sportName,
     status: "live",
-    setup: { ...board.setup, teamA: names.a, teamB: names.b },
+    setup: setupWithTags({ ...board.setup, teamA: names.a, teamB: names.b }, tagsNow(board)),
     teams: { a: { name: names.a, score: 0 }, b: { name: names.b, score: 0 } },
     scoreUnit,
     current: null,

@@ -1,5 +1,5 @@
-import type { Board, BoardEvent, BoardView, EndEvent, FootballRules, PadAction, PointEvent, RulePreset, Side, SportEngine, TimelineLine } from "./types";
-import { blankView, bool, cleanName, clampInt, clockValue, isObj, namesNow, newClock, ordinal, other, plural, runClock, SIDES, stopClock, stoppedResult, type PeriodClock } from "./common";
+import type { Board, BoardEvent, BoardView, EndEvent, FootballRules, PadAction, PointEvent, RulePreset, Side, SportEngine, Tag, TimelineLine } from "./types";
+import { blankView, bool, cleanName, clampInt, clockValue, isObj, namesNow, newClock, ordinal, other, plural, runClock, SIDES, stopClock, stoppedResult, tagOf, type PeriodClock } from "./common";
 
 /**
  * Football and futsal on a turf: goals, halves on a count-up clock with
@@ -75,9 +75,9 @@ const GOAL_HOWS = ["goal", "penalty", "own-goal"];
 const isKick = (e: PointEvent) => e.how === "shootout-goal" || e.how === "shootout-miss";
 
 type Kick = { side: Side; scored: boolean };
-/** when: the minute, or null with no clock; tag: "pen", "og" or "". */
-type Scorer = { side: Side; name: string; goals: { when: string | null; tag: string }[] };
-type Booking = { side: Side; name: string; marks: string[]; yellows: number; off: boolean };
+/** when: the minute, or null with no clock; tag: "pen", "og" or "". profile: the player's TapTurf tag, when one was picked. */
+type Scorer = { side: Side; name: string; profile?: Tag; goals: { when: string | null; tag: string }[] };
+type Booking = { side: Side; name: string; profile?: Tag; marks: string[]; yellows: number; off: boolean };
 
 type S = {
   rules: FootballRules;
@@ -123,7 +123,10 @@ function start(board: Board): S {
   };
 }
 
-const playerKey = (side: Side, name: string) => `${side}:${name.toLowerCase()}`;
+/** One person per key: a tagged player by the tag (whatever the spelling typed), an untagged one by the name, any case. */
+const playerKey = (side: Side, name: string, tag?: Tag) => (tag ? `${side}:@${tag.u}` : `${side}:${name.toLowerCase()}`);
+/** The event's player tag, read only next to a name. */
+const tagIn = (e: { player?: string; tag?: unknown }) => (e.player ? tagOf(e.tag) : undefined);
 const level = (s: S) => s.goals.a === s.goals.b;
 
 /** The shootout so far. IFAB Law 10: kicks alternate, the side that kicks first keeps kicking first, and it stops once one side cannot catch up. */
@@ -217,7 +220,7 @@ function why(s: S, e: BoardEvent): string | null {
     }
     case "card": {
       if (!s.rules.cards) return "Cards are off in settings";
-      const b = e.player ? s.bookings.get(playerKey(e.side, e.player)) : undefined;
+      const b = e.player ? s.bookings.get(playerKey(e.side, e.player, tagIn(e))) : undefined;
       return b?.off ? `${b.name} is sent off already` : null;
     }
     case "clock": {
@@ -266,8 +269,9 @@ function step(s: S, e: BoardEvent, i: number): void {
       line(text, "score", e.side, when);
       if (e.player) {
         // Own goals are listed with the team they count for, as match reports do.
-        const k = playerKey(e.side, e.player);
-        const sc = s.scorers.get(k) ?? { side: e.side, name: e.player, goals: [] };
+        const profile = tagIn(e);
+        const k = playerKey(e.side, e.player, profile);
+        const sc = s.scorers.get(k) ?? { side: e.side, name: e.player, ...(profile ? { profile } : {}), goals: [] };
         sc.goals.push({ when, tag: how === "penalty" ? "pen" : how === "own-goal" ? "og" : "" });
         s.scorers.set(k, sc);
       }
@@ -277,7 +281,8 @@ function step(s: S, e: BoardEvent, i: number): void {
     case "card": {
       const when = minuteAt(s, e.at);
       const name = e.player ?? s.names[e.side];
-      const b = e.player ? (s.bookings.get(playerKey(e.side, e.player)) ?? { side: e.side, name: e.player, marks: [], yellows: 0, off: false }) : null;
+      const profile = tagIn(e);
+      const b = e.player ? (s.bookings.get(playerKey(e.side, e.player, profile)) ?? { side: e.side, name: e.player, ...(profile ? { profile } : {}), marks: [], yellows: 0, off: false }) : null;
       // IFAB Law 12: a second caution in the match is a sending off.
       const second = e.color === "yellow" && !!b && b.yellows === 1;
       if (e.color === "yellow") s.yellow[e.side]++;
@@ -288,7 +293,7 @@ function step(s: S, e: BoardEvent, i: number): void {
         if (e.color === "yellow") b.yellows++;
         if (e.color === "red" || second) b.off = true;
         b.marks.push(`${second ? "second yellow" : e.color === "red" ? "red card" : "yellow card"}${when ? ` ${when}` : ""}`);
-        s.bookings.set(playerKey(e.side, b.name), b);
+        s.bookings.set(playerKey(b.side, b.name, b.profile), b);
       }
       s.lastAction = `${second ? "Second yellow" : e.color === "red" ? "Red card" : "Yellow card"}, ${s.names[e.side]}`;
       return;
@@ -394,11 +399,11 @@ function derive(board: Board): BoardView {
   for (const sc of s.scorers.values()) {
     const known = sc.goals.every((g) => g.when);
     const marks = sc.goals.map((g) => (g.when ? `${g.when}${g.tag ? ` (${g.tag})` : ""}` : g.tag)).filter(Boolean);
-    v.players.push({ side: sc.side, name: sc.name, text: known ? marks.join(", ") : `${plural(sc.goals.length, "goal")}${marks.length ? ` (${marks.join(", ")})` : ""}` });
+    v.players.push({ side: sc.side, name: sc.name, text: known ? marks.join(", ") : `${plural(sc.goals.length, "goal")}${marks.length ? ` (${marks.join(", ")})` : ""}`, ...(sc.profile ? { tag: { ...sc.profile } } : {}) });
   }
   for (const b of s.bookings.values()) {
     const text = b.marks.join(", ");
-    v.players.push({ side: b.side, name: b.name, text: text.charAt(0).toUpperCase() + text.slice(1) });
+    v.players.push({ side: b.side, name: b.name, text: text.charAt(0).toUpperCase() + text.slice(1), ...(b.profile ? { tag: { ...b.profile } } : {}) });
   }
 
   if (!res && shootoutOn(s)) {

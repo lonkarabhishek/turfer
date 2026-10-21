@@ -1,6 +1,7 @@
 // Relative, not "@/", so logic.test.ts compiles on its own.
 import { applyBoard, checkBoard, deriveBoard, undoBoard } from "../../../lib/board";
-import type { AnyRules, Board, BoardEvent, BoardSport, BoardView, EndEvent, PadAction, RulePreset, Side } from "../../../lib/board/types";
+import type { AnyRules, Board, BoardEvent, BoardSport, BoardView, CardEvent, EndEvent, FoulEvent, PadAction, PointEvent, RulePreset, Side, Tag } from "../../../lib/board/types";
+import { readTag } from "../../../lib/account/tag";
 import { PROMPTS_KEPT, type BoardPrefs } from "./storage";
 
 /**
@@ -57,29 +58,49 @@ export function namePrompt(e: BoardEvent): { title: string; button: string } {
   return { title: "Who scored?", button: "Add scorer" };
 }
 
-/** Names already typed for a team, newest first, for one-tap chips. */
-export function knownPlayers(board: Board, team: Side, max = 12): string[] {
-  const out: string[] = [];
+/** A player chip: the name as typed, and the TapTurf profile picked with it, if any. */
+export type KnownPlayer = { name: string; tag?: Tag };
+
+/**
+ * Players already named for a team, newest first, for one-tap chips. One
+ * chip per name and tag: two "Rahul"s tagged to different profiles (or
+ * one tagged, one not) are two chips; the same name in another case with
+ * the same tag (or none) is one, spelt as last typed.
+ */
+export function knownPlayers(board: Board, team: Side, max = 12): KnownPlayer[] {
+  const out: KnownPlayer[] = [];
+  const seen = new Set<string>();
   for (let i = board.events.length - 1; i >= 0 && out.length < max; i--) {
     const e = board.events[i];
-    const p = "player" in e ? e.player : undefined;
-    if (p && playerTeam(e) === team && !out.some((x) => x.toLowerCase() === p.toLowerCase())) out.push(p);
+    if (playerTeam(e) !== team) continue;
+    const p = (e as PointEvent | CardEvent | FoulEvent).player;
+    if (!p) continue;
+    const tag = readTag((e as PointEvent | CardEvent | FoulEvent).tag);
+    const key = `${p.toLowerCase()}\n${tag?.u ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag ? { name: p, tag } : { name: p });
   }
   return out;
 }
 
 /**
- * The board with a player name put on the event at index, which must
- * still be the last one: the tap went in at once (stamped then), the
- * name comes after. Null when something else has been added since, or
- * the engine will not take it.
+ * The board with a player name, and exactly the given tag, put on the
+ * event at index, which must still be the last one: the tap went in at
+ * once (stamped then), the name comes after. No tag removes any tag the
+ * event had, so a new name never keeps someone else's profile. Null when
+ * something else has been added since, or the engine will not take it
+ * (an invalid tag, a card for a player sent off).
  */
-export function withPlayer(board: Board, index: number, name: string): Board | null {
+export function withPlayer(board: Board, index: number, name: string, tag?: Tag | null): Board | null {
   const last = board.events[board.events.length - 1];
   const clean = name.replace(/\s+/g, " ").trim().slice(0, 40);
   if (!clean || index !== board.events.length - 1 || !last || playerTeam(last) === null) return null;
+  const e = { ...last, player: clean } as PointEvent | CardEvent | FoulEvent;
+  delete e.tag;
+  if (tag) e.tag = { u: tag.u };
   const before = undoBoard(board);
-  const next = applyBoard(before, { ...last, player: clean } as BoardEvent);
+  const next = applyBoard(before, e);
   return next === before ? null : next;
 }
 

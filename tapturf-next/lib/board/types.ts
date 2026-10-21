@@ -12,6 +12,9 @@
  * randomness; time comes in on the events (`at`) or as an argument.
  */
 
+import type { Tag } from "../account/tag";
+export type { Tag } from "../account/tag";
+
 export const BOARD_SPORTS = ["football", "basketball", "volleyball", "badminton", "pickleball", "tennis", "table-tennis", "padel", "other"] as const;
 export type BoardSport = (typeof BOARD_SPORTS)[number];
 export type Side = "a" | "b";
@@ -151,6 +154,14 @@ export type BoardSetup = {
   title: string;
   venue: string;
   rules: AnyRules;
+  /**
+   * Racquet sports (badminton, pickleball, tennis, table tennis, padel):
+   * the TapTurf profile tagged on each singles player, by side. Present
+   * only when at least one side is tagged, and never on other sports. A
+   * rename can set or clear it later (see RenameEvent). Kept while the
+   * rules are doubles, shown only while they are singles.
+   */
+  tags?: Partial<Record<Side, Tag>>;
 };
 
 /** kind tells a board from a cricket match wherever both travel (storage, live links, the follower page). */
@@ -175,6 +186,8 @@ export type BoardInput = {
   rules?: Partial<AnyRules>;
   /** Racquet sports: who serves first. Asked before the first point when left out. */
   firstServe?: Side;
+  /** Racquet sports: the singles players' TapTurf profiles. Invalid ones, and any on other sports, are dropped. */
+  tags?: Partial<Record<Side, Tag | null>>;
 };
 
 /* ------------------------------------------------------------------ */
@@ -193,13 +206,16 @@ type Stamp = { at?: number };
  * | "shootout-miss" (does not change the score; side = the kicking
  * team); racquet sports optionally "ace" (side = server) or
  * "double-fault" (side = receiver), for stats only. player: an optional
- * name typed by the scorer, at most 40 characters.
+ * name typed by the scorer, at most 40 characters. tag: the TapTurf
+ * profile picked for that player, only ever next to a player name.
+ * Football and basketball list a tagged player once per tag (whatever
+ * the spelling typed), an untagged one once per name.
  */
-export type PointEvent = Stamp & { type: "point"; side: Side; value?: number; how?: string; player?: string };
+export type PointEvent = Stamp & { type: "point"; side: Side; value?: number; how?: string; player?: string; tag?: Tag };
 /** Football cards. */
-export type CardEvent = Stamp & { type: "card"; side: Side; color: "yellow" | "red"; player?: string };
+export type CardEvent = Stamp & { type: "card"; side: Side; color: "yellow" | "red"; player?: string; tag?: Tag };
 /** Basketball team fouls (player optional). */
-export type FoulEvent = Stamp & { type: "foul"; side: Side; player?: string };
+export type FoulEvent = Stamp & { type: "foul"; side: Side; player?: string; tag?: Tag };
 /** Start (run true) or stop the clock. `at` is required. ms sets the period clock to that value at `at` (elapsed counting up, left counting down): "Set time". A period or end event stops a running clock at its own `at`. */
 export type ClockEvent = { type: "clock"; run: boolean; at: number; ms?: number };
 /** End the current half, quarter or period (timed and "other" sports). Sets and games end by themselves. */
@@ -220,8 +236,12 @@ export type ServeEvent = Stamp & { type: "serve"; side: Side; server?: 1 | 2 };
  * "conceded": `side` is the side that stops, and the other side wins.
  */
 export type EndEvent = Stamp & { type: "end"; reason?: "abandoned" | "retired" | "walkover" | "conceded"; side?: Side };
-/** Rename a team or player. */
-export type RenameEvent = Stamp & { type: "rename"; side: Side; name: string };
+/**
+ * Rename a team or player. tag, racquet sports only: left out keeps the
+ * side's tag as it is, null clears it, a tag sets it. A change of tag
+ * alone carries the side's current name.
+ */
+export type RenameEvent = Stamp & { type: "rename"; side: Side; name: string; tag?: Tag | null };
 export type TimeoutEvent = Stamp & { type: "timeout"; side: Side };
 /** Change rules from here on; earlier games, sets and periods stay as played. check() refuses a change the current state cannot take ("Score is 16-12 already; pick 21"). */
 export type RulesEvent = Stamp & { type: "rules"; rules: Partial<AnyRules> };
@@ -254,9 +274,10 @@ export type BoardView = {
   /** "Football", or OtherRules.name. */
   sportName: string;
   status: "live" | "done";
-  /** Names as now (after renames) and the rules in force now (after rules events). */
+  /** Names and tags as now (after renames) and the rules in force now (after rules events). */
   setup: BoardSetup;
-  teams: Record<Side, { name: string; score: number }>;
+  /** tag: the singles player's TapTurf profile, only while the rules in force are singles in a racquet sport; left out otherwise. */
+  teams: Record<Side, { name: string; score: number; tag?: Tag }>;
   /** What teams[x].score counts: "Goals", "Points", "Sets", "Games". */
   scoreUnit: string;
   /** Racquet and set sports: the score inside the current game or set ("40" / "AD", "18" / "20"). null when the main score says it all. */
@@ -290,8 +311,8 @@ export type BoardView = {
   timeline: TimelineLine[];
   /** Per sport: goals, cards, fouls, timeouts, points won, longest run, aces... a: and b: as shown. */
   stats: { label: string; a: string; b: string }[];
-  /** Scorers and cards for football; top scorers for basketball. Empty when no names were typed. */
-  players: { side: Side; name: string; text: string }[];
+  /** Scorers and cards for football; top scorers for basketball. Empty when no names were typed. A tagged player is one row per tag, named as first typed, with the tag. */
+  players: { side: Side; name: string; text: string; tag?: Tag }[];
   /** "Set point Asha", "Match point", "Deuce", "Golden point", "Change ends", "Blue in the bonus", "Interval". Shown until the next point. Time-based ones ("Stoppage time", "Time up") are the UI's, from clockMs. */
   notices: string[];
   /** Racquet sports and volleyball: a game or set just ended; the pad waits for "Start game N" (optionally with "Swap sides"). Never stored: the next point clears it. */

@@ -13,7 +13,7 @@ import type {
   SportEngine,
   TimelineLine,
 } from "./types";
-import { SIDES, blankView, bool, clampInt, cleanName, isObj, isSide, namesNow, num, oneOf, other, plural } from "./common";
+import { SIDES, blankView, bool, clampInt, cleanName, isObj, isSide, namesNow, num, oneOf, other, plural, showSideTags } from "./common";
 
 /**
  * Rally point sports: badminton, volleyball and table tennis, one fold
@@ -556,6 +556,7 @@ function deriveWith<R extends AnyRules>(kit: Kit<R>, raw: Board): BoardView {
   const live = !f.over;
   v.status = live ? "live" : "done";
   v.setup = { ...v.setup, rules: f.rules };
+  showSideTags(v);
   v.teams.a.score = multi ? f.won.a : g.pts.a;
   v.teams.b.score = multi ? f.won.b : g.pts.b;
   if (live && multi) {

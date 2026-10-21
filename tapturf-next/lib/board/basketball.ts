@@ -1,5 +1,5 @@
-import type { BasketballRules, Board, BoardEvent, BoardView, EndEvent, PadAction, RulePreset, Side, SportEngine, TimelineLine } from "./types";
-import { blankView, bool, cleanName, clampInt, clockText, clockValue, isObj, namesNow, newClock, oneOf, other, plural, runClock, SIDES, stopClock, stoppedResult, type PeriodClock } from "./common";
+import type { BasketballRules, Board, BoardEvent, BoardView, EndEvent, PadAction, RulePreset, Side, SportEngine, Tag, TimelineLine } from "./types";
+import { blankView, bool, cleanName, clampInt, clockText, clockValue, isObj, namesNow, newClock, oneOf, other, plural, runClock, SIDES, stopClock, stoppedResult, tagOf, type PeriodClock } from "./common";
 
 /**
  * Basketball: quarters or halves on a count-down clock, or pickup "first
@@ -68,8 +68,8 @@ type S = {
   foulsTotal: Record<Side, number>;
   timeouts: Record<Side, number>;
   made: Record<Side, Record<string, number>>;
-  /** Named players: points and fouls. */
-  players: Map<string, { side: Side; name: string; points: number; fouls: number }>;
+  /** Named players: points and fouls. One entry per tag for a tagged player, else per name. */
+  players: Map<string, { side: Side; name: string; tag?: Tag; points: number; fouls: number }>;
   /** Scores when this overtime began (3x3: first to 2 in overtime). */
   otFrom: Record<Side, number>;
   /** Regulation and overtimes are over and decided on the score. */
@@ -212,7 +212,7 @@ function step(s: S, e: BoardEvent, i: number): void {
       const how = e.how ?? Object.keys(HOWS[s.rules.scoring]).find((k) => HOWS[s.rules.scoring][k] === value && k !== "free-throw") ?? "free-throw";
       s.made[e.side][how] = (s.made[e.side][how] ?? 0) + 1;
       if (e.player) {
-        const pl = player(s, e.side, e.player);
+        const pl = player(s, e.side, e.player, e.tag);
         pl.points += value;
       }
       const what = how === "free-throw" ? "Free throw" : `+${value}`;
@@ -224,7 +224,7 @@ function step(s: S, e: BoardEvent, i: number): void {
       // A foul in a break (a technical) counts for the period about to start.
       s.fouls[e.side]++;
       s.foulsTotal[e.side]++;
-      if (e.player) player(s, e.side, e.player).fouls++;
+      if (e.player) player(s, e.side, e.player, e.tag).fouls++;
       line(`Foul, ${e.player ?? s.names[e.side]} (team foul ${s.fouls[e.side]})`, "card", e.side, whenAt(s, e.at));
       s.lastAction = `Foul, ${s.names[e.side]}`;
       return;
@@ -282,10 +282,12 @@ function step(s: S, e: BoardEvent, i: number): void {
   }
 }
 
-function player(s: S, side: Side, name: string) {
-  const k = `${side}:${name.toLowerCase()}`;
+/** A named player's line: a tagged player by the tag (whatever the spelling typed), an untagged one by the name, any case. */
+function player(s: S, side: Side, name: string, rawTag: unknown) {
+  const tag = tagOf(rawTag);
+  const k = tag ? `${side}:@${tag.u}` : `${side}:${name.toLowerCase()}`;
   let pl = s.players.get(k);
-  if (!pl) s.players.set(k, (pl = { side, name, points: 0, fouls: 0 }));
+  if (!pl) s.players.set(k, (pl = { side, name, ...(tag ? { tag } : {}), points: 0, fouls: 0 }));
   return pl;
 }
 
@@ -334,7 +336,7 @@ function derive(board: Board): BoardView {
   v.stats.push({ label: "Timeouts", a: String(s.timeouts.a), b: String(s.timeouts.b) });
 
   const players = [...s.players.values()].sort((x, y) => y.points - x.points || x.name.localeCompare(y.name));
-  for (const pl of players) v.players.push({ side: pl.side, name: pl.name, text: [pl.points ? plural(pl.points, "point") : "", pl.fouls ? plural(pl.fouls, "foul") : ""].filter(Boolean).join(", ") });
+  for (const pl of players) v.players.push({ side: pl.side, name: pl.name, text: [pl.points ? plural(pl.points, "point") : "", pl.fouls ? plural(pl.fouls, "foul") : ""].filter(Boolean).join(", "), ...(pl.tag ? { tag: { ...pl.tag } } : {}) });
 
   if (!res) {
     // FIBA Art. 41.1.1: once a team has rules.foulLimit team fouls in a period, every further foul gives the other side free throws.

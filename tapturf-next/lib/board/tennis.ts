@@ -1,5 +1,5 @@
 import type { Board, BoardEvent, BoardSport, BoardView, PadAction, PointEvent, RulePreset, Side, SportEngine, TennisRules, TimelineLine } from "./types";
-import { SIDES, blankView, bool, clampInt, cleanName, isObj, isSide, namesNow, oneOf, other, plural } from "./common";
+import { SIDES, blankView, bool, clampInt, cleanName, isObj, isSide, namesNow, oneOf, other, plural, showSideTags } from "./common";
 
 /**
  * Tennis and padel: points, games, sets. One fold for both; padel only
@@ -583,6 +583,7 @@ function deriveWith(c: Config, raw: Board): BoardView {
   const live = !f.over;
   v.status = live ? "live" : "done";
   v.setup = { ...v.setup, rules: r };
+  showSideTags(v);
   v.teams.a.score = multi ? f.won.a : s.games.a;
   v.teams.b.score = multi ? f.won.b : s.games.b;
   if (live) {
