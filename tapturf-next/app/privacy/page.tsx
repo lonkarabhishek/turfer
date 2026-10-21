@@ -69,6 +69,14 @@ const SECTIONS: LegalSection[] = [
           play at it), and when you tap Call or WhatsApp on a turf page. We also record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
         </p>
+        <p id="usernames" className="scroll-mt-24">
+          <strong>Your username and public profile.</strong> You can pick a TapTurf username. Your username,
+          name and photo then show on your public profile page, tapturf.in/u/your-username, with the month you
+          joined. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
+          matches can find you by username or name and tag you as a player, and the tag links to your profile.
+          Turning it off hides your profile page, takes you out of search and removes your tags from live
+          scores; open live links catch up within about a minute.
+        </p>
         <p id="live-links" className="scroll-mt-24">
           <strong>Live score links.</strong> The free Live Cricket Scorer and Live Scoreboard keep your match
           in your browser. If you turn on a live link, the match is sent to our server as you score so others
@@ -76,7 +84,8 @@ const SECTIONS: LegalSection[] = [
           goal or card with its time, the match clock, and the result. We also keep a one-way
           hash of your network address (never the address itself) so one network cannot make links in bulk.
           You log in to turn on a live link or to keep following one, but the link is not tied to your account:
-          no name, number or email goes with it. While you follow a live score, your browser joins a count of
+          your own name, number or email does not go with it. If you tag players with their TapTurf usernames,
+          those usernames go with the match. While you follow a live score, your browser joins a count of
           people watching it. Nothing about you is sent.
         </p>
         <p>
@@ -101,6 +110,7 @@ const SECTIONS: LegalSection[] = [
         <li>To show hosts who wants to join their game, and to show players how to reach the host.</li>
         <li>To publish reviews and venue corrections you submit.</li>
         <li>To show a live score to the people you send its link to, and how many are watching.</li>
+        <li>To show your public profile and let friends tag you on live scores, unless you turn that off.</li>
         <li>To keep the service safe: rate-limiting sign-ins and OTP sends, and investigating misuse.</li>
         <li>To understand which turfs, cities and features people use, in aggregate, so we can improve them.</li>
         <li>
@@ -125,8 +135,13 @@ const SECTIONS: LegalSection[] = [
         <p>
           <strong>Live scores.</strong> Anyone with a live link can see that score, names included.
           Links are not listed anywhere on TapTurf and are hidden from search engines, but anyone who has one
-          can forward it, so ask your players before you add their names. Turn the link off in the scorer at
+          can forward it, so ask your players before you add or tag them. Turn the link off in the scorer at
           any time, or email <Email /> and we will take it down.
+        </p>
+        <p>
+          <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are
+          public on your profile page and in player search, unless you turn off &ldquo;Let others find and tag
+          me&rdquo;. Your phone number and email are never shown there.
         </p>
         <p>
           <strong>Venues.</strong> We don&rsquo;t pass your details to turf owners. When you tap Call or
@@ -196,7 +211,8 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
-        banners you closed, whether you dismissed the &ldquo;install app&rdquo; prompt, the short visit note
+        banners you closed, whether you dismissed the &ldquo;install app&rdquo; prompt, whether we already
+        asked you to pick a username, the TapTurf profiles you tagged recently, the short visit note
         described under &ldquo;When you sign up&rdquo;, and the matches and tournaments you score with our
         free tools. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
@@ -212,6 +228,10 @@ const SECTIONS: LegalSection[] = [
     body: (
       <ul>
         <li>Your account and the things you posted stay until you delete them or ask us to.</li>
+        <li>
+          When you change your username, the old one stays reserved for you: links to it still reach your
+          profile and nobody else can take it.
+        </li>
         <li>Games expire after their date and are hidden; the record is kept so hosts can see their history.</li>
         <li>Sign-in and OTP logs are kept for up to 12 months, then removed.</li>
         <li>Call and WhatsApp tap counts are kept as totals; the link to your account is dropped after 90 days.</li>
@@ -230,7 +250,8 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          You can edit your name and photo from your dashboard and leave or cancel games. For anything else,
+          You can edit your name, your username and whether others can find and tag you from your dashboard,
+          and leave or cancel games. For anything else,
           including removing a review or suggestion you posted, email <Email /> from the address or phone
           linked to your account and we will:
         </p>
@@ -254,7 +275,7 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         TapTurf is meant for people aged 18 and over. If you are under 18, use it only with a parent or
-        guardian&rsquo;s permission, and do not host games. If we learn that we hold an account for a child
+        guardian&rsquo;s permission, do not host games, and keep &ldquo;Let others find and tag me&rdquo; off. If we learn that we hold an account for a child
         without that permission, we will delete it.
       </p>
     ),
@@ -264,7 +285,8 @@ const SECTIONS: LegalSection[] = [
     title: "Security",
     body: (
       <p>
-        All traffic to tapturf.in is encrypted. Personal data in our database is readable only by our own
+        All traffic to tapturf.in is encrypted. Your name, photo and username are public; your phone number
+        and email are not. Personal data in our database is readable only by our own
         server code and the account it belongs to, and the logs that could identify you are closed to the
         public API. No system is perfectly secure, so if you notice a problem please tell us at <Email /> and
         we will act on it quickly.

@@ -73,7 +73,12 @@ const SECTIONS: LegalSection[] = [
       <ul>
         <li>You need an account to host or join games, write reviews, suggest corrections, and turn on or keep following a live score link. Browsing is open to everyone.</li>
         <li>Sign in with your own mobile number or Google account, and keep the name on your profile real enough that other players can recognise you.</li>
-        <li>You must be 18 or older, or have a parent or guardian&rsquo;s permission. Under-18s may not host games.</li>
+        <li>
+          You can pick a username: 3 to 20 letters, digits or underscores, starting with a letter, and not one
+          that pretends to be TapTurf or someone else. You can change it up to 3 times in 30 days, and turn off
+          &ldquo;Let others find and tag me&rdquo; at any time. We may remove a username that breaks these terms.
+        </li>
+        <li>You must be 18 or older, or have a parent or guardian&rsquo;s permission. Under-18s may not host games and should keep &ldquo;Let others find and tag me&rdquo; off.</li>
         <li>You are responsible for what happens under your account. Tell us at <Email /> if you think someone else is using it.</li>
         <li>You can stop using TapTurf at any time and ask us to delete your account.</li>
       </ul>
@@ -158,7 +163,8 @@ const SECTIONS: LegalSection[] = [
         <li>Don&rsquo;t scrape, copy or republish our listings in bulk. Linking to a page is always fine.</li>
         <li>Don&rsquo;t try to get around sign-in, rate limits or other protections, or probe the service for weaknesses without telling us first.</li>
         <li>Don&rsquo;t use TapTurf to send unsolicited messages to venues or players.</li>
-        <li>Don&rsquo;t impersonate a venue, a host or TapTurf.</li>
+        <li>Only tag people on a live score who actually played in that match.</li>
+        <li>Don&rsquo;t impersonate a venue, a host, another player or TapTurf.</li>
       </ul>
     ),
   },

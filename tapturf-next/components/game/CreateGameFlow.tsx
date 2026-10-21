@@ -122,6 +122,21 @@ function humanDate(dateStr: string): string {
   return dt.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
+/** The last WhatsApp number this device gave players, 10 digits. */
+const HOST_PHONE_KEY = "tapturf_host_phone_v1";
+
+/** The number to offer: the profile's Indian number, else the one given last time. */
+function defaultHostPhone(profilePhone: string | undefined): string {
+  const m = /^\+91([6-9]\d{9})$/.exec(profilePhone ?? "");
+  if (m) return m[1];
+  try {
+    const last = typeof window !== "undefined" ? localStorage.getItem(HOST_PHONE_KEY) : null;
+    return last && /^[6-9]\d{9}$/.test(last) ? last : "";
+  } catch {
+    return "";
+  }
+}
+
 export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = {}) {
   const { user, login, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -159,6 +174,10 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const [turfBooked, setTurfBooked] = useState(false);
   const [timeSheetOpen, setTimeSheetOpen] = useState(false);
   const [draftNote, setDraftNote] = useState<string | null>(null);
+  // null until typed: then the profile's number or the last game's.
+  const [hostPhoneTyped, setHostPhoneTyped] = useState<string | null>(null);
+  const hostPhone = hostPhoneTyped ?? defaultHostPhone(user?.phone);
+  const hostPhoneOk = hostPhone === "" || /^[6-9]\d{9}$/.test(hostPhone);
 
   const turfSearchRef = useRef<HTMLInputElement>(null);
 
@@ -252,12 +271,19 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const handleSubmit = async () => {
     if (!user) { login(); return; }
     if (!endTime) return;
+    if (!hostPhoneOk) {
+      setSubmitError("Enter a 10-digit mobile number for players, or leave it empty.");
+      return;
+    }
     setSubmitError("");
     setSubmitting(true);
+    if (hostPhone) {
+      try { localStorage.setItem(HOST_PHONE_KEY, hostPhone); } catch { /* ignore */ }
+    }
 
     const { data, error } = await createGame(
       { turfId, date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked },
-      { id: user.id, name: user.name, phone: user.phone, profile_image_url: user.profile_image_url }
+      { id: user.id, name: user.name, phone: hostPhone ? `+91${hostPhone}` : "", profile_image_url: user.profile_image_url }
     );
 
     setSubmitting(false);
@@ -791,6 +817,26 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     className="w-full px-4 py-3.5 min-h-[56px] text-[15px] text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
                   />
                 </div>
+
+                {/* WHATSAPP group */}
+                <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-6">
+                  <label htmlFor="host-phone">WhatsApp number for players</label> <span className="normal-case font-normal text-primary-400">(optional)</span>
+                </p>
+                <div className={`bg-white border rounded-2xl overflow-hidden flex items-center ${hostPhoneOk ? "border-primary-200" : "border-hot-500"}`}>
+                  <span className="pl-4 pr-2 text-[15px] font-mono text-primary-500">+91</span>
+                  <input
+                    id="host-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={hostPhone}
+                    onChange={(e) => setHostPhoneTyped(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="10-digit number"
+                    aria-describedby="host-phone-note"
+                    className="flex-1 pr-4 py-3.5 min-h-[56px] text-[15px] text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
+                  />
+                </div>
+                <p id="host-phone-note" className="text-[12px] text-primary-500 px-1 pt-1.5">Shown to signed-in players on this game.</p>
 
                 {submitError && (
                   <div className="mt-4 p-3.5 bg-hot-500/10 border border-hot-500/40 rounded-2xl">

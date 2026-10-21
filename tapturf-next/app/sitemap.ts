@@ -68,13 +68,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     {
       url: `${BASE}/privacy`,
-      lastModified: new Date("2026-10-07"),
+      lastModified: new Date("2026-10-21"),
       changeFrequency: "yearly",
       priority: 0.2,
     },
     {
       url: `${BASE}/terms`,
-      lastModified: new Date("2026-10-07"),
+      lastModified: new Date("2026-10-21"),
       changeFrequency: "yearly",
       priority: 0.2,
     },

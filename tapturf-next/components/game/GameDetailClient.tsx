@@ -12,6 +12,12 @@ import { GameDistance } from "./GameDistance";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 
+/** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */
+function waNumber(phone: string): string {
+  const d = phone.replace(/[^0-9]/g, "");
+  return d.length === 10 ? `91${d}` : d;
+}
+
 export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string; liveLinks?: boolean }) {
   const { user, login } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
@@ -460,7 +466,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               </div>
               {game.host_phone && (user ? (
                 <a
-                  href={`https://wa.me/${game.host_phone.replace(/[^0-9]/g, "")}`}
+                  href={`https://wa.me/${waNumber(game.host_phone)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fb855] text-white text-xs font-bold px-3 py-2 rounded-full transition-colors shrink-0"
