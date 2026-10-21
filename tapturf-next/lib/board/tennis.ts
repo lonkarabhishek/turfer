@@ -291,7 +291,7 @@ function rulesProblem(c: Config, f: Fold, raw: unknown): string | null {
     return fit ? `Games are ${score} already; pick sets to ${fit}` : `Games are ${score} already, so that would end this set`;
   }
   if (gameFresh(f, s)) return null;
-  if (tiebreakDue(next, s.games) !== (s.tb !== null)) return s.tb ? "The tiebreak has started; change that after this set" : "Finish this game first";
+  if (tiebreakDue(next, s.games) !== (s.tb !== null)) return s.tb ? "The tiebreak has started; change that after this set" : `Games are ${from(s.games, "a")} and this game has started; change that after this set`;
   if (!s.tb && gameWinner(f.pts, next.deuce)) {
     const call = gameCall(f.pts);
     return `This game is at ${call.a}-${call.b}; change that after it`;
@@ -462,12 +462,27 @@ function endSet(f: Fold, w: Side, i: number) {
 /* Turning the fold into the view                                      */
 /* ------------------------------------------------------------------ */
 
+/** What decided a time-up win when sets and games were level: "tiebreak 5-3" or "30-15 in game 5", from w's side. */
+function decidedBy(f: Fold, w: Side): string | null {
+  const s = cur(f);
+  if (lead(f.won) || s.winner || s.matchTb || lead(s.games)) return null;
+  if (s.tb) return `tiebreak ${from(s.tb, w)}`;
+  if (!lead(f.pts)) return null;
+  const call = gameCall(f.pts);
+  return `${call[w]}-${call[other(w)]} in game ${s.games.a + s.games.b + 1}`;
+}
+
 function resultOf(f: Fold): { winner: Side | null; kind: "win" | "draw" | "abandoned"; text: string; headline: string } {
   const o = f.over ?? { winner: null, how: "abandoned" };
   const N = f.names;
   const sets = played(f);
-  const list = (x: Side) => (sets.length ? ` (${setsText(sets, x)})` : "");
   const w = o.winner;
+  // Time up decided inside the set in play: the points that decided it go in too ("6-6, tiebreak 5-3").
+  const tail = o.how === "time" && w ? decidedBy(f, w) : null;
+  const list = (x: Side) => {
+    const parts = [...(sets.length ? [setsText(sets, x)] : []), ...(tail ? [tail] : [])];
+    return parts.length ? ` (${parts.join(", ")})` : "";
+  };
   if (o.how === "abandoned" || (!w && o.how !== "time")) return { winner: null, kind: "abandoned", text: `Abandoned${list("a")}`, headline: `${N.a} vs ${N.b} abandoned${list("a")}` };
   if (!w) return { winner: null, kind: "draw", text: `Drawn, time up${list("a")}`, headline: `${N.a} and ${N.b} drew, time up${list("a")}` };
   const l = other(w);

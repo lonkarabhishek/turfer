@@ -473,12 +473,12 @@ test("end: retired, walkover, conceded, abandoned and time up", () => {
   v = derive(T, add(T, level, ...games("aba"), { type: "end" }));
   assert.equal(v.result?.text, "Asha won, time up (6-4, 4-6, 2-1)");
   v = derive(T, add(T, board(T), serve("a"), ...pts("abb"), { type: "end" }));
-  assert.deepEqual(v.result, { winner: "b", kind: "win", text: "Ravi won, time up" });
+  assert.deepEqual(v.result, { winner: "b", kind: "win", text: "Ravi won, time up (30-15 in game 1)" });
   v = derive(T, add(T, level, { type: "end" }));
   assert.deepEqual([v.result, v.headline], [{ winner: null, kind: "draw", text: "Drawn, time up (6-4, 4-6)" }, "Asha and Ravi drew, time up (6-4, 4-6)"]);
   // In a tiebreak, its points decide.
   v = derive(T, add(T, board(T), serve("a"), ...games("ab".repeat(6)), ...pts("bba"), { type: "end" }));
-  assert.equal(v.result?.text, "Ravi won, time up (6-6)");
+  assert.equal(v.result?.text, "Ravi won, time up (6-6, tiebreak 2-1)");
 });
 
 test("rules changes apply from now on, and the score must be able to take them", () => {
@@ -505,7 +505,7 @@ test("rules changes apply from now on, and the score must be able to take them",
   // Games 4-4 with nothing played in game 9: sets to 4 makes it the tiebreak. With a point played, finish the game first.
   const fourAll = add(T, board(T), serve("a"), ...games("abababab"));
   assert.equal(derive(T, add(T, fourAll, { type: "rules", rules: { games: 4 } })).currentLabel, "Tiebreak");
-  assert.equal(T.check(add(T, fourAll, ...pts("a")), { type: "rules", rules: { games: 4 } }), "Finish this game first");
+  assert.equal(T.check(add(T, fourAll, ...pts("a")), { type: "rules", rules: { games: 4 } }), "Games are 4-4 and this game has started; change that after this set");
 
   // A tiebreak under way stays; one not started yet can go.
   const tb = add(T, board(T), serve("a"), ...games("ab".repeat(6)));
