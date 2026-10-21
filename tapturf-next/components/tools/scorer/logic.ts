@@ -1,4 +1,5 @@
 // Relative, not "@/", so logic.test.ts compiles on its own (npm run test:scorer).
+import { readTag, sameTag, type Tag } from "../../../lib/account/tag";
 import { derive, newPlayerId, undoBall, type BallEvent, type BallWicket, type Extra, type Match, type MatchEvent, type MatchView, type Side } from "../../../lib/cricket/scoring";
 
 /** Where the runs on a no-ball came from. */
@@ -56,7 +57,9 @@ const PICKS = new Set(["setBatter", "setBowler"]);
  * What Undo does. The last tap is taken back as a whole (a wicket and the
  * batter who came in, the openers, a strike swap). A batter or bowler
  * picked because a ball asked for one (end of over, after a wicket) goes
- * back with that ball, since the pick only made sense after it.
+ * back with that ball, since the pick only made sense after it. A tag
+ * picked with a player is part of the pick, so it goes back with it; a
+ * tag from PlayerSheet is its own tap.
  */
 export function smartUndo(m: Match): { match: Match; removedBall: number | null } {
   const ev = m.events;
@@ -103,13 +106,88 @@ export function defaultName(view: MatchView, side: Side, kind: "Batter" | "Bowle
   for (let n = Math.max(max, count) + 1; ; n++) if (!used.has(`${kind} ${n}`.toLowerCase())) return `${kind} ${n}`;
 }
 
-/** A typed or tapped name to a player: the roster player with that name, or a new one. */
-export function resolvePlayer(m: Match, side: Side, name: string): { player: string; name?: string } {
+/**
+ * Who a pick brings in, ready to spread into a setBatter or setBowler:
+ * the player's id, the name when it is someone new, and the tag when a
+ * TapTurf profile was picked. The tag rides on the pick, so undo takes the
+ * pick and the tag back together.
+ */
+export type PlayerPick = { player: string; name?: string; tag?: Tag };
+
+/**
+ * A typed, tapped or searched name to a player of a side:
+ *  1. with a tag (a profile picked from search), the player who already has that tag;
+ *  2. else a player with that name and no tag: the same person (the pick attaches the tag, if any);
+ *  3. else someone new with a fresh id, even when a tagged player has the same
+ *     name. Two people with one name stay two players, and a name alone never
+ *     joins anyone to someone else's profile.
+ * A tag that is not a real one is ignored.
+ */
+export function resolvePlayer(m: Match, side: Side, name: string, tag?: Tag | null): PlayerPick {
   const clean = cleanName(name);
-  const v = derive(m);
-  const hit = v.teams[side].players.find((p) => p.name.toLowerCase() === clean.toLowerCase());
-  if (hit) return { player: hit.id };
-  return { player: newPlayerId(m, side), name: clean };
+  const t = readTag(tag);
+  const withTag = t ? { tag: t } : {};
+  const players = derive(m).teams[side].players;
+  const tagged = t ? players.find((p) => p.tag?.u === t.u) : undefined;
+  if (tagged) return { player: tagged.id, ...withTag };
+  const hit = players.find((p) => !p.tag && p.name.toLowerCase() === clean.toLowerCase());
+  if (hit) return { player: hit.id, ...withTag };
+  return { player: newPlayerId(m, side), name: clean || (t ? t.u : ""), ...withTag };
+}
+
+/**
+ * For sheets that keep a name rather than an id (OpenersSheet: its chips
+ * and defaults are the names of players on show). A name that is one of
+ * those options is that player, tagged or not (an untagged one first if
+ * two share the name). Anything else goes through resolvePlayer, so a
+ * name typed fresh never lands on a tagged player.
+ */
+export function resolveOption(m: Match, side: Side, name: string, options: readonly { id: string; name: string; tag?: Tag }[]): PlayerPick {
+  const clean = cleanName(name).toLowerCase();
+  const same = options.filter((o) => o.name.toLowerCase() === clean);
+  const hit = same.find((o) => !o.tag) ?? same[0];
+  return hit ? { player: hit.id } : resolvePlayer(m, side, name);
+}
+
+/**
+ * The name a profile picked from search goes in under: the scorer's own
+ * name stays, and the profile's name is used only when the box is empty
+ * or still holds a placeholder ("Batter 3", "Bowler 2"). Cut to 40.
+ */
+export function profileName(typed: string, profile: string): string {
+  const own = cleanName(typed);
+  return own && !placeholderOf(own) ? own : cleanName(profile) || own;
+}
+
+/**
+ * "Pick this profile" in the batter or bowler sheets (and the next batter
+ * after a wicket, resolved against the match with the wicket applied):
+ * spread it into the event, as in
+ * `{ type: "setBowler", ...profilePick(m, side, typed, { u, name }) }`.
+ * Null when the profile has no real username.
+ */
+export function profilePick(m: Match, side: Side, typed: string, profile: { u: string; name?: string }): PlayerPick | null {
+  const tag = readTag(profile);
+  return tag ? resolvePlayer(m, side, profileName(typed, profile.name ?? ""), tag) : null;
+}
+
+/**
+ * PlayerSheet's Save, as one tap: a rename when the name changed, and a
+ * tagPlayer when the tag changed (a profile picked from search, or null
+ * for Remove tag; leave tag out to keep it as it is). A tag change goes
+ * even when the name is the same. Nothing changed: no events. Undo takes
+ * the whole tap back.
+ */
+export function playerEdits(view: MatchView, side: Side, id: string, edit: { name?: string; tag?: Tag | null }): MatchEvent[] {
+  const p = view.teams[side].players.find((x) => x.id === id);
+  if (!p) return [];
+  const out: MatchEvent[] = [];
+  const name = cleanName(edit.name ?? "");
+  if (name && name !== p.name) out.push({ type: "renamePlayer", team: side, player: id, name });
+  const tag = edit.tag === undefined ? undefined : readTag(edit.tag);
+  // A tag that is not a real one (and not null) changes nothing.
+  if (tag !== undefined && (tag !== null || edit.tag === null) && !sameTag(tag, p.tag)) out.push({ type: "tagPlayer", team: side, player: id, tag });
+  return out;
 }
 
 /** Clocks for event handlers (taps, saves). Never called while rendering. */

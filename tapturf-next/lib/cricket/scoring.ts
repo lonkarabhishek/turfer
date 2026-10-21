@@ -1,11 +1,15 @@
+// Relative, not "@/": test:scorer compiles the engine on its own with plain tsc.
+import { isTag, readTag, type Tag } from "../account/tag";
 import { BALLS_PER_OVER, formatOvers, formatRate, runRate } from "./overs";
+
+export type { Tag } from "../account/tag";
 
 /**
  * Ball-by-ball cricket scoring, event sourced.
  *
  * A match is its setup plus an append-only list of events: a ball, a new
  * batter, a new bowler, a strike swap, a retirement, the end of an
- * innings, a player added or renamed. Everything the scorer shows comes
+ * innings, a player added, renamed or tagged. Everything the scorer shows comes
  * from derive(match), one pass over the events. Undo is dropping the last
  * event, and a match saved to localStorage comes back exactly as it was.
  * Pure, no dependencies, tested in scoring.test.ts.
@@ -64,6 +68,13 @@ export type Rules = {
 export const DEFAULT_RULES: Rules = { wideRuns: 1, noBallRuns: 1, freeHit: true, maxOversPerBowler: null, lastManStands: false, retireAt: null };
 
 export type Player = { id: string; name: string };
+/**
+ * A player as the view shows them: with the TapTurf profile tagged on
+ * them, if any. Only the view has tags. The stored roster stays id and
+ * name (normalizeSetup and sanitizeMatch drop anything else); tags ride on
+ * the events that pick or tag a player.
+ */
+export type PlayerView = Player & { tag?: Tag };
 
 /** Setup with every field filled in. Changed mid-match only by a changeSetup event. */
 export type MatchSetup = {
@@ -147,17 +158,28 @@ export type BallEvent = {
   at?: number;
 };
 
-/** A batter walks in. Fills the empty end, striker first. Pass name to add someone new. */
-export type SetBatterEvent = { type: "setBatter"; player: string; name?: string; end?: End; at?: number };
-/** A bowler takes the ball: a new over, or a change mid-over. Pass name to add someone new. */
-export type SetBowlerEvent = { type: "setBowler"; player: string; name?: string; at?: number };
+/**
+ * A batter walks in. Fills the empty end, striker first. Pass name to add
+ * someone new. tag (a TapTurf profile picked from search) tags the player
+ * as they come in, so undo of the pick takes the tag back with it.
+ */
+export type SetBatterEvent = { type: "setBatter"; player: string; name?: string; end?: End; tag?: Tag; at?: number };
+/** A bowler takes the ball: a new over, or a change mid-over. Pass name to add someone new, tag as for a batter. */
+export type SetBowlerEvent = { type: "setBowler"; player: string; name?: string; tag?: Tag; at?: number };
 export type SwapStrikeEvent = { type: "swapStrike"; at?: number };
 /** Retired hurt can come back later and is not a wicket. Retired out is a wicket. */
 export type RetireEvent = { type: "retire"; out: End; kind: RetireKind; at?: number };
 /** Declared closes this innings and the match moves on. Abandoned ends the match with no result. */
 export type EndInningsEvent = { type: "endInnings"; reason?: "declared" | "abandoned"; at?: number };
-export type AddPlayerEvent = { type: "addPlayer"; team: Side; player: string; name: string; at?: number };
+export type AddPlayerEvent = { type: "addPlayer"; team: Side; player: string; name: string; tag?: Tag; at?: number };
 export type RenamePlayerEvent = { type: "renamePlayer"; team: Side; player: string; name: string; at?: number };
+/**
+ * Tag a player already in the team with a TapTurf profile after the fact,
+ * or take the tag off (tag null). The tag key is always there. Like a
+ * rename it works after the innings or the match is over, and it is a tap
+ * of its own (PlayerSheet).
+ */
+export type TagPlayerEvent = { type: "tagPlayer"; team: Side; player: string; tag: Tag | null; at?: number };
 /** Change names, overs, players or rules mid-match. Applies from here on. */
 export type ChangeSetupEvent = {
   type: "changeSetup";
@@ -171,7 +193,7 @@ export type ChangeSetupEvent = {
   at?: number;
 };
 
-export type MatchEvent = BallEvent | SetBatterEvent | SetBowlerEvent | SwapStrikeEvent | RetireEvent | EndInningsEvent | AddPlayerEvent | RenamePlayerEvent | ChangeSetupEvent;
+export type MatchEvent = BallEvent | SetBatterEvent | SetBowlerEvent | SwapStrikeEvent | RetireEvent | EndInningsEvent | AddPlayerEvent | RenamePlayerEvent | TagPlayerEvent | ChangeSetupEvent;
 
 /* ------------------------------------------------------------------ */
 /* View model                                                          */
@@ -203,6 +225,8 @@ export type Dismissal = {
 export type BatterLine = {
   id: string;
   name: string;
+  /** The TapTurf profile tagged on this player. No key at all when untagged. */
+  tag?: Tag;
   /** Batting position, 1 for the first opener in. */
   order: number;
   runs: number;
@@ -222,6 +246,7 @@ export type BatterLine = {
 export type BowlerLine = {
   id: string;
   name: string;
+  tag?: Tag;
   order: number;
   /** Legal balls. */
   balls: number;
@@ -249,7 +274,7 @@ export type Extras = { wides: number; noBalls: number; byes: number; legByes: nu
 export type PartnershipView = {
   /** 1 for the opening stand. */
   number: number;
-  batters: { id: string; name: string; runs: number; balls: number }[];
+  batters: { id: string; name: string; tag?: Tag; runs: number; balls: number }[];
   runs: number;
   balls: number;
   extras: number;
@@ -344,7 +369,7 @@ export type InningsView = {
   /** In order of coming in. */
   batters: BatterLine[];
   /** Named players of the batting side who have not batted. */
-  yetToBat: Player[];
+  yetToBat: PlayerView[];
   /** In order of first ball bowled. */
   bowlers: BowlerLine[];
   partnership: PartnershipView | null;
@@ -388,7 +413,8 @@ export type ResultView = {
   text: string;
 };
 
-export type AwardLine = { id: string; side: Side; name: string; text: string; score: number };
+/** tag only when id is one of that side's players: a fielder can be just a typed name. */
+export type AwardLine = { id: string; side: Side; name: string; tag?: Tag; text: string; score: number };
 
 export type Awards = {
   /** "Amit 34* (15)" */
@@ -401,10 +427,11 @@ export type Awards = {
 
 export type Need = "striker" | "nonStriker" | "bowler";
 
-export type BatterOption = { id: string; name: string; retiredHurt: boolean; runs: number; balls: number };
+export type BatterOption = { id: string; name: string; tag?: Tag; retiredHurt: boolean; runs: number; balls: number };
 export type BowlerOption = {
   id: string;
   name: string;
+  tag?: Tag;
   balls: number;
   overs: string;
   runs: number;
@@ -414,11 +441,14 @@ export type BowlerOption = {
   blocked: "lastOver" | "quota" | null;
 };
 
+/** The setup as the view shows it: the full rosters, with their tags. */
+export type SetupView = Omit<MatchSetup, "players"> & { players: Record<Side, PlayerView[]> };
+
 export type MatchView = {
   id: string;
-  setup: MatchSetup;
-  /** Current names and full rosters, including players added mid-match. */
-  teams: Record<Side, { name: string; players: Player[] }>;
+  setup: SetupView;
+  /** Current names and full rosters, including players added mid-match, with their tags. */
+  teams: Record<Side, { name: string; players: PlayerView[] }>;
   /** One or two innings. The second appears as soon as the first ends. */
   innings: InningsView[];
   /** The innings being played, or the last one when the match is over. */
@@ -444,7 +474,7 @@ export type MatchView = {
   /** The current bowler took wickets with their last two balls. */
   onHatTrick: boolean;
   awards: Awards;
-  /** What undo would take back: "4.2 FOUR", "Amit in", "Rahul to bowl". */
+  /** What undo would take back: "4.2 FOUR", "Amit in", "Rahul to bowl", "Amit tagged". */
   lastAction: string | null;
   eventCount: number;
   /** Events that could not be applied (bad data); they are skipped, never fatal. */
@@ -693,14 +723,19 @@ export function undo(match: Match): Match {
 
 /**
  * Take back the last ball, along with the batter and bowler picks that
- * came after it. Players added or renamed since are kept.
+ * came after it. Players added, renamed or tagged since are kept, except
+ * a tag stamped with the same tap as something taken back: it goes too.
+ * (A tag picked with a batter or bowler rides on the pick itself.)
  */
 export function undoBall(match: Match): Match {
   const ev = match.events;
   let i = ev.length - 1;
   while (i >= 0 && ev[i].type !== "ball") i--;
   if (i < 0) return undo(match);
-  const keep = ev.slice(i + 1).filter((e) => e.type === "addPlayer" || e.type === "renamePlayer");
+  const after = ev.slice(i + 1);
+  const kept = (e: MatchEvent) => e.type === "addPlayer" || e.type === "renamePlayer" || e.type === "tagPlayer";
+  const droppedAt = new Set([ev[i], ...after.filter((e) => !kept(e))].map((e) => e.at).filter((at) => at !== undefined));
+  const keep = after.filter((e) => kept(e) && !(e.type === "tagPlayer" && e.at !== undefined && droppedAt.has(e.at)));
   return { ...match, events: [...ev.slice(0, i), ...keep] };
 }
 
@@ -709,7 +744,7 @@ export function newPlayerId(match: Match, side: Side): string {
   const used = new Set<string>();
   for (const s of ["a", "b"] as const) for (const p of match.setup.players[s]) used.add(p.id);
   for (const e of match.events) {
-    if (e.type === "addPlayer" || e.type === "renamePlayer" || e.type === "setBatter" || e.type === "setBowler") used.add(e.player);
+    if (e.type === "addPlayer" || e.type === "renamePlayer" || e.type === "tagPlayer" || e.type === "setBatter" || e.type === "setBowler") used.add(e.player);
   }
   let max = 0;
   const re = new RegExp(`^${side}(\\d+)$`);
@@ -807,6 +842,9 @@ function readEvent(x: unknown): MatchEvent | null {
   const at = typeof x.at === "number" && Number.isFinite(x.at) ? { at: x.at } : {};
   const player = typeof x.player === "string" && PLAYER_ID.test(x.player) ? x.player : null;
   const name = typeof x.name === "string" ? { name: readName(x.name, 40) } : {};
+  // A pick keeps a tag only when it is a real one (just { u }); a bad tag is dropped and the pick stays.
+  const t = readTag(x.tag);
+  const tag = t ? { tag: t } : {};
   switch (x.type) {
     case "ball": {
       if (typeof x.extra !== "string" || !EXTRAS.has(x.extra)) return null;
@@ -819,20 +857,26 @@ function readEvent(x: unknown): MatchEvent | null {
       return { ...e, ...at };
     }
     case "setBatter":
-      return player ? { type: "setBatter", player, ...name, ...(isEnd(x.end) ? { end: x.end } : {}), ...at } : null;
+      return player ? { type: "setBatter", player, ...name, ...(isEnd(x.end) ? { end: x.end } : {}), ...tag, ...at } : null;
     case "setBowler":
-      return player ? { type: "setBowler", player, ...name, ...at } : null;
+      return player ? { type: "setBowler", player, ...name, ...tag, ...at } : null;
     case "swapStrike":
       return { type: "swapStrike", ...at };
     case "retire":
       return isEnd(x.out) && (x.kind === "retiredHurt" || x.kind === "retiredOut") ? { type: "retire", out: x.out, kind: x.kind, ...at } : null;
     case "endInnings":
       return { type: "endInnings", ...(x.reason === "declared" || x.reason === "abandoned" ? { reason: x.reason } : {}), ...at };
-    case "addPlayer":
+    case "addPlayer": {
+      const n = readName(x.name, 40);
+      return player && isSide(x.team) && n ? { type: "addPlayer", team: x.team, player, name: n, ...tag, ...at } : null;
+    }
     case "renamePlayer": {
       const n = readName(x.name, 40);
-      return player && isSide(x.team) && n ? { type: x.type, team: x.team, player, name: n, ...at } : null;
+      return player && isSide(x.team) && n ? { type: "renamePlayer", team: x.team, player, name: n, ...at } : null;
     }
+    case "tagPlayer":
+      // The tag key always comes back: a bad or missing tag reads as null, taking the tag off.
+      return player && isSide(x.team) ? { type: "tagPlayer", team: x.team, player, tag: t, ...at } : null;
     case "changeSetup": {
       const e: ChangeSetupEvent = { type: "changeSetup" };
       if (typeof x.teamA === "string") e.teamA = readName(x.teamA, 40);
@@ -856,8 +900,9 @@ function readEvent(x: unknown): MatchEvent | null {
  * A match from someone else's browser or the database, rebuilt field by
  * field from what the engine reads, so nothing else rides along: unknown
  * keys and event types are dropped, numbers clamped, enums checked, names
- * cut, player ids kept to the engine's own "a7" form and rosters to 40 a
- * side. A match the engine made comes back unchanged. Null if it is not a
+ * cut, player ids kept to the engine's own "a7" form, tags to { u } with a
+ * real username, and rosters to 40 a side. A match the engine made comes
+ * back unchanged. Null if it is not a
  * match, or is longer than any real one.
  */
 export function sanitizeMatch(raw: unknown): Match | null {
@@ -902,6 +947,13 @@ export function sanitizeMatch(raw: unknown): Match | null {
  * show: an addPlayer for a player already in the team, which check()
  * refuses, says the latest name too, so as the last event its lastAction
  * does.
+ *
+ * Tags fold the same way, to the tag the player ends with: every pick or
+ * addPlayer that carries a tag carries that final tag, or no tag key when
+ * the player ends untagged, and every tagPlayer carries it too, or null.
+ * So a profile tagged and then untagged, or swapped for another, is not in
+ * the copy at all. fold() reads the same tags, and lastAction for a
+ * tagPlayer reads the fold, so derive() still reads the same.
  */
 export function publicMatch(m: Match): Match {
   const f = fold(m);
@@ -911,17 +963,33 @@ export function publicMatch(m: Match): Match {
     const was = cleanName(name);
     return now && was && was !== now ? now : name;
   };
+  const finalTag = (side: Side, id: string): Tag | null => {
+    const t = isSide(side) ? f.tags[side].get(id) : undefined;
+    return t ? { u: t.u } : null;
+  };
+  /** A pick's tag, if it has one, as the final tag; the key goes when the player ends untagged. */
+  const pickTag = <E extends SetBatterEvent | SetBowlerEvent | AddPlayerEvent>(e: E, side: Side): E => {
+    if (e.tag === undefined) return e;
+    const t = finalTag(side, e.player);
+    if (t) return { ...e, tag: t };
+    const rest = { ...e };
+    delete rest.tag;
+    return rest;
+  };
   const roster = (side: Side): Player[] => m.setup.players[side].map((p) => ({ ...p, name: latest(side, p.id, p.name) }));
   const events = m.events.map((e, i): MatchEvent => {
     switch (e.type) {
       case "addPlayer":
+        return pickTag({ ...e, name: latest(e.team, e.player, e.name) }, e.team);
       case "renamePlayer":
         return { ...e, name: latest(e.team, e.player, e.name) };
+      case "tagPlayer":
+        return { ...e, tag: finalTag(e.team, e.player) };
       case "setBatter":
       case "setBowler": {
-        if (e.name === undefined) return e;
         const inn = i >= second ? f.inns[1] : f.inns[0];
-        return { ...e, name: latest(e.type === "setBatter" ? inn.batting : inn.bowling, e.player, e.name) };
+        const side = e.type === "setBatter" ? inn.batting : inn.bowling;
+        return pickTag(e.name === undefined ? e : { ...e, name: latest(side, e.player, e.name) }, side);
       }
       default:
         return e;
@@ -1000,6 +1068,8 @@ type Fold = {
   id: string;
   setup: MatchSetup;
   roster: Record<Side, Map<string, string>>;
+  /** The TapTurf profile on each tagged player, by side and id like the roster. Only ever roster players. */
+  tags: Record<Side, Map<string, Tag>>;
   inns: InnS[];
   abandoned: boolean;
   done: boolean;
@@ -1065,6 +1135,12 @@ function getBowl(inn: InnS, id: string): BowlS {
 function ensurePlayer(f: Fold, side: Side, id: string, name?: string) {
   const m = f.roster[side];
   if (!m.has(id)) m.set(id, cleanName(name) || `Player ${m.size + 1}`);
+}
+
+/** A pick that went in with a real tag tags its player (filed under the same side as the name). A pick without one leaves the tag alone. */
+function tagFromPick(f: Fold, side: Side, id: string, tag: unknown) {
+  const t = readTag(tag);
+  if (t) f.tags[side].set(id, t);
 }
 
 /** Last man stands and only one wicket left: the last batter may bat alone. */
@@ -1252,6 +1328,7 @@ function setBatter(f: Fold, inn: InnS, e: SetBatterEvent): boolean {
   const end: End = e.end ?? (inn.striker === null ? "striker" : "nonStriker");
   if ((end === "striker" ? inn.striker : inn.nonStriker) !== null) return false;
   ensurePlayer(f, inn.batting, id, e.name);
+  tagFromPick(f, inn.batting, id, e.tag);
   const b = getBat(inn, id);
   if (b.retiredHurt) {
     b.retiredHurt = false;
@@ -1316,7 +1393,8 @@ function fold(match: Match): Fold {
   const setup = normalizeSetup(match.setup);
   const roster: Record<Side, Map<string, string>> = { a: new Map(), b: new Map() };
   for (const s of ["a", "b"] as const) for (const p of setup.players[s]) roster[s].set(p.id, p.name);
-  const f: Fold = { id: match.id, setup, roster, inns: [newInn(0, setup.battingFirst, setup, null, 0)], abandoned: false, done: false, ignored: 0, lastLabel: null };
+  const tags: Record<Side, Map<string, Tag>> = { a: new Map(), b: new Map() };
+  const f: Fold = { id: match.id, setup, roster, tags, inns: [newInn(0, setup.battingFirst, setup, null, 0)], abandoned: false, done: false, ignored: 0, lastLabel: null };
   const events = Array.isArray(match.events) ? match.events : [];
 
   for (let i = 0; i < events.length; i++) {
@@ -1330,14 +1408,25 @@ function fold(match: Match): Fold {
     switch (e.type) {
       case "addPlayer": {
         const name = cleanName(e.name);
-        if ((e.team === "a" || e.team === "b") && e.player && name && !f.roster[e.team].has(e.player)) f.roster[e.team].set(e.player, name);
-        else ok = false;
+        if ((e.team === "a" || e.team === "b") && e.player && name && !f.roster[e.team].has(e.player)) {
+          f.roster[e.team].set(e.player, name);
+          tagFromPick(f, e.team, e.player, e.tag);
+        } else ok = false;
         break;
       }
       case "renamePlayer": {
         const name = cleanName(e.name);
         if ((e.team === "a" || e.team === "b") && f.roster[e.team].has(e.player) && name) f.roster[e.team].set(e.player, name);
         else ok = false;
+        break;
+      }
+      case "tagPlayer": {
+        // Read as sanitizeMatch reads it: anything but a real tag takes the tag off.
+        if ((e.team === "a" || e.team === "b") && f.roster[e.team].has(e.player)) {
+          const t = readTag(e.tag);
+          if (t) f.tags[e.team].set(e.player, t);
+          else f.tags[e.team].delete(e.player);
+        } else ok = false;
         break;
       }
       case "changeSetup":
@@ -1360,6 +1449,7 @@ function fold(match: Match): Fold {
             if (!id) ok = false;
             else {
               ensurePlayer(f, inn.bowling, id, e.name);
+              tagFromPick(f, inn.bowling, id, e.tag);
               inn.bowler = id;
             }
             break;
@@ -1446,6 +1536,12 @@ function howOutText(how: DismissalS | null, bowlerName: string, fielderName: str
 
 const sr = (runs: number, balls: number) => (balls > 0 ? (runs / balls) * 100 : null);
 
+/** { tag } for a tagged player, {} otherwise: a view never has a tag key that says undefined. */
+function tagOf(f: Fold, side: Side, id: string | null): { tag?: Tag } {
+  const t = id ? f.tags[side].get(id) : undefined;
+  return t ? { tag: { u: t.u } } : {};
+}
+
 function buildInnings(f: Fold, inn: InnS, live: boolean): InningsView {
   const s = f.setup;
   const teamName = (side: Side) => (side === "a" ? s.teamA : s.teamB);
@@ -1463,6 +1559,7 @@ function buildInnings(f: Fold, inn: InnS, live: boolean): InningsView {
     return {
       id: b.id,
       name: batName(b.id),
+      ...tagOf(f, inn.batting, b.id),
       order: b.order,
       runs: b.runs,
       balls: b.balls,
@@ -1482,6 +1579,7 @@ function buildInnings(f: Fold, inn: InnS, live: boolean): InningsView {
   const bowlLine = (b: BowlS): BowlerLine => ({
     id: b.id,
     name: bowlName(b.id),
+    ...tagOf(f, inn.bowling, b.id),
     order: b.order,
     balls: b.balls,
     overs: formatOvers(b.balls),
@@ -1501,7 +1599,7 @@ function buildInnings(f: Fold, inn: InnS, live: boolean): InningsView {
   const emptyBowl = (id: string): BowlerLine => bowlLine({ id, order: 0, balls: 0, runs: 0, wickets: 0, dots: 0, wides: 0, noBalls: 0, fours: 0, sixes: 0, maidens: 0, streak: 0 });
 
   const partView = (p: PartS, number: number, unbroken: boolean): PartnershipView => {
-    const bs = p.ids.map((id) => ({ id, name: batName(id), runs: p.by[id]?.runs ?? 0, balls: p.by[id]?.balls ?? 0 }));
+    const bs = p.ids.map((id) => ({ id, name: batName(id), ...tagOf(f, inn.batting, id), runs: p.by[id]?.runs ?? 0, balls: p.by[id]?.balls ?? 0 }));
     const who = bs.map((b) => b.name).join(" and ");
     return { number, batters: bs, runs: p.runs, balls: p.balls, extras: p.extras, unbroken, text: `${who}, ${p.runs} (${p.balls})` };
   };
@@ -1582,7 +1680,7 @@ function buildInnings(f: Fold, inn: InnS, live: boolean): InningsView {
     lastOverBowler: inn.lastOverBowler,
     freeHit: live && inn.freeHit,
     batters,
-    yetToBat: [...f.roster[inn.batting]].filter(([id]) => !inn.bats.has(id)).map(([id, name]) => ({ id, name })),
+    yetToBat: [...f.roster[inn.batting]].filter(([id]) => !inn.bats.has(id)).map(([id, name]) => ({ id, name, ...tagOf(f, inn.batting, id) })),
     bowlers,
     partnership: current,
     partnerships,
@@ -1707,6 +1805,8 @@ function awardsOf(f: Fold, views: InningsView[], result: ResultView | null): Awa
 
   const batText = (a: Acc) => `${a.runs}${a.out ? "" : "*"} (${a.balls})`;
   const bowlText = (a: Acc) => `${a.wkts}/${a.conceded}`;
+  // A fielder may be just a typed name, or an id from the other side: no tag unless the id is that side's player.
+  const tagged = (a: Acc) => (f.roster[a.side].has(a.id) ? tagOf(f, a.side, a.id) : {});
 
   const batters = all.filter((a) => a.batted && (a.balls > 0 || a.runs > 0));
   batters.sort((x, y) => y.runs - x.runs || x.balls - y.balls);
@@ -1733,12 +1833,12 @@ function awardsOf(f: Fold, views: InningsView[], result: ResultView | null): Awa
         a.st ? plural(a.st, "stumping") : "",
         a.ro ? plural(a.ro, "run out") : "",
       ].filter(Boolean);
-      potm = { id: a.id, side: a.side, name: a.name, text: `${a.name}${parts.length ? `, ${parts.join(" and ")}` : ""}`, score: Math.round(score * 10) / 10 };
+      potm = { id: a.id, side: a.side, name: a.name, ...tagged(a), text: `${a.name}${parts.length ? `, ${parts.join(" and ")}` : ""}`, score: Math.round(score * 10) / 10 };
     }
   }
   return {
-    topScorer: top ? { id: top.id, side: top.side, name: top.name, text: `${top.name} ${batText(top)}`, score: top.runs } : null,
-    bestBowler: best ? { id: best.id, side: best.side, name: best.name, text: `${best.name} ${bowlText(best)}`, score: best.wkts } : null,
+    topScorer: top ? { id: top.id, side: top.side, name: top.name, ...tagged(top), text: `${top.name} ${batText(top)}`, score: top.runs } : null,
+    bestBowler: best ? { id: best.id, side: best.side, name: best.name, ...tagged(best), text: `${best.name} ${bowlText(best)}`, score: best.wkts } : null,
     potm,
   };
 }
@@ -1753,7 +1853,7 @@ export function derive(match: Match): MatchView {
   const current = innings[innings.length - 1];
   const result = resultOf(f);
   const teamName = (side: Side) => (side === "a" ? s.teamA : s.teamB);
-  const roster = (side: Side): Player[] => [...f.roster[side]].map(([id, name]) => ({ id, name }));
+  const roster = (side: Side): PlayerView[] => [...f.roster[side]].map(([id, name]) => ({ id, name, ...tagOf(f, side, id) }));
 
   let chase: ChaseView | null = null;
   if (inn.index === 1 && inn.target !== null && live) {
@@ -1784,7 +1884,7 @@ export function derive(match: Match): MatchView {
         const b = inn.bowls.get(p.id);
         const balls = b?.balls ?? 0;
         const blocked: BowlerOption["blocked"] = max !== null && balls >= max * B ? "quota" : inn.lastOverBowler === p.id ? "lastOver" : null;
-        return { id: p.id, name: p.name, balls, overs: formatOvers(balls), runs: b?.runs ?? 0, wickets: b?.wickets ?? 0, current: inn.bowler === p.id, blocked };
+        return { id: p.id, name: p.name, ...(p.tag ? { tag: p.tag } : {}), balls, overs: formatOvers(balls), runs: b?.runs ?? 0, wickets: b?.wickets ?? 0, current: inn.bowler === p.id, blocked };
       })
     : [];
   const batterOptions: BatterOption[] = live
@@ -1792,7 +1892,7 @@ export function derive(match: Match): MatchView {
         .filter((p) => p.id !== inn.striker && p.id !== inn.nonStriker && !inn.bats.get(p.id)?.out)
         .map((p) => {
           const b = inn.bats.get(p.id);
-          return { id: p.id, name: p.name, retiredHurt: !!b?.retiredHurt, runs: b?.runs ?? 0, balls: b?.balls ?? 0 };
+          return { id: p.id, name: p.name, ...(p.tag ? { tag: p.tag } : {}), retiredHurt: !!b?.retiredHurt, runs: b?.runs ?? 0, balls: b?.balls ?? 0 };
         })
     : [];
 
@@ -1846,6 +1946,14 @@ export function derive(match: Match): MatchView {
       case "renamePlayer":
         lastAction = `Renamed to ${cleanName(lastEvent.name)}`;
         break;
+      case "tagPlayer": {
+        // From the fold, never the event's own tag: publicMatch may have rewritten that, and the event may have been refused.
+        const side = isSide(lastEvent.team) ? lastEvent.team : null;
+        const id = typeof lastEvent.player === "string" ? lastEvent.player : "";
+        const who = (side && f.roster[side].get(id)) || id || "Player";
+        lastAction = `${who} ${side && f.tags[side].has(id) ? "tagged" : "untagged"}`;
+        break;
+      }
       case "changeSetup":
         lastAction = "Match settings changed";
         break;
@@ -1897,6 +2005,9 @@ export function check(match: Match, e: MatchEvent): CheckResult {
   const inn = f.inns[f.inns.length - 1];
   const s = f.setup;
   const isSide = (x: unknown): x is Side => x === "a" || x === "b";
+  const BAD_TAG = "That is not a TapTurf username";
+  /** A pick may carry a tag; when it does, it must be a real one. */
+  const badPickTag = (x: { tag?: unknown }) => x.tag !== undefined && !isTag(x.tag);
 
   switch (e.type) {
     case "addPlayer":
@@ -1904,10 +2015,16 @@ export function check(match: Match, e: MatchEvent): CheckResult {
       if (!e.player) return fail("Missing player id");
       if (!cleanName(e.name)) return fail("Type a name");
       if (f.roster[e.team].has(e.player)) return fail("That player is already in the team");
+      if (badPickTag(e)) return fail(BAD_TAG);
       return { error: null, warnings };
     case "renamePlayer":
       if (!isSide(e.team) || !f.roster[e.team].has(e.player)) return fail("Player not found");
       if (!cleanName(e.name)) return fail("Type a name");
+      return { error: null, warnings };
+    case "tagPlayer":
+      if (!isSide(e.team) || !f.roster[e.team].has(e.player)) return fail("Player not found");
+      // The key must be there: null takes the tag off, anything else must be a real tag.
+      if (e.tag !== null && !isTag(e.tag)) return fail(BAD_TAG);
       return { error: null, warnings };
     case "changeSetup": {
       if (e.overs !== undefined && !(Number(e.overs) >= 1)) return fail("Overs must be at least 1");
@@ -1964,6 +2081,7 @@ export function check(match: Match, e: MatchEvent): CheckResult {
       if (!id) return fail("Pick a batter");
       const known = f.roster[inn.batting].has(id);
       if (!known && !cleanName(e.name)) return fail("Type the batter's name");
+      if (badPickTag(e)) return fail(BAD_TAG);
       const name = f.roster[inn.batting].get(id) ?? cleanName(e.name);
       if (inn.striker === id || inn.nonStriker === id) return fail(`${name} is already batting`);
       if (inn.bats.get(id)?.out) return fail(`${name} is already out`);
@@ -1978,6 +2096,7 @@ export function check(match: Match, e: MatchEvent): CheckResult {
       if (!id) return fail("Pick a bowler");
       const known = f.roster[inn.bowling].has(id);
       if (!known && !cleanName(e.name)) return fail("Type the bowler's name");
+      if (badPickTag(e)) return fail(BAD_TAG);
       const name = f.roster[inn.bowling].get(id) ?? cleanName(e.name);
       if (inn.bowler === id) return fail(`${name} is already bowling`);
       if (inn.lastOverBowler === id) warnings.push(`${name} bowled the last over. A bowler cannot bowl two overs in a row.`);
