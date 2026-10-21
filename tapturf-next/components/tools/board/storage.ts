@@ -39,8 +39,8 @@ export type BoardIndex = { v: 1; current: string | null; list: BoardMeta[] };
  * logic.ts). Kept here so a reload neither asks again nor forgets a swap.
  */
 export type BoardPrefs = { swap: boolean; names: boolean; seen?: string[]; turns?: string[] };
-/** Answers kept per board: a long match has a few dozen prompts at most. */
-export const PROMPTS_KEPT = 60;
+/** Answers kept per board, past any real match (a five set tennis match has about 70 changes of ends); answers that can never apply again are dropped first (logic.ts answer). */
+export const PROMPTS_KEPT = 400;
 export const DEFAULT_PREFS: BoardPrefs = { swap: false, names: false };
 
 const emptyIndex = (): BoardIndex => ({ v: 1, current: null, list: [] });

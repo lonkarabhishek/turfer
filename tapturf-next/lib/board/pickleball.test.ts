@@ -285,3 +285,19 @@ test("rules changed before the first rally: the game starts as the new rules sta
   assert.equal(e.derive(b).server, "b", "side out: the first serving side has one server only");
   assert.equal(call(b), "0-0-1");
 });
+
+test("rules changed before the first rally keep a server the scorer picked, and its number", () => {
+  // Game 2: the app has Ravi serving; the scorer fixes it to Asha, then changes the points. Asha keeps the serve.
+  let b = add(board({ points: 11, bestOf: 3 }), serve("a"));
+  b = pointsTo(b, "a", 11);
+  assert.equal(e.derive(b).sets.length, 2);
+  b = add(b, serve("a"), { type: "rules", rules: { points: 15 } });
+  assert.equal(e.derive(b).server, "a", "Change server survives the rules change");
+  b = add(b, ...rallies("a"));
+  assert.deepEqual(score(b), { a: 1, b: 0, winner: null, tiebreak: null }, "the server's rally is a point, not a side out");
+  // Game 1: Fix server number to 1, then a rules change that keeps doubles: still 0-0-1.
+  let c = add(board({ doubles: true }), serve("a", 1));
+  assert.equal(call(c), "0-0-1");
+  c = add(c, { type: "rules", rules: { points: 15 } });
+  assert.equal(call(c), "0-0-1");
+});

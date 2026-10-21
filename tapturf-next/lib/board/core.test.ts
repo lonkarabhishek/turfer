@@ -1027,3 +1027,12 @@ test("basketball: times on a count-down clock round up, as the clock shows them"
   assert.equal(deriveBoard(b).timeline.at(-1)?.when, "Q1 0:01");
   assert.match(boardShareText(deriveBoard(b), { now: T0 + 10 * MIN - 600 }), /Q1 0:01/);
 });
+
+test("football: a finished draw takes penalties and nothing else", () => {
+  const b = run(fb(), clock(true, T0), period(T0 + 21 * MIN), clock(true, T0 + 25 * MIN), period(T0 + 46 * MIN));
+  assert.equal(deriveBoard(b).result?.kind, "draw");
+  refuse(b, { type: "rules", rules: { penalties: true, halfMinutes: 45 } }, /Only penalties/);
+  refuse(b, { type: "rules", rules: { halfMinutes: 45 } }, /over/);
+  const pens = run(b, { type: "rules", rules: { penalties: true, shootoutKicks: 3 } });
+  assert.equal(deriveBoard(pens).status, "live");
+});

@@ -214,9 +214,17 @@ export function swappedNow(board: Board, prefs: Pick<BoardPrefs, "swap" | "turns
 /** Whether the prompt behind this key has been answered. */
 export const answered = (prefs: Pick<BoardPrefs, "seen">, key: string | null) => !!key && (prefs.seen ?? []).includes(key);
 
+/**
+ * A key that can still hold: its point stands, or it was undone and redo
+ * may bring it back. One whose place now has another event is gone for
+ * good (any new tap clears redo).
+ */
+const mayHold = (board: Board) => (k: string) => keyHolds(board, k) || Number(k.slice(0, k.indexOf(":"))) >= board.events.length;
+
 /** Answer the prompt behind key, swapping sides or not. With no key (no point yet) a swap is the scorer's own. */
-export function answer(prefs: BoardPrefs, key: string | null, swap: boolean): BoardPrefs {
+export function answer(prefs: BoardPrefs, key: string | null, swap: boolean, board: Board): BoardPrefs {
   if (!key) return swap ? { ...prefs, swap: !prefs.swap } : prefs;
-  const add = (list: string[] | undefined) => [...(list ?? []).filter((k) => k !== key), key].slice(-PROMPTS_KEPT);
-  return { ...prefs, seen: add(prefs.seen), turns: swap ? add(prefs.turns) : prefs.turns };
+  const keep = mayHold(board);
+  const add = (list: string[] | undefined) => [...(list ?? []).filter((k) => k !== key && keep(k)), key].slice(-PROMPTS_KEPT);
+  return { ...prefs, seen: add(prefs.seen), turns: swap ? add(prefs.turns) : (prefs.turns ?? []).filter(keep) };
 }

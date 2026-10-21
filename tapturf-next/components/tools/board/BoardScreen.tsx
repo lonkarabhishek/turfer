@@ -113,8 +113,12 @@ export function BoardScreen({
   const [said, setSaid] = useState("");
   const timeIsUp = useTimeUp(view, wallNow);
   const lastTap = useRef(0);
-  /** The last tap was Undo: the next rally tap is likely the correction, so it waits only the short window. */
-  const undone = useRef(false);
+  /**
+   * The guard for the next pad tap when it is not the usual one: after
+   * Undo the short window (that tap is likely the correction), after Go to
+   * penalties the long one (the kick keys take the button's place).
+   */
+  const nextGuard = useRef<number | null>(null);
   const fired = useRef(new Set<string>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -253,8 +257,8 @@ export function BoardScreen({
     }
     // A finished game waits for "Start game N": an extra tap on the winning point must not score in the next one.
     if (gameEnd && (a.event.type === "point" || a.event.type === "serve")) return;
-    if (!guard(undone.current ? TAP_GUARD_MS : guardMs(a))) return;
-    undone.current = false;
+    if (!guard(nextGuard.current ?? guardMs(a))) return;
+    nextGuard.current = null;
     vibrate();
     if (a.event.type === "period") {
       // Full time (or the last period) ends the match: say what the result will be first.
@@ -274,7 +278,7 @@ export function BoardScreen({
     const b = undoBoard(board);
     setRedo((r) => [...r.slice(-49), board]);
     onChange(b);
-    undone.current = true;
+    nextGuard.current = TAP_GUARD_MS;
     setSheet(null);
     showToast(`Took back ${what}`, "info", { redo: true });
     setSaid(`Undone. ${deriveBoard(b).headline}`);
@@ -287,6 +291,7 @@ export function BoardScreen({
     onChange(prev);
     // The toast goes from over the pad: a second tap of a double tap must not land on a half.
     lastTap.current = tapClock();
+    nextGuard.current = null;
     setToast(null);
     setSaid(`Redone. ${deriveBoard(prev).headline}`);
   };
@@ -317,14 +322,14 @@ export function BoardScreen({
   const startNext = (swap: boolean) => {
     // The panel takes the halves' place as the winning point lands: the second touch of a double tap does nothing.
     if (!guard(RALLY_GUARD_MS)) return;
-    setPrefs(answer(prefs, key, swap));
+    setPrefs(answer(prefs, key, swap, board));
     vibrate();
   };
 
   /** Swap sides: answers the Change ends banner when it is up, else the scorer's own swap. */
   const swapSides = () => {
     lastTap.current = tapClock();
-    setPrefs(endsBanner ? answer(prefs, key, true) : { ...prefs, swap: !prefs.swap });
+    setPrefs(endsBanner ? answer(prefs, key, true, board) : { ...prefs, swap: !prefs.swap });
   };
 
   const fixServe = parts.wide.get("fix-serve");
@@ -416,6 +421,7 @@ export function BoardScreen({
         type="button"
         onClick={() => {
           lastTap.current = tapClock();
+          nextGuard.current = null;
           setToast(null);
         }}
         aria-label="Dismiss"
@@ -475,7 +481,7 @@ export function BoardScreen({
 
         {halves ? (
           <section className="min-h-0 flex flex-col lg:col-start-1 lg:row-start-2 lg:rounded-3xl lg:overflow-hidden lg:bg-white lg:border lg:border-primary-200" aria-label="Scoring pad">
-            <HintStrip view={view} waiting={!!gameEnd} endsBanner={endsBanner} onSwap={swapSides} onDismiss={() => setPrefs(answer(prefs, key, false))} />
+            <HintStrip view={view} waiting={!!gameEnd} endsBanner={endsBanner} onSwap={swapSides} onDismiss={() => setPrefs(answer(prefs, key, false, board))} />
             <div className="flex-1 min-h-0 px-2 pb-2 grid grid-cols-2 gap-2">
               {!isLive ? (
                 <div className="col-span-2 min-h-0">{donePanel}</div>
@@ -523,7 +529,9 @@ export function BoardScreen({
             ) : (
               <>
                 {toPenalties && (
-                  <button type="button" onClick={() => guard(RALLY_GUARD_MS) && commit([toPenalties])} className="press-tight mb-2 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full border-2 border-primary-900 bg-white text-primary-900 text-[16px] font-bold active:bg-primary-100">
+                  <button type="button" onClick={() => {
+                      if (guard(RALLY_GUARD_MS) && commit([toPenalties])) nextGuard.current = RALLY_GUARD_MS;
+                    }} className="press-tight mb-2 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full border-2 border-primary-900 bg-white text-primary-900 text-[16px] font-bold active:bg-primary-100">
                     <Goal className="w-5 h-5" aria-hidden /> Go to penalties
                   </button>
                 )}
@@ -554,6 +562,7 @@ export function BoardScreen({
             number: fixNumber?.sub,
             swap: true,
             swapped,
+            penalties: !!toPenalties,
             players: board.sport === "basketball" ? prefs.names : undefined,
             details: halves,
           }}

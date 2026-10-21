@@ -562,3 +562,12 @@ test("volleyball: best of 3 at 1-1 changed to best of 5 before set 3: no toss, t
   b = add(e, b, serve("b"), { type: "rules", rules: { decidingPoints: 15 } });
   assert.equal(e.derive(b).server, "b");
 });
+
+test("table tennis: Change server at 0-0 of game 2 survives a rules change before the first rally", () => {
+  const e = tableTennisEngine;
+  let b = add(e, board(e), serve("a"), ...game(11, 0));
+  const auto = e.derive(b).server;
+  const mine = auto === "a" ? "b" : "a";
+  b = add(e, b, serve(mine), { type: "rules", rules: { doubles: true } });
+  assert.equal(e.derive(b).server, mine);
+});

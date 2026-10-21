@@ -150,7 +150,7 @@ test("side prompts: answered once per point, whatever comes after it", () => {
   assert.ok(deriveBoard(b).gameJustEnded?.changeEnds, "set 1 over, change ends");
   const key = promptKey(b);
   assert.ok(key && keyHolds(b, key));
-  let prefs = answer(DEFAULT_PREFS, key, true);
+  let prefs = answer(DEFAULT_PREFS, key, true, b);
   assert.equal(answered(prefs, key), true);
   assert.equal(swappedNow(b, prefs), true);
   // A timeout, a rename or a rules change before set 2: the engine still says the set just ended, but it stays answered.
@@ -161,7 +161,7 @@ test("side prompts: answered once per point, whatever comes after it", () => {
   assert.equal(answered(prefs, promptKey(b)), true);
   assert.equal(swappedNow(b, prefs), true);
   // Answering it again cannot turn the pad back.
-  prefs = answer(prefs, key, true);
+  prefs = answer(prefs, key, true, b);
   assert.equal(swappedNow(b, prefs), true);
   // Undo back past the set point: the sides go back to how set 1 had them, and the same point redone is swapped again.
   const before = b.events.slice(0, -2);
@@ -182,5 +182,26 @@ test("side prompts: kept across a reload, junk dropped", () => {
   const p = loadPrefs("bv-keep");
   assert.deepEqual(p.seen, ["25:1"]);
   assert.deepEqual(p.turns, ["25:1"]);
-  assert.equal(answer(DEFAULT_PREFS, null, true).swap, true, "no point yet: a swap is the scorer's own");
+  assert.equal(answer(DEFAULT_PREFS, null, true, newBoard("football", {}, { id: "bx", now: 1 })).swap, true, "no point yet: a swap is the scorer's own");
+});
+
+test("side prompts: a long match never runs out of answers, and answers for points taken back are dropped", () => {
+  let b = newBoard("volleyball", { teamA: "Red", teamB: "Blue" }, { id: "bv-long", now: 1 });
+  b = go(b, { type: "serve", side: "a" });
+  let prefs = DEFAULT_PREFS;
+  let flips = 0;
+  // 120 swap answers, each on its own point: the pad turns every time.
+  for (let i = 0; i < 120; i++) {
+    b = go(b, { type: "point", side: i % 2 ? "a" : "b" });
+    const before = swappedNow(b, prefs);
+    prefs = answer(prefs, promptKey(b), true, b);
+    if (swappedNow(b, prefs) !== before) flips++;
+  }
+  assert.equal(flips, 120);
+  // Undo a point, score a different one in its place: the old answer is gone for good and is dropped.
+  const last = promptKey(b)!;
+  b = go({ ...b, events: b.events.slice(0, -1) }, { type: "timeout", side: "a" });
+  prefs = answer(prefs, promptKey(b), false, b);
+  assert.ok(!(prefs.turns ?? []).includes(last));
+  assert.equal((prefs.turns ?? []).length, 119);
 });

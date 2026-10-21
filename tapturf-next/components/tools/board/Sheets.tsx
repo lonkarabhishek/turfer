@@ -27,18 +27,18 @@ export function MoreSheet({
 }: {
   view: BoardView;
   /** What this sport and board offer beyond the usual: the serve fixes, Swap sides, the basketball names switch, Details on phones. */
-  extras: { server?: string; number?: string; swap?: boolean; swapped?: boolean; players?: boolean; details?: boolean };
+  extras: { server?: string; number?: string; swap?: boolean; swapped?: boolean; penalties?: boolean; players?: boolean; details?: boolean };
   onAction: (a: MoreAction) => void;
   onClose: () => void;
 }) {
   const live = view.status === "live";
-  // A football draw can still go to penalties: the one change a finished match takes (checkBoard allows only that).
-  const rulesOpen = live || (view.sport === "football" && view.result?.kind === "draw");
+  // penalties: a finished football draw that can still go to penalties (BoardScreen asks checkBoard), the one change it takes.
+  const rulesOpen = live || !!extras.penalties;
   return (
     <Sheet title="More" onClose={onClose}>
       <div className="grid grid-cols-2 gap-2">
         <Pick onClick={() => onAction("names")} label="Team names" detail="Fix a name or spelling" />
-        <Pick onClick={() => onAction("rules")} label="Change rules" detail={live ? "From the next point on" : "Go to penalties"} disabled={!rulesOpen} />
+        <Pick onClick={() => onAction("rules")} label="Change rules" detail={!live && extras.penalties ? "Go to penalties" : "From the next point on"} disabled={!rulesOpen} />
         {extras.swap && <Pick onClick={() => onAction("swap")} label="Swap sides" detail={extras.swapped ? "Back to the start" : "When the players change ends"} />}
         {extras.server && <Pick onClick={() => onAction("server")} label="Change server" detail={extras.server} disabled={!live} />}
         {extras.number && <Pick onClick={() => onAction("number")} label="Fix server number" detail={extras.number} disabled={!live} />}

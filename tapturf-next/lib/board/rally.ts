@@ -55,6 +55,8 @@ export type GameS = {
   winner: Side | null;
   /** Who served the game's first rally. null until picked (the deciding-set toss). */
   first: Serving | null;
+  /** first came from the scorer (a serve event before the first rally: the first serve, a toss, Change server, Fix server number), not the engine. */
+  chosen: boolean;
   /** Rallies played, which is more than the points in side-out pickleball. */
   rallies: number;
   timeouts: Record<Side, number>;
@@ -132,7 +134,7 @@ export type Kit<R extends AnyRules> = {
 
 const cur = <R>(f: GameFold<R>): GameS => f.games[f.games.length - 1];
 
-const newGame = (index: number): GameS => ({ index, pts: { a: 0, b: 0 }, winner: null, first: null, rallies: 0, timeouts: { a: 0, b: 0 } });
+const newGame = (index: number): GameS => ({ index, pts: { a: 0, b: 0 }, winner: null, first: null, chosen: false, rallies: 0, timeouts: { a: 0, b: 0 } });
 
 /** Games needed to win the match. */
 const need = (s: Shape) => Math.floor(s.bestOf / 2) + 1;
@@ -307,6 +309,7 @@ function step<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, e: BoardEvent, i:
       const fresh = f.needsServe || g.rallies === 0;
       if (fresh) {
         g.first = kit.firstServe(f, e);
+        g.chosen = true;
         f.serving = g.first;
         f.needsServe = false;
       } else f.serving = kit.correctServe(f, g, e);
@@ -364,25 +367,20 @@ function step<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, e: BoardEvent, i:
 
 /**
  * A rules change before a game's first rally: the game starts as the new
- * rules would have started it. The server number comes from the new
- * rules (side-out doubles pickleball starts 0-0-2), a set that is now the
- * deciding one asks for a toss, one that no longer is takes the usual
- * alternation, and the change of ends before it follows the new rules. A
- * server the scorer picked (game 1, or a toss) stays picked.
+ * rules would have started it. A server the engine chose follows the new
+ * rules (alternation, or a toss for a set that is now the deciding one).
+ * A server the scorer chose stays, its number re-derived only when the new
+ * rules turn server numbers on or off (singles to side-out doubles
+ * pickleball starts 0-0-2). The change of ends before it follows the new
+ * rules.
  */
 function restartGame<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, g: GameS, was: R) {
   const picked = g.first;
-  let want: Serving | null = null;
-  let tossed = true;
-  if (g.index > 0) {
-    const prev = f.games[g.index - 1];
-    want = kit.nextGame(f, prev);
-    const now = f.rules;
-    f.rules = was;
-    tossed = kit.nextGame(f, prev) === null;
-    f.rules = now;
+  if (picked && g.chosen) {
+    if (kit.numbered(was) !== kit.numbered(f.rules)) g.first = kit.firstServe(f, { type: "serve", side: picked.side });
+  } else if (g.index > 0) {
+    g.first = kit.nextGame(f, f.games[g.index - 1]);
   }
-  g.first = want ?? (picked && tossed ? kit.firstServe(f, { type: "serve", side: picked.side }) : null);
   f.serving = g.first;
   f.needsServe = g.first === null;
   if (g.index > 0 && f.justEnded) {

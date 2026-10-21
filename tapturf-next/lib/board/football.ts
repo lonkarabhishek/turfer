@@ -188,8 +188,12 @@ function why(s: S, e: BoardEvent): string | null {
   if (e.type === "rename") return cleanName(e.name) ? null : "Type a name";
   if (e.type === "rules") {
     const next = normalizeRules({ ...s.rules, ...e.rules });
-    // A draw at full time can still go to penalties: that is the one change a finished match takes.
-    if (res && !(res.kind === "draw" && !s.ended && next.penalties)) return "The match is over";
+    // A draw at full time can still go to penalties: that is the one change a finished match takes, and nothing else with it.
+    if (res) {
+      if (!(res.kind === "draw" && !s.ended && next.penalties)) return "The match is over";
+      const others = (Object.keys(next) as (keyof FootballRules)[]).some((k) => k !== "penalties" && k !== "shootoutKicks" && next[k] !== s.rules[k]);
+      if (others) return "The match is over. Only penalties can be turned on now";
+    }
     if (next.halves < s.h + 1) return `The ${ordinal(s.h + 1)} half is on. Keep ${s.h + 1} halves`;
     if (s.phase === "full" && next.halves !== s.rules.halves) return "The halves are played already";
     if (s.kicks.length && (next.penalties !== s.rules.penalties || next.shootoutKicks !== s.rules.shootoutKicks)) return "Penalties have started";
