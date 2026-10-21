@@ -3,9 +3,8 @@
 import { useState, useRef, useEffect, useId } from "react";
 import { Check } from "lucide-react";
 import { phoneAuthHelpers } from "@/lib/firebase/client";
-import { createClient } from "@/lib/supabase/client";
-import { logPhoneLogin } from "@/lib/analytics/logins";
-import { useAuth } from "./AuthProvider";
+import { errorOf, firebaseToken, postMe, profileOf } from "@/lib/account/client";
+import { storePhoneUser, useAuth } from "./AuthProvider";
 import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
 import { saveSignupContext } from "@/lib/analytics/visitor";
 
@@ -57,6 +56,8 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [timer, setTimer] = useState(0);
   const [successName, setSuccessName] = useState("");
+  // The code was right but TapTurf could not be reached: retry without a new SMS.
+  const [retry, setRetry] = useState(false);
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
@@ -130,12 +131,59 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
     setSuccessName(userName);
     // We already wrote the exact user to localStorage; ask the
     // AuthProvider to publish it synchronously — no DB round-trip.
-    hydrateFromStorage();
+    hydrateFromStorage(true);
     // Short taa-daa (was 900ms). Long enough to register the win,
     // fast enough that the user doesn't feel a stall.
     setTimeout(() => {
       onSuccess?.();
     }, 350);
+  };
+
+  /**
+   * The account for the number Firebase just verified, from the server
+   * (made when newName is given). The server logs the sign-in.
+   */
+  const signInWithServer = async (token: string, newName?: string) => {
+    const a = await postMe(token, newName);
+    const profile = profileOf(a);
+    if (profile) {
+      setRetry(false);
+      storePhoneUser(profile, token);
+      // A new account: save how they found us, in the background.
+      if ((a.body as { created?: boolean }).created) saveSignupContext(profile.id, "phone");
+      finishLogin(profile.name?.split(" ")[0] || "");
+      return;
+    }
+    const e = errorOf(a);
+    if (e === "name") {
+      setRetry(false);
+      setStep("name");
+    } else if (e === "conflict") {
+      setRetry(false);
+      setError("This number is linked to a Google account. Sign in with Google, or contact us.");
+    } else {
+      setRetry(true);
+      setError("Couldn't reach TapTurf. Check your connection and try again.");
+    }
+  };
+
+  /** A fresh token from the sign-in Firebase already has: no new SMS. */
+  const retryWithServer = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const t = await firebaseToken();
+      if ("token" in t) await signInWithServer(t.token, step === "name" ? name.trim() : undefined);
+      else if ("none" in t) {
+        setRetry(false);
+        setStep("phone");
+        setError("Your code has expired. Send a new one.");
+      } else {
+        setError("Couldn't reach TapTurf. Check your connection and try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const verifyOTP = async (otpCode: string) => {
@@ -149,41 +197,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
         setOtp(["", "", "", "", "", ""]);
         return;
       }
-
-      const supabase = createClient();
-      const formattedPhone = `+91${phone}`;
-
-      const { data: existingRows, error: lookupError } = await supabase
-        .from("users")
-        .select("id, name, phone, email, role, profile_image_url")
-        .or(`phone.eq.${formattedPhone},phone.eq.${phone}`)
-        .order("created_at", { ascending: true })
-        .limit(1);
-
-      if (lookupError) {
-        console.error("[PhoneOTP] Lookup error:", lookupError);
-        setError("Couldn't look up your account. Try again or refresh.");
-        setOtp(["", "", "", "", "", ""]);
-        return;
-      }
-
-      const existingUser = existingRows?.[0];
-
-      if (existingUser) {
-        localStorage.setItem("auth_token", result.user.idToken);
-        localStorage.setItem("user", JSON.stringify({
-          id: existingUser.id,
-          name: existingUser.name,
-          phone: formattedPhone,
-          email: existingUser.email,
-          role: existingUser.role || "user",
-          profile_image_url: existingUser.profile_image_url,
-        }));
-        logPhoneLogin(existingUser.id);
-        finishLogin(existingUser.name?.split(" ")[0] || "");
-      } else {
-        setStep("name");
-      }
+      await signInWithServer(result.user.idToken);
     } catch (e) {
       console.error("[PhoneOTP] Verify threw:", e);
       setError(e instanceof Error ? e.message : "Verification failed. Please try again.");
@@ -198,47 +212,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
       setError("Please enter your name");
       return;
     }
-    setError("");
-    setLoading(true);
-    try {
-      const supabase = createClient();
-      const formattedPhone = `+91${phone}`;
-      const userId = crypto.randomUUID();
-      const { data: newUser, error: insertError } = await supabase
-        .from("users")
-        .insert([{
-          id: userId,
-          name: name.trim(),
-          phone: formattedPhone,
-          role: "user",
-          password: "phone-auth-no-password",
-        }])
-        .select("id, name, email, phone, role, profile_image_url")
-        .single();
-
-      if (insertError || !newUser) {
-        console.error("[PhoneOTP] Create user error:", insertError?.message, insertError?.details);
-        setError("Could not create account. Please try again.");
-        return;
-      }
-
-      const authToken = localStorage.getItem("auth_token") || `phone_${Date.now()}`;
-      localStorage.setItem("auth_token", authToken);
-      saveSignupContext(newUser.id, "phone");
-      localStorage.setItem("user", JSON.stringify({
-        id: newUser.id,
-        name: newUser.name,
-        phone: formattedPhone,
-        role: "player",
-      }));
-
-      logPhoneLogin(newUser.id);
-      finishLogin(newUser.name?.split(" ")[0] || "");
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    await retryWithServer();
   };
 
   const handleResend = async () => {
@@ -420,6 +394,16 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
 
       {error && (
         <p className="text-[13px] text-hot-600 text-center font-medium">{error}</p>
+      )}
+
+      {retry && step === "otp" && (
+        <button
+          onClick={retryWithServer}
+          disabled={loading}
+          className="w-full bg-primary-800 hover:bg-primary-900 text-white py-3.5 min-h-[52px] rounded-full font-bold text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-elevated focus-neon"
+        >
+          {loading ? "Trying…" : "Try again"}
+        </button>
       )}
 
       <div id={recaptchaId} />

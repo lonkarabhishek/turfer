@@ -1,28 +1,4 @@
 import { createClient } from "@/lib/supabase/client";
-import type { AppUser } from "@/types/user";
-
-export async function getUserProfile(userId: string) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, name, email, phone, role, profile_image_url")
-    .eq("id", userId)
-    .single();
-
-  return { data: data as AppUser | null, error: error?.message || null };
-}
-
-export async function updateUserProfile(userId: string, updates: Partial<Pick<AppUser, "name" | "phone" | "profile_image_url">>) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .update(updates)
-    .eq("id", userId)
-    .select("id, name, email, phone, role, profile_image_url")
-    .single();
-
-  return { data: data as AppUser | null, error: error?.message || null };
-}
 
 export async function searchTurfs(query?: string) {
   const supabase = createClient();

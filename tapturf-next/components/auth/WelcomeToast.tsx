@@ -1,10 +1,29 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
-import { Check } from "lucide-react";
+import { Check, Info, X } from "lucide-react";
 
 export function WelcomeToast() {
-  const { welcomeMessage } = useAuth();
+  const { welcomeMessage, notice, dismissNotice } = useAuth();
+
+  if (notice) {
+    return (
+      <div className="fixed top-4 inset-x-4 z-[60] flex justify-center" role="status" aria-live="polite">
+        <div className="flex items-start gap-3 max-w-md bg-primary-800 text-white rounded-2xl pl-3 pr-2 py-3 shadow-elevated">
+          <Info className="w-5 h-5 mt-0.5 shrink-0 text-accent-300" aria-hidden />
+          <p className="text-[14px] leading-snug font-medium">{notice}</p>
+          <button
+            type="button"
+            onClick={dismissNotice}
+            aria-label="Dismiss"
+            className="shrink-0 -my-1 w-9 h-9 rounded-full flex items-center justify-center text-white/80 hover:bg-white/10 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!welcomeMessage) return null;
 

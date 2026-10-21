@@ -33,6 +33,10 @@ async function getAuthLazy(): Promise<Auth> {
     a.languageCode = "en";
     return a;
   })();
+  // A failed load (offline, a blocked chunk) is not kept: the next call tries again.
+  _authP.catch(() => {
+    _authP = null;
+  });
   return _authP;
 }
 

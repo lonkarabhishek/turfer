@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { AppUser } from "@/types/user";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { saveSignupContext } from "@/lib/analytics/visitor";
+import type { AccountProfile } from "@/lib/account/types";
+import { errorOf, firebaseToken, getMe, postMe, profileOf, supabaseToken, type TokenCheck } from "@/lib/account/client";
 
 interface AuthContextType {
   user: AppUser | null;
@@ -17,6 +19,8 @@ interface AuthContextType {
    * (the live score's login card) can wait for it.
    */
   settled: boolean;
+  /** The user came from the server in this tab (not only from this device's storage). */
+  profileFresh: boolean;
   login: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -24,27 +28,44 @@ interface AuthContextType {
    * Synchronously pull the phone-auth user out of localStorage and
    * publish them into the context. Use this right after a PhoneOTP
    * success writes to localStorage — cheaper and faster than
-   * refreshUser() (no DB round-trip).
+   * refreshUser() (no DB round-trip). fresh: what was written came from
+   * the server just now.
    */
-  hydrateFromStorage: () => AppUser | null;
+  hydrateFromStorage: (fresh?: boolean) => AppUser | null;
+  /**
+   * The token the account routes need, for this sign-in. A phone sign-in
+   * whose Firebase session is gone is signed out here (it cannot do
+   * anything that needs one), with a notice.
+   */
+  getToken: () => Promise<TokenCheck>;
+  /** Publish a profile the server just sent (after an edit). */
+  applyProfile: (p: AccountProfile) => void;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
   welcomeMessage: string | null;
   dismissWelcome: () => void;
+  /** A longer message about the sign-in itself ("your phone login ended"). */
+  notice: string | null;
+  dismissNotice: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   settled: false,
+  profileFresh: false,
   login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
   hydrateFromStorage: () => null,
+  getToken: async () => ({ none: true }),
+  applyProfile: () => {},
   showLoginModal: false,
   setShowLoginModal: () => {},
   welcomeMessage: null,
   dismissWelcome: () => {},
+  notice: null,
+  dismissNotice: () => {},
 });
 
 export function useAuth() {
@@ -54,15 +75,67 @@ export function useAuth() {
 // Two auth paths, tracked so we can handle each independently.
 type AuthSource = "phone" | "oauth" | null;
 
+/** When this device last checked its phone sign-in with the server. */
+const PROFILE_CHECKED_KEY = "tapturf_profile_checked_v1";
+/** When this device first found no Firebase session behind its phone sign-in. */
+const FB_MISSING_KEY = "tapturf_fb_missing_v1";
+/** The last profile the server sent for this device's Google sign-in: { uid, user }. */
+const GOOGLE_PROFILE_KEY = "tapturf_google_profile_v1";
+
+const DAY_MS = 86_400_000;
+/** A missing Firebase session must be seen twice, this far apart, before a background sign-out. */
+const FB_MISSING_GRACE_MS = 10 * 60_000;
+
+function store(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* storage full or blocked */
+  }
+}
+
+function read(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** A server profile as the app's user. */
+function userFromProfile(p: AccountProfile): AppUser {
+  return {
+    id: p.id,
+    name: p.name || "User",
+    email: p.email ?? undefined,
+    phone: p.phone ?? undefined,
+    role: (p.role || "user") as AppUser["role"],
+    profile_image_url: p.profile_image_url ?? undefined,
+    username: p.username ?? undefined,
+    taggable: p.taggable,
+  };
+}
+
 // Build AppUser fields from a Supabase auth user's metadata
-function buildUserFromSupabase(supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> }): Omit<AppUser, "role"> & { role?: string; profile_image_url?: string } {
+function buildUserFromSupabase(supaUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }): AppUser {
   return {
     id: supaUser.id,
     name: (supaUser.user_metadata?.name || supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User") as string,
     email: supaUser.email,
-    phone: (supaUser.phone || supaUser.user_metadata?.phone) as string | undefined,
+    role: "user" as AppUser["role"],
     profile_image_url: (supaUser.user_metadata?.avatar_url || supaUser.user_metadata?.picture) as string | undefined,
   };
+}
+
+/** The Google user this device last had from the server, if it is this sign-in's. */
+function readGoogleUser(uid: string): AppUser | null {
+  try {
+    const p = JSON.parse(read(GOOGLE_PROFILE_KEY) ?? "null");
+    return p?.uid === uid && p.user?.id ? (p.user as AppUser) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -86,10 +159,18 @@ function readPhoneUser(): AppUser | null {
       phone: p.phone,
       role: (p.role || "user") as AppUser["role"],
       profile_image_url: p.profile_image_url,
+      username: typeof p.username === "string" ? p.username : undefined,
+      taggable: typeof p.taggable === "boolean" ? p.taggable : undefined,
     };
   } catch {
     return null;
   }
+}
+
+/** Save a phone sign-in's server profile on this device. */
+export function storePhoneUser(p: AccountProfile, token?: string) {
+  if (token) store("auth_token", token);
+  store("user", JSON.stringify(userFromProfile(p)));
 }
 
 // Mirror the current phone-auth user id to a browser cookie the server
@@ -115,107 +196,188 @@ function writeUidCookie(uid: string | null) {
   }
 }
 
+/** The Firebase token AdminGate hands the server (lib/admin/auth.ts ADMIN_TOKEN_COOKIE). Goes with the phone sign-in. */
+function clearFidCookie() {
+  try {
+    document.cookie = "tt_fid=; path=/; max-age=0; SameSite=Lax";
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Pages where a background check never runs: live scoring and following must not be interrupted. */
+function quietPath(): boolean {
+  const p = window.location.pathname;
+  return p.startsWith("/live") || p.startsWith("/tools");
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Seed from localStorage synchronously.
   const initial = typeof window !== "undefined" ? readPhoneUser() : null;
   const [user, setUser] = useState<AppUser | null>(initial);
   const [loading, setLoading] = useState(initial === null);
   const [settled, setSettled] = useState(initial !== null);
+  const [profileFresh, setProfileFresh] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const supabaseRef = useRef(createClient());
   const sourceRef = useRef<AuthSource>(initial ? "phone" : null);
+  /** The Google sign-in's own id (a legacy account's users.id can differ). */
+  const authUidRef = useRef<string | null>(null);
   const supabase = supabaseRef.current;
 
   const dismissWelcome = useCallback(() => setWelcomeMessage(null), []);
+  const dismissNotice = useCallback(() => setNotice(null), []);
 
   const showWelcome = useCallback((name: string) => {
     setWelcomeMessage(`Welcome${name ? `, ${name}` : ""}!`);
     setTimeout(() => setWelcomeMessage(null), 3500);
   }, []);
 
-  // ── DB helpers ──
+  const showNotice = useCallback((text: string) => {
+    setNotice(text);
+    setTimeout(() => setNotice((n) => (n === text ? null : n)), 9000);
+  }, []);
 
-  const fetchUserProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("id, name, email, phone, role, profile_image_url")
-        .eq("id", userId)
-        .limit(1);
-      if (data && data.length > 0 && !error) return data[0] as AppUser;
-    } catch (e) {
-      console.warn("[Auth] fetchUserProfile failed:", e);
-    }
-    return null;
-  }, [supabase]);
+  // ── Server profile ──
 
-  const fetchUserProfileByEmail = useCallback(async (email: string): Promise<AppUser | null> => {
-    try {
-      const { data } = await supabase
-        .from("users")
-        .select("id, name, email, phone, role, profile_image_url")
-        .eq("email", email)
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (data && data.length > 0) return data[0] as AppUser;
-    } catch (e) {
-      console.warn("[Auth] fetchUserProfileByEmail failed:", e);
-    }
-    return null;
-  }, [supabase]);
-
-  const ensureUserInDB = useCallback(async (userData: {
-    id: string; name: string; email?: string; phone?: string; profile_image_url?: string;
-  }): Promise<AppUser> => {
-    const byId = await fetchUserProfile(userData.id);
-    if (byId) return byId;
-
-    if (userData.email) {
-      const byEmail = await fetchUserProfileByEmail(userData.email);
-      if (byEmail) return byEmail;
-    }
-
-    try {
-      const { data: inserted } = await supabase.from("users").insert([{
-        id: userData.id,
-        name: userData.name,
-        email: userData.email || null,
-        phone: userData.phone || null,
-        role: "user",
-        profile_image_url: userData.profile_image_url || null,
-        password: "oauth-no-password",
-      }]).select("id, name, email, phone, role, profile_image_url").single();
-      if (inserted) {
-        // A new account: save how they found us, in the background.
-        saveSignupContext(inserted.id, "google");
-        return inserted as AppUser;
+  const applyProfile = useCallback((p: AccountProfile) => {
+    const next = userFromProfile(p);
+    if (sourceRef.current === "phone") {
+      storePhoneUser(p);
+    } else if (sourceRef.current === "oauth") {
+      // Keyed by the Google sign-in's id, which a legacy account's id can differ from.
+      try {
+        const prev = JSON.parse(read(GOOGLE_PROFILE_KEY) ?? "null");
+        if (prev?.uid) store(GOOGLE_PROFILE_KEY, JSON.stringify({ uid: prev.uid, user: next }));
+      } catch {
+        /* ignore */
       }
-    } catch (e) {
-      console.warn("[Auth] ensureUserInDB insert failed (likely RLS):", e);
     }
+    setUser(next);
+    setProfileFresh(true);
+  }, []);
 
-    return {
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      phone: userData.phone,
-      role: "user" as AppUser["role"],
-      profile_image_url: userData.profile_image_url,
-    };
-  }, [supabase, fetchUserProfile, fetchUserProfileByEmail]);
-
+  /**
+   * Google: publish the sign-in at once (this device's last server copy,
+   * or Google's own profile), then the account from the server, made if
+   * there is none. Never throws, and a failed server call keeps the user.
+   */
   const resolveSupabaseUser = useCallback(async (
-    supaUser: { id: string; email?: string; phone?: string; user_metadata?: Record<string, unknown> },
+    supaUser: { id: string; email?: string; user_metadata?: Record<string, unknown> },
     shouldWelcome: boolean,
+    accessToken: string | null,
   ) => {
-    const meta = buildUserFromSupabase(supaUser);
-    const dbUser = await ensureUserInDB(meta);
-    setUser(dbUser);
+    const quick = readGoogleUser(supaUser.id) ?? buildUserFromSupabase(supaUser);
+    setUser(quick);
     sourceRef.current = "oauth";
-    if (shouldWelcome) showWelcome(dbUser.name?.split(" ")[0] || "");
-  }, [ensureUserInDB, showWelcome]);
+    authUidRef.current = supaUser.id;
+    if (shouldWelcome) showWelcome(quick.name?.split(" ")[0] || "");
+
+    const load = async (token: string | null, tries: number): Promise<void> => {
+      if (!token || sourceRef.current !== "oauth") return;
+      const a = await postMe(token);
+      if (sourceRef.current !== "oauth") return;
+      const p = profileOf(a);
+      if (p) {
+        const next = userFromProfile(p);
+        store(GOOGLE_PROFILE_KEY, JSON.stringify({ uid: supaUser.id, user: next }));
+        setUser(next);
+        setProfileFresh(true);
+        // A new account: save how they found us, in the background.
+        if ((a.body as { created?: boolean }).created) saveSignupContext(p.id, "google");
+        return;
+      }
+      // 401: the session is being refreshed or ended; Supabase's own events handle that.
+      if (a.status !== 401 && tries > 0) {
+        await new Promise((r) => setTimeout(r, 15_000));
+        const again = await supabaseToken();
+        await load("token" in again ? again.token : null, tries - 1);
+      }
+    };
+    void load(accessToken, 2);
+  }, [showWelcome]);
+
+  /**
+   * End this device's phone sign-in: its Firebase session is gone, or the
+   * server has no account for its number. Never touches the Google
+   * session; if there is one, the user carries on with it.
+   */
+  const forcePhoneSignOut = useCallback(async (message: string) => {
+    for (const k of ["auth_token", "user", FB_MISSING_KEY, PROFILE_CHECKED_KEY]) store(k, null);
+    writeUidCookie(null);
+    clearFidCookie();
+    try {
+      const { getFirebaseAuth } = await import("@/lib/firebase/client");
+      await (await getFirebaseAuth()).signOut();
+    } catch {
+      /* ignore */
+    }
+    setUser(null);
+    setProfileFresh(false);
+    sourceRef.current = null;
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) {
+        const name = readGoogleUser(data.session.user.id)?.name ?? buildUserFromSupabase(data.session.user).name;
+        await resolveSupabaseUser(data.session.user, false, data.session.access_token);
+        showNotice(`Your phone login ended. You are signed in with Google as ${name}.`);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    showNotice(message);
+  }, [supabase, resolveSupabaseUser, showNotice]);
+
+  const getToken = useCallback(async (): Promise<TokenCheck> => {
+    if (sourceRef.current === "oauth") return supabaseToken();
+    if (sourceRef.current !== "phone") return { none: true };
+    const t = await firebaseToken();
+    if ("none" in t) await forcePhoneSignOut("Your login ended. Please log in again with your phone number.");
+    else if ("token" in t) store(FB_MISSING_KEY, null);
+    return t;
+  }, [forcePhoneSignOut]);
+
+  /**
+   * Phone: check this device's sign-in with the server, at most once a
+   * day. A missing Firebase session signs out only when seen twice, ten
+   * minutes apart; offline, slow or failing checks change nothing.
+   */
+  const checkPhoneSignIn = useCallback(async () => {
+    const local = readPhoneUser();
+    if (!local || sourceRef.current !== "phone") return;
+    if (Date.now() - Number(read(PROFILE_CHECKED_KEY) || 0) < DAY_MS) return;
+    const t = await firebaseToken();
+    if (sourceRef.current !== "phone" || "unknown" in t) return;
+    if ("none" in t) {
+      const first = Number(read(FB_MISSING_KEY) || 0);
+      if (!first) store(FB_MISSING_KEY, String(Date.now()));
+      else if (Date.now() - first >= FB_MISSING_GRACE_MS) await forcePhoneSignOut("Your login ended. Please log in again with your phone number.");
+      return;
+    }
+    store(FB_MISSING_KEY, null);
+    const a = await getMe(t.token);
+    if (sourceRef.current !== "phone") return;
+    const p = profileOf(a);
+    if (p) {
+      store(PROFILE_CHECKED_KEY, String(Date.now()));
+      storePhoneUser(p, t.token);
+      setUser(userFromProfile(p));
+      setProfileFresh(true);
+      if (p.id !== local.id) showNotice(`You are signed in to the account for your phone number, ${p.name}.`);
+      return;
+    }
+    const e = errorOf(a);
+    if (e === "new") {
+      await forcePhoneSignOut("This phone number has no TapTurf account. Log in with the number on your profile.");
+    } else if (e === "conflict") {
+      store(PROFILE_CHECKED_KEY, String(Date.now()));
+    }
+    // sign_in, unavailable: try again on a later visit. Never sign out from a server error.
+  }, [forcePhoneSignOut, showNotice]);
 
   // ── Init auth on mount ──
 
@@ -241,15 +403,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // ── 1. Phone auth: instant from localStorage ──
+    let idle: number | null = null;
     if (initial) {
       sourceRef.current = "phone";
       setLoading(false);
       clearTimeout(emergencyTimeout);
-      // Freshen from DB in the background — non-blocking, and if it
-      // returns nothing we KEEP the localStorage user (don't nuke).
-      fetchUserProfile(initial.id).then((profile) => {
-        if (profile && !cancelled && sourceRef.current === "phone") setUser(profile);
-      });
+      // Check with the server in the background, when the page is idle,
+      // never on live scoring pages or on a data-saving connection.
+      const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+      if (!quietPath() && !conn?.saveData && navigator.onLine !== false) {
+        const run = () => {
+          if (!cancelled) void checkPhoneSignIn();
+        };
+        idle = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(run, { timeout: 5000 }) : setTimeout(run, 2000) as unknown as number;
+      }
     }
 
     // ── 2. Google OAuth signal ──
@@ -286,6 +453,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // callback only schedules the work; it runs after the lock is free.
     const handleAuthEvent = async (event: AuthChangeEvent, session: Session | null) => {
       if (cancelled) return;
+      const token = session?.access_token ?? null;
 
       if (event === "INITIAL_SESSION") {
         if (session?.user) {
@@ -299,13 +467,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // phone-auth localStorage so it can't out-vote the OAuth
             // user.
             if (shouldWelcomeFromCallback) {
-              try {
-                localStorage.removeItem("auth_token");
-                localStorage.removeItem("user");
-              } catch { /* ignore */ }
+              store("auth_token", null);
+              store("user", null);
               sourceRef.current = null;
             }
-            await resolveSupabaseUser(session.user, shouldWelcomeFromCallback);
+            await resolveSupabaseUser(session.user, shouldWelcomeFromCallback, token);
           }
         }
         clearTimeout(emergencyTimeout);
@@ -316,7 +482,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_IN" && session?.user) {
         const isNewSignIn = sourceRef.current === null;
-        await resolveSupabaseUser(session.user, isNewSignIn);
+        // The same sign-in again (a tab back in the foreground): nothing to fetch.
+        if (sourceRef.current === "oauth" && authUidRef.current === session.user.id) {
+          setShowLoginModal(false);
+          return;
+        }
+        await resolveSupabaseUser(session.user, isNewSignIn, token);
         setShowLoginModal(false);
         setLoading(false);
         setSettled(true);
@@ -327,7 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // A silent refresh changes nothing for a signed-in user. With nobody signed in it is a session that
         // came back late (the first check failed on a bad network): sign them in now, not on the next tab switch.
         if (session?.user && sourceRef.current === null) {
-          await resolveSupabaseUser(session.user, false);
+          await resolveSupabaseUser(session.user, false, token);
           setLoading(false);
           setSettled(true);
         }
@@ -344,6 +515,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // OAuth session gone. Before nuking user state, see if there's
         // still a phone token sitting in localStorage we can fall back
         // to — otherwise sign the user out.
+        setProfileFresh(false);
+        authUidRef.current = null;
         if (rehydratePhone()) return;
         setUser(null);
         sourceRef.current = null;
@@ -370,6 +543,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Phone auth cleared in another tab. Only wipe user if we were
         // phone — an oauth session might still be valid.
         setUser(null);
+        setProfileFresh(false);
         sourceRef.current = null;
       }
     };
@@ -399,6 +573,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
       clearTimeout(emergencyTimeout);
+      if (idle !== null) {
+        if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idle);
+        else clearTimeout(idle);
+      }
       window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", onVisibility);
     };
@@ -427,9 +605,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     // Intentional logout, clear BOTH sources.
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user");
+    for (const k of ["auth_token", "user", GOOGLE_PROFILE_KEY, FB_MISSING_KEY, PROFILE_CHECKED_KEY]) store(k, null);
     writeUidCookie(null);
+    clearFidCookie();
     try {
       const { getFirebaseAuth } = await import("@/lib/firebase/client");
       const auth = await getFirebaseAuth();
@@ -437,58 +615,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* ignore */ }
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
+    setProfileFresh(false);
     sourceRef.current = null;
+    authUidRef.current = null;
   }, [supabase]);
 
   // Fast, synchronous path: read localStorage and push into context.
   // Called right after PhoneOTP writes the user so the modal/page can
   // navigate away without waiting on a redundant DB round-trip.
-  const hydrateFromStorage = useCallback((): AppUser | null => {
+  const hydrateFromStorage = useCallback((fresh = false): AppUser | null => {
     const p = readPhoneUser();
     if (p) {
       setUser(p);
       sourceRef.current = "phone";
       setLoading(false);
       setSettled(true);
+      if (fresh) {
+        setProfileFresh(true);
+        store(PROFILE_CHECKED_KEY, String(Date.now()));
+        store(FB_MISSING_KEY, null);
+      }
       showWelcome(p.name?.split(" ")[0] || "");
       return p;
     }
     return null;
   }, [showWelcome]);
 
+  /** The account from the server again, for this sign-in. */
   const refreshUser = useCallback(async () => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        if (parsed.id) {
-          const profile = await fetchUserProfile(parsed.id);
-          const nextUser = profile || {
-            id: parsed.id, name: parsed.name || "User", email: parsed.email,
-            phone: parsed.phone, role: parsed.role || "user", profile_image_url: parsed.profile_image_url,
-          };
-          setUser(nextUser);
-          sourceRef.current = "phone";
-          showWelcome(nextUser.name?.split(" ")[0] || "");
-          return;
-        }
-      } catch { /* invalid */ }
-    }
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        if (profile) { setUser(profile); sourceRef.current = "oauth"; return; }
-      }
-    } catch { /* ignore */ }
-  }, [fetchUserProfile, supabase, showWelcome]);
+    const t = await getToken();
+    if (!("token" in t)) return;
+    const p = profileOf(await getMe(t.token));
+    if (p) applyProfile(p);
+  }, [getToken, applyProfile]);
 
   return (
     <AuthContext.Provider value={{
-      user, loading, settled, login, logout, refreshUser, hydrateFromStorage,
+      user, loading, settled, profileFresh, login, logout, refreshUser, hydrateFromStorage,
+      getToken, applyProfile,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
+      notice, dismissNotice,
     }}>
       {children}
     </AuthContext.Provider>

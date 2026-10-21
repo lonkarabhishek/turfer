@@ -1,42 +1,112 @@
 "use client";
 
-import { useState } from "react";
-import { User, Save, Phone, Mail } from "lucide-react";
-import { updateUserProfile } from "@/lib/queries/users";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { User, Save, Phone, Mail, AtSign } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { checkUsername, errorOf, patchMe, profileOf } from "@/lib/account/client";
+import { usernameProblem } from "@/lib/account/usernames";
+import type { AccountError } from "@/lib/account/types";
 import type { AppUser } from "@/types/user";
 
+type Availability = "idle" | "checking" | "ok" | "taken" | "reserved" | "bad" | "unknown";
+
+const AVAILABILITY_TEXT: Record<Availability, string> = {
+  idle: "",
+  checking: "Checking…",
+  ok: "Available",
+  taken: "Someone already has this username.",
+  reserved: "This username is not allowed.",
+  bad: "3 to 20 letters, digits or _, starting with a letter.",
+  unknown: "",
+};
+
+const SAVE_ERROR: Partial<Record<AccountError, string>> = {
+  taken: "Someone already has this username.",
+  reserved: "This username is not allowed.",
+  bad: "Check your name and username.",
+  limit: "You can change your username 3 times in 30 days. Try again later.",
+  sign_in: "Your login ended. Please log in again.",
+  new: "Your login ended. Please log in again.",
+};
+
 export function ProfileSection({ user }: { user: AppUser }) {
-  const { refreshUser } = useAuth();
-  const [name, setName] = useState(user.name || "");
-  const [phone, setPhone] = useState(user.phone || "");
+  const { getToken, applyProfile, refreshUser } = useAuth();
+  // What the person typed; until then, what the server sent.
+  const [draft, setDraft] = useState<{ name?: string; username?: string; taggable?: boolean }>({});
+  const name = draft.name ?? (user.name || "");
+  const username = draft.username ?? (user.username ?? "");
+  const taggable = draft.taggable ?? (user.taggable ?? true);
+  const [checked, setChecked] = useState<{ u: string; r: Availability } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  // The latest from the server, once: another device may have changed it.
+  useEffect(() => {
+    void refreshUser();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const u = username.trim();
+  const usernameChanged = u !== (user.username ?? "");
+  const problem = u ? usernameProblem(u) : null;
+  const availability: Availability = !u || !usernameChanged ? "idle" : problem ? problem : checked?.u === u ? checked.r : "checking";
+
+  // Availability, a moment after typing stops.
+  useEffect(() => {
+    if (availability !== "checking") return;
+    let live = true;
+    const t = setTimeout(async () => {
+      const tok = await getToken();
+      if (!live) return;
+      if (!("token" in tok)) {
+        setChecked({ u, r: "unknown" });
+        return;
+      }
+      const a = await checkUsername(tok.token, u);
+      if (!live) return;
+      const e = errorOf(a);
+      setChecked({ u, r: e === "taken" || e === "reserved" || e === "bad" ? e : e ? "unknown" : "ok" });
+    }, 450);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [availability, u, getToken]);
+
+  const canSave = !saving && !!name.trim() && (!usernameChanged || (!!u && (availability === "ok" || availability === "unknown")));
 
   const handleSave = async () => {
+    setError("");
     setSaving(true);
-    const { error } = await updateUserProfile(user.id, {
-      name: name.trim(),
-      phone: phone.trim() || undefined,
-    });
-    setSaving(false);
-
-    if (!error) {
-      // Update localStorage for phone users so refreshUser picks up changes
-      const stored = localStorage.getItem("user");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          parsed.name = name.trim();
-          if (phone.trim()) parsed.phone = phone.trim();
-          localStorage.setItem("user", JSON.stringify(parsed));
-        } catch { /* ignore */ }
+    try {
+      const tok = await getToken();
+      if (!("token" in tok)) {
+        if ("unknown" in tok) setError("Couldn't reach TapTurf. Check your connection and try again.");
+        return;
       }
+      const patch: { name?: string; username?: string; taggable?: boolean } = { name: name.trim() };
+      if (u) {
+        patch.username = u;
+        patch.taggable = taggable;
+      }
+      const a = await patchMe(tok.token, patch);
+      const p = profileOf(a);
+      if (p) applyProfile(p);
+      const e = errorOf(a);
+      if (e) {
+        setError(SAVE_ERROR[e] ?? "Couldn't save. Please try again.");
+        return;
+      }
+      setDraft({});
       setSaved(true);
-      await refreshUser();
       setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
     }
   };
+
+  const status = AVAILABILITY_TEXT[availability];
 
   return (
     <div className="max-w-md">
@@ -54,38 +124,102 @@ export function ProfileSection({ user }: { user: AppUser }) {
             <User className="w-8 h-8 text-gray-500" />
           </div>
         )}
-        <div>
-          <p className="text-lg font-semibold text-gray-900">{user.name}</p>
-          <p className="text-sm text-gray-500 capitalize">{user.role}</p>
+        <div className="min-w-0">
+          <p className="text-lg font-semibold text-gray-900 truncate">{user.name}</p>
+          {user.username ? (
+            <p className="text-sm text-gray-500 truncate">@{user.username}</p>
+          ) : (
+            <p className="text-sm text-gray-500 capitalize">{user.role}</p>
+          )}
         </div>
       </div>
 
       <div className="space-y-5">
         {/* Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+          <label htmlFor="profile-name" className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
           <input
+            id="profile-name"
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
           />
         </div>
 
-        {/* Phone */}
+        {/* Username */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
+          <label htmlFor="profile-username" className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
           <div className="relative">
-            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <AtSign className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91 XXXXX XXXXX"
+              id="profile-username"
+              type="text"
+              value={username}
+              maxLength={20}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="pick a username"
+              aria-describedby="profile-username-status"
+              onChange={(e) => setDraft((d) => ({ ...d, username: e.target.value.replace(/\s/g, "").toLowerCase() }))}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
             />
           </div>
+          <p
+            id="profile-username-status"
+            aria-live="polite"
+            className={`mt-1.5 text-xs min-h-4 ${availability === "ok" ? "text-accent-700" : availability === "checking" ? "text-gray-500" : "text-hot-600"}`}
+          >
+            {status}
+          </p>
+          {usernameChanged && user.username && (
+            <p className="text-xs text-gray-500">Your old username keeps pointing to you, and nobody else can take it.</p>
+          )}
         </div>
+
+        {/* Find and tag */}
+        <div className={username.trim() ? "" : "opacity-50"}>
+          <label className="flex items-start justify-between gap-4 cursor-pointer">
+            <span>
+              <span className="block text-sm font-medium text-gray-700">Let others find and tag me</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Friends who score live matches can tag you as a player. Off also hides your profile page.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={taggable}
+              disabled={!username.trim()}
+              onChange={(e) => setDraft((d) => ({ ...d, taggable: e.target.checked }))}
+              className="mt-1 w-10 h-6 shrink-0 accent-accent-600 cursor-pointer"
+            />
+          </label>
+          {user.username && user.taggable !== false && (
+            <Link href={`/u/${user.username}`} className="inline-block mt-2 text-sm font-semibold text-accent-700 underline underline-offset-2">
+              See your public profile
+            </Link>
+          )}
+        </div>
+
+        {/* Phone (read-only: it is the login number) */}
+        {user.phone && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
+            <div className="relative">
+              <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="tel"
+                value={user.phone}
+                disabled
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500">Only you can see this.</p>
+          </div>
+        )}
 
         {/* Email (read-only) */}
         {user.email && (
@@ -103,10 +237,12 @@ export function ProfileSection({ user }: { user: AppUser }) {
           </div>
         )}
 
+        {error && <p className="text-sm text-hot-600 font-medium" role="alert">{error}</p>}
+
         {/* Save button */}
         <button
           onClick={handleSave}
-          disabled={saving || !name.trim()}
+          disabled={!canSave}
           className="flex items-center justify-center gap-2 w-full bg-gray-900 text-white py-3 rounded-xl font-semibold text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
         >
           <Save className="w-4 h-4" />
