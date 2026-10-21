@@ -1,9 +1,9 @@
 /**
- * The free cricket tools under /tools. One list drives the hub, the
- * footer link, the sitemap, related-tool links and each page's metadata.
+ * The free tools under /tools. One list drives the hub, the footer link,
+ * the sitemap, related-tool links and each page's metadata.
  */
 
-export type ToolSlug = "cricket-nrr-calculator" | "cricket-toss" | "cricket-scorecard-maker" | "cricket-live-scorer" | "cricket-tournament-scorer" | "cricket-team-generator";
+export type ToolSlug = "cricket-nrr-calculator" | "cricket-toss" | "cricket-scorecard-maker" | "cricket-live-scorer" | "live-scoreboard" | "cricket-tournament-scorer" | "cricket-team-generator";
 
 export type ToolDef = {
   slug: ToolSlug;
@@ -73,6 +73,19 @@ export const TOOLS: ToolDef[] = [
     h1: "Live Cricket Scorer",
     cta: { label: "Find a box cricket turf near you", href: "/sport/box-cricket" },
     related: ["cricket-scorecard-maker", "cricket-toss", "cricket-team-generator"],
+  },
+  {
+    slug: "live-scoreboard",
+    key: "live_scoreboard",
+    name: "Live Scoreboard",
+    tagline: "Live score for football, badminton and more.",
+    title: "Live Scoreboard for Football, Badminton, Basketball & More | TapTurf",
+    // No live link promise here: the page hides live links when the server has no write key.
+    description:
+      "Free live scoreboard for football, badminton, basketball, volleyball, pickleball, tennis and more. Tap to score on your phone and share it on WhatsApp.",
+    h1: "Live Scoreboard",
+    cta: { label: "Find a turf or court near you", href: "/turfs" },
+    related: ["cricket-team-generator", "cricket-toss", "cricket-live-scorer"],
   },
   {
     slug: "cricket-tournament-scorer",

@@ -1,6 +1,7 @@
 // Relative, not "@/", so live.test.ts compiles on its own (npm run test:scorer).
 import { useEffect, useRef, useState } from "react";
 import type { MatchView } from "../../../lib/cricket/scoring";
+import { BOARD_SPORTS, type BoardShape, type BoardSport } from "../../../lib/board/types";
 import {
   LIVE_CODE_RE,
   LIVE_KEEPALIVE_MAX_BYTES,
@@ -15,7 +16,7 @@ import {
   type LiveStopBody,
   type LiveSyncState,
 } from "../../../lib/live/types";
-import { loadLinks, loadMatch, saveLink } from "./storage";
+import { loadLinks, saveLink } from "./links";
 
 /**
  * The scorer's side of a live link (lib/live/types.ts has the flow).
@@ -49,8 +50,11 @@ export function nextRev(rev: number, now: number): number {
   return Math.max(now, rev + 1);
 }
 
+/** What a send's urgency is read from: a cricket MatchView, or a board's boardShape(view) (one "innings" per finished period or set). */
+export type LiveShape = Pick<MatchView, "status" | "innings"> | BoardShape;
+
 /** Status and innings count. When either changes, the send skips the throttle, so followers see an innings or match end at once. */
-export function shapeOf(view: { status: MatchView["status"]; innings: readonly unknown[] }): string {
+export function shapeOf(view: LiveShape): string {
   return `${view.status}:${view.innings.length}`;
 }
 
@@ -195,19 +199,33 @@ export function linkUrl(code: string): string {
   return liveUrl(window.location.origin, code);
 }
 
+/** Control characters out, spaces single, trimmed and cut: a query value typed by anyone. */
+const plain = (x: string | null, max: number) =>
+  (x ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+    .trim();
+
 /**
- * A game reminder's ?venue and ?from=game (which turns the live link
- * on), and the query string without them: read once, so a reload in
- * the middle of the match resumes it instead of offering a new one.
+ * A game reminder's ?venue, ?from=game (which turns the live link on),
+ * and for the Live Scoreboard ?sport (a board sport, else null) and
+ * &name (the game's own name, for "Other sport"); and the query string
+ * without any of them: read once, so a reload in the middle of the match
+ * resumes it instead of offering a new one. The cricket scorer ignores
+ * sport and name.
  */
-export function readReminder(search: string): { venue: string; fromGame: boolean; rest: string } {
+export function readReminder(search: string): { venue: string; fromGame: boolean; sport: BoardSport | null; name: string; rest: string } {
   const q = new URLSearchParams(search);
   const venue = (q.get("venue") ?? "").trim().slice(0, 48);
   const fromGame = q.get("from") === "game";
-  q.delete("venue");
-  q.delete("from");
+  const s = plain(q.get("sport"), 24).toLowerCase();
+  const sport = BOARD_SPORTS.find((x) => x === s) ?? null;
+  const name = plain(q.get("name"), 32);
+  for (const k of ["venue", "from", "sport", "name"]) q.delete(k);
   const rest = q.toString();
-  return { venue, fromGame, rest: rest ? `?${rest}` : "" };
+  return { venue, fromGame, sport, name, rest: rest ? `?${rest}` : "" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -389,7 +407,7 @@ export function createLiveSync(io: LiveIo) {
 
   return {
     /** A local edit to this match, already saved. */
-    changed(id: string, view: { status: MatchView["status"]; innings: readonly unknown[] }) {
+    changed(id: string, view: LiveShape) {
       const r = run(id);
       r.shape = shapeOf(view);
       const link = linkOf(id);
@@ -531,7 +549,7 @@ function timeoutSignal(ms: number): AbortSignal {
   return c.signal;
 }
 
-const browserIo: Omit<LiveIo, "emit"> = {
+const browserIo: Omit<LiveIo, "emit" | "match"> = {
   now: () => Date.now(),
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
@@ -549,23 +567,37 @@ const browserIo: Omit<LiveIo, "emit"> = {
   },
   links: () => loadLinks().links,
   saveLink,
-  match: loadMatch,
   secret: () => makeSecret(crypto.getRandomValues(new Uint8Array(32))),
 };
+
+/**
+ * The browser's I/O, reading each match through load: the cricket
+ * scorer's loadMatch, or the Live Scoreboard's board loader (which
+ * stamps sentAt). Passed in, so neither tool's bundle loads the other's
+ * engine. It runs right before each PUT body is
+ * built, retries and keepalive flushes included.
+ */
+export function browserIoFor(load: (id: string) => unknown): Omit<LiveIo, "emit"> {
+  return { ...browserIo, match: load };
+}
 
 const NO_LINKS: LiveSnapshot = { links: {}, net: {} };
 
 /**
- * Live links for LiveScorer, which stays mounted while the scorer opens
- * and closes. Off (enabled false): no listeners and no requests.
+ * Live links for LiveScorer and LiveScoreboard, which stay mounted while
+ * the scorer opens and closes. Off (enabled false): no listeners and no
+ * requests. opts.load reads a match by id for sending (the cricket
+ * scorer's loadMatch, or the board loader); it is read once, at mount, so an inline opts object does
+ * not rebuild the sync on every render.
  */
-export function useLiveSync(enabled: boolean) {
+export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unknown }) {
   const [snap, setSnap] = useState<LiveSnapshot>(NO_LINKS);
   const ref = useRef<LiveSync | null>(null);
+  const [load] = useState(() => opts.load);
 
   useEffect(() => {
     if (!enabled) return;
-    const sync: LiveSync = createLiveSync({ ...browserIo, emit: () => setSnap(sync.snapshot()) });
+    const sync: LiveSync = createLiveSync({ ...browserIoFor(load), emit: () => setSnap(sync.snapshot()) });
     ref.current = sync;
     const wake = () => sync.wake();
     const onVisibility = () => (document.visibilityState === "hidden" ? sync.flushAll(false) : sync.wake());
@@ -591,12 +623,12 @@ export function useLiveSync(enabled: boolean) {
       sync.dispose();
       ref.current = null;
     };
-  }, [enabled]);
+  }, [enabled, load]);
 
   return {
     info: (id: string): LiveInfo => liveInfo(snap.links[id] ?? null, snap.net[id]),
-    /** Call from persist(), after the match is saved. */
-    changed: (id: string, view: MatchView) => ref.current?.changed(id, view),
+    /** Call from persist(), after the match is saved: a MatchView, or boardShape(view) for a board. */
+    changed: (id: string, view: LiveShape) => ref.current?.changed(id, view),
     start: async (id: string): Promise<LiveFault | null> => (ref.current ? ref.current.start(id) : "unavailable"),
     stop: async (id: string): Promise<boolean> => (ref.current ? ref.current.stop(id) : false),
     move: (from: string, to: string): boolean => ref.current?.move(from, to) ?? false,

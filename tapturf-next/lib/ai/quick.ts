@@ -264,6 +264,8 @@ const SMALL_TALK: [string[], string, (onTurf: boolean) => string][] = [
 ];
 
 type ToolSlug = NonNullable<AskFilters["tool"]>;
+/** The Live Scoreboard's sports as players type them. */
+const BOARD_SPORT_WORDS = ["football", "futsal", "basketball", "volleyball", "badminton", "pickleball", "tennis", "table tennis", "padel"];
 const TOOLS: [ToolSlug, string[], string, string][] = [
   [
     "cricket-nrr-calculator",
@@ -299,6 +301,17 @@ const TOOLS: [ToolSlug, string[], string, string][] = [
     "TapTurf has a free live scorer for exactly this, no sign-in needed. One tap a ball, and the scorecard, run rate and overs keep themselves up to date.",
   ],
   [
+    // A sport named with a score word; a plain "live score" or "score counter" stays with cricket above.
+    "live-scoreboard",
+    [
+      ...BOARD_SPORT_WORDS.flatMap((s) => [`${s} score`, `${s} scorer`, `${s} score counter`, `${s} scoreboard`, `${s} score board`, `${s} scoring app`]),
+      "scoreboard", "score board", "live scoreboard", "scoreboard app", "score keeper", "scorekeeper",
+      "keep score", "keep the score", "keep score of our game", "keep score of the game", "keep score of any sport", "keep score for any sport",
+    ],
+    "Keep score of a game",
+    "TapTurf has a free live scoreboard for exactly this, no sign-in needed. One tap a point or a goal, and the sets, halves and clock keep themselves up to date.",
+  ],
+  [
     "cricket-tournament-scorer",
     ["points table", "make a points table", "points table maker", "tournament scorer", "track our tournament", "track my tournament", "league table"],
     "Track a tournament points table",
@@ -311,7 +324,13 @@ const TOOL_ASKS: Record<ToolSlug, string> = {
   "cricket-team-generator": "Divide players into teams",
   "cricket-scorecard-maker": "Make a scorecard",
   "cricket-live-scorer": "Score our match live",
+  "live-scoreboard": "Keep score of any sport",
   "cricket-tournament-scorer": "Make a points table",
+};
+/** Tools to offer first after a hit, so the two scorers point at each other; the rest follow in TOOL_ASKS order. */
+const NEXT_TOOLS: Partial<Record<ToolSlug, ToolSlug[]>> = {
+  "cricket-live-scorer": ["live-scoreboard"],
+  "live-scoreboard": ["cricket-team-generator", "cricket-live-scorer"],
 };
 
 const COMPARE_ANY = new Set(["compare two turfs", "compare two venues", "compare two grounds", "compare 2 turfs", "compare 2 venues", "compare turfs", "compare venues"]);
@@ -331,7 +350,8 @@ function smallTalk(key: string, query: string, ctx: QuickContext): AskFilters | 
   }
   for (const [slug, phrases, summary, reply] of TOOLS) {
     if (!phrases.includes(key)) continue;
-    const followups = (Object.keys(TOOL_ASKS) as ToolSlug[]).filter((s) => s !== slug).slice(0, 3).map((s) => TOOL_ASKS[s]);
+    const next = [...(NEXT_TOOLS[slug] ?? []), ...(Object.keys(TOOL_ASKS) as ToolSlug[])];
+    const followups = next.filter((s, i) => s !== slug && next.indexOf(s) === i).slice(0, 3).map((s) => TOOL_ASKS[s]);
     return { ...blank(), intent: "tool", tool: slug, summary, reply, followups };
   }
   if (COMPARE_ANY.has(key)) {

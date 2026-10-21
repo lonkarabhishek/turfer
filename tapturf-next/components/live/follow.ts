@@ -1,10 +1,12 @@
 import { LIVE_CODE_RE, LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
+import type { Board, BoardView } from "../../lib/board/types";
 
 /**
  * The follower page's rules (/live/<code>): which poll answer to show,
  * when to poll next, and how old the score is, worked out from the
- * server's clock, since budget phones are often minutes off. Also the
- * handoff to the scorecard maker for "Make the result card".
+ * server's clock, since budget phones are often minutes off; a board's
+ * clock as the scorer sees it. Also the handoff to the scorecard maker
+ * for "Make the result card".
  * No React and relative imports only, so follow.test.ts can run it with
  * fake timers.
  */
@@ -25,7 +27,7 @@ export const QUIET_MS = 3 * 60 * 60_000;
 const STATUSES: readonly FollowStatus[] = ["waiting", "live", "done", "stopped", "expired"];
 const FINAL: readonly FollowStatus[] = ["stopped", "expired"];
 
-/** A GET /api/live/<code> body, checked. The match is left for sanitizeMatch. */
+/** A GET /api/live/<code> body, checked. The match is left for sanitizeLive. */
 export function readLive(body: unknown): LiveGetResponse | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
@@ -108,20 +110,69 @@ export function pauseOf(v: { status: "live" | "done"; inningsBreak: boolean; cur
 
 const PAUSED: Record<Exclude<Pause, null>, string> = { break: "Innings break.", start: "Waiting for the first ball." };
 
+/** A cricket pause in words, for freshness(). */
+export function pauseText(p: Pause): string | null {
+  return p ? PAUSED[p] : null;
+}
+
+/** Past a timed period's length a running clock no longer explains the quiet: stoppage time is rarely this long. */
+export const CLOCK_GRACE_MS = 15 * 60_000;
+
+/**
+ * Whether a live board is in a spell where the scorer has nothing to
+ * send, in words, or null. shownMs is the clock as shown now (clockMs at
+ * boardNow). A 0-0 football half sends nothing for 20 minutes by design,
+ * and so do a badminton interval and a volleyball set break.
+ */
+export function boardPause(
+  v: Pick<BoardView, "status" | "eventCount" | "needsServe" | "period" | "sets" | "clock" | "timeline">,
+  shownMs: number | null,
+): string | null {
+  if (v.status !== "live") return null;
+  if (v.eventCount === 0 || v.needsServe) return "Waiting for the start.";
+  if (v.period?.break) return `${v.period.label}.`;
+  const c = v.clock;
+  if (c?.running && shownMs !== null && (c.down ? shownMs > 0 : c.limitMs === null || shownMs < c.limitMs + CLOCK_GRACE_MS)) return "Clock running.";
+  const last = v.sets[v.sets.length - 1];
+  if (v.sets.length > 1 && last && last.a === 0 && last.b === 0) return "Between games.";
+  // Names and the first serve picked, nothing scored and the clock never started: the game has not begun.
+  const clockStarted = !!c && (c.running || (c.down ? c.limitMs !== null && c.ms < c.limitMs : c.ms > 0));
+  if (!clockStarted && !v.timeline.some((l) => l.tone === "score")) return "Waiting for the start.";
+  return null;
+}
+
+/**
+ * The scorer's "now" for a board's clock, from the follower's server
+ * time: when this copy was sent (sentAt, the scorer's clock) plus how long
+ * the server has had it. Anchored on the send, not the last event, so an
+ * undo or a send held back offline does not set the clock back. null
+ * when there is nothing to anchor on.
+ */
+export function boardNow(board: Pick<Board, "sentAt">, view: Pick<BoardView, "lastAt">, updatedAtMs: number, serverNow: number): number | null {
+  const anchor = board.sentAt ?? view.lastAt;
+  return anchor == null ? null : anchor + Math.max(0, serverNow - updatedAtMs);
+}
+
 export type Freshness = { tone: "live" | "paused" | "quiet" | "stopped" | "done"; text: string };
 
 /**
  * The line under the score for a live or finished match. age is by the
- * server's clock. In a pause the scorer has nothing to send, so a quiet
- * spell there is not called offline; past QUIET_MS it is called stopped
- * all the same.
+ * server's clock; pause is the planned gap in words (pauseText,
+ * boardPause), or null. In a pause the scorer has nothing to send, so a
+ * quiet spell there is not called offline; past QUIET_MS it is called
+ * stopped all the same.
  */
-export function freshness(status: Extract<LiveStatus, "live" | "done">, age: number, pause: Pause = null): Freshness {
+export function freshness(status: Extract<LiveStatus, "live" | "done">, age: number, pause: string | null = null): Freshness {
   if (status === "done") return { tone: "done", text: `Final score. Last update ${ago(age)}.` };
   if (age < FRESH_MS) return { tone: "live", text: `Updated ${ago(age)}` };
-  if (age <= QUIET_MS && pause) return { tone: "paused", text: `${PAUSED[pause]} Last update ${ago(age)}.` };
+  if (age <= QUIET_MS && pause) return { tone: "paused", text: `${pause} Last update ${ago(age)}.` };
   if (age <= QUIET_MS) return { tone: "quiet", text: `No update for ${span(age)}. The scorer may be offline.` };
   return { tone: "stopped", text: `This match stopped updating. Last update ${ago(age)}.` };
+}
+
+/** The LIVE badge: while updates keep coming, or while a running clock explains why none do (hold). */
+export function liveBadgeOn(age: number, hold: boolean): boolean {
+  return age < FRESH_MS || (hold && age <= QUIET_MS);
 }
 
 /* ------------------------------------------------------------------ */

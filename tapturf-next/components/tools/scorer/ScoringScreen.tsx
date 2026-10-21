@@ -10,6 +10,8 @@ import { BatterSheet, BowlerSheet, ConfirmSheet, MoreSheet, OpenersSheet, Player
 import type { PanelActions } from "./Tabs";
 import { MatchTabs, ScoreHeader, type MatchTab } from "./MatchHeader";
 import { pillTone, type LiveInfo } from "./live";
+import { WatchCount } from "@/components/live/WatchCount";
+import type { Watchers } from "@/components/live/watch";
 
 export const TOOL = "live_scorer";
 const SHEET_FLAG = "tapturfSheet";
@@ -83,6 +85,7 @@ export function ScoringScreen({
   onNewMatch,
   onResultCard,
   live,
+  watchers = null,
 }: {
   match: Match;
   onChange: (m: Match) => void;
@@ -91,6 +94,8 @@ export function ScoringScreen({
   onResultCard: (v: MatchView) => void;
   /** Left out when the site has no live links. */
   live?: ShareLive;
+  /** How many followers have the live link open (useWatchers), shown by the LIVE pill. */
+  watchers?: Watchers | null;
 }) {
   const view = useMemo(() => derive(match), [match]);
   const [tab, setTab] = useState<MatchTab>("live");
@@ -376,7 +381,14 @@ export function ScoringScreen({
           onShare={() => openSheet({ k: "share" })}
           onMore={() => openSheet({ k: "more" })}
           onPlayer={onPlayer}
-          badge={live && pillTone(live.info) ? <LivePill info={live.info} onClick={() => openSheet({ k: "share" })} /> : undefined}
+          badge={
+            live && pillTone(live.info) ? (
+              <>
+                <LivePill info={live.info} onClick={() => openSheet({ k: "share" })} />
+                <WatchCount watchers={watchers} tone="dark" />
+              </>
+            ) : undefined
+          }
         />
 
         {/* Tabs */}

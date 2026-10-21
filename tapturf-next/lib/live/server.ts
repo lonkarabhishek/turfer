@@ -4,7 +4,9 @@ import { revalidateTag, unstable_cache } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createReadOnlyClient } from "../supabase/server";
 import { createGuardedFetch, defaultGuardOptions } from "../supabase/guard";
-import { derive, publicMatch, sanitizeMatch, type Match } from "../cricket/scoring";
+import { derive, publicMatch } from "../cricket/scoring";
+import { deriveBoard, publicBoard } from "../board/index";
+import { isLiveBoard, sanitizeLive, type LiveMatch } from "./match";
 import {
   LIVE_MAX_MATCH_CHARS,
   LIVE_MAX_REV,
@@ -250,18 +252,19 @@ export function parsePutBody(raw: unknown): LivePutBody | null {
 }
 
 /**
- * The match a PUT stores and followers are served. Rebuilt from the
- * engine's whitelist (sanitizeMatch), so only what the engine makes is
- * kept, never the client's objects; then every player name is folded to
- * its latest value (publicMatch), so a player renamed mid-match is not
- * served under the old name. Size is checked on that, what is stored.
+ * The match a PUT stores and followers are served: a cricket match or a
+ * Live Scoreboard board. Rebuilt from its engine's whitelist
+ * (sanitizeLive), so only what the engine makes is kept, never the
+ * client's objects; then every name is folded to its latest value
+ * (publicMatch, publicBoard), so a player or team renamed mid-match is
+ * not served under the old name. Size is checked on that, what is stored.
  */
-export function liveMatchToStore(raw: unknown): { match: Match; status: "live" | "done" } | { error: "bad" | "too_big" } {
-  const clean = sanitizeMatch(raw);
+export function liveMatchToStore(raw: unknown): { match: LiveMatch; status: "live" | "done" } | { error: "bad" | "too_big" } {
+  const clean = sanitizeLive(raw);
   if (!clean) return { error: "bad" };
-  const match = publicMatch(clean);
+  const match = isLiveBoard(clean) ? publicBoard(clean) : publicMatch(clean);
   if (JSON.stringify(match).length > LIVE_MAX_MATCH_CHARS) return { error: "too_big" };
-  return { match, status: derive(match).status };
+  return { match, status: isLiveBoard(match) ? deriveBoard(match).status : derive(match).status };
 }
 
 export function parseStopBody(raw: unknown): LiveStopBody | null {

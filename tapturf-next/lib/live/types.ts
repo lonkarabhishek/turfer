@@ -6,7 +6,9 @@
  * Flow. The scorer turns on a live link: their browser asks the server
  * for a code (POST /api/live/new, no database), makes a secret of its
  * own, and from then on sends the whole match after each change
- * (PUT /api/live/<code>). The first send creates the row. Followers
+ * (PUT /api/live/<code>). The first send creates the row. A match is a
+ * cricket Match (Live Cricket Scorer) or a Board (Live Scoreboard,
+ * kind "board"); lib/live/match.ts sanitizeLive reads either. Followers
  * open /live/<code> and poll GET /api/live/<code>, which Vercel's CDN
  * and the Next data cache answer, so the database sees about one read
  * per write however many people follow.
@@ -17,7 +19,7 @@ export const LIVE_CODE_RE = /^[a-z0-9]{12}$/;
 /** 32 random bytes as hex, made in the scorer's browser. Only its sha256 is stored. */
 export const LIVE_SECRET_RE = /^[0-9a-f]{64}$/;
 
-/** Sanitised match JSON larger than this is refused (a 100 over match is about 90 KB). */
+/** Sanitised match JSON larger than this is refused (a 100 over match is about 90 KB; a five set tennis board far less). */
 export const LIVE_MAX_MATCH_CHARS = 160_000;
 /** Request bodies larger than this are refused before parsing. */
 export const LIVE_MAX_BODY_BYTES = 200_000;
@@ -41,7 +43,7 @@ export const LIVE_POLL_TIMEOUT_MS = 8_000;
 
 export type LiveStatus = "live" | "done" | "stopped" | "expired";
 
-/** GET /api/live/<code> body (200). match is sanitised; null once stopped or expired. */
+/** GET /api/live/<code> body (200). match is sanitised (a Match or a Board); null once stopped or expired. */
 export type LiveGetResponse = {
   /** null: the code is valid but the scorer's first update has not arrived yet. */
   status: LiveStatus | "waiting";
@@ -54,7 +56,7 @@ export type LiveGetResponse = {
 /** POST /api/live/new response. */
 export type LiveNewResponse = { code: string } | { error: LiveError };
 
-/** PUT /api/live/<code> body. match is the scorer's whole Match. */
+/** PUT /api/live/<code> body. match is the scorer's whole Match, or Board with sentAt set at send. */
 export type LivePutBody = { secret: string; match: unknown; rev: number };
 /** The highest rev a PUT may carry (2^52), so the +1 a stop or an expiry adds stays a safe integer. Date.now() is far below it. */
 export const LIVE_MAX_REV = 2 ** 52;
@@ -79,10 +81,11 @@ export type LiveError = "stale" | "slow" | "forbidden" | "gone" | "limit" | "bus
 export type LivePutResponse = { ok: true; rev: number } | { error: LiveError; rev?: number };
 
 /**
- * The scorer's record of a link, per match id, in localStorage under
- * LIVE_LINKS_KEY. Kept outside the "tapturf_scorer" prefix on purpose:
- * LiveScorer reloads matches on every storage event with that prefix,
- * and link bookkeeping must not wake the other tab.
+ * The scorer's record of a link, per match id ("m..." cricket, "b..."
+ * boards), in localStorage under LIVE_LINKS_KEY. Kept outside the
+ * "tapturf_scorer" prefix on purpose: LiveScorer reloads matches on
+ * every storage event with that prefix, and link bookkeeping must not
+ * wake the other tab.
  */
 export const LIVE_LINKS_KEY = "tapturf_live_links_v1";
 

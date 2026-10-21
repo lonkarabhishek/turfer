@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
+// The eye count's tests run with these: test:live runs this file (package.json lists each test file).
+import "./watch.test";
 import assert from "node:assert/strict";
 import {
   FAIL_BACKOFF_MS,
@@ -7,14 +9,19 @@ import {
   WAIT_POLL_FOR_MS,
   WAIT_POLL_MS,
   WAIT_SLOW_POLL_MS,
+  CLOCK_GRACE_MS,
   ago,
+  boardNow,
+  boardPause,
   cardFrom,
   clockNow,
   freshness,
   isNewer,
   joinClock,
+  liveBadgeOn,
   nextPoll,
   pauseOf,
+  pauseText,
   readLive,
   resultCardHref,
   serverTimeOf,
@@ -25,6 +32,8 @@ import {
 } from "./follow";
 import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, type LiveGetResponse } from "../../lib/live/types";
 import { apply, check, derive, newMatch, type Match, type MatchEvent } from "../../lib/cricket/scoring";
+import { applyBoard, checkBoard, clockMs, deriveBoard, newBoard, undoBoard } from "../../lib/board/index";
+import type { Board, BoardEvent } from "../../lib/board/types";
 
 const MIN = 60_000;
 
@@ -119,17 +128,20 @@ test("the live line turns amber after 2 min and gives up after 3 hours", () => {
 });
 
 test("an innings break or a match before its first ball is not called offline", () => {
-  assert.deepEqual(freshness("live", 6 * MIN, "break"), { tone: "paused", text: "Innings break. Last update 6 min ago." });
-  assert.deepEqual(freshness("live", 6 * MIN, "start"), { tone: "paused", text: "Waiting for the first ball. Last update 6 min ago." });
+  const brk = pauseText("break");
+  const start = pauseText("start");
+  assert.deepEqual(freshness("live", 6 * MIN, brk), { tone: "paused", text: "Innings break. Last update 6 min ago." });
+  assert.deepEqual(freshness("live", 6 * MIN, start), { tone: "paused", text: "Waiting for the first ball. Last update 6 min ago." });
   // Fresh is fresh, paused or not.
-  assert.deepEqual(freshness("live", 20_000, "break"), { tone: "live", text: "Updated 20 s ago" });
-  assert.equal(freshness("live", QUIET_MS, "break").tone, "paused");
+  assert.deepEqual(freshness("live", 20_000, brk), { tone: "live", text: "Updated 20 s ago" });
+  assert.equal(freshness("live", QUIET_MS, brk).tone, "paused");
   // A pause that lasts 3 hours is called stopped all the same.
-  assert.equal(freshness("live", QUIET_MS + MIN, "break").tone, "stopped");
-  assert.equal(freshness("live", QUIET_MS + MIN, "start").tone, "stopped");
+  assert.equal(freshness("live", QUIET_MS + MIN, brk).tone, "stopped");
+  assert.equal(freshness("live", QUIET_MS + MIN, start).tone, "stopped");
   // With balls bowled, a quiet scorer may be offline.
-  assert.equal(freshness("live", 6 * MIN, null).tone, "quiet");
-  assert.equal(freshness("done", 6 * MIN, "break").tone, "done");
+  assert.equal(pauseText(null), null);
+  assert.equal(freshness("live", 6 * MIN, pauseText(null)).tone, "quiet");
+  assert.equal(freshness("done", 6 * MIN, brk).tone, "done");
 });
 
 const PLAYERS = { a: ["Amit", "Rahul", "Karan"], b: ["Sameer", "Vikas", "Nikhil"] };
@@ -166,12 +178,125 @@ test("the pause comes from the match: before the first ball, and the innings bre
   assert.equal(pauseOf(derive(m)), null);
 });
 
+/* ------------------------------------------------------------------ */
+/* Boards: the follower's clock and the pauses                         */
+/* ------------------------------------------------------------------ */
+
+const B0 = Date.parse("2026-10-20T10:00:00Z");
+/** The server's clock runs 90 s ahead of the scorer's phone: only differences of server times may count. */
+const SKEW = 90_000;
+/** Apply board events, failing the test on any refused one. */
+function play(b: Board, ...events: BoardEvent[]): Board {
+  for (const e of events) {
+    assert.equal(checkBoard(b, e), null, JSON.stringify(e));
+    b = applyBoard(b, e);
+  }
+  return b;
+}
+const football = (halfMinutes = 20) => newBoard("football", { teamA: "Red FC", teamB: "Blue FC", rules: { halfMinutes } }, { id: "bfoot", now: B0 });
+/** What the follower shows: the clock at boardNow for a copy the server took at updatedAt, read at serverNow. */
+const followerClock = (b: Board, updatedAt: number, serverNow: number) => {
+  const v = deriveBoard(b);
+  const t = boardNow(b, v, updatedAt, serverNow);
+  return t === null ? null : clockMs(v, t);
+};
+
+test("board clock: an undo does not set the follower's clock back", () => {
+  // Kick off 10:00:00, goal 10:10:00, goal undone 10:10:05, sent then.
+  let b = play(football(), { type: "clock", run: true, at: B0 }, { type: "point", side: "a", how: "goal", at: B0 + 10 * MIN });
+  b = undoBoard(b);
+  const sent = { ...b, sentAt: B0 + 10 * MIN + 5_000 };
+  const updatedAt = B0 + 10 * MIN + 6_000 + SKEW;
+  assert.equal(followerClock(sent, updatedAt, updatedAt), 10 * MIN + 5_000);
+  assert.equal(followerClock(sent, updatedAt, updatedAt + MIN), 11 * MIN + 5_000);
+  // Without sentAt the newest event (the kick off) is all there is: the clock read 0:00 here.
+  assert.equal(followerClock(b, updatedAt, updatedAt), 0);
+});
+
+test("board clock: a send held back offline still ticks from when it went", () => {
+  // Kick off 10:00, goal 10:05 with no signal, the send lands 10:12.
+  const b = play(football(), { type: "clock", run: true, at: B0 }, { type: "point", side: "a", how: "goal", at: B0 + 5 * MIN });
+  const sent = { ...b, sentAt: B0 + 12 * MIN };
+  const updatedAt = B0 + 12 * MIN + 400 + SKEW;
+  assert.equal(followerClock(sent, updatedAt, updatedAt), 12 * MIN);
+  // A CDN copy read 10 s on, or a server time a little behind the row's: never earlier than the send.
+  assert.equal(followerClock(sent, updatedAt, updatedAt + 10_000), 12 * MIN + 10_000);
+  assert.equal(followerClock(sent, updatedAt, updatedAt - 3_000), 12 * MIN);
+  // Paused clocks do not move however old the copy is.
+  const paused = { ...play(b, { type: "clock", run: false, at: B0 + 12 * MIN }), sentAt: B0 + 12 * MIN };
+  assert.equal(followerClock(paused, updatedAt, updatedAt + 30 * MIN), 12 * MIN);
+  // No sentAt and no `at` anywhere: nothing to anchor on.
+  const plain = newBoard("other", {}, { id: "bplain", now: B0 });
+  assert.equal(boardNow(plain, deriveBoard(plain), updatedAt, updatedAt), null);
+});
+
+test("board pause: a running clock with nothing to send is not called offline, within the half and its grace", () => {
+  let b = football(45);
+  assert.equal(boardPause(deriveBoard(b), null), "Waiting for the start.");
+  b = play(b, { type: "clock", run: true, at: B0 });
+  const sent = { ...b, sentAt: B0 };
+  const updatedAt = B0 + SKEW;
+  const at = (ms: number) => {
+    const v = deriveBoard(sent);
+    const pause = boardPause(v, followerClock(sent, updatedAt, updatedAt + ms));
+    return { pause, fresh: freshness("live", ms, pause), badge: liveBadgeOn(ms, pause === "Clock running.") };
+  };
+  // A 0-0 spell of 20 minutes: paused, and the LIVE badge stays.
+  const quiet20 = at(20 * MIN);
+  assert.equal(quiet20.pause, "Clock running.");
+  assert.deepEqual(quiet20.fresh, { tone: "paused", text: "Clock running. Last update 20 min ago." });
+  assert.equal(quiet20.badge, true);
+  // 45+16: past stoppage time anyone plays, so the scorer may be offline after all.
+  const late = at(45 * MIN + CLOCK_GRACE_MS + MIN);
+  assert.equal(late.pause, null);
+  assert.equal(late.fresh.tone, "quiet");
+  assert.equal(late.badge, false);
+  // Half time is a pause of its own.
+  const ht = deriveBoard(play(b, { type: "period", at: B0 + 46 * MIN }));
+  assert.equal(ht.period?.break, true);
+  assert.equal(boardPause(ht, clockMs(ht, B0 + 50 * MIN)), `${ht.period?.label}.`);
+  assert.match(boardPause(ht, null) ?? "", /^Half time\.$/);
+});
+
+test("board pause: before the first point, between games, and never once done", () => {
+  // No first server yet: points wait for it.
+  let b = newBoard("badminton", { teamA: "Asha", teamB: "Ravi", rules: { doubles: false } }, { id: "bbad", now: B0 });
+  b = play(b, { type: "rename", side: "a", name: "Asha K", at: B0 });
+  assert.equal(deriveBoard(b).needsServe, true);
+  assert.equal(boardPause(deriveBoard(b), null), "Waiting for the start.");
+  // First server picked, nothing scored yet.
+  b = play(b, { type: "serve", side: "a", at: B0 + 1_000 });
+  assert.equal(boardPause(deriveBoard(b), null), "Waiting for the start.");
+  b = play(b, { type: "point", side: "a", at: B0 + 2_000 });
+  assert.equal(boardPause(deriveBoard(b), null), null);
+  // Game 1 to Asha: the next game is 0-0 until its first point.
+  for (let i = 1; i < 21; i++) b = play(b, { type: "point", side: "a", at: B0 + 2_000 + i * 1_000 });
+  const v = deriveBoard(b);
+  assert.equal(v.sets.length, 2);
+  assert.equal(boardPause(v, null), "Between games.");
+  b = play(b, { type: "point", side: "b", at: B0 + 60_000 });
+  assert.equal(boardPause(deriveBoard(b), null), null);
+  const done = deriveBoard(play(b, { type: "end", reason: "abandoned", at: B0 + 70_000 }));
+  assert.equal(done.status, "done");
+  assert.equal(boardPause(done, null), null);
+});
+
+test("board pause: a count down clock holds only while time is left", () => {
+  const b = play(newBoard("basketball", { teamA: "Hoops", teamB: "Dunkers" }, { id: "bball", now: B0 }), { type: "clock", run: true, at: B0 });
+  const v = deriveBoard(b);
+  assert.equal(v.clock?.down, true);
+  assert.equal(boardPause(v, clockMs(v, B0 + 4 * MIN)), "Clock running.");
+  // The quarter's time is up and nobody pressed End quarter: no reason for the quiet any more.
+  assert.equal(boardPause(v, clockMs(v, B0 + 60 * MIN)), null);
+});
+
 test("no copy uses a dash as punctuation", () => {
   const lines = [
     freshness("live", 0),
     freshness("live", 6 * MIN),
-    freshness("live", 6 * MIN, "break"),
-    freshness("live", 6 * MIN, "start"),
+    freshness("live", 6 * MIN, pauseText("break")),
+    freshness("live", 6 * MIN, pauseText("start")),
+    freshness("live", 6 * MIN, "Half time."),
     freshness("live", QUIET_MS * 2),
     freshness("done", MIN),
   ].map((f) => f.text);

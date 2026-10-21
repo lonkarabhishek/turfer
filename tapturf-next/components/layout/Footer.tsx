@@ -96,7 +96,7 @@ export async function Footer() {
               </li>
               <li>
                 <Link href="/tools" className="hover:text-white transition-colors">
-                  Free Cricket Tools
+                  Free Sports Tools
                 </Link>
               </li>
               <li>

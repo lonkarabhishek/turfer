@@ -666,6 +666,8 @@ export function restoreMatch(raw: unknown): Match | null {
   try {
     const m = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<Match> | null;
     if (!m || typeof m !== "object" || m.v !== 1 || !m.setup || typeof m.setup !== "object" || !Array.isArray(m.events)) return null;
+    // A Live Scoreboard board (lib/board) has the same outline; read as a match it would be an empty one.
+    if ((m as { kind?: unknown }).kind === "board") return null;
     const events = m.events.filter((e): e is MatchEvent => !!e && typeof e === "object" && typeof (e as MatchEvent).type === "string");
     return { v: 1, id: String(m.id ?? "match"), createdAt: Number(m.createdAt) || 0, setup: normalizeSetup(m.setup), events };
   } catch {
@@ -860,6 +862,8 @@ function readEvent(x: unknown): MatchEvent | null {
  */
 export function sanitizeMatch(raw: unknown): Match | null {
   if (!isObj(raw) || raw.v !== 1 || !isObj(raw.setup) || !Array.isArray(raw.events) || raw.events.length > MAX_EVENTS) return null;
+  // A Live Scoreboard board passes every check above, and every event of it would be dropped as unknown.
+  if (raw.kind === "board") return null;
   const events: MatchEvent[] = [];
   for (const x of raw.events) {
     const e = readEvent(x);

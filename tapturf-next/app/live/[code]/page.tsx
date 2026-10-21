@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { LiveFollow } from "@/components/live/LiveFollow";
-import { derive, sanitizeMatch, type Match } from "@/lib/cricket/scoring";
+import { derive } from "@/lib/cricket/scoring";
+import { deriveBoard } from "@/lib/board";
 import { verifyLiveCode } from "@/lib/live/codes";
+import { isLiveBoard, sanitizeLive, type LiveMatch } from "@/lib/live/match";
 import { getLiveForPage, liveWriteKey } from "@/lib/live/server";
 import type { LiveGetResponse } from "@/lib/live/types";
 
@@ -26,7 +28,7 @@ function known(code: string): boolean {
 type Loaded = {
   /** As GET /api/live/<code> serves it, so the first paint and the polls agree. */
   initial: LiveGetResponse | null;
-  match: Match | null;
+  match: LiveMatch | null;
   /** The server's clock after the read, so the follower's "Updated 20 s ago" does not depend on the phone's. */
   at: number;
 };
@@ -40,7 +42,7 @@ const load = cache(async (code: string): Promise<Loaded> => {
   try {
     const row = await getLiveForPage(code);
     if (!row) return { initial: { status: "waiting", match: null, rev: 0, updatedAt: null }, match: null, at: Date.now() };
-    const match = row.match == null ? null : sanitizeMatch(row.match);
+    const match = row.match == null ? null : sanitizeLive(row.match);
     return { initial: { status: row.status, match, rev: row.rev, updatedAt: row.updated_at }, match, at: Date.now() };
   } catch (e) {
     console.warn("live page: read failed", code, e);
@@ -48,29 +50,41 @@ const load = cache(async (code: string): Promise<Loaded> => {
   }
 });
 
+// No match to read the sport from: the link may be the Live Scoreboard's, so nothing here says cricket.
 const PLAIN_TITLE: Record<LiveGetResponse["status"], string> = {
-  waiting: "Live cricket score",
-  live: "Live cricket score",
-  done: "Cricket scorecard",
+  waiting: "Live score",
+  live: "Live score",
+  done: "Final score",
   stopped: "Live link turned off",
   expired: "Live link expired",
 };
+
+/** Title and description for the link preview: "Football: Red FC vs Blue FC live score", the headline under it. */
+function describe(match: LiveMatch): { title: string; description: string } {
+  if (isLiveBoard(match)) {
+    const v = deriveBoard(match);
+    // "Other sport" with no name typed has nothing to say there ("Game: A vs B" reads oddly).
+    const sport = v.sport === "other" && !(v.setup.rules as { name?: string }).name ? "" : `${v.sportName}: `;
+    return { title: `${sport}${v.teams.a.name} vs ${v.teams.b.name} live score`, description: v.headline };
+  }
+  const v = derive(match);
+  return { title: `${v.setup.teamA} vs ${v.setup.teamB} live score`, description: v.headline };
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { code } = await params;
   if (!known(code)) return { title: "Live score not found", robots: ROBOTS };
   const data = await load(code);
-  if (!data.match) return { title: data.initial ? PLAIN_TITLE[data.initial.status] : "Live cricket score", robots: ROBOTS };
-  const v = derive(data.match);
+  if (!data.match) return { title: data.initial ? PLAIN_TITLE[data.initial.status] : "Live score", robots: ROBOTS };
   // The layout's template adds " | TapTurf".
-  const title = `${v.setup.teamA} vs ${v.setup.teamB} live score`;
+  const { title, description } = describe(data.match);
   return {
     title,
-    description: v.headline,
+    description,
     robots: ROBOTS,
     openGraph: {
       title: `${title} | TapTurf`,
-      description: v.headline,
+      description,
       url: `/live/${code}`,
       siteName: "TapTurf",
       locale: "en_IN",

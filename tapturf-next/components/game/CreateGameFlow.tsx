@@ -366,7 +366,8 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
             </button>
           </div>
 
-          {/cricket/i.test(sport) && <LiveScorerPromo variant="created" venue={turfName} liveLinks={liveLinks} />}
+          {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
+          <LiveScorerPromo sport={sport} variant="created" venue={turfName} liveLinks={liveLinks} />
         </div>
       ) : (
         <>

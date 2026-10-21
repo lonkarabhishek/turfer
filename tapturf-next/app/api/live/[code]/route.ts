@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { sanitizeMatch } from "@/lib/cricket/scoring";
 import { verifyLiveCode } from "@/lib/live/codes";
+import { sanitizeLive } from "@/lib/live/match";
 import {
   createLiveLimiter,
   getLive,
@@ -22,7 +22,7 @@ import { LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib
 //   GET    -> LiveGetResponse, what followers poll. Served by the CDN and
 //             the data cache, so the database sees about one read per
 //             write whatever the follower count.
-//   PUT    { secret, match, rev } -> the scorer's latest match.
+//   PUT    { secret, match, rev } -> the scorer's latest match or board.
 //   DELETE { secret } -> turn the link off.
 // Write answers follow LiveError's table; none of them is cached.
 //
@@ -65,8 +65,9 @@ export async function GET(_req: Request, { params }: Ctx) {
     console.warn("live: read failed", code, e);
     return NextResponse.json({ error: "unavailable" }, { status: 503, headers: NO_STORE });
   }
+  // sanitizeLive, never sanitizeMatch: read as cricket, a stored board would be served as an empty 0/0 scorecard.
   const body: LiveGetResponse = row
-    ? { status: row.status, match: row.match == null ? null : sanitizeMatch(row.match), rev: row.rev, updatedAt: row.updated_at }
+    ? { status: row.status, match: row.match == null ? null : sanitizeLive(row.match), rev: row.rev, updatedAt: row.updated_at }
     : { status: "waiting", match: null, rev: 0, updatedAt: null };
   return NextResponse.json(body, { headers: LIVE_HEADERS });
 }

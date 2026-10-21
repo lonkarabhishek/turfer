@@ -100,7 +100,7 @@ export function ToolPage({ tool, intro, children, explainer, faq }: { tool: Tool
 
       {related.length > 0 && (
         <section className="mt-12">
-          <h2 className="text-[20px] font-display text-primary-900 mb-3">More free cricket tools</h2>
+          <h2 className="text-[20px] font-display text-primary-900 mb-3">More free tools</h2>
           <ul className="grid sm:grid-cols-2 gap-3">
             {related.map((r) => (
               <li key={r.slug}>

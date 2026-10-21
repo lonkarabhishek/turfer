@@ -1,21 +1,51 @@
 import Link from "next/link";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, ArrowRight, Tally5 } from "lucide-react";
+import { readBoardSport, SPORT_LIST } from "@/lib/board/sports";
 import { toolPath } from "@/lib/tools/registry";
 
 /**
- * A reminder to score a cricket game with the Live Scorer, shown once the
- * game is created and on its game page. Plain markup with no state, so it
- * renders inside either client screen; the scorer reads ?venue and
- * ?from=game itself (prefill and the "from game" tool_opened event).
+ * A reminder to score the game live, shown once the game is created and on
+ * its game page. Cricket opens the Live Cricket Scorer; a sport the Live
+ * Scoreboard knows opens that with the sport picked; anything else (swimming)
+ * shows nothing. Plain markup with no state, so it renders inside either
+ * client screen; each tool reads ?sport, ?name, ?venue and ?from=game itself
+ * (prefill and the "from game" tool_opened event).
  */
-export function LiveScorerPromo({ venue, variant, live = false, liveLinks = true }: { venue?: string; variant: "created" | "game"; live?: boolean; liveLinks?: boolean }) {
+export function LiveScorerPromo({ sport, venue, variant, live = false, liveLinks = true }: { sport: string; venue?: string; variant: "created" | "game"; live?: boolean; liveLinks?: boolean }) {
+  const cricket = /cricket/i.test(sport);
+  const board = cricket ? null : readBoardSport(sport);
+  if (!cricket && !board) return null;
+
+  // "Other" keeps the game's own label (Ultimate Frisbee), so the scoreboard is named for it too.
+  const label = board === "other" ? sport.trim() : (SPORT_LIST.find((s) => s.sport === board)?.label ?? sport.trim());
+  const word = label.toLowerCase();
   const place = venue?.trim();
-  const href = `${toolPath("cricket-live-scorer")}?${place ? `venue=${encodeURIComponent(place)}&` : ""}from=game`;
+  const query = [
+    board && `sport=${board}`,
+    board === "other" && `name=${encodeURIComponent(label)}`,
+    place && `venue=${encodeURIComponent(place)}`,
+    "from=game",
+  ]
+    .filter(Boolean)
+    .join("&");
+  const href = `${toolPath(board ? "live-scoreboard" : "cricket-live-scorer")}?${query}`;
+  const by = board === "football" ? "goal by goal" : "point by point";
+
   // On the game page during the slot, this is the thing to do next, so it
   // gets the tinted card and the solid button. Otherwise it stays quiet and
   // never competes with sharing the game.
   const now = variant === "game" && live;
   const Heading = variant === "game" ? "h3" : "h2";
+  const Icon = board ? Tally5 : Activity;
+
+  const heading = board ? `${now ? "Game on? " : ""}Score your ${word} game live` : now ? "Game on? Score it live" : "Score it live on match day";
+  const body = board
+    ? liveLinks
+      ? `Score ${by} on your phone and share one link. Everyone can follow the score live, no app needed.`
+      : `Score ${by} on your phone. The scoreboard keeps itself up to date, ready to share on WhatsApp.`
+    : liveLinks
+      ? "Score ball by ball on your phone and share one link. Everyone can follow the score live, no app needed."
+      : "Score ball by ball on your phone. The scorecard, run rates and graphs keep themselves up to date.";
 
   return (
     <div
@@ -25,15 +55,11 @@ export function LiveScorerPromo({ venue, variant, live = false, liveLinks = true
     >
       <div className="flex items-start gap-3.5">
         <span className={`shrink-0 w-11 h-11 rounded-xl inline-flex items-center justify-center text-accent-700 ${now ? "bg-white" : "bg-accent-50"}`}>
-          <Activity className="w-5 h-5" aria-hidden />
+          <Icon className="w-5 h-5" aria-hidden />
         </span>
         <div className="min-w-0">
-          <Heading className="text-base font-semibold text-primary-800">{now ? "Game on? Score it live" : "Score it live on match day"}</Heading>
-          <p className="mt-1 text-sm text-primary-500 leading-relaxed">
-            {liveLinks
-              ? "Score ball by ball on your phone and share one link. Everyone can follow the score live, no app needed."
-              : "Score ball by ball on your phone. The scorecard, run rates and graphs keep themselves up to date."}
-          </p>
+          <Heading className="text-base font-semibold text-primary-800">{heading}</Heading>
+          <p className="mt-1 text-sm text-primary-500 leading-relaxed">{body}</p>
         </div>
       </div>
       <Link
@@ -42,7 +68,7 @@ export function LiveScorerPromo({ venue, variant, live = false, liveLinks = true
           now ? "bg-primary-900 text-white hover:bg-accent-600" : "border-2 border-primary-200 bg-white text-primary-800 hover:border-accent-400"
         }`}
       >
-        Open the Live Scorer
+        {board ? "Open the Live Scoreboard" : "Open the Live Scorer"}
         <ArrowRight className="w-4 h-4" aria-hidden />
       </Link>
     </div>

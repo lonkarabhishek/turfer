@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { Match } from "../../../lib/cricket/scoring";
 import { LIVE_KEEPALIVE_MAX_BYTES, LIVE_RETRY_MS, LIVE_SEND_EVERY_MS, type LiveLinkRecord } from "../../../lib/live/types";
 import {
+  browserIoFor,
   canKeepLink,
   createLiveSync,
   handleResult,
@@ -23,7 +24,7 @@ import {
   type LiveIo,
   type LiveNet,
 } from "./live";
-import { MAX_SAVED, saveMatch, type MatchMeta } from "./storage";
+import { MAX_SAVED, loadMatch, saveMatch, type MatchMeta } from "./storage";
 
 const T0 = 1_760_000_000_000;
 const CODE = "abcdefgh1234";
@@ -183,11 +184,42 @@ test("keep the same link only while it can still take writes", () => {
 });
 
 test("a game reminder's venue and from=game are read, and left out of the query", () => {
-  assert.deepEqual(readReminder("?venue=%20Turf%20Park%20&from=game"), { venue: "Turf Park", fromGame: true, rest: "" });
-  assert.deepEqual(readReminder("?utm_source=wa&venue=X&from=game&tab=1"), { venue: "X", fromGame: true, rest: "?utm_source=wa&tab=1" });
-  assert.deepEqual(readReminder("?from=other"), { venue: "", fromGame: false, rest: "" });
-  assert.deepEqual(readReminder(""), { venue: "", fromGame: false, rest: "" });
+  const none = { sport: null, name: "" };
+  assert.deepEqual(readReminder("?venue=%20Turf%20Park%20&from=game"), { venue: "Turf Park", fromGame: true, ...none, rest: "" });
+  assert.deepEqual(readReminder("?utm_source=wa&venue=X&from=game&tab=1"), { venue: "X", fromGame: true, ...none, rest: "?utm_source=wa&tab=1" });
+  assert.deepEqual(readReminder("?from=other"), { venue: "", fromGame: false, ...none, rest: "" });
+  assert.deepEqual(readReminder(""), { venue: "", fromGame: false, ...none, rest: "" });
   assert.equal(readReminder(`?venue=${"v".repeat(60)}`).venue.length, 48);
+});
+
+test("a Live Scoreboard reminder's sport and name are read, and left out of the query too", () => {
+  assert.deepEqual(readReminder("?sport=football&venue=Kick%20Off&from=game"), { venue: "Kick Off", fromGame: true, sport: "football", name: "", rest: "" });
+  assert.deepEqual(readReminder("?sport=other&name=%20Ultimate%20%20Frisbee%20&from=game&utm_source=wa"), {
+    venue: "",
+    fromGame: true,
+    sport: "other",
+    name: "Ultimate Frisbee",
+    rest: "?utm_source=wa",
+  });
+  assert.equal(readReminder("?sport=Table-Tennis").sport, "table-tennis");
+  // Not a board sport: no sport, and still out of the address, so a reload resumes the match.
+  assert.deepEqual(readReminder("?sport=cricket&tab=2"), { venue: "", fromGame: false, sport: null, name: "", rest: "?tab=2" });
+  assert.equal(readReminder("?sport=").sport, null);
+  assert.equal(readReminder(`?name=${"n".repeat(50)}`).name.length, 32);
+  assert.equal(readReminder("?name=a%0Ab%09c").name, "a b c");
+});
+
+test("the sync reads each match through the page's loader", () => {
+  assert.equal(browserIoFor(loadMatch).match, loadMatch);
+  const seen: string[] = [];
+  const io = browserIoFor((id) => {
+    seen.push(id);
+    return { id, sentAt: 5 };
+  });
+  assert.deepEqual(io.match("b1"), { id: "b1", sentAt: 5 });
+  assert.deepEqual(seen, ["b1"]);
+  // Everything else is the browser's own.
+  assert.equal(io.links, browserIoFor(loadMatch).links);
 });
 
 test("saving past the cap names the matches it dropped", () => {
@@ -223,7 +255,7 @@ test("secret is 64 hex; short url drops the scheme", () => {
 type Call = {
   method: string;
   url: string;
-  body: { secret?: string; rev?: number; match?: { n: number } } | null;
+  body: { secret?: string; rev?: number; match?: { n: number; sentAt?: number } } | null;
   keepalive: boolean;
   answer: (status: number, body: unknown) => Promise<void>;
   drop: () => Promise<void>;
@@ -231,7 +263,7 @@ type Call = {
 
 const tickOver = () => new Promise<void>((r) => setImmediate(r));
 
-function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<string, { n: number }> } = {}) {
+function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<string, { n: number }>; load?: (id: string, now: number) => unknown } = {}) {
   let now = T0;
   let seq = 0;
   const timers: { id: number; at: number; fn: () => void }[] = [];
@@ -271,7 +303,7 @@ function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<s
       if (rec) links[id] = { ...rec };
       else delete links[id];
     },
-    match: (id) => matches[id] ?? null,
+    match: (id) => (start.load ? start.load(id, now) : (matches[id] ?? null)),
     secret: () => SECRET,
     emit: () => {},
   };
@@ -291,7 +323,7 @@ function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<s
     now = end;
   };
   /** A local edit: save the match, then tell the engine, as LiveScorer's persist() does. */
-  const edit = (id: string, n: number, shape: { status: "live" | "done"; innings: number[] } = LIVE1) => {
+  const edit = (id: string, n: number, shape: { status: "live" | "done"; innings: readonly unknown[] } = LIVE1) => {
     matches[id] = { n };
     sync.changed(id, shape);
   };
@@ -329,6 +361,33 @@ test("engine: leading send, one at a time, then one trailing send with the lates
   assert.equal(t.links.m1.sentRev, t.links.m1.rev);
   await t.advance(10_000);
   assert.equal(t.calls.length, 2, "all sent: quiet");
+});
+
+test("engine: a board's loader runs for every PUT, so a retry carries a fresh sentAt", async () => {
+  const boards: Record<string, { n: number }> = {};
+  // As LiveScoreboard's loader: the stored board, stamped with the time of this send.
+  const t = rig({ links: { b1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, load: (id, now) => (boards[id] ? { ...boards[id], sentAt: now } : null) });
+  boards.b1 = { n: 1 };
+  t.sync.changed("b1", { status: "live", innings: [null] });
+  assert.equal(t.calls.length, 1);
+  assert.equal(t.calls[0].body?.match?.sentAt, T0);
+  await drop(t.calls[0]);
+  await t.advance(LIVE_RETRY_MS[0]);
+  assert.equal(t.calls.length, 2);
+  assert.equal(t.calls[1].body?.match?.sentAt, T0 + LIVE_RETRY_MS[0]);
+  await ok(t.calls[1]);
+  // A finished period is a new "innings" of the board's shape: it skips the throttle like an innings end.
+  await t.advance(700);
+  boards.b1 = { n: 2 };
+  t.sync.changed("b1", { status: "live", innings: [null, null] });
+  assert.equal(t.calls.length, 3);
+  // A loader that finds nothing (the board was deleted): nothing is sent.
+  await ok(t.calls[2]);
+  delete boards.b1;
+  await t.advance(3000);
+  t.sync.changed("b1", { status: "live", innings: [null, null] });
+  await t.advance(10_000);
+  assert.equal(t.calls.length, 3);
 });
 
 test("engine: an innings or match end skips the throttle", async () => {

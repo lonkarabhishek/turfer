@@ -70,12 +70,13 @@ const SECTIONS: LegalSection[] = [
           each sign-in to spot abuse and to see how many people use the site.
         </p>
         <p id="live-links" className="scroll-mt-24">
-          <strong>Live scorecard links.</strong> The free Live Cricket Scorer keeps your match in your browser.
-          If you turn on a live link, the match is sent to our server as you score so others can follow it:
-          the team and player names, the title and venue if you added them, every ball with the time it was
-          scored, and the result. We also keep a one-way hash of your network address (never the address
-          itself) so one network cannot make links in bulk. A live link needs no account and is not tied to
-          yours.
+          <strong>Live score links.</strong> The free Live Cricket Scorer and Live Scoreboard keep your match
+          in your browser. If you turn on a live link, the match is sent to our server as you score so others
+          can follow it: the team and player names, the title and venue if you added them, every ball, point,
+          goal or card with its time, the match clock, and the result. We also keep a one-way
+          hash of your network address (never the address itself) so one network cannot make links in bulk. A
+          live link needs no account and is not tied to yours. While you have a live score open, your browser
+          joins a count of people watching it. Nothing about you is sent.
         </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
@@ -98,7 +99,7 @@ const SECTIONS: LegalSection[] = [
         <li>To run your account and show your games, requests and notifications.</li>
         <li>To show hosts who wants to join their game, and to show players how to reach the host.</li>
         <li>To publish reviews and venue corrections you submit.</li>
-        <li>To show a live scorecard to the people you send its link to.</li>
+        <li>To show a live score to the people you send its link to, and how many are watching.</li>
         <li>To keep the service safe: rate-limiting sign-ins and OTP sends, and investigating misuse.</li>
         <li>To understand which turfs, cities and features people use, in aggregate, so we can improve them.</li>
         <li>
@@ -121,7 +122,7 @@ const SECTIONS: LegalSection[] = [
           your name, photo and any note you wrote. Reviews show your name.
         </p>
         <p>
-          <strong>Live scorecards.</strong> Anyone with a live link can see that scorecard, names included.
+          <strong>Live scores.</strong> Anyone with a live link can see that score, names included.
           Links are not listed anywhere on TapTurf and are hidden from search engines, but anyone who has one
           can forward it, so ask your players before you add their names. Turn the link off in the scorer at
           any time, or email <Email /> and we will take it down.
@@ -135,7 +136,7 @@ const SECTIONS: LegalSection[] = [
           data on our instructions and cannot use it for their own purposes:
         </p>
         <ul>
-          <li>Supabase, which hosts our database and handles Google sign-in sessions.</li>
+          <li>Supabase, which hosts our database, handles Google sign-in sessions and counts who is watching a live score.</li>
           <li>Google Firebase, which sends and verifies phone one-time codes.</li>
           <li>Vercel, which hosts the website.</li>
           <li>Google Analytics, for anonymous usage statistics (section 5).</li>
@@ -196,7 +197,7 @@ const SECTIONS: LegalSection[] = [
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
         banners you closed, whether you dismissed the &ldquo;install app&rdquo; prompt, the short visit note
         described under &ldquo;When you sign up&rdquo;, and the matches and tournaments you score with our
-        free cricket tools. For a live link it also keeps the key that lets only this browser update that
+        free tools. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
         token, which identifies you to our server, that one summary when you create an account, and a match
         while its live link is on. Clearing site data in your browser removes all of it. A live link that was
@@ -215,7 +216,7 @@ const SECTIONS: LegalSection[] = [
         <li>Call and WhatsApp tap counts are kept as totals; the link to your account is dropped after 90 days.</li>
         <li>The sign-up summary stays with your account and is deleted with it, or sooner if you ask.</li>
         <li>
-          A live scorecard is cleared when you turn its link off, or 30 days after its last update. The
+          A live score is cleared when you turn its link off, or 30 days after its last update. The
           one-way hash of the network address is kept for 2 days to stop misuse.
         </li>
         <li>Emails you send us are kept as long as needed to deal with your request.</li>

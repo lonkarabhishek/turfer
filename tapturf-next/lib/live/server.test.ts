@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apply, newMatch, newPlayerId, type Match } from "../cricket/scoring";
+import { apply, newMatch, newPlayerId, sanitizeMatch, type Match } from "../cricket/scoring";
+import { applyBoard, deriveBoard, newBoard, sanitizeBoard } from "../board/index";
+import type { Board, BoardEvent } from "../board/types";
+import { isLiveBoard, sanitizeLive } from "./match";
 import {
   LIVE_MIN_GAP_MS,
   LIVE_MINTS_PER_10_MIN,
@@ -163,8 +166,9 @@ test("stored match: a renamed player is stored under the latest name only, roste
   for (const old of ["Rahul Sharma", "R Sharma", "Walk In Guy"]) assert.ok(!json.includes(old), `${old} is not stored`);
   for (const now of ["Player 1", "Guest", "Amit Verma", "Bobby Deol"]) assert.ok(json.includes(now), `${now} is stored`);
   assert.equal(out.status, "live");
+  assert.equal(isLiveBoard(out.match), false);
   // The renames stay, so followers' history lines up with the scorer's.
-  assert.equal(out.match.events.filter((e) => e.type === "renamePlayer").length, 3);
+  assert.equal((out.match as Match).events.filter((e) => e.type === "renamePlayer").length, 3);
   // The scorer's own match keeps what was typed.
   assert.ok(JSON.stringify(m).includes("Rahul Sharma"));
 });
@@ -183,6 +187,60 @@ test("stored match: not a match is bad; size is measured after the names are fol
   // Half the renames, all short, is stored.
   const ok = liveMatchToStore({ ...base, events: events.slice(0, 1000) });
   assert.ok("match" in ok && JSON.stringify(ok.match).length <= LIVE_MAX_MATCH_CHARS);
+});
+
+/** Apply board events, failing the test on any refused one. */
+function play(b: Board, ...events: BoardEvent[]): Board {
+  for (const e of events) {
+    const next = applyBoard(b, e);
+    assert.notEqual(next, b, `${JSON.stringify(e)} applied`);
+    b = next;
+  }
+  return b;
+}
+
+test("stored board: kept as a board, renamed team folded to its latest name, sentAt kept, and read back unchanged", () => {
+  const T = 1_760_000_000_000;
+  let b = newBoard("football", { teamA: "Red FC", teamB: "Blue FC", venue: "Kick Off Arena" }, { id: "bstore1", now: T });
+  b = play(b, { type: "clock", run: true, at: T }, { type: "point", side: "a", how: "goal", player: "Ravi", at: T + 60_000 }, { type: "rename", side: "a", name: "Red Star FC", at: T + 90_000 });
+  const out = liveMatchToStore(JSON.parse(JSON.stringify({ ...b, sentAt: T + 95_000 })));
+  assert.ok("match" in out, JSON.stringify(out));
+  assert.ok(isLiveBoard(out.match));
+  const stored = out.match as Board;
+  assert.equal(out.status, "live");
+  assert.equal(stored.sentAt, T + 95_000);
+  assert.equal(stored.setup.teamA, "Red Star FC");
+  const json = JSON.stringify(stored);
+  assert.ok(!json.includes("Red FC"), "the old name is not stored");
+  assert.ok(json.includes("Ravi") && json.includes("Kick Off Arena"));
+  assert.equal(stored.events.length, 3);
+  // What followers get (GET and the page run sanitizeLive) is what was stored, event for event.
+  assert.deepEqual(sanitizeLive(JSON.parse(json)), stored);
+  const v = deriveBoard(stored);
+  assert.equal(v.teams.a.name, "Red Star FC");
+  assert.equal(v.teams.a.score, 1);
+  // The scorer's own board keeps what was typed.
+  assert.equal(b.setup.teamA, "Red FC");
+});
+
+test("stored board: a finished one is done; neither engine reads the other's", () => {
+  const b = play(newBoard("badminton", { teamA: "Asha", teamB: "Ravi", firstServe: "a" }, { id: "bstore2", now: 1 }), { type: "end", reason: "retired", side: "b", at: 2 });
+  const out = liveMatchToStore(JSON.parse(JSON.stringify(b)));
+  assert.ok("match" in out);
+  assert.equal(out.status, "done");
+  // Read as cricket, a board would be an empty 0/0 scorecard: it is refused instead, both ways.
+  const m = newMatch({ teamA: "Kings", teamB: "Royals" }, { id: "m9", now: 1 });
+  assert.equal(sanitizeMatch(JSON.parse(JSON.stringify(b))), null);
+  assert.equal(sanitizeBoard(JSON.parse(JSON.stringify(m))), null);
+  // sanitizeLive picks the right one.
+  assert.ok(isLiveBoard(sanitizeLive(JSON.parse(JSON.stringify(b)))!));
+  assert.deepEqual(sanitizeLive(JSON.parse(JSON.stringify(m))), sanitizeMatch(JSON.parse(JSON.stringify(m))));
+  const cricket = liveMatchToStore(JSON.parse(JSON.stringify(m)));
+  assert.ok("match" in cricket && !isLiveBoard(cricket.match));
+  // A board of no sport we know, or not a board or match at all: bad.
+  assert.deepEqual(liveMatchToStore({ v: 1, kind: "board", id: "bx", sport: "curling", setup: {}, events: [] }), { error: "bad" });
+  assert.deepEqual(liveMatchToStore({ kind: "board" }), { error: "bad" });
+  assert.equal(sanitizeLive("board"), null);
 });
 
 test("DELETE body: just the secret", () => {

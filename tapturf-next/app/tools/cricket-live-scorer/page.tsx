@@ -97,7 +97,11 @@ export default function Page() {
                     <Link href="/privacy#live-links" className="text-accent-700 font-semibold hover:underline">
                       privacy policy
                     </Link>{" "}
-                    says what is shared and for how long.
+                    says what is shared and for how long. Playing football, badminton or another sport? The{" "}
+                    <Link href="/tools/live-scoreboard" className="text-accent-700 font-semibold hover:underline">
+                      Live Scoreboard
+                    </Link>{" "}
+                    gives you the same live link.
                   </p>
                 ),
               },

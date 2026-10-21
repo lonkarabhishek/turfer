@@ -1,25 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Copy, Loader2, Share2 } from "lucide-react";
-import { derive, sanitizeMatch, toScorecard, type Match, type MatchView } from "@/lib/cricket/scoring";
+import { derive, toScorecard, type MatchView } from "@/lib/cricket/scoring";
+import { clockMs, deriveBoard } from "@/lib/board";
+import type { BoardSport } from "@/lib/board/types";
 import { trackTool } from "@/lib/analytics/tools";
 import { CONTACT_EMAIL } from "@/lib/contact";
+import { sportBySlug, venueWord } from "@/lib/sports";
+import { isLiveBoard, sanitizeLive, type LiveMatch } from "@/lib/live/match";
 import { liveUrl, type LiveGetResponse } from "@/lib/live/types";
 import { MatchTabs, ScoreHeader } from "@/components/tools/scorer/MatchHeader";
 import { writeHandoff } from "@/components/tools/scorer/handoff";
-import { FRESH_MS, clockNow, freshness, joinClock, pauseOf, resultCardHref, setClock, startPolling, type FollowStatus, type Pause } from "./follow";
+import { BoardHeader } from "@/components/board/BoardHeader";
+import { BoardTabs } from "@/components/board/BoardTabs";
+import { boardNow, boardPause, clockNow, freshness, joinClock, liveBadgeOn, pauseOf, pauseText, resultCardHref, setClock, startPolling, type FollowStatus } from "./follow";
+import { useWatchers } from "./useWatchers";
+import { WatchCount } from "./WatchCount";
 
 const TOOL = "live_follow";
 
 /** The answer on screen, its match already checked. updatedAt is ms by the server's clock. */
-type Shown = { status: FollowStatus; rev: number; match: Match | null; updatedAt: number | null };
+type Shown = { status: FollowStatus; rev: number; match: LiveMatch | null; updatedAt: number | null };
 
 function toShown(r: LiveGetResponse): Shown | null {
-  // Checked again here: the page trusts nothing it did not rebuild itself.
-  const match = r.match == null ? null : sanitizeMatch(r.match);
+  // Checked again here: the page trusts nothing it did not rebuild itself. A board is rebuilt as a board.
+  const match = r.match == null ? null : sanitizeLive(r.match);
   if ((r.status === "live" || r.status === "done") && !match) return null;
   return { status: r.status, rev: r.rev, match, updatedAt: r.updatedAt ? Date.parse(r.updatedAt) : null };
 }
@@ -43,10 +51,13 @@ function useServerNow(serverNow: number, every: number, since: number): number {
   return now;
 }
 
-/** The red LIVE pill by the team names, only while updates keep coming. */
-function LiveBadge({ updatedAt, serverNow }: { updatedAt: number; serverNow: number }) {
+/** At a server time: the planned gap in words (freshness), or null. */
+type PauseAt = (serverNow: number) => string | null;
+
+/** The red LIVE pill by the team names, only while updates keep coming, or while a running clock is why none do. */
+function LiveBadge({ updatedAt, serverNow, pause }: { updatedAt: number; serverNow: number; pause: PauseAt }) {
   const now = useServerNow(serverNow, 15_000, updatedAt);
-  if (now - updatedAt >= FRESH_MS) return null;
+  if (!liveBadgeOn(now - updatedAt, pause(now) === "Clock running.")) return null;
   return (
     <span className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full bg-red-600 text-[10px] font-extrabold tracking-wide">
       <span className="w-1.5 h-1.5 rounded-full bg-white motion-safe:animate-pulse" aria-hidden />
@@ -56,9 +67,9 @@ function LiveBadge({ updatedAt, serverNow }: { updatedAt: number; serverNow: num
 }
 
 /** How old the score is. Ticks on its own, so the rest of the page does not re-render every few seconds. */
-function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "done"; updatedAt: number; pause: Pause; serverNow: number }) {
+function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "done"; updatedAt: number; pause: PauseAt; serverNow: number }) {
   const now = useServerNow(serverNow, 5_000, updatedAt);
-  const f = freshness(status, Math.max(0, now - updatedAt), pause);
+  const f = freshness(status, Math.max(0, now - updatedAt), pause(now));
   if (f.tone === "quiet" || f.tone === "stopped") {
     return <p className={`rounded-2xl border px-3 py-2 text-[14px] ${f.tone === "quiet" ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-primary-50 border-primary-200 text-primary-700"}`}>{f.text}</p>;
   }
@@ -76,7 +87,8 @@ function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "
  * a time and served by the CDN, so followers never cost a database read
  * each. The highest rev wins; nothing re-renders when it has not moved,
  * and the picked tab and innings stay put until the link moves on to a
- * new match.
+ * new match. A cricket match shows the Live Cricket Scorer's view, a
+ * board the Live Scoreboard's, with its clock ticking here.
  */
 export function LiveFollow({ code, initial, serverNow }: { code: string; initial: LiveGetResponse | null; serverNow: number }) {
   const router = useRouter();
@@ -127,11 +139,32 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   }, [code, serverNow]);
 
   const match = shown?.match ?? null;
-  const view = useMemo(() => (match ? derive(match) : null), [match]);
+  const board = match && isLiveBoard(match) ? match : null;
+  const view = useMemo(() => (match && !isLiveBoard(match) ? derive(match) : null), [match]);
+  const boardView = useMemo(() => (board ? deriveBoard(board) : null), [board]);
+  const scored = shown?.status === "live" || shown?.status === "done";
+  // Everyone with the score open counts, themselves included. Waiting and turned off links count no one.
+  const watchers = useWatchers(scored && match ? code : null, { track: true });
+
+  // The board's clock in the scorer's clock domain (boardNow). The first render uses the page's render time, as
+  // useServerNow does, so the server render and hydration show the same clock.
+  const [clockLive, setClockLive] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setClockLive(true), 0);
+    return () => clearTimeout(t);
+  }, []);
+  const updatedAt = shown?.updatedAt ?? null;
+  const boardClock = useCallback(
+    (at: number): number | null => (board && boardView ? boardNow(board, boardView, updatedAt ?? serverNow, at) : null),
+    [board, boardView, updatedAt, serverNow],
+  );
+  const headerNow = useCallback(() => boardClock(clockLive ? clockNow() : serverNow) ?? 0, [boardClock, clockLive, serverNow]);
+
+  const names = view ? `${view.setup.teamA} vs ${view.setup.teamB}` : boardView ? `${boardView.teams.a.name} vs ${boardView.teams.b.name}` : null;
 
   const share = async () => {
     const link = liveUrl(window.location.origin, code);
-    const text = view ? `${view.setup.teamA} vs ${view.setup.teamB}, live score on TapTurf` : "Live cricket score on TapTurf";
+    const text = names ? `${names}, live score on TapTurf` : "Live score on TapTurf";
     trackTool("tool_cta_clicked", TOOL, { href: "share", status: shown?.status ?? "unavailable" });
     if (typeof navigator.share === "function") {
       try {
@@ -174,36 +207,48 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
     </div>
   );
 
-  if (!shown || !view || (shown.status !== "live" && shown.status !== "done")) {
-    const state = shown && shown.status !== "live" && shown.status !== "done" ? shown.status : "unavailable";
+  if (!shown || !names || !scored) {
+    const state = shown && !scored ? (shown.status as Exclude<FollowStatus, "live" | "done">) : "unavailable";
     return (
       <div className="mx-auto max-w-xl px-4 py-6 sm:py-10">
         <StateCard state={state} />
         <div className="mt-4 space-y-4">
           {(state === "waiting" || state === "unavailable") && shareBar}
-          <Ctas code={code} />
+          <Ctas code={code} sport={undefined} />
         </div>
       </div>
     );
   }
 
-  const s = view.setup;
-  const { status, updatedAt } = shown;
+  const status = shown.status as "live" | "done";
+  const pause: PauseAt = boardView
+    ? (at) => {
+        const t = boardClock(at);
+        return boardPause(boardView, t === null ? null : clockMs(boardView, t));
+      }
+    : () => (view ? pauseText(pauseOf(view)) : null);
+  // By the team names: the LIVE pill while live, and the eye count. Nothing in the slot when neither shows.
+  const liveBadge = status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} pause={pause} /> : null;
+  const badge =
+    liveBadge || watchers?.count ? (
+      <>
+        {liveBadge}
+        <WatchCount watchers={watchers} tone="dark" />
+      </>
+    ) : undefined;
+  const header = boardView ? (
+    <BoardHeader view={boardView} board={board ?? undefined} now={headerNow} badge={badge} onShare={share} className="sm:rounded-3xl sm:overflow-hidden" />
+  ) : view ? (
+    <ScoreHeader view={view} className="sm:rounded-3xl sm:overflow-hidden" venue onShare={share} badge={badge} />
+  ) : null;
+  const tabsClass = "border-t border-primary-200 sm:border sm:rounded-3xl sm:overflow-hidden lg:col-start-2 lg:row-start-1 lg:row-span-2";
   return (
     <div className="mx-auto max-w-6xl pb-6 sm:px-4 sm:py-5 lg:grid lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:items-start">
       <div className="lg:col-start-1 lg:row-start-1">
-        <h1 className="sr-only">
-          {s.teamA} vs {s.teamB} live score
-        </h1>
-        <ScoreHeader
-          view={view}
-          className="sm:rounded-3xl sm:overflow-hidden"
-          venue
-          onShare={share}
-          badge={status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} /> : undefined}
-        />
+        <h1 className="sr-only">{names} live score</h1>
+        {header}
         <div className="px-3 py-2.5 sm:px-1 space-y-2">
-          {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pauseOf(view)} serverNow={serverNow} />}
+          {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} />}
           {trouble && (
             <p role="status" className="text-[13px] font-semibold text-red-700">
               Can&rsquo;t get the latest score. Trying again.
@@ -212,10 +257,15 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         </div>
       </div>
       {/* Keyed by match id: the same link moved on to the next match starts on Live again. Never keyed by rev. */}
-      <MatchTabs key={view.id} view={view} readOnly actions={{ onShare: share, onResultCard: () => resultCard(view) }} className="border-t border-primary-200 sm:border sm:rounded-3xl sm:overflow-hidden lg:col-start-2 lg:row-start-1 lg:row-span-2" />
+      {boardView ? (
+        // No result card for boards: the scorecard maker is cricket only.
+        <BoardTabs key={boardView.id} view={boardView} readOnly className={tabsClass} />
+      ) : view ? (
+        <MatchTabs key={view.id} view={view} readOnly actions={{ onShare: share, onResultCard: () => resultCard(view) }} className={tabsClass} />
+      ) : null}
       <div className="px-3 pt-4 sm:px-0 space-y-4 lg:col-start-1 lg:row-start-2 lg:pt-1">
         {shareBar}
-        <Ctas code={code} />
+        <Ctas code={code} sport={boardView ? boardView.sport : "cricket"} />
       </div>
     </div>
   );
@@ -253,18 +303,39 @@ function CtaLink({ href, children, primary }: { href: string; children: ReactNod
   );
 }
 
-function Ctas({ code }: { code: string }) {
+/** The follower's way to score their own game and find a place to play it, for the sport on screen. */
+function ctasFor(sport: BoardSport | "cricket" | undefined): { body: string; tool: { href: string; label: string }; find: { href: string; label: string } } {
+  if (sport === "cricket") {
+    return {
+      body: "Score it ball by ball on your phone and share a live link like this one.",
+      tool: { href: "/tools/cricket-live-scorer", label: "Score your own match, free" },
+      find: { href: "/sport/box-cricket", label: "Find a box cricket turf" },
+    };
+  }
+  const body = "Score it on your phone and share a live link like this one.";
+  // Not known yet (waiting, turned off): the tools page has both scorers.
+  if (!sport) return { body, tool: { href: "/tools", label: "Score your own match, free" }, find: { href: "/turfs", label: "Find a turf or court" } };
+  const page = sport === "other" ? undefined : sportBySlug(sport);
+  return {
+    body,
+    tool: { href: "/tools/live-scoreboard", label: "Keep score of your own game, free" },
+    find: page ? { href: `/sport/${page.slug}`, label: `Find a ${page.name.toLowerCase()} ${venueWord(page, 1)}` } : { href: "/turfs", label: "Find a turf or court" },
+  };
+}
+
+function Ctas({ code, sport }: { code: string; sport: BoardSport | "cricket" | undefined }) {
   const report = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Report live link ${code}`)}`;
+  const c = ctasFor(sport);
   return (
     <>
       <section className="rounded-2xl border border-primary-200 bg-white p-4">
         <h2 className="text-[16px] font-bold text-primary-900">Playing a match yourself?</h2>
-        <p className="mt-1 text-[14px] text-primary-600">Score it ball by ball on your phone and share a live link like this one.</p>
+        <p className="mt-1 text-[14px] text-primary-600">{c.body}</p>
         <div className="mt-3 flex flex-col gap-2">
-          <CtaLink href="/tools/cricket-live-scorer" primary>
-            Score your own match, free <ArrowRight className="w-4 h-4" aria-hidden />
+          <CtaLink href={c.tool.href} primary>
+            {c.tool.label} <ArrowRight className="w-4 h-4" aria-hidden />
           </CtaLink>
-          <CtaLink href="/sport/box-cricket">Find a box cricket turf</CtaLink>
+          <CtaLink href={c.find.href}>{c.find.label}</CtaLink>
         </div>
       </section>
       <p className="text-center text-[12px] text-primary-500">

@@ -111,3 +111,60 @@ export function blankView(board: Board, sportName: string, scoreUnit: string): B
     eventCount: board.events.length,
   };
 }
+
+/** A plain object (not null, not an array): what JSON gives for {}. */
+export const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+
+/** A boolean, or the fallback. */
+export const bool = (x: unknown, fallback: boolean): boolean => (typeof x === "boolean" ? x : fallback);
+
+/* ------------------------------------------------------------------ */
+/* Timed sports: the period clock                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A period clock as derive folds it: `ms` is the value at `at` (elapsed
+ * counting up, left counting down). started: it has run or been set in
+ * this period, so a time read off it means something.
+ */
+export type PeriodClock = { running: boolean; ms: number; at: number | null; down: boolean; started: boolean };
+
+export const newClock = (down: boolean, ms: number, at: number | null): PeriodClock => ({ running: false, ms, at, down, started: false });
+
+/** The clock's value at `t`. Time going backwards (a phone clock fixed mid match) counts as none, and a down clock stops at 0. */
+export function clockValue(c: Pick<PeriodClock, "running" | "ms" | "at" | "down">, t: number | null | undefined): number {
+  if (!c.running || c.at === null || typeof t !== "number" || !Number.isFinite(t)) return c.ms;
+  const d = Math.max(0, t - c.at);
+  return c.down ? Math.max(0, c.ms - d) : c.ms + d;
+}
+
+/** Start, stop or set the clock (a ClockEvent the engine has checked). */
+export function runClock(c: PeriodClock, e: { run: boolean; at: number; ms?: number }): void {
+  const value = clockValue(c, e.at);
+  c.ms = e.ms ?? value;
+  c.running = e.run;
+  c.at = e.at;
+  if (e.run || e.ms !== undefined) c.started = true;
+}
+
+/** A period or end event stops a running clock at its own `at` (or where it was last read, when it has none). */
+export function stopClock(c: PeriodClock, at: number | undefined): void {
+  if (!c.running) return;
+  c.ms = clockValue(c, at ?? c.at);
+  c.running = false;
+  if (typeof at === "number") c.at = at;
+}
+
+/**
+ * The result of an end with a reason: abandoned has none; retired,
+ * walkover and conceded go to the side that did not stop. Null for a
+ * plain end (time up), which each engine decides on its own score.
+ */
+export function stoppedResult(e: { reason?: string; side?: Side }, names: Record<Side, string>): BoardView["result"] {
+  if (e.reason === "abandoned") return { winner: null, kind: "abandoned", text: "Abandoned" };
+  if ((e.reason === "retired" || e.reason === "walkover" || e.reason === "conceded") && isSide(e.side)) {
+    const w = other(e.side);
+    return { winner: w, kind: "win", text: e.reason === "walkover" ? `${names[w]} won by walkover` : `${names[w]} won, ${names[e.side]} ${e.reason}` };
+  }
+  return null;
+}

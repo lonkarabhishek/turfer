@@ -13,6 +13,7 @@ import type { ShareLive } from "./scorer/Sheets";
 import { deleteMatch, loadIndex, loadMatch, metaOf, saveMatch, setCurrent, type MatchMeta, type ScorerIndex } from "./scorer/storage";
 import { writeHandoff } from "./scorer/handoff";
 import { canKeepLink, linkUrl, readReminder, shortUrl, useLiveSync, type LiveInfo } from "./scorer/live";
+import { useWatchers } from "@/components/live/useWatchers";
 
 /** A live match touched within this long is reopened straight into scoring on reload. */
 const RESUME_MS = 12 * 60 * 60 * 1000;
@@ -49,7 +50,10 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const [prefill, setPrefill] = useState({ venue: "", live: false });
   /** The link last copied from the page card: one turned on since shows "Copy link" again. */
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  const live = useLiveSync(liveLinks);
+  const live = useLiveSync(liveLinks, { load: loadMatch });
+  // The eye count by the LIVE pill: only while scoring a match whose link is on. The scorer listens, never counts in.
+  const watchLink = liveLinks && open && match ? live.info(match.id) : null;
+  const watchers = useWatchers(watchLink?.on && watchLink.link ? watchLink.link.code : null, { track: false });
   const pushed = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
@@ -328,7 +332,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
       <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
 
-      {open && match && <ScoringScreen key={match.id} match={match} onChange={onChange} onExit={closeScorer} onNewMatch={newMatch} onResultCard={resultCard} live={liveLinks ? liveFor(match.id) : undefined} />}
+      {open && match && <ScoringScreen key={match.id} match={match} onChange={onChange} onExit={closeScorer} onNewMatch={newMatch} onResultCard={resultCard} live={liveLinks ? liveFor(match.id) : undefined} watchers={watchers} />}
     </div>
   );
 }

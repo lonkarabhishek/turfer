@@ -125,6 +125,6 @@ export function vibrate(pattern: number | number[] = 10) {
 }
 
 /** "." reads badly on a chip in the sun; show 0. */
-export const chipText = (chip: string) => (chip === "." ? "0" : chip);
+export { chipText } from "./chip";
 
 export const rate = (r: number | null) => (r === null ? "-" : r.toFixed(2));

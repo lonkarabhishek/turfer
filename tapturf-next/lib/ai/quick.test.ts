@@ -178,6 +178,19 @@ test("live scoring asks open the ball by ball scorer", () => {
   assert.ok(!hit("live score").followups.includes("Score our match live"));
 });
 
+test("other sports open the live scoreboard, and the two scorers point at each other", () => {
+  for (const q of ["football score", "Badminton score counter", "keep score of our game", "Basketball scoreboard", "table tennis score", "Keep score of any sport"]) {
+    const f = hit(q);
+    assert.deepEqual([f.intent, f.tool], ["tool", "live-scoreboard"], q);
+    assert.match(f.reply, /live scoreboard/);
+    assert.ok(!f.followups.includes("Keep score of any sport"), q);
+  }
+  // No sport named stays with the cricket scorer, which offers the scoreboard first.
+  for (const q of ["live score", "score counter", "scoring app"]) assert.equal(hit(q).tool, "cricket-live-scorer", q);
+  assert.equal(hit("live score").followups[0], "Keep score of any sport");
+  assert.equal(hit("scorecard").tool, "cricket-scorecard-maker");
+});
+
 test("Hinglish variants answer in Hinglish", () => {
   let f = hit("kothrud me sasta box cricket hai kya");
   assert.deepEqual([f.sport, f.areas, f.max_price_per_hour], ["box-cricket", ["Kothrud"], 800]);

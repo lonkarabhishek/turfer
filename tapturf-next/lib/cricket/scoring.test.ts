@@ -1166,6 +1166,27 @@ test("sanitizeMatch: not a match, a wrong version or too many events is null", (
   assert.equal(sanitizeMatch(swaps(3000))?.events.length, 3000);
 });
 
+test("sanitizeMatch and restoreMatch: a Live Scoreboard board is not a match", () => {
+  // The shape lib/board makes: same v, setup and events, told apart by kind.
+  const board = {
+    v: 1,
+    kind: "board",
+    id: "bmabc12345",
+    createdAt: 1_760_000_000_000,
+    sport: "football",
+    setup: { teamA: "Red FC", teamB: "Blue FC", title: "", venue: "", rules: { halves: 2, halfMinutes: 20, cards: false, penalties: false, shootoutKicks: 5 } },
+    events: [{ type: "point", side: "a", how: "goal", at: 1_760_000_060_000 }],
+  };
+  assert.equal(sanitizeMatch(board), null);
+  assert.equal(sanitizeMatch(JSON.parse(JSON.stringify(board))), null);
+  assert.equal(restoreMatch(board), null);
+  assert.equal(restoreMatch(JSON.stringify(board)), null);
+  // Any other kind, or none, is read as before.
+  const m = finished();
+  assert.deepEqual(sanitizeMatch({ ...wire(m) as object, kind: "match" }), m);
+  assert.ok(restoreMatch({ ...m, kind: "match" }));
+});
+
 test("sanitizeMatch: NaN, Infinity and wild numbers are clamped the engine's way", () => {
   const m = finished();
   const s = sanitizeMatch({

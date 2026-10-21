@@ -533,9 +533,8 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
             </div>
           </details>
 
-          {/cricket/i.test(game.sport) && status !== "expired" && (
-            <LiveScorerPromo variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />
-          )}
+          {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
+          {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />}
         </div>
 
         {/* ═══════════════════════════════════════════════════════ */}

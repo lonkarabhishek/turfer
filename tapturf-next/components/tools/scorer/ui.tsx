@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import type { ChipTone } from "@/lib/cricket/scoring";
-import { chipText } from "./logic";
+import { chipText } from "./chip";
 
 /** Chip colours: strong fills for boundaries and wickets, readable in sunlight. */
 export const TONE: Record<ChipTone, string> = {
