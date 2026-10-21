@@ -628,3 +628,14 @@ describe("who is following", () => {
     assert.equal(followLoginHref("abcd2345wxyz"), "/login?next=%2Flive%2Fabcd2345wxyz&via=follow");
   });
 });
+
+test("boardPause: the toss before a deciding set is between games, not the start", () => {
+  const base = { status: "live" as const, eventCount: 51, period: null, clock: null, timeline: [] };
+  const sets = [
+    { a: 25, b: 0, winner: "a" as const, tiebreak: null },
+    { a: 0, b: 25, winner: "b" as const, tiebreak: null },
+    { a: 0, b: 0, winner: null, tiebreak: null },
+  ];
+  assert.equal(boardPause({ ...base, needsServe: true, sets }, null), "Between games.");
+  assert.equal(boardPause({ ...base, needsServe: true, eventCount: 0, sets: [sets[2]] }, null), "Waiting for the start.");
+});

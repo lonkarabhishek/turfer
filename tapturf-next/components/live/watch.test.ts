@@ -242,6 +242,27 @@ test("an error hides the count, retries once after 10 s, then waits for the next
   w.stop();
 });
 
+test("a retry that gets back in refills the retry: a second drop, on a page still looked at, is retried too", async () => {
+  const r = rig();
+  const w = createWatch("abc", false, r.io);
+  await tick();
+  r.channels[0].status?.("SUBSCRIBED");
+  r.channels[0].status?.("CHANNEL_ERROR");
+  await r.advance(WATCH_RETRY_MS);
+  assert.equal(r.opens, 2);
+  r.channels[1].status?.("SUBSCRIBED");
+  r.present(r.channels[1], 1);
+  assert.deepEqual(r.shown.at(-1), { count: 1, capped: false });
+  r.channels[1].status?.("CHANNEL_ERROR");
+  await r.advance(WATCH_RETRY_MS);
+  assert.equal(r.opens, 3, "retried again");
+  // A retry that fails does not refill it.
+  r.channels[2].status?.("TIMED_OUT");
+  await r.advance(10 * WATCH_RETRY_MS);
+  assert.equal(r.opens, 3, "no loop");
+  w.stop();
+});
+
 test("no Realtime at all: null, one retry, then quiet", async () => {
   const r = rig({ fail: 5 });
   const w = createWatch("abc", true, r.io);

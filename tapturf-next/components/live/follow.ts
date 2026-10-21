@@ -129,12 +129,14 @@ export function boardPause(
   shownMs: number | null,
 ): string | null {
   if (v.status !== "live") return null;
-  if (v.eventCount === 0 || v.needsServe) return "Waiting for the start.";
+  const last = v.sets[v.sets.length - 1];
+  const between = v.sets.length > 1 && !!last && last.a === 0 && last.b === 0;
+  // A new toss before a deciding set is between games, not the start: two sets have been played.
+  if (v.eventCount === 0 || (v.needsServe && !between)) return "Waiting for the start.";
   if (v.period?.break) return `${v.period.label}.`;
   const c = v.clock;
   if (c?.running && shownMs !== null && (c.down ? shownMs > 0 : c.limitMs === null || shownMs < c.limitMs + CLOCK_GRACE_MS)) return "Clock running.";
-  const last = v.sets[v.sets.length - 1];
-  if (v.sets.length > 1 && last && last.a === 0 && last.b === 0) return "Between games.";
+  if (between) return "Between games.";
   // Names and the first serve picked, nothing scored and the clock never started: the game has not begun.
   const clockStarted = !!c && (c.running || (c.down ? c.limitMs !== null && c.ms < c.limitMs : c.ms > 0));
   if (!clockStarted && !v.timeline.some((l) => l.tone === "score")) return "Waiting for the start.";

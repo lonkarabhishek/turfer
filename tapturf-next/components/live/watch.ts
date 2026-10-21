@@ -171,6 +171,8 @@ export function createWatch(code: string, track: boolean, io: WatchIo): Watch {
           if (status === "SUBSCRIBED") {
             if (subscribed) return;
             subscribed = true;
+            // Back in: the next drop gets its own retry. Only a success refills it, so this never loops.
+            retried = false;
             // presence_state follows the join; if it is slow, decide on what is known.
             if (track) syncTimer = io.setTimer(() => decide(g, c), WATCH_SYNC_WAIT_MS);
             return;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimeClient } from "@supabase/supabase-js";
 import { createLeases, createWatch, type WatchChannel, type WatchStatus, type Watchers } from "./watch";
 
 /** This tab's presence key: random, so nothing about the viewer is sent, and the same across this page's remounts. */
@@ -19,16 +19,41 @@ function keyOfTab(): string {
 
 const leases = createLeases();
 
-/** The Realtime channel for a topic, through the site's one browser client, loaded only when a count is shown. */
+/**
+ * Realtime removes its socket a moment after the last channel goes (100
+ * ms in realtime-js 2.96); a join in that window waits out a 10 s timeout.
+ * A new channel on the same topic waits this long after a removal.
+ */
+const SETTLE_MS = 150;
+
+let realtime: RealtimeClient | null = null;
+
+/**
+ * The one Realtime connection for counts, loaded only when a count is
+ * shown. Its own, not the site client's: it carries the public key only,
+ * never the viewer's login, so joining a count says nothing about who is
+ * watching.
+ */
+async function realtimeClient(): Promise<RealtimeClient> {
+  if (!realtime) {
+    const { RealtimeClient } = await import("@supabase/supabase-js");
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const url = new URL("realtime/v1", base.endsWith("/") ? base : `${base}/`);
+    url.protocol = url.protocol.replace("http", "ws");
+    realtime = new RealtimeClient(url.href, { params: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! } });
+  }
+  return realtime;
+}
+
+/** The Realtime channel for a topic. */
 async function openChannel(topic: string): Promise<WatchChannel> {
   const release = await leases.acquire(topic);
   let channel: RealtimeChannel;
   let remove: () => Promise<unknown>;
   try {
-    const { createClient } = await import("@/lib/supabase/client");
-    const client = createClient();
+    const client = await realtimeClient();
     channel = client.channel(topic, { config: { presence: { key: keyOfTab() } } });
-    remove = () => client.removeChannel(channel).finally(release);
+    remove = () => client.removeChannel(channel).finally(() => setTimeout(release, SETTLE_MS));
   } catch (e) {
     release();
     throw e;
