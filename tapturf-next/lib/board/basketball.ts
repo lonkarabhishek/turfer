@@ -285,7 +285,8 @@ function step(s: S, e: BoardEvent, i: number): void {
 /** A named player's line: a tagged player by the tag (whatever the spelling typed), an untagged one by the name, any case. */
 function player(s: S, side: Side, name: string, rawTag: unknown) {
   const tag = tagOf(rawTag);
-  const k = tag ? `${side}:@${tag.u}` : `${side}:${name.toLowerCase()}`;
+  // \u0001 cannot be in a cleaned name: a name typed as "@ravi_x" stays apart from the tagged ravi_x.
+  const k = tag ? `${side}\u0001${tag.u}` : `${side}:${name.toLowerCase()}`;
   let pl = s.players.get(k);
   if (!pl) s.players.set(k, (pl = { side, name, ...(tag ? { tag } : {}), points: 0, fouls: 0 }));
   return pl;

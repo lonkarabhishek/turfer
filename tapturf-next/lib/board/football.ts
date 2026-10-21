@@ -124,7 +124,8 @@ function start(board: Board): S {
 }
 
 /** One person per key: a tagged player by the tag (whatever the spelling typed), an untagged one by the name, any case. */
-const playerKey = (side: Side, name: string, tag?: Tag) => (tag ? `${side}:@${tag.u}` : `${side}:${name.toLowerCase()}`);
+// \u0001 cannot be in a cleaned name, so a name typed as "@rahul_k" never shares a key with the tagged rahul_k.
+const playerKey = (side: Side, name: string, tag?: Tag) => (tag ? `${side}\u0001${tag.u}` : `${side}:${name.toLowerCase()}`);
 /** The event's player tag, read only next to a name. */
 const tagIn = (e: { player?: string; tag?: unknown }) => (e.player ? tagOf(e.tag) : undefined);
 const level = (s: S) => s.goals.a === s.goals.b;

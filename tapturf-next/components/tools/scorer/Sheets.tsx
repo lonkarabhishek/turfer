@@ -22,7 +22,7 @@ import {
   type Rules,
   type Side,
 } from "@/lib/cricket/scoring";
-import { buildBall, cleanName, defaultName, placeholderOf, playerEdits, profilePick, resolvePlayer, type NbSource, type PlayerPick } from "./logic";
+import { buildBall, cleanName, defaultName, placeholderOf, playerEdits, profilePick, resolveOption, resolvePlayer, type NbSource, type PlayerPick } from "./logic";
 import { NameInput, Options, Pick, Sheet, SheetLabel } from "./ui";
 import { PlayerSearch, TagLine } from "../PlayerSearch";
 import type { PlayerHit } from "@/lib/account/types";
@@ -128,9 +128,10 @@ export function OpenersSheet({ match, view, onCommit, onClose }: { match: Match;
       evs.push(e);
       m = apply(m, e);
     };
-    if (needS) push({ type: "setBatter", ...resolvePlayer(m, inn.batting, sN), end: "striker" });
-    if (needN) push({ type: "setBatter", ...resolvePlayer(m, inn.batting, nN), end: "nonStriker" });
-    if (needB) push({ type: "setBowler", ...resolvePlayer(m, inn.bowling, bN) });
+    // A name that is one of the players on show is that player, tagged or not; anything else is resolved as typed.
+    if (needS) push({ type: "setBatter", ...resolveOption(m, inn.batting, sN, bat), end: "striker" });
+    if (needN) push({ type: "setBatter", ...resolveOption(m, inn.batting, nN, bat), end: "nonStriker" });
+    if (needB) push({ type: "setBowler", ...resolveOption(m, inn.bowling, bN, view.bowlerOptions) });
     if (!onCommit(evs)) setErr("Could not start. Check the names.");
   };
 

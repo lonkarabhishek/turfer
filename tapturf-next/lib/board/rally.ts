@@ -69,6 +69,8 @@ export type GameFold<R> = {
   /** The rules in force now. */
   rules: R;
   names: Record<Side, string>;
+  /** Each side's name as of the event being folded, to tell a tag-only rename from a real one. */
+  spelt: Record<Side, string>;
   /** Finished games and the one in play (last). */
   games: GameS[];
   won: Record<Side, number>;
@@ -175,6 +177,7 @@ function freshFold<R extends AnyRules>(kit: Kit<R>, board: Board): GameFold<R> {
   return {
     rules: kit.normalizeRules(board.setup?.rules),
     names: namesNow(board),
+    spelt: { a: cleanName(board.setup?.teamA), b: cleanName(board.setup?.teamB) },
     games: [newGame(0)],
     won: zero(),
     serving: null,
@@ -326,10 +329,18 @@ function step<R extends AnyRules>(kit: Kit<R>, f: GameFold<R>, e: BoardEvent, i:
       line(e.side, `Timeout, ${N[e.side]}`, "info");
       f.lastAction = `Timeout, ${N[e.side]}`;
       return;
-    case "rename":
-      line(e.side, `Name changed to ${cleanName(e.name)}`, "info", null);
-      f.lastAction = `Renamed ${cleanName(e.name)}`;
+    case "rename": {
+      const name = cleanName(e.name);
+      // A change of tag alone carries the current name: no "Name changed" line, and never a username in the text.
+      if (name === f.spelt[e.side] && e.tag !== undefined) {
+        f.lastAction = e.tag ? `${name} tagged` : `Tag removed, ${name}`;
+        return;
+      }
+      f.spelt[e.side] = name;
+      line(e.side, `Name changed to ${name}`, "info", null);
+      f.lastAction = `Renamed ${name}`;
       return;
+    }
     case "rules": {
       const was = f.rules;
       f.rules = kit.normalizeRules({ ...f.rules, ...e.rules });

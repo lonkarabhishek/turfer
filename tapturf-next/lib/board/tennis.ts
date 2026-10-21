@@ -107,6 +107,8 @@ type Fold = {
   /** The rules in force now. */
   rules: TennisRules;
   names: Record<Side, string>;
+  /** Each side's name as of the event being folded, to tell a tag-only rename from a real one. */
+  spelt: Record<Side, string>;
   /** Finished sets and the one in play (last). */
   sets: SetS[];
   won: Pts;
@@ -175,6 +177,7 @@ function freshFold(c: Config, board: Board): Fold {
   return {
     rules,
     names: namesNow(board),
+    spelt: { a: cleanName(board.setup?.teamA), b: cleanName(board.setup?.teamB) },
     sets: [newSet(rules, 0)],
     won: zero(),
     pts: zero(),
@@ -322,10 +325,18 @@ function step(c: Config, f: Fold, e: BoardEvent, i: number) {
       f.lastAction = `${N[e.side]} serves`;
       return;
     }
-    case "rename":
-      line(e.side, `Name changed to ${cleanName(e.name)}`, "info", null);
-      f.lastAction = `Renamed ${cleanName(e.name)}`;
+    case "rename": {
+      const name = cleanName(e.name);
+      // A change of tag alone carries the current name: no "Name changed" line, and never a username in the text.
+      if (name === f.spelt[e.side] && e.tag !== undefined) {
+        f.lastAction = e.tag ? `${name} tagged` : `Tag removed, ${name}`;
+        return;
+      }
+      f.spelt[e.side] = name;
+      line(e.side, `Name changed to ${name}`, "info", null);
+      f.lastAction = `Renamed ${name}`;
       return;
+    }
     case "rules": {
       f.rules = c.normalize({ ...f.rules, ...e.rules });
       // A set with nothing played starts under the new rules (a match tiebreak or not), and so does a game with nothing played (a tiebreak or not).

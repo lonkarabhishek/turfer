@@ -1336,3 +1336,35 @@ test("football: a finished draw takes penalties and nothing else", () => {
   const pens = run(b, { type: "rules", rules: { penalties: true, shootoutKicks: 3 } });
   assert.equal(deriveBoard(pens).status, "live");
 });
+
+test("tags: a name typed as @username is not the tagged person", () => {
+  let b = run(fb({ cards: true }), clock(true, T0), { type: "point", side: "a", how: "goal", player: "@rahul_k", at: T0 + MIN }, { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k" }, at: T0 + 2 * MIN });
+  const rows = deriveBoard(b).players.filter((p) => p.side === "a");
+  assert.equal(rows.length, 2);
+  assert.ok(rows.some((p) => p.name === "Rahul" && p.tag?.u === "rahul_k"));
+  assert.ok(rows.some((p) => p.name === "@rahul_k" && !p.tag));
+  // A red for the typed name does not send the tagged player off.
+  b = run(b, { type: "card", side: "a", color: "red", player: "@rahul_k", at: T0 + 3 * MIN });
+  assert.equal(checkBoard(b, { type: "card", side: "a", color: "yellow", player: "Rahul", tag: { u: "rahul_k" }, at: T0 + 4 * MIN }), null);
+
+  const k = run(bb(), clock(true, T0), { type: "point", side: "a", value: 2, player: "@ravi_x", at: T0 + MIN }, { type: "point", side: "a", value: 3, player: "Ravi", tag: { u: "ravi_x" }, at: T0 + 2 * MIN });
+  assert.equal(deriveBoard(k).players.filter((p) => p.side === "a").length, 2);
+});
+
+test("tags: a tag-only rename in singles adds no name-change line and no username in text", () => {
+  for (const sport of ["badminton", "tennis"] as const) {
+    const b0 = newBoard(sport, { teamA: "Asha", teamB: "Ravi", rules: { doubles: false } }, { id: `t-${sport}`, now: T0 });
+    const b1 = run(b0, { type: "rename", side: "a", name: "Asha", tag: { u: "asha_p" } });
+    const v1 = deriveBoard(b1);
+    assert.equal(v1.timeline.filter((l) => /Name changed/.test(l.text)).length, 0, sport);
+    assert.equal(v1.lastAction, "Asha tagged", sport);
+    assert.equal(v1.teams.a.tag?.u, "asha_p", sport);
+    assert.ok(!JSON.stringify(v1.timeline).includes("asha_p"), sport);
+    const v2 = deriveBoard(run(b1, { type: "rename", side: "a", name: "Asha", tag: null }));
+    assert.equal(v2.lastAction, "Tag removed, Asha", sport);
+    assert.equal(v2.teams.a.tag, undefined, sport);
+    // A real rename with a tag still says so.
+    const v3 = deriveBoard(run(b0, { type: "rename", side: "a", name: "Asha P", tag: { u: "asha_p" } }));
+    assert.equal(v3.timeline.filter((l) => /Name changed to Asha P/.test(l.text)).length, 1, sport);
+  }
+});
