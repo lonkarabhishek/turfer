@@ -71,7 +71,7 @@ const waLink = (text: string) => `https://wa.me/?text=${encodeURIComponent(text)
 export function PrivacyNote() {
   return (
     <p className="mt-1 flex items-center gap-1 text-[12px] leading-snug text-primary-500">
-      <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>
+      <span className="min-w-0">Team and player names, any TapTurf usernames you tag, and the score are uploaded for this link.</span>
       <a href="/privacy#live-links" target="_blank" rel="noopener" className="shrink-0 min-h-12 px-2 inline-flex items-center font-semibold text-accent-700 underline underline-offset-2">
         Privacy
       </a>

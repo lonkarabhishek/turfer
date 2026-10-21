@@ -202,7 +202,7 @@ export function Setup({
                 <p className="py-1 text-[13px] leading-snug text-primary-700">You log in when the match starts, with Google or your phone. Friends see the score and log in to follow it live.</p>
               )}
               <p className="flex items-center gap-1 text-[12px] leading-snug text-primary-500">
-                <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>
+                <span className="min-w-0">Team and player names, any TapTurf usernames you tag, and the score are uploaded for this link.</span>
                 <a href="/privacy#live-links" target="_blank" rel="noopener" className="shrink-0 min-h-12 px-2 inline-flex items-center font-semibold text-accent-700 underline underline-offset-2">
                   Privacy
                 </a>

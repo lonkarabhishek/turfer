@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { TagHandle } from "@/components/account/TagHandle";
 import { ChevronLeft, MoreHorizontal, Share2 } from "lucide-react";
 import type { BatterLine, BowlerLine, MatchView, Side } from "@/lib/cricket/scoring";
 import { rate } from "./logic";
@@ -61,6 +62,7 @@ export function ScoreHeader({
       <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${b.onStrike ? "bg-accent-500" : "bg-transparent"}`} aria-hidden />
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-[15px] ${b.onStrike ? "font-bold" : "font-semibold text-primary-700"}`}>{b.name}</span>
+        {b.tag && <TagHandle tag={b.tag} link={!onPlayer} className="block truncate text-[12px] font-medium text-accent-700 leading-tight" />}
       </span>
       <span className="text-[16px] font-bold tabular-nums shrink-0">
         {b.runs}
@@ -71,7 +73,10 @@ export function ScoreHeader({
   const bowler = (b: BowlerLine) => (
     <>
       <span className="text-[12px] font-bold uppercase text-primary-500">Bowling</span>
-      <span className="flex-1 min-w-0 truncate text-[15px] font-semibold">{b.name}</span>
+      <span className="flex-1 min-w-0 truncate text-[15px] font-semibold">
+        {b.name}
+        {b.tag && <TagHandle tag={b.tag} link={!onPlayer} className="ml-1.5 text-[12px] font-medium text-accent-700" />}
+      </span>
       {view.onHatTrick && <span className="text-[12px] font-bold text-red-600">Hat-trick ball</span>}
       <span className="text-[14px] font-bold tabular-nums">
         {b.overs}-{b.maidens}-{b.runs}-{b.wickets}

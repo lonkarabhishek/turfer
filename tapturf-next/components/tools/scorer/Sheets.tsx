@@ -22,8 +22,11 @@ import {
   type Rules,
   type Side,
 } from "@/lib/cricket/scoring";
-import { buildBall, cleanName, defaultName, placeholderOf, resolvePlayer, type NbSource } from "./logic";
+import { buildBall, cleanName, defaultName, placeholderOf, playerEdits, profilePick, resolvePlayer, type NbSource, type PlayerPick } from "./logic";
 import { NameInput, Options, Pick, Sheet, SheetLabel } from "./ui";
+import { PlayerSearch, TagLine } from "../PlayerSearch";
+import type { PlayerHit } from "@/lib/account/types";
+import type { Tag } from "@/lib/account/tag";
 
 type Commit = (events: MatchEvent[]) => boolean;
 
@@ -31,8 +34,27 @@ type Commit = (events: MatchEvent[]) => boolean;
 /* Picking players                                                     */
 /* ------------------------------------------------------------------ */
 
-/** Chips of a team's players plus a box to type a new one. Tapping a chip picks straight away. */
-function PlayerPicker({ options, newName, onPick, newLabel }: { options: { id: string; name: string; detail?: string; muted?: boolean }[]; newName: string; onPick: (name: string, id?: string) => void; newLabel: string }) {
+/** "@asha · 12 (9)": a tagged player's username before the detail. */
+const withHandle = (tag: Tag | undefined, detail?: string) => (tag ? (detail ? `@${tag.u} · ${detail}` : `@${tag.u}`) : detail);
+
+/**
+ * Chips of a team's players plus a box to type a new one. Tapping a chip
+ * picks straight away. With onProfile, a TapTurf profile can be picked
+ * too: the typed name stays, an empty box takes the profile's name.
+ */
+function PlayerPicker({
+  options,
+  newName,
+  onPick,
+  newLabel,
+  onProfile,
+}: {
+  options: { id: string; name: string; tag?: Tag; detail?: string; muted?: boolean }[];
+  newName: string;
+  onPick: (name: string, id?: string) => void;
+  newLabel: string;
+  onProfile?: (p: PlayerHit, typed: string) => void;
+}) {
   const [typed, setTyped] = useState("");
   const name = cleanName(typed);
   return (
@@ -40,7 +62,7 @@ function PlayerPicker({ options, newName, onPick, newLabel }: { options: { id: s
       {options.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
           {options.map((o) => (
-            <Pick key={o.id} onClick={() => onPick(o.name, o.id)} label={o.name} detail={o.detail} muted={o.muted} />
+            <Pick key={o.id} onClick={() => onPick(o.name, o.id)} label={o.name} detail={withHandle(o.tag, o.detail)} muted={o.muted} />
           ))}
         </div>
       )}
@@ -55,6 +77,7 @@ function PlayerPicker({ options, newName, onPick, newLabel }: { options: { id: s
           )}
         </div>
       </div>
+      {onProfile && <PlayerSearch onPick={(p) => onProfile(p, typed)} />}
     </div>
   );
 }
@@ -63,7 +86,7 @@ function PlayerPicker({ options, newName, onPick, newLabel }: { options: { id: s
 const batterOpts = (list: BatterOption[]) =>
   [...list]
     .sort((x, y) => Number(x.retiredHurt) - Number(y.retiredHurt) || Number(placeholderOf(x.name) === "Bowler") - Number(placeholderOf(y.name) === "Bowler"))
-    .map((b) => ({ id: b.id, name: b.name, detail: b.retiredHurt ? `Retired hurt, ${b.runs} (${b.balls})` : b.balls ? `${b.runs} (${b.balls})` : "Yet to bat", muted: b.retiredHurt }));
+    .map((b) => ({ id: b.id, name: b.name, tag: b.tag, detail: b.retiredHurt ? `Retired hurt, ${b.runs} (${b.balls})` : b.balls ? `${b.runs} (${b.balls})` : "Yet to bat", muted: b.retiredHurt }));
 
 /** Who bowls next: the latest bowlers first, then the rest of the team. */
 function bowlerOrder(view: MatchView) {
@@ -180,9 +203,13 @@ export function BatterSheet({ match, view, onCommit, onClose }: { match: Match; 
   const side = view.current.batting;
   const end: End = view.needs.includes("striker") ? "striker" : "nonStriker";
   const pick = (name: string, id?: string) => onCommit([{ type: "setBatter", ...(id ? { player: id } : resolvePlayer(match, side, name)) }]);
+  const profile = (p: PlayerHit, typed: string) => {
+    const pk = profilePick(match, side, typed || defaultName(view, side, "Batter"), p);
+    if (pk) onCommit([{ type: "setBatter", ...pk }]);
+  };
   return (
     <Sheet title="Next batter in" subtitle={end === "striker" ? "Comes in on strike." : "Comes in at the non-striker's end."} onClose={onClose}>
-      <PlayerPicker options={batterOpts(view.batterOptions)} newName={defaultName(view, side, "Batter")} newLabel="New player" onPick={pick} />
+      <PlayerPicker options={batterOpts(view.batterOptions)} newName={defaultName(view, side, "Batter")} newLabel="New player" onPick={pick} onProfile={profile} />
     </Sheet>
   );
 }
@@ -195,6 +222,10 @@ export function BowlerSheet({ match, view, mode, onCommit, onClose }: { match: M
   const opts = bowlerOrder(view).filter((o) => !(mode === "change" && o.current));
   const max = view.setup.rules.maxOversPerBowler;
   const pick = (name: string, id?: string) => onCommit([{ type: "setBowler", ...(id ? { player: id } : resolvePlayer(match, side, name)) }]);
+  const profile = (p: PlayerHit, typed: string) => {
+    const pk = profilePick(match, side, typed || defaultName(view, side, "Bowler"), p);
+    if (pk) onCommit([{ type: "setBowler", ...pk }]);
+  };
   return (
     <Sheet title={mode === "change" ? "Change bowler" : `Over ${overNo}: who bowls?`} subtitle={mode === "change" ? "The new bowler finishes this over." : view.current.lastOverBowler ? "The last over's bowler cannot bowl this one." : undefined} onClose={onClose}>
       {opts.length > 0 && (
@@ -210,7 +241,7 @@ export function BowlerSheet({ match, view, mode, onCommit, onClose }: { match: M
                   pick(o.name, o.id);
                 }}
                 label={o.name}
-                detail={warn ? (confirm === o.id ? "Tap again to let them bowl" : warn) : figures}
+                detail={withHandle(o.tag, warn ? (confirm === o.id ? "Tap again to let them bowl" : warn) : figures)}
                 muted={!!warn && confirm !== o.id}
                 danger={!!warn && confirm === o.id}
               />
@@ -219,7 +250,7 @@ export function BowlerSheet({ match, view, mode, onCommit, onClose }: { match: M
         </div>
       )}
       <div className={opts.length ? "mt-3" : ""}>
-        <PlayerPicker options={[]} newName={defaultName(view, side, "Bowler")} newLabel="New bowler" onPick={pick} />
+        <PlayerPicker options={[]} newName={defaultName(view, side, "Bowler")} newLabel="New bowler" onPick={pick} onProfile={profile} />
       </div>
     </Sheet>
   );
@@ -280,11 +311,21 @@ export function WicketSheet({ match, view, extra, nb, preset, onCommit, onClose 
   const newOnStrike = faceNew ?? after?.newOnStrike ?? true;
   const crossed = canCross && after ? newOnStrike !== after.newOnStrike : false;
 
-  const commit = (batterName?: string, batterId?: string) => {
+  /** The ball, and the batter who comes in: a roster id, a name, or a TapTurf profile (resolved against the match with the wicket in). */
+  const commit = (batter?: { name: string; id?: string } | { profile: PlayerHit; typed: string }) => {
     const e = build(crossed);
     if (!e) return;
     const evs: MatchEvent[] = [e];
-    if (batterName) evs.push({ type: "setBatter", ...(batterId ? { player: batterId } : resolvePlayer(apply(match, e), inn.batting, batterName)) });
+    if (batter) {
+      const m2 = apply(match, e);
+      let pk: PlayerPick | null;
+      if ("profile" in batter) {
+        const v2 = after?.view;
+        pk = profilePick(m2, inn.batting, batter.typed || (v2 ? defaultName(v2, inn.batting, "Batter") : ""), batter.profile);
+      } else pk = batter.id ? { player: batter.id } : resolvePlayer(m2, inn.batting, batter.name);
+      if (!pk) return;
+      evs.push({ type: "setBatter", ...pk });
+    }
     if (!onCommit(evs)) setErr("That did not fit. Check who is out.");
   };
 
@@ -452,7 +493,7 @@ export function WicketSheet({ match, view, extra, nb, preset, onCommit, onClose 
       {after && !after.error && after.needBatter && after.view && (
         <>
           <SheetLabel>Next batter in</SheetLabel>
-          <PlayerPicker options={batterOpts(after.view.batterOptions)} newName={defaultName(after.view, inn.batting, "Batter")} newLabel="New player" onPick={(name, id) => commit(name, id)} />
+          <PlayerPicker options={batterOpts(after.view.batterOptions)} newName={defaultName(after.view, inn.batting, "Batter")} newLabel="New player" onPick={(name, id) => commit({ name, id })} onProfile={(profile, typed) => commit({ profile, typed })} />
         </>
       )}
       {after && !after.error && !after.needBatter && (
@@ -498,19 +539,24 @@ export function MoreSheet({ view, onAction, onClose }: { view: MatchView; onActi
   );
 }
 
-/** Tap a name: rename, and for the batters and bowler at the crease the quick actions. */
+/** Tap a name: rename, tag or untag a TapTurf profile, and for the batters and bowler at the crease the quick actions. */
 export function PlayerSheet({ view, side, id, onCommit, onAction, onClose }: { view: MatchView; side: Side; id: string; onCommit: Commit; onAction: (a: MoreAction) => void; onClose: () => void }) {
   const p = view.teams[side].players.find((x) => x.id === id);
   const [name, setName] = useState(p?.name ?? "");
+  // undefined: keep the tag as it is; null: Remove tag; a tag: the profile picked.
+  const [tag, setTag] = useState<Tag | null | undefined>(undefined);
+  const [tagErr, setTagErr] = useState<string | null>(null);
   const cur = view.current;
   const atCrease = view.status === "live" && side === cur.batting && (cur.striker?.id === id || cur.nonStriker?.id === id);
   const bowling = view.status === "live" && side === cur.bowling && cur.bowler?.id === id;
   if (!p) return null;
+  const shown = tag === undefined ? p.tag ?? null : tag;
   const save = () => {
-    const n = cleanName(name);
-    if (!n || n === p.name) return onClose();
-    onCommit([{ type: "renamePlayer", team: side, player: id, name: n }]);
+    const events = playerEdits(view, side, id, { name, ...(tag !== undefined ? { tag } : {}) });
+    if (!events.length) return onClose();
+    onCommit(events);
   };
+  const others = new Set(view.teams[side].players.filter((x) => x.id !== id && x.tag).map((x) => x.tag!.u));
   return (
     <Sheet title={p.name} subtitle={view.teams[side].name} onClose={onClose}>
       <SheetLabel>Name</SheetLabel>
@@ -521,6 +567,25 @@ export function PlayerSheet({ view, side, id, onCommit, onAction, onClose }: { v
         </button>
       </div>
       <p className="mt-1.5 text-[12px] text-primary-500">Changes the name everywhere, old balls included.</p>
+      {shown ? (
+        <TagLine tag={shown} onRemove={() => setTag(null)} />
+      ) : (
+        <PlayerSearch
+          onPick={(hit) => {
+            if (others.has(hit.u)) return setTagErr(`@${hit.u} is already on another ${view.teams[side].name} player.`);
+            setTagErr(null);
+            setTag({ u: hit.u });
+            // A placeholder name ("Batter 3") becomes the profile's name; a real one stays.
+            if (placeholderOf(cleanName(name)) || !cleanName(name)) setName(cleanName(hit.name).slice(0, 40));
+          }}
+        />
+      )}
+      {tagErr && (
+        <p role="alert" className="mt-1.5 text-[13px] font-semibold text-red-600">
+          {tagErr}
+        </p>
+      )}
+      {tag !== undefined && <p className="mt-1.5 text-[12px] text-primary-500">Save to {tag ? "tag" : "remove the tag"}.</p>}
       {(atCrease || bowling) && (
         <div className="mt-4 grid grid-cols-2 gap-2">
           {atCrease && <Pick onClick={() => onAction("swap")} label="Swap strike" disabled={!cur.striker || !cur.nonStriker} />}

@@ -6,6 +6,8 @@ import { formatOvers } from "@/lib/cricket/overs";
 import type { BatterLine, BowlerLine, InningsView, MatchView, Side } from "@/lib/cricket/scoring";
 import { rate } from "./logic";
 import { BallChip } from "./ui";
+import { TagHandle } from "@/components/account/TagHandle";
+import type { Tag } from "@/lib/account/tag";
 
 type OnPlayer = (side: Side, id: string) => void;
 
@@ -26,12 +28,26 @@ function Card({ title, right, children, className = "" }: { title?: ReactNode; r
 const th = "py-1.5 px-1 text-right text-[12px] font-semibold text-primary-500 tabular-nums";
 const td = "py-2 px-1 text-right text-[15px] tabular-nums text-primary-800";
 
-function NameButton({ name, onClick, strong }: { name: string; onClick?: () => void; strong?: boolean }) {
-  if (!onClick) return <span className={strong ? "font-bold text-primary-900" : "font-semibold text-primary-900"}>{name}</span>;
+/** A tagged player's @username after their name: a profile link for followers, plain text next to the scorer's name buttons. */
+function Handle({ tag, link }: { tag?: Tag; link: boolean }) {
+  return tag ? <TagHandle tag={tag} link={link} className="block text-[12px] font-medium text-accent-700" /> : null;
+}
+
+function NameButton({ name, onClick, strong, tag }: { name: string; onClick?: () => void; strong?: boolean; tag?: Tag }) {
+  if (!onClick)
+    return (
+      <span>
+        <span className={strong ? "font-bold text-primary-900" : "font-semibold text-primary-900"}>{name}</span>
+        <Handle tag={tag} link />
+      </span>
+    );
   return (
-    <button type="button" onClick={onClick} className={`text-left underline decoration-primary-200 underline-offset-4 hover:decoration-accent-500 ${strong ? "font-bold text-primary-900" : "font-semibold text-primary-900"}`}>
-      {name}
-    </button>
+    <span>
+      <button type="button" onClick={onClick} className={`text-left underline decoration-primary-200 underline-offset-4 hover:decoration-accent-500 ${strong ? "font-bold text-primary-900" : "font-semibold text-primary-900"}`}>
+        {name}
+      </button>
+      <Handle tag={tag} link={false} />
+    </span>
   );
 }
 
@@ -54,7 +70,7 @@ function BattingTable({ rows, side, onPlayer, showHow }: { rows: BatterLine[]; s
             <td className="py-2 pr-1 text-[15px] min-w-0">
               <span className="inline-flex items-center gap-1.5 max-w-full">
                 {b.onStrike && <span className="w-2 h-2 rounded-full bg-accent-500 shrink-0" aria-label="On strike" />}
-                <NameButton name={b.name} strong={b.onStrike} onClick={onPlayer ? () => onPlayer(side, b.id) : undefined} />
+                <NameButton name={b.name} tag={b.tag} strong={b.onStrike} onClick={onPlayer ? () => onPlayer(side, b.id) : undefined} />
                 {showHow && (b.status === "batting" || b.status === "notOut") && <span className="text-primary-900 font-bold" aria-hidden>*</span>}
               </span>
               {showHow && <span className={`block text-[12px] leading-snug ${b.status === "out" ? "text-primary-500" : "text-accent-700"}`}>{b.howOut}</span>}
@@ -92,7 +108,7 @@ function BowlingTable({ rows, side, onPlayer }: { rows: BowlerLine[]; side: Side
               <td className="py-2 pr-1 text-[15px]">
                 <span className="inline-flex items-center gap-1.5">
                   {b.current && <span className="w-2 h-2 rounded-full bg-accent-500 shrink-0" aria-label="Bowling now" />}
-                  <NameButton name={b.name} strong={b.current} onClick={onPlayer ? () => onPlayer(side, b.id) : undefined} />
+                  <NameButton name={b.name} tag={b.tag} strong={b.current} onClick={onPlayer ? () => onPlayer(side, b.id) : undefined} />
                 </span>
                 {bits && <span className="block text-[12px] text-primary-500">{bits}</span>}
               </td>
@@ -363,6 +379,7 @@ function ResultPanel({ view, onPlayer, actions, readOnly }: { view: MatchView; o
                 <span>
                   <span className="block text-[12px] font-semibold text-primary-500">Player of the match, {view.teams[potm.side].name}</span>
                   <span className="font-bold text-primary-900">{potm.text}</span>
+                  <Handle tag={potm.tag} link={!onPlayer} />
                 </span>
               </li>
             )}
@@ -371,6 +388,7 @@ function ResultPanel({ view, onPlayer, actions, readOnly }: { view: MatchView; o
                 <span className="text-primary-500">Top scorer</span>
                 <span className="font-semibold text-primary-900 text-right">
                   {topScorer.text}
+                  <Handle tag={topScorer.tag} link={!onPlayer} />
                   <span className="block text-[12px] font-normal text-primary-500">{view.teams[topScorer.side].name}</span>
                 </span>
               </li>
@@ -380,6 +398,7 @@ function ResultPanel({ view, onPlayer, actions, readOnly }: { view: MatchView; o
                 <span className="text-primary-500">Best bowler</span>
                 <span className="font-semibold text-primary-900 text-right">
                   {bestBowler.text}
+                  <Handle tag={bestBowler.tag} link={!onPlayer} />
                   <span className="block text-[12px] font-normal text-primary-500">{view.teams[bestBowler.side].name}</span>
                 </span>
               </li>
