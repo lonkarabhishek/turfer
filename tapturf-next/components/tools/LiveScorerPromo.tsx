@@ -41,10 +41,10 @@ export function LiveScorerPromo({ sport, venue, variant, live = false, liveLinks
   const heading = board ? `${now ? "Game on? " : ""}Score your ${word} game live` : now ? "Game on? Score it live" : "Score it live on match day";
   const body = board
     ? liveLinks
-      ? `Score ${by} on your phone and share one link. Everyone can follow the score live, no app needed.`
+      ? `Score ${by} on your phone and share one link. Everyone sees the score, and a quick login keeps it live. No app needed.`
       : `Score ${by} on your phone. The scoreboard keeps itself up to date, ready to share on WhatsApp.`
     : liveLinks
-      ? "Score ball by ball on your phone and share one link. Everyone can follow the score live, no app needed."
+      ? "Score ball by ball on your phone and share one link. Everyone sees the score, and a quick login keeps it live. No app needed."
       : "Score ball by ball on your phone. The scorecard, run rates and graphs keep themselves up to date.";
 
   return (

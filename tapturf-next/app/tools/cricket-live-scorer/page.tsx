@@ -39,7 +39,7 @@ const FAQ = [
   {
     q: "Is my match saved, and can I share it?",
     a: LIVE_LINKS
-      ? "Every ball is saved in your browser as you score, so a reload, a dead screen or closing the tab does not lose anything. Open the page again and the match carries on. Share live score sends a WhatsApp-ready update with the score, run rate, batters, bowler and this over. No account is needed, and nothing is uploaded unless you turn on a live link. With it on, anyone you send the link to can follow the match ball by ball, and you can turn it off any time."
+      ? "Every ball is saved in your browser as you score, so a reload, a dead screen or closing the tab does not lose anything. Open the page again and the match carries on. Share live score sends a WhatsApp-ready update with the score, run rate, batters, bowler and this over. Scoring needs no account, and nothing is uploaded unless you turn on a live link, which takes a quick login. With it on, anyone you send the link to sees the score, a quick login lets them follow ball by ball, and you can turn it off any time."
       : "Every ball is saved in your browser as you score, so a reload, a dead screen or closing the tab does not lose anything. Open the page again and the match carries on. Share live score sends a WhatsApp-ready update with the score, run rate, batters, bowler and this over. Matches stay on the phone you scored on; nothing is uploaded and no account is needed.",
   },
 ];

@@ -21,7 +21,7 @@ export type ToolDef = {
   /** The one product CTA under the result. */
   cta: { label: string; href: string };
   related: ToolSlug[];
-  /** Last real change to the page (YYYY-MM-DD), for the sitemap's lastmod. */
+  /** Last real change to the page, the shared ToolPage shell included (YYYY-MM-DD), for the sitemap's lastmod. */
   updated: string;
 };
 
@@ -30,7 +30,7 @@ export const TOOLS_BASE = "https://www.tapturf.in/tools";
 export const TOOLS: ToolDef[] = [
   {
     slug: "cricket-nrr-calculator",
-    updated: "2026-10-11",
+    updated: "2026-10-21",
     key: "nrr_calculator",
     name: "Cricket NRR Calculator",
     tagline: "Calculate net run rate instantly.",
@@ -43,7 +43,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     slug: "cricket-toss",
-    updated: "2026-10-11",
+    updated: "2026-10-21",
     key: "toss",
     name: "Cricket Toss",
     tagline: "Flip a coin for your cricket match.",
@@ -56,7 +56,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     slug: "cricket-scorecard-maker",
-    updated: "2026-10-11",
+    updated: "2026-10-21",
     key: "scorecard_maker",
     name: "Cricket Scorecard Maker",
     tagline: "Create and share match result cards.",
@@ -96,7 +96,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     slug: "cricket-tournament-scorer",
-    updated: "2026-10-11",
+    updated: "2026-10-21",
     key: "tournament_scorer",
     name: "Series & Tournament Scorer",
     tagline: "Track matches, points and NRR.",
@@ -109,7 +109,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     slug: "cricket-team-generator",
-    updated: "2026-10-11",
+    updated: "2026-10-21",
     key: "team_generator",
     name: "Cricket Team Generator",
     tagline: "Split players into teams instantly.",

@@ -99,7 +99,7 @@ export default function Page() {
                 title: "A live link for everyone watching",
                 body: (
                   <p>
-                    Turn on a live link and send it to the group. Followers just open it: the score, clock, sets, timeline and stats update as you tap, and the eye by LIVE shows how many are watching. Only that match is uploaded, and you can turn the link off any time. The{" "}
+                    Turn on a live link and send it to the group. You log in once to turn it on. Followers see the score as soon as they open it, and a quick login keeps the score, clock, sets, timeline and stats updating as you tap; the eye by LIVE shows how many are following. Only that match is uploaded, and you can turn the link off any time. The{" "}
                     <Link href="/privacy#live-links" className="text-accent-700 font-semibold hover:underline">
                       privacy policy
                     </Link>{" "}

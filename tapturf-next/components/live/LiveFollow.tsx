@@ -17,20 +17,22 @@ import { MatchTabs, ScoreHeader } from "@/components/tools/scorer/MatchHeader";
 import { writeHandoff } from "@/components/tools/scorer/handoff";
 import { BoardHeader } from "@/components/board/BoardHeader";
 import { BoardTabs } from "@/components/board/BoardTabs";
-import { accessOf, boardNow, boardPause, clockNow, followLoginHref, freshness, joinClock, liveBadgeOn, pauseOf, pauseText, pollsFor, resultCardHref, setClock, startPolling, type FollowStatus } from "./follow";
+import { accessOf, ago, boardNow, boardPause, clockNow, followLoginHref, freshness, joinClock, liveBadgeOn, pauseOf, pauseText, pollsFor, resultCardHref, setClock, startPolling, type FollowStatus } from "./follow";
 import { useWatchers } from "./useWatchers";
 import { WatchCount } from "./WatchCount";
 
 const TOOL = "live_follow";
+/** Past this, a Supabase session still unresolved (a dead network) counts as logged out. */
+const AUTH_WAIT_MS = 8_000;
 
-/** The answer on screen, its match already checked. updatedAt is ms by the server's clock. */
-type Shown = { status: FollowStatus; rev: number; match: LiveMatch | null; updatedAt: number | null };
+/** The answer on screen, its match already checked. updatedAt and seenAt (when it came in) are ms by the server's clock. */
+type Shown = { status: FollowStatus; rev: number; match: LiveMatch | null; updatedAt: number | null; seenAt: number };
 
-function toShown(r: LiveGetResponse): Shown | null {
+function toShown(r: LiveGetResponse, seenAt: number): Shown | null {
   // Checked again here: the page trusts nothing it did not rebuild itself. A board is rebuilt as a board.
   const match = r.match == null ? null : sanitizeLive(r.match);
   if ((r.status === "live" || r.status === "done") && !match) return null;
-  return { status: r.status, rev: r.rev, match, updatedAt: r.updatedAt ? Date.parse(r.updatedAt) : null };
+  return { status: r.status, rev: r.rev, match, updatedAt: r.updatedAt ? Date.parse(r.updatedAt) : null, seenAt };
 }
 
 /**
@@ -57,12 +59,12 @@ type PauseAt = (serverNow: number) => string | null;
 
 /**
  * The red LIVE pill by the team names, only while updates keep coming,
- * or while a running clock is why none do. frozen: as it was when the
- * page opened, for a follower who gets no updates.
+ * or while a running clock is why none do. frozenAt: for a follower who
+ * gets no updates, as it was when the score came in.
  */
-function LiveBadge({ updatedAt, serverNow, pause, frozen }: { updatedAt: number; serverNow: number; pause: PauseAt; frozen: boolean }) {
+function LiveBadge({ updatedAt, serverNow, pause, frozenAt }: { updatedAt: number; serverNow: number; pause: PauseAt; frozenAt: number | null }) {
   const ticking = useServerNow(serverNow, 15_000, updatedAt);
-  const now = frozen ? serverNow : ticking;
+  const now = frozenAt ?? ticking;
   if (!liveBadgeOn(now - updatedAt, pause(now) === "Clock running.")) return null;
   return (
     <span className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full bg-red-600 text-[10px] font-extrabold tracking-wide">
@@ -72,10 +74,20 @@ function LiveBadge({ updatedAt, serverNow, pause, frozen }: { updatedAt: number;
   );
 }
 
-/** How old the score is. Ticks on its own, so the rest of the page does not re-render every few seconds. */
-function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "done"; updatedAt: number; pause: PauseAt; serverNow: number }) {
-  const now = useServerNow(serverNow, 5_000, updatedAt);
-  const f = freshness(status, Math.max(0, now - updatedAt), pause(now));
+/**
+ * How old the score is. Ticks on its own, so the rest of the page does not
+ * re-render every few seconds. frozenAt: for a follower who gets no
+ * updates, as of when the score came in; it never says the score updates
+ * (the login card does) or that it is final (a draw can still go to
+ * penalties).
+ */
+function Freshness({ status, updatedAt, pause, serverNow, frozenAt }: { status: "live" | "done"; updatedAt: number; pause: PauseAt; serverNow: number; frozenAt: number | null }) {
+  const ticking = useServerNow(serverNow, 5_000, updatedAt);
+  const now = frozenAt ?? ticking;
+  const age = Math.max(0, now - updatedAt);
+  const f = freshness(status, age, pause(now));
+  if (frozenAt !== null && f.tone === "live") return null;
+  if (frozenAt !== null && f.tone === "done") return <p className="text-[13px] text-primary-500">Last update {ago(age)}.</p>;
   if (f.tone === "quiet" || f.tone === "stopped") {
     return <p className={`rounded-2xl border px-3 py-2 text-[14px] ${f.tone === "quiet" ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-primary-50 border-primary-200 text-primary-700"}`}>{f.text}</p>;
   }
@@ -100,8 +112,8 @@ function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "
  */
 export function LiveFollow({ code, initial, serverNow }: { code: string; initial: LiveGetResponse | null; serverNow: number }) {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
-  const [shown, setShown] = useState<Shown | null>(() => (initial ? toShown(initial) : null));
+  const { user, loading: authLoading, settled } = useAuth();
+  const [shown, setShown] = useState<Shown | null>(() => (initial ? toShown(initial, serverNow) : null));
   const [trouble, setTrouble] = useState(false);
   const [copied, setCopied] = useState(false);
   const latest = useRef(shown);
@@ -113,11 +125,18 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
 
   // Mounted: past hydration, so the clock can tick and the login can be read (the server render knows neither).
   const [mounted, setMounted] = useState(false);
+  const [waited, setWaited] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(t);
+    const w = setTimeout(() => setWaited(true), AUTH_WAIT_MS);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(w);
+    };
   }, []);
-  const access = accessOf(mounted, authLoading, !!user);
+  // Logged out only once auth has really answered (settled), not on its 3 s fallback: a Google login still being
+  // checked on a slow network must not get the login card.
+  const access = accessOf(mounted, !user && (authLoading || !(settled || waited)), !!user);
   const scored = shown?.status === "live" || shown?.status === "done";
   const polls = pollsFor(access, scored);
 
@@ -136,7 +155,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
       get: (signal) => fetch(`/api/live/${code}`, { cache: "no-store", signal }),
       current: () => latest.current,
       show: (r) => {
-        const next = toShown(r);
+        const next = toShown(r, clockNow());
         if (!next) return false;
         latest.current = next;
         setShown(next);
@@ -178,6 +197,8 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   // useServerNow does, so the server render and hydration show the same clock. It ticks logged out too: it is
   // worked out here from the last update, as between any two updates.
   const updatedAt = shown?.updatedAt ?? null;
+  // A follower who gets no updates sees the page as of when this score came in.
+  const frozenAt = walled && shown ? shown.seenAt : null;
   const boardClock = useCallback(
     (at: number): number | null => (board && boardView ? boardNow(board, boardView, updatedAt ?? serverNow, at) : null),
     [board, boardView, updatedAt, serverNow],
@@ -251,8 +272,10 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         return boardPause(boardView, t === null ? null : clockMs(boardView, t));
       }
     : () => (view ? pauseText(pauseOf(view)) : null);
+  // Logged out and quiet for hours when the score came in: the card stops promising updates.
+  const stopped = frozenAt !== null && updatedAt !== null && status === "live" && freshness(status, Math.max(0, frozenAt - updatedAt), pause(frozenAt)).tone === "stopped";
   // By the team names: the LIVE pill while live, and the eye count. Nothing in the slot when neither shows.
-  const liveBadge = status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} pause={pause} frozen={walled} /> : null;
+  const liveBadge = status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} pause={pause} frozenAt={frozenAt} /> : null;
   const badge =
     liveBadge || watchers?.count ? (
       <>
@@ -272,8 +295,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         <h1 className="sr-only">{names} live score</h1>
         {header}
         <div className="px-3 py-2.5 sm:px-1 space-y-2">
-          {/* Logged out and live, the login card says how old the score is: "Updated 4 min ago" would read as a scorer gone quiet. */}
-          {updatedAt !== null && !(walled && status === "live") && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} />}
+          {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} frozenAt={frozenAt} />}
           {trouble && (
             <p role="status" className="text-[13px] font-semibold text-red-700">
               Can&rsquo;t get the latest score. Trying again.
@@ -287,7 +309,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
           <Loader2 className="w-6 h-6 text-primary-300 motion-safe:animate-spin" aria-hidden />
         </div>
       ) : walled ? (
-        <LoginCard code={code} done={status === "done"} cricket={!boardView} className="mx-3 sm:mx-0 lg:col-start-2 lg:row-start-1 lg:row-span-2" />
+        <LoginCard code={code} done={status === "done"} stopped={stopped} cricket={!boardView} className="mx-3 sm:mx-0 lg:col-start-2 lg:row-start-1 lg:row-span-2" />
       ) : boardView ? (
         // No result card for boards: the scorecard maker is cricket only.
         <BoardTabs key={boardView.id} view={boardView} readOnly className={tabsClass} />
@@ -302,13 +324,19 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   );
 }
 
-/** In the tabs' place for a follower who is not logged in. The score above is free; keeping up with it takes a login. */
-function LoginCard({ code, done, cricket, className }: { code: string; done: boolean; cricket: boolean; className: string }) {
+/**
+ * In the tabs' place for a follower who is not logged in. The score is
+ * free; keeping up with it takes a login. stopped: no update for hours, so
+ * nothing promises it will update (the line under the score says it
+ * stopped). Beside the score on a wide screen, under it on a phone:
+ * nothing here says above.
+ */
+function LoginCard({ code, done, stopped, cricket, className }: { code: string; done: boolean; stopped: boolean; cricket: boolean; className: string }) {
   const href = followLoginHref(code);
   const more = cricket ? "the full scorecard, overs and commentary" : "the timeline and stats";
-  const title = done ? (cricket ? "Log in to see the full scorecard" : "Log in to see the timeline and stats") : "Log in to follow live";
-  // Beside the score on a wide screen, under it on a phone: nothing here says above.
-  const body = done ? `That is the final score. Log in for ${more}.` : `You are seeing the score from when you opened the link. Log in and it updates by itself, with ${more}.`;
+  const title = done || stopped ? (cricket ? "Log in to see the full scorecard" : "Log in to see the timeline and stats") : "Log in to follow live";
+  const still = "This score does not update while you are logged out.";
+  const body = stopped ? `Log in for ${more}.` : done ? `${still} Log in for ${more}.` : `${still} Log in and it updates by itself, with ${more}.`;
   return (
     <section className={`rounded-3xl border-2 border-primary-900 bg-white p-5 ${className}`}>
       <h2 className="text-[19px] font-bold leading-tight text-primary-900">{title}</h2>

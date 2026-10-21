@@ -9,6 +9,14 @@ import { saveSignupContext } from "@/lib/analytics/visitor";
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
+  /**
+   * The first real answer is in: a phone login read from storage, or
+   * Supabase's first session check handled (a Google user resolved, or no
+   * session). Unlike loading, never set by the 3 s fallback, so a page
+   * that would mislead a logged-in user by showing its logged-out view
+   * (the live score's login card) can wait for it.
+   */
+  settled: boolean;
   login: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -28,6 +36,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  settled: false,
   login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
@@ -111,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const initial = typeof window !== "undefined" ? readPhoneUser() : null;
   const [user, setUser] = useState<AppUser | null>(initial);
   const [loading, setLoading] = useState(initial === null);
+  const [settled, setSettled] = useState(initial !== null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
@@ -224,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(p);
         sourceRef.current = "phone";
         setLoading(false);
+        setSettled(true);
         return true;
       }
       return false;
@@ -299,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         clearTimeout(emergencyTimeout);
         setLoading(false);
+        setSettled(true);
         return;
       }
 
@@ -307,11 +319,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await resolveSupabaseUser(session.user, isNewSignIn);
         setShowLoginModal(false);
         setLoading(false);
+        setSettled(true);
         return;
       }
 
       if (event === "TOKEN_REFRESHED") {
-        // No-op. Silent refresh — don't churn state.
+        // A silent refresh changes nothing for a signed-in user. With nobody signed in it is a session that
+        // came back late (the first check failed on a bad network): sign them in now, not on the next tab switch.
+        if (session?.user && sourceRef.current === null) {
+          await resolveSupabaseUser(session.user, false);
+          setLoading(false);
+          setSettled(true);
+        }
         return;
       }
 
@@ -329,6 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         sourceRef.current = null;
         setLoading(false);
+        setSettled(true);
       }
     };
 
@@ -429,6 +449,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(p);
       sourceRef.current = "phone";
       setLoading(false);
+      setSettled(true);
       showWelcome(p.name?.split(" ")[0] || "");
       return p;
     }
@@ -465,7 +486,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, login, logout, refreshUser, hydrateFromStorage,
+      user, loading, settled, login, logout, refreshUser, hydrateFromStorage,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
     }}>
