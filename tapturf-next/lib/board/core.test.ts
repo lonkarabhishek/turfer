@@ -991,3 +991,39 @@ test("boardShareText: basketball points by quarter, other, and set sports", () =
   const padel: BoardView = { ...tennis, sport: "padel", sportName: "Padel", status: "live", result: null, currentLabel: "Game 5, set 2", current: { a: "40", b: "AD" }, server: "b", sets: tennis.sets.slice(0, 2) };
   assert.equal(boardShareText(padel).split("\n").slice(2, 5).join("\n"), ["Game 5, set 2: 40-AD", "7-6(5), 3-6", "Ravi serving"].join("\n"));
 });
+
+test("football: a half length changed at half time leaves the 1st half's minutes as played", () => {
+  const at = T0 + 25 * MIN + 30_000;
+  const b = run(fb(), clock(true, T0), period(T0 + 21 * MIN), { type: "rules", rules: { halfMinutes: 25 } }, clock(true, T0 + 25 * MIN), goal("a", undefined, at));
+  const v = deriveBoard(b);
+  assert.equal(v.timeline.at(-1)?.when, "21'", "20 minutes were played before it, not 25");
+  assert.equal(v.clock?.baseMs, 20 * MIN);
+  assert.match(boardShareText(v, { now: at }), /2nd half, 21'/);
+  // Set time is refused in match time: 20 played + 25 + 30 of stoppage.
+  refuse(b, clock(true, at, 56 * MIN), /up to 75:00/);
+});
+
+test("football: time up mid-shootout is a draw, unless the kicks are equal or one side cannot catch up", () => {
+  let b = run(levelAtFullTime({}), kick("b", true));
+  assert.deepEqual(deriveBoard(run(b, { type: "end" })).result, { winner: null, kind: "draw", text: "Drawn 1-1" });
+  b = run(b, kick("a", false));
+  assert.equal(deriveBoard(run(b, { type: "end" })).result?.text, "Blue FC won 1-0 on penalties");
+});
+
+test("basketball: reaching the target stops the clock on that basket", () => {
+  const preset = SPORT_ENGINES.basketball.presets[0].options.find((o: { label: string }) => o.label.startsWith("3x3"));
+  assert.ok(preset);
+  let b = run(bb(preset.rules), clock(true, T0));
+  for (let i = 0; i < 10; i++) b = run(b, pts("a", 2, "outside", T0 + MIN));
+  b = run(b, pts("a", 1, "inside", T0 + 4 * MIN));
+  const v = deriveBoard(b);
+  assert.equal(v.status, "done");
+  assert.equal(v.clock?.running, false);
+  assert.equal(clockMs(v, T0 + 20 * MIN), 6 * MIN, "6 minutes were left at the winning basket");
+});
+
+test("basketball: times on a count-down clock round up, as the clock shows them", () => {
+  const b = run(bb(), clock(true, T0), pts("a", 3, undefined, T0 + 10 * MIN - 600));
+  assert.equal(deriveBoard(b).timeline.at(-1)?.when, "Q1 0:01");
+  assert.match(boardShareText(deriveBoard(b), { now: T0 + 10 * MIN - 600 }), /Q1 0:01/);
+});

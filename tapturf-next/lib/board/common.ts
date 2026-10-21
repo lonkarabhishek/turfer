@@ -45,9 +45,13 @@ export function ordinal(n: number): string {
   return `${n}${s}`;
 }
 
-/** 7:05 or 1:02:03 from ms (rounded down to the second). Negative shows as 0:00. */
-export function clockText(ms: number): string {
-  const t = Math.max(0, Math.floor(ms / 1000));
+/**
+ * 7:05 or 1:02:03 from ms, rounded down to the second. Negative shows as
+ * 0:00. up: round up instead, for a clock counting down (0.6 s left shows
+ * 0:01, as BoardClock does), so the timeline, share text and header agree.
+ */
+export function clockText(ms: number, up = false): string {
+  const t = Math.max(0, up ? Math.ceil(ms / 1000) : Math.floor(ms / 1000));
   const h = Math.floor(t / 3600);
   const m = Math.floor((t % 3600) / 60);
   const s = t % 60;

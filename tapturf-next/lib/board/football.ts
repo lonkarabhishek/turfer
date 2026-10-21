@@ -1,5 +1,5 @@
 import type { Board, BoardEvent, BoardView, EndEvent, FootballRules, PadAction, PointEvent, RulePreset, Side, SportEngine, TimelineLine } from "./types";
-import { blankView, bool, cleanName, clampInt, clockText, clockValue, isObj, namesNow, newClock, ordinal, other, plural, runClock, SIDES, stopClock, stoppedResult, type PeriodClock } from "./common";
+import { blankView, bool, cleanName, clampInt, clockValue, isObj, namesNow, newClock, ordinal, other, plural, runClock, SIDES, stopClock, stoppedResult, type PeriodClock } from "./common";
 
 /**
  * Football and futsal on a turf: goals, halves on a count-up clock with
@@ -8,6 +8,12 @@ import { blankView, bool, cleanName, clampInt, clockText, clockValue, isObj, nam
  */
 
 const MIN = 60_000;
+
+/** The match clock as people read it and type it: minutes run on past the hour (75:00, never 1:15:00). */
+function matchTime(ms: number): string {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
 /** "Set time" can go this far past a half's length: stoppage time on a turf is never longer. */
 export const SET_TIME_GRACE_MS = 30 * MIN;
 
@@ -51,13 +57,14 @@ const PRESETS: RulePreset<FootballRules>[] = [
 /**
  * The minute a goal or card goes in the report: 2 x 20 runs 1' to 20',
  * then 20+1' in stoppage time; the 2nd half runs 21' to 40', then 40+1'.
- * elapsed is ms into this half (0-based half).
+ * baseMin is the minutes of the halves before this one, each as long as
+ * it was set when it ended; elapsed is ms into this half.
  */
-export function footballMinute(half: number, halfMinutes: number, elapsed: number): string {
+export function footballMinute(baseMin: number, halfMinutes: number, elapsed: number): string {
   const len = halfMinutes * MIN;
   const e = Math.max(0, elapsed);
-  if (e < len) return `${half * halfMinutes + Math.floor(e / MIN) + 1}'`;
-  return `${(half + 1) * halfMinutes}+${Math.floor((e - len) / MIN) + 1}'`;
+  if (e < len) return `${baseMin + Math.floor(e / MIN) + 1}'`;
+  return `${baseMin + halfMinutes}+${Math.floor((e - len) / MIN) + 1}'`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -77,6 +84,8 @@ type S = {
   names: Record<Side, string>;
   /** The half being played, or the last one at full time. */
   h: number;
+  /** Minutes of the halves before this one, at the length each had: a change to 2 x 25 at half time leaves the 1st half at 20. */
+  base: number;
   /** play: a half is on (or about to kick off). break: half time. full: the halves are over. */
   phase: "play" | "break" | "full";
   clock: PeriodClock;
@@ -98,6 +107,7 @@ function start(board: Board): S {
     rules: normalizeRules(board.setup.rules),
     names: namesNow(board),
     h: 0,
+    base: 0,
     phase: "play",
     clock: newClock(false, 0, null),
     kicked: false,
@@ -147,8 +157,10 @@ function result(s: S): BoardView["result"] {
       return { winner: w, kind: "win", text: `${names[w]} won ${hi}-${lo}` };
     }
     const so = shootout(s);
-    if (s.kicks.length && so.scored.a !== so.scored.b) {
-      const w: Side = so.scored.a > so.scored.b ? "a" : "b";
+    // Stopped mid-shootout (time up): a win only on equal kicks or once one side cannot catch up (IFAB Law 10). Else a draw.
+    const decided = so.winner ?? (so.taken.a === so.taken.b && so.scored.a !== so.scored.b ? (so.scored.a > so.scored.b ? "a" : "b") : null);
+    if (decided) {
+      const w: Side = decided;
       return { winner: w, kind: "win", text: `${names[w]} won ${Math.max(so.scored.a, so.scored.b)}-${Math.min(so.scored.a, so.scored.b)} on penalties` };
     }
     return { winner: null, kind: "draw", text: `Drawn ${hi}-${lo}` };
@@ -167,7 +179,7 @@ function halfLabel(s: S, h = s.h): string {
 function minuteAt(s: S, at: number | undefined): string | null {
   const c = s.clock;
   if (!c.started || (c.running && at === undefined)) return null;
-  return footballMinute(s.h, s.rules.halfMinutes, clockValue(c, at));
+  return footballMinute(s.base, s.rules.halfMinutes, clockValue(c, at));
 }
 
 /** Why this event cannot go in now, or null. */
@@ -207,7 +219,8 @@ function why(s: S, e: BoardEvent): string | null {
     case "clock": {
       if (s.phase === "full") return "The halves are over";
       const max = s.rules.halfMinutes * MIN + SET_TIME_GRACE_MS;
-      if (e.ms !== undefined && (e.ms < 0 || e.ms > max)) return `Pick a time up to ${clockText(max)}`;
+      // On the match clock the scorer types: 70:00 in the 2nd half of 2 x 20, not 50:00.
+      if (e.ms !== undefined && (e.ms < 0 || e.ms > max)) return `Pick a time up to ${matchTime(s.base * MIN + max)}`;
       if (e.ms === undefined && e.run === s.clock.running) return e.run ? "The clock is running" : "The clock is stopped";
       return null;
     }
@@ -284,13 +297,14 @@ function step(s: S, e: BoardEvent, i: number): void {
       }
       runClock(s.clock, e);
       if (kickOff) line(s.h === 0 ? "Kick off" : `${ordinal(s.h + 1)} half kicks off`, "info", null);
-      s.lastAction = e.ms !== undefined ? `Clock set to ${clockText(s.h * s.rules.halfMinutes * MIN + e.ms)}` : kickOff ? (s.h === 0 ? "Kick off" : `${ordinal(s.h + 1)} half kicks off`) : e.run ? "Clock started" : "Clock stopped";
+      s.lastAction = e.ms !== undefined ? `Clock set to ${matchTime(s.base * MIN + e.ms)}` : kickOff ? (s.h === 0 ? "Kick off" : `${ordinal(s.h + 1)} half kicks off`) : e.run ? "Clock started" : "Clock stopped";
       return;
     }
     case "period": {
       stopClock(s.clock, e.at);
       if (s.h < s.rules.halves - 1) {
         line("Half time", "info", null);
+        s.base += s.rules.halfMinutes;
         s.h++;
         s.phase = "break";
         s.kicked = false;
@@ -359,7 +373,7 @@ function derive(board: Board): BoardView {
           : "Full time"
         : halfLabel(s);
   v.period = { index: s.phase === "full" ? rules.halves : s.h, of: rules.halves, label, break: s.phase === "break" || waitingKicks };
-  v.clock = { running: s.clock.running, ms: s.clock.ms, at: s.clock.at, limitMs: len, down: false, baseMs: s.h * len };
+  v.clock = { running: s.clock.running, ms: s.clock.ms, at: s.clock.at, limitMs: len, down: false, baseMs: s.base * MIN };
   if (shootoutOn(s) || s.kicks.length) {
     v.current = { a: String(so.scored.a), b: String(so.scored.b) };
     v.currentLabel = "Penalties";

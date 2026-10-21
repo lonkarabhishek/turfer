@@ -295,8 +295,8 @@ function statusLine(view: BoardView, now: number | undefined): string | null {
   if (view.sport === "football" && view.current) return `Penalties ${view.current.a}-${view.current.b}`;
   if (p && c && !p.break && now !== undefined && (c.running || c.ms > 0)) {
     const ms = clockMs(view, now) ?? c.ms;
-    if (view.sport === "football" && c.limitMs) return `${p.label}, ${footballMinute(Math.round(c.baseMs / c.limitMs), c.limitMs / MIN, ms)}`;
-    return p.label === "Game" ? clockText(ms) : `${p.label} ${clockText(ms)}`;
+    if (view.sport === "football" && c.limitMs) return `${p.label}, ${footballMinute(Math.round(c.baseMs / MIN), c.limitMs / MIN, ms)}`;
+    return p.label === "Game" ? clockText(ms, c.down) : `${p.label} ${clockText(ms, c.down)}`;
   }
   if (p) return p.label;
   if (view.current && (view.sport === "tennis" || view.sport === "padel")) return `${view.currentLabel ?? "Game"}: ${view.current.a}-${view.current.b}`;

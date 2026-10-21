@@ -142,7 +142,7 @@ function whenAt(s: S, at: number | undefined): string | null {
   const label = periodLabel(s.rules, s.p);
   const one = s.rules.periods === 1 && !inOvertime(s);
   if (!s.rules.clock || (s.clock.running && at === undefined)) return one ? null : label;
-  const left = clockText(clockValue(s.clock, at));
+  const left = clockText(clockValue(s.clock, at), s.clock.down);
   return one ? left : `${label} ${left}`;
 }
 
@@ -207,6 +207,8 @@ function step(s: S, e: BoardEvent, i: number): void {
       const when = whenAt(s, e.at);
       s.score[e.side] += value;
       s.byPeriod[s.p][e.side] += value;
+      // Reaching the target ends the game (FIBA 3x3): the clock stops on that basket, as at any end.
+      if (targetWinner(s)) stopClock(s.clock, e.at);
       const how = e.how ?? Object.keys(HOWS[s.rules.scoring]).find((k) => HOWS[s.rules.scoring][k] === value && k !== "free-throw") ?? "free-throw";
       s.made[e.side][how] = (s.made[e.side][how] ?? 0) + 1;
       if (e.player) {
