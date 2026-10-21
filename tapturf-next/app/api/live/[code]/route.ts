@@ -8,6 +8,7 @@ import {
   liveIpHash,
   liveMatchToStore,
   liveResult,
+  liveTagsChecked,
   liveWriteClient,
   liveWriteKey,
   parsePutBody,
@@ -92,6 +93,8 @@ export async function PUT(req: Request, { params }: Ctx) {
   // player is not served under the old name, whichever client sent it.
   const store = liveMatchToStore(body.match);
   if ("error" in store) return reply(store.error);
+  // Tags of people who turned tagging off are never stored; old usernames become current ones.
+  const match = await liveTagsChecked(store.match);
 
   let data: unknown;
   try {
@@ -99,7 +102,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       p_key: key,
       p_code: code,
       p_secret: body.secret,
-      p_match: store.match,
+      p_match: match,
       p_status: store.status,
       p_rev: body.rev,
       p_ip_hash: ipHash,

@@ -8,8 +8,18 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "lib": ["es2023", "dom"],
-    "types": ["node"]
+    "lib": [
+      "es2023",
+      "dom"
+    ],
+    "types": [
+      "node"
+    ]
   },
-  "files": ["lib/live/codes.test.ts", "lib/live/server.test.ts", "components/live/follow.test.ts"]
+  "files": [
+    "lib/live/codes.test.ts",
+    "lib/live/server.test.ts",
+    "components/live/follow.test.ts",
+    "lib/live/tags.test.ts"
+  ]
 }

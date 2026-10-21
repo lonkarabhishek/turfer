@@ -8,6 +8,7 @@ import { derive, publicMatch } from "../cricket/scoring";
 import { deriveBoard, publicBoard } from "../board/index";
 import { isLiveBoard, sanitizeLive, type LiveMatch } from "./match";
 import { MAX_TRACKED, clientNetwork, windowCounter } from "../limits";
+import { checkLiveTags, createTagLookup } from "./tags";
 import {
   LIVE_MAX_MATCH_CHARS,
   LIVE_MAX_REV,
@@ -94,14 +95,40 @@ export function toLiveRow(data: unknown): LiveRow {
   return { match: d.match ?? null, rev, status: d.status as LiveStatus, updated_at: new Date(at).toISOString() };
 }
 
+/**
+ * Checks tagged usernames for live links (lib/live/tags.ts): who may
+ * still be shown, under their current name. Null when it cannot say.
+ */
+const liveTagLookup = createTagLookup(async (names) => {
+  const key = liveWriteKey();
+  if (!key) return null;
+  const { data, error } = await liveWriteClient().rpc("live_tags_check", { p_key: key, p_usernames: names });
+  const d = (data && typeof data === "object" ? data : {}) as { r?: unknown; tags?: unknown };
+  if (error || d.r !== "ok" || !Array.isArray(d.tags)) {
+    console.warn("live: tag check failed", error?.message ?? d.r);
+    return null;
+  }
+  return d.tags.filter((t): t is { asked: string; u: string } => !!t && typeof t.asked === "string" && typeof t.u === "string");
+});
+
+/** A match with its tags checked; never throws (a failed check removes them all). */
+export function liveTagsChecked<T>(match: T): Promise<T> {
+  return checkLiveTags(match, liveTagLookup);
+}
+
 async function readLive(code: string): Promise<LiveRow | null> {
-  const { data, error } = await createReadOnlyClient().rpc("live_match_get", { p_code: code });
+  const key = liveWriteKey();
+  if (!key) throw new Error("live read: no write key");
+  // The keyed read: stored tags reach followers only through here, checked.
+  const { data, error } = await createReadOnlyClient().rpc("live_match_get_k", { p_key: key, p_code: code });
   // supabase-js returns errors (timeouts, the open breaker) instead of
   // throwing. Throw them: unstable_cache then stores nothing and keeps
   // serving its last copy, where returning null would cache "waiting"
   // for a match that is live (the lib/home/data.ts lesson).
   if (error) throw new Error(`live read failed: ${error.message}`);
-  return data == null ? null : toLiveRow(data);
+  if (data == null) return null;
+  const row = toLiveRow(data);
+  return row.match == null ? row : { ...row, match: await liveTagsChecked(row.match) };
 }
 
 // Polls that miss the cache together share one lookup per instance.

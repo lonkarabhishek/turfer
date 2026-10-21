@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { checkBoard, clockMs } from "@/lib/board";
-import type { AnyRules, Board, BoardEvent, BoardView, Side } from "@/lib/board/types";
+import type { AnyRules, Board, BoardEvent, BoardView, RenameEvent, Side, Tag } from "@/lib/board/types";
+import { PLAYER_SPORTS } from "@/lib/board/common";
 import { NameInput, Pick, Sheet, SheetLabel } from "../scorer/ui";
+import { PlayerSearch, TagLine } from "../PlayerSearch";
 import { RulesEditor } from "./Rules";
-import { END_REASONS, clockParts, endEvent, endPreview, reasonAllowed, rulesDiff, setTimeMs, type EndReason } from "./logic";
+import { END_REASONS, clockParts, endEvent, endPreview, reasonAllowed, rulesDiff, setTimeMs, type EndReason, type KnownPlayer } from "./logic";
 
 /** Commit one or more events as one tap (same `at`). False when refused; the screen shows why. */
 type Commit = (events: BoardEvent[]) => boolean;
@@ -59,25 +61,63 @@ export function MoreSheet({
 /* Names                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Names the app fills in when none is typed: a profile picked for that side may replace them. */
+const PLACEHOLDER_NAMES = new Set(["team a", "team b", "player a", "player b"]);
+
 export function NamesSheet({ view, onCommit, onClose }: { view: BoardView; onCommit: Commit; onClose: () => void }) {
-  const [a, setA] = useState(view.teams.a.name);
-  const [b, setB] = useState(view.teams.b.name);
+  const [names, setNames] = useState<Record<Side, string>>({ a: view.teams.a.name, b: view.teams.b.name });
+  // Singles in a racquet sport: each side is one person, who can be tagged.
+  const singles = PLAYER_SPORTS.includes(view.sport) && (view.setup.rules as { doubles?: unknown }).doubles === false;
+  const [tags, setTags] = useState<Record<Side, Tag | null>>({ a: view.setup.tags?.a ?? null, b: view.setup.tags?.b ?? null });
   const [err, setErr] = useState<string | null>(null);
+  const clean = (x: string) => x.replace(/\s+/g, " ").trim().slice(0, 32);
+  const tagChanged = (s: Side) => (tags[s]?.u ?? null) !== (view.setup.tags?.[s]?.u ?? null);
   const save = () => {
-    const clean = (x: string) => x.replace(/\s+/g, " ").trim().slice(0, 32);
-    const next: Record<Side, string> = { a: clean(a), b: clean(b) };
+    const next: Record<Side, string> = { a: clean(names.a), b: clean(names.b) };
     if (!next.a || !next.b) return setErr("Give both a name.");
     if (next.a.toLowerCase() === next.b.toLowerCase()) return setErr("Use two different names.");
-    const events: BoardEvent[] = (["a", "b"] as const).filter((s) => next[s] !== view.teams[s].name).map((s) => ({ type: "rename", side: s, name: next[s] }));
+    if (singles && tags.a && tags.a.u === tags.b?.u) return setErr("Tag two different profiles.");
+    const events: BoardEvent[] = [];
+    for (const s of ["a", "b"] as const) {
+      const retag = singles && tagChanged(s);
+      if (next[s] === view.teams[s].name && !retag) continue;
+      // The tag key only when it changed: left out keeps the side's tag as it is.
+      const e: RenameEvent = { type: "rename", side: s, name: next[s] };
+      if (retag) e.tag = tags[s] ? { u: tags[s]!.u } : null;
+      events.push(e);
+    }
     if (!events.length) return onClose();
     if (!onCommit(events)) setErr("Could not rename. Try a shorter name.");
   };
   return (
-    <Sheet title="Team names" subtitle="Changes the name everywhere, the live link too." onClose={onClose}>
+    <Sheet title={singles ? "Player names" : "Team names"} subtitle="Changes the name everywhere, the live link too." onClose={onClose}>
       {(["a", "b"] as const).map((s) => (
-        <div key={s} className="mt-1">
-          <SheetLabel>{s === "a" ? "Team 1" : "Team 2"}</SheetLabel>
-          <NameInput id={`bd-name-${s}`} value={s === "a" ? a : b} onChange={s === "a" ? setA : setB} label={s === "a" ? "Team 1 name" : "Team 2 name"} onEnter={save} />
+        <div key={s} className="mt-1 mb-3">
+          <SheetLabel>{singles ? (s === "a" ? "Player 1" : "Player 2") : s === "a" ? "Team 1" : "Team 2"}</SheetLabel>
+          <NameInput
+            id={`bd-name-${s}`}
+            value={names[s]}
+            onChange={(v) => {
+              setErr(null);
+              setNames((n) => ({ ...n, [s]: v }));
+            }}
+            label={singles ? `Player ${s === "a" ? 1 : 2} name` : `Team ${s === "a" ? 1 : 2} name`}
+            onEnter={save}
+          />
+          {singles &&
+            (tags[s] ? (
+              <TagLine tag={tags[s]!} onRemove={() => setTags((t) => ({ ...t, [s]: null }))} />
+            ) : (
+              <PlayerSearch
+                exclude={tags[s === "a" ? "b" : "a"]?.u}
+                onPick={(p) => {
+                  setErr(null);
+                  setTags((t) => ({ ...t, [s]: { u: p.u } }));
+                  // A typed name stays; an empty or default one becomes the profile's name.
+                  setNames((n) => (!clean(n[s]) || PLACEHOLDER_NAMES.has(clean(n[s]).toLowerCase()) ? { ...n, [s]: p.name.slice(0, 32) } : n));
+                }}
+              />
+            ))}
         </div>
       ))}
       {err && (
@@ -234,8 +274,8 @@ export function SetTimeSheet({ view, now, onCommit, onClose }: { view: BoardView
 /* Player name                                                         */
 /* ------------------------------------------------------------------ */
 
-/** Who scored (or got the card) for the tap that already went in. Chips of names typed before for the team. */
-export function PlayerSheet({ title, team, known, onSave, onClose }: { title: string; team: string; known: string[]; onSave: (name: string) => void; onClose: () => void }) {
+/** Who scored (or got the card) for the tap that already went in. Chips of players named before for the team; a TapTurf profile can be tagged. */
+export function PlayerSheet({ title, team, known, onSave, onClose }: { title: string; team: string; known: KnownPlayer[]; onSave: (name: string, tag?: Tag) => void; onClose: () => void }) {
   const [name, setName] = useState("");
   const clean = name.replace(/\s+/g, " ").trim();
   return (
@@ -243,8 +283,14 @@ export function PlayerSheet({ title, team, known, onSave, onClose }: { title: st
       {known.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {known.map((n) => (
-            <button key={n} type="button" onClick={() => onSave(n)} className="press-tight h-12 px-4 rounded-full border-2 border-primary-200 bg-white text-[15px] font-semibold text-primary-800 hover:border-primary-400">
-              {n}
+            <button
+              key={`${n.name}|${n.tag?.u ?? ""}`}
+              type="button"
+              onClick={() => onSave(n.name, n.tag)}
+              className="press-tight h-12 px-4 rounded-full border-2 border-primary-200 bg-white text-[15px] font-semibold text-primary-800 hover:border-primary-400"
+            >
+              {n.name}
+              {n.tag && <span className="ml-1.5 text-[12px] font-medium text-accent-700">@{n.tag.u}</span>}
             </button>
           ))}
         </div>
@@ -255,6 +301,8 @@ export function PlayerSheet({ title, team, known, onSave, onClose }: { title: st
           Save
         </button>
       </div>
+      {/* A typed name stays with the profile picked; with none typed, the profile's name is used. */}
+      <PlayerSearch onPick={(p) => onSave((clean || p.name).slice(0, 40), { u: p.u })} />
       <p className="mt-2 text-[12px] text-primary-500">The score already counts. This only adds the name.</p>
     </Sheet>
   );

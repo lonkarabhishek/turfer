@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { BoardView, Side, TimelineLine } from "@/lib/board/types";
 import { TEAM, isSetSport } from "./shared";
+import { TagHandle } from "@/components/account/TagHandle";
 
 /**
  * The tabs under the board header, shared by the scorer and the follower
@@ -42,7 +43,7 @@ export function BoardTabs({ view, readOnly, className = "" }: { view: BoardView;
       <div id="bd-panel" role="tabpanel" aria-labelledby={`bd-tab-${tab}`} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3">
         {tab === "live" && <LivePanel view={view} readOnly={readOnly} />}
         {tab === "timeline" && <Timeline view={view} lines={[...view.timeline].reverse()} empty={readOnly ? "Every point, goal and break shows here once the match starts." : "Every point, goal and break shows here as you score."} />}
-        {tab === "stats" && <StatsPanel view={view} />}
+        {tab === "stats" && <StatsPanel view={view} readOnly={readOnly} />}
       </div>
     </div>
   );
@@ -190,7 +191,7 @@ function Timeline({ view, lines, empty }: { view: BoardView; lines: TimelineLine
 /* Stats                                                               */
 /* ------------------------------------------------------------------ */
 
-function StatsPanel({ view }: { view: BoardView }) {
+function StatsPanel({ view, readOnly }: { view: BoardView; readOnly?: boolean }) {
   const { a, b } = view.teams;
   return (
     <div className="space-y-3">
@@ -236,13 +237,21 @@ function StatsPanel({ view }: { view: BoardView }) {
         <Card title="Players">
           <ul className="divide-y divide-primary-100">
             {view.players.map((p, i) => (
-              <li key={`${p.side}-${p.name}-${i}`} className="py-2 flex items-start gap-2">
+              <li key={`${p.side}-${p.name}-${p.tag?.u ?? ""}-${i}`} className="py-2 flex items-start gap-2">
                 <span className="pt-1.5">
                   <Dot side={p.side} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-semibold text-primary-900 truncate">{p.name}</span>
-                  <span className="block text-[12px] text-primary-500">{view.teams[p.side].name}</span>
+                  <span className="block text-[12px] text-primary-500 truncate">
+                    {view.teams[p.side].name}
+                    {p.tag && (
+                      <>
+                        {" · "}
+                        <TagHandle tag={p.tag} link={readOnly} className="text-accent-700 font-semibold" />
+                      </>
+                    )}
+                  </span>
                 </span>
                 <span className="shrink-0 text-right text-[14px] tabular-nums text-primary-800 max-w-[50%]">{p.text}</span>
               </li>

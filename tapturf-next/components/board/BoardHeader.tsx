@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { TagHandle } from "@/components/account/TagHandle";
 import { ChevronLeft, MoreHorizontal, Share2 } from "lucide-react";
 import type { Board, BoardView, Side } from "@/lib/board/types";
 import { BoardClock } from "./BoardClock";
@@ -133,6 +134,7 @@ function ScoreRow({ view, sides, now, onTeam }: { view: BoardView; sides: [Side,
   const team = (side: Side, align: "left" | "right") => (
     <div className={`min-w-0 flex flex-col ${align === "left" ? "items-start text-left" : "items-end text-right"}`}>
       <TeamName view={view} side={side} onTeam={onTeam} align={align} />
+      {view.teams[side].tag && <TagHandle tag={view.teams[side].tag!} link={!onTeam} className="text-[12px] font-semibold text-accent-300 leading-tight" />}
       <p className="mt-1 font-display text-[56px] [@media(max-height:700px)]:text-[46px] leading-[0.95] font-bold tabular-nums">{setSport ? bigScore(view, side) : view.teams[side].score}</p>
       <span className={`mt-1.5 h-1 w-10 rounded-full ${TEAM[side].bar}`} aria-hidden />
       {/* Always there in the serving sports, so the row keeps its height whoever serves. */}

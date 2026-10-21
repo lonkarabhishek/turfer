@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeftRight, Goal, ListOrdered, MoreHorizontal, Pause, Play, Plus, Redo2, Share2, Timer, Undo2, UserPlus, X } from "lucide-react";
 import { applyBoard, boardShareText, checkBoard, deriveBoard, padFor, undoBoard } from "@/lib/board";
-import type { Board, BoardEvent, BoardView, PadAction, Side } from "@/lib/board/types";
+import type { Board, BoardEvent, BoardView, PadAction, Side, Tag } from "@/lib/board/types";
 import { trackTool, type ToolEvent } from "@/lib/analytics/tools";
 import { BoardHeader } from "@/components/board/BoardHeader";
 import { BoardTabs } from "@/components/board/BoardTabs";
@@ -297,8 +297,8 @@ export function BoardScreen({
   };
 
   /** The name sheet's save: the name goes on the tap that already counted, if it is still the last one. Redo is left alone. */
-  const savePlayer = (index: number, name: string) => {
-    const b = withPlayer(board, index, name);
+  const savePlayer = (index: number, name: string, tag?: Tag) => {
+    const b = withPlayer(board, index, name, tag);
     setSheet(null);
     if (!b) {
       showToast("Something was added after that tap, so the name could not go on it.", "error");
@@ -574,7 +574,7 @@ export function BoardScreen({
       {sheet?.k === "rules" && <RulesSheet board={board} view={view} onCommit={commit} onClose={closeSheet} />}
       {sheet?.k === "end" && <EndSheet board={board} view={view} now={sheet.at} onCommit={commit} onClose={closeSheet} />}
       {sheet?.k === "time" && <SetTimeSheet view={view} now={sheet.at} onCommit={commit} onClose={closeSheet} />}
-      {sheet?.k === "player" && board.events[sheet.index] && <PlayerSheetFor board={board} view={view} index={sheet.index} onSave={(n) => savePlayer(sheet.index, n)} onClose={closeSheet} />}
+      {sheet?.k === "player" && board.events[sheet.index] && <PlayerSheetFor board={board} view={view} index={sheet.index} onSave={(n, t) => savePlayer(sheet.index, n, t)} onClose={closeSheet} />}
       {sheet?.k === "details" && (
         <Sheet title="Timeline and stats" onClose={closeSheet} wide>
           <BoardTabs view={view} className="-mx-4 -mt-3" />
@@ -840,7 +840,7 @@ function ClockBar({
 }
 
 /** The name sheet for the tap at index, with the names typed before for the right team. */
-function PlayerSheetFor({ board, view, index, onSave, onClose }: { board: Board; view: BoardView; index: number; onSave: (name: string) => void; onClose: () => void }) {
+function PlayerSheetFor({ board, view, index, onSave, onClose }: { board: Board; view: BoardView; index: number; onSave: (name: string, tag?: Tag) => void; onClose: () => void }) {
   const e = board.events[index];
   const team = playerTeam(e);
   if (!team) return null;
