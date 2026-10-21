@@ -488,7 +488,7 @@ export function BoardScreen({
             {(TIMEOUT_SPORTS.includes(board.sport) || parts.timeout.a || parts.timeout.b) && (
               <div className="grid grid-cols-2 gap-2 px-2 pb-2">
                 {sides.map((s) => (
-                  <SmallKey key={s} side={s} action={isLive && !gameEnd ? parts.timeout[s] : null} fallback="Timeout" onTap={tap} />
+                  <SmallKey key={s} side={s} action={isLive && !gameEnd ? parts.timeout[s] : null} fallback="Timeout" onTap={tap} view={view} />
                 ))}
               </div>
             )}
