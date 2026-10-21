@@ -7,15 +7,18 @@ export const ADMIN_TOKEN_COOKIE = "tt_fid";
 
 // The site owner. Signing in via EITHER of these paths unlocks /admin:
 //   - Google OAuth with this email
-//   - Phone OTP with this number (bare 10-digit; matched against E.164 too)
+//   - Phone OTP with this Indian number (the 10 digits after +91)
 export const ADMIN_EMAILS = ["lonkarabhishek00@gmail.com"];
 export const ADMIN_PHONES = ["9403612979"];
 
-function normalisePhone(raw: string | null | undefined): string {
-  if (!raw) return "";
-  // Strip anything non-digit, then drop the leading 91 country code if present.
-  const digits = raw.replace(/\D+/g, "");
-  return digits.length > 10 ? digits.slice(-10) : digits;
+/**
+ * The 10 digits of a verified Indian number, or "". Only "+91" and exactly
+ * 10 digits count: matching the last 10 digits of any number would let a
+ * foreign number that ends the same way (+1 940 ...) pass as the owner.
+ */
+export function indianPhone10(raw: string | null | undefined): string {
+  const m = /^\+91(\d{10})$/.exec(raw ?? "");
+  return m ? m[1] : "";
 }
 
 /**
@@ -38,7 +41,10 @@ export async function isAdmin(): Promise<boolean> {
     const supabase = await createServerClient();
     const { data } = await supabase.auth.getUser();
     const email = data?.user?.email?.toLowerCase().trim();
-    if (email && ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(email)) {
+    // Only a Google sign-in counts: the app signs in by email through Google alone.
+    const providers = (data?.user?.app_metadata as { providers?: unknown } | undefined)?.providers;
+    const google = Array.isArray(providers) && providers.includes("google");
+    if (email && google && ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(email)) {
       return true;
     }
     // Not user_metadata.phone: users can set that themselves.
@@ -54,7 +60,7 @@ export async function isAdmin(): Promise<boolean> {
   try {
     const jar = await cookies();
     const claims = await verifyFirebaseIdToken(jar.get(ADMIN_TOKEN_COOKIE)?.value);
-    const phone = normalisePhone(claims?.phone_number);
+    const phone = indianPhone10(claims?.phone_number);
     if (phone && ADMIN_PHONES.includes(phone)) return true;
   } catch {
     // fall through
