@@ -14,6 +14,8 @@ import { deleteMatch, loadIndex, loadMatch, metaOf, saveMatch, setCurrent, type 
 import { writeHandoff } from "./scorer/handoff";
 import { canKeepLink, linkUrl, readReminder, shortUrl, useLiveSync, type LiveInfo } from "./scorer/live";
 import { useWatchers } from "@/components/live/useWatchers";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
 
 /** A live match touched within this long is reopened straight into scoring on reload. */
 const RESUME_MS = 12 * 60 * 60 * 1000;
@@ -51,6 +53,9 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   /** The link last copied from the page card: one turned on since shows "Copy link" again. */
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const live = useLiveSync(liveLinks, { load: loadMatch });
+  const auth = useAuth();
+  /** Back from the live link login (?live=1): the match whose link to turn on once auth has settled. */
+  const loginAsk = useRef<string | null>(null);
   // The eye count by the LIVE pill: only while scoring a match whose link is on. The scorer listens, never counts in.
   const watchLink = liveLinks && open && match ? live.info(match.id) : null;
   const watchers = useWatchers(watchLink?.on && watchLink.link ? watchLink.link.code : null, { track: false });
@@ -78,13 +83,14 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
   useEffect(() => {
     // Read here, not with useSearchParams: the page is static.
-    const { venue, fromGame, rest } = readReminder(window.location.search);
+    const { venue, fromGame, rest: afterReminder } = readReminder(window.location.search);
+    const { returning, rest } = liveReturn(afterReminder);
     trackTool("tool_opened", TOOL, fromGame ? { from: "game" } : {});
     // Restore after mount so the server and first client render agree.
     const t = setTimeout(() => {
       // Take the reminder out of the address, so a reload mid-match resumes it. Here, not above, so Strict Mode's
       // second run still reads it; and before openScorer, whose pushState would carry it on.
-      if (venue || fromGame) {
+      if (venue || fromGame || returning) {
         try {
           window.history.replaceState(window.history.state, "", window.location.pathname + rest + window.location.hash);
         } catch {
@@ -99,11 +105,14 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
         setPrefill({ venue, live: fromGame });
         setNewOpen(true);
       }
+      const ask = returning ? takeLiveAsk("cricket", t0) : null;
+      loginAsk.current = ask;
       const m = ix.current ? loadMatch(ix.current) : null;
       if (m) {
         setMatch(m);
         const meta = ix.list.find((x) => x.id === m.id);
-        if (!venue && !fromGame && meta && meta.status === "live" && t0 - meta.updatedAt < RESUME_MS) openScorer();
+        // A login return opens its own match below.
+        if (!ask && !venue && !fromGame && meta && meta.status === "live" && t0 - meta.updatedAt < RESUME_MS) openScorer();
       }
       setHydrated(true);
     }, 0);
@@ -159,6 +168,12 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   };
 
   const startLink = async (id: string) => {
+    // Sharing needs a login (Google first, then phone); scoring does not. The match is saved, so the trip loses nothing.
+    if (!auth.user) {
+      trackTool("tool_action", TOOL, { action: "live_link_login" });
+      askLiveLogin("cricket", id);
+      return;
+    }
     const fault = await live.start(id);
     trackTool("tool_action", TOOL, fault ? { action: "live_link_failed", reason: fault } : { action: "live_link_on" });
   };
@@ -169,7 +184,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
   const liveFor = (id: string): ShareLive => {
     const info = live.info(id);
-    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id) };
+    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user };
   };
 
   const onChange = (m: Match) => {
@@ -200,6 +215,22 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
     setIndex(setCurrent(id));
     openScorer();
   };
+
+  // Back from the login: open that match and turn its link on. Logged in or not, the ask is used up.
+  const loginDone = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    loginDone.current = (id: string) => {
+      if (!auth.user || !loadMatch(id)) return;
+      resume(id);
+      void startLink(id);
+    };
+  });
+  useEffect(() => {
+    const id = loginAsk.current;
+    if (!hydrated || !id || auth.loading) return;
+    loginAsk.current = null;
+    loginDone.current(id);
+  }, [hydrated, auth.loading]);
 
   const remove = (meta: MatchMeta) => {
     // Live or done: once the match is gone nothing here could turn its link off.
@@ -296,7 +327,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
       ) : (
         <div>
           {match && <h2 className="text-[18px] font-bold text-primary-900 mb-3">New match</h2>}
-          <Setup onStart={start} initialVenue={prefill.venue} live={liveLinks ? { on: prefill.live, keepFrom } : undefined} />
+          <Setup onStart={start} initialVenue={prefill.venue} live={liveLinks ? { on: prefill.live, keepFrom, loginFirst: !auth.user } : undefined} />
         </div>
       )}
 

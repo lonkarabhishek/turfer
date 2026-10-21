@@ -89,7 +89,7 @@ function SwitchKnob({ on }: { on: boolean }) {
  * left out when the site has no live links; keepFrom names the previous
  * match when its link can move to this one.
  */
-export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match, live: SetupLive) => void; initialVenue?: string; live?: { on: boolean; keepFrom: string | null } }) {
+export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match, live: SetupLive) => void; initialVenue?: string; live?: { on: boolean; keepFrom: string | null; loginFirst?: boolean } }) {
   const [teamA, setTeamA] = useState("Team A");
   const [teamB, setTeamB] = useState("Team B");
   const [overs, setOvers] = useState(6);
@@ -322,6 +322,9 @@ export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match
                     <span className="block text-[12px] text-primary-500">{keep ? `Friends following ${live.keepFrom} move to this match.` : "This match gets a new link."}</span>
                   </span>
                 </label>
+              )}
+              {live.loginFirst && !(live.keepFrom && keep) && (
+                <p className="py-1 text-[13px] leading-snug text-primary-700">You log in when the match starts, with Google or your phone. Friends who open the link never need to.</p>
               )}
               <p className="flex items-center gap-1 text-[12px] leading-snug text-primary-500">
                 <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>

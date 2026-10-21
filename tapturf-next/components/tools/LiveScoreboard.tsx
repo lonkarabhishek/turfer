@@ -7,6 +7,8 @@ import type { Board, BoardSport, BoardView } from "@/lib/board/types";
 import { trackTool } from "@/lib/analytics/tools";
 import { sportIcon } from "@/components/board/shared";
 import { useWatchers } from "@/components/live/useWatchers";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
 import { ToolCta } from "./ToolCta";
 import { SecondaryButton } from "./inputs";
 import { Setup, type SetupLive } from "./board/Setup";
@@ -63,6 +65,9 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   /** The link last copied from the page card: one turned on since shows "Copy link" again. */
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const live = useLiveSync(liveLinks, { load: loadForLive });
+  const auth = useAuth();
+  /** Back from the live link login (?live=1): the board whose link to turn on once auth has settled. */
+  const loginAsk = useRef<string | null>(null);
   // The eye count by the LIVE pill: only while scoring a match whose link is on. The scorer listens, never counts in.
   const watchLink = liveLinks && open && board ? live.info(board.id) : null;
   const watchers = useWatchers(watchLink?.on && watchLink.link ? watchLink.link.code : null, { track: false });
@@ -86,14 +91,15 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
 
   useEffect(() => {
     // Read here, not with useSearchParams: the page is static.
-    const { venue, fromGame, sport, name, rest } = readReminder(window.location.search);
+    const { venue, fromGame, sport, name, rest: afterReminder } = readReminder(window.location.search);
+    const { returning, rest } = liveReturn(afterReminder);
     trackTool("tool_opened", TOOL, fromGame ? { from: "game", ...(sport ? { sport } : {}) } : {});
     const reminder = !!(venue || fromGame || sport);
     // Restore after mount so the server and first client render agree.
     const t = setTimeout(() => {
       // Take the reminder out of the address, so a reload mid-match resumes it. Here, not above, so Strict Mode's
       // second run still reads it; and before openScorer, whose pushState would carry it on.
-      if (reminder || name) {
+      if (reminder || name || returning) {
         try {
           window.history.replaceState(window.history.state, "", window.location.pathname + rest + window.location.hash);
         } catch {
@@ -108,11 +114,14 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
         setPrefill({ sport, name, venue, live: fromGame });
         setNewOpen(true);
       }
+      const ask = returning ? takeLiveAsk("board", t0) : null;
+      loginAsk.current = ask;
       const b = ix.current ? loadBoard(ix.current) : null;
       if (b) {
         setBoard(b);
         const meta = ix.list.find((x) => x.id === b.id);
-        if (!reminder && meta && meta.status === "live" && t0 - meta.updatedAt < RESUME_MS) openScorer();
+        // A login return opens its own board below.
+        if (!ask && !reminder && meta && meta.status === "live" && t0 - meta.updatedAt < RESUME_MS) openScorer();
       }
       setHydrated(true);
     }, 0);
@@ -168,6 +177,12 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   };
 
   const startLink = async (id: string) => {
+    // Sharing needs a login (Google first, then phone); scoring does not. The board is saved, so the trip loses nothing.
+    if (!auth.user) {
+      trackTool("tool_action", TOOL, { action: "live_link_login" });
+      askLiveLogin("board", id);
+      return;
+    }
     const fault = await live.start(id);
     trackTool("tool_action", TOOL, fault ? { action: "live_link_failed", reason: fault } : { action: "live_link_on" });
   };
@@ -178,7 +193,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
 
   const liveFor = (id: string): ShareLive => {
     const info = live.info(id);
-    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id) };
+    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user };
   };
 
   const onChange = (b: Board) => {
@@ -210,6 +225,22 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
     setIndex(setCurrent(id));
     openScorer();
   };
+
+  // Back from the login: open that board and turn its link on. Logged in or not, the ask is used up.
+  const loginDone = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    loginDone.current = (id: string) => {
+      if (!auth.user || !loadBoard(id)) return;
+      resume(id);
+      void startLink(id);
+    };
+  });
+  useEffect(() => {
+    const id = loginAsk.current;
+    if (!hydrated || !id || auth.loading) return;
+    loginAsk.current = null;
+    loginDone.current(id);
+  }, [hydrated, auth.loading]);
 
   const remove = (meta: BoardMeta) => {
     // Live or done: once the match is gone nothing here could turn its link off.
@@ -289,7 +320,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
       ) : (
         <div>
           {board && <h2 className="text-[18px] font-bold text-primary-900 mb-3">New match</h2>}
-          <Setup onStart={start} initial={{ sport: initialSport, name: prefill.name, venue: prefill.venue }} live={liveLinks ? { on: prefill.live, keepFrom } : undefined} />
+          <Setup onStart={start} initial={{ sport: initialSport, name: prefill.name, venue: prefill.venue }} live={liveLinks ? { on: prefill.live, keepFrom, loginFirst: !auth.user } : undefined} />
         </div>
       )}
 

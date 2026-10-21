@@ -24,6 +24,7 @@ import {
   type LiveIo,
   type LiveNet,
 } from "./live";
+import { askLiveLogin, liveReturn, takeLiveAsk } from "./liveLogin";
 import { MAX_SAVED, loadMatch, saveMatch, type MatchMeta } from "./storage";
 
 const T0 = 1_760_000_000_000;
@@ -780,4 +781,25 @@ test("engine: a turn-off the server did not get puts the link back on, to try ag
   assert.deepEqual([t.links.m1.on, t.links.m1.stopped], [true, undefined]);
   const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
   assert.deepEqual([info.on, info.fault], [true, "not_off"]);
+});
+
+test("live link login: the ask survives the trip and is read once, by its own tool, while fresh", () => {
+  const store = new Map<string, string>();
+  const ss = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+  Object.defineProperty(globalThis, "sessionStorage", { value: ss, configurable: true });
+  let went = "";
+  Object.defineProperty(globalThis, "window", { value: { location: { href: "https://www.tapturf.in/tools/live-scoreboard?tab=2" } }, configurable: true });
+  Object.defineProperty(globalThis.window.location, "href", { get: () => "https://www.tapturf.in/tools/live-scoreboard?tab=2", set: (v: string) => void (went = v), configurable: true });
+  askLiveLogin("board", "b123", 1_000);
+  assert.equal(went, `/login?next=${encodeURIComponent("/tools/live-scoreboard?tab=2&live=1")}&via=live`);
+  assert.deepEqual(liveReturn("?tab=2&live=1"), { returning: true, rest: "?tab=2" });
+  assert.deepEqual(liveReturn("?live=1"), { returning: true, rest: "" });
+  assert.deepEqual(liveReturn("?tab=2"), { returning: false, rest: "?tab=2" });
+  assert.equal(takeLiveAsk("cricket", 2_000), null, "another tool's ask is not taken...");
+  assert.equal(takeLiveAsk("board", 2_000), null, "...and is used up all the same");
+  askLiveLogin("board", "b123", 1_000);
+  assert.equal(takeLiveAsk("board", 1_000 + 31 * 60_000), null, "a stale ask is ignored");
+  askLiveLogin("board", "b123", 1_000);
+  assert.equal(takeLiveAsk("board", 5_000), "b123");
+  assert.equal(takeLiveAsk("board", 5_000), null, "read once");
 });

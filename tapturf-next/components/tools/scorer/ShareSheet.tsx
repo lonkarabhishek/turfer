@@ -20,6 +20,8 @@ export type ShareLive = {
   url: string | null;
   onStart: () => void;
   onStop: () => void;
+  /** Logged out: Turn on live link goes to the login first. */
+  loginFirst?: boolean;
 };
 
 /** What the link carries, in the sport's own words. */
@@ -109,8 +111,9 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
           </p>
         )}
         <button type="button" onClick={live.onStart} className="press-tight mt-3 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[17px] font-bold hover:bg-primary-800">
-          <Radio className="w-5 h-5" aria-hidden /> Turn on live link
+          <Radio className="w-5 h-5" aria-hidden /> {live.loginFirst ? "Log in and turn on live link" : "Turn on live link"}
         </button>
+        {live.loginFirst && <p className="mt-2 text-[13px] leading-snug text-primary-500">Log in with Google or your phone to share. Your match is saved, and friends who open the link never need to log in.</p>}
         <PrivacyNote />
       </section>
     );
