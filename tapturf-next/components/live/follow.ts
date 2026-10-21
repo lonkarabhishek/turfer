@@ -354,3 +354,29 @@ export function startPolling(io: PollIo): Poller {
     },
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Who is following                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The score is free; keeping up with it takes a login. checking: not
+ * known yet. The server render and hydration are always checking, since
+ * a phone login lives in localStorage and the server cannot see it.
+ */
+export type Access = "checking" | "in" | "out";
+
+export function accessOf(mounted: boolean, authLoading: boolean, signedIn: boolean): Access {
+  if (!mounted || authLoading) return "checking";
+  return signedIn ? "in" : "out";
+}
+
+/** Whether the page polls. Logged out it does only until there is a score to show, so the first score still comes in by itself. */
+export function pollsFor(access: Access, scored: boolean): boolean {
+  return access === "in" || (access === "out" && !scored);
+}
+
+/** The follower's login: Google first, then phone, and straight back to this score. */
+export function followLoginHref(code: string): string {
+  return `/login?next=${encodeURIComponent(`/live/${code}`)}&via=follow`;
+}

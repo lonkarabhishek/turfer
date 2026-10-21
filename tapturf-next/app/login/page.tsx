@@ -25,8 +25,9 @@ function LoginInner() {
   const { user, loading: authLoading } = useAuth();
   const nextParam = params?.get("next") || "/";
   const errParam = params?.get("error");
-  // From turning on a live score link: email (Google) first, then phone, and copy about sharing.
-  const live = params?.get("via") === "live";
+  // From a live score: email (Google) first, then phone. live: turning on a link; follow: keeping up with one.
+  const via = params?.get("via");
+  const live = via === "live" || via === "follow";
 
   const [googleBusy, setGoogleBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(
@@ -137,10 +138,14 @@ function LoginInner() {
 
         {/* Title */}
         <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-[0.95] mb-2">
-          {live ? "Log in to share a live link" : "Sign in"}
+          {via === "follow" ? "Log in to follow the live score" : live ? "Log in to share a live link" : "Sign in"}
         </h1>
         <p className="text-primary-600 text-[15px] mb-8">
-          {live ? "Your match stays saved on this phone. Friends who open the link never need to log in." : "Book turfs. Host games. Find a squad."}
+          {via === "follow"
+            ? "Free, and quick with Google or your phone. You come straight back to the score."
+            : live
+              ? "Your match stays saved on this phone. You log in once; friends log in on their own phones to follow."
+              : "Book turfs. Host games. Find a squad."}
         </p>
 
         {/* Error banner — always visible above the CTAs so it's noticed. */}

@@ -186,7 +186,7 @@ export function Setup({
 
       {live && (
         <div className="rounded-2xl border border-primary-200">
-          <SwitchRow on={liveOn} onToggle={() => setLiveChoice(!liveOn)} title="Live link: let others follow the score" detail="One link for the group. No app or sign-up." />
+          <SwitchRow on={liveOn} onToggle={() => setLiveChoice(!liveOn)} title="Live link: let others follow the score" detail="One link for the group. No app needed." />
           {liveOn && (
             <div className="px-4 pb-2">
               {live.keepFrom && (
@@ -199,7 +199,7 @@ export function Setup({
                 </label>
               )}
               {live.loginFirst && !(live.keepFrom && keep) && (
-                <p className="py-1 text-[13px] leading-snug text-primary-700">You log in when the match starts, with Google or your phone. Friends who open the link never need to.</p>
+                <p className="py-1 text-[13px] leading-snug text-primary-700">You log in when the match starts, with Google or your phone. Friends see the score and log in to follow it live.</p>
               )}
               <p className="flex items-center gap-1 text-[12px] leading-snug text-primary-500">
                 <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>

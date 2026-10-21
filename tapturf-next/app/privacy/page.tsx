@@ -74,9 +74,10 @@ const SECTIONS: LegalSection[] = [
           in your browser. If you turn on a live link, the match is sent to our server as you score so others
           can follow it: the team and player names, the title and venue if you added them, every ball, point,
           goal or card with its time, the match clock, and the result. We also keep a one-way
-          hash of your network address (never the address itself) so one network cannot make links in bulk. A
-          live link needs no account and is not tied to yours. While you have a live score open, your browser
-          joins a count of people watching it. Nothing about you is sent.
+          hash of your network address (never the address itself) so one network cannot make links in bulk.
+          You log in to turn on a live link or to keep following one, but the link is not tied to your account:
+          no name, number or email goes with it. While you follow a live score, your browser joins a count of
+          people watching it. Nothing about you is sent.
         </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my

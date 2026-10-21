@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Copy, Loader2, Share2 } from "lucide-react";
+import { ArrowRight, Check, Copy, Loader2, LogIn, Share2 } from "lucide-react";
 import { derive, toScorecard, type MatchView } from "@/lib/cricket/scoring";
 import { clockMs, deriveBoard } from "@/lib/board";
 import type { BoardSport } from "@/lib/board/types";
 import { trackTool } from "@/lib/analytics/tools";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { sportBySlug, venueWord } from "@/lib/sports";
 import { isLiveBoard, sanitizeLive, type LiveMatch } from "@/lib/live/match";
@@ -16,7 +17,7 @@ import { MatchTabs, ScoreHeader } from "@/components/tools/scorer/MatchHeader";
 import { writeHandoff } from "@/components/tools/scorer/handoff";
 import { BoardHeader } from "@/components/board/BoardHeader";
 import { BoardTabs } from "@/components/board/BoardTabs";
-import { boardNow, boardPause, clockNow, freshness, joinClock, liveBadgeOn, pauseOf, pauseText, resultCardHref, setClock, startPolling, type FollowStatus } from "./follow";
+import { accessOf, boardNow, boardPause, clockNow, followLoginHref, freshness, joinClock, liveBadgeOn, pauseOf, pauseText, pollsFor, resultCardHref, setClock, startPolling, type FollowStatus } from "./follow";
 import { useWatchers } from "./useWatchers";
 import { WatchCount } from "./WatchCount";
 
@@ -54,9 +55,14 @@ function useServerNow(serverNow: number, every: number, since: number): number {
 /** At a server time: the planned gap in words (freshness), or null. */
 type PauseAt = (serverNow: number) => string | null;
 
-/** The red LIVE pill by the team names, only while updates keep coming, or while a running clock is why none do. */
-function LiveBadge({ updatedAt, serverNow, pause }: { updatedAt: number; serverNow: number; pause: PauseAt }) {
-  const now = useServerNow(serverNow, 15_000, updatedAt);
+/**
+ * The red LIVE pill by the team names, only while updates keep coming,
+ * or while a running clock is why none do. frozen: as it was when the
+ * page opened, for a follower who gets no updates.
+ */
+function LiveBadge({ updatedAt, serverNow, pause, frozen }: { updatedAt: number; serverNow: number; pause: PauseAt; frozen: boolean }) {
+  const ticking = useServerNow(serverNow, 15_000, updatedAt);
+  const now = frozen ? serverNow : ticking;
   if (!liveBadgeOn(now - updatedAt, pause(now) === "Clock running.")) return null;
   return (
     <span className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full bg-red-600 text-[10px] font-extrabold tracking-wide">
@@ -88,10 +94,13 @@ function Freshness({ status, updatedAt, pause, serverNow }: { status: "live" | "
  * each. The highest rev wins; nothing re-renders when it has not moved,
  * and the picked tab and innings stay put until the link moves on to a
  * new match. A cricket match shows the Live Cricket Scorer's view, a
- * board the Live Scoreboard's, with its clock ticking here.
+ * board the Live Scoreboard's, with its clock ticking here. The score
+ * is free; logged out, the page stops polling once it has one and asks
+ * for a login (Google first, then phone) in the tabs' place.
  */
 export function LiveFollow({ code, initial, serverNow }: { code: string; initial: LiveGetResponse | null; serverNow: number }) {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [shown, setShown] = useState<Shown | null>(() => (initial ? toShown(initial) : null));
   const [trouble, setTrouble] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -102,11 +111,26 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
     trackTool("tool_opened", TOOL, { status: openedAs });
   }, [openedAs]);
 
+  // Mounted: past hydration, so the clock can tick and the login can be read (the server render knows neither).
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    // Set the clock while the page's render time is still close. A page
-    // mounted again from the router cache (Back) keeps the clock it has
-    // and polls at once, so an old score is never shown as fresh.
-    const restored = joinClock(serverNow);
+    const t = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(t);
+  }, []);
+  const access = accessOf(mounted, authLoading, !!user);
+  const scored = shown?.status === "live" || shown?.status === "done";
+  const polls = pollsFor(access, scored);
+
+  // Set the clock while the page's render time is still close. A page
+  // mounted again from the router cache (Back) keeps the clock it has
+  // and polls at once, so an old score is never shown as fresh.
+  const restored = useRef(false);
+  useEffect(() => {
+    restored.current = joinClock(serverNow);
+  }, [serverNow]);
+
+  useEffect(() => {
+    if (!polls) return;
     const poller = startPolling({
       // No query string: every follower must share the one CDN copy.
       get: (signal) => fetch(`/api/live/${code}`, { cache: "no-store", signal }),
@@ -124,7 +148,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
       hidden: () => document.visibilityState === "hidden",
     });
     const wake = () => poller.wake();
-    if (restored) wake();
+    if (restored.current) wake();
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("focus", wake);
     window.addEventListener("online", wake);
@@ -136,29 +160,29 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
       window.removeEventListener("online", wake);
       window.removeEventListener("pageshow", wake);
     };
-  }, [code, serverNow]);
+  }, [code, polls]);
 
   const match = shown?.match ?? null;
   const board = match && isLiveBoard(match) ? match : null;
   const view = useMemo(() => (match && !isLiveBoard(match) ? derive(match) : null), [match]);
   const boardView = useMemo(() => (board ? deriveBoard(board) : null), [board]);
-  const scored = shown?.status === "live" || shown?.status === "done";
-  // Everyone with the score open counts, themselves included. Waiting and turned off links count no one.
-  const watchers = useWatchers(scored && match ? code : null, { track: true });
+  // Everyone following counts, themselves included. Waiting and turned off links count no one, and nor does
+  // a score seen logged out: those viewers get no updates, and each count is a Realtime connection.
+  const watchers = useWatchers(scored && match && access === "in" ? code : null, { track: true });
+  const walled = scored && access === "out";
+  useEffect(() => {
+    if (walled) trackTool("tool_action", TOOL, { action: "login_wall" });
+  }, [walled]);
 
   // The board's clock in the scorer's clock domain (boardNow). The first render uses the page's render time, as
-  // useServerNow does, so the server render and hydration show the same clock.
-  const [clockLive, setClockLive] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setClockLive(true), 0);
-    return () => clearTimeout(t);
-  }, []);
+  // useServerNow does, so the server render and hydration show the same clock. It ticks logged out too: it is
+  // worked out here from the last update, as between any two updates.
   const updatedAt = shown?.updatedAt ?? null;
   const boardClock = useCallback(
     (at: number): number | null => (board && boardView ? boardNow(board, boardView, updatedAt ?? serverNow, at) : null),
     [board, boardView, updatedAt, serverNow],
   );
-  const headerNow = useCallback(() => boardClock(clockLive ? clockNow() : serverNow) ?? 0, [boardClock, clockLive, serverNow]);
+  const headerNow = useCallback(() => boardClock(mounted ? clockNow() : serverNow) ?? 0, [boardClock, mounted, serverNow]);
 
   const names = view ? `${view.setup.teamA} vs ${view.setup.teamB}` : boardView ? `${boardView.teams.a.name} vs ${boardView.teams.b.name}` : null;
 
@@ -228,7 +252,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
       }
     : () => (view ? pauseText(pauseOf(view)) : null);
   // By the team names: the LIVE pill while live, and the eye count. Nothing in the slot when neither shows.
-  const liveBadge = status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} pause={pause} /> : null;
+  const liveBadge = status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} pause={pause} frozen={walled} /> : null;
   const badge =
     liveBadge || watchers?.count ? (
       <>
@@ -248,7 +272,8 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         <h1 className="sr-only">{names} live score</h1>
         {header}
         <div className="px-3 py-2.5 sm:px-1 space-y-2">
-          {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} />}
+          {/* Logged out and live, the login card says how old the score is: "Updated 4 min ago" would read as a scorer gone quiet. */}
+          {updatedAt !== null && !(walled && status === "live") && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} />}
           {trouble && (
             <p role="status" className="text-[13px] font-semibold text-red-700">
               Can&rsquo;t get the latest score. Trying again.
@@ -257,7 +282,13 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         </div>
       </div>
       {/* Keyed by match id: the same link moved on to the next match starts on Live again. Never keyed by rev. */}
-      {boardView ? (
+      {access === "checking" ? (
+        <div className={`${tabsClass} h-72 flex items-center justify-center bg-white`}>
+          <Loader2 className="w-6 h-6 text-primary-300 motion-safe:animate-spin" aria-hidden />
+        </div>
+      ) : walled ? (
+        <LoginCard code={code} done={status === "done"} cricket={!boardView} className="mx-3 sm:mx-0 lg:col-start-2 lg:row-start-1 lg:row-span-2" />
+      ) : boardView ? (
         // No result card for boards: the scorecard maker is cricket only.
         <BoardTabs key={boardView.id} view={boardView} readOnly className={tabsClass} />
       ) : view ? (
@@ -268,6 +299,29 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         <Ctas code={code} sport={boardView ? boardView.sport : "cricket"} />
       </div>
     </div>
+  );
+}
+
+/** In the tabs' place for a follower who is not logged in. The score above is free; keeping up with it takes a login. */
+function LoginCard({ code, done, cricket, className }: { code: string; done: boolean; cricket: boolean; className: string }) {
+  const href = followLoginHref(code);
+  const more = cricket ? "the full scorecard, overs and commentary" : "the timeline and stats";
+  const title = done ? (cricket ? "Log in to see the full scorecard" : "Log in to see the timeline and stats") : "Log in to follow live";
+  // Beside the score on a wide screen, under it on a phone: nothing here says above.
+  const body = done ? `That is the final score. Log in for ${more}.` : `You are seeing the score from when you opened the link. Log in and it updates by itself, with ${more}.`;
+  return (
+    <section className={`rounded-3xl border-2 border-primary-900 bg-white p-5 ${className}`}>
+      <h2 className="text-[19px] font-bold leading-tight text-primary-900">{title}</h2>
+      <p className="mt-1.5 text-[15px] leading-snug text-primary-600">{body}</p>
+      <Link
+        href={href}
+        onClick={() => trackTool("tool_cta_clicked", TOOL, { href: "login", status: done ? "done" : "live" })}
+        className="press-tight mt-4 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full bg-primary-900 text-white text-[16px] font-bold hover:bg-accent-600"
+      >
+        <LogIn className="w-5 h-5" aria-hidden /> Log in with Google or phone
+      </Link>
+      <p className="mt-2 text-center text-[12px] text-primary-500">Free. You come straight back to this score.</p>
+    </section>
   );
 }
 

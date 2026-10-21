@@ -23,7 +23,7 @@ const FAQ = [
   {
     q: "Can others follow the score?",
     a: LIVE_LINKS
-      ? "Yes. Turn on a live link when you set up the match, or later from Share live score, and send it to the group on WhatsApp. Anyone with the link sees the score, the clock, the sets and every goal or point as you tap, with no app or sign-up. The eye next to LIVE shows how many people have it open. You can turn the link off any time, and only that match is uploaded."
+      ? "Yes. Turn on a live link when you set up the match, or later from Share live score, and send it to the group on WhatsApp. You log in once to turn it on, with Google or your phone. Anyone with the link sees the score straight away, and a quick login keeps the clock, the sets and every goal or point updating as you tap. No app needed. The eye next to LIVE shows how many people are following. You can turn the link off any time, and only that match is uploaded."
       : "Share live score sends a WhatsApp-ready update with the score, the sets or the goals, and where the match is. Send a new one whenever the score changes. Matches stay on the phone you scored on; nothing is uploaded.",
   },
   {

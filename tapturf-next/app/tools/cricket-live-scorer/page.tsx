@@ -93,7 +93,7 @@ export default function Page() {
                 title: "A live link for everyone watching",
                 body: (
                   <p>
-                    Turn on a live link when you set up the match, or later from Share live score, and send it to the group. Followers just open the link: the score, scorecard, overs, graphs and commentary update as you score, with no app or sign-up. Only that match is uploaded, and you can turn the link off any time. The{" "}
+                    Turn on a live link when you set up the match, or later from Share live score, and send it to the group. You log in once to turn it on, with Google or your phone. Followers see the score as soon as they open the link, and a quick login keeps the score, scorecard, overs, graphs and commentary updating as you score. No app needed. Only that match is uploaded, and you can turn the link off any time. The{" "}
                     <Link href="/privacy#live-links" className="text-accent-700 font-semibold hover:underline">
                       privacy policy
                     </Link>{" "}

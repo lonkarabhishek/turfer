@@ -10,11 +10,13 @@ import {
   WAIT_POLL_MS,
   WAIT_SLOW_POLL_MS,
   CLOCK_GRACE_MS,
+  accessOf,
   ago,
   boardNow,
   boardPause,
   cardFrom,
   clockNow,
+  followLoginHref,
   freshness,
   isNewer,
   joinClock,
@@ -22,6 +24,7 @@ import {
   nextPoll,
   pauseOf,
   pauseText,
+  pollsFor,
   readLive,
   resultCardHref,
   serverTimeOf,
@@ -600,5 +603,28 @@ describe("polling", () => {
     await advance(60_000);
     assert.equal(h.polls, 1);
     assert.deepEqual(h.troubles, []);
+  });
+});
+
+describe("who is following", () => {
+  test("unknown until mounted and auth has loaded, so the server render and hydration agree", () => {
+    assert.equal(accessOf(false, false, true), "checking");
+    assert.equal(accessOf(false, true, false), "checking");
+    assert.equal(accessOf(true, true, false), "checking");
+    assert.equal(accessOf(true, false, true), "in");
+    assert.equal(accessOf(true, false, false), "out");
+  });
+
+  test("logged in always polls; logged out only until there is a score; checking never", () => {
+    assert.equal(pollsFor("in", true), true);
+    assert.equal(pollsFor("in", false), true);
+    assert.equal(pollsFor("out", false), true);
+    assert.equal(pollsFor("out", true), false);
+    assert.equal(pollsFor("checking", false), false);
+    assert.equal(pollsFor("checking", true), false);
+  });
+
+  test("the login comes straight back to this score", () => {
+    assert.equal(followLoginHref("abcd2345wxyz"), "/login?next=%2Flive%2Fabcd2345wxyz&via=follow");
   });
 });

@@ -308,7 +308,7 @@ export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match
           <button type="button" role="switch" aria-checked={liveOn} onClick={() => setLiveChoice(!liveOn)} className="w-full min-h-14 px-4 py-2 flex items-center justify-between gap-3 text-left">
             <span className="min-w-0">
               <span className="block text-[15px] font-semibold text-primary-900">Live link: let others follow the score</span>
-              <span className="block text-[12px] text-primary-500">One link for the group. No app or sign-up.</span>
+              <span className="block text-[12px] text-primary-500">One link for the group. No app needed.</span>
             </span>
             <SwitchKnob on={liveOn} />
           </button>
@@ -324,7 +324,7 @@ export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match
                 </label>
               )}
               {live.loginFirst && !(live.keepFrom && keep) && (
-                <p className="py-1 text-[13px] leading-snug text-primary-700">You log in when the match starts, with Google or your phone. Friends who open the link never need to.</p>
+                <p className="py-1 text-[13px] leading-snug text-primary-700">You log in when the match starts, with Google or your phone. Friends see the score and log in to follow it live.</p>
               )}
               <p className="flex items-center gap-1 text-[12px] leading-snug text-primary-500">
                 <span className="min-w-0">Team and player names and the score are uploaded for this link.</span>
