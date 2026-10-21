@@ -28,6 +28,7 @@ import {
   type MatchEvent,
   type SetupInput,
   type Side,
+  type Tag,
 } from "./scoring";
 
 /* Titans (a): Amit a1, Rahul a2, Karan a3, Dev a4, Om a5, Jay a6
@@ -956,9 +957,23 @@ test("derive is instant over a long match", () => {
 /* ------------------------------------------------------------------ */
 
 const WICKETS: BallWicketKind[] = ["bowled", "caught", "lbw", "runOut", "stumped", "hitWicket", "obstructing"];
-const EVENT_TYPES: MatchEvent["type"][] = ["ball", "setBatter", "setBowler", "swapStrike", "retire", "endInnings", "addPlayer", "renamePlayer", "changeSetup"];
+const EVENT_TYPES: MatchEvent["type"][] = ["ball", "setBatter", "setBowler", "swapStrike", "retire", "endInnings", "addPlayer", "renamePlayer", "tagPlayer", "changeSetup"];
+/** TapTurf usernames the random matches tag players with. */
+const USERS = ["amit_s", "amit_k", "rahul_p", "sam99"];
 /** The match as it travels: JSON. */
 const wire = (m: Match): unknown => JSON.parse(JSON.stringify(m));
+
+/** Never a "tag" key that says undefined anywhere in x: JSON would drop it, and the strict round trips would break. */
+function noUndefinedTag(x: unknown, where: string) {
+  const seen = new Set<unknown>();
+  const walk = (o: unknown, path: string) => {
+    if (!o || typeof o !== "object" || seen.has(o)) return;
+    seen.add(o);
+    if (Object.prototype.hasOwnProperty.call(o, "tag")) assert.notEqual((o as { tag?: unknown }).tag, undefined, `${where}: tag: undefined at ${path}`);
+    for (const [k, v] of Object.entries(o)) walk(v, `${path}.${k}`);
+  };
+  walk(x, "");
+}
 
 /**
  * A random legal match with every kind of event the scorer makes, built
@@ -993,19 +1008,21 @@ function anyMatch(seed: number, seen: Map<string, number>): Match {
     // The scorer stamps each tap; events made through the API may have no time.
     const at = chance(0.8) ? { at: 1_760_000_000_000 + step * 997 + (chance(0.2) ? 0.25 : 0) } : {};
     const fresh = (side: Side, role: string) => ({ player: newPlayerId(m, side), name: `${role} ${step}` });
+    // Some picks come from a profile search; the same few profiles come round again, so tags get swapped and folded.
+    const tag = (p: number) => (chance(p) ? { tag: { u: pick(USERS) } } : {});
     const x = r();
     let e: MatchEvent;
     if (v.needs.includes("striker") || v.needs.includes("nonStriker")) {
       const opts = v.batterOptions;
-      e = { type: "setBatter", ...(opts.length && chance(0.7) ? { player: pick(opts).id } : fresh(inn.batting, "Batter")), ...(chance(0.2) ? { end: v.needs[0] as End } : {}), ...at };
+      e = { type: "setBatter", ...(opts.length && chance(0.7) ? { player: pick(opts).id } : fresh(inn.batting, "Batter")), ...(chance(0.2) ? { end: v.needs[0] as End } : {}), ...tag(0.2), ...at };
     } else if (v.needs.includes("bowler") || x < 0.02) {
       const ok = v.bowlerOptions.filter((o) => !o.blocked && !o.current);
-      e = { type: "setBowler", ...(ok.length && chance(0.8) ? { player: pick(ok).id } : fresh(inn.bowling, "Bowler")), ...at };
+      e = { type: "setBowler", ...(ok.length && chance(0.8) ? { player: pick(ok).id } : fresh(inn.bowling, "Bowler")), ...tag(0.2), ...at };
     } else if (x < 0.04) e = { type: "swapStrike", ...at };
     else if (x < 0.06) e = { type: "retire", out: pick(["striker", "nonStriker"] as const), kind: pick(["retiredHurt", "retiredOut"] as const), ...at };
     else if (x < 0.08) {
       const side = pick(["a", "b"] as const);
-      e = { type: "addPlayer", team: side, ...fresh(side, "Sub"), ...at };
+      e = { type: "addPlayer", team: side, ...fresh(side, "Sub"), ...tag(0.3), ...at };
     } else if (x < 0.1) {
       const side = pick(["a", "b"] as const);
       const players = v.teams[side].players;
@@ -1026,6 +1043,12 @@ function anyMatch(seed: number, seen: Map<string, number>): Match {
     else if (x < 0.14) {
       m = chance(0.5) ? undoBall(m) : undo(m);
       continue;
+    } else if (x < 0.16) {
+      // PlayerSheet: tag someone after the fact, swap their tag or take it off.
+      const side = pick(["a", "b"] as const);
+      const players = v.teams[side].players;
+      if (!players.length) continue;
+      e = { type: "tagPlayer", team: side, player: pick(players).id, tag: chance(0.3) ? null : { u: pick(USERS) }, ...at };
     } else {
       const extra = pick(["none", "none", "none", "none", "wide", "noBall", "bye", "legBye"] as const);
       const runs = extra === "none" || extra === "noBall" ? pick([0, 0, 1, 2, 3, 4, 6, 5]) : 0;
@@ -1046,7 +1069,8 @@ function anyMatch(seed: number, seen: Map<string, number>): Match {
     const next = apply(m, e);
     if (next === m) continue;
     m = next;
-    for (const k of [e.type, e.type === "ball" ? e.extra : null, e.type === "ball" ? e.wicket?.kind : e.type === "retire" ? e.kind : null]) if (k) seen.set(k, (seen.get(k) ?? 0) + 1);
+    const tagged = (e.type === "setBatter" || e.type === "setBowler" || e.type === "addPlayer") && e.tag ? `tagged ${e.type}` : e.type === "tagPlayer" && !e.tag ? "untag" : null;
+    for (const k of [e.type, e.type === "ball" ? e.extra : null, e.type === "ball" ? e.wicket?.kind : e.type === "retire" ? e.kind : null, tagged]) if (k) seen.set(k, (seen.get(k) ?? 0) + 1);
   }
   return m;
 }
@@ -1058,8 +1082,14 @@ test("sanitizeMatch: every match the engine makes comes back exactly", () => {
     const s = sanitizeMatch(wire(m));
     assert.deepEqual(s, m, `seed ${seed}`);
     assert.deepEqual(derive(s!), derive(m), `seed ${seed} derive`);
+    noUndefinedTag(m, `seed ${seed} match`);
+    noUndefinedTag(derive(m), `seed ${seed} view`);
+    // Storage gives back the same events, tags and all, and the same view.
+    const back = restoreMatch(JSON.stringify(m))!;
+    assert.deepEqual(back.events, m.events, `seed ${seed} restore`);
+    assert.deepEqual(derive(back), derive(m), `seed ${seed} restore derive`);
   }
-  for (const k of [...EVENT_TYPES, ...WICKETS, "retiredHurt", "retiredOut", "wide", "noBall", "bye", "legBye"]) assert.ok(seen.get(k), `no ${k} in any match`);
+  for (const k of [...EVENT_TYPES, ...WICKETS, "retiredHurt", "retiredOut", "wide", "noBall", "bye", "legBye", "tagged setBatter", "tagged setBowler", "tagged addPlayer", "untag"]) assert.ok(seen.get(k), `no ${k} in any match`);
   for (let seed = 1; seed <= 30; seed++) {
     const m = randomMatch(seed, { overs: 3 + (seed % 5), playersPerSide: 4 + (seed % 7) });
     assert.deepEqual(sanitizeMatch(wire(m)), m, `soak seed ${seed}`);
@@ -1259,7 +1289,7 @@ test("sanitizeMatch: unknown event types and player ids the engine never makes a
 
 test("sanitizeMatch: junk anywhere never throws, derives cleanly and reads back the same", () => {
   const JUNK: unknown[] = [null, true, false, 0, -1, 2.5, 1e308, -1e308, NaN, Infinity, "", " ", "a1", "b99", "x".repeat(5000), "__proto__", {}, [], [1, 2], { kind: "caught" }, { type: "ball" }, JSON.parse('{"toString": 1, "valueOf": 1}'), JSON.parse('{"__proto__": {"polluted": 1}}')];
-  const FIELDS = ["type", "player", "name", "team", "runs", "extra", "extraRuns", "noBallExtra", "wicket", "kind", "out", "fielder", "end", "reason", "rules", "players", "overs", "teamA", "id", "at", "evil"];
+  const FIELDS = ["type", "player", "name", "team", "runs", "extra", "extraRuns", "noBallExtra", "wicket", "kind", "out", "fielder", "end", "reason", "rules", "players", "overs", "teamA", "id", "at", "evil", "tag", "u"];
   let checked = 0;
   for (let seed = 1; seed <= 40; seed++) {
     const r = rng(seed * 104729);
@@ -1285,6 +1315,8 @@ test("sanitizeMatch: junk anywhere never throws, derives cleanly and reads back 
     const text = [v.headline, shareText(v), ...v.innings.flatMap((i) => [i.summary, i.extrasText, ...i.commentary.map((c) => c.line), ...i.batters.map((b) => b.howOut)])].join("\n");
     assert.doesNotMatch(text, /undefined|NaN|Infinity|\[object/, `seed ${seed}`);
     assert.deepEqual(sanitizeMatch(wire(s)), s, `seed ${seed} reads back the same`);
+    noUndefinedTag(s, `seed ${seed} junk`);
+    for (const p of [...v.teams.a.players, ...v.teams.b.players]) if (p.tag) assert.deepEqual(Object.keys(p.tag), ["u"]);
   }
   assert.ok(checked >= 30, `${checked} junked matches checked`);
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
@@ -1316,16 +1348,36 @@ function earlierNames(m: Match): string[] {
     .map((n) => `${n.side}:${n.id} ${n.name}`);
 }
 
+/**
+ * Tags a match carries that are not that player's tag now: on a pick or addPlayer (a tag key that is not the
+ * final tag), or on a tagPlayer (not the final tag, or null when untagged). Sides as in namesIn.
+ */
+function earlierTags(m: Match): string[] {
+  const v = derive(m);
+  const now = (side: Side, id: string) => v.teams[side].players.find((p) => p.id === id)?.tag?.u ?? null;
+  const out: string[] = [];
+  for (const e of m.events) {
+    if ((e.type === "setBatter" || e.type === "setBowler") && e.tag !== undefined && e.tag.u !== now(e.player[0] as Side, e.player)) out.push(`${e.type} ${e.player} @${e.tag.u}`);
+    else if (e.type === "addPlayer" && e.tag !== undefined && e.tag.u !== now(e.team, e.player)) out.push(`addPlayer ${e.player} @${e.tag.u}`);
+    else if (e.type === "tagPlayer" && (e.tag?.u ?? null) !== now(e.team, e.player)) out.push(`tagPlayer ${e.player} @${e.tag?.u ?? null}`);
+  }
+  return out;
+}
+
 test("publicMatch: no earlier names, and the match reads the same", () => {
   let renamed = 0;
+  let retagged = 0;
   for (let seed = 1; seed <= 150; seed++) {
     const m = anyMatch(seed, new Map());
     const before = JSON.stringify(m);
     const p = publicMatch(m);
     assert.equal(JSON.stringify(m), before, `seed ${seed} scorer's match untouched`);
+    if (earlierTags(m).length) retagged++;
     if (earlierNames(m).length) renamed++;
-    else assert.deepEqual(p, m, `seed ${seed} nothing to fold`);
+    else if (!earlierTags(m).length) assert.deepEqual(p, m, `seed ${seed} nothing to fold`);
     assert.deepEqual(earlierNames(p), [], `seed ${seed}`);
+    assert.deepEqual(earlierTags(p), [], `seed ${seed} tags`);
+    noUndefinedTag(p, `seed ${seed} public`);
     assert.deepEqual(derive(p), derive(m), `seed ${seed} derive`);
     assert.deepEqual(sanitizeMatch(wire(p)), p, `seed ${seed} reads back the same`);
     assert.deepEqual(publicMatch(p), p, `seed ${seed} once is enough`);
@@ -1336,6 +1388,7 @@ test("publicMatch: no earlier names, and the match reads the same", () => {
     );
   }
   assert.ok(renamed >= 50, `${renamed} matches with an earlier name`);
+  assert.ok(retagged >= 20, `${retagged} matches with an earlier tag`);
   // Nothing renamed, nothing to fold: the match comes back as it was.
   for (let seed = 1; seed <= 30; seed++) {
     const m = randomMatch(seed, { overs: 3 + (seed % 5), playersPerSide: 4 + (seed % 7) });
@@ -1404,4 +1457,334 @@ test("publicMatch: players renamed twice leave no earlier name in what the live 
   assert.equal(derive(again).lastAction, "Amit Again added");
   assert.ok(!JSON.stringify(publicMatch(again)).includes("Amit"));
   assert.deepEqual(derive(publicMatch(again)), { ...derive(again), lastAction: "Player 1 added" });
+});
+
+/* ------------------------------------------------------------------ */
+/* Tags: TapTurf profiles on players                                   */
+/* ------------------------------------------------------------------ */
+
+const T = (u: string): Tag => ({ u });
+const tagP = (team: Side, player: string, tag: Tag | null): MatchEvent => ({ type: "tagPlayer", team, player, tag });
+/** A pick (or addPlayer) made from a profile search. */
+const withTag = (e: MatchEvent, u: string): MatchEvent => ({ ...e, tag: T(u) }) as MatchEvent;
+const BAD_TAG = "That is not a TapTurf username";
+const hasTag = (x: object) => Object.prototype.hasOwnProperty.call(x, "tag");
+
+test("tags: a pick from search tags the player, and every view of them shows it", () => {
+  let m = run(make(), withTag(bat("a1"), "amit_s"), bat("a2"), withTag(bowl("b1"), "sameer_x"));
+  let v = derive(m);
+  // Picks keep their own lastAction.
+  assert.equal(v.lastAction, "Sameer to bowl");
+  assert.deepEqual(v.teams.a.players[0], { id: "a1", name: "Amit", tag: { u: "amit_s" } });
+  assert.deepEqual(v.teams.a.players[1], { id: "a2", name: "Rahul" });
+  assert.deepEqual(v.setup.players.a[0], { id: "a1", name: "Amit", tag: { u: "amit_s" } });
+  assert.deepEqual(v.current.striker?.tag, T("amit_s"));
+  assert.equal(hasTag(v.current.nonStriker!), false);
+  assert.deepEqual(v.current.bowler?.tag, T("sameer_x"));
+  assert.deepEqual(
+    v.current.partnership?.batters.map((b) => b.tag?.u ?? null),
+    ["amit_s", null],
+  );
+  // The stored roster never has tags: they ride on the events.
+  assert.deepEqual(m.setup.players.a[0], { id: "a1", name: "Amit" });
+  assert.equal(JSON.stringify(m.setup).includes("amit_s"), false);
+
+  m = run(m, tagP("a", "a3", T("karan_k")));
+  v = derive(m);
+  assert.equal(v.lastAction, "Karan tagged");
+  assert.deepEqual(
+    v.current.yetToBat.find((p) => p.id === "a3"),
+    { id: "a3", name: "Karan", tag: { u: "karan_k" } },
+  );
+  assert.equal(hasTag(v.current.yetToBat.find((p) => p.id === "a4")!), false);
+
+  m = run(m, ...times(6, dot));
+  v = derive(m);
+  assert.deepEqual(v.bowlerOptions.find((o) => o.id === "b1")?.tag, T("sameer_x"));
+  assert.equal(hasTag(v.bowlerOptions.find((o) => o.id === "b2")!), false);
+  assert.deepEqual(v.current.bowlers[0].tag, T("sameer_x"));
+  assert.deepEqual(v.current.batters[0].tag, T("amit_s"));
+
+  // Rahul (on strike after the over) is bowled; Karan's tag shows on the options and when he walks in with a plain pick.
+  m = run(m, bowl("b2"), out("bowled"));
+  v = derive(m);
+  assert.deepEqual(v.batterOptions.find((o) => o.id === "a3")?.tag, T("karan_k"));
+  m = run(m, bat("a3"));
+  assert.deepEqual(derive(m).current.batters.find((b) => b.id === "a3")?.tag, T("karan_k"));
+  noUndefinedTag(derive(m), "view");
+
+  // A pick with a tag sets it (the latest wins); a pick without one leaves it alone.
+  let b = run(start(), withTag(bowl("b2"), "vikas_r"), withTag(bowl("b1"), "sameer_x"), withTag(bowl("b2"), "vikas_2"), bowl("b1"));
+  v = derive(b);
+  assert.deepEqual(
+    v.teams.b.players.slice(0, 2).map((p) => p.tag?.u ?? null),
+    ["sameer_x", "vikas_2"],
+  );
+  // An addPlayer with a tag tags the new player.
+  b = run(b, { type: "addPlayer", team: "b", player: "b7", name: "Sub", tag: T("sub_7") });
+  assert.deepEqual(derive(b).teams.b.players.at(-1), { id: "b7", name: "Sub", tag: { u: "sub_7" } });
+  assert.equal(derive(b).lastAction, "Sub added");
+});
+
+test("tags: filed under the side the pick files the player, like the name", () => {
+  // A hand-made match brings in batter b1 for side a: the tag is side a's b1, not the bowler b1 (Sameer).
+  const m = run(make(), bat("a1"), withTag(bat("b1", undefined, "Zara Ali"), "zara_a"), withTag(bowl("b2"), "vikas_r"), ball(1));
+  const v = derive(m);
+  assert.deepEqual(
+    v.teams.a.players.find((p) => p.id === "b1"),
+    { id: "b1", name: "Zara Ali", tag: { u: "zara_a" } },
+  );
+  assert.deepEqual(
+    v.teams.b.players.find((p) => p.id === "b1"),
+    { id: "b1", name: "Sameer" },
+  );
+  assert.deepEqual(v.current.striker?.tag, T("zara_a"));
+  assert.deepEqual(v.current.bowler?.tag, T("vikas_r"));
+});
+
+test("tags: two people with one name stay two players, each with their own profile", () => {
+  // b1 Amit (@amit_s) bowls the first over. In the third, a different Amit (@amit_k) is picked from search and gets a new id.
+  let m = make({ overs: 4, players: { a: A, b: ["Amit"] } });
+  m = run(m, bat("a1"), bat("a2"), withTag(bowl("b1"), "amit_s"), ...times(6, dot));
+  m = run(m, { type: "setBowler", player: "b2", name: "Vikas" }, ...times(6, dot));
+  m = run(m, { type: "setBowler", player: "b3", name: "Amit", tag: T("amit_k") }, ball(4));
+  const v = derive(m);
+  assert.deepEqual(
+    v.current.bowlers.map((b) => `${b.id} ${b.name} @${b.tag?.u ?? "-"} ${b.overs}-${b.runs}`),
+    ["b1 Amit @amit_s 1.0-0", "b2 Vikas @- 1.0-0", "b3 Amit @amit_k 0.1-4"],
+  );
+  assert.deepEqual(
+    v.teams.b.players.map((p) => `${p.id} ${p.name} @${p.tag?.u ?? "-"}`),
+    ["b1 Amit @amit_s", "b2 Vikas @-", "b3 Amit @amit_k"],
+  );
+  // Through the live link too.
+  assert.deepEqual(derive(publicMatch(sanitizeMatch(wire(m))!)), v);
+});
+
+test("tags: tagPlayer after the fact, after the match is over, and off again", () => {
+  let m = run(finished(), bat("b1"), bat("b2"), bowl("a1"), ball(1), ball(6), ball(4), ball(4));
+  const before = derive(m);
+  assert.equal(before.status, "done");
+  const vikas = tagP("b", "b2", T("vikas_r"));
+  assert.equal(check(m, vikas).error, null);
+  m = run(m, vikas);
+  let v = derive(m);
+  assert.equal(v.lastAction, "Vikas tagged");
+  assert.equal(v.ignored, 0);
+  // Vikas is top scorer, best bowler and player of the match: all of them carry his profile now.
+  assert.deepEqual(
+    [v.awards.potm, v.awards.topScorer, v.awards.bestBowler].map((a) => `${a?.id} ${a?.side} @${a?.tag?.u}`),
+    ["b2 b @vikas_r", "b2 b @vikas_r", "b2 b @vikas_r"],
+  );
+  assert.deepEqual(v.innings[0].bowlers.find((b) => b.id === "b2")?.tag, T("vikas_r"));
+  assert.deepEqual(v.innings[1].batters.find((b) => b.id === "b2")?.tag, T("vikas_r"));
+  // Nothing else changes: the result, the share text and the scorecard stay plain.
+  assert.equal(v.result?.text, before.result?.text);
+  assert.equal(shareText(v), shareText(before));
+  assert.deepEqual(toScorecard(v), toScorecard(before));
+  assert.equal(shareText(v).includes("vikas_r"), false);
+
+  m = run(m, tagP("b", "b2", null));
+  v = derive(m);
+  assert.equal(v.lastAction, "Vikas untagged");
+  assert.equal(JSON.stringify(v).includes('"tag"'), false);
+  assert.deepEqual(v, { ...before, eventCount: before.eventCount + 2, lastAction: "Vikas untagged" });
+
+  // Refused: not in that team, unknown, a username that is not one, or no tag key at all.
+  assert.equal(check(m, tagP("a", "b2", T("vikas_r"))).error, "Player not found");
+  assert.equal(check(m, tagP("b", "b9", T("vikas_r"))).error, "Player not found");
+  assert.equal(check(m, tagP("c" as Side, "b2", null)).error, "Player not found");
+  for (const tag of [T("Vikas R"), T("vi"), T("1vikas"), T("x".repeat(21)), "vikas_r", {}, [], 5, undefined]) {
+    assert.equal(check(m, { type: "tagPlayer", team: "b", player: "b2", tag } as unknown as MatchEvent).error, BAD_TAG, JSON.stringify(tag) ?? "undefined");
+  }
+  assert.equal(check(m, { type: "tagPlayer", team: "b", player: "b2" } as unknown as MatchEvent).error, BAD_TAG);
+  assert.equal(apply(m, tagP("b", "b2", T("Vikas"))), m);
+
+  // A pick's tag must be a real one too.
+  const s = start();
+  assert.equal(check(run(s, out("bowled")), { type: "setBatter", player: "a3", tag: T("Not Valid") }).error, BAD_TAG);
+  assert.equal(check(s, { type: "setBowler", player: "b2", tag: T("") }).error, BAD_TAG);
+  assert.equal(check(s, { type: "setBowler", player: "b2", tag: null } as unknown as MatchEvent).error, BAD_TAG);
+  assert.equal(check(s, { type: "addPlayer", team: "a", player: "a7", name: "Sam", tag: T("1sam") }).error, BAD_TAG);
+  assert.equal(check(s, { type: "addPlayer", team: "a", player: "a7", name: "Sam", tag: T("sam_1") }).error, null);
+});
+
+test("tags: storage, sanitize and the live link keep them; undo takes a picked tag back with its pick", () => {
+  let m = run(make(), withTag(bat("a1"), "amit_s"), bat("a2"), bowl("b1"), ball(4), tagP("b", "b1", T("sameer_x")));
+  m = run(m, { type: "addPlayer", team: "a", player: "a7", name: "Sub", tag: T("sub_7") });
+  const back = restoreMatch(JSON.stringify(m))!;
+  assert.deepEqual(back, m);
+  assert.deepEqual(derive(back), derive(m));
+  const s = sanitizeMatch(wire(m))!;
+  assert.deepEqual(s, m);
+  const live = derive(publicMatch(s));
+  assert.deepEqual(live, derive(m));
+  assert.deepEqual(
+    [live.teams.a.players[0].tag, live.teams.b.players[0].tag, live.teams.a.players.at(-1)!.tag],
+    [T("amit_s"), T("sameer_x"), T("sub_7")],
+  );
+  assert.equal(derive(undo(m)).teams.a.players.length, 6);
+
+  // End of the over: the next bowler is picked from search. undoBall takes back the last ball, the pick and its tag.
+  m = run(m, ...times(5, dot), withTag(bowl("b2"), "vikas_r"));
+  assert.deepEqual(derive(m).current.bowler?.tag, T("vikas_r"));
+  const u = derive(undoBall(m));
+  assert.equal(u.current.legalBalls, 5);
+  assert.equal(hasTag(u.teams.b.players.find((p) => p.id === "b2")!), false);
+  // The tags made in taps of their own stay.
+  assert.deepEqual(u.teams.b.players[0].tag, T("sameer_x"));
+});
+
+test("tags: sanitizeMatch keeps a real tag on picks and tagPlayer, drops bad ones, never a tag: undefined", () => {
+  const m = finished();
+  const s = sanitizeMatch({
+    ...m,
+    events: [
+      { type: "setBatter", player: "a1", tag: { u: "amit_s", uid: "4b1c-secret-uid", name: "Amit S", evil: 1 } },
+      { type: "setBatter", player: "a2", tag: { u: "Not Valid" } },
+      { type: "setBowler", player: "b1", name: "Sameer", tag: "sameer" },
+      { type: "setBowler", player: "b2", tag: null },
+      { type: "addPlayer", team: "a", player: "a7", name: "Sam", tag: { u: "sam_7" } },
+      { type: "addPlayer", team: "a", player: "a8", name: "Om", tag: { u: 7 } },
+      { type: "renamePlayer", team: "a", player: "a1", name: "Amit S", tag: { u: "amit_s" } },
+      { type: "tagPlayer", team: "a", player: "a1", tag: { u: "amit_s", photo: "x.png" }, at: 5 },
+      { type: "tagPlayer", team: "a", player: "a1", tag: null },
+      { type: "tagPlayer", team: "a", player: "a1", tag: { u: "AMIT" } },
+      { type: "tagPlayer", team: "a", player: "a1" },
+      { type: "tagPlayer", team: "c", player: "a1", tag: null },
+      { type: "tagPlayer", team: "a", player: "zz", tag: null },
+      { type: "tagPlayer", team: "a", player: { id: "a1" }, tag: null },
+      { type: "tagPlayer", team: "a", player: "a1", tag: JSON.parse('{"toString": 1, "valueOf": 1}') },
+    ],
+  });
+  assert.ok(s);
+  assert.deepEqual(s.events, [
+    { type: "setBatter", player: "a1", tag: { u: "amit_s" } },
+    { type: "setBatter", player: "a2" },
+    { type: "setBowler", player: "b1", name: "Sameer" },
+    { type: "setBowler", player: "b2" },
+    { type: "addPlayer", team: "a", player: "a7", name: "Sam", tag: { u: "sam_7" } },
+    { type: "addPlayer", team: "a", player: "a8", name: "Om" },
+    { type: "renamePlayer", team: "a", player: "a1", name: "Amit S" },
+    { type: "tagPlayer", team: "a", player: "a1", tag: { u: "amit_s" }, at: 5 },
+    { type: "tagPlayer", team: "a", player: "a1", tag: null },
+    { type: "tagPlayer", team: "a", player: "a1", tag: null },
+    { type: "tagPlayer", team: "a", player: "a1", tag: null },
+    { type: "tagPlayer", team: "a", player: "a1", tag: null },
+  ]);
+  assert.equal(JSON.stringify(s).includes("secret"), false);
+  noUndefinedTag(s, "sanitized");
+  assert.deepEqual(sanitizeMatch(wire(s)), s);
+  assert.doesNotThrow(() => derive(s));
+});
+
+test("tags: malformed tags in the scorer's own storage read safely, as sanitizeMatch reads them", () => {
+  // restoreMatch keeps events as they are, so derive can meet anything there.
+  const raw: unknown = {
+    ...start(),
+    events: [
+      { type: "setBatter", player: "a1", tag: { u: 5 } },
+      { type: "setBatter", player: "a2", tag: { u: "rahul_p", uid: "zzz-uid" } },
+      { type: "setBowler", player: "b1", tag: { u: "sameer_x" } },
+      { type: "tagPlayer", team: "b", player: "b1", tag: "sameer" },
+      { type: "tagPlayer", team: "a", player: "a9", tag: { u: "ghost_1" } },
+    ],
+  };
+  const r = restoreMatch(JSON.stringify(raw))!;
+  const v = derive(r);
+  assert.equal(hasTag(v.teams.a.players[0]), false);
+  assert.deepEqual(v.teams.a.players[1].tag, T("rahul_p"));
+  // A tagPlayer with no real tag takes it off, as sanitizeMatch reads it.
+  assert.equal(hasTag(v.teams.b.players[0]), false);
+  // Not in the team: refused, and lastAction reads the fold, not the event.
+  assert.equal(v.ignored, 1);
+  assert.equal(v.lastAction, "a9 untagged");
+  const text = JSON.stringify(v);
+  for (const bad of ["undefined", "zzz-uid", "ghost_1", "sameer_x"]) assert.equal(text.includes(bad), false, bad);
+  noUndefinedTag(v, "restored view");
+  assert.deepEqual(derive(sanitizeMatch(raw)!), v);
+});
+
+test("tags: undoBall keeps a later tag but not one from a tap it takes back; newPlayerId counts tagPlayer ids", () => {
+  const s = start();
+  const later = run(s, ball(1), { ...tagP("a", "a1", T("amit_s")), at: 9 } as MatchEvent);
+  assert.deepEqual(undoBall(later).events, [...s.events, { type: "tagPlayer", team: "a", player: "a1", tag: { u: "amit_s" }, at: 9 }]);
+  assert.deepEqual(derive(undoBall(later)).teams.a.players[0].tag, T("amit_s"));
+
+  // An older kind of tap: a pick and a tagPlayer stamped together after the ball. Both go; tags of other taps stay.
+  const legacy: Match = {
+    ...s,
+    events: [
+      ...s.events,
+      { ...ball(1), at: 1 },
+      { ...tagP("a", "a3", T("karan_k")), at: 1 } as MatchEvent,
+      { type: "setBowler", player: "b2", at: 2 },
+      { ...tagP("b", "b2", T("vikas_r")), at: 2 } as MatchEvent,
+      { ...tagP("a", "a1", T("amit_s")), at: 3 } as MatchEvent,
+      tagP("a", "a2", T("rahul_p")),
+      { type: "renamePlayer", team: "b", player: "b2", name: "Vikas R", at: 2 },
+    ],
+  };
+  assert.deepEqual(undoBall(legacy).events, [
+    ...s.events,
+    { type: "tagPlayer", team: "a", player: "a1", tag: { u: "amit_s" }, at: 3 },
+    { type: "tagPlayer", team: "a", player: "a2", tag: { u: "rahul_p" } },
+    { type: "renamePlayer", team: "b", player: "b2", name: "Vikas R", at: 2 },
+  ]);
+  // undo() takes back a tag tap alone.
+  assert.deepEqual(undo(later).events, run(s, ball(1)).events);
+
+  const ghost: Match = { ...make({ players: {} }), events: [tagP("a", "a7", null)] };
+  assert.equal(newPlayerId(ghost, "a"), "a8");
+  assert.equal(newPlayerId(ghost, "b"), "b1");
+});
+
+test("tags: publicMatch serves only the tag each player ends with", () => {
+  let m = run(make(), withTag(bat("a1"), "amit_s"), bat("a2"), withTag(bowl("b1"), "sameer_x"), ball(1));
+  m = run(m, tagP("a", "a1", T("amit_k")), tagP("b", "b1", null));
+  m = run(m, { type: "addPlayer", team: "b", player: "b7", name: "Sub", tag: T("sub_7") }, tagP("b", "b7", null));
+  m = run(m, tagP("a", "a2", T("rahul_p")));
+  const before = JSON.stringify(m);
+  const p = publicMatch(m);
+  assert.equal(JSON.stringify(m), before, "the scorer's match keeps its history");
+  const json = JSON.stringify(p);
+  for (const old of ["amit_s", "sameer_x", "sub_7"]) assert.equal(json.includes(old), false, `${old} is still in the live copy`);
+  assert.deepEqual(p.events, [
+    { type: "setBatter", player: "a1", tag: { u: "amit_k" } },
+    // No tag was picked with him, so none is added.
+    { type: "setBatter", player: "a2" },
+    // Untagged in the end: the pick loses its tag key, the tagPlayer says null.
+    { type: "setBowler", player: "b1" },
+    { type: "ball", runs: 1, extra: "none", extraRuns: 0 },
+    { type: "tagPlayer", team: "a", player: "a1", tag: { u: "amit_k" } },
+    { type: "tagPlayer", team: "b", player: "b1", tag: null },
+    { type: "addPlayer", team: "b", player: "b7", name: "Sub" },
+    { type: "tagPlayer", team: "b", player: "b7", tag: null },
+    { type: "tagPlayer", team: "a", player: "a2", tag: { u: "rahul_p" } },
+  ]);
+  noUndefinedTag(p, "public");
+  assert.deepEqual(derive(p), derive(m));
+  assert.deepEqual(publicMatch(p), p);
+  assert.deepEqual(sanitizeMatch(wire(p)), p);
+
+  // A tagPlayer for someone not in the team (check() refuses it) serves null and reads the same.
+  const ghost: Match = { ...m, events: [...m.events, tagP("a", "a9", T("ghost_1"))] };
+  assert.equal(derive(ghost).lastAction, "a9 untagged");
+  assert.deepEqual(derive(publicMatch(ghost)), derive(ghost));
+  assert.equal(JSON.stringify(publicMatch(ghost)).includes("ghost_1"), false);
+
+  // A batter whose id has the other side's letter: the pick takes side a's final tag, never Sameer's (side b's b1).
+  const odd = run(make(), bat("a1"), withTag(bat("b1", undefined, "Zara Ali"), "zara_a"), withTag(bowl("b2"), "vikas_r"), ball(1), tagP("b", "b1", T("sameer_x")), tagP("a", "b1", T("zara_b")));
+  const po = publicMatch(odd);
+  assert.deepEqual(po.events[1], { type: "setBatter", player: "b1", name: "Zara Ali", tag: { u: "zara_b" } });
+  assert.deepEqual(derive(po), derive(odd));
+  assert.equal(JSON.stringify(po).includes("zara_a"), false);
+
+  // In the chase, a pick is filed under the side batting then.
+  let c = run(finished(), withTag(bat("b1"), "sameer_x"), bat("b2"), bowl("a1"), tagP("b", "b1", T("sameer_y")));
+  const pc = publicMatch(c);
+  assert.deepEqual(pc.events.at(-4), { type: "setBatter", player: "b1", tag: { u: "sameer_y" } });
+  assert.deepEqual(derive(pc), derive(c));
+  c = run(c, ball(1));
+  assert.deepEqual(derive(publicMatch(c)), derive(c));
 });
