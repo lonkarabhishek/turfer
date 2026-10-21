@@ -1,6 +1,7 @@
 // Relative, not "@/", so logic.test.ts compiles on its own.
 import { applyBoard, checkBoard, deriveBoard, undoBoard } from "../../../lib/board";
 import type { AnyRules, Board, BoardEvent, BoardSport, BoardView, EndEvent, PadAction, RulePreset, Side } from "../../../lib/board/types";
+import { PROMPTS_KEPT, type BoardPrefs } from "./storage";
 
 /**
  * The Live Scoreboard pad's decisions, kept apart from React so they can
@@ -170,4 +171,52 @@ export function clockParts(view: BoardView, shown: number): { minutes: number; s
   const c = view.clock;
   const total = Math.max(0, c ? (c.down ? Math.ceil(shown / 1000) : Math.floor((c.baseMs + shown) / 1000)) : 0);
   return { minutes: Math.floor(total / 60), seconds: total % 60 };
+}
+
+/* ------------------------------------------------------------------ */
+/* Side prompts: "Set over" and "Change ends"                          */
+/* ------------------------------------------------------------------ */
+
+const atOf = (e: BoardEvent | undefined) => String((e as { at?: number } | undefined)?.at ?? "");
+
+/**
+ * The point behind the side prompts on screen, as "index:time". Only a
+ * point raises them, and they stay up until the next point, so a timeout,
+ * rename, rules change or serve fix after it keeps the same key: a prompt
+ * answered stays answered. Undo takes the point and its key away; redo
+ * brings back the same key; the point scored again is a new key.
+ */
+export function promptKey(board: Board): string | null {
+  for (let i = board.events.length - 1; i >= 0; i--) {
+    if (board.events[i].type === "point") return `${i}:${atOf(board.events[i])}`;
+  }
+  return null;
+}
+
+/** Whether the point behind a key is still in the board (not undone). */
+export function keyHolds(board: Board, key: string): boolean {
+  const cut = key.indexOf(":");
+  const e = board.events[Number(key.slice(0, cut))];
+  return cut > 0 && !!e && e.type === "point" && atOf(e) === key.slice(cut + 1);
+}
+
+/**
+ * Which way round the pad is: the scorer's own Swap sides, turned once
+ * more for each prompt answered with a swap whose point still stands. So
+ * undoing a game's winning point puts the sides back as that game had
+ * them, and answering the same prompt twice can never undo the swap.
+ */
+export function swappedNow(board: Board, prefs: Pick<BoardPrefs, "swap" | "turns">): boolean {
+  const n = (prefs.turns ?? []).filter((k) => keyHolds(board, k)).length;
+  return prefs.swap !== (n % 2 === 1);
+}
+
+/** Whether the prompt behind this key has been answered. */
+export const answered = (prefs: Pick<BoardPrefs, "seen">, key: string | null) => !!key && (prefs.seen ?? []).includes(key);
+
+/** Answer the prompt behind key, swapping sides or not. With no key (no point yet) a swap is the scorer's own. */
+export function answer(prefs: BoardPrefs, key: string | null, swap: boolean): BoardPrefs {
+  if (!key) return swap ? { ...prefs, swap: !prefs.swap } : prefs;
+  const add = (list: string[] | undefined) => [...(list ?? []).filter((k) => k !== key), key].slice(-PROMPTS_KEPT);
+  return { ...prefs, seen: add(prefs.seen), turns: swap ? add(prefs.turns) : prefs.turns };
 }

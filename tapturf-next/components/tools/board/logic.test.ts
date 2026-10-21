@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyBoard, deriveBoard, newBoard, padFor } from "../../../lib/board";
 import type { Board, BoardEvent } from "../../../lib/board/types";
-import { RALLY_GUARD_MS, TAP_GUARD_MS, endEvent, endPreview, guardMs, knownPlayers, namePrompt, offersName, optionOn, padParts, playerTeam, reasonAllowed, rulesDiff, setTimeMs, clockParts, stamp, withPlayer } from "./logic";
-import { MAX_SAVED, deleteBoard, loadBoard, loadIndex, loadPrefs, metaOf, saveBoard, savePrefs } from "./storage";
+import { RALLY_GUARD_MS, TAP_GUARD_MS, answer, answered, endEvent, endPreview, guardMs, keyHolds, knownPlayers, namePrompt, offersName, optionOn, padParts, playerTeam, promptKey, reasonAllowed, rulesDiff, setTimeMs, clockParts, stamp, swappedNow, withPlayer } from "./logic";
+import { DEFAULT_PREFS, MAX_SAVED, deleteBoard, loadBoard, loadIndex, loadPrefs, metaOf, saveBoard, savePrefs } from "./storage";
 
 /* A small in-memory localStorage, enough for storage.ts. */
 const mem = new Map<string, string>();
@@ -122,7 +122,7 @@ test("storage: saves, reads back through sanitizeBoard, keeps 25 and says which 
   saveBoard(first, metaOf(first, deriveBoard(first), 10));
   assert.deepEqual(loadBoard("bs0"), first);
   savePrefs("bs0", { swap: true, names: false });
-  assert.deepEqual(loadPrefs("bs0"), { swap: true, names: false });
+  assert.deepEqual(loadPrefs("bs0"), { swap: true, names: false, seen: [], turns: [] });
   let dropped: string[] = [];
   for (let i = 1; i <= MAX_SAVED; i++) {
     const b = newBoard("football", {}, { id: `bs${i}`, now: i + 1 });
@@ -141,4 +141,46 @@ test("storage: saves, reads back through sanitizeBoard, keeps 25 and says which 
   assert.equal(loadBoard("bad"), null);
   mem.set("tapturf_board_v1", "not json");
   assert.deepEqual(loadIndex(), { v: 1, current: null, list: [] });
+});
+
+test("side prompts: answered once per point, whatever comes after it", () => {
+  let b = newBoard("volleyball", { teamA: "Red", teamB: "Blue" }, { id: "bv-ends", now: 1 });
+  b = go(b, { type: "serve", side: "a" });
+  for (let i = 0; i < 25; i++) b = go(b, { type: "point", side: "a" });
+  assert.ok(deriveBoard(b).gameJustEnded?.changeEnds, "set 1 over, change ends");
+  const key = promptKey(b);
+  assert.ok(key && keyHolds(b, key));
+  let prefs = answer(DEFAULT_PREFS, key, true);
+  assert.equal(answered(prefs, key), true);
+  assert.equal(swappedNow(b, prefs), true);
+  // A timeout, a rename or a rules change before set 2: the engine still says the set just ended, but it stays answered.
+  b = go(b, { type: "timeout", side: "b" });
+  b = go(b, { type: "rename", side: "a", name: "Red FC" });
+  assert.ok(deriveBoard(b).gameJustEnded, "the engine keeps it until the next point");
+  assert.equal(promptKey(b), key);
+  assert.equal(answered(prefs, promptKey(b)), true);
+  assert.equal(swappedNow(b, prefs), true);
+  // Answering it again cannot turn the pad back.
+  prefs = answer(prefs, key, true);
+  assert.equal(swappedNow(b, prefs), true);
+  // Undo back past the set point: the sides go back to how set 1 had them, and the same point redone is swapped again.
+  const before = b.events.slice(0, -2);
+  const undone = { ...b, events: before.slice(0, -1) };
+  assert.equal(keyHolds(undone, key!), false);
+  assert.equal(swappedNow(undone, prefs), false);
+  assert.equal(swappedNow({ ...b, events: before }, prefs), true);
+  // The set point scored again is a new point: asked again.
+  const again = go(undone, { type: "point", side: "a" });
+  assert.notEqual(promptKey(again), key);
+  assert.equal(answered(prefs, promptKey(again)), false);
+  // The scorer's own Swap sides is on top of the answers.
+  assert.equal(swappedNow(b, { ...prefs, swap: true }), false);
+});
+
+test("side prompts: kept across a reload, junk dropped", () => {
+  savePrefs("bv-keep", { swap: false, names: false, seen: ["25:1", 7 as unknown as string], turns: ["25:1"] });
+  const p = loadPrefs("bv-keep");
+  assert.deepEqual(p.seen, ["25:1"]);
+  assert.deepEqual(p.turns, ["25:1"]);
+  assert.equal(answer(DEFAULT_PREFS, null, true).swap, true, "no point yet: a swap is the scorer's own");
 });

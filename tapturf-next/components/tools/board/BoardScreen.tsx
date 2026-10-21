@@ -15,7 +15,7 @@ import { pillTone, type LiveInfo } from "../scorer/live";
 import { BOARD_WORDS, ConfirmSheet, ShareSheet, type ShareLive } from "../scorer/ShareSheet";
 import { Sheet } from "../scorer/ui";
 import { EndSheet, MoreSheet, NamesSheet, PlayerSheet, RulesSheet, SetTimeSheet, type MoreAction } from "./Sheets";
-import { TAP_GUARD_MS, guardMs, knownPlayers, namePrompt, offersName, padParts, playerTeam, stamp, withPlayer } from "./logic";
+import { RALLY_GUARD_MS, TAP_GUARD_MS, answer, answered, guardMs, knownPlayers, namePrompt, offersName, padParts, playerTeam, promptKey, stamp, swappedNow, withPlayer } from "./logic";
 import { loadPrefs, savePrefs, type BoardPrefs } from "./storage";
 
 export const TOOL = "live_scoreboard";
@@ -111,11 +111,10 @@ export function BoardScreen({
   const [toast, setToast] = useState<Toast | null>(null);
   const [redo, setRedo] = useState<Board[]>([]);
   const [said, setSaid] = useState("");
-  /** The eventCount at which "Start game N" was pressed, and at which a mid-game "Change ends" was seen. */
-  const [ack, setAck] = useState<number | null>(null);
-  const [endsAck, setEndsAck] = useState<number | null>(null);
   const timeIsUp = useTimeUp(view, wallNow);
   const lastTap = useRef(0);
+  /** The last tap was Undo: the next rally tap is likely the correction, so it waits only the short window. */
+  const undone = useRef(false);
   const fired = useRef(new Set<string>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -125,10 +124,14 @@ export function BoardScreen({
   const exitAfterPop = useRef(false);
   const exitRef = useRef(onExit);
 
-  const sides = order(prefs.swap);
+  const swapped = swappedNow(board, prefs);
+  const sides = order(swapped);
   const isLive = view.status === "live";
-  const gameEnd = isLive && view.gameJustEnded && ack !== view.eventCount ? view.gameJustEnded : null;
-  const endsBanner = isLive && !gameEnd && view.changeEnds && endsAck !== view.eventCount;
+  // Both prompts belong to the point that raised them: answered once, they stay answered (logic.ts promptKey).
+  const key = promptKey(board);
+  const seen = answered(prefs, key);
+  const gameEnd = isLive && view.gameJustEnded && !seen ? view.gameJustEnded : null;
+  const endsBanner = isLive && !gameEnd && view.changeEnds && !seen;
 
   useEffect(
     () => () => {
@@ -250,7 +253,8 @@ export function BoardScreen({
     }
     // A finished game waits for "Start game N": an extra tap on the winning point must not score in the next one.
     if (gameEnd && (a.event.type === "point" || a.event.type === "serve")) return;
-    if (!guard(guardMs(a))) return;
+    if (!guard(undone.current ? TAP_GUARD_MS : guardMs(a))) return;
+    undone.current = false;
     vibrate();
     if (a.event.type === "period") {
       // Full time (or the last period) ends the match: say what the result will be first.
@@ -270,8 +274,7 @@ export function BoardScreen({
     const b = undoBoard(board);
     setRedo((r) => [...r.slice(-49), board]);
     onChange(b);
-    // Taking back the point that won a game: winning it again asks "Start game N" again.
-    if (ack !== null && b.events.length < ack) setAck(null);
+    undone.current = true;
     setSheet(null);
     showToast(`Took back ${what}`, "info", { redo: true });
     setSaid(`Undone. ${deriveBoard(b).headline}`);
@@ -282,6 +285,8 @@ export function BoardScreen({
     if (!prev) return;
     setRedo((r) => r.slice(0, -1));
     onChange(prev);
+    // The toast goes from over the pad: a second tap of a double tap must not land on a half.
+    lastTap.current = tapClock();
     setToast(null);
     setSaid(`Redone. ${deriveBoard(prev).headline}`);
   };
@@ -310,17 +315,16 @@ export function BoardScreen({
   };
 
   const startNext = (swap: boolean) => {
-    lastTap.current = tapClock();
-    if (swap) setPrefs({ ...prefs, swap: !prefs.swap });
-    setAck(view.eventCount);
-    setEndsAck(view.eventCount);
+    // The panel takes the halves' place as the winning point lands: the second touch of a double tap does nothing.
+    if (!guard(RALLY_GUARD_MS)) return;
+    setPrefs(answer(prefs, key, swap));
     vibrate();
   };
 
+  /** Swap sides: answers the Change ends banner when it is up, else the scorer's own swap. */
   const swapSides = () => {
     lastTap.current = tapClock();
-    setPrefs({ ...prefs, swap: !prefs.swap });
-    setEndsAck(view.eventCount);
+    setPrefs(endsBanner ? answer(prefs, key, true) : { ...prefs, swap: !prefs.swap });
   };
 
   const fixServe = parts.wide.get("fix-serve");
@@ -369,7 +373,8 @@ export function BoardScreen({
   // Desktop keys: the arrow keys score for the left or right half, U undoes.
   useEffect(() => {
     keyRef.current = (e: KeyboardEvent) => {
-      if (sheet || e.metaKey || e.ctrlKey || e.altKey) return;
+      // A held key repeats: one press, one point.
+      if (e.repeat || sheet || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const k = e.key.toLowerCase();
@@ -404,7 +409,14 @@ export function BoardScreen({
           <Redo2 className="w-4 h-4" aria-hidden /> Redo
         </button>
       )}
-      <button type="button" onClick={() => setToast(null)} aria-label="Dismiss" className="shrink-0 w-10 h-10 inline-flex items-center justify-center rounded-full hover:bg-white/15">
+      <button
+        type="button"
+        onClick={() => {
+          lastTap.current = tapClock();
+          setToast(null);
+        }}
+        aria-label="Dismiss"
+        className="shrink-0 w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-white/15">
         <X className="w-4 h-4" />
       </button>
     </div>
@@ -424,7 +436,7 @@ export function BoardScreen({
         <button type="button" onClick={() => openSheet({ k: "share", at: wallNow() })} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[16px] font-bold hover:bg-accent-600">
           <Share2 className="w-4 h-4" aria-hidden /> Share result
         </button>
-        <button type="button" onClick={onNewMatch} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-white/10 text-white text-[16px] font-bold hover:bg-white/20">
+        <button type="button" onClick={() => guard(RALLY_GUARD_MS) && onNewMatch()} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-white/10 text-white text-[16px] font-bold hover:bg-white/20">
           <Plus className="w-4 h-4" aria-hidden /> New match
         </button>
       </div>
@@ -439,7 +451,7 @@ export function BoardScreen({
           board={board}
           now={wallNow}
           compact={halves}
-          swapped={prefs.swap}
+          swapped={swapped}
           className="lg:col-start-1 lg:row-start-1 lg:rounded-3xl lg:overflow-hidden"
           onExit={onExit}
           onShare={() => openSheet({ k: "share", at: wallNow() })}
@@ -460,7 +472,7 @@ export function BoardScreen({
 
         {halves ? (
           <section className="min-h-0 flex flex-col lg:col-start-1 lg:row-start-2 lg:rounded-3xl lg:overflow-hidden lg:bg-white lg:border lg:border-primary-200" aria-label="Scoring pad">
-            <HintStrip view={view} waiting={!!gameEnd} endsBanner={endsBanner} onSwap={swapSides} onDismiss={() => setEndsAck(view.eventCount)} />
+            <HintStrip view={view} waiting={!!gameEnd} endsBanner={endsBanner} onSwap={swapSides} onDismiss={() => setPrefs(answer(prefs, key, false))} />
             <div className="flex-1 min-h-0 px-2 pb-2 grid grid-cols-2 gap-2">
               {!isLive ? (
                 <div className="col-span-2 min-h-0">{donePanel}</div>
@@ -510,7 +522,7 @@ export function BoardScreen({
                 <button type="button" onClick={() => openSheet({ k: "share", at: wallNow() })} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[16px] font-bold hover:bg-accent-600">
                   <Share2 className="w-4 h-4" aria-hidden /> Share result
                 </button>
-                <button type="button" onClick={onNewMatch} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[16px] font-bold hover:bg-primary-800">
+                <button type="button" onClick={() => guard(RALLY_GUARD_MS) && onNewMatch()} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[16px] font-bold hover:bg-primary-800">
                   <Plus className="w-4 h-4" aria-hidden /> New match
                 </button>
               </div>
@@ -531,7 +543,7 @@ export function BoardScreen({
             server: fixServe?.sub,
             number: fixNumber?.sub,
             swap: true,
-            swapped: prefs.swap,
+            swapped,
             players: board.sport === "basketball" ? prefs.names : undefined,
             details: halves,
           }}

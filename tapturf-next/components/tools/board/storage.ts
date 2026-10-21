@@ -31,8 +31,16 @@ export type BoardMeta = {
 
 export type BoardIndex = { v: 1; current: string | null; list: BoardMeta[] };
 
-/** swap: side b shows on the left (the players changed ends). names: offer "Add player" after basketball points and fouls. */
-export type BoardPrefs = { swap: boolean; names: boolean };
+/**
+ * swap: side b shows on the left (the scorer's own Swap sides). names:
+ * offer "Add player" after basketball points and fouls. seen: the side
+ * prompts answered ("Set over", "Change ends"), and turns: the ones
+ * answered with a swap, each by the point that raised it (promptKey in
+ * logic.ts). Kept here so a reload neither asks again nor forgets a swap.
+ */
+export type BoardPrefs = { swap: boolean; names: boolean; seen?: string[]; turns?: string[] };
+/** Answers kept per board: a long match has a few dozen prompts at most. */
+export const PROMPTS_KEPT = 60;
 export const DEFAULT_PREFS: BoardPrefs = { swap: false, names: false };
 
 const emptyIndex = (): BoardIndex => ({ v: 1, current: null, list: [] });
@@ -128,12 +136,16 @@ function readPrefs(): Record<string, BoardPrefs> {
     if (!x || typeof x !== "object" || Array.isArray(x)) return {};
     const out: Record<string, BoardPrefs> = {};
     for (const [id, p] of Object.entries(x as Record<string, Partial<BoardPrefs> | null>)) {
-      if (p && typeof p === "object") out[id] = { swap: p.swap === true, names: p.names === true };
+      if (p && typeof p === "object") out[id] = { swap: p.swap === true, names: p.names === true, seen: keys(p.seen), turns: keys(p.turns) };
     }
     return out;
   } catch {
     return {};
   }
+}
+
+function keys(x: unknown): string[] {
+  return Array.isArray(x) ? x.filter((k): k is string => typeof k === "string" && k.length <= 40).slice(-PROMPTS_KEPT) : [];
 }
 
 function writePrefs(all: Record<string, BoardPrefs>) {
@@ -150,7 +162,7 @@ export function loadPrefs(id: string): BoardPrefs {
 
 export function savePrefs(id: string, prefs: BoardPrefs) {
   const all = readPrefs();
-  all[id] = { swap: prefs.swap, names: prefs.names };
+  all[id] = { swap: prefs.swap, names: prefs.names, seen: keys(prefs.seen), turns: keys(prefs.turns) };
   // Only boards still saved keep theirs, so the record cannot grow past the list.
   const kept = new Set(loadIndex().list.map((m) => m.id));
   kept.add(id);
