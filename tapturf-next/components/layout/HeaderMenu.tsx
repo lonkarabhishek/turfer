@@ -12,7 +12,7 @@ const LINKS = [
   { href: "/turf-near-me", label: "Turf near me", icon: LocateFixed },
   { href: "/games", label: "Open games", icon: Gamepad2 },
   { href: "/game/create", label: "Host a game", icon: PlusCircle },
-  { href: "/tools", label: "Free cricket tools", icon: Calculator },
+  { href: "/tools", label: "Free sports tools", icon: Calculator },
   { href: "/blog", label: "Blog", icon: BookOpen },
   { href: "/my", label: "myTapturf for turf owners", icon: Store },
 ];

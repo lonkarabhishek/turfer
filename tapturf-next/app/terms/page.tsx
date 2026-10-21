@@ -71,7 +71,7 @@ const SECTIONS: LegalSection[] = [
     title: "Your account",
     body: (
       <ul>
-        <li>You need an account to host or join games, write reviews and suggest corrections. Browsing is open to everyone.</li>
+        <li>You need an account to host or join games, write reviews, suggest corrections, and turn on or keep following a live score link. Browsing is open to everyone.</li>
         <li>Sign in with your own mobile number or Google account, and keep the name on your profile real enough that other players can recognise you.</li>
         <li>You must be 18 or older, or have a parent or guardian&rsquo;s permission. Under-18s may not host games.</li>
         <li>You are responsible for what happens under your account. Tell us at <Email /> if you think someone else is using it.</li>

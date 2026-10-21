@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeftRight, ListOrdered, MoreHorizontal, Pause, Play, Plus, Redo2, Share2, Timer, Undo2, UserPlus, X } from "lucide-react";
+import { ArrowLeftRight, Goal, ListOrdered, MoreHorizontal, Pause, Play, Plus, Redo2, Share2, Timer, Undo2, UserPlus, X } from "lucide-react";
 import { applyBoard, boardShareText, checkBoard, deriveBoard, padFor, undoBoard } from "@/lib/board";
 import type { Board, BoardEvent, BoardView, PadAction, Side } from "@/lib/board/types";
 import { trackTool, type ToolEvent } from "@/lib/analytics/tools";
@@ -394,6 +394,9 @@ export function BoardScreen({
   }, []);
 
   const names = `${view.teams.a.name} vs ${view.teams.b.name}`;
+  // Level at full time with penalties off: one tap turns them on and the shootout starts (the page promises this).
+  const penaltiesOn: BoardEvent = { type: "rules", rules: { penalties: true } };
+  const toPenalties = !isLive && board.sport === "football" && view.result?.kind === "draw" && !checkBoard(board, penaltiesOn) ? penaltiesOn : null;
   const canUndo = board.events.length > 0;
   const add = toast?.add;
   const toastEl = toast && (
@@ -518,14 +521,21 @@ export function BoardScreen({
                 </div>
               </>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => openSheet({ k: "share", at: wallNow() })} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[16px] font-bold hover:bg-accent-600">
-                  <Share2 className="w-4 h-4" aria-hidden /> Share result
-                </button>
-                <button type="button" onClick={() => guard(RALLY_GUARD_MS) && onNewMatch()} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[16px] font-bold hover:bg-primary-800">
-                  <Plus className="w-4 h-4" aria-hidden /> New match
-                </button>
-              </div>
+              <>
+                {toPenalties && (
+                  <button type="button" onClick={() => guard(RALLY_GUARD_MS) && commit([toPenalties])} className="press-tight mb-2 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full border-2 border-primary-900 bg-white text-primary-900 text-[16px] font-bold active:bg-primary-100">
+                    <Goal className="w-5 h-5" aria-hidden /> Go to penalties
+                  </button>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => openSheet({ k: "share", at: wallNow() })} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-accent-500 text-white text-[16px] font-bold hover:bg-accent-600">
+                    <Share2 className="w-4 h-4" aria-hidden /> Share result
+                  </button>
+                  <button type="button" onClick={() => guard(RALLY_GUARD_MS) && onNewMatch()} className="press-tight inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[16px] font-bold hover:bg-primary-800">
+                    <Plus className="w-4 h-4" aria-hidden /> New match
+                  </button>
+                </div>
+              </>
             )}
             <ClockBar view={view} parts={parts} timeIsUp={timeIsUp} onTap={tap} onSetTime={() => openSheet({ k: "time", at: wallNow() })} onMore={() => openSheet({ k: "more" })} undoKey={undoKey} />
           </footer>
@@ -782,7 +792,8 @@ function ClockBar({
       </button>,
     );
   }
-  if (live && view.clock) {
+  // No Set time in a shootout: the halves are over and the clock cannot be set.
+  if (live && view.clock && view.currentLabel !== "Penalties") {
     items.push(
       <button key="time" type="button" onClick={onSetTime} className={`${KEY} h-14 px-1 text-[14px] leading-tight border-2 border-primary-200 bg-white text-primary-800 inline-flex flex-col items-center justify-center gap-0.5 active:bg-primary-100`}>
         <Timer className="w-5 h-5" aria-hidden />

@@ -84,16 +84,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.8,
     },
-    // Free cricket tools: the hub and one page per tool.
+    // Free sports tools: the hub (as new as its newest tool) and one page per tool.
     {
       url: `${BASE}/tools`,
-      lastModified: new Date("2026-10-11"),
+      lastModified: new Date(TOOLS.map((t) => t.updated).sort().at(-1) ?? "2026-10-11"),
       changeFrequency: "monthly",
       priority: 0.8,
     },
     ...TOOLS.map((t) => ({
       url: `${BASE}/tools/${t.slug}`,
-      lastModified: new Date("2026-10-11"),
+      lastModified: new Date(t.updated),
       changeFrequency: "monthly" as const,
       priority: 0.8,
     })),
