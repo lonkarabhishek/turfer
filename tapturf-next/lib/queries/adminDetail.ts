@@ -1,4 +1,5 @@
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { adminUserRows } from "@/lib/queries/adminUsers";
 import { isCity } from "@/lib/city";
 
 /**
@@ -146,7 +147,7 @@ const normPhone = (p: string | null) => {
 export async function getAdminUsers(filter: UserFilter = "all"): Promise<AdminUser[]> {
   const s = supa();
   const [{ data: users }, { data: games }, { data: reqs }] = await Promise.all([
-    s.from("users").select("id, name, email, phone, is_verified, created_at").order("created_at", { ascending: false }),
+    adminUserRows().then((data) => ({ data })),
     s.from("games").select("creator_id, created_at"),
     s.from("game_requests").select("user_id, created_at"),
   ]);
@@ -305,6 +306,6 @@ export async function getAdminNotifications(filter: NotificationFilter = "all") 
 export async function userNames(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids.filter(Boolean))] as string[];
   if (unique.length === 0) return new Map();
-  const { data } = await supa().from("users").select("id, name, email, phone").in("id", unique);
-  return new Map((data ?? []).map((u) => [u.id, u.name || u.email || u.phone || "Unnamed"]));
+  const data = await adminUserRows(unique);
+  return new Map(data.map((u) => [u.id, u.name || u.email || u.phone || "Unnamed"]));
 }

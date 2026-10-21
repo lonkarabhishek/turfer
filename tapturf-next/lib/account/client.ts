@@ -34,6 +34,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  * means the sign-in is gone. Offline, slow or failing is 'unknown'.
  */
 export async function firebaseToken(): Promise<TokenCheck> {
+  // Local end-to-end builds only: a token the test signed with its own key
+  // (next.config.ts refuses this flag on Vercel; the server trusts that
+  // key only off Vercel, lib/firebase/verifyIdToken.ts certsUrl).
+  if (process.env.NEXT_PUBLIC_E2E_AUTH === "1") {
+    const t = localStorage.getItem("tt_e2e_fb_token");
+    return t ? { token: t } : { none: true };
+  }
   if (typeof navigator !== "undefined" && navigator.onLine === false) return { unknown: true };
   try {
     const auth = await withTimeout(

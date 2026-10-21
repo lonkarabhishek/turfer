@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+// The end-to-end sign-in hook (lib/account/client.ts firebaseToken) is for
+// local test builds only. It must never be built into a deployment.
+if (process.env.VERCEL && process.env.NEXT_PUBLIC_E2E_AUTH) {
+  throw new Error("NEXT_PUBLIC_E2E_AUTH is for local end-to-end builds only. Remove it from the Vercel environment.");
+}
+
 const nextConfig: NextConfig = {
   // The build renders about 3,500 pages against Supabase, whose public
   // role cancels statements after 3 s. Eight pages at once per worker

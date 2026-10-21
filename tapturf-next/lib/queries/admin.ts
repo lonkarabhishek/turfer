@@ -1,5 +1,6 @@
 import { fetchAllRows } from "@/lib/queries/turfs";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { adminUserRows } from "@/lib/queries/adminUsers";
 
 /**
  * Admin dashboard queries. All read-only. Every function is scoped to
@@ -158,7 +159,7 @@ export async function getHeadline(): Promise<AdminHeadline> {
   ] = await Promise.all([
     // Full user set so we can dedupe in memory. Only ~50 rows today, and
     // even at 10k this is fine for an owner-only page.
-    s.from("users").select("id, email, phone, created_at"),
+    adminUserRows().then((data) => ({ data })),
     s.from("games").select("*", { count: "exact", head: true }),
     s.from("games").select("*", { count: "exact", head: true }).gte("created_at", iso7d),
     s.from("games").select("*", { count: "exact", head: true }).gte("created_at", iso30d),
@@ -297,12 +298,7 @@ export async function getDailyGames(days = 30): Promise<DailyPoint[]> {
 }
 
 export async function getRecentUsers(limit = 20): Promise<RecentUser[]> {
-  const s = supa();
-  const { data } = await s
-    .from("users")
-    .select("id, name, email, phone, role, created_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const data = (await adminUserRows()).slice(0, limit);
 
   return (data || []).map((u) => ({
     id: u.id,
@@ -404,10 +400,7 @@ export async function getTopHosts(limit = 10): Promise<TopHost[]> {
   if (sorted.length === 0) return [];
 
   const ids = sorted.map(([id]) => id);
-  const { data: users } = await s
-    .from("users")
-    .select("id, name, email")
-    .in("id", ids);
+  const users = await adminUserRows(ids);
 
   const byId = new Map<string, { name: string | null; email: string | null }>();
   (users || []).forEach((u) => byId.set(u.id, { name: u.name ?? null, email: u.email ?? null }));
