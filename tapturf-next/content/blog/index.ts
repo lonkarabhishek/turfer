@@ -39,9 +39,12 @@ import { post as howToWinAtBoxCricket } from "./posts/how-to-win-at-box-cricket"
 import { post as nashikVsPuneTurfsListedPrices2026 } from "./posts/nashik-vs-pune-turfs-listed-prices-2026";
 // 2026-10-19: Nashik sports news.
 import { post as nashikFootballGroundKanhereFloodlightsApproved } from "./posts/nashik-football-ground-kanhere-floodlights-approved";
+// 2026-10-21: owner's guide, turf business on leased land.
+import { post as howToStartATurfBusinessNashikPuneLeaseGuide } from "./posts/how-to-start-a-turf-business-nashik-pune-lease-guide";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  howToStartATurfBusinessNashikPuneLeaseGuide,
   nashikFootballGroundKanhereFloodlightsApproved,
   nashikVsPuneTurfsListedPrices2026,
   howToWinAtBoxCricket,
