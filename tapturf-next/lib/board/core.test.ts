@@ -18,12 +18,14 @@ import {
   SPORT_LIST,
   undoBoard,
 } from "./index";
-import { BOARD_SPORTS, type Board, type BoardEvent, type BoardSport, type BoardView, type Side } from "./types";
+import { BOARD_SPORTS, type Board, type BoardEvent, type BoardSport, type BoardView, type Side, type Tag } from "./types";
 import { sportBySlug } from "../sports";
 
 const T0 = 1_760_000_000_000;
 const MIN = 60_000;
 const SIDES: Side[] = ["a", "b"];
+/** The racquet sports, whose singles players are the sides and so carry the side tags. */
+const RACQUET: readonly BoardSport[] = ["badminton", "pickleball", "tennis", "table-tennis", "padel"];
 
 /** Apply events, failing the test on any refused one. */
 function run(b: Board, ...events: BoardEvent[]): Board {
@@ -806,11 +808,20 @@ function anyBoard(sport: BoardSport, seed: number, seen: Map<string, number>): B
   const rules = Object.assign({}, ...engine.presets.map((p: { options: { rules: object }[] }) => (chance(0.6) ? pick(p.options).rules : {})));
   const jitter = (v: unknown): unknown =>
     typeof v === "number" ? v + pick([-2, -1, 1, 2, 5]) : typeof v === "boolean" ? !v : v === null ? pick([11, 15, 21]) : Array.isArray(v) ? pick([[1], [1, 2, 3], [2]]) : typeof v === "string" ? pick(["Kabaddi", "  Ultimate   frisbee ", v]) : v;
+  // Tags come from their own stream, so the boards' events are the ones they were before tags.
+  const rt = rng(seed * 104_729 + sport.length + 3);
+  const TAGS: Tag[] = [{ u: "ravi" }, { u: "asha_k" }, { u: "arjun99" }];
+  const someTag = () => TAGS[Math.floor(rt() * TAGS.length)];
+  const playerTag = () => (rt() < 0.5 ? { tag: someTag() } : {});
+  // Racquet renames: keep, clear or set the side's tag. Other sports take no side tags.
+  const renameTag = () => (!RACQUET.includes(sport) ? {} : ((x) => (x < 0.4 ? {} : x < 0.6 ? { tag: null } : { tag: someTag() }))(rt()));
+  const setupTags = rt() < 0.5 ? { tags: { a: someTag(), ...(rt() < 0.5 ? { b: someTag() } : {}) } } : {};
   let b = newBoard(
     sport,
-    { teamA: pick(["Red FC", " Kothrud   Kings ", "", "x".repeat(50)]), teamB: pick(["Blue FC", "Asha / Ravi"]), title: chance(0.5) ? "Sunday League" : "", venue: chance(0.5) ? "Baner Turf, Pune" : "", rules, ...(chance(0.6) ? { firstServe: pick(SIDES) } : {}) },
+    { teamA: pick(["Red FC", " Kothrud   Kings ", "", "x".repeat(50)]), teamB: pick(["Blue FC", "Asha / Ravi"]), title: chance(0.5) ? "Sunday League" : "", venue: chance(0.5) ? "Baner Turf, Pune" : "", rules, ...(chance(0.6) ? { firstServe: pick(SIDES) } : {}), ...setupTags },
     { id: `b${seed}x${sport.length}`, now: T0 + seed },
   );
+  if (b.setup.tags) seen.set("tag:setup", (seen.get("tag:setup") ?? 0) + 1);
   let t = T0 + seed;
   for (let step = 0; step < 220; step++) {
     const v = deriveBoard(b);
@@ -825,16 +836,16 @@ function anyBoard(sport: BoardSport, seed: number, seen: Map<string, number>): B
       }
       const a = pick(acts);
       e = { ...a.event, ...(a.event.type === "clock" || chance(0.85) ? { at: t } : {}) } as BoardEvent;
-      if (a.ask === "player" && chance(0.5)) e = { ...e, player: pick(NAMES) } as BoardEvent;
+      if (a.ask === "player" && chance(0.5)) e = { ...e, player: pick(NAMES), ...playerTag() } as BoardEvent;
     } else if (x < 0.77) e = { type: "clock", run: chance(0.5), at: t, ...(chance(0.6) ? { ms: Math.floor(r() * 12 * MIN) } : {}) };
-    else if (x < 0.8) e = { type: "rename", side: pick(SIDES), name: pick(NAMES), ...(chance(0.5) ? { at: t } : {}) };
+    else if (x < 0.8) e = { type: "rename", side: pick(SIDES), name: pick(NAMES), ...renameTag(), ...(chance(0.5) ? { at: t } : {}) };
     else if (x < 0.84) {
       const cur = v.setup.rules as unknown as Record<string, unknown>;
       const key = pick(Object.keys(cur));
       e = { type: "rules", rules: chance(0.5) ? pick(pick(engine.presets as { options: { rules: object }[] }[]).options).rules : { [key]: jitter(cur[key]) }, at: t };
     } else if (x < 0.86) e = { type: "serve", side: pick(SIDES), ...(chance(0.3) ? { server: pick([1, 2] as const) } : {}), at: t };
     else if (x < 0.88) e = { type: "timeout", side: pick(SIDES), at: t };
-    else if (x < 0.9) e = { type: "foul", side: pick(SIDES), ...(chance(0.5) ? { player: pick(NAMES) } : {}), at: t };
+    else if (x < 0.9) e = { type: "foul", side: pick(SIDES), ...(chance(0.5) ? { player: pick(NAMES), ...playerTag() } : {}), at: t };
     else if (x < 0.905) e = { type: "end", ...(chance(0.7) ? { reason: pick(["abandoned", "retired", "walkover", "conceded"] as const), side: pick(SIDES) } : {}), at: t };
     else if (x < 0.93) {
       b = undoBoard(b);
@@ -844,7 +855,9 @@ function anyBoard(sport: BoardSport, seed: number, seen: Map<string, number>): B
     if (next === b) continue;
     b = next;
     const how = e.type === "point" ? e.how : undefined;
-    for (const k of [e.type, how ? `how:${how}` : null, `${sport}:${e.type}`]) if (k) seen.set(k, (seen.get(k) ?? 0) + 1);
+    const tag = (e as { tag?: Tag | null }).tag;
+    const tagged = tag === undefined ? null : `tag:${e.type}${tag === null ? "-null" : ""}`;
+    for (const k of [e.type, how ? `how:${how}` : null, `${sport}:${e.type}`, tagged]) if (k) seen.set(k, (seen.get(k) ?? 0) + 1);
   }
   return b;
 }
@@ -860,9 +873,15 @@ test("sanitizeBoard: every board the engines build comes back exactly", () => {
       // The live copy round-trips too, with sentAt.
       const live = { ...publicBoard(b), sentAt: T0 + 99 };
       assert.deepEqual(sanitizeBoard(wire(live)), live, `${sport} seed ${seed} public`);
+      // It shows the same names, side tags and players, and folding it again changes nothing.
+      const pv = deriveBoard(live);
+      const bv = deriveBoard(b);
+      assert.deepEqual([pv.teams, pv.setup, pv.players], [bv.teams, bv.setup, bv.players], `${sport} seed ${seed} public view`);
+      assert.deepEqual(publicBoard(live), live, `${sport} seed ${seed} public twice`);
     }
   }
   for (const k of ["point", "card", "foul", "clock", "period", "serve", "end", "rename", "timeout", "rules"]) assert.ok(seen.get(k), `no ${k} on any board`);
+  for (const k of ["tag:setup", "tag:point", "tag:card", "tag:foul", "tag:rename", "tag:rename-null"]) assert.ok(seen.get(k), `no ${k} on any board`);
   for (const k of ["goal", "penalty", "own-goal", "shootout-goal", "shootout-miss", "two", "three", "free-throw"]) assert.ok(seen.get(`how:${k}`), `no ${k} on any board`);
   for (const s of BOARD_SPORTS) assert.ok(seen.get(`${s}:point`), `no points in ${s}`);
 });
@@ -881,6 +900,287 @@ test("publicBoard: renames fold into the latest name, players as typed", () => {
   assert.equal(b.setup.teamA, "Red FC");
   assert.deepEqual(publicBoard(p), p);
   assert.deepEqual(publicBoard({ ...b, sentAt: 7 }).sentAt, 7);
+});
+
+/* ------------------------------------------------------------------ */
+/* TapTurf profile tags                                                */
+/* ------------------------------------------------------------------ */
+
+const RAHUL_K: Tag = { u: "rahul_k" };
+const RAHUL_S: Tag = { u: "rahul_s" };
+const ev = (x: object) => x as BoardEvent;
+
+test("tags: kept next to a player name on points, cards and fouls; from the pad a bad one, or one with no name, is refused", () => {
+  const b = run(
+    fb({ cards: true }),
+    ev({ type: "point", side: "a", how: "goal", player: " Rahul ", tag: { u: "rahul_k", uid: "0b7c" } }),
+    ev({ type: "card", side: "b", color: "yellow", player: "Arjun", tag: { u: "arjun99" } }),
+    ev({ type: "point", side: "a", how: "goal", player: "Ravi", tag: null }),
+  );
+  // Only the username is kept; null is no tag, and leaves no key.
+  assert.deepEqual(b.events, [
+    { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k" } },
+    { type: "card", side: "b", color: "yellow", player: "Arjun", tag: { u: "arjun99" } },
+    { type: "point", side: "a", how: "goal", player: "Ravi" },
+  ]);
+  assert.equal("tag" in b.events[2], false);
+  for (const tag of [{ u: "Rahul K" }, { u: "rahul-k" }, { u: "ab" }, { u: "1rahul" }, { u: "r".repeat(21) }, { u: 5 }, "rahul_k", ["rahul_k"], {}, 0]) {
+    refuse(b, ev({ type: "point", side: "a", how: "goal", player: "Rahul", tag }));
+  }
+  refuse(b, ev({ type: "point", side: "a", how: "goal", tag: RAHUL_K }));
+  refuse(b, ev({ type: "point", side: "a", how: "goal", player: "   ", tag: RAHUL_K }));
+  refuse(b, ev({ type: "card", side: "a", color: "red", tag: RAHUL_K }));
+  const k = run(bb(), clock(true, T0), ev({ type: "foul", side: "a", player: "Rahul", tag: RAHUL_K }));
+  assert.deepEqual(k.events[1], { type: "foul", side: "a", player: "Rahul", tag: RAHUL_K });
+  refuse(k, ev({ type: "foul", side: "a", tag: RAHUL_K }));
+  refuse(k, ev({ type: "foul", side: "a", player: "Rahul", tag: { u: "RAHUL_K" } }));
+});
+
+test("tags: a stored board drops a bad tag, or one with no player name, and keeps the event", () => {
+  const raw = {
+    ...(wire(fb({ cards: true })) as object),
+    events: [
+      { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k", evil: "x".repeat(1000) } },
+      { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "NOPE" } },
+      { type: "point", side: "a", how: "goal", tag: { u: "rahul_k" } },
+      { type: "card", side: "b", color: "red", player: "  ", tag: { u: "rahul_k" } },
+      { type: "foul", side: "a", player: "Ravi", tag: "ravi" },
+      { type: "point", side: "a", how: "goal", player: "Rahul", tag: null },
+      { type: "point", side: "a", how: "goal", player: 7, tag: { u: "rahul_k" } },
+    ],
+  };
+  const s = sanitizeBoard(raw)!;
+  assert.deepEqual(s.events, [
+    { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k" } },
+    { type: "point", side: "a", how: "goal", player: "Rahul" },
+    { type: "point", side: "a", how: "goal" },
+    { type: "card", side: "b", color: "red" },
+    { type: "foul", side: "a", player: "Ravi" },
+    { type: "point", side: "a", how: "goal", player: "Rahul" },
+    { type: "point", side: "a", how: "goal" },
+  ]);
+  for (const e of s.events.slice(1)) assert.equal("tag" in e, false, JSON.stringify(e));
+  assert.deepEqual(sanitizeBoard(wire(s)), s);
+  assert.deepEqual(publicBoard(s).events, s.events, "player tags stay as typed on the live copy");
+});
+
+test("football: two Rahuls tagged to different profiles are two players, and the sent-off check is per person", () => {
+  let b = run(
+    fb({ cards: true }),
+    clock(true, T0),
+    ev({ type: "point", side: "a", how: "goal", player: "Rahul", tag: RAHUL_K, at: T0 + 2 * MIN }),
+    ev({ type: "point", side: "a", how: "goal", player: "Rahul", tag: RAHUL_S, at: T0 + 5 * MIN }),
+    ev({ type: "point", side: "a", how: "goal", player: "Rahul", at: T0 + 7 * MIN }),
+    ev({ type: "card", side: "a", color: "yellow", player: "Rahul", tag: RAHUL_K, at: T0 + 8 * MIN }),
+    ev({ type: "card", side: "a", color: "yellow", player: "rahul", tag: RAHUL_K, at: T0 + 9 * MIN }),
+  );
+  let v = deriveBoard(b);
+  // Timeline lines are text, the name as typed, tagged or not.
+  assert.deepEqual(
+    v.timeline.filter((l) => l.tone !== "info").map((l) => l.text),
+    ["Goal! Rahul", "Goal! Rahul", "Goal! Rahul", "Yellow card, Rahul", "Second yellow, rahul. Sent off"],
+  );
+  assert.deepEqual(v.players, [
+    { side: "a", name: "Rahul", text: "3'", tag: RAHUL_K },
+    { side: "a", name: "Rahul", text: "6'", tag: RAHUL_S },
+    { side: "a", name: "Rahul", text: "8'" },
+    { side: "a", name: "Rahul", text: "Yellow card 9', second yellow 10'", tag: RAHUL_K },
+  ]);
+  assert.equal("tag" in v.players[2], false);
+  // Rahul K is off, in any spelling; Rahul S and the untagged Rahul are not.
+  refuse(b, ev({ type: "card", side: "a", color: "red", player: "RAHUL", tag: RAHUL_K }), /^Rahul is sent off already$/);
+  refuse(b, ev({ type: "card", side: "a", color: "yellow", player: "Rahul Kumar", tag: RAHUL_K }), /sent off/);
+  b = run(
+    b,
+    ev({ type: "card", side: "a", color: "yellow", player: "Rahul", tag: RAHUL_S, at: T0 + 10 * MIN }),
+    ev({ type: "card", side: "a", color: "red", player: "Rahul", at: T0 + 11 * MIN }),
+  );
+  v = deriveBoard(b);
+  assert.deepEqual(v.players.slice(3), [
+    { side: "a", name: "Rahul", text: "Yellow card 9', second yellow 10'", tag: RAHUL_K },
+    { side: "a", name: "Rahul", text: "Yellow card 11'", tag: RAHUL_S },
+    { side: "a", name: "Rahul", text: "Red card 12'" },
+  ]);
+  // Now the untagged Rahul is off too, but Rahul S still is not.
+  refuse(b, ev({ type: "card", side: "a", color: "yellow", player: "rahul" }), /sent off/);
+  b = run(b, ev({ type: "card", side: "a", color: "yellow", player: "Rahul", tag: RAHUL_S }));
+  assert.equal(deriveBoard(b).timeline.at(-1)?.text, "Second yellow, Rahul. Sent off");
+  refuse(b, ev({ type: "card", side: "a", color: "red", player: "Rahul", tag: RAHUL_S }), /sent off/);
+  // The same name on the other team is someone else.
+  run(b, ev({ type: "card", side: "b", color: "red", player: "Rahul", tag: RAHUL_K }));
+  // A stored board reads back the same, and so does its live copy.
+  assert.deepEqual(sanitizeBoard(wire(b)), b);
+  assert.deepEqual(deriveBoard(publicBoard(b)).players, deriveBoard(b).players);
+});
+
+test("football and basketball: a tagged player is one row however the name is typed", () => {
+  const f = run(
+    fb(),
+    ev({ type: "point", side: "a", how: "goal", player: "Rahul", tag: RAHUL_K }),
+    ev({ type: "point", side: "a", how: "penalty", player: "RAHUL", tag: RAHUL_K }),
+    ev({ type: "point", side: "a", how: "goal", player: "rahul k", tag: RAHUL_K }),
+    // Rahul K puts one in his own net: listed with the team it counts for, as before.
+    ev({ type: "point", side: "b", how: "own-goal", player: "Rahul", tag: RAHUL_K }),
+  );
+  const fv = deriveBoard(f);
+  assert.deepEqual(fv.players, [
+    { side: "a", name: "Rahul", text: "3 goals (pen)", tag: RAHUL_K },
+    { side: "b", name: "Rahul", text: "1 goal (og)", tag: RAHUL_K },
+  ]);
+  assert.deepEqual(
+    fv.timeline.map((l) => l.text),
+    ["Goal! Rahul", "Penalty goal! RAHUL", "Goal! rahul k", "Own goal by Rahul"],
+  );
+  assert.ok(boardShareText(fv).includes("Goals: Rahul 3 goals (pen), Rahul 1 goal (og)"));
+
+  const k = run(
+    bb(),
+    clock(true, T0),
+    ev({ type: "point", side: "a", value: 2, how: "two", player: "Rahul", tag: RAHUL_K }),
+    ev({ type: "point", side: "a", value: 3, how: "three", player: "RAHUL", tag: RAHUL_K }),
+    ev({ type: "foul", side: "a", player: "rahul", tag: RAHUL_K }),
+    ev({ type: "point", side: "a", value: 2, how: "two", player: "Rahul", tag: RAHUL_S }),
+    ev({ type: "point", side: "a", value: 1, how: "free-throw", player: "Rahul" }),
+    ev({ type: "point", side: "a", value: 1, how: "free-throw", player: "rahul" }),
+  );
+  const kv = deriveBoard(k);
+  assert.deepEqual(kv.players, [
+    { side: "a", name: "Rahul", text: "5 points, 1 foul", tag: RAHUL_K },
+    { side: "a", name: "Rahul", text: "2 points", tag: RAHUL_S },
+    { side: "a", name: "Rahul", text: "2 points" },
+  ]);
+  assert.equal("tag" in kv.players[2], false);
+  assert.deepEqual(
+    kv.timeline.filter((l) => l.side).map((l) => l.text),
+    ["+2, Rahul", "+3, RAHUL", "Foul, rahul (team foul 1)", "+2, Rahul", "Free throw, Rahul", "Free throw, rahul"],
+  );
+  assert.deepEqual(sanitizeBoard(wire(k)), k);
+});
+
+test("racquet singles: a tag per player at setup; a rename leaving it out keeps it, null clears it, and the live copy has the final one", () => {
+  const plain = newBoard("badminton", { teamA: "Asha", teamB: "Ravi", rules: { doubles: false } }, { id: "bbad", now: T0 });
+  assert.deepEqual(Object.keys(plain.setup).sort(), ["rules", "teamA", "teamB", "title", "venue"], "untagged: the exact keys as before");
+  assert.deepEqual(Object.keys(deriveBoard(plain).setup).sort(), ["rules", "teamA", "teamB", "title", "venue"]);
+  assert.deepEqual(deriveBoard(plain).teams, { a: { name: "Asha", score: 0 }, b: { name: "Ravi", score: 0 } });
+
+  let b = newBoard("badminton", { teamA: "Asha", teamB: "Ravi", rules: { doubles: false }, tags: { a: { u: "asha_k" }, b: null } }, { id: "bbad", now: T0 });
+  assert.deepEqual(b.setup.tags, { a: { u: "asha_k" } });
+  assert.deepEqual(deriveBoard(b).teams, { a: { name: "Asha", score: 0, tag: { u: "asha_k" } }, b: { name: "Ravi", score: 0 } });
+  assert.deepEqual(sanitizeBoard(wire(b)), b);
+
+  // Renamed later without touching the tag: the tag stays.
+  b = run(b, { type: "serve", side: "a" }, { type: "point", side: "a" }, { type: "rename", side: "a", name: "Asha K" });
+  assert.deepEqual(b.events.at(-1), { type: "rename", side: "a", name: "Asha K" });
+  assert.deepEqual(deriveBoard(b).teams.a, { name: "Asha K", score: 0, tag: { u: "asha_k" } });
+  // A tag-only change carries the current name.
+  b = run(b, { type: "rename", side: "b", name: "Ravi", tag: { u: "ravi" } });
+  assert.deepEqual(deriveBoard(b).teams.b, { name: "Ravi", score: 0, tag: { u: "ravi" } });
+  // An explicit null clears it, and a later rename with no tag does not bring it back.
+  b = run(b, { type: "rename", side: "a", name: "Asha K", tag: null }, { type: "rename", side: "a", name: "Asha Kumar" });
+  assert.deepEqual(b.events.at(-2), { type: "rename", side: "a", name: "Asha K", tag: null });
+  let v = deriveBoard(b);
+  assert.deepEqual(v.teams.a, { name: "Asha Kumar", score: 0 });
+  assert.deepEqual(v.setup.tags, { b: { u: "ravi" } }, "the view's setup has the tags as now");
+  // Set again, to another profile.
+  b = run(b, { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } });
+  v = deriveBoard(b);
+  assert.deepEqual([v.teams.a.tag, v.teams.b.tag], [{ u: "asha_kumar" }, { u: "ravi" }]);
+  assert.deepEqual(sanitizeBoard(wire(b)), b);
+
+  // The live copy: the setup and every rename carry each side's final tag.
+  const p = publicBoard(b);
+  assert.deepEqual(p.setup.tags, { a: { u: "asha_kumar" }, b: { u: "ravi" } });
+  assert.deepEqual(
+    p.events.filter((e) => e.type === "rename"),
+    [
+      { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
+      { type: "rename", side: "b", name: "Ravi", tag: { u: "ravi" } },
+      { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
+      { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
+      { type: "rename", side: "a", name: "Asha Kumar", tag: { u: "asha_kumar" } },
+    ],
+  );
+  assert.ok(!JSON.stringify(p).includes('"asha_k"'), "an old tag is not served");
+  assert.deepEqual([deriveBoard(p).teams, deriveBoard(p).setup], [deriveBoard(b).teams, deriveBoard(b).setup]);
+  assert.deepEqual(publicBoard(p), p);
+  assert.deepEqual(sanitizeBoard(wire(p)), p);
+  assert.deepEqual(b.setup.tags, { a: { u: "asha_k" } }, "the scorer's own board is untouched");
+
+  // Cleared at the end: no tag for that side anywhere in the live copy.
+  const cleared = publicBoard(run(b, { type: "rename", side: "a", name: "Asha Kumar", tag: null }));
+  assert.deepEqual(cleared.setup.tags, { b: { u: "ravi" } });
+  assert.ok(!JSON.stringify(cleared).includes("asha_"));
+  for (const e of cleared.events) if (e.type === "rename" && e.side === "a") assert.equal("tag" in e, false);
+  // Both cleared: no tags key at all.
+  const none = publicBoard(run(b, { type: "rename", side: "a", name: "Asha Kumar", tag: null }, { type: "rename", side: "b", name: "Ravi", tag: null }));
+  assert.equal("tags" in none.setup, false);
+  assert.ok(!JSON.stringify(none).includes('"tag"'));
+});
+
+test("racquet sides: a bad tag is refused from the pad and dropped from a stored board", () => {
+  const b = newBoard("tennis", { teamA: "Asha", teamB: "Ravi", rules: { doubles: false }, tags: { a: { u: "Asha K" }, b: { u: "ravi", uid: "x" } as Tag } }, { id: "bten", now: T0 });
+  assert.deepEqual(b.setup.tags, { b: { u: "ravi" } });
+  for (const tag of [{ u: "Asha" }, "asha_k", [], {}, 1]) refuse(b, ev({ type: "rename", side: "a", name: "Asha", tag }));
+  const raw = {
+    ...(wire(b) as object),
+    setup: { ...b.setup, tags: { a: { u: "asha_k", x: 1 }, b: { u: "BAD" }, c: { u: "ravi" } } },
+    events: [
+      { type: "rename", side: "a", name: "Asha", tag: { u: "Bad Tag" } },
+      { type: "rename", side: "b", name: "Ravi", tag: null },
+      { type: "rename", side: "a", name: "Asha", tag: { u: "asha_k", y: 2 } },
+    ],
+  };
+  const s = sanitizeBoard(raw)!;
+  assert.deepEqual(s.setup.tags, { a: { u: "asha_k" } });
+  assert.deepEqual(s.events, [
+    { type: "rename", side: "a", name: "Asha" },
+    { type: "rename", side: "b", name: "Ravi", tag: null },
+    { type: "rename", side: "a", name: "Asha", tag: { u: "asha_k" } },
+  ]);
+  for (const tags of [null, "asha_k", [], { a: null }, { a: "asha_k" }]) assert.equal("tags" in sanitizeBoard({ ...raw, setup: { ...b.setup, tags } })!.setup, false, JSON.stringify(tags));
+});
+
+test("racquet doubles: a side tag is kept but not shown, and shows again when the rules go back to singles", () => {
+  let b = newBoard("tennis", { teamA: "Asha", teamB: "Ravi", rules: { doubles: false }, tags: { a: { u: "asha_k" } } }, { id: "bten", now: T0 });
+  assert.deepEqual(deriveBoard(b).teams.a.tag, { u: "asha_k" });
+  b = run(b, { type: "rules", rules: { doubles: true } });
+  const v = deriveBoard(b);
+  assert.deepEqual(v.teams, { a: { name: "Asha", score: 0 }, b: { name: "Ravi", score: 0 } });
+  assert.deepEqual(v.setup.tags, { a: { u: "asha_k" } }, "kept in the setup as now");
+  // A rename in doubles leaves the tag alone.
+  b = run(b, { type: "rename", side: "a", name: "Asha / Meera" });
+  assert.equal("tag" in deriveBoard(b).teams.a, false);
+  b = run(b, { type: "rules", rules: { doubles: false } }, { type: "rename", side: "a", name: "Asha" });
+  assert.deepEqual(deriveBoard(b).teams.a, { name: "Asha", score: 0, tag: { u: "asha_k" } });
+  // Padel and pickleball are doubles unless set otherwise: a tag given at setup is not shown.
+  for (const sport of ["padel", "pickleball"] as BoardSport[]) {
+    const d = newBoard(sport, { teamA: "Asha / Meera", tags: { a: { u: "asha_k" } } }, { id: "bdbl", now: T0 });
+    assert.deepEqual(d.setup.tags, { a: { u: "asha_k" } }, sport);
+    assert.deepEqual(deriveBoard(d).teams.a, { name: "Asha / Meera", score: 0 }, sport);
+  }
+  // Every racquet sport shows it in singles.
+  for (const sport of RACQUET) {
+    const sg = newBoard(sport, { rules: { doubles: false }, tags: { b: { u: "ravi" } } }, { id: "bsgl", now: T0 });
+    assert.deepEqual([deriveBoard(sg).teams.a.tag, deriveBoard(sg).teams.b.tag], [undefined, { u: "ravi" }], sport);
+    assert.equal("tag" in deriveBoard(sg).teams.a, false, sport);
+  }
+});
+
+test("side tags are for racquet players only: other sports drop them at setup and in a stored board, and refuse them on a rename", () => {
+  for (const sport of BOARD_SPORTS.filter((s) => !RACQUET.includes(s))) {
+    const x = newBoard(sport, { rules: { doubles: false }, tags: { a: { u: "asha_k" } } }, { id: "bx", now: T0 });
+    assert.equal("tags" in x.setup, false, sport);
+    assert.equal("tag" in deriveBoard(x).teams.a, false, sport);
+    refuse(x, ev({ type: "rename", side: "a", name: "Asha", tag: { u: "asha_k" } }));
+    refuse(x, ev({ type: "rename", side: "a", name: "Asha", tag: null }));
+    const s = sanitizeBoard({ ...(wire(x) as object), setup: { ...x.setup, tags: { a: { u: "asha_k" } } }, events: [{ type: "rename", side: "a", name: "Asha", tag: { u: "asha_k" } }] })!;
+    assert.equal("tags" in s.setup, false, sport);
+    assert.deepEqual(s.events, [{ type: "rename", side: "a", name: "Asha" }], sport);
+    // A hand-built board with a side tag shows none and serves none.
+    const hand = { ...x, setup: { ...x.setup, tags: { a: { u: "asha_k" } } } };
+    assert.equal("tags" in deriveBoard(hand).setup, false, sport);
+    assert.equal("tags" in publicBoard(hand).setup, false, sport);
+  }
 });
 
 test("readBoardSport: a game's sport label", () => {

@@ -1,5 +1,5 @@
-import { BOARD_SPORTS, type AnyRules, type Board, type BoardEvent, type BoardInput, type BoardShape, type BoardSport, type BoardView, type PadAction, type SportEngine } from "./types";
-import { cleanName, clockText, clockValue, isObj, isSide, namesNow, num } from "./common";
+import { BOARD_SPORTS, type AnyRules, type Board, type BoardEvent, type BoardInput, type BoardShape, type BoardSport, type BoardView, type PadAction, type RenameEvent, type Side, type SportEngine, type Tag } from "./types";
+import { cleanName, clockText, clockValue, isObj, isSide, namesNow, num, PLAYER_SPORTS, SIDES, setupWithTags, tagOf, tagsNow } from "./common";
 import { footballEngine, footballMinute, SET_TIME_GRACE_MS } from "./football";
 import { basketballEngine, OVERTIME_MS } from "./basketball";
 import { otherEngine } from "./other";
@@ -34,9 +34,19 @@ const isBoardSport = (x: unknown): x is BoardSport => (BOARD_SPORTS as readonly 
 const engineOf = (sport: BoardSport) => SPORT_ENGINES[sport] ?? otherEngine;
 
 /** Singles racquet games name players, not teams. */
-const PLAYER_SPORTS: readonly BoardSport[] = ["badminton", "pickleball", "tennis", "table-tennis", "padel"];
 function defaultNames(sport: BoardSport, rules: unknown): [string, string] {
   return PLAYER_SPORTS.includes(sport) && isObj(rules) && rules.doubles === false ? ["Player A", "Player B"] : ["Team A", "Team B"];
+}
+
+/** Side tags from the setup screen or a stored setup: racquet sports only, valid tags only. */
+function readSideTags(raw: unknown, sport: BoardSport): Partial<Record<Side, Tag>> {
+  const out: Partial<Record<Side, Tag>> = {};
+  if (!PLAYER_SPORTS.includes(sport) || !isObj(raw)) return out;
+  for (const s of SIDES) {
+    const t = tagOf(raw[s]);
+    if (t) out[s] = t;
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -60,7 +70,7 @@ export function newBoard(sport: BoardSport, input: BoardInput = {}, opts: { id?:
     id,
     createdAt: now,
     sport: s,
-    setup: { teamA: cleanName(input.teamA) || da, teamB: cleanName(input.teamB) || db, title: cleanName(input.title, 48), venue: cleanName(input.venue, 48), rules },
+    setup: setupWithTags({ teamA: cleanName(input.teamA) || da, teamB: cleanName(input.teamB) || db, title: cleanName(input.title, 48), venue: cleanName(input.venue, 48), rules }, readSideTags(input.tags, s)),
     events: [],
   };
   return isSide(input.firstServe) ? applyBoard(board, { type: "serve", side: input.firstServe }) : board;
@@ -170,7 +180,10 @@ function readEvent(x: unknown, ctx: ReadCtx, strict: boolean): BoardEvent | null
   const side = isSide(x.side) ? x.side : null;
   if (bad(x.player !== undefined && typeof x.player !== "string")) return null;
   const name = cleanName(x.player, 40);
-  const player = name ? { player: name } : {};
+  // A point, card or foul keeps a tag only next to a player name. From the pad, a bad tag or one with no name is refused; null means none.
+  const tag = name ? tagOf(x.tag) : undefined;
+  if ((x.type === "point" || x.type === "card" || x.type === "foul") && bad(x.tag !== undefined && x.tag !== null && !tag)) return null;
+  const player = name ? { player: name, ...(tag ? { tag } : {}) } : {};
   switch (x.type) {
     case "point": {
       if (!side || bad(x.value !== undefined && !intIn(x.value, 1, 99)) || bad(x.how !== undefined && !(typeof x.how === "string" && HOW.test(x.how)))) return null;
@@ -209,7 +222,13 @@ function readEvent(x: unknown, ctx: ReadCtx, strict: boolean): BoardEvent | null
     }
     case "rename": {
       const n = cleanName(x.name, 32);
-      return side && n ? { type: "rename", side, name: n, ...at } : null;
+      if (!side || !n) return null;
+      // Racquet sports only: no tag keeps the side's, null clears it, a tag sets it.
+      if (x.tag === undefined) return { type: "rename", side, name: n, ...at };
+      const t = x.tag === null ? null : tagOf(x.tag);
+      const ok = t !== undefined && PLAYER_SPORTS.includes(ctx.sport);
+      if (bad(!ok)) return null;
+      return ok ? { type: "rename", side, name: n, tag: t, ...at } : { type: "rename", side, name: n, ...at };
     }
     case "timeout":
       return side ? { type: "timeout", side, ...at } : null;
@@ -247,7 +266,7 @@ export function sanitizeBoard(raw: unknown): Board | null {
     id: typeof raw.id === "string" && BOARD_ID.test(raw.id) ? raw.id : "board",
     createdAt: num(raw.createdAt) ?? 0,
     sport,
-    setup: { teamA: cleanName(raw.setup.teamA) || da, teamB: cleanName(raw.setup.teamB) || db, title: cleanName(raw.setup.title, 48), venue: cleanName(raw.setup.venue, 48), rules },
+    setup: setupWithTags({ teamA: cleanName(raw.setup.teamA) || da, teamB: cleanName(raw.setup.teamB) || db, title: cleanName(raw.setup.title, 48), venue: cleanName(raw.setup.venue, 48), rules }, readSideTags(raw.setup.tags, sport)),
     events,
   };
   const sentAt = num(raw.sentAt);
@@ -261,15 +280,24 @@ export function sanitizeBoard(raw: unknown): Board | null {
 
 /**
  * The board as a live link serves it: an old team name is not served
- * once it is renamed. The setup names and every rename say the latest
- * name, so derive reads the same (names come from the latest rename) and
- * the events line up one for one. Player names on events stay as typed.
- * The scorer's own board is not touched.
+ * once it is renamed, nor an old or removed side tag. The setup names and
+ * tags and every rename say the latest ones (a side with no tag now has
+ * none anywhere), so derive reads the same and the events line up one
+ * for one. Player names and tags on events stay as typed. The scorer's
+ * own board is not touched.
  */
 export function publicBoard(board: Board): Board {
   const names = namesNow(board);
-  const events = board.events.map((e): BoardEvent => (e.type === "rename" && e.name !== names[e.side] ? { ...e, name: names[e.side] } : e));
-  return { ...board, setup: { ...board.setup, teamA: names.a, teamB: names.b }, events };
+  const tags = tagsNow(board);
+  const events = board.events.map((e): BoardEvent => {
+    if (e.type !== "rename") return e;
+    const out: RenameEvent = { ...e, name: names[e.side] };
+    delete out.tag;
+    const t = tags[e.side];
+    if (t) out.tag = t;
+    return out;
+  });
+  return { ...board, setup: setupWithTags({ ...board.setup, teamA: names.a, teamB: names.b }, tags), events };
 }
 
 /** Live sync urgency: one "innings" per finished period or set, so an end of either (or of the match) skips the send throttle. */

@@ -71,8 +71,50 @@ test("withPlayer names the last tap, keeps its time, and refuses once something 
   const later = go(named, { type: "point", side: "b", how: "goal" });
   assert.equal(withPlayer(later, 1, "Arjun"), null);
   assert.equal(withPlayer(later, 2, ""), null);
-  assert.deepEqual(knownPlayers(withPlayer(later, 2, "Arjun")!, "b"), ["Arjun"]);
-  assert.deepEqual(knownPlayers(named, "a"), ["Ravi"]);
+  assert.deepEqual(knownPlayers(withPlayer(later, 2, "Arjun")!, "b"), [{ name: "Arjun" }]);
+  assert.deepEqual(knownPlayers(named, "a"), [{ name: "Ravi" }]);
+});
+
+test("player chips: one per name and tag, newest spelling first, own goals with the scorer's real team", () => {
+  let b = newBoard("football", { teamA: "Red FC", teamB: "Blue FC" }, { id: "bf-chips", now: 1 });
+  b = go(b, { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k" } });
+  b = go(b, { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_s" } });
+  b = go(b, { type: "point", side: "a", how: "goal", player: "Rahul" });
+  b = go(b, { type: "point", side: "a", how: "goal", player: "RAHUL", tag: { u: "rahul_k" } });
+  // An own goal for Blue FC, put in by Red FC's Rahul S: his chip is Red FC's.
+  b = go(b, { type: "point", side: "b", how: "own-goal", player: "rahul", tag: { u: "rahul_s" } });
+  assert.deepEqual(knownPlayers(b, "a"), [{ name: "rahul", tag: { u: "rahul_s" } }, { name: "RAHUL", tag: { u: "rahul_k" } }, { name: "Rahul" }]);
+  assert.deepEqual(knownPlayers(b, "b"), []);
+  assert.deepEqual(knownPlayers(b, "a", 2).length, 2);
+});
+
+test("withPlayer: a chip's tag goes on the tap, and a name given with no tag never keeps the old one", () => {
+  let b = newBoard("football", { teamA: "Red FC", teamB: "Blue FC", rules: { cards: true } }, { id: "bf-tag", now: 1 });
+  b = go(b, { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k" } });
+  b = go(b, { type: "point", side: "a", how: "goal" });
+  const chip = knownPlayers(b, "a")[0];
+  assert.deepEqual(chip, { name: "Rahul", tag: { u: "rahul_k" } });
+  const i = b.events.length - 1;
+  const at = (b.events[i] as { at?: number }).at;
+  const tagged = withPlayer(b, i, chip.name, chip.tag)!;
+  assert.deepEqual(tagged.events[i], { type: "point", side: "a", how: "goal", player: "Rahul", tag: { u: "rahul_k" }, at });
+  assert.deepEqual(deriveBoard(tagged).players, [{ side: "a", name: "Rahul", text: "2 goals", tag: { u: "rahul_k" } }]);
+  // A different name typed with no tag: the old tag goes, the key is not left behind.
+  const typed = withPlayer(tagged, i, "Rahul Kumar")!;
+  assert.deepEqual(typed.events[i], { type: "point", side: "a", how: "goal", player: "Rahul Kumar", at });
+  assert.equal("tag" in typed.events[i], false);
+  // Exactly the tag given: another profile replaces it, null clears it.
+  assert.deepEqual((withPlayer(tagged, i, "Rahul", { u: "rahul_s" })!.events[i] as { tag?: unknown }).tag, { u: "rahul_s" });
+  assert.equal("tag" in withPlayer(tagged, i, "Rahul", null)!.events[i], false);
+  // The engine refuses a bad tag, so nothing changes.
+  assert.equal(withPlayer(b, i, "Rahul", { u: "Not A Username" }), null);
+  // A card: the sent-off check is per person, so the other Rahul can still be booked.
+  let c = go(b, { type: "card", side: "a", color: "red", player: "Rahul", tag: { u: "rahul_k" } });
+  c = go(c, { type: "card", side: "a", color: "yellow" });
+  const j = c.events.length - 1;
+  assert.equal(withPlayer(c, j, "rahul", { u: "rahul_k" }), null, "Rahul K is sent off already");
+  assert.ok(withPlayer(c, j, "Rahul", { u: "rahul_s" }));
+  assert.ok(withPlayer(c, j, "Rahul"));
 });
 
 test("end choices: a walkover only before play, retired after; the preview says the result", () => {
