@@ -12,6 +12,7 @@ import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { convertGoogleDriveUrl } from "@/lib/utils/images";
 import { areaFor } from "@/lib/utils/area";
+import { dailyHoursSummary } from "@/lib/utils/hours";
 import { guessCityFromAddress, labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing } from "@/components/turf/TurfPricing";
@@ -76,6 +77,11 @@ export async function generateMetadata({
   const ratingClause = hasRatings
     ? ` Rated ${Number(turf.rating).toFixed(1)} (${turf.total_reviews} Google reviews).`
     : "";
+  const hours = dailyHoursSummary(turf.opening_hours, {
+    start_time: turf.start_time,
+    end_time: turf.end_time,
+    is_24x7: turf.is_24x7,
+  });
   const priceClause =
     priceSummary.kind === "real" ? ` Starting ${priceSummary.label}.` : "";
   // USP for the title, priority per brief:
@@ -93,6 +99,10 @@ export async function generateMetadata({
     if (priceSummary.kind === "real" && priceSummary.min != null) {
       return `₹${priceSummary.min}${priceUnitSuffix(turf, { short: true })}`;
     }
+    // No price: a well reviewed Google rating is the next thing a
+    // searcher checks before clicking.
+    if (hasRatings && turf.total_reviews >= 10 && Number(turf.rating) >= 3.5 && turfTypeShort)
+      return `${turfTypeShort}, ${Number(turf.rating).toFixed(1)}★`;
     if (turf.is_covered && turfType) return `Covered ${turfType}`;
     if (turf.is_covered && primarySport) return `Covered ${primarySport}`;
     if (turfType) return turfType;
@@ -126,12 +136,15 @@ export async function generateMetadata({
   const photoClause = photoCount > 0 ? ` ${photoCount} photo${photoCount === 1 ? "" : "s"}.` : "";
   const locationClause = cityAndArea ? ` in ${cityAndArea}` : "";
 
+  // Lead with the venue's name and place: most searches for these pages
+  // are the venue's name, and Google bolds the words that match.
   return {
     title,
     description:
-      `${turfType ?? (sports || "Sports turf")}${locationClause}.` +
+      `${displayName}${cityAndArea ? `, ${cityAndArea}` : ""}: ${(turfType ?? (sports || "sports turf")).toLowerCase()}.` +
       (turfType && sports ? ` Sports: ${sports}.` : "") +
-      `${priceClause}${ratingClause}${photoClause}${getPhone(turf) ? " Call or WhatsApp to book." : ""}`,
+      `${priceClause}${hours ? ` ${hours}.` : ""}${ratingClause}${photoClause}` +
+      ` See prices, timings, photos and location${getPhone(turf) ? ", then call or WhatsApp to book" : ""}.`,
     keywords: [
       turf.name,
       area ? `turf in ${area.toLowerCase()}` : null,
@@ -172,6 +185,11 @@ export default async function TurfDetailPage({
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);
   const sidebarPrice = summarisePrice(turf);
+  const hoursLine = dailyHoursSummary(turf.opening_hours, {
+    start_time: turf.start_time,
+    end_time: turf.end_time,
+    is_24x7: turf.is_24x7,
+  });
   // Members-only clubs (NIWEC): no "Call to Book", show how to get in.
   const membersOnly = turf.membership_required === true;
   // Is this turf its city's Most Trending Turf this week?
@@ -248,6 +266,19 @@ export default async function TurfDetailPage({
               {turf.address}
             </span>
           </div>
+
+          {/* Price and hours up front: on a phone the booking card is at
+              the bottom of the page, and these are what a searcher came for. */}
+          <p className="mt-2 text-[14px] text-primary-600 lg:hidden">
+            <span className="font-semibold text-primary-800">
+              {sidebarPrice.kind === "real" || sidebarPrice.kind === "reported"
+                ? sidebarPrice.label
+                : sidebarPrice.kind === "reported_text"
+                  ? "Reported prices below"
+                  : "Price on request"}
+            </span>
+            {hoursLine && <> · {hoursLine}</>}
+          </p>
 
           <div className="mt-3 md:hidden">
             <AskAboutButton />
@@ -555,7 +586,7 @@ function describeTurfType(sports: string[]): { turfType: string | null; turfType
  * original; the data team cleans names separately.
  */
 function cleanTurfName(name: string): string {
-  return name
+  return unShout(name)
     .replace(/\s*\([^)]*\)/g, "")
     .split(/\s*[|/]\s*/)[0]
     .replace(/\s*(?:-|–|,)?\s*best turf.*$/i, "")
@@ -563,6 +594,17 @@ function cleanTurfName(name: string): string {
     .replace(/(\bturf)\s+(?:box cricket|cricket|football)(?:[,\s]+(?:box cricket|cricket|football|etc\.?))*$/i, "$1")
     .replace(/\s{2,}/g, " ")
     .trim() || name;
+}
+
+/**
+ * "PLAYMAKERS SOCCER FIELD" reads as shouting in a search result. A name
+ * that is all capitals is shown in title case; short words that look like
+ * initials (FC, BCFC, KSR) stay as they are.
+ */
+function unShout(name: string): string {
+  const letters = name.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 8 || letters !== letters.toUpperCase()) return name;
+  return name.replace(/[A-Za-z]+/g, (w) => (w.length <= 4 ? w : w[0] + w.slice(1).toLowerCase()));
 }
 
 /** Cut at a word boundary to at most `max` chars, without a trailing ellipsis. */
