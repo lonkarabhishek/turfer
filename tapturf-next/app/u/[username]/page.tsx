@@ -45,10 +45,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username } = await params;
   const found = await loadProfile(decodeURIComponent(username));
   const robots = { index: false, follow: true };
-  if (!found || !("profile" in found)) return { title: "Player not found | TapTurf", robots };
+  if (!found || !("profile" in found)) return { title: "Player not found", robots };
   const { u, name } = found.profile;
   return {
-    title: `${name} (@${u}) | TapTurf`,
+    title: `${name} (@${u})`,
     description: `${name} plays on TapTurf.`,
     robots,
     alternates: { canonical: `https://www.tapturf.in/u/${u}` },
