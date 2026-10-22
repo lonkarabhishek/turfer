@@ -4,7 +4,7 @@ import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-10-21";
+const UPDATED = "2026-10-22";
 const PAGE_URL = "https://www.tapturf.in/privacy";
 
 export const metadata: Metadata = {
@@ -190,6 +190,14 @@ const SECTIONS: LegalSection[] = [
           your full browser details or anything you type into a form here. We use it only to improve TapTurf,
           we do not sell it, and you can ask us to delete it at any time.
         </p>
+        <p id="city">
+          <strong>Your city.</strong> When you use TapTurf signed in, we note one city with your account so we
+          can see which cities our members are in: the city you chose on TapTurf, or found with &ldquo;Use my
+          location&rdquo;. If you haven&rsquo;t chosen one, we note the city your internet connection points to,
+          which is only approximate, and the name of that place. It is worked out from your IP address at that
+          moment; the address itself is not stored. Only TapTurf&rsquo;s team sees it, it is never shown on
+          your profile, and you can ask us to delete it at any time.
+        </p>
         <p>
           Turf pages embed Google Maps, and photos load from Google&rsquo;s servers. Loading these shares your
           IP address with Google under{" "}
@@ -218,8 +226,9 @@ const SECTIONS: LegalSection[] = [
         described under &ldquo;When you sign up&rdquo;, and the matches and tournaments you score with our
         free tools. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
-        token, which identifies you to our server, that one summary when you create an account, and a match
-        while its live link is on. Clearing site data in your browser removes all of it. A live link that was
+        token, which identifies you to our server, the city you picked and whether you picked it or let your
+        location find it (for the city note described under &ldquo;Your city&rdquo;), that one summary when
+        you create an account, and a match while its live link is on. Clearing site data in your browser removes all of it. A live link that was
         on then stops updating and is cleared 30 days after its last update, or sooner if you email us.
       </p>
     ),
@@ -237,7 +246,7 @@ const SECTIONS: LegalSection[] = [
         <li>Games expire after their date and are hidden; the record is kept so hosts can see their history.</li>
         <li>Sign-in and OTP logs are kept for up to 12 months, then removed.</li>
         <li>Call and WhatsApp tap counts are kept as totals; the link to your account is dropped after 90 days.</li>
-        <li>The sign-up summary stays with your account and is deleted with it, or sooner if you ask.</li>
+        <li>The sign-up summary and your city stay with your account and are deleted with it, or sooner if you ask.</li>
         <li>
           A live score is cleared when you turn its link off, or 30 days after its last update. The
           one-way hash of the network address is kept for 2 days to stop misuse.

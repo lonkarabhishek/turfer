@@ -1,3 +1,5 @@
+import { CITY_SRC_KEY } from "../city";
+import { CITY_SRC_HEADER } from "./city";
 import type { AccountError, AccountProfile, MeResponse, PlayersSearchResponse, UsernameCheckResponse, UsernameSuggestResponse } from "./types";
 
 /**
@@ -76,12 +78,22 @@ export async function supabaseToken(): Promise<TokenCheck> {
 
 export type Answer<T> = { status: number; body: T | { error: AccountError } };
 
+/** How the city in the tt_city cookie was chosen (lib/city.ts setCityPref), for the server's city note. */
+function citySource(): Record<string, string> {
+  try {
+    const v = localStorage.getItem(CITY_SRC_KEY);
+    return v && v.length <= 60 ? { [CITY_SRC_HEADER]: v } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function call<T>(token: string, path: string, init: RequestInit = {}): Promise<Answer<T>> {
   try {
     const res = await fetch(path, {
       ...init,
       cache: "no-store",
-      headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${token}` },
+      headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...citySource(), Authorization: `Bearer ${token}` },
     });
     let body: unknown = null;
     try {

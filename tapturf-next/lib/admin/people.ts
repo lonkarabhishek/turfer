@@ -1,11 +1,18 @@
+import { cityInfo } from "../city";
+
 /**
- * The people behind the sign-ups chart: one row from admin_user_details
- * turned into what the admin list shows, plus the India-time formatting
- * and search it uses. Pure, so the server and the browser agree (no Intl
- * in anything rendered, which would differ between them).
+ * The people behind the sign-ups chart: one row from admin_people
+ * turned into what the admin chart and list show, plus their cities, the
+ * India-time formatting and search. Pure, so the server and the browser
+ * agree (no Intl in anything rendered, which would differ between them).
+ * Relative imports only (npm run test:trend).
  */
 
 export type Method = "google" | "phone" | "email" | "unknown";
+
+/** How a recorded city was found (lib/account/city.ts). */
+export type CitySource = "picked" | "gps" | "ip" | "unknown";
+export type RecordedCity = { id: string | null; source: CitySource; ipCity: string | null; atSignup: boolean; at: number | null };
 
 export type Contacted = { turf: string; slug: string | null; kinds: string[]; n: number; at: number | null };
 export type Claim = { turf: string; slug: string | null; status: string; role: string | null };
@@ -36,7 +43,10 @@ export type Person = {
   avatar: string | null;
   role: string | null;
   verified: boolean;
+  /** When they signed up: their first sign-in, even for accounts copied into users later. */
   joinedAt: number;
+  /** When their users row was made, only when that was more than a minute after they signed up. */
+  rowAddedAt: number | null;
   /** The joined time is shared with other accounts: a bulk import, not their real sign-up. */
   imported: boolean;
   updatedAt: number | null;
@@ -59,9 +69,13 @@ export type Person = {
   claims: Claim[];
   lastActive: number | null;
   before: Before | null;
+  /** The city recorded by the server, if any (private.user_cities). */
+  city: RecordedCity | null;
+  /** A best guess from their activity, with its share of the evidence (0 to 1). */
+  likely: { id: string; share: number } | null;
 };
 
-/** One row as admin_user_details returns it. */
+/** One row as admin_people returns it. */
 export type DetailsRow = {
   id: string;
   name: string | null;
@@ -71,6 +85,7 @@ export type DetailsRow = {
   role: string | null;
   is_verified: boolean | null;
   created_at: string | null;
+  signed_up_at?: string | null;
   updated_at: string | null;
   method: string | null;
   username: string | null;
@@ -91,6 +106,13 @@ export type DetailsRow = {
   turfs: unknown;
   last_active: string | null;
   signup: unknown;
+  city?: string | null;
+  city_source?: string | null;
+  city_ip?: string | null;
+  city_at_signup?: boolean | null;
+  city_at?: string | null;
+  likely_city?: string | null;
+  likely_share?: number | null;
 };
 
 const time = (s: unknown): number | null => {
@@ -104,6 +126,17 @@ const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "
 const strings = (v: unknown, max = 5): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, max) : []);
 
 const METHODS: readonly Method[] = ["google", "phone", "email"];
+const SOURCES: readonly CitySource[] = ["picked", "gps", "ip", "unknown"];
+const CITY_ID = /^[a-z][a-z-]{1,30}$/;
+const cityId = (v: unknown): string | null => (typeof v === "string" && CITY_ID.test(v) ? v : null);
+
+function recordedCity(r: DetailsRow): RecordedCity | null {
+  const source = SOURCES.find((x) => x === r.city_source);
+  if (!source) return null;
+  // A source that needs a city but came without a valid one reads as unknown.
+  const id = source === "unknown" ? null : cityId(r.city);
+  return { id, source: id ? source : "unknown", ipCity: str(r.city_ip)?.slice(0, 60) ?? null, atSignup: r.city_at_signup === true, at: time(r.city_at) };
+}
 
 /** Where someone first came from: a campaign when tagged, else the referring site. */
 export function sourceOf(first: Record<string, unknown> | null): string {
@@ -194,12 +227,19 @@ function claimsOf(v: unknown): Claim[] {
 
 /** Rows to people, newest first; a joined time shared by several rows is marked as an import. */
 export function toPeople(rows: readonly DetailsRow[]): Person[] {
-  const seen = new Map<string, number>();
-  for (const r of rows) if (r.created_at) seen.set(r.created_at, (seen.get(r.created_at) ?? 0) + 1);
+  const joined = (r: DetailsRow) => time(r.signed_up_at) ?? time(r.created_at);
+  const seen = new Map<number, number>();
+  for (const r of rows) {
+    const t = joined(r);
+    if (t !== null) seen.set(t, (seen.get(t) ?? 0) + 1);
+  }
   const people = rows.flatMap((r): Person[] => {
-    const joinedAt = time(r.created_at);
+    const joinedAt = joined(r);
     if (joinedAt === null || typeof r.id !== "string") return [];
     const method = METHODS.find((m) => m === r.method) ?? "unknown";
+    const rowAt = time(r.created_at);
+    const likely = cityId(r.likely_city);
+    const share = typeof r.likely_share === "number" && Number.isFinite(r.likely_share) ? Math.min(1, Math.max(0, r.likely_share)) : 0;
     return [
       {
         id: r.id,
@@ -210,7 +250,8 @@ export function toPeople(rows: readonly DetailsRow[]): Person[] {
         role: str(r.role),
         verified: r.is_verified === true,
         joinedAt,
-        imported: (seen.get(r.created_at as string) ?? 0) > 1,
+        rowAddedAt: rowAt !== null && rowAt - joinedAt > 60_000 ? rowAt : null,
+        imported: (seen.get(joinedAt) ?? 0) > 1,
         updatedAt: time(r.updated_at),
         method,
         username: str(r.username),
@@ -231,6 +272,8 @@ export function toPeople(rows: readonly DetailsRow[]): Person[] {
         claims: claimsOf(r.turfs),
         lastActive: time(r.last_active),
         before: beforeOf(r.signup),
+        city: recordedCity(r),
+        likely: likely ? { id: likely, share } : null,
       },
     ];
   });
@@ -242,15 +285,82 @@ export function joinedBetween(people: readonly Person[], start: number, end: num
   return people.filter((p) => p.joinedAt >= start && p.joinedAt < end);
 }
 
-/** Search by name, email, @username or any part of the phone number. */
+/**
+ * Search by name, email, @username, city or any part of the phone number.
+ * A number written the Indian way (+91, 0091 or a leading 0) also finds
+ * the 10 digits it stands for; digits also match names and emails.
+ */
 export function matches(p: Person, query: string): boolean {
   const q = query.trim().toLowerCase().replace(/^@/, "");
   if (!q) return true;
   const digits = q.replace(/\D/g, "");
   if (digits.length >= 3 && digits.length === q.replace(/[\s+()-]/g, "").length) {
-    return (p.phone ?? "").replace(/\D/g, "").includes(digits);
+    const national = /^(?:0{0,2}91|0)[6-9]\d{9}$/.test(digits) ? digits.slice(-10) : digits.replace(/^0+(?=[6-9])/, "");
+    if (national.length >= 3 && (p.phone ?? "").replace(/\D/g, "").includes(national)) return true;
   }
-  return [p.name, p.email, p.username].some((s) => s?.toLowerCase().includes(q));
+  const where = cityOf(p);
+  return [p.name, p.email, p.username, where ? cityLabel(where.id) : null].some((s) => s?.toLowerCase().includes(q));
+}
+
+/* ------------------------------------------------------------------ */
+/* Cities                                                              */
+/* ------------------------------------------------------------------ */
+
+/** "Not known" in the city filter. */
+export const NO_CITY = "none";
+
+/** A city's name to show: the curated label, or the id title-cased. */
+export const cityLabel = (id: string): string => cityInfo(id).label;
+
+/** The city to count someone under: the recorded one, else the best guess from activity. */
+export function cityOf(p: Person): { id: string; guessed: boolean } | null {
+  if (p.city?.id) return { id: p.city.id, guessed: false };
+  if (p.likely) return { id: p.likely.id, guessed: true };
+  return null;
+}
+
+/** Whether someone counts under a city filter (null: every city; NO_CITY: no city at all). */
+export function inCity(p: Person, city: string | null): boolean {
+  if (city === null) return true;
+  const c = cityOf(p);
+  return city === NO_CITY ? c === null : c?.id === city;
+}
+
+export type CityCount = { id: string; label: string; recorded: number; guessed: number; total: number };
+
+/** People per city, most first (ties by name), and how many have no city at all. */
+export function byCity(people: readonly Person[]): { cities: CityCount[]; unknown: number } {
+  const m = new Map<string, CityCount>();
+  let unknown = 0;
+  for (const p of people) {
+    const c = cityOf(p);
+    if (!c) {
+      unknown++;
+      continue;
+    }
+    const row = m.get(c.id) ?? { id: c.id, label: cityLabel(c.id), recorded: 0, guessed: 0, total: 0 };
+    if (c.guessed) row.guessed++;
+    else row.recorded++;
+    row.total++;
+    m.set(c.id, row);
+  }
+  const cities = [...m.values()].sort((a, b) => b.total - a.total || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  return { cities, unknown };
+}
+
+/* ------------------------------------------------------------------ */
+/* Safe display                                                        */
+/* ------------------------------------------------------------------ */
+
+/** A same-site path that is safe to link, else null: browser-sent text must never become an off-site link. */
+export function sitePath(s: string | null): string | null {
+  return s && s.length <= 300 && /^\/(?![/\\])[^\s\x00-\x1f\x7f\\]*$/.test(s) ? s : null;
+}
+
+/** The first character for an avatar, whole even when it is an emoji or another character outside the basic plane. */
+export function initial(p: Pick<Person, "name" | "username" | "email">): string {
+  const first = Array.from((p.name ?? p.username ?? p.email ?? "").trim())[0];
+  return first ? first.toUpperCase() : "?";
 }
 
 // India time, by hand: Intl output differs between Node and browsers.

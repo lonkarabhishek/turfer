@@ -475,6 +475,12 @@ export function matchCities<T extends { id: string; label: string; state?: strin
 const KEY = "tapturf_city_v1";
 const TS_KEY = "tapturf_city_ts";
 const MIG_KEY = "tapturf_city_mig_v2";
+/**
+ * localStorage: "<city>|<source>" of the last confirmed pick, so account
+ * calls can tell the server a city was found by GPS rather than picked
+ * (lib/account/city.ts). The cookie holds only the city.
+ */
+export const CITY_SRC_KEY = "tapturf_city_src";
 
 /** Where a pick came from (GA4 city_chosen). "ask" is the city-first pick screen. */
 export type CitySource = "ask" | "picker" | "gps" | "make_my_city" | "near_me" | "reset";
@@ -554,6 +560,10 @@ export function setCityPref(next: CityId, opts: { source?: CitySource } = {}): b
   const stuck = Boolean(after && serializeCityChoice(after) === value);
   try {
     localStorage.setItem(KEY, value);
+  } catch { /* ignore */ }
+  try {
+    if (opts.source) localStorage.setItem(CITY_SRC_KEY, `${value}|${opts.source}`);
+    else localStorage.removeItem(CITY_SRC_KEY);
   } catch { /* ignore */ }
   try {
     localStorage.setItem(TS_KEY, String(Date.now()));

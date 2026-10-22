@@ -6,6 +6,7 @@ import { createIdentityChecker, googleIdentity, peekToken, phoneIdentity, type I
 import { usernameCandidates, usernameProblem } from "./usernames";
 import { createAccountLimiter, toProfile } from "./server";
 import { isTag, readTag, sameTag } from "./tag";
+import { CITY_SRC_HEADER, cityNote } from "./city";
 
 /* ------------------------------------------------------------------ */
 /* Tokens                                                              */
@@ -284,4 +285,30 @@ test("tags: username only, anything else dropped", () => {
   assert.ok(sameTag(null, undefined));
   assert.ok(sameTag({ u: "abc" }, { u: "abc" }));
   assert.ok(!sameTag({ u: "abc" }, null));
+});
+
+/* ------------------------------------------------------------------ */
+/* City note                                                           */
+/* ------------------------------------------------------------------ */
+
+test("the city recorded for a sign-in: a pick, then the internet, then nothing", () => {
+  const req = (h: Record<string, string>) => (n: string) => h[n.toLowerCase()] ?? null;
+  // A confirmed pick wins; the browser's hint says whether GPS found it.
+  assert.deepEqual(cityNote(req({ cookie: "a=1; tt_city=pune" })), { city: "pune", source: "picked", ipCity: null });
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=pune", [CITY_SRC_HEADER]: "pune|gps" })).source, "gps");
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=pune", [CITY_SRC_HEADER]: "pune|near_me" })).source, "gps");
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=pune", [CITY_SRC_HEADER]: "pune|picker" })).source, "picked");
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=pune", [CITY_SRC_HEADER]: "mumbai|gps" })).source, "picked", "a hint for another city is ignored");
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=pune", [CITY_SRC_HEADER]: "pune|gps; x" })).source, "picked", "a malformed hint is ignored");
+  // The pick beats the internet connection, whose own city name is kept.
+  const both = cityNote(req({ cookie: "tt_city=pune", "x-vercel-ip-country": "IN", "x-vercel-ip-city": "Navi%20Mumbai", "x-vercel-ip-latitude": "19.03", "x-vercel-ip-longitude": "73.03" }));
+  assert.deepEqual(both, { city: "pune", source: "picked", ipCity: "Navi Mumbai" });
+  // No pick: the internet connection now, then the proxy's last guess.
+  assert.deepEqual(cityNote(req({ "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "19.03", "x-vercel-ip-longitude": "73.03" })), { city: "mumbai", source: "ip", ipCity: null });
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=geo.nashik" })), { city: "nashik", source: "ip", ipCity: null });
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=unknown" })), { city: null, source: "unknown", ipCity: null });
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=atlantis" })), { city: null, source: "unknown", ipCity: null }, "not a curated city");
+  // Abroad: no Indian city, but the place is kept with its country; odd characters are dropped.
+  assert.deepEqual(cityNote(req({ "x-vercel-ip-country": "AE", "x-vercel-ip-city": "Dubai%3Cscript%3E" })), { city: null, source: "unknown", ipCity: "Dubaiscript (AE)" });
+  assert.equal(cityNote(req({ "x-vercel-ip-city": "%E0%A4" })).ipCity, null, "bad percent-encoding");
 });

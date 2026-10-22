@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createGuardedFetch, defaultGuardOptions } from "../supabase/guard";
 import { clientNetwork, windowCounter } from "../limits";
+import type { CityNote } from "./city";
 import type { Identity } from "./identity";
 import type { AccountProfile, PlayerHit } from "./types";
 
@@ -21,22 +22,26 @@ export function accountKey(): string | null {
   return process.env.ACCOUNT_KEY?.trim() || null;
 }
 
+function makeClient(fetch: typeof globalThis.fetch): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) throw new Error("Missing Supabase environment variables");
+  return createClient(url, anon, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch } });
+}
+
 // Its own breaker, like the live writes: failing account calls must not
 // make page refreshes on this instance fail fast too.
 const accountFetch = createGuardedFetch(defaultGuardOptions());
 let client: SupabaseClient | null = null;
 
 function accountClient(): SupabaseClient {
-  if (client) return client;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("Missing Supabase environment variables");
-  client = createClient(url, anon, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: { fetch: accountFetch },
-  });
+  client ??= makeClient(accountFetch);
   return client;
 }
+
+// City notes get a breaker of their own too: when they fail, sign-ins must not.
+const cityFetch = createGuardedFetch(defaultGuardOptions());
+let cityClient: SupabaseClient | null = null;
 
 const s = (x: unknown): string | null => (typeof x === "string" ? x : null);
 
@@ -179,6 +184,42 @@ export function createAccountLimiter(perMinute: number, now: () => number = Date
 
 /** Account answers are for one person: never stored by a browser or CDN. */
 export const PRIVATE_HEADERS = { "Cache-Control": "private, no-store" };
+
+const RANK: Record<CityNote["source"], number> = { unknown: 0, ip: 1, picked: 2, gps: 2 };
+/** Per instance: the best city source already recorded for each account, so most calls skip the database. */
+const notedCity = new Map<string, number>();
+
+/**
+ * Record a signed-in person's city (lib/account/city.ts) for the admin
+ * view. The database keeps the better of what it has and this (a pick
+ * beats an internet guess, a guess beats nothing; a pick stays), so it
+ * is safe on every sign-in check. Run it after the reply: it never
+ * throws and never affects the sign-in.
+ */
+export async function noteCity(userId: string, note: CityNote): Promise<void> {
+  const rank = RANK[note.source];
+  if ((notedCity.get(userId) ?? -1) >= rank) return;
+  const key = accountKey();
+  if (!key) return;
+  try {
+    cityClient ??= makeClient(cityFetch);
+    const { data, error } = await cityClient.rpc("account_note_city", {
+      p_key: key,
+      p_user_id: userId,
+      p_city: note.city,
+      p_source: note.source,
+      p_ip_city: note.ipCity,
+    });
+    if (error || (data as { r?: unknown } | null)?.r !== "ok") {
+      console.warn("account: account_note_city failed", error?.message ?? (data as { r?: unknown } | null)?.r);
+      return;
+    }
+    if (notedCity.size >= 5_000) notedCity.delete(notedCity.keys().next().value as string);
+    notedCity.set(userId, rank);
+  } catch (e) {
+    console.warn("account: account_note_city threw", e);
+  }
+}
 
 /** A small JSON body, or null when it is missing, too big or not JSON. */
 export async function readSmallJson(req: Request, max = 2_000): Promise<Record<string, unknown> | null> {

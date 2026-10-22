@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
 import { toPeople, type DetailsRow, type Person } from "@/lib/admin/people";
+import { fetchAllRows } from "@/lib/queries/turfs";
 
 export type AdminUserRow = {
   id: string;
@@ -46,24 +47,23 @@ export function adminUserRows(ids?: string[]): Promise<AdminUserRow[]> {
 /**
  * Everyone, with everything the admin sign-ups chart and list show
  * (sign-up time, contact, username, sign-ins, activity, sign-up context),
- * through admin_user_details() with the same owner check. Newest first.
+ * through admin_people() with the same owner check. Newest first.
  * people is null when not allowed or failing, so the section can say so;
- * never throws. readAt is the chart's "now": taken after the read and
+ * never throws. Paged: PostgREST caps a function's rows too (1,000 on
+ * Supabase), and the chart and the list are both built from this read;
+ * the function's order (sign-up time, then id) keeps pages from
+ * overlapping. readAt is the chart's "now": taken after the read and
  * never before the newest sign-up, so every bar and the total agree.
  */
 export const signupPeople = cache(async (): Promise<{ people: Person[] | null; readAt: number }> => {
   try {
     const supabase = await createServerClient();
     const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-    const { data, error } = await supabase.rpc("admin_user_details", { p_firebase_token: token });
-    if (error) {
-      console.warn("admin_user_details failed", error.code, error.message);
-      return { people: null, readAt: Date.now() };
-    }
-    const people = toPeople((data ?? []) as DetailsRow[]);
+    const rows = await fetchAllRows<DetailsRow>((from, to) => supabase.rpc("admin_people", { p_firebase_token: token }).range(from, to));
+    const people = toPeople(rows);
     return { people, readAt: Math.max(Date.now(), people[0]?.joinedAt ?? 0) };
   } catch (e) {
-    console.warn("admin_user_details threw", e);
+    console.warn("admin_people failed", e);
     return { people: null, readAt: Date.now() };
   }
 });

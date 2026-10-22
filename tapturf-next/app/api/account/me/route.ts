@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { cityNote } from "@/lib/account/city";
 import { accountError, accountReply, caller } from "@/lib/account/route";
-import { createAccountLimiter, readSmallJson, resolveAccount, setUsername, updateName } from "@/lib/account/server";
+import { createAccountLimiter, noteCity, readSmallJson, resolveAccount, setUsername, updateName } from "@/lib/account/server";
 import type { AccountError, AccountProfile } from "@/lib/account/types";
 
 // The signed-in person's own account (lib/account/types.ts has the API).
@@ -10,12 +12,23 @@ import type { AccountError, AccountProfile } from "@/lib/account/types";
 const allowRead = createAccountLimiter(60);
 const allowWrite = createAccountLimiter(20);
 
+/** After the reply: record the person's city for the admin view (lib/account/city.ts). Never touches the sign-in. */
+function noteCityLater(req: Request, userId: string) {
+  try {
+    const note = cityNote((n) => req.headers.get(n));
+    after(() => noteCity(userId, note));
+  } catch (e) {
+    console.warn("account: city note skipped", e);
+  }
+}
+
 export async function GET(req: Request) {
   const who = await caller(req, allowRead);
   if ("reply" in who) return who.reply;
   const r = await resolveAccount(who.id);
   if ("unavailable" in r) return accountError("unavailable");
   if ("r" in r) return accountError(r.r);
+  noteCityLater(req, r.ok.id);
   return accountReply({ profile: r.ok });
 }
 
@@ -29,6 +42,9 @@ export async function POST(req: Request) {
   const r = await resolveAccount(who.id, { create: true, log: true, name });
   if ("unavailable" in r) return accountError("unavailable");
   if ("r" in r) return accountError(r.r);
+  // On every sign-in, not only when created: Google accounts are made by a database trigger first,
+  // so created is never true for them.
+  noteCityLater(req, r.ok.id);
   return accountReply({ profile: r.ok, created: r.created });
 }
 

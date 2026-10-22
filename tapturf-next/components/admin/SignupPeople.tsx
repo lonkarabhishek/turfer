@@ -1,18 +1,48 @@
 "use client";
 
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
-import { METHOD_NAMES, ago, duration, istDateTime, joinedBetween, matches, whatsappLink, type Method, type Person } from "@/lib/admin/people";
+import {
+  METHOD_NAMES,
+  NO_CITY,
+  ago,
+  cityLabel,
+  cityOf,
+  duration,
+  inCity,
+  initial,
+  istDateTime,
+  joinedBetween,
+  matches,
+  sitePath,
+  whatsappLink,
+  type Method,
+  type Person,
+  type RecordedCity,
+} from "@/lib/admin/people";
 
 /**
- * Who signed up in the stretch the chart shows, newest first. Each row
- * opens to everything we know: contact, account, sign-ins, what they have
- * done on TapTurf and what they did before signing up.
+ * Who signed up in the stretch the chart shows (and the city picked in
+ * By city), newest first. Each row opens to everything we know: contact,
+ * city, account, sign-ins, what they have done on TapTurf and what they
+ * did before signing up.
  */
 
 const PAGE = 25;
 // lib/analytics/visitor.ts started saving the sign-up context then.
 const CONTEXT_SINCE = "19 Oct 2026";
+// supabase/migrations/20261006_user_logins.sql started the sign-in log then (no backfill).
+const LOGINS_SINCE = "6 Oct 2026";
+const LOGINS_SINCE_MS = Date.UTC(2026, 9, 5, 18, 30); // 6 Oct 2026 00:00 IST
+// Cities are recorded from then (supabase/migrations/20261022_user_cities.sql).
+const CITIES_SINCE = "22 Oct 2026";
+
+const HOW: Record<RecordedCity["source"], string> = {
+  picked: "chosen in the city menu",
+  gps: "found by their location",
+  ip: "from their internet connection, approximate",
+  unknown: "not known",
+};
 
 const title = (s: string) => s.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
@@ -23,6 +53,7 @@ export function SignupPeople({
   end,
   label,
   now,
+  city = null,
   onShowAll,
 }: {
   people: Person[] | null;
@@ -30,20 +61,34 @@ export function SignupPeople({
   end: number;
   label: string;
   now: number;
+  /** Only this city's sign-ups (NO_CITY: those with no city), or everyone. */
+  city?: string | null;
   /** Zoom the chart back out to all time, to search everyone. */
   onShowAll?: () => void;
 }) {
   const id = useId();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
-  // How many to show, for this window and search; a new one starts again at one page.
-  const key = `${start}:${end}:${query}`;
+  // How many to show, for this window, city and search; a new one starts again at one page.
+  const key = `${start}:${end}:${city}:${query}`;
   const [shown, setShown] = useState({ key, n: PAGE });
   const limit = shown.key === key ? shown.n : PAGE;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  // After Show more, focus the first row it added (the button may be gone).
+  const focusRow = useRef<number | null>(null);
+  useEffect(() => {
+    const i = focusRow.current;
+    if (i === null) return;
+    focusRow.current = null;
+    listRef.current?.querySelectorAll<HTMLButtonElement>(":scope > li > button")[i]?.focus();
+  });
 
-  const inView = useMemo(() => (people ? joinedBetween(people, start, end) : []), [people, start, end]);
+  const scoped = useMemo(() => (people ? people.filter((p) => inCity(p, city)) : []), [people, city]);
+  const inView = useMemo(() => joinedBetween(scoped, start, end), [scoped, start, end]);
   const found = useMemo(() => inView.filter((p) => matches(p, query)), [inView, query]);
-  const elsewhere = useMemo(() => (query.trim() && people ? people.filter((p) => matches(p, query)).length - found.length : 0), [people, query, found]);
+  const elsewhere = useMemo(() => (query.trim() ? scoped.filter((p) => matches(p, query)).length - found.length : 0), [scoped, query, found]);
+  const where = city === null ? null : city === NO_CITY ? "no known city" : cityLabel(city);
 
   if (people === null) {
     return (
@@ -81,12 +126,14 @@ export function SignupPeople({
             People who signed up
           </h3>
           <p className="text-[13px] text-primary-500">
-            {query.trim() ? `${count(found.length, "match", "matches")} of ${count(inView.length, "person", "people")}` : count(inView.length, "person", "people")} · {label}
+            {query.trim() ? `${count(found.length, "match", "matches")} of ${count(inView.length, "person", "people")}` : count(inView.length, "person", "people")}
+            {where ? ` · ${where}` : ""} · {label}
           </p>
         </div>
-        <div className="relative w-full sm:w-72">
+        <div className="relative w-full sm:w-80">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden />
           <input
+            ref={inputRef}
             id={`${id}-q`}
             type="text"
             inputMode="search"
@@ -94,12 +141,18 @@ export function SignupPeople({
             spellCheck={false}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Name, phone, email or @username"
+            placeholder="Name, phone, city or @username"
             aria-label="Search the people who signed up"
             className="w-full h-10 rounded-full border border-primary-200 bg-white pl-9 pr-9 text-[14px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500"
           />
           {query && (
-            <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-primary-100">
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                inputRef.current?.focus();
+              }}
+              aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-primary-100">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -107,22 +160,29 @@ export function SignupPeople({
       </div>
 
       {found.length === 0 ? (
-        <div className="mt-3 rounded-xl bg-primary-50 px-4 py-6 text-center text-sm text-primary-600">
+        <div className="mt-3 rounded-xl bg-primary-50 px-4 py-6 text-center text-sm text-primary-600 break-words">
           {query.trim() ? (
             <>
               <p>No one here matches &ldquo;{query.trim()}&rdquo;.</p>
               {elsewhere > 0 && onShowAll && (
-                <button type="button" onClick={onShowAll} className="mt-2 font-semibold text-primary-800 underline underline-offset-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onShowAll();
+                    inputRef.current?.focus();
+                  }}
+                  className="mt-2 font-semibold text-primary-800 underline underline-offset-2"
+                >
                   {count(elsewhere, "match", "matches")} in other dates: show all time
                 </button>
               )}
             </>
           ) : (
-            <p>No one signed up in this stretch.</p>
+            <p>{where ? `No one from ${where === "no known city" ? "an unknown city" : where} signed up in this stretch.` : "No one signed up in this stretch."}</p>
           )}
         </div>
       ) : (
-        <ul aria-labelledby={`${id}-h`} className="mt-3 rounded-xl border border-primary-200 overflow-hidden">
+        <ul ref={listRef} aria-labelledby={`${id}-h`} className="mt-3 rounded-xl border border-primary-200 overflow-hidden">
           {visible.map((p) => (
             <Row key={p.id} p={p} now={now} open={open.has(p.id)} onToggle={() => toggle(p.id)} panelId={`${id}-${p.id}`} />
           ))}
@@ -130,7 +190,13 @@ export function SignupPeople({
       )}
 
       {left > 0 && (
-        <button type="button" onClick={() => setShown({ key, n: limit + PAGE })} className="mt-3 w-full h-10 rounded-full border border-primary-200 text-[13px] font-semibold text-primary-700 hover:bg-primary-50">
+        <button
+          type="button"
+          onClick={() => {
+            focusRow.current = limit;
+            setShown({ key, n: limit + PAGE });
+          }}
+          className="mt-3 w-full h-10 rounded-full border border-primary-200 text-[13px] font-semibold text-primary-700 hover:bg-primary-50">
           Show {Math.min(PAGE, left)} more ({left.toLocaleString("en-IN")} left)
         </button>
       )}
@@ -164,27 +230,33 @@ function highlights(p: Person): string[] {
 function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open: boolean; onToggle: () => void; panelId: string }) {
   const contact = p.phone ?? p.email;
   const extra = highlights(p);
+  const c = cityOf(p);
   return (
     <li className="border-t border-primary-100 first:border-t-0">
       <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={panelId} className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${open ? "bg-primary-50" : "hover:bg-primary-50"}`}>
         <Avatar p={p} />
         <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
             <span className={`font-semibold truncate max-w-full ${p.name ? "text-primary-900" : "text-primary-400"}`}>{p.name ?? "No name"}</span>
-            {p.username && <span className="text-[13px] text-primary-500">@{p.username}</span>}
+            {p.username && <span className="min-w-0 max-w-full truncate text-[13px] text-primary-500">@{p.username}</span>}
             <MethodBadge method={p.method} />
           </p>
           <p className="text-[13px] text-primary-600 truncate">
+            {c && <span className={c.guessed ? "text-primary-500" : "text-primary-800"}>{c.guessed ? `Probably ${cityLabel(c.id)}` : cityLabel(c.id)} · </span>}
             {contact ?? <span className="text-primary-400">No contact</span>}
             {extra.length > 0 && <span className="hidden md:inline text-primary-400"> · {extra.join(" · ")}</span>}
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[13px] font-semibold text-primary-800">{ago(p.joinedAt, now)}</p>
-          <p className="hidden sm:block font-mono text-[11px] text-primary-400">
-            {istDateTime(p.joinedAt)}
-            {p.imported && <span className="ml-0.5 text-hot-500">*</span>}
+          <p className="text-[13px] font-semibold text-primary-800">
+            {ago(p.joinedAt, now)}
+            {p.imported && (
+              <span className="ml-0.5 text-hot-500" aria-label="bulk import time">
+                *
+              </span>
+            )}
           </p>
+          <p className="hidden sm:block font-mono text-[11px] text-primary-400">{istDateTime(p.joinedAt)}</p>
         </div>
         <ChevronDown className={`shrink-0 w-4 h-4 text-primary-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>
@@ -195,7 +267,7 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
 
 function Avatar({ p }: { p: Person }) {
   const [broken, setBroken] = useState(false);
-  const letter = (p.name ?? p.username ?? p.email ?? "?").trim().charAt(0).toUpperCase() || "?";
+  const letter = initial(p);
   if (p.avatar && !broken) {
     return (
       /* eslint-disable-next-line @next/next/no-img-element */
@@ -216,7 +288,11 @@ function MethodBadge({ method }: { method: Method }) {
       : method === "phone"
         ? "bg-primary-100 border-primary-200 text-primary-700"
         : "bg-primary-50 border-primary-100 text-primary-500";
-  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${cls}`}>{METHOD_NAMES[method]}</span>;
+  return (
+    <span title={METHOD_NAMES[method]} className={`inline-block max-w-full truncate align-middle rounded-full border px-2 py-0.5 text-[10px] font-bold ${cls}`}>
+      {METHOD_NAMES[method]}
+    </span>
+  );
 }
 
 function When({ t, now }: { t: number | null; now: number }) {
@@ -249,10 +325,46 @@ function Item({ label, children }: { label: string; children: ReactNode }) {
 const none = <span className="text-primary-400">None</span>;
 const link = "font-medium text-primary-900 underline decoration-primary-300 underline-offset-2 hover:decoration-primary-700";
 
+function CityItems({ p, now }: { p: Person; now: number }) {
+  const rc = p.city;
+  if (rc?.id) {
+    return (
+      <>
+        <Item label="City">
+          {cityLabel(rc.id)}
+          <span className="text-primary-500">
+            , {HOW[rc.source]}
+            {rc.atSignup ? ", at sign-up" : rc.at !== null ? `, noted ${ago(rc.at, now)}` : ""}
+          </span>
+        </Item>
+        {rc.ipCity && rc.ipCity.toLowerCase() !== cityLabel(rc.id).toLowerCase() && <Item label="Internet location">{rc.ipCity}</Item>}
+      </>
+    );
+  }
+  return (
+    <>
+      <Item label="City">
+        {p.likely ? (
+          <>
+            Probably {cityLabel(p.likely.id)}
+            <span className="text-primary-500"> (guessed from their activity: {Math.round(p.likely.share * 100)}% of it points there)</span>
+          </>
+        ) : (
+          <span className="text-primary-400">Not known yet</span>
+        )}
+        {!rc && <span className="block text-[12px] text-primary-500">Recorded from {CITIES_SINCE} when they use the site signed in.</span>}
+      </Item>
+      {rc?.ipCity && <Item label="Internet location">{rc.ipCity}</Item>}
+    </>
+  );
+}
+
 function Details({ p, now, id }: { p: Person; now: number; id: string }) {
   const wa = p.phone ? whatsappLink(p.phone) : null;
   const b = p.before;
   const signedUp = b?.signup ?? p.joinedAt;
+  const landing = b ? sitePath(b.landing) : null;
+  const preLog = p.joinedAt < LOGINS_SINCE_MS;
   return (
     <div id={id} className="grid gap-x-8 gap-y-5 px-3 sm:px-4 pt-2 pb-5 bg-primary-50 sm:grid-cols-2 xl:grid-cols-3">
       <Group title="Contact">
@@ -281,6 +393,7 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
             none
           )}
         </Item>
+        <CityItems p={p} now={now} />
       </Group>
 
       <Group title="Account">
@@ -288,6 +401,7 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
         <Item label="Joined">
           <When t={p.joinedAt} now={now} />
           {p.imported && <span className="block text-[12px] text-hot-600">Bulk import time, not the real sign-up</span>}
+          {p.rowAddedAt !== null && <span className="block text-[12px] text-primary-500">Copied into the accounts list on {istDateTime(p.rowAddedAt)}</span>}
         </Item>
         <Item label="Username">
           {p.username ? (
@@ -314,11 +428,22 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
       </Group>
 
       <Group title="Sign-ins">
-        <Item label="Times">{p.logins ? p.logins.toLocaleString("en-IN") : none}</Item>
-        <Item label="Last sign-in">
-          <When t={p.lastLogin} now={now} />
-        </Item>
-        <Item label="Used">{p.loginMethods.length ? p.loginMethods.map((m) => (m === "google" ? "Google" : m === "phone" ? "Phone" : title(m))).join(", ") : none}</Item>
+        {preLog && p.logins === 0 ? (
+          <Item label="Times">
+            <span className="text-primary-400">Not recorded. Sign-ins are saved from {LOGINS_SINCE}.</span>
+          </Item>
+        ) : (
+          <>
+            <Item label="Times">
+              {p.logins ? p.logins.toLocaleString("en-IN") : none}
+              {preLog && p.logins > 0 && <span className="text-primary-500"> since {LOGINS_SINCE}</span>}
+            </Item>
+            <Item label="Last sign-in">
+              <When t={p.lastLogin} now={now} />
+            </Item>
+            <Item label="Used">{p.loginMethods.length ? p.loginMethods.map((m) => (m === "google" ? "Google" : m === "phone" ? "Phone" : m === "email" ? "Email" : title(m))).join(", ") : none}</Item>
+          </>
+        )}
         <Item label="Last active">
           <When t={p.lastActive} now={now} />
         </Item>
@@ -397,9 +522,9 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
             <Item label="Came from">{b.source}</Item>
             <Item label="First page">
               {/* The browser sent this, so it is a link only when it is a path on this site. */}
-              {b.landing && /^\/(?![/\\])/.test(b.landing) ? (
-                <a href={b.landing} target="_blank" rel="noopener" className={`${link} break-all`}>
-                  {b.landing}
+              {landing ? (
+                <a href={landing} target="_blank" rel="noopener" className={`${link} break-all`}>
+                  {landing}
                 </a>
               ) : (
                 <span className="break-all">{b.landing ?? none}</span>

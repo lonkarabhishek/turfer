@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronLeft, ChevronRight, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ZoomOut } from "lucide-react";
 import {
   LEVELS,
   LEVEL_NAMES,
@@ -17,16 +17,19 @@ import {
   type Level,
   type TrendWindow,
 } from "@/lib/admin/trend";
-import type { Person } from "@/lib/admin/people";
+import { NO_CITY, cityLabel, inCity, joinedBetween, type Person } from "@/lib/admin/people";
+import { CityBreakdown } from "./CityBreakdown";
 import { SignupPeople } from "./SignupPeople";
 
 /**
  * Sign-ups over time, zoomable: 3 months, then monthly, weekly, daily and
  * 6 hours. Tap a bar (or Enter on it) to open it one level down; the
  * breadcrumb, Zoom out and Escape go back up; the arrows move to the
- * stretch before or after. Under it, the people who signed up in the
- * stretch shown, with everything about them. Both use each person's
- * sign-up time (lib/admin/people.ts), so the list always matches the bars.
+ * stretch before or after. Under it, sign-ups by city for the stretch
+ * shown (tap a city to show only its sign-ups, in the chart and the
+ * list), then the people who signed up, with everything about them. All
+ * use each person's sign-up time (lib/admin/people.ts), so the list
+ * always matches the bars.
  * All buckets are India time (lib/admin/trend.ts does the counting).
  */
 
@@ -68,8 +71,11 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en
 type FocusAfter = { bar: number | null } | "crumb" | null;
 
 export function SignupsTrend({ people, now }: { people: Person[] | null; now: number }) {
-  const list = useMemo(() => (people ?? []).map((p) => p.joinedAt).sort((a, b) => a - b), [people]);
-  const first = list.length ? list[0] : null;
+  // The city picked in By city (NO_CITY: no known city), or everyone. Kept while zooming and moving.
+  const [city, setCity] = useState<string | null>(null);
+  // Windows start from the first sign-up of anyone, so picking a city never moves the view.
+  const first = useMemo(() => (people?.length ? people.reduce((m, p) => Math.min(m, p.joinedAt), Infinity) : null), [people]);
+  const list = useMemo(() => (people ?? []).filter((p) => inCity(p, city)).map((p) => p.joinedAt).sort((a, b) => a - b), [people, city]);
   const [stack, setStack] = useState<TrendWindow[]>(() => [defaultWindow("quarter", now, first)]);
   const [hover, setHover] = useState<number | null>(null);
   // The bar that takes Tab (roving tabindex): the last one focused, else the first.
@@ -83,6 +89,7 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
 
   const w = stack[stack.length - 1];
   const buckets = useMemo(() => bucketsOf(list, w, now), [list, w, now]);
+  const inWindow = useMemo(() => joinedBetween(people ?? [], w.start, w.end), [people, w]);
   const sum = useMemo(() => totals(list, w, now), [list, w, now]);
 
   // Measured with a callback ref, so it also starts when the plot first appears after an empty state.
@@ -114,7 +121,7 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
       </Shell>
     );
   }
-  if (list.length === 0) {
+  if (!people.length) {
     return <Shell>{<p className="py-16 text-center text-sm text-primary-500">No sign-ups yet.</p>}</Shell>;
   }
 
@@ -248,6 +255,11 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
       {/* The number */}
       <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-1">
         <p className="text-[40px] leading-none font-semibold text-primary-900">{sum.total.toLocaleString("en-IN")}</p>
+        {city !== null && (
+          <button type="button" onClick={() => setCity(null)} className="mb-1 inline-flex items-center gap-1 h-8 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold" aria-label={`Showing ${city === NO_CITY ? "people with no known city" : cityLabel(city)} only. Show every city`}>
+            {city === NO_CITY ? "No known city" : cityLabel(city)} <X className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        )}
         <div className="pb-1 text-[13px] text-primary-500">
           {delta !== null && sum.previousName && (
             <p>
@@ -277,7 +289,7 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
           viewBox={`0 0 ${width} ${PLOT_H + AXIS_H}`}
           style={{ width: "100%", height: "auto" }}
           role="group"
-          aria-label={`Sign-ups by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
+          aria-label={`Sign-ups${city === null ? "" : city === NO_CITY ? " with no known city" : ` from ${cityLabel(city)}`} by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
           className="block overflow-visible select-none"
         >
           {/* Grid and y axis */}
@@ -405,12 +417,15 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
         </div>
       )}
 
+      <CityBreakdown people={inWindow} city={city} onCity={setCity} label={w.label} />
+
       <SignupPeople
         people={people}
         start={w.start}
         end={w.end}
         label={w.label}
         now={now}
+        city={city}
         onShowAll={stack.length === 1 && w.level === "quarter" ? undefined : () => pickLevel("quarter")}
       />
     </Shell>
