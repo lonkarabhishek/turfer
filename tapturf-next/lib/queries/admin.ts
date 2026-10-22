@@ -237,35 +237,24 @@ export async function getHeadline(): Promise<AdminHeadline> {
 }
 
 /**
- * Signups grouped by day for the last N days. Days with no signups
- * are still returned with count 0 so the chart doesn't look sparse.
+ * When every account was made (epoch ms, oldest first), and when that was
+ * read (the chart's "now"), for the sign-ups trend chart, which buckets
+ * them itself. Only created_at is read: it stays
+ * public after the users lockdown, unlike email and phone. Paged, so it
+ * keeps working past PostgREST's 1,000-row cap. Throws when the database
+ * cannot be read, so the page shows its error instead of an empty chart.
  */
-export async function getDailySignups(days = 30): Promise<DailyPoint[]> {
-  const s = supa();
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - (days - 1));
-  since.setUTCHours(0, 0, 0, 0);
-
-  const { data } = await s
-    .from("users")
-    .select("created_at")
-    .gte("created_at", since.toISOString())
-    .order("created_at", { ascending: true });
-
-  // Bucket by YYYY-MM-DD (UTC).
-  const buckets = new Map<string, number>();
-  for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setUTCDate(since.getUTCDate() + i);
-    buckets.set(d.toISOString().slice(0, 10), 0);
+export async function getSignupTimes(): Promise<{ times: number[]; readAt: number }> {
+  const readAt = Date.now();
+  const rows = await fetchAllRows<{ created_at: string | null }>((from, to) =>
+    supa().from("users").select("created_at").order("created_at", { ascending: true }).order("id", { ascending: true }).range(from, to),
+  );
+  const times: number[] = [];
+  for (const r of rows) {
+    const t = r.created_at ? Date.parse(r.created_at) : NaN;
+    if (Number.isFinite(t)) times.push(t);
   }
-  (data || []).forEach((row) => {
-    if (!row.created_at) return;
-    const key = new Date(row.created_at).toISOString().slice(0, 10);
-    if (buckets.has(key)) buckets.set(key, (buckets.get(key) || 0) + 1);
-  });
-
-  return Array.from(buckets.entries()).map(([date, count]) => ({ date, count }));
+  return { times: times.sort((x, y) => x - y), readAt };
 }
 
 /**

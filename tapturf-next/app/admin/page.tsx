@@ -3,8 +3,8 @@ import Link from "next/link";
 import { isAdmin } from "@/lib/admin/auth";
 import { AdminGate } from "@/components/admin/AdminGate";
 import {
+  getSignupTimes,
   getHeadline,
-  getDailySignups,
   getDailyGames,
   getRecentUsers,
   getGamesByCity,
@@ -23,6 +23,7 @@ import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { DailyChart } from "@/components/admin/DailyChart";
+import { SignupsTrend } from "@/components/admin/SignupsTrend";
 import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { turfPath } from "@/lib/utils/turfPath";
@@ -96,7 +97,7 @@ export default async function AdminPage() {
 
   const [
     headline,
-    signups,
+    signupTimes,
     games,
     recentUsers,
     gamesByCity,
@@ -112,7 +113,11 @@ export default async function AdminPage() {
     logins,
   ] = await Promise.all([
     getHeadline(),
-    getDailySignups(30),
+    // A failed read shows a message in the chart, never a broken page.
+    getSignupTimes().catch((e) => {
+      console.warn("admin: sign-up times failed", e);
+      return null;
+    }),
     getDailyGames(30),
     getRecentUsers(25),
     getGamesByCity(),
@@ -297,14 +302,10 @@ export default async function AdminPage() {
       </section>
 
       {/* Charts */}
+      <div className="mb-4">
+        <SignupsTrend times={signupTimes?.times ?? null} now={signupTimes?.readAt ?? 0} />
+      </div>
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-        <div className="rounded-2xl bg-white border border-primary-200 p-5">
-          <DailyChart
-            points={signups}
-            label="Signups, last 30 days"
-            color="#16A34A"
-          />
-        </div>
         <div className="rounded-2xl bg-white border border-primary-200 p-5">
           <DailyChart
             points={games}
