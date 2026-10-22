@@ -4,12 +4,13 @@ export const post: Post = {
   slug: "nashik-vs-pune-turfs-listed-prices-2026",
   title: "Nashik vs Pune Turfs: What's Listed and What an Hour Costs",
   description:
-    "TapTurf data from October 2026: how many turfs are listed in Nashik and Pune, which sports dominate, and what listed hourly prices look like, with caveats.",
-  hook: "63 turfs listed in Nashik, 117 in Pune. Football leads in both, box cricket only in Pune. Here is the data, and its limits.",
+    "TapTurf data, updated 22 October 2026: how many turfs are listed in Nashik and Pune, which sports dominate, and what listed hourly prices look like, with caveats.",
+  hook: "63 turfs listed in Nashik, 291 in Pune. Football leads in both, box cricket only in Pune. Here is the data, and its limits.",
   category: "Guides",
   city: null,
   readMinutes: 6,
   publishedAt: "2026-10-19",
+  updatedAt: "2026-10-22",
   coverEmoji: "📊",
   heroImage: {
     url: "/blog/art/nashik-vs-pune-turfs.svg",
@@ -30,7 +31,7 @@ export const post: Post = {
   blocks: [
     {
       type: "p",
-      text: "As of 19 October 2026, TapTurf lists 117 active turfs in Pune and 63 in Nashik. Football is listed at almost every venue in both cities, but box cricket is a Pune story: 93 Pune venues list it against 11 in Nashik. Where prices are listed, Nashik's median is ₹600 an hour and Pune's is ₹1,000, though both come from small samples.",
+      text: "As of 22 October 2026, TapTurf lists 291 active turfs in Pune and 63 in Nashik. Football is listed at almost every venue in both cities, but box cricket is a Pune story: 232 Pune venues list it against 11 in Nashik. Where prices are listed, Nashik's median is ₹600 an hour and Pune's is ₹1,000. The Nashik figure comes from a small sample.",
     },
     {
       type: "callout",
@@ -40,9 +41,9 @@ export const post: Post = {
     {
       type: "stat-grid",
       items: [
-        { value: "117", label: "Active turfs listed in Pune", hint: "TapTurf database, 19 Oct 2026" },
-        { value: "63", label: "Active turfs listed in Nashik", hint: "TapTurf database, 19 Oct 2026" },
-        { value: "₹1,000", label: "Median listed price in Pune", hint: "68 priced venues" },
+        { value: "291", label: "Active turfs listed in Pune", hint: "TapTurf database, 22 Oct 2026" },
+        { value: "63", label: "Active turfs listed in Nashik", hint: "TapTurf database, 22 Oct 2026" },
+        { value: "₹1,000", label: "Median listed price in Pune", hint: "172 priced venues" },
         { value: "₹600", label: "Median listed price in Nashik", hint: "22 priced venues" },
       ],
     },
@@ -50,27 +51,27 @@ export const post: Post = {
     { type: "h2", text: "How many turfs does TapTurf list in Nashik and Pune?" },
     {
       type: "p",
-      text: "Across India, TapTurf had 2,351 active venues on 19 October 2026. Hyderabad (390), Bangalore (303), Mumbai (189) and Pune (117) are among the largest lists, followed by Delhi (104) and Nashik (63). A bigger list reflects what has been catalogued so far, not only how many turfs physically exist.",
+      text: "Across India, TapTurf had 2,726 active venues on 22 October 2026. Hyderabad (390), Bangalore (303), Pune (291) and Mumbai (188) are among the largest lists, followed by Delhi (104) and Nashik (63). A bigger list reflects what has been catalogued so far, not only how many turfs physically exist.",
     },
     {
       type: "p",
-      text: "Pune has nearly twice as many listings as Nashik, which fits its size. Do not read the gap as a precise measure of turf supply: a venue that is not on Google Maps will not show up here.",
+      text: "When this post first went out on 19 October, we listed 117 Pune turfs. The jump to 291 is because we added more Pune listings to TapTurf that week, not because 174 new turfs opened in Pune. Pune now has more than four times as many listings as Nashik. Do not read the gap as a precise measure of turf supply: a venue that is not on Google Maps will not show up here, and Nashik has not had the same round of additions yet.",
     },
 
     { type: "h2", text: "Which areas have the most turfs?" },
     {
       type: "p",
-      text: "In Pune, Kothrud has the most listed turfs (9), followed by Undri (7), Hinjewadi (6) and Ravet (5). In Nashik the spread is flat: Deolali, Govind Nagar, Panchavati and Pathardi have 3 each.",
+      text: "In Pune, Kothrud has the most listed turfs (13), followed by Wakad (11), then Undri and Tathawade (10 each). In Nashik the spread is flat: Deolali, Govind Nagar, Panchavati and Pathardi have 3 each.",
     },
     {
       type: "table",
-      caption: "Areas with the most listed turfs (TapTurf database, 19 Oct 2026)",
+      caption: "Areas with the most listed turfs (TapTurf database, 22 Oct 2026)",
       columns: ["City", "Area", "Listed turfs"],
       rows: [
-        ["Pune", "Kothrud", 9],
-        ["Pune", "Undri", 7],
-        ["Pune", "Hinjewadi", 6],
-        ["Pune", "Ravet", 5],
+        ["Pune", "Kothrud", 13],
+        ["Pune", "Wakad", 11],
+        ["Pune", "Undri", 10],
+        ["Pune", "Tathawade", 10],
         ["Nashik", "Deolali", 3],
         ["Nashik", "Govind Nagar", 3],
         ["Nashik", "Panchavati", 3],
@@ -79,7 +80,7 @@ export const post: Post = {
     },
     {
       type: "p",
-      text: "Two caveats. 23 of Pune's 117 listings and 18 of Nashik's 63 have no area filled in, so these counts leave out a fair share of venues. Area names are also counted exactly as entered, so spelling variants of one place may be split.",
+      text: "Two caveats. 23 of Pune's 291 listings and 18 of Nashik's 63 have no area filled in, so these counts leave out a fair share of venues. Area names are also counted exactly as entered, so spelling variants of one place may be split.",
     },
     {
       type: "cta",
@@ -102,18 +103,18 @@ export const post: Post = {
     {
       type: "table",
       caption: "Venues listing each sport (a venue counts once per sport)",
-      columns: ["Sport", "Nashik (of 63)", "Pune (of 117)"],
+      columns: ["Sport", "Nashik (of 63)", "Pune (of 291)"],
       rows: [
-        ["Football", 56, 108],
-        ["Cricket", 45, 20],
-        ["Box Cricket", 11, 93],
-        ["Badminton", 3, 21],
-        ["Pickleball", 1, 6],
+        ["Football", 56, 259],
+        ["Cricket", 45, 23],
+        ["Box Cricket", 11, 232],
+        ["Badminton", 3, 38],
+        ["Pickleball", 1, 22],
       ],
     },
     {
       type: "p",
-      text: "Put as shares, about 89% of Nashik listings and 92% of Pune listings include football. Box cricket appears at about 79% of Pune listings but only about 17% in Nashik. If you want to play box cricket in Pune you have plenty of choice; in Nashik, check the sport on each listing.",
+      text: "Put as shares, about 89% of Nashik listings and 89% of Pune listings include football. Box cricket appears at about 80% of Pune listings but only about 17% in Nashik. If you want to play box cricket in Pune you have plenty of choice; in Nashik, check the sport on each listing.",
     },
     {
       type: "cta",
@@ -125,22 +126,22 @@ export const post: Post = {
     { type: "h2", text: "What does an hour cost in Nashik and Pune?" },
     {
       type: "p",
-      text: "Only some listings show a price. In Nashik 22 of 63 venues (35%) have one, and in Pune 68 of 117 (58%). Each venue can list up to six hourly rates: morning, afternoon and evening, on weekdays and weekends. The medians below are taken across all of those listed rates, not one rate per venue.",
+      text: "Only some listings show a price. In Nashik 22 of 63 venues (35%) have one, and in Pune 172 of 291 (59%). Each venue can list up to six hourly rates: morning, afternoon and evening, on weekdays and weekends. The medians below are taken across all of those listed rates, not one rate per venue.",
     },
     {
       type: "table",
-      caption: "Listed hourly prices (TapTurf database, 19 Oct 2026)",
+      caption: "Listed hourly prices (TapTurf database, 22 Oct 2026)",
       columns: ["", "Nashik", "Pune"],
       rows: [
-        ["Venues with a listed price", "22 of 63", "68 of 117"],
+        ["Venues with a listed price", "22 of 63", "172 of 291"],
         ["Lowest listed rate", "₹300", "₹200"],
         ["Median listed rate", "₹600", "₹1,000"],
-        ["Highest listed rate", "₹900", "₹1,999"],
+        ["Highest listed rate", "₹900", "₹3,000"],
       ],
     },
     {
       type: "p",
-      text: "On this data, a typical listed hour in Nashik costs less than a typical listed hour in Pune, by roughly ₹400. That gap is plausible but not proven: 22 venues is a small sample, and price coverage is patchy in both cities. The Pune range of ₹200 to ₹1,999 is wide because it includes everything from a basic net to a premium weekend evening slot.",
+      text: "On this data, a typical listed hour in Nashik costs less than a typical listed hour in Pune, by roughly ₹400. That gap is plausible but not proven: 22 venues is a small sample for Nashik, and price coverage is patchy in both cities. The Pune median held at ₹1,000 after we added more Pune listings. The Pune range of ₹200 to ₹3,000 is wide because it includes everything from a basic net to a premium weekend evening slot.",
     },
     {
       type: "callout",
@@ -169,19 +170,19 @@ export const post: Post = {
       items: [
         {
           q: "How many turfs are there in Pune?",
-          a: "TapTurf lists 117 active turfs in Pune as of 19 October 2026. That is the number we have catalogued, not a count of every turf in the city.",
+          a: "TapTurf lists 291 active turfs in Pune as of 22 October 2026. That is the number we have catalogued, not a count of every turf in the city.",
         },
         {
           q: "How many turfs are there in Nashik?",
-          a: "TapTurf lists 63 active turfs in Nashik as of 19 October 2026. Some turfs may not be listed yet.",
+          a: "TapTurf lists 63 active turfs in Nashik as of 22 October 2026. Some turfs may not be listed yet.",
         },
         {
           q: "Is it cheaper to book a turf in Nashik than in Pune?",
-          a: "On listed prices, yes: the median listed hourly rate is ₹600 in Nashik and ₹1,000 in Pune. The samples are small (22 and 68 priced venues) and prices are not owner-verified, so confirm with the venue.",
+          a: "On listed prices, yes: the median listed hourly rate is ₹600 in Nashik and ₹1,000 in Pune. The samples are small (22 and 172 priced venues) and prices are not owner-verified, so confirm with the venue.",
         },
         {
           q: "Is box cricket common in Nashik?",
-          a: "Less so than in Pune. 11 of 63 Nashik listings include box cricket, against 93 of 117 in Pune. Many Nashik venues list Cricket instead, which is a separate label in our data.",
+          a: "Less so than in Pune. 11 of 63 Nashik listings include box cricket, against 232 of 291 in Pune. Many Nashik venues list Cricket instead, which is a separate label in our data.",
         },
         {
           q: "Can I trust the prices on TapTurf?",
@@ -194,8 +195,9 @@ export const post: Post = {
     {
       type: "ul",
       items: [
-        "Source: TapTurf database, 19 October 2026 (queried the same day, read-only).",
-        "Scope: 2,351 active venues across India; 117 in Pune and 63 in Nashik.",
+        "Source: TapTurf database, 22 October 2026 (queried the same day, read-only). First published with 19 October 2026 data.",
+        "Scope: 2,726 active venues across India; 291 in Pune and 63 in Nashik.",
+        "Pune went from 117 to 291 listings between the two dates because we added Pune listings, not because the market grew by that much.",
         "Listings are compiled mainly from Google Maps and similar public sources, so this is what is listed on TapTurf, not every turf in a city.",
         "Prices are as listed on TapTurf and have not been verified by owners. Medians are across all listed hourly rates for each city.",
         "Multi-sport venues repeat one price set under each sport they list.",

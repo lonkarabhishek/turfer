@@ -221,3 +221,22 @@ export function formatClock(hhmm: string): string {
   h = h % 12 || 12;
   return `${h}:${String(m).padStart(2, "0")} ${meridiem}`;
 }
+
+/**
+ * One line for titles, snippets and the top of a turf page: "Open 24
+ * hours" or "Open 6:00 AM – 11:00 PM daily" when every day has the same
+ * hours. Null when hours differ by day or are unknown, so nothing day
+ * dependent ends up in a cached page header.
+ */
+export function dailyHoursSummary(
+  oh: OpeningHours | null | undefined,
+  fallback?: { start_time: string | null; end_time: string | null; is_24x7?: boolean | null },
+): string | null {
+  const rows = normaliseOpeningHours(oh, fallback);
+  if (rows.length !== 7 || rows.some((r) => r.closed || r.spans.length === 0)) return null;
+  const key = (r: DayHours) => r.spans.map((s) => `${s.opens}-${s.closes}`).join(",");
+  if (new Set(rows.map(key)).size !== 1) return null;
+  const spans = rows[0].spans;
+  if (spans.length === 1 && isAllDaySpan(spans[0])) return "Open 24 hours";
+  return `Open ${spans.map(formatSpan).join(", ")} daily`;
+}

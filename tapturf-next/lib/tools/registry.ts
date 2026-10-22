@@ -43,14 +43,14 @@ export const TOOLS: ToolDef[] = [
   },
   {
     slug: "cricket-toss",
-    updated: "2026-10-21",
+    updated: "2026-10-22",
     key: "toss",
     name: "Cricket Toss",
     tagline: "Flip a coin for your cricket match.",
-    title: "Cricket Toss Online - Free Coin Toss for Cricket | TapTurf",
+    title: "Cricket Toss Coin Online: Flip Heads or Tails Free | TapTurf",
     description:
-      "Online cricket toss. Call heads or tails, flip the coin, see who won and pick bat or bowl. Works one-handed on your phone, no sign-up, ready the moment it loads.",
-    h1: "Cricket Toss",
+      "Cricket toss coin online. Call heads or tails, tap Flip and see who bats first in one second. Free, works one-handed on your phone, no sign-up and no app.",
+    h1: "Cricket Toss Coin Online",
     cta: { label: "Find a turf for your next match", href: "/turf-near-me" },
     related: ["cricket-team-generator", "cricket-live-scorer"],
   },

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Bar chart showing the share of Pune and Nashik turfs on TapTurf that list 24-hour hours or stay open until midnight or later</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1020"/><stop offset="1" stop-color="#1E2440"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<circle cx="1080" cy="110" r="44" fill="#F5E6B8"/><circle cx="1100" cy="96" r="44" fill="#141A30"/>
+<g fill="#FFFFFF" fill-opacity="0.6"><circle cx="930" cy="70" r="2"/><circle cx="990" cy="160" r="2"/><circle cx="1150" cy="190" r="2"/><circle cx="870" cy="130" r="1.5"/></g>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="110" font-size="44" font-weight="700">Late-night turfs: Pune vs Nashik</text>
+<text x="80" y="150" font-size="24" fill-opacity="0.7">Listed hours, TapTurf database, 22 Oct 2026</text>
+<rect x="80" y="190" width="22" height="22" rx="4" fill="#16A34A"/><text x="112" y="209" font-size="22">Pune (270 turfs with hours)</text>
+<rect x="430" y="190" width="22" height="22" rx="4" fill="#E0A92E"/><text x="462" y="209" font-size="22">Nashik (53 turfs with hours)</text>
+<g font-size="24" font-weight="700">
+<text x="80" y="300">Open 24 hours</text>
+<rect x="420" y="270" width="283" height="34" rx="6" fill="#16A34A"/><text x="717" y="297">40%</text>
+<rect x="420" y="314" width="158" height="34" rx="6" fill="#E0A92E"/><text x="592" y="341">23%</text>
+<text x="80" y="450">Open until midnight</text>
+<text x="80" y="480">or later</text>
+<rect x="420" y="420" width="469" height="34" rx="6" fill="#16A34A"/><text x="903" y="447">67%</text>
+<rect x="420" y="464" width="371" height="34" rx="6" fill="#E0A92E"/><text x="805" y="491">53%</text>
+</g>
+<text x="80" y="600" font-size="20" fill-opacity="0.6">Hours as listed, mainly from Google Maps, not owner-verified. Confirm your slot with the venue.</text>
+<text x="1120" y="640" font-size="22" font-weight="700" text-anchor="end" fill="#16A34A">tapturf.in</text>
+</g>
+</svg>

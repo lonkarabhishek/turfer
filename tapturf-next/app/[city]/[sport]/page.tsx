@@ -53,8 +53,10 @@ export async function generateMetadata({
   const url = `https://www.tapturf.in/${data.city}/${s.slug}`;
 
   const bits = [
-    `Compare ${stats.count} ${lower} ${venueWord(s, stats.count)} in ${cityLabel} by area, rating and price.`,
-    stats.floodlit > 0 ? `${stats.floodlit} with floodlights.` : null,
+    `Find a ${lower} ${word} near you in ${cityLabel}: ${stats.count} ${venueWord(s, stats.count)} with ratings, prices, timings and location.`,
+    stats.topAreas.length > 0 ? `Popular areas: ${stats.topAreas.slice(0, 3).map((a) => a.area).join(", ")}.` : null,
+    // Floodlights only mean something for outdoor turfs, not indoor courts.
+    s.venue === "turf" && stats.floodlit > 0 ? `${stats.floodlit} with floodlights.` : null,
     // No price in the search snippet: some listed rates look per-player
     // rather than per-hour (data team checking), and a misleading
     // "From ₹200/hr" in Google results does more harm than good.
@@ -63,7 +65,7 @@ export async function generateMetadata({
 
   return {
     // Layout's template appends "| TapTurf".
-    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${s.venue === "turf" ? "Grounds" : "Venues"}, Compare & Book`,
+    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${s.venue === "turf" ? "Grounds" : `${s.venue[0].toUpperCase()}${s.venue.slice(1)}s`}, Prices & Timings`,
     description: bits.join(" "),
     keywords: [
       `${lower} ${word} in ${cityLabel.toLowerCase()}`,
@@ -175,7 +177,7 @@ export default async function CitySportPage({
             </h1>
             <p className="text-[15px] text-primary-500 mt-1">
               {stats.count} {venueWord(s, stats.count)}
-              {stats.floodlit > 0 && <> · {stats.floodlit} with floodlights</>}
+              {s.venue === "turf" && stats.floodlit > 0 && <> · {stats.floodlit} with floodlights</>}
               {stats.priceMin != null && stats.priceMax != null && (
                 <> · ₹{stats.priceMin.toLocaleString("en-IN")} to ₹{stats.priceMax.toLocaleString("en-IN")}/hr listed</>
               )}

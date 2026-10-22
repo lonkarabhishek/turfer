@@ -42,9 +42,18 @@ import { post as nashikFootballGroundKanhereFloodlightsApproved } from "./posts/
 // 2026-10-21: owner's guide, turf business on leased land.
 import { post as howToStartATurfBusinessNashikPuneLeaseGuide } from "./posts/how-to-start-a-turf-business-nashik-pune-lease-guide";
 import { post as freeCricketLiveScorerAndLiveScoreboard } from "./posts/free-cricket-live-scorer-and-live-scoreboard";
+// 2026-10-22: data post, listed opening hours in Pune and Nashik.
+import { post as lateNightTurfsPuneNashik } from "./posts/late-night-turfs-pune-nashik";
+// 2026-10-22: ad-free scorer vs CricHeroes for casual turf cricket.
+import { post as adFreeCricketScorerCricheroesAlternative } from "./posts/ad-free-cricket-scorer-cricheroes-alternative";
+// 2026-10-23: all-India listed price data post.
+import { post as indiaTurfPriceMap2026 } from "./posts/india-turf-price-map-2026";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  indiaTurfPriceMap2026,
+  adFreeCricketScorerCricheroesAlternative,
+  lateNightTurfsPuneNashik,
   howToStartATurfBusinessNashikPuneLeaseGuide,
   freeCricketLiveScorerAndLiveScoreboard,
   nashikFootballGroundKanhereFloodlightsApproved,
