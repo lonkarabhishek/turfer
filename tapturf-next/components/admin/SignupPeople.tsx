@@ -396,12 +396,13 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
           <>
             <Item label="Came from">{b.source}</Item>
             <Item label="First page">
-              {b.landing ? (
+              {/* The browser sent this, so it is a link only when it is a path on this site. */}
+              {b.landing && /^\/(?![/\\])/.test(b.landing) ? (
                 <a href={b.landing} target="_blank" rel="noopener" className={`${link} break-all`}>
                   {b.landing}
                 </a>
               ) : (
-                none
+                <span className="break-all">{b.landing ?? none}</span>
               )}
             </Item>
             <Item label="First visit">
