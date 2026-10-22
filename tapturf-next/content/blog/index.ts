@@ -42,9 +42,12 @@ import { post as nashikFootballGroundKanhereFloodlightsApproved } from "./posts/
 // 2026-10-21: owner's guide, turf business on leased land.
 import { post as howToStartATurfBusinessNashikPuneLeaseGuide } from "./posts/how-to-start-a-turf-business-nashik-pune-lease-guide";
 import { post as freeCricketLiveScorerAndLiveScoreboard } from "./posts/free-cricket-live-scorer-and-live-scoreboard";
+// 2026-10-22: data post, listed opening hours in Pune and Nashik.
+import { post as lateNightTurfsPuneNashik } from "./posts/late-night-turfs-pune-nashik";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  lateNightTurfsPuneNashik,
   howToStartATurfBusinessNashikPuneLeaseGuide,
   freeCricketLiveScorerAndLiveScoreboard,
   nashikFootballGroundKanhereFloodlightsApproved,
