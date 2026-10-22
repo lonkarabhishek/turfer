@@ -3,8 +3,9 @@ import Link from "next/link";
 import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { CITY_LIST_AND } from "@/lib/city";
+import { PRIVACY_UPDATED } from "@/lib/policy";
 
-const UPDATED = "2026-10-22";
+const UPDATED = PRIVACY_UPDATED;
 const PAGE_URL = "https://www.tapturf.in/privacy";
 
 export const metadata: Metadata = {
@@ -193,10 +194,14 @@ const SECTIONS: LegalSection[] = [
         <p id="city">
           <strong>Your city.</strong> When you use TapTurf signed in, we note one city with your account so we
           can see which cities our members are in: the city you chose on TapTurf, or found with &ldquo;Use my
-          location&rdquo;. If you haven&rsquo;t chosen one, we note the city your internet connection points to,
-          which is only approximate, and the name of that place. It is worked out from your IP address at that
-          moment; the address itself is not stored. Only TapTurf&rsquo;s team sees it, it is never shown on
-          your profile, and you can ask us to delete it at any time.
+          location&rdquo;, or, if you haven&rsquo;t chosen one, the city your internet connection points to,
+          which is only approximate. Whether or not you chose a city, we also note the name of the place your
+          internet connection points to, with its country if it is outside India. These are worked out from
+          your IP address on that visit or, when that gives nothing away (for example while you are abroad),
+          from the city your browser remembered from an earlier visit to TapTurf; the address itself is never
+          stored. Where you have no city noted, our team may see a best guess from the turfs and games you
+          used on TapTurf. Only TapTurf&rsquo;s team sees any of this, it is never shown on your profile, and
+          you can ask us to delete it at any time.
         </p>
         <p>
           Turf pages embed Google Maps, and photos load from Google&rsquo;s servers. Loading these shares your

@@ -12,8 +12,9 @@ import { detectCityFromHeaders } from "../cityRouting";
  *    which (CITY_SRC_HEADER, saved by setCityPref); without that, or
  *    when it names another city, it counts as picked.
  * 2. The city of their internet connection on this request (Vercel's IP
- *    headers), then the one the proxy guessed on their last page load
- *    (tt_city "geo.<city>"). Approximate.
+ *    headers), then the one the proxy guessed on an earlier page load
+ *    (tt_city "geo.<city>"; a connection that gives nothing away, such as
+ *    one abroad, never replaces it). Approximate.
  * 3. Nothing: unknown.
  * The internet connection's own city name is kept too (ipCity), even
  * when a pick wins: it can name places outside the curated cities.

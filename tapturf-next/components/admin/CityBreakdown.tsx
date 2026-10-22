@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { NO_CITY, byCity, cityLabel, type Person } from "@/lib/admin/people";
 
@@ -34,6 +34,7 @@ export function CityBreakdown({
   label: string;
 }) {
   const [all, setAll] = useState(false);
+  const headRef = useRef<HTMLHeadingElement | null>(null);
   const { cities, unknown } = useMemo(() => byCity(people), [people]);
   const total = people.length;
   const guesses = cities.some((c) => c.guessed > 0);
@@ -48,7 +49,9 @@ export function CityBreakdown({
     <div className="mt-6 border-t border-primary-100 pt-5">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div>
-          <h3 className="font-semibold text-primary-900">By city</h3>
+          <h3 ref={headRef} tabIndex={-1} className="font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded">
+            By city
+          </h3>
           <p className="text-[13px] text-primary-500">
             {total.toLocaleString("en-IN")} {total === 1 ? "person" : "people"} · {label}
           </p>
@@ -58,7 +61,14 @@ export function CityBreakdown({
           {guesses && <Key color={GUESSED} text="Best guess from activity" />}
           {unknown > 0 && <Key color={NOT_KNOWN} text="Not known" />}
           {city !== null && (
-            <button type="button" onClick={() => onCity(null)} className="inline-flex items-center gap-1 h-8 px-3 rounded-full border border-primary-200 font-semibold text-primary-700 hover:bg-primary-50">
+            <button
+              type="button"
+              // This button goes away: keep focus on the heading.
+              onClick={() => {
+                headRef.current?.focus();
+                onCity(null);
+              }}
+              className="inline-flex items-center gap-1 h-8 px-3 rounded-full border border-primary-200 font-semibold text-primary-700 hover:bg-primary-50">
               <X className="w-3.5 h-3.5" aria-hidden /> All cities
             </button>
           )}
@@ -85,20 +95,16 @@ export function CityBreakdown({
               onClick={() => onCity(city === c.id ? null : c.id)}
             />
           ))}
-          {unknown > 0 && (
+          {(unknown > 0 || city === NO_CITY) && (
             <Bar name="Not known" parts={[[unknown, NOT_KNOWN]]} total={unknown} of={total} max={max} pressed={city === NO_CITY} described={null} muted onClick={() => onCity(city === NO_CITY ? null : NO_CITY)} />
           )}
         </div>
       )}
 
-      {hidden > 0 && (
-        <button type="button" onClick={() => setAll(true)} aria-expanded={false} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2">
-          Show all {rows.length} cities
-        </button>
-      )}
-      {all && rows.length > FIRST && (
-        <button type="button" onClick={() => setAll(false)} aria-expanded className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2">
-          Show the top {FIRST}
+      {/* One toggle that stays put, so focus stays on it. */}
+      {(all ? rows.length > FIRST : hidden > 0) && (
+        <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2">
+          {all ? `Show the top ${FIRST}` : `Show all ${rows.length} cities`}
         </button>
       )}
     </div>

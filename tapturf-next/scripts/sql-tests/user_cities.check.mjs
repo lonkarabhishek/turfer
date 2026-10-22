@@ -3,12 +3,13 @@
 // roles, auth schema and the tables they read, and checks how cities are
 // recorded and what admin_people returns. Never touches a real
 // database.
-// Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/user_cities.check.mjs supabase/migrations/20261022_admin_user_details.sql supabase/migrations/20261022_user_cities.sql
+// Then 20261022_people_fixes.sql (twice) and the case it fixes.
+// Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/user_cities.check.mjs supabase/migrations/20261022_admin_user_details.sql supabase/migrations/20261022_user_cities.sql supabase/migrations/20261022_people_fixes.sql
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
 import fs from "node:fs";
 import assert from "node:assert/strict";
 
-const [BASE, FILE] = process.argv.slice(2);
+const [BASE, FILE, FIXES] = process.argv.slice(2);
 const db = new PGlite();
 const q = async (sql, params) => (await db.query(sql, params)).rows;
 const one = async (sql, params) => (await q(sql, params))[0];
@@ -202,5 +203,30 @@ eq(who("Leg").turfs.map((t) => t.status), ["pending"], "an old-app email row's c
 eq(who("Gph").turfs, [], "a typed phone on a Google row was never verified");
 eq(who("Mix").turfs.map((t) => [t.turf, t.status]), [["Mumbai One", "active"], ["Sambhajinagar One", "revoked"]], "a phone account's claims, every status");
 eq(who("Mix").likely_city, "mumbai", "an active claim (5) plus Ask cities (1) ties the games (6): the latest evidence wins");
+
+// The fixes: a phone sign-in logged later no longer hides a Google sign-in from before the log.
+const BOTH = "aaaaaaaa-0000-4000-8000-000000000003";
+await q(`insert into auth.users (id, email, created_at, last_sign_in_at, raw_app_meta_data) values ('${BOTH}', 'both@x.in', '2026-09-01 00:00+00', '2026-10-01 00:00+00', '{"provider":"google","providers":["google"]}')`);
+await q(`insert into public.users (id, name, email, phone, created_at) values ('${BOTH}', 'Both', 'both@x.in', '+919822222222', '2026-09-01 00:00+00')`);
+await q(`insert into public.user_logins (user_id, method, created_at) values ('${BOTH}', 'phone', '2026-10-10 00:00+00'), ('${BOTH}', 'phone', '2026-10-22 00:00+00')`);
+let both = (await q("select * from public.admin_people('tok')")).find((r) => r.name === "Both");
+eq([both.logins, both.login_methods], [2, ["phone"]], "before the fixes: the Google sign-in is hidden by the phone ones");
+const fixes = fs.readFileSync(FIXES, "utf8");
+assert.doesNotMatch(fixes, /\bdrop\b|\bdelete\b|\btruncate\b/i, "fixes: nothing dropped or deleted");
+assert.doesNotMatch(fixes, /[\u2014\u2013]/, "fixes: no em or en dashes");
+await db.exec(fixes);
+await db.exec(fixes);
+both = (await q("select * from public.admin_people('tok')")).find((r) => r.name === "Both");
+eq([both.logins, +both.last_login, both.login_methods], [3, +new Date("2026-10-22T00:00Z"), ["google", "phone"]], "after: both kinds, three sign-ins");
+const goo = (await q("select * from public.admin_people('tok')")).find((r) => r.name === "Goo");
+eq([goo.logins, goo.login_methods], [1, ["google"]], "a Google account with no log rows is unchanged");
+// The Latest logins tile agrees.
+const recent = await q("select method, logged_in_at from public.get_recent_logins(50, 'tok') where user_id = $1 order by logged_in_at", [BOTH]);
+eq(recent.map((r) => r.method), ["google", "phone", "phone"], "Latest logins lists the Google sign-in too");
+// A Google sign-in that is in the log is not counted twice.
+await q(`update auth.users set last_sign_in_at = '2026-10-20 10:00+00' where id = '${BOTH}'`);
+await q(`insert into public.user_logins (user_id, method, created_at) values ('${BOTH}', 'google', '2026-10-20 10:02+00')`);
+both = (await q("select * from public.admin_people('tok')")).find((r) => r.name === "Both");
+eq([both.logins, both.login_methods], [3, ["google", "phone"]], "a logged Google sign-in is not counted again");
 
 console.log(`user_cities: ${passed} checks passed`);

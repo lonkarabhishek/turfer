@@ -237,13 +237,14 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
         <Avatar p={p} />
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-            <span className={`font-semibold truncate max-w-full ${p.name ? "text-primary-900" : "text-primary-400"}`}>{p.name ?? "No name"}</span>
+            <span className={`font-semibold max-w-full break-words sm:truncate ${p.name ? "text-primary-900" : "text-primary-400"}`}>{p.name ?? "No name"}</span>
             {p.username && <span className="min-w-0 max-w-full truncate text-[13px] text-primary-500">@{p.username}</span>}
             <MethodBadge method={p.method} />
           </p>
           <p className="text-[13px] text-primary-600 truncate">
-            {c && <span className={c.guessed ? "text-primary-500" : "text-primary-800"}>{c.guessed ? `Probably ${cityLabel(c.id)}` : cityLabel(c.id)} · </span>}
+            {/* Contact first: on a narrow row the city is what gets cut. */}
             {contact ?? <span className="text-primary-400">No contact</span>}
+            {c && <span className={c.guessed ? "text-primary-500" : "text-primary-800"}> · {c.guessed ? `Probably ${cityLabel(c.id)}` : cityLabel(c.id)}</span>}
             {extra.length > 0 && <span className="hidden md:inline text-primary-400"> · {extra.join(" · ")}</span>}
           </p>
         </div>

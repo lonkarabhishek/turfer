@@ -84,6 +84,7 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
   const [width, setWidth] = useState(640);
   const barsRef = useRef<(SVGGElement | null)[]>([]);
   const crumbRef = useRef<HTMLSpanElement | null>(null);
+  const heroRef = useRef<HTMLParagraphElement | null>(null);
   const focusAfter = useRef<FocusAfter>(null);
   const id = useId();
 
@@ -150,6 +151,8 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
   };
   const canZoomOut = stack.length > 1 || w.level !== "quarter";
   const deeper = finer(w.level);
+  // Which sign-ups the chart and its table hold, for screen readers.
+  const scope = city === null ? "" : city === NO_CITY ? " with no known city" : ` from ${cityLabel(city)}`;
 
   // Geometry.
   const plotW = Math.max(120, width - Y_AXIS_W);
@@ -254,9 +257,18 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
 
       {/* The number */}
       <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-1">
-        <p className="text-[40px] leading-none font-semibold text-primary-900">{sum.total.toLocaleString("en-IN")}</p>
+        <p ref={heroRef} tabIndex={-1} className="text-[40px] leading-none font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded">
+          {sum.total.toLocaleString("en-IN")}
+        </p>
         {city !== null && (
-          <button type="button" onClick={() => setCity(null)} className="mb-1 inline-flex items-center gap-1 h-8 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold" aria-label={`Showing ${city === NO_CITY ? "people with no known city" : cityLabel(city)} only. Show every city`}>
+          <button
+            type="button"
+            // The chip goes away: keep focus on the number, which now counts everyone.
+            onClick={() => {
+              heroRef.current?.focus();
+              setCity(null);
+            }}
+            className="mb-1 inline-flex items-center gap-1 h-8 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold" aria-label={`Showing ${city === NO_CITY ? "people with no known city" : cityLabel(city)} only. Show every city`}>
             {city === NO_CITY ? "No known city" : cityLabel(city)} <X className="w-3.5 h-3.5" aria-hidden />
           </button>
         )}
@@ -289,7 +301,7 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
           viewBox={`0 0 ${width} ${PLOT_H + AXIS_H}`}
           style={{ width: "100%", height: "auto" }}
           role="group"
-          aria-label={`Sign-ups${city === null ? "" : city === NO_CITY ? " with no known city" : ` from ${cityLabel(city)}`} by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
+          aria-label={`Sign-ups${scope} by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
           className="block overflow-visible select-none"
         >
           {/* Grid and y axis */}
@@ -326,7 +338,8 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
                   setActive(i);
                 }}
                 onBlur={() => setHover((x) => (x === i ? null : x))}
-                onClick={() => zoomIn(b)}
+                // A bar that had focus (a click, or a screen reader's activation) keeps focus in the plot after the zoom.
+                onClick={(e) => zoomIn(b, document.activeElement === e.currentTarget)}
                 onKeyDown={(e) => onBarKey(e, i)}
                 className={`outline-none ${deeper ? "cursor-zoom-in" : ""}`}
               >
@@ -389,7 +402,7 @@ export function SignupsTrend({ people, now }: { people: Person[] | null; now: nu
       {showTable && (
         <div id={`${id}-table`} className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-primary-200">
           <table className="w-full text-[13px]">
-            <caption className="sr-only">Sign-ups, {w.label}</caption>
+            <caption className="sr-only">{`Sign-ups${scope}, ${w.label}`}</caption>
             <thead className="sticky top-0 bg-primary-50">
               <tr>
                 <th scope="col" className="text-left font-semibold text-primary-600 px-3 py-2">

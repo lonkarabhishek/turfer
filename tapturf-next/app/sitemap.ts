@@ -8,6 +8,7 @@ import { TOOLS } from "@/lib/tools/registry";
 import { fetchAllRows } from "@/lib/queries/turfs";
 import { isGameExpired } from "@/lib/utils/game";
 import { turfPath } from "@/lib/utils/turfPath";
+import { PRIVACY_UPDATED } from "@/lib/policy";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -68,7 +69,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     {
       url: `${BASE}/privacy`,
-      lastModified: new Date("2026-10-21"),
+      lastModified: new Date(PRIVACY_UPDATED),
       changeFrequency: "yearly",
       priority: 0.2,
     },

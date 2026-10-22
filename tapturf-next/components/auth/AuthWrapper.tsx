@@ -6,6 +6,7 @@ import { LoginModal } from "./LoginModal";
 import { WelcomeToast } from "./WelcomeToast";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { UsernamePrompt } from "@/components/account/UsernamePrompt";
+import { PolicyNotice } from "@/components/legal/PolicyNotice";
 
 /**
  * The outer <Suspense> used to wrap the WHOLE app tree so LoginModal's
@@ -25,6 +26,7 @@ export function AuthWrapper({ children }: { children: ReactNode }) {
       </Suspense>
       <WelcomeToast />
       <UsernamePrompt />
+      <PolicyNotice />
     </AuthProvider>
   );
 }
