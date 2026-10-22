@@ -46,9 +46,12 @@ import { post as freeCricketLiveScorerAndLiveScoreboard } from "./posts/free-cri
 import { post as lateNightTurfsPuneNashik } from "./posts/late-night-turfs-pune-nashik";
 // 2026-10-22: ad-free scorer vs CricHeroes for casual turf cricket.
 import { post as adFreeCricketScorerCricheroesAlternative } from "./posts/ad-free-cricket-scorer-cricheroes-alternative";
+// 2026-10-23: all-India listed price data post.
+import { post as indiaTurfPriceMap2026 } from "./posts/india-turf-price-map-2026";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  indiaTurfPriceMap2026,
   adFreeCricketScorerCricheroesAlternative,
   lateNightTurfsPuneNashik,
   howToStartATurfBusinessNashikPuneLeaseGuide,
