@@ -14,6 +14,7 @@ export const post: Post = {
   city: null,
   readMinutes: 5,
   publishedAt: "2026-10-21",
+  updatedAt: "2026-10-22",
   coverEmoji: "📲",
   keywords: [
     "free cricket live scorer",
@@ -109,6 +110,13 @@ export const post: Post = {
     {
       type: "p",
       text: "If you do not want a live link, Share live score also sends a WhatsApp-ready text update with the current score. Without a live link, the match stays on the phone you scored on. The TapTurf privacy policy explains what a live link shares and for how long.",
+    },
+
+    {
+      type: "cta",
+      text: "Coming from CricHeroes? See how the two compare for casual turf cricket, and where CricHeroes is better.",
+      href: "/blog/ad-free-cricket-scorer-cricheroes-alternative",
+      label: "Read: ad-free scorer vs CricHeroes",
     },
 
     { type: "h2", text: "Who it is for", id: "who-it-is-for" },

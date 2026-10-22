@@ -44,9 +44,12 @@ import { post as howToStartATurfBusinessNashikPuneLeaseGuide } from "./posts/how
 import { post as freeCricketLiveScorerAndLiveScoreboard } from "./posts/free-cricket-live-scorer-and-live-scoreboard";
 // 2026-10-22: data post, listed opening hours in Pune and Nashik.
 import { post as lateNightTurfsPuneNashik } from "./posts/late-night-turfs-pune-nashik";
+// 2026-10-22: ad-free scorer vs CricHeroes for casual turf cricket.
+import { post as adFreeCricketScorerCricheroesAlternative } from "./posts/ad-free-cricket-scorer-cricheroes-alternative";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  adFreeCricketScorerCricheroesAlternative,
   lateNightTurfsPuneNashik,
   howToStartATurfBusinessNashikPuneLeaseGuide,
   freeCricketLiveScorerAndLiveScoreboard,
