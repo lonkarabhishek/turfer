@@ -140,17 +140,27 @@ test("default views and moving them back and forward", () => {
   assert.deepEqual(defaultWindow("week", NOW, FIRST).label, "Last 12 weeks");
   assert.deepEqual(defaultWindow("6h", NOW, FIRST).label, "Last 7 days");
 
-  // A zoomed-in week moves one whole week at a time, even from a part week.
+  // A zoomed-in week moves to the week bar next to it, cut at month edges like the bars of a month
+  // view, so no day is skipped or shown twice.
   const sep = zoomInto(defaultWindow("quarter", NOW, FIRST), bucketsOf(T, defaultWindow("quarter", NOW, FIRST), NOW)[4])!;
   const sepWeeks = zoomInto(sep, bucketsOf(T, sep, NOW)[2])!;
   const firstWeek = zoomInto(sepWeeks, bucketsOf(T, sepWeeks, NOW)[0])!;
   assert.equal(firstWeek.start, ist(2026, 9, 1), "a part week opens as its part");
   const prev = panned(firstWeek, -1, NOW)!;
-  assert.equal(prev.start, ist(2026, 8, 24));
-  assert.equal(prev.end, ist(2026, 8, 31));
+  assert.deepEqual([prev.start, prev.end, prev.label], [ist(2026, 8, 31), ist(2026, 9, 1), "31 Aug 2026"], "Monday 31 Aug, August's part of that week");
+  assert.deepEqual([panned(prev, -1, NOW)!.start, panned(prev, -1, NOW)!.end], [ist(2026, 8, 24), ist(2026, 8, 31)]);
   const next = panned(firstWeek, 1, NOW)!;
   assert.equal(next.start, ist(2026, 9, 7));
   assert.equal(next.end, ist(2026, 9, 14));
+  const lastWeek = zoomInto(sepWeeks, bucketsOf(T, sepWeeks, NOW)[4])!;
+  assert.equal(lastWeek.label, "28 to 30 Sep 2026");
+  const later = panned(lastWeek, 1, NOW)!;
+  assert.deepEqual([later.start, later.end, later.label], [ist(2026, 10, 1), ist(2026, 10, 5), "1 to 4 Oct 2026"], "the rest of that week, not the week after");
+  // Near a month start, Later never lands in the future.
+  const early = ist(2026, 10, 1, 10);
+  const endSep = zoomInto(sepWeeks, bucketsOf(T, sepWeeks, early)[4])!;
+  assert.equal(canPan(endSep, 1, early, FIRST), true);
+  assert.ok(panned(endSep, 1, early)!.start <= early);
 });
 
 test("totals compare with the same length of time before", () => {
@@ -168,6 +178,18 @@ test("totals compare with the same length of time before", () => {
   const td = totals(T, today, NOW);
   assert.equal(td.total, 2);
   assert.equal(td.previous, 0, "yesterday 18:00 is after 09:15, so it is not counted against this morning");
+  assert.equal(td.previousName, "Wed, 21 Oct 2026");
+  // A week cut by the month end, against the same weekdays a week earlier.
+  const sepWeeks = zoomInto(sep, bucketsOf(T, sep, NOW)[2])!;
+  const cut = zoomInto(sepWeeks, bucketsOf(T, sepWeeks, NOW)[4])!;
+  const c = totals(T, cut, NOW);
+  assert.deepEqual([c.total, c.previous, c.previousName], [1, 0, "21 to 23 Sep 2026"]);
+});
+
+test("bars and the headline both stop at now", () => {
+  const w = defaultWindow("day", NOW, FIRST);
+  const late = [...T, NOW + 800].sort((a, b) => a - b);
+  assert.equal(bucketsOf(late, w, NOW).reduce((s, b) => s + b.count, 0), totals(late, w, NOW).total);
 });
 
 test("the breadcrumb follows a moved view", () => {
@@ -181,6 +203,12 @@ test("the breadcrumb follows a moved view", () => {
   assert.deepEqual(trail(oct, NOW, FIRST).map((w) => w.label), ["All time", "Q4 2026 (Oct to Dec 2026)", "October 2026"]);
   // A default view has no parents.
   assert.deepEqual(trail(defaultWindow("day", NOW, FIRST), NOW, FIRST).map((w) => w.label), ["Last 30 days"]);
+  // Moved to before the first sign-up's quarter: the crumbs still reach it.
+  const firstJul = ist(2025, 7, 2);
+  const julWeek = { level: "day", start: ist(2025, 7, 7), end: ist(2025, 7, 14), span: { level: "week", n: 1 }, label: "7 to 13 Jul 2025" } as TrendWindow;
+  const before = panned(panned(julWeek, -1, NOW)!, -1, NOW)!;
+  assert.equal(before.label, "30 Jun 2025");
+  assert.deepEqual(trail(before, NOW, firstJul).map((w) => w.label), ["All time", "Q2 2025 (Apr to Jun 2025)", "June 2025", "30 Jun 2025"]);
 });
 
 test("a week across two months names both", () => {

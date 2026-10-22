@@ -127,6 +127,8 @@ function labels(level: Level, start: number, end: number): { axis: string; long:
     case "month":
       return { axis: `${monthShort(start)} ${String(year(start)).slice(2)}`, long: `${MONTHS_LONG[wall(start).getUTCMonth()]} ${year(start)}` };
     case "week": {
+      // A week cut down to one day by a month edge, like Monday 31 Aug.
+      if (last - start < DAY) return { axis: dayMonth(start), long: dayMonthYear(start) };
       const sameMonth = wall(start).getUTCMonth() === wall(last).getUTCMonth();
       // "12 to 18 Oct 2026", "28 Sep to 4 Oct 2026": a cut week reads the same way, as the days it holds.
       const range = sameMonth ? `${wall(start).getUTCDate()} to ${dayMonthYear(last)}` : `${dayMonth(start)} to ${dayMonthYear(last)}`;
@@ -166,7 +168,9 @@ function lowerBound(a: readonly number[], x: number): number {
 
 /**
  * The window's buckets, each clipped to the window (so they add up to the
- * window's total) and never past the bucket that holds now.
+ * window's total) and never past the bucket that holds now. Like totals,
+ * they count only up to now, so a row read after "now" never shows in a
+ * bar but not in the headline.
  */
 export function bucketsOf(times: readonly number[], w: TrendWindow, now: number): Bucket[] {
   const stop = Math.min(w.end, addBuckets(w.level, now, 1));
@@ -176,7 +180,7 @@ export function bucketsOf(times: readonly number[], w: TrendWindow, now: number)
     const start = Math.max(full.start, w.start);
     const end = Math.min(full.end, w.end);
     if (end <= start) continue;
-    out.push({ start, end, count: countBetween(times, start, end), current: start <= now && now < end, ...labels(w.level, start, end) });
+    out.push({ start, end, count: countBetween(times, start, Math.min(end, now + 1)), current: start <= now && now < end, ...labels(w.level, start, end) });
   }
   return out;
 }
@@ -237,16 +241,31 @@ export function zoomInto(w: TrendWindow, b: Bucket): TrendWindow | null {
 }
 
 /**
+ * The bar next to a zoomed-in one: it starts where this one ends (or ends
+ * where this one starts) and is cut at the edges of the bar one level up,
+ * like the week bars of a month view. So from "28 to 30 Sep", Later is
+ * "1 to 4 Oct", and no day is skipped or shown twice.
+ */
+function neighbour(level: Level, w: TrendWindow, dir: -1 | 1): { start: number; end: number } {
+  const parent: Level | undefined = LEVELS[LEVELS.indexOf(level) - 1];
+  if (dir === 1) {
+    const start = w.end;
+    const end = addBuckets(level, start, 1);
+    return { start, end: parent ? Math.min(end, addBuckets(parent, start, 1)) : end };
+  }
+  const end = w.start;
+  const start = floorTo(level, end - 1);
+  return { start: parent ? Math.max(start, floorTo(parent, end - 1)) : start, end };
+}
+
+/**
  * The same view moved back (dir -1) or forward (+1) by its span. Null when
- * it cannot move at all. A zoomed-in bar moves to the neighbouring one
- * whole (the window may have been a clipped part of it, like the first
- * days of a month in a week view).
+ * it cannot move at all. A zoomed-in bar moves to the bar next to it.
  */
 export function panned(w: TrendWindow, dir: -1 | 1, now: number): TrendWindow | null {
   if (!w.span) return null;
   const { level, n } = w.span;
-  const start = n === 1 ? addBuckets(level, w.start, dir) : addBuckets(level, w.start, dir * n);
-  const end = n === 1 ? addBuckets(level, start, 1) : addBuckets(level, w.end, dir * n);
+  const { start, end } = n === 1 ? neighbour(level, w, dir) : { start: addBuckets(level, w.start, dir * n), end: addBuckets(level, w.end, dir * n) };
   let label: string;
   if (n === 1) label = labels(level, start, end).long;
   else {
@@ -264,11 +283,23 @@ export function canPan(w: TrendWindow, dir: -1 | 1, now: number, first: number |
   return first !== null && w.start > first;
 }
 
+/** How long one bar is at the levels where that never changes. */
+const FIXED: Partial<Record<Level, number>> = { week: 7 * DAY, day: DAY, "6h": 6 * HOUR };
+
 /** Sign-ups in the window, and in the same length of time just before it (null when there is none to compare). */
 export function totals(times: readonly number[], w: TrendWindow, now: number): { total: number; previous: number | null; previousName: string | null } {
-  const total = countBetween(times, w.start, Math.min(w.end, now + 1));
+  const stop = Math.min(w.end, now + 1);
+  const total = countBetween(times, w.start, stop);
+  if (!w.span) return { total, previous: null, previousName: null };
+  // A zoomed-in week, day or 6 hours: the same days and hours one bar earlier, so a week cut by a
+  // month edge ("28 to 30 Sep") is set against the same weekdays ("21 to 23 Sep"), and today so far
+  // against yesterday up to this hour.
+  const length = w.span.n === 1 ? FIXED[w.span.level] : undefined;
+  if (length) {
+    return { total, previous: countBetween(times, w.start - length, stop - length), previousName: labels(w.span.level, w.start - length, w.end - length).long };
+  }
   const back = panned(w, -1, now);
-  if (!back || !w.span) return { total, previous: null, previousName: null };
+  if (!back) return { total, previous: null, previousName: null };
   // A finished stretch is compared with the whole one before it; one still going on, with the same
   // time into the one before (today so far against yesterday up to this hour).
   const previous = w.end <= now ? countBetween(times, back.start, back.end) : countBetween(times, back.start, Math.min(back.end, back.start + (now + 1 - w.start)));
@@ -284,7 +315,8 @@ export function totals(times: readonly number[], w: TrendWindow, now: number): {
  */
 export function trail(w: TrendWindow, now: number, first: number | null): TrendWindow[] {
   if (!w.span || w.span.n !== 1) return [w];
-  const out: TrendWindow[] = [defaultWindow("quarter", now, first)];
+  // Rooted early enough to hold w, even when w was moved to before the first sign-up's quarter.
+  const out: TrendWindow[] = [defaultWindow("quarter", now, first === null ? w.start : Math.min(first, w.start))];
   while (out[out.length - 1].level !== w.level) {
     const top = out[out.length - 1];
     const bar = bucketsOf([], top, now).find((b) => b.start <= w.start && w.start < b.end);

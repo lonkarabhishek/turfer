@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronLeft, ChevronRight, ZoomOut } from "lucide-react";
 import {
   LEVELS,
@@ -25,7 +25,8 @@ import { SignupPeople } from "./SignupPeople";
  * 6 hours. Tap a bar (or Enter on it) to open it one level down; the
  * breadcrumb, Zoom out and Escape go back up; the arrows move to the
  * stretch before or after. Under it, the people who signed up in the
- * stretch shown, with everything about them.
+ * stretch shown, with everything about them. Both use each person's
+ * sign-up time (lib/admin/people.ts), so the list always matches the bars.
  * All buckets are India time (lib/admin/trend.ts does the counting).
  */
 
@@ -63,43 +64,53 @@ function barPath(x: number, y: number, w: number, h: number): string {
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
 
-export function SignupsTrend({ times, now, people }: { times: number[] | null; now: number; people: Person[] | null }) {
-  const list = useMemo(() => times ?? [], [times]);
+/** Where focus goes once the next view has drawn: the bar holding a time, or the current crumb. */
+type FocusAfter = { bar: number | null } | "crumb" | null;
+
+export function SignupsTrend({ people, now }: { people: Person[] | null; now: number }) {
+  const list = useMemo(() => (people ?? []).map((p) => p.joinedAt).sort((a, b) => a - b), [people]);
   const first = list.length ? list[0] : null;
   const [stack, setStack] = useState<TrendWindow[]>(() => [defaultWindow("quarter", now, first)]);
   const [hover, setHover] = useState<number | null>(null);
+  // The bar that takes Tab (roving tabindex): the last one focused, else the first.
+  const [active, setActive] = useState(0);
   const [showTable, setShowTable] = useState(false);
   const [width, setWidth] = useState(640);
-  const boxRef = useRef<HTMLDivElement>(null);
   const barsRef = useRef<(SVGGElement | null)[]>([]);
-  const focusAfter = useRef<number | null>(null);
+  const crumbRef = useRef<HTMLSpanElement | null>(null);
+  const focusAfter = useRef<FocusAfter>(null);
   const id = useId();
 
   const w = stack[stack.length - 1];
   const buckets = useMemo(() => bucketsOf(list, w, now), [list, w, now]);
   const sum = useMemo(() => totals(list, w, now), [list, w, now]);
 
-  useEffect(() => {
-    const el = boxRef.current;
+  // Measured with a callback ref, so it also starts when the plot first appears after an empty state.
+  const boxRef = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
     const ro = new ResizeObserver(([e]) => setWidth(Math.max(240, Math.round(e.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // After a zoom by keyboard, keep focus in the chart.
+  // After a change made from the keyboard, put focus back where the person was.
   useEffect(() => {
-    if (focusAfter.current === null) return;
-    const i = Math.min(focusAfter.current, buckets.length - 1);
+    const f = focusAfter.current;
+    if (f === null) return;
     focusAfter.current = null;
-    barsRef.current[i]?.focus();
+    if (f === "crumb") {
+      crumbRef.current?.focus();
+      return;
+    }
+    const at = f.bar;
+    const found = at === null ? -1 : buckets.findIndex((b) => b.start <= at && at < b.end);
+    barsRef.current[Math.max(0, Math.min(found, buckets.length - 1))]?.focus();
   }, [buckets]);
 
-  if (times === null) {
+  if (people === null) {
     return (
       <Shell>
         <p className="py-16 text-center text-sm text-primary-500">Couldn&apos;t load sign-ups right now. Reload to try again.</p>
-        <SignupPeople people={people} start={-Infinity} end={Infinity} label="All time" now={now} />
       </Shell>
     );
   }
@@ -107,25 +118,28 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
     return <Shell>{<p className="py-16 text-center text-sm text-primary-500">No sign-ups yet.</p>}</Shell>;
   }
 
-  const go = (next: TrendWindow[]) => {
+  const go = (next: TrendWindow[], focus: FocusAfter = null) => {
+    focusAfter.current = focus;
     setHover(null);
+    setActive(0);
     setStack(next);
   };
-  const pickLevel = (level: Level) => go([defaultWindow(level, now, first)]);
+  const pickLevel = (level: Level, focus: FocusAfter = null) => go([defaultWindow(level, now, first)], focus);
   const zoomIn = (b: Bucket, byKey = false) => {
     const next = zoomInto(w, b);
     if (!next) return;
-    if (byKey) focusAfter.current = 0;
-    go([...stack, next]);
+    go([...stack, next], byKey ? { bar: null } : null);
   };
-  const zoomOut = () => {
-    if (stack.length > 1) return go(stack.slice(0, -1));
+  /** Up one level; from the plot, focus lands on the bar that holds the view being left. */
+  const zoomOut = (focus: FocusAfter = null) => {
+    if (stack.length > 1) return go(stack.slice(0, -1), focus);
     const i = LEVELS.indexOf(w.level);
-    if (i > 0) pickLevel(LEVELS[i - 1]);
+    if (i > 0) pickLevel(LEVELS[i - 1], focus);
   };
+  const canMove = (dir: -1 | 1) => canPan(w, dir, now, first);
   const move = (dir: -1 | 1) => {
     const next = panned(w, dir, now);
-    if (next && canPan(w, dir, now, first)) go(trail(next, now, first));
+    if (next && canMove(dir)) go(trail(next, now, first));
   };
   const canZoomOut = stack.length > 1 || w.level !== "quarter";
   const deeper = finer(w.level);
@@ -154,6 +168,7 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
 
   const delta = sum.previous === null ? null : sum.total - sum.previous;
   const hovered = hover !== null ? buckets[hover] : null;
+  const tabStop = Math.min(active, n - 1);
 
   const onBarKey = (e: KeyboardEvent<SVGGElement>, i: number) => {
     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -169,21 +184,21 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
   return (
     <Shell
       onKeyDown={(e) => {
-        if (e.key === "Escape" && canZoomOut) {
-          e.preventDefault();
-          focusAfter.current = 0;
-          zoomOut();
-        }
+        if (e.key !== "Escape" || !canZoomOut) return;
+        e.preventDefault();
+        // From a bar, stay in the plot on the bar just left; from the crumbs, on the current crumb;
+        // from any other control, focus stays where it is.
+        const from = e.target as Element;
+        zoomOut(from.closest("svg") ? { bar: w.start } : from.closest("nav") ? "crumb" : null);
       }}
     >
       {/* Zoom level */}
-      <div role="radiogroup" aria-label="Group sign-ups by" className="grid grid-cols-5 sm:flex gap-1 rounded-full bg-primary-100 p-1 sm:w-fit">
+      <div role="group" aria-label="Group sign-ups by" className="grid grid-cols-5 sm:flex gap-1 rounded-full bg-primary-100 p-1 sm:w-fit">
         {LEVELS.map((l) => (
           <button
             key={l}
             type="button"
-            role="radio"
-            aria-checked={w.level === l}
+            aria-pressed={w.level === l}
             aria-label={LEVEL_NAMES[l]}
             onClick={() => pickLevel(l)}
             className={`h-8 px-1 sm:px-3 rounded-full text-[12px] sm:text-[13px] font-semibold whitespace-nowrap transition-colors ${w.level === l ? "bg-white text-primary-900 shadow-sm" : "text-primary-500 hover:text-primary-800"}`}
@@ -204,11 +219,11 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
               <li key={i} className="flex items-center gap-1 min-w-0">
                 {i > 0 && <span aria-hidden>›</span>}
                 {i === stack.length - 1 ? (
-                  <span className="font-semibold text-primary-900" aria-current="page">
+                  <span ref={crumbRef} tabIndex={-1} className="font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded" aria-current="page">
                     {s.label}
                   </span>
                 ) : (
-                  <button type="button" onClick={() => go(stack.slice(0, i + 1))} className="underline underline-offset-2 hover:text-primary-900">
+                  <button type="button" onClick={() => go(stack.slice(0, i + 1), "crumb")} className="underline underline-offset-2 hover:text-primary-900">
                     {s.label}
                   </button>
                 )}
@@ -217,13 +232,14 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
           </ol>
         </nav>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => move(-1)} disabled={!canPan(w, -1, now, first)} aria-label="Earlier" className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-35 disabled:hover:bg-transparent">
+          {/* aria-disabled, not disabled: a button that turns off under focus would drop focus to the page. */}
+          <button type="button" onClick={() => move(-1)} aria-disabled={!canMove(-1)} aria-label="Earlier" className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button type="button" onClick={() => move(1)} disabled={!canPan(w, 1, now, first)} aria-label="Later" className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-35 disabled:hover:bg-transparent">
+          <button type="button" onClick={() => move(1)} aria-disabled={!canMove(1)} aria-label="Later" className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
             <ChevronRight className="w-4 h-4" />
           </button>
-          <button type="button" onClick={zoomOut} disabled={!canZoomOut} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-[13px] font-semibold text-primary-700 hover:bg-primary-50 disabled:opacity-35 disabled:hover:bg-transparent">
+          <button type="button" onClick={() => canZoomOut && zoomOut()} aria-disabled={!canZoomOut} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-[13px] font-semibold text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
             <ZoomOut className="w-4 h-4" aria-hidden /> Zoom out
           </button>
         </div>
@@ -254,9 +270,12 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
 
       {/* The chart */}
       <div ref={boxRef} className="relative mt-4" onPointerLeave={() => setHover(null)}>
+        {/* viewBox and width 100%: before it is measured, the first draw scales into the card instead of spilling out. */}
         <svg
           width={width}
           height={PLOT_H + AXIS_H}
+          viewBox={`0 0 ${width} ${PLOT_H + AXIS_H}`}
+          style={{ width: "100%", height: "auto" }}
           role="group"
           aria-label={`Sign-ups by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
           className="block overflow-visible select-none"
@@ -279,17 +298,21 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
             const what = `${b.long}: ${plural(b.count, "sign-up", "sign-ups")}${b.current ? " so far" : ""}${deeper ? `. Press Enter to zoom in to ${LEVEL_NAMES[deeper].toLowerCase()}` : ""}`;
             return (
               <g
-                key={b.start}
+                // Keyed by level too, so a zoom draws new bars and focusing one fires onFocus (the tooltip).
+                key={`${w.level}:${b.start}`}
                 ref={(el) => {
                   barsRef.current[i] = el;
                 }}
                 role="button"
-                tabIndex={i === 0 ? 0 : -1}
+                tabIndex={i === tabStop ? 0 : -1}
                 aria-label={what}
                 aria-disabled={!deeper}
                 onPointerEnter={() => setHover(i)}
                 onPointerMove={() => hover !== i && setHover(i)}
-                onFocus={() => setHover(i)}
+                onFocus={() => {
+                  setHover(i);
+                  setActive(i);
+                }}
                 onBlur={() => setHover((x) => (x === i ? null : x))}
                 onClick={() => zoomIn(b)}
                 onKeyDown={(e) => onBarKey(e, i)}
@@ -316,7 +339,8 @@ export function SignupsTrend({ times, now, people }: { times: number[] | null; n
         {/* Tooltip */}
         {hovered && hover !== null && (
           <div
-            role="status"
+            // The bar's own label already says this to screen readers.
+            aria-hidden
             className="pointer-events-none absolute z-10 rounded-xl bg-primary-900 text-white px-3 py-2 shadow-elevated text-left"
             // Its bottom sits just above the bar top, so it never covers the bar it is about.
             style={{

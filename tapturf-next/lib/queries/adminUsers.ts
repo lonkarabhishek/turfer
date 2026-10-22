@@ -44,23 +44,26 @@ export function adminUserRows(ids?: string[]): Promise<AdminUserRow[]> {
 }
 
 /**
- * Everyone, with everything the admin sign-ups list shows (contact,
- * username, sign-ins, activity, sign-up context), through
- * admin_user_details() with the same owner check. Newest first; null
- * when not allowed or failing, so the list can say so.
+ * Everyone, with everything the admin sign-ups chart and list show
+ * (sign-up time, contact, username, sign-ins, activity, sign-up context),
+ * through admin_user_details() with the same owner check. Newest first.
+ * people is null when not allowed or failing, so the section can say so;
+ * never throws. readAt is the chart's "now": taken after the read and
+ * never before the newest sign-up, so every bar and the total agree.
  */
-export const signupPeople = cache(async (): Promise<Person[] | null> => {
+export const signupPeople = cache(async (): Promise<{ people: Person[] | null; readAt: number }> => {
   try {
     const supabase = await createServerClient();
     const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
     const { data, error } = await supabase.rpc("admin_user_details", { p_firebase_token: token });
     if (error) {
       console.warn("admin_user_details failed", error.code, error.message);
-      return null;
+      return { people: null, readAt: Date.now() };
     }
-    return toPeople((data ?? []) as DetailsRow[]);
+    const people = toPeople((data ?? []) as DetailsRow[]);
+    return { people, readAt: Math.max(Date.now(), people[0]?.joinedAt ?? 0) };
   } catch (e) {
     console.warn("admin_user_details threw", e);
-    return null;
+    return { people: null, readAt: Date.now() };
   }
 });
