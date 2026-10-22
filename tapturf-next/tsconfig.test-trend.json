@@ -8,8 +8,16 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "lib": ["es2023", "dom"],
-    "types": ["node"]
+    "lib": [
+      "es2023",
+      "dom"
+    ],
+    "types": [
+      "node"
+    ]
   },
-  "files": ["lib/admin/trend.test.ts"]
+  "files": [
+    "lib/admin/trend.test.ts",
+    "lib/admin/people.test.ts"
+  ]
 }

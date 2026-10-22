@@ -44,16 +44,6 @@ export interface DailyPoint {
   count: number;
 }
 
-export interface RecentUser {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  role: string | null;
-  created_at: string | null;
-  method: "google" | "phone" | "unknown";
-}
-
 export interface CountByLabel {
   label: string;
   count: number;
@@ -284,21 +274,6 @@ export async function getDailyGames(days = 30): Promise<DailyPoint[]> {
   });
 
   return Array.from(buckets.entries()).map(([date, count]) => ({ date, count }));
-}
-
-export async function getRecentUsers(limit = 20): Promise<RecentUser[]> {
-  const data = (await adminUserRows()).slice(0, limit);
-
-  return (data || []).map((u) => ({
-    id: u.id,
-    name: u.name ?? null,
-    email: u.email ?? null,
-    phone: u.phone ?? null,
-    role: u.role ?? null,
-    created_at: u.created_at ?? null,
-    // Inferred: users with email but no phone are Google users; phone-only are phone-auth.
-    method: u.email && !u.phone ? "google" : u.phone && !u.email ? "phone" : u.email && u.phone ? "google" : "unknown",
-  }));
 }
 
 export async function getGamesByCity(): Promise<CountByLabel[]> {

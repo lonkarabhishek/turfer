@@ -6,7 +6,6 @@ import {
   getSignupTimes,
   getHeadline,
   getDailyGames,
-  getRecentUsers,
   getGamesByCity,
   getGamesBySport,
   getGamesByStatus,
@@ -22,6 +21,7 @@ import { ListingCheckTool, ReviewSummaryTool } from "@/components/admin/AiTools"
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
+import { signupPeople } from "@/lib/queries/adminUsers";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { SignupsTrend } from "@/components/admin/SignupsTrend";
 import { BreakdownList } from "@/components/admin/BreakdownList";
@@ -36,36 +36,6 @@ export const metadata: Metadata = {
   title: "Admin · TapTurf",
   robots: { index: false, follow: false, nocache: true },
 };
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/** e.g. "3d ago", "5h ago", "just now", "6mo ago". */
-function relativeTime(iso: string | null): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const s = Math.max(0, Math.floor((now - then) / 1000));
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
-  const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  const y = Math.floor(d / 365);
-  return `${y}y ago`;
-}
 
 function loginsUnavailable(reason: "not_set_up" | "not_allowed" | "error"): string {
   if (reason === "not_set_up") return "Login log not set up yet";
@@ -99,7 +69,7 @@ export default async function AdminPage() {
     headline,
     signupTimes,
     games,
-    recentUsers,
+    people,
     gamesByCity,
     gamesBySport,
     gamesByStatus,
@@ -119,7 +89,7 @@ export default async function AdminPage() {
       return null;
     }),
     getDailyGames(30),
-    getRecentUsers(25),
+    signupPeople(),
     getGamesByCity(),
     getGamesBySport(),
     getGamesByStatus(),
@@ -141,20 +111,6 @@ export default async function AdminPage() {
     ...adminGames.filter((g) => g.state === "upcoming").reverse(),
     ...adminGames.filter((g) => g.state === "expired" || g.state === "cancelled"),
   ].slice(0, 12);
-
-  // Detect batch-backfill: any created_at that appears on 2+ rows almost
-  // certainly came from a bulk migration rather than a real user signup
-  // (we ran one to backfill OAuth users into public.users). Flag those
-  // so we don't misrepresent the row-insert time as the true signup.
-  const backfillTs = new Set<string>();
-  {
-    const seen = new Map<string, number>();
-    recentUsers.forEach((u) => {
-      if (!u.created_at) return;
-      seen.set(u.created_at, (seen.get(u.created_at) || 0) + 1);
-    });
-    seen.forEach((n, ts) => { if (n > 1) backfillTs.add(ts); });
-  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 md:py-12">
@@ -303,7 +259,7 @@ export default async function AdminPage() {
 
       {/* Charts */}
       <div className="mb-4">
-        <SignupsTrend times={signupTimes?.times ?? null} now={signupTimes?.readAt ?? 0} />
+        <SignupsTrend times={signupTimes?.times ?? null} now={signupTimes?.readAt ?? 0} people={people} />
       </div>
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <div className="rounded-2xl bg-white border border-primary-200 p-5">
@@ -548,92 +504,24 @@ export default async function AdminPage() {
         <BreakdownList title="Active turfs by city" items={turfsByCity} />
       </section>
 
-      {/* Two-column: recent users + top hosts */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        {/* Recent users */}
-        <div className="lg:col-span-2 rounded-2xl bg-white border border-primary-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-primary-100 flex items-baseline justify-between">
-            <p className="text-xs font-bold text-primary-500">
-              Latest signups
-            </p>
-            <p className="text-xs text-primary-400">Showing {recentUsers.length}</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-primary-50 text-[11px] text-primary-500 font-semibold">
-                <tr>
-                  <th className="text-left px-4 py-2.5">Name</th>
-                  <th className="text-left px-4 py-2.5">Contact</th>
-                  <th className="text-left px-4 py-2.5">Method</th>
-                  <th className="text-right px-4 py-2.5">Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentUsers.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-primary-400">
-                      No signups yet.
-                    </td>
-                  </tr>
-                )}
-                {recentUsers.map((u) => (
-                  <tr key={u.id} className="border-t border-primary-100">
-                    <td className="px-4 py-3 font-medium text-primary-900">
-                      {u.name || <span className="text-primary-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-primary-700">
-                      {u.email || u.phone || (
-                        <span className="text-primary-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <MethodBadge method={u.method} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-primary-800 font-semibold text-xs">
-                          {relativeTime(u.created_at)}
-                        </span>
-                        <span
-                          className="font-mono text-[10px] text-primary-400"
-                          title={u.created_at || ""}
-                        >
-                          {formatDate(u.created_at)}
-                          {u.created_at && backfillTs.has(u.created_at) && (
-                            <span
-                              className="ml-1 text-hot-500"
-                              title="This timestamp is shared by multiple rows — likely a batch backfill, not the real signup"
-                            >
-                              *
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Top hosts */}
+      {/* Top hosts (the people who signed up are in the Sign-ups section) */}
+      <section className="mb-8">
         <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-primary-100">
             <p className="text-xs font-bold text-primary-500">
               Top hosts
             </p>
           </div>
-          <ul>
+          <ul className="grid sm:grid-cols-2">
             {topHosts.length === 0 && (
-              <li className="px-5 py-8 text-center text-primary-400 text-sm">
+              <li className="sm:col-span-2 px-5 py-8 text-center text-primary-400 text-sm">
                 No games hosted yet.
               </li>
             )}
             {topHosts.map((h, i) => (
               <li
                 key={h.id}
-                className="border-t border-primary-100 first:border-t-0 px-5 py-3 flex items-center gap-3"
+                className="border-t border-primary-100 first:border-t-0 sm:[&:nth-child(2)]:border-t-0 px-5 py-3 flex items-center gap-3"
               >
                 <div className="w-8 h-8 rounded-full bg-accent-500 text-white flex items-center justify-center font-display text-sm">
                   {i + 1}
@@ -661,31 +549,8 @@ export default async function AdminPage() {
       </section>
 
       <footer className="text-xs text-primary-400 text-center mt-10 pb-8 space-y-1">
-        <p>
-          <span className="text-hot-500">*</span> means the joined date is a
-          bulk backfill timestamp shared across multiple rows. The real
-          signup date lives in <code>auth.users</code> and isn&apos;t
-          exposed here.
-        </p>
         <p>Owner-only view. Not indexed. Not linked from anywhere.</p>
       </footer>
     </div>
-  );
-}
-
-function MethodBadge({ method }: { method: "google" | "phone" | "unknown" }) {
-  const cls =
-    method === "google"
-      ? "bg-accent-50 border-accent-200 text-accent-700"
-      : method === "phone"
-        ? "bg-primary-100 border-primary-200 text-primary-700"
-        : "bg-primary-50 border-primary-100 text-primary-500";
-  const label = method === "google" ? "Google" : method === "phone" ? "Phone" : "?";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${cls}`}
-    >
-      {label}
-    </span>
   );
 }

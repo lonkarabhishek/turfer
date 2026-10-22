@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
+import { toPeople, type DetailsRow, type Person } from "@/lib/admin/people";
 
 export type AdminUserRow = {
   id: string;
@@ -41,3 +42,25 @@ export function adminUserRows(ids?: string[]): Promise<AdminUserRow[]> {
   if (ids && ids.length === 0) return Promise.resolve([]);
   return load(ids ? [...new Set(ids)].sort().join(",") : "*");
 }
+
+/**
+ * Everyone, with everything the admin sign-ups list shows (contact,
+ * username, sign-ins, activity, sign-up context), through
+ * admin_user_details() with the same owner check. Newest first; null
+ * when not allowed or failing, so the list can say so.
+ */
+export const signupPeople = cache(async (): Promise<Person[] | null> => {
+  try {
+    const supabase = await createServerClient();
+    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+    const { data, error } = await supabase.rpc("admin_user_details", { p_firebase_token: token });
+    if (error) {
+      console.warn("admin_user_details failed", error.code, error.message);
+      return null;
+    }
+    return toPeople((data ?? []) as DetailsRow[]);
+  } catch (e) {
+    console.warn("admin_user_details threw", e);
+    return null;
+  }
+});

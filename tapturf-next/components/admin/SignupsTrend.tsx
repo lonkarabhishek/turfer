@@ -17,12 +17,15 @@ import {
   type Level,
   type TrendWindow,
 } from "@/lib/admin/trend";
+import type { Person } from "@/lib/admin/people";
+import { SignupPeople } from "./SignupPeople";
 
 /**
  * Sign-ups over time, zoomable: 3 months, then monthly, weekly, daily and
  * 6 hours. Tap a bar (or Enter on it) to open it one level down; the
  * breadcrumb, Zoom out and Escape go back up; the arrows move to the
- * stretch before or after.
+ * stretch before or after. Under it, the people who signed up in the
+ * stretch shown, with everything about them.
  * All buckets are India time (lib/admin/trend.ts does the counting).
  */
 
@@ -60,7 +63,7 @@ function barPath(x: number, y: number, w: number, h: number): string {
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
 
-export function SignupsTrend({ times, now }: { times: number[] | null; now: number }) {
+export function SignupsTrend({ times, now, people }: { times: number[] | null; now: number; people: Person[] | null }) {
   const list = useMemo(() => times ?? [], [times]);
   const first = list.length ? list[0] : null;
   const [stack, setStack] = useState<TrendWindow[]>(() => [defaultWindow("quarter", now, first)]);
@@ -93,7 +96,12 @@ export function SignupsTrend({ times, now }: { times: number[] | null; now: numb
   }, [buckets]);
 
   if (times === null) {
-    return <Shell>{<p className="py-16 text-center text-sm text-primary-500">Couldn&apos;t load sign-ups right now. Reload to try again.</p>}</Shell>;
+    return (
+      <Shell>
+        <p className="py-16 text-center text-sm text-primary-500">Couldn&apos;t load sign-ups right now. Reload to try again.</p>
+        <SignupPeople people={people} start={-Infinity} end={Infinity} label="All time" now={now} />
+      </Shell>
+    );
   }
   if (list.length === 0) {
     return <Shell>{<p className="py-16 text-center text-sm text-primary-500">No sign-ups yet.</p>}</Shell>;
@@ -372,6 +380,15 @@ export function SignupsTrend({ times, now }: { times: number[] | null; now: numb
           </table>
         </div>
       )}
+
+      <SignupPeople
+        people={people}
+        start={w.start}
+        end={w.end}
+        label={w.label}
+        now={now}
+        onShowAll={stack.length === 1 && w.level === "quarter" ? undefined : () => pickLevel("quarter")}
+      />
     </Shell>
   );
 }
@@ -383,7 +400,7 @@ function Shell({ children, onKeyDown }: { children: React.ReactNode; onKeyDown?:
         <h2 id="signups-trend-title" className="font-semibold text-primary-900">
           Sign-ups
         </h2>
-        <p className="text-[13px] text-primary-500">New accounts over time, India time</p>
+        <p className="text-[13px] text-primary-500">New accounts over time and who they are, India time</p>
       </div>
       {children}
     </section>
