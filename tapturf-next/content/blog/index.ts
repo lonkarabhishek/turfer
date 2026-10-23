@@ -48,9 +48,12 @@ import { post as lateNightTurfsPuneNashik } from "./posts/late-night-turfs-pune-
 import { post as adFreeCricketScorerCricheroesAlternative } from "./posts/ad-free-cricket-scorer-cricheroes-alternative";
 // 2026-10-23: all-India listed price data post.
 import { post as indiaTurfPriceMap2026 } from "./posts/india-turf-price-map-2026";
+// 2026-10-23: data post, turfs in and around Hinjewadi, Pune.
+import { post as turfsInHinjewadiPune } from "./posts/turfs-in-hinjewadi-pune";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  turfsInHinjewadiPune,
   indiaTurfPriceMap2026,
   adFreeCricketScorerCricheroesAlternative,
   lateNightTurfsPuneNashik,

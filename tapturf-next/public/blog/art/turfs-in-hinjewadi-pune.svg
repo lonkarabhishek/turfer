@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Summary card for turfs in Hinjewadi, Pune: 15 listed, 9 listing 24-hour hours, a ₹1,000 typical weekday evening rate, and a bar chart of venues by phase</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="105" font-size="46" font-weight="700">Turfs in Hinjewadi, Pune</text>
+<text x="80" y="145" font-size="24" fill-opacity="0.7">Listed on TapTurf, 23 Oct 2026</text>
+<g>
+<rect x="80" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="104" y="258" font-size="56" font-weight="700" fill="#4ADE80">15</text>
+<text x="104" y="294" font-size="20" fill-opacity="0.8">turfs listed</text>
+<rect x="340" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="364" y="258" font-size="56" font-weight="700" fill="#4ADE80">9</text>
+<text x="364" y="294" font-size="20" fill-opacity="0.8">list 24 hours</text>
+<rect x="600" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="624" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹1,000</text>
+<text x="624" y="294" font-size="20" fill-opacity="0.8">typical evening hour</text>
+<rect x="860" y="190" width="260" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="884" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹500</text>
+<text x="884" y="294" font-size="20" fill-opacity="0.8">lowest listed hour</text>
+</g>
+<text x="80" y="375" font-size="22" font-weight="700" fill-opacity="0.9">Turfs by location</text>
+<g font-size="20">
+<text x="80" y="417">Phase 1</text><rect x="300" y="397" width="400" height="26" rx="5" fill="#16A34A"/><text x="712" y="417" font-weight="700">5</text>
+<text x="80" y="455">Phase 2</text><rect x="300" y="435" width="80" height="26" rx="5" fill="#16A34A"/><text x="392" y="455" font-weight="700">1</text>
+<text x="80" y="493">Phase 3 and Maan</text><rect x="300" y="473" width="400" height="26" rx="5" fill="#16A34A"/><text x="712" y="493" font-weight="700">5</text>
+<text x="80" y="531">Marunji</text><rect x="300" y="511" width="160" height="26" rx="5" fill="#16A34A"/><text x="472" y="531" font-weight="700">2</text>
+<text x="80" y="569">No phase listed</text><rect x="300" y="549" width="160" height="26" rx="5" fill="#16A34A" fill-opacity="0.5"/><text x="472" y="569" font-weight="700">2</text>
+</g>
+<text x="80" y="625" font-size="18" fill-opacity="0.6">Prices and hours as listed, not owner-verified. Confirm with the venue before you book.</text>
+<text x="1120" y="640" font-size="22" font-weight="700" text-anchor="end" fill="#4ADE80">tapturf.in</text>
+</g>
+</svg>
