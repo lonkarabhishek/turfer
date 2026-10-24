@@ -50,9 +50,11 @@ import { post as adFreeCricketScorerCricheroesAlternative } from "./posts/ad-fre
 import { post as indiaTurfPriceMap2026 } from "./posts/india-turf-price-map-2026";
 // 2026-10-23: data post, turfs in and around Hinjewadi, Pune.
 import { post as turfsInHinjewadiPune } from "./posts/turfs-in-hinjewadi-pune";
+import { post as turfsInKothrudPune } from "./posts/turfs-in-kothrud-pune";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  turfsInKothrudPune,
   turfsInHinjewadiPune,
   indiaTurfPriceMap2026,
   adFreeCricketScorerCricheroesAlternative,
