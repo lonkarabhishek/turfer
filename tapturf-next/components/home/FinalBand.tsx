@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Mail, MessageCircle, PlusCircle, Search } from "lucide-react";
-import { CONTACT_EMAIL, CONTACT_MAILTO, WHATSAPP_URL } from "@/lib/contact";
+import { Mail, PlusCircle, Search } from "lucide-react";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 
 /**
  * Closing band: the business model in one line, a last Find a turf and
@@ -38,14 +38,6 @@ export function FinalBand() {
             Reach players in your city. Questions, corrections or partnerships: write to us any time.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="press-tight inline-flex items-center gap-2 h-11 px-5 rounded-full bg-white text-primary-900 text-[15px] font-semibold"
-            >
-              <MessageCircle className="w-4 h-4 text-accent-600" /> Chat on WhatsApp
-            </a>
             <a
               href={CONTACT_MAILTO}
               className="press-tight inline-flex items-center gap-2 h-11 px-5 rounded-full border border-white/30 text-white text-[15px] font-semibold"

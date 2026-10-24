@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getFooterCities, HOME_CITIES } from "@/lib/queries/cities";
 import { CITIES } from "@/lib/city";
 import { SPORT_PAGES } from "@/lib/sports";
-import { CONTACT_EMAIL, CONTACT_MAILTO, WHATSAPP_URL } from "@/lib/contact";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 
 /** City links on every desktop page: the twelve biggest live cities. */
 const LINKED_CITIES = 12;
@@ -134,16 +134,6 @@ export async function Footer() {
               <li>
                 <a href={CONTACT_MAILTO} className="hover:text-white transition-colors">
                   {CONTACT_EMAIL}
-                </a>
-              </li>
-              <li>
-                <a
-                  href={WHATSAPP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white transition-colors"
-                >
-                  WhatsApp us
                 </a>
               </li>
               <li>

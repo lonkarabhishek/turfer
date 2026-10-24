@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, Check, Circle, ExternalLink, Loader2, Star } from "lucide-react";
+import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { labelFor, isCity } from "@/lib/city";
@@ -160,11 +161,9 @@ export function MyTurf({ id }: { id: string }) {
 
       <section className="mt-10 rounded-2xl bg-primary-900 text-white p-5">
         <p className="font-semibold">New photos?</p>
-        <p className="mt-1 text-[14px] text-white/80">Send them on WhatsApp and we&rsquo;ll add them to your page, usually the same day.</p>
+        <p className="mt-1 text-[14px] text-white/80">Email them to {CONTACT_EMAIL} and we&rsquo;ll add them to your page, usually the same day.</p>
         <a
-          href={`https://wa.me/message/NZ5Z6H7N2H25E1?text=${encodeURIComponent(`Photos for ${t.name} (${t.id})`)}`}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={`${CONTACT_MAILTO}?subject=${encodeURIComponent(`Photos for ${t.name} (${t.id})`)}`}
           className="mt-3 inline-flex items-center gap-1 h-10 px-4 rounded-full bg-accent-500 hover:bg-accent-400 text-[14px] font-semibold"
         >
           Send photos <ArrowUpRight className="w-4 h-4" />
