@@ -36,6 +36,14 @@
 --    Google one (amr oauth), not only a Google identity on the account.
 -- 12. private.turf_owner_events: every claim, code and decision, so a
 --    rejection is not lost when someone claims again.
+-- 13. A number from an approved public suggestion is logged (moderate_
+--    suggestion) and, like an owner-set one, opens nothing at once. A
+--    number on a revoked claim only goes to a check by hand: its real
+--    holder is never locked out, and the admin can restore the claim.
+-- 14. A claim opened with a code to someone else's number can't change the
+--    WhatsApp number for 14 days (owner_update_turf).
+-- 15. A proof must be a phone sign-in token of TapTurf's own Firebase
+--    project (aud, iss), checked before Google is asked.
 --
 -- Additive: two columns, one table, replaced function bodies with the same
 -- signatures, one revoke. Nothing is dropped, deleted or merged. Safe to
@@ -79,10 +87,31 @@ create table if not exists private.turf_owner_events (
 create index if not exists turf_owner_events_turf on private.turf_owner_events (turf_id, user_key, at);
 revoke all on private.turf_owner_events from public, anon, authenticated;
 
+-- Was this column's current number put there by an owner or a suggestion (not by TapTurf)?
+create or replace function private.number_set_by_others(p_turf_id uuid, p_column text, p_value text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select not public._is_admin_key(l.user_key) and public._phone10(l.after ->> p_column) is not distinct from public._phone10(p_value)
+      from public.turf_edit_log l
+     where l.turf_id = p_turf_id and l.after ? p_column
+     order by l.created_at desc, l.id desc
+     limit 1), false);
+$$;
+revoke all on function private.number_set_by_others(uuid, text, text) from public, anon, authenticated;
+
 -- ── Which listed numbers open a turf at once ──────────────
--- All of _turf_phones, except a WhatsApp number an owner set in myTapturf
--- (owner_update_turf logs it in turf_edit_log): someone with access must
--- not be able to add a number that gets them, or anyone, back in at once.
+-- The listing's mobiles (_turf_phones), except:
+-- - an owner or WhatsApp number whose current value was set by a myTapturf
+--   owner (owner_update_turf) or came from a public suggestion
+--   (moderate_suggestion); both log it in turf_edit_log. Someone must not
+--   be able to put in a number that gets them, or anyone, in at once.
+--   TapTurf's own changes (the site owner, research) still count.
+-- - a number on a revoked claim for this turf: it goes to a check by hand.
 create or replace function private.turf_trusted_phones(p_turf_id uuid)
 returns text[]
 language sql
@@ -90,19 +119,25 @@ stable
 security definer
 set search_path = ''
 as $$
-  select array_remove(array[
-    public._phone10(t.contact_info ->> 'phone'),
-    public._phone10(t.owner_phone),
-    case when public._phone10(t.whatsapp_phone) is distinct from (
-           select public._phone10(l.after ->> 'whatsapp_phone') from public.turf_edit_log l
-            where l.turf_id = t.id and l.after ? 'whatsapp_phone' order by l.created_at desc limit 1)
-         then public._phone10(t.whatsapp_phone) end
-  ], null)
-  from public.turfs t where t.id = p_turf_id;
+  select coalesce(array_agg(x) filter (where x is not null), '{}') from (
+    select public._phone10(t.contact_info ->> 'phone') as x from public.turfs t where t.id = p_turf_id
+    union all
+    select case when not private.number_set_by_others(t.id, 'owner_phone', t.owner_phone) then public._phone10(t.owner_phone) end
+      from public.turfs t where t.id = p_turf_id
+    union all
+    select case when not private.number_set_by_others(t.id, 'whatsapp_phone', t.whatsapp_phone) then public._phone10(t.whatsapp_phone) end
+      from public.turfs t where t.id = p_turf_id
+  ) p
+  where not exists (select 1 from public.turf_owners r
+                     where r.turf_id = p_turf_id and r.status = 'revoked'
+                       and (r.verified_phone = p.x or r.user_key = 'p:' || p.x));
 $$;
 revoke all on function private.turf_trusted_phones(uuid) from public, anon, authenticated;
 
--- Was this person turned away from this turf: the same sign-in, the same account, or the same number.
+
+-- Was this person turned away from this turf: the same sign-in or the same account. (A number on a
+-- revoked claim is not a person: turf_trusted_phones sends it to a check by hand instead, so its real
+-- holder can still claim.) p_phone is not used.
 create or replace function private.claim_revoked(p_turf_id uuid, p_key text, p_user_id uuid, p_phone text)
 returns boolean
 language sql
@@ -113,10 +148,7 @@ as $$
   select exists (
     select 1 from public.turf_owners r
      where r.turf_id = p_turf_id and r.status = 'revoked'
-       and (r.user_key = p_key
-            or (p_user_id is not null and r.user_id = p_user_id)
-            or (p_phone is not null and (r.verified_phone = p_phone or r.user_key = 'p:' || p_phone))
-            or (left(p_key, 2) = 'p:' and r.verified_phone = substr(p_key, 3))));
+       and (r.user_key = p_key or (p_user_id is not null and r.user_id = p_user_id)));
 $$;
 revoke all on function private.claim_revoked(uuid, text, uuid, text) from public, anon, authenticated;
 
@@ -169,12 +201,11 @@ as $$
 $$;
 revoke all on function private.caller_account(text) from public, anon, authenticated;
 
--- A Firebase ID token's own claims when it is from a sign-in in the last 10 minutes, else null.
--- Read without checking the signature: firebase_phone10 asks Google for that.
-create or replace function private.fresh_token_claims(p_token text)
+-- A token's claims (the middle part), read without checking the signature, or null.
+create or replace function private.token_claims(p_token text)
 returns jsonb
 language plpgsql
-stable
+immutable
 set search_path = ''
 as $$
 declare
@@ -189,8 +220,37 @@ begin
   exception when others then
     return null;
   end;
+  return case when jsonb_typeof(v_claims) = 'object' then v_claims end;
+end;
+$$;
+revoke all on function private.token_claims(text) from public, anon, authenticated;
+
+-- Is this a Firebase ID token of TapTurf's project (by its claims; Google checks the signature)?
+create or replace function private.tapturf_token(p_claims jsonb)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(p_claims ->> 'aud' = 'tapturf' and p_claims ->> 'iss' = 'https://securetoken.google.com/tapturf', false);
+$$;
+revoke all on function private.tapturf_token(jsonb) from public, anon, authenticated;
+
+-- A phone sign-in token of TapTurf's project from the last 10 minutes: its claims, else null.
+-- Read without checking the signature: firebase_phone10 asks Google for that.
+create or replace function private.fresh_token_claims(p_token text)
+returns jsonb
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  v_claims jsonb := private.token_claims(p_token);
+begin
   -- coalesce: a missing claim must refuse, not slip through as null.
-  if coalesce(jsonb_typeof(v_claims), '') <> 'object' or coalesce(jsonb_typeof(v_claims -> 'auth_time'), '') <> 'number' then
+  if v_claims is null or not private.tapturf_token(v_claims)
+     or coalesce(v_claims #>> '{firebase,sign_in_provider}', '') <> 'phone'
+     or coalesce(jsonb_typeof(v_claims -> 'auth_time'), '') <> 'number' then
     return null;
   end if;
   if (v_claims ->> 'auth_time')::numeric < extract(epoch from now() - interval '10 minutes') then
@@ -259,9 +319,10 @@ begin
      and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
     return 'e:' || v_email;
   end if;
-  -- Only something shaped like a token is worth a call to Google.
+  -- Only a token of TapTurf's own project is worth a call to Google.
   if p_token is null or length(p_token) < 100 or length(p_token) > 8000
      or p_token !~ '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+     or not private.tapturf_token(private.token_claims(p_token))
      or not exists (select 1 from pg_extension where extname = 'http') then
     return null;
   end if;
@@ -303,9 +364,10 @@ begin
      and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
     return true;
   end if;
-  -- Only something shaped like a token is worth a call to Google.
+  -- Only a token of TapTurf's own project is worth a call to Google.
   if p_firebase_token is null or length(p_firebase_token) < 100 or length(p_firebase_token) > 8000
      or p_firebase_token !~ '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+     or not private.tapturf_token(private.token_claims(p_firebase_token))
      or not exists (select 1 from pg_extension where extname = 'http') then
     return false;
   end if;
@@ -585,6 +647,10 @@ begin
   if v_uid is null then
     return jsonb_build_object('error', 'no_account');
   end if;
+  -- A person TapTurf turned away is told so, whatever number they prove.
+  if private.claim_revoked(p_turf_id, k, v_uid, null) then
+    return jsonb_build_object('error', 'revoked');
+  end if;
   v_phone := private.firebase_phone10(p_proof);
   if v_phone is null then
     return jsonb_build_object('error', 'bad_code');
@@ -708,6 +774,225 @@ begin
   insert into private.turf_owner_events (turf_id, user_key, user_id, from_status, to_status, how)
   values (p_turf_id, p_user_key, v_uid, v_prev, p_status, 'admin');
   return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Approving a suggestion, as before (20261009_suggestion_review.sql), now also logs any phone it
+-- changes, so turf_trusted_phones knows a number came from the public.
+create or replace function public.moderate_suggestion(p_id uuid, p_action text, p_apply jsonb default '{}'::jsonb, p_firebase_token text default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_turf uuid;
+  v_daily text;
+  v_before public.turfs%rowtype;
+  v_after jsonb := '{}'::jsonb;
+  v_prev jsonb := '{}'::jsonb;
+begin
+  if not public._is_site_owner(p_firebase_token) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if p_action not in ('approve', 'reject') then
+    raise exception 'bad action';
+  end if;
+  select turf_id into v_turf from public.turf_suggestions where id = p_id and status = 'pending';
+  if v_turf is null then
+    return;
+  end if;
+
+  if p_action = 'approve' then
+    select * into v_before from public.turfs where id = v_turf for update;
+    v_daily := p_apply->'opening_hours'->>'daily';
+    update public.turfs t set
+      owner_phone = coalesce(nullif(p_apply->>'owner_phone', ''), t.owner_phone),
+      whatsapp_phone = coalesce(nullif(p_apply->>'whatsapp_phone', ''), t.whatsapp_phone),
+      morning_price = coalesce((p_apply->>'morning_price')::numeric, t.morning_price),
+      afternoon_price = coalesce((p_apply->>'afternoon_price')::numeric, t.afternoon_price),
+      evening_price = coalesce((p_apply->>'evening_price')::numeric, t.evening_price),
+      weekend_evening_price = coalesce((p_apply->>'weekend_evening_price')::numeric, t.weekend_evening_price),
+      opening_hours = case when v_daily is not null and v_daily <> '' then jsonb_build_object('daily', v_daily) else t.opening_hours end,
+      is_24x7 = case when v_daily is not null and v_daily ilike '%24 hours%' then true
+                     when v_daily is not null and v_daily <> '' then false
+                     else t.is_24x7 end,
+      sports = case when jsonb_typeof(p_apply->'sports_add') = 'array'
+                    then (select coalesce(jsonb_agg(distinct x), '[]'::jsonb)
+                          from jsonb_array_elements_text(coalesce(t.sports, '[]'::jsonb) || (p_apply->'sports_add')) x)
+                    else t.sports end,
+      amenities = case when jsonb_typeof(p_apply->'amenities_add') = 'array'
+                       then (select coalesce(jsonb_agg(distinct x), '[]'::jsonb)
+                             from jsonb_array_elements_text(coalesce(t.amenities, '[]'::jsonb) || (p_apply->'amenities_add')) x)
+                       else t.amenities end,
+      updated_at = now()
+    where t.id = v_turf;
+    if nullif(p_apply->>'owner_phone', '') is not null and (p_apply->>'owner_phone') is distinct from v_before.owner_phone then
+      v_prev := v_prev || jsonb_build_object('owner_phone', v_before.owner_phone);
+      v_after := v_after || jsonb_build_object('owner_phone', p_apply->>'owner_phone');
+    end if;
+    if nullif(p_apply->>'whatsapp_phone', '') is not null and (p_apply->>'whatsapp_phone') is distinct from v_before.whatsapp_phone then
+      v_prev := v_prev || jsonb_build_object('whatsapp_phone', v_before.whatsapp_phone);
+      v_after := v_after || jsonb_build_object('whatsapp_phone', p_apply->>'whatsapp_phone');
+    end if;
+    if v_after <> '{}'::jsonb then
+      insert into public.turf_edit_log (turf_id, user_key, before, after) values (v_turf, 'suggestion:' || p_id, v_prev, v_after);
+    end if;
+  end if;
+
+  update public.turf_suggestions
+  set status = case when p_action = 'approve' then 'approved' else 'rejected' end,
+      moderated_at = now()
+  where id = p_id;
+end;
+$$;
+
+-- Editing the listing, as before (20261019_mytapturf.sql), with one hold: see the check after bad_patch.
+create or replace function public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k text := public._caller_key(p_token);
+  t public.turfs%rowtype;
+  v_before jsonb := '{}'::jsonb;
+  v_after jsonb := '{}'::jsonb;
+  f text;
+  v text;
+  prices text[] := array['morning_price', 'afternoon_price', 'evening_price', 'weekend_morning_price', 'weekend_afternoon_price', 'weekend_evening_price'];
+  flags text[] := array['has_floodlights', 'is_covered', 'parking_available', 'washroom_available', 'changing_room_available', 'has_cafeteria', 'has_drinking_water', 'equipment_provided', 'is_24x7'];
+  price_touched boolean := false;
+  hours_touched boolean := false;
+begin
+  if not public._can_manage(k, p_turf_id) then
+    return jsonb_build_object('error', 'forbidden');
+  end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
+    return jsonb_build_object('error', 'bad_patch');
+  end if;
+  -- Opened with a code to someone else's number: no new WhatsApp number for the first 14 days,
+  -- so a code read out to a stranger can't send players' chats elsewhere straight away.
+  if p_patch ? 'whatsapp_phone' and not public._is_admin_key(k) and exists (
+       select 1 from public.turf_owners o
+        where o.turf_id = p_turf_id and o.user_key = k and o.status = 'active'
+          and o.verified_phone is not null and o.user_key <> 'p:' || o.verified_phone
+          and o.decided_at > now() - interval '14 days') then
+    return jsonb_build_object('error', 'held', 'field', 'whatsapp_phone');
+  end if;
+  select * into t from public.turfs where id = p_turf_id for update;
+
+  foreach f in array prices loop
+    if p_patch ? f then
+      v := nullif(trim(p_patch ->> f), '');
+      if v is not null and (v !~ '^\d{1,6}$' or v::int > 100000) then
+        return jsonb_build_object('error', 'bad_value', 'field', f);
+      end if;
+      v_before := v_before || jsonb_build_object(f, to_jsonb(t) -> f);
+      v_after := v_after || jsonb_build_object(f, v::int);
+      price_touched := true;
+    end if;
+  end loop;
+
+  foreach f in array flags loop
+    if p_patch ? f then
+      if jsonb_typeof(p_patch -> f) not in ('boolean', 'null') then
+        return jsonb_build_object('error', 'bad_value', 'field', f);
+      end if;
+      v_before := v_before || jsonb_build_object(f, to_jsonb(t) -> f);
+      v_after := v_after || jsonb_build_object(f, p_patch -> f);
+      if f = 'is_24x7' then hours_touched := true; end if;
+    end if;
+  end loop;
+
+  foreach f in array array['start_time', 'end_time'] loop
+    if p_patch ? f then
+      v := nullif(trim(p_patch ->> f), '');
+      if v is not null and v !~ '^([01]\d|2[0-3]):[0-5]\d$' then
+        return jsonb_build_object('error', 'bad_value', 'field', f);
+      end if;
+      v_before := v_before || jsonb_build_object(f, to_jsonb(t) -> f);
+      v_after := v_after || jsonb_build_object(f, v);
+      hours_touched := true;
+    end if;
+  end loop;
+
+  if p_patch ? 'closed_days' then
+    v_before := v_before || jsonb_build_object('closed_days', t.closed_days);
+    v_after := v_after || jsonb_build_object('closed_days', left(nullif(trim(p_patch ->> 'closed_days'), ''), 60));
+  end if;
+  if p_patch ? 'description' then
+    v_before := v_before || jsonb_build_object('description', t.description);
+    v_after := v_after || jsonb_build_object('description', left(nullif(trim(p_patch ->> 'description'), ''), 1500));
+  end if;
+  if p_patch ? 'surface_type' then
+    v_before := v_before || jsonb_build_object('surface_type', t.surface_type);
+    v_after := v_after || jsonb_build_object('surface_type', left(nullif(trim(p_patch ->> 'surface_type'), ''), 40));
+  end if;
+  if p_patch ? 'number_of_grounds' then
+    v := nullif(trim(p_patch ->> 'number_of_grounds'), '');
+    if v is not null and (v !~ '^\d{1,2}$' or v::int < 1 or v::int > 30) then
+      return jsonb_build_object('error', 'bad_value', 'field', 'number_of_grounds');
+    end if;
+    v_before := v_before || jsonb_build_object('number_of_grounds', t.number_of_grounds);
+    v_after := v_after || jsonb_build_object('number_of_grounds', v::int);
+  end if;
+  if p_patch ? 'formats' then
+    if jsonb_typeof(p_patch -> 'formats') <> 'array' or jsonb_array_length(p_patch -> 'formats') > 10
+       or exists (select 1 from jsonb_array_elements(p_patch -> 'formats') e where jsonb_typeof(e) <> 'string' or length(e #>> '{}') > 40) then
+      return jsonb_build_object('error', 'bad_value', 'field', 'formats');
+    end if;
+    v_before := v_before || jsonb_build_object('formats', t.formats);
+    v_after := v_after || jsonb_build_object('formats', case when jsonb_array_length(p_patch -> 'formats') = 0 then null else p_patch -> 'formats' end);
+  end if;
+  if p_patch ? 'whatsapp_phone' then
+    v := nullif(trim(p_patch ->> 'whatsapp_phone'), '');
+    if v is not null and public._phone10(v) is null then
+      return jsonb_build_object('error', 'bad_value', 'field', 'whatsapp_phone');
+    end if;
+    v_before := v_before || jsonb_build_object('whatsapp_phone', t.whatsapp_phone);
+    v_after := v_after || jsonb_build_object('whatsapp_phone', case when v is null then null else '+91' || public._phone10(v) end);
+  end if;
+
+  if v_after = '{}'::jsonb then
+    return jsonb_build_object('ok', true, 'changed', '[]'::jsonb);
+  end if;
+
+  update public.turfs set
+    morning_price = case when v_after ? 'morning_price' then (v_after ->> 'morning_price')::int else morning_price end,
+    afternoon_price = case when v_after ? 'afternoon_price' then (v_after ->> 'afternoon_price')::int else afternoon_price end,
+    evening_price = case when v_after ? 'evening_price' then (v_after ->> 'evening_price')::int else evening_price end,
+    weekend_morning_price = case when v_after ? 'weekend_morning_price' then (v_after ->> 'weekend_morning_price')::int else weekend_morning_price end,
+    weekend_afternoon_price = case when v_after ? 'weekend_afternoon_price' then (v_after ->> 'weekend_afternoon_price')::int else weekend_afternoon_price end,
+    weekend_evening_price = case when v_after ? 'weekend_evening_price' then (v_after ->> 'weekend_evening_price')::int else weekend_evening_price end,
+    has_floodlights = case when v_after ? 'has_floodlights' then (v_after ->> 'has_floodlights')::boolean else has_floodlights end,
+    is_covered = case when v_after ? 'is_covered' then (v_after ->> 'is_covered')::boolean else is_covered end,
+    parking_available = case when v_after ? 'parking_available' then (v_after ->> 'parking_available')::boolean else parking_available end,
+    washroom_available = case when v_after ? 'washroom_available' then (v_after ->> 'washroom_available')::boolean else washroom_available end,
+    changing_room_available = case when v_after ? 'changing_room_available' then (v_after ->> 'changing_room_available')::boolean else changing_room_available end,
+    has_cafeteria = case when v_after ? 'has_cafeteria' then (v_after ->> 'has_cafeteria')::boolean else has_cafeteria end,
+    has_drinking_water = case when v_after ? 'has_drinking_water' then (v_after ->> 'has_drinking_water')::boolean else has_drinking_water end,
+    equipment_provided = case when v_after ? 'equipment_provided' then (v_after ->> 'equipment_provided')::boolean else equipment_provided end,
+    is_24x7 = case when v_after ? 'is_24x7' then (v_after ->> 'is_24x7')::boolean else is_24x7 end,
+    start_time = case when v_after ? 'start_time' then (v_after ->> 'start_time')::time else start_time end,
+    end_time = case when v_after ? 'end_time' then (v_after ->> 'end_time')::time else end_time end,
+    closed_days = case when v_after ? 'closed_days' then v_after ->> 'closed_days' else closed_days end,
+    description = case when v_after ? 'description' then v_after ->> 'description' else description end,
+    surface_type = case when v_after ? 'surface_type' then v_after ->> 'surface_type' else surface_type end,
+    number_of_grounds = case when v_after ? 'number_of_grounds' then (v_after ->> 'number_of_grounds')::int else number_of_grounds end,
+    formats = case when v_after ? 'formats' then v_after -> 'formats' else formats end,
+    whatsapp_phone = case when v_after ? 'whatsapp_phone' then v_after ->> 'whatsapp_phone' else whatsapp_phone end,
+    -- The owner's own hours replace researched opening_hours text.
+    opening_hours = case when hours_touched then null else opening_hours end,
+    price_owner_confirmed = case when price_touched then true else price_owner_confirmed end,
+    price_verified_at = case when price_touched then now() else price_verified_at end,
+    price_unit = case when price_touched and price_unit is null then 'per_hour' else price_unit end,
+    updated_at = now()
+  where id = p_turf_id;
+
+  insert into public.turf_edit_log (turf_id, user_key, before, after) values (p_turf_id, k, v_before, v_after);
+  return jsonb_build_object('ok', true, 'changed', (select jsonb_agg(key) from jsonb_object_keys(v_after) key));
 end;
 $$;
 

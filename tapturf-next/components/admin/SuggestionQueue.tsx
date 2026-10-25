@@ -38,10 +38,11 @@ function proposedEntries(p: Proposed): [keyof Proposed, string][] {
 function currentValue(s: Row, k: keyof Proposed): string {
   const c = s.current;
   switch (k) {
+    // The last 4 digits, so a swap of the owner's number shows.
     case "owner_phone":
-      return c.owner_phone ? "listed" : "none";
+      return c.owner_phone ? `ends ${c.owner_phone.replace(/\D/g, "").slice(-4)}` : "none";
     case "whatsapp_phone":
-      return c.whatsapp_phone ? "listed" : "none";
+      return c.whatsapp_phone ? `ends ${c.whatsapp_phone.replace(/\D/g, "").slice(-4)}` : "none";
     case "morning_price":
     case "afternoon_price":
     case "evening_price":
@@ -206,6 +207,9 @@ export function SuggestionQueue({ initial }: { initial: Row[] }) {
                           <label htmlFor={`${s.id}-${k}`} className="cursor-pointer">
                             <span className="font-medium text-primary-900">{FIELD_LABEL[k]}:</span> <span className="text-primary-900">{v}</span>
                             <span className="text-primary-400"> (now {currentValue(s, k)})</span>
+                            {(k === "owner_phone" || k === "whatsapp_phone") && (
+                              <span className="block text-[12px] text-amber-800">A number from a suggestion never opens myTapturf at once: claims with it go to a check by hand.</span>
+                            )}
                           </label>
                         </li>
                       ))}

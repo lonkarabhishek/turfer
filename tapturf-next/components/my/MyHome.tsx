@@ -351,9 +351,12 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     setBusy(true);
     setMsg("");
     try {
-      const r = await ownerRpc<ClaimResult>("owner_claim", { p_turf_id: turf.id, p_role: "owner" });
+      const r = await ownerRpc<ClaimResult>("owner_claim", { p_turf_id: turf.id, p_role: role });
       if (r.status === "active") return void (await opened());
-      fail(r.error);
+      if (r.status === "pending") {
+        setStep("sent");
+        onDone();
+      } else fail(r.error);
     } catch {
       fail();
     }
@@ -364,8 +367,8 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     setMsg("");
     const p10 = phone.replace(/\D/g, "").slice(-10);
     if (!/^[6-9]\d{9}$/.test(p10)) return setMsg(CLAIM_ERRORS.bad_phone);
-    // Signed in with this very number: it proved it already, no code needed.
-    if (me.kind === "phone" && p10 === me.who) return void openInstant();
+    // Signed in with this very number, and it opens this turf: it proved it already, no code needed.
+    if (instant && me.kind === "phone" && p10 === me.who) return void openInstant();
     setBusy(true);
     try {
       const r = await ownerRpc<{ listed?: boolean; blocked?: boolean; status?: string; retry_in?: number; error?: string }>("owner_phone_listed", { p_turf_id: turf.id, p_phone: p10 });

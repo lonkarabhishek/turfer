@@ -37,7 +37,12 @@ create table public.users (id uuid primary key default gen_random_uuid(), email 
 create table public.usernames (user_id uuid primary key, username text unique not null);
 create table public.user_logins (id bigint generated always as identity primary key, user_id uuid not null, method text not null, created_at timestamptz not null default now());
 create table public.turfs (id uuid primary key, name text, slug text, city text, area text, address text, is_active boolean default true,
-  contact_info jsonb, owner_phone text, whatsapp_phone text, cover_image text, images jsonb);
+  contact_info jsonb, owner_phone text, whatsapp_phone text, cover_image text, images jsonb,
+  morning_price int, afternoon_price int, evening_price int, weekend_morning_price int, weekend_afternoon_price int, weekend_evening_price int,
+  has_floodlights boolean, is_covered boolean, parking_available boolean, washroom_available boolean, changing_room_available boolean,
+  has_cafeteria boolean, has_drinking_water boolean, equipment_provided boolean, is_24x7 boolean, start_time time, end_time time,
+  closed_days text, description text, surface_type text, number_of_grounds int, formats jsonb, opening_hours jsonb,
+  price_owner_confirmed boolean, price_verified_at timestamptz, price_unit text, updated_at timestamptz default now());
 create table public.turf_contact_clicks (id bigint generated always as identity primary key, turf_id uuid, kind text, created_at timestamptz default now());
 create table public.ask_queries (id bigint generated always as identity primary key, filters jsonb, created_at timestamptz default now());
 create table public.games (id uuid primary key default gen_random_uuid(), turf_id uuid, date date, status text, created_at timestamptz default now());
@@ -148,10 +153,16 @@ const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const tok = (claims) => `${b64u({ alg: "RS256" })}.${b64u(claims)}.sig`;
 const nowS = Math.floor(Date.now() / 1000);
 const fresh = async (t) => (await one("select private.fresh_token_claims($1) c", [t])).c;
-eq((await fresh(tok({ auth_time: nowS - 60, phone_number: "+919800000001" })))?.phone_number, "+919800000001", "a sign-in a minute ago");
-eq(await fresh(tok({ auth_time: nowS - 11 * 60, phone_number: "+919800000001" })), null, "an 11-minute-old sign-in is not a proof");
-eq(await fresh(tok({ phone_number: "+919800000001" })), null, "no auth_time");
-eq(await fresh(tok({ auth_time: "soon" })), null, "auth_time not a number");
+const PROJ = { aud: "tapturf", iss: "https://securetoken.google.com/tapturf", firebase: { sign_in_provider: "phone" } };
+eq((await fresh(tok({ ...PROJ, auth_time: nowS - 60, phone_number: "+919800000001" })))?.phone_number, "+919800000001", "a sign-in a minute ago");
+eq(await fresh(tok({ ...PROJ, auth_time: nowS - 11 * 60, phone_number: "+919800000001" })), null, "an 11-minute-old sign-in is not a proof");
+eq(await fresh(tok({ ...PROJ, phone_number: "+919800000001" })), null, "no auth_time");
+eq(await fresh(tok({ ...PROJ, auth_time: "soon" })), null, "auth_time not a number");
+eq(await fresh(tok({ ...PROJ, aud: "evil-project", auth_time: nowS })), null, "another Firebase project's token");
+eq(await fresh(tok({ ...PROJ, iss: "https://securetoken.google.com/evil", auth_time: nowS })), null, "another issuer");
+eq(await fresh(tok({ ...PROJ, firebase: { sign_in_provider: "password" }, auth_time: nowS })), null, "not a phone sign-in");
+await as(null);
+eq((await one("select public._caller_key($1) k", [tok({ aud: "evil", iss: "x", phone_number: "+919800000001" }) + "x".repeat(120)])).k, null, "another project's token never reaches Google");
 eq(await fresh("not.a-token"), null, "garbage");
 eq(await fresh(null), null, "null");
 eq((await one("select private.firebase_phone10($1) p", [tok({ auth_time: nowS, phone_number: "+919800000001" }) + "x".repeat(100)])).p, null, "no Google here: nothing is trusted without the lookup");
@@ -212,8 +223,8 @@ eq(await verify(T2, "proof:9800000002"), { error: "revoked" }, "a revoked claim 
 eq(await claim(T2), { error: "revoked" }, "owner_claim agrees");
 await as(null);
 await q(`insert into public.users (id, name, phone) values ('66666666-6666-4666-8666-666666666666', 'Sam Phone', '+919800000002')`);
-eq(await claim(T2, { token: "phone:9800000002" }), { error: "revoked" }, "not by signing in with the number they proved");
-eq((await rpc("owner_home", ["phone:9800000002"])).matches.some((t) => t.id === T2), false, "and the turf is not offered to them");
+eq(await claim(T2, { token: "phone:9800000002" }), { status: "pending" }, "the number they proved goes to a check by hand (its real holder is not locked out)");
+eq((await rpc("owner_home", ["phone:9800000002"])).matches.some((t) => t.id === T2), false, "and the turf is not offered at once");
 await google(G, "sam@x.in");
 await google(G2, "nobody@x.in");
 eq(await verify(T1, "proof:9800000001"), { error: "no_account" }, "no account, no claim, even with the code");
@@ -228,6 +239,14 @@ eq(await rpc("owner_claim_info", [null, T4]), { mobiles: 1, endings: ["08"] }, "
 eq(await rpc("owner_phone_listed", [null, T4, "9800000007"]), { listed: false, blocked: true }, "an owner-set number is not a way in: a check by hand");
 await q(`update public.turfs set whatsapp_phone = '+919800000009' where id = '${T4}'`);
 eq((await one(`select private.turf_trusted_phones('${T4}') p`)).p, ["9800000008", "9800000009"], "a number changed since (by TapTurf) counts again");
+
+// A number from an approved public suggestion opens nothing at once; one the site owner set does.
+await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T4}', 'suggestion:abc', '{"owner_phone":null}', '{"owner_phone":"9800000031"}')`);
+await q(`update public.turfs set owner_phone = '9800000031' where id = '${T4}'`);
+ok(!(await one(`select private.turf_trusted_phones('${T4}') p`)).p.includes("9800000031"), "a suggested number is not trusted");
+await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T4}', 'e:lonkarabhishek00@gmail.com', '{"owner_phone":"9800000031"}', '{"owner_phone":"9800000032"}')`);
+await q(`update public.turfs set owner_phone = '9800000032' where id = '${T4}'`);
+ok((await one(`select private.turf_trusted_phones('${T4}') p`)).p.includes("9800000032"), "one the site owner set is");
 
 // One listed number gets a code at most every 2 minutes and 5 a day, whoever asks; one sign-in 10 a day.
 await as(null);
@@ -249,13 +268,23 @@ await q(`update public.turfs set whatsapp_phone = '+919800000007' where id = '${
 eq(await listed("9800000017", T4, "9800000007"), { listed: false, blocked: true }, "an owner-set number: by hand");
 // Already in, or turned away: said before any code.
 eq(await listed("9800000003", T2, "9800000002"), { status: "active" }, "an active claimant is told they're in");
-eq(await listed("9800000002", T2, "9800000002"), { error: "revoked" }, "a revoked number is told, before any code");
+eq(await listed("9800000002", T2, "9800000002"), { listed: false, blocked: true }, "a number on a revoked claim: a check by hand, said before any code");
 // A pending phone claim opens once its own number is listed.
 await q(`insert into public.users (id, name, phone) values ('77777777-7777-4777-8777-777777777777', 'Late Owner', '+919800000021')`);
 eq(await claim(T3, { token: "phone:9800000021" }), { status: "pending" }, "no number on the listing yet: pending");
 await q(`update public.turfs set owner_phone = '9800000021' where id = '${T3}'`);
 eq(await claim(T3, { token: "phone:9800000021" }), { status: "active" }, "the number is listed now: open");
 eq((await row(T3, "p:9800000021")).verified_phone, "9800000021");
+await google(G, "sam@x.in");
+
+// Opened with a code to someone else's number: no new WhatsApp number for 14 days.
+await google(G, "sam@x.in");
+eq(await rpc("owner_update_turf", [null, T1, { whatsapp_phone: "9800000099" }]), { error: "held", field: "whatsapp_phone" }, "a code-opened claim can't change WhatsApp yet");
+eq((await rpc("owner_update_turf", [null, T1, { morning_price: "900" }])).ok, true, "other edits go through");
+await q(`update public.turf_owners set decided_at = now() - interval '15 days' where turf_id = '${T1}' and user_key = 'e:sam@x.in'`);
+eq((await rpc("owner_update_turf", [null, T1, { whatsapp_phone: "9800000099" }])).ok, true, "after 14 days it can");
+await as(null);
+eq((await rpc("owner_update_turf", ["phone:9800000003", T2, { whatsapp_phone: "9800000098" }])).ok, true, "someone in with their own number can at once");
 await google(G, "sam@x.in");
 
 // Every claim, code and decision is kept.
@@ -269,7 +298,7 @@ await db.exec(`create or replace function public._is_site_owner(p_firebase_token
 eq(await rpc("admin_owner_claims", [null]), { error: "forbidden" }, "not the site owner");
 await q(`select set_config('test.owner', 'yes', false)`);
 const claims = await rpc("admin_owner_claims", [null]);
-eq(Array.isArray(claims) && claims.length, 5, "every claim");
+eq(Array.isArray(claims) && claims.length, 6, "every claim");
 const c1 = claims.find((c) => c.turf_id === T1 && c.user_key === "e:sam@x.in");
 eq([c1.user_id, c1.account.name, c1.account.username, c1.account.email, c1.account.method, c1.verified_phone, c1.slug, c1.site_owner], [G, "Sam Account", "sam", "sam@x.in", "google", "9800000001", "one", false], "the claim's account, method and the number proved");
 eq(c1.phone_given, "9800000002", "and the number they typed that was not listed");

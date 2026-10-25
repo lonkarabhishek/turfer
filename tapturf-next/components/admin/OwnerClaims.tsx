@@ -145,7 +145,7 @@ export function OwnerClaims() {
                 {c.rejectedAt !== null && <p className="text-[13px] text-primary-600">Turned down before, on {istDateTime(c.rejectedAt)}.</p>}
                 {c.status === "active" && c.theirListedPhone && (
                   <p className="text-[12px] text-amber-800">
-                    Their number +91 {spaced(c.theirListedPhone)} is on this listing, so it can open it again. If you revoke them, change the listing&rsquo;s number too.
+                    Their number +91 {spaced(c.theirListedPhone)} is on this listing. If you revoke them, claims with that number go to a check by hand for this turf.
                   </p>
                 )}
                 {typedNameDiffers(c) && <p className="text-[12px] text-primary-500">Name typed on the claim: {c.storedName}</p>}
@@ -160,6 +160,13 @@ export function OwnerClaims() {
                 )}
                 {c.status === "active" && (
                   <button type="button" disabled={busy === key} onClick={() => void decide(c, "revoked")} className="h-9 px-3 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Revoke</button>
+                )}
+                {c.status === "revoked" && (
+                  <>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-9 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Restore</button>
+                    {/* Rejected, not revoked: their number stops being held back from instant claims. */}
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-9 px-3 rounded-full bg-primary-100 text-primary-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Close, don&rsquo;t block</button>
+                  </>
                 )}
               </div>
             </div>

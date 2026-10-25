@@ -92,7 +92,13 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
       const r = await ownerRpc<{ ok?: boolean; error?: string; field?: string }>("owner_update_turf", { p_turf_id: turf.id, p_patch: changes });
       if (!r.ok) {
         setState("error");
-        setMsg(r.error === "bad_value" ? `Check ${r.field?.replace(/_/g, " ")}: that value doesn't look right.` : "Couldn't save. Sign in again and retry.");
+        setMsg(
+          r.error === "bad_value"
+            ? `Check ${r.field?.replace(/_/g, " ")}: that value doesn't look right.`
+            : r.error === "held"
+              ? "You can change the WhatsApp number two weeks after you got in. If it's urgent, email info@tapturf.in."
+              : "Couldn't save. Sign in again and retry.",
+        );
         return;
       }
       await refreshTurfPage(turf.id);
