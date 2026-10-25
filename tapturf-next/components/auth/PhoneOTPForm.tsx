@@ -52,7 +52,7 @@ function useRotatingLine(lines: string[], active: boolean, interval = 2200): str
  * comes first and an open keyboard would pull people to the phone form.
  */
 export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?: () => void; autoFocusPhone?: boolean }) {
-  const { hydrateFromStorage } = useAuth();
+  const { hydrateFromStorage, showNotice } = useAuth();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -164,6 +164,8 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
       // A new account: save how they found us, in the background.
       if ((a.body as { created?: boolean }).created) saveSignupContext(profile.id, "phone");
       finishLogin(profile.name?.split(" ")[0] || "");
+      // The email never holds up the sign-in; if it didn't save, say so (they're asked again later).
+      if ((a.body as { emailError?: string }).emailError) showNotice("You're in! We couldn't save your email. Add it any time in your profile.");
       return;
     }
     const e = errorOf(a);
@@ -425,7 +427,7 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
               className={inputClass}
             />
             <p id={`${recaptchaId}-email-help`} className={`mt-1 text-[12px] leading-snug ${emailTip ? "text-hot-600" : "text-primary-500"}`}>
-              {emailTip || "For turf deals and game invites. No spam. Only you can see it."}
+              {emailTip || "For turf deals and game invites. No spam. We won't show it to other players or turfs."}
             </p>
             {!emailTip && emailTypo(email) && (
               <button type="button" onClick={() => setEmail(emailTypo(email) ?? email)} className="mt-1 text-[12px] font-semibold text-accent-700 underline underline-offset-2">

@@ -29,6 +29,7 @@ import {
   type UserFilter,
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
+import { signupPeople } from "@/lib/queries/adminUsers";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { ASK_FILTERS, askStats, askVia, filterAsks, getAskDigest, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
 import { AskDigestCard } from "@/components/admin/AskDigest";
@@ -253,6 +254,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                 {" "}(one entry per person per 10 minutes; phone sign-ins are logged from 6 Oct 2026, Google ones include each account&apos;s last sign-in from before that)
               </span>
             </p>
+            <UnfinishedGoogle />
             <Table head={["When", "Name", "Phone", "Email", "Via"]} empty={rows.length === 0}>
               {rows.map((r, i) => (
                 <tr key={`${r.user_id}-${r.logged_in_at}-${i}`}>
@@ -569,4 +571,37 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
       };
     }
   }
+}
+
+/** Google sign-ups that never came back: no sign-in to list, but real accounts (Google confirmed the email). */
+async function UnfinishedGoogle() {
+  const { people } = await signupPeople();
+  const list = (people ?? []).filter((p) => p.signInUnfinished);
+  if (list.length === 0) return null;
+  return (
+    <section className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+      <h2 className="font-semibold text-amber-900">
+        {list.length} Google sign-up{list.length === 1 ? "" : "s"} didn&rsquo;t finish
+      </h2>
+      <p className="text-[13px] text-amber-900/80">They picked their Google account but never came back to TapTurf. Their email is real: Google confirmed it.</p>
+      <ul className="mt-2 space-y-1 text-[13px] text-primary-800">
+        {list.map((p) => (
+          <li key={p.id}>
+            {fmtDateTime(new Date(p.joinedAt).toISOString())} · {p.name ?? "No name"} ·{" "}
+            {p.email ? (
+              <a href={`mailto:${p.email}`} className="underline underline-offset-2">
+                {p.email}
+              </a>
+            ) : (
+              "no email"
+            )}{" "}
+            ·{" "}
+            <a href={`/admin?person=${p.id}#people`} className="font-semibold text-accent-700 hover:underline">
+              Open in people list
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }

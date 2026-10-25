@@ -38,7 +38,6 @@ export function LoginModal() {
         options: {
           redirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
           queryParams: {
-            access_type: "offline",
             prompt: "select_account",
           },
         },

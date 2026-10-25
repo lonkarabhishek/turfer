@@ -44,7 +44,7 @@ export function readWhy(x: string | null | undefined): Why | null {
 
 const TEXT: Record<Why, string> = {
   denied: "Google sign-in was cancelled. Tap Continue with Google to try again.",
-  again: "Almost done. Tap Continue with Google once more to finish signing in.",
+  again: "Almost done. Tap Continue with Google once more. If it still doesn't work, log in with your phone number below.",
   google: "Google couldn't sign you in just now. Try again, or log in with your phone number below.",
   lost: "Google said yes, but this browser lost the sign-in on the way back. Tap Continue with Google again and stay in this browser until it finishes.",
   used: "That sign-in was already used. Tap Continue with Google to sign in again.",

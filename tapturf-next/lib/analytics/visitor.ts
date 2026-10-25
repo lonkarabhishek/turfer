@@ -184,19 +184,27 @@ export function signupContext(method: "phone" | "google") {
  * keepalive survives the redirect after sign-in; signup never waits on it.
  */
 const SIGNUP_SENT = "tapturf_signup_sent_v1";
+const SIGNUP_GA = "tapturf_signup_ga_v1";
 
 export function saveSignupContext(userId: string, method: "phone" | "google") {
   if (typeof window === "undefined" || !userId) return;
   // Once per account on this device: a Google sign-up is recognised on every load for a while.
   try {
     if (localStorage.getItem(SIGNUP_SENT) === userId) return;
-    localStorage.setItem(SIGNUP_SENT, userId);
   } catch {
     /* storage blocked: the database keeps the first save anyway */
   }
   step("signup");
   const ctx = signupContext(method);
-  gtag("event", "sign_up", { method, first_source: ctx.first?.utm.source ?? ctx.first?.ref?.split("/")[0] ?? "direct" });
+  // The analytics event once per account here, even when the save below has to be retried.
+  let counted = false;
+  try {
+    counted = localStorage.getItem(SIGNUP_GA) === userId;
+    if (!counted) localStorage.setItem(SIGNUP_GA, userId);
+  } catch {
+    /* storage blocked: count it */
+  }
+  if (!counted) gtag("event", "sign_up", { method, first_source: ctx.first?.utm.source ?? ctx.first?.ref?.split("/")[0] ?? "direct" });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -206,7 +214,18 @@ export function saveSignupContext(userId: string, method: "phone" | "google") {
       keepalive: true,
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ p_user_id: userId, p_ctx: ctx }),
-    }).catch(() => {});
+    })
+      .then((r) => {
+        // Saved (or kept from an earlier save): this device need not send it again.
+        if (r.ok) {
+          try {
+            localStorage.setItem(SIGNUP_SENT, userId);
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+      .catch(() => {});
   } catch {
     /* ignore */
   }

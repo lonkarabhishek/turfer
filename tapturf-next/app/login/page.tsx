@@ -15,7 +15,12 @@ import { safeNext } from "@/lib/auth/next";
 // The in-app browser this page is open in (read once, on the client only).
 const noSubscribe = () => () => {};
 let inAppSeen: InApp | null | undefined;
-const readInApp = () => (inAppSeen === undefined ? (inAppSeen = inAppBrowser(navigator.userAgent)) : inAppSeen);
+const readInApp = () => {
+  if (inAppSeen !== undefined) return inAppSeen;
+  // Added to the home screen (as NotificationsPrompt checks): a real browser, not an app's.
+  const standalone = (navigator as { standalone?: boolean }).standalone === true || !!window.matchMedia?.("(display-mode: standalone)").matches;
+  return (inAppSeen = inAppBrowser(navigator.userAgent, standalone));
+};
 
 /**
  * Dedicated /login page. Replaces the fragile modal-based flow with a
@@ -72,8 +77,8 @@ function LoginInner() {
         provider: "google",
         options: {
           redirectTo,
+          // No access_type offline: the app never uses Google's own tokens, so it doesn't ask for them.
           queryParams: {
-            access_type: "offline",
             prompt: "select_account",
           },
         },

@@ -63,8 +63,9 @@ export function toProfile(data: unknown): AccountProfile | null {
     username: s(d.username),
     taggable: d.taggable !== false,
     contact_email: s(d.contact_email),
-    // Only a database that knows about the ask can start it.
+    // Only a database that knows about the ask can start it, or offer the field.
     ask_email: d.ask_email === true,
+    email_editable: d.email_editable === true,
   };
 }
 

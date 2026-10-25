@@ -63,8 +63,8 @@ const SECTIONS: LegalSection[] = [
         <p id="email" className="scroll-mt-24">
           <strong>An email, if you add one.</strong> If you signed in with your phone, you can add an email
           when you sign up or later in your profile. We use it only to send you turf deals and game invites.
-          It is never shown to anyone else, it is not used to sign you in, and you can change or remove it in
-          your profile at any time.
+          Only TapTurf&rsquo;s team sees it: we never show it on your profile or share it with turfs or other
+          players. It is not used to sign you in, and you can change or remove it in your profile at any time.
         </p>
         <p>
           <strong>When you sign in with Google.</strong> Google shares your name, email address and profile

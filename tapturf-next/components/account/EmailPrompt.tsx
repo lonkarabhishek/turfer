@@ -10,27 +10,42 @@ import { cleanEmail, emailProblem, emailTypo } from "@/lib/account/emails";
 import { FOCUSABLE, askHere, busy, claimPrompt } from "@/lib/account/prompts";
 import { usernameAskedBefore } from "./UsernamePrompt";
 
-/** User ids this device has asked, so a failed No thanks never asks again here. */
-const ASKED_KEY = "tapturf_email_asked_v1";
+/**
+ * What this device did with the ask, per account: "done" (saved or No thanks: never again here,
+ * whatever the server says), or a time when it was put off (a tap outside, Escape). Put off
+ * once, it comes back once, a week later.
+ */
+const ASKED_KEY = "tapturf_email_asked_v2";
 const ASKED_KEPT = 20;
+const LATER_MS = 7 * 86_400_000;
 const askedHere = new Set<string>();
+type Asked = Record<string, "done" | { later: number; times: number }>;
 
-function askedBefore(id: string): boolean {
-  if (askedHere.has(id)) return true;
+function readAsked(): Asked {
   try {
-    const list = JSON.parse(localStorage.getItem(ASKED_KEY) ?? "[]");
-    return Array.isArray(list) && list.includes(id);
+    const v = JSON.parse(localStorage.getItem(ASKED_KEY) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Asked) : {};
   } catch {
-    return false;
+    return {};
   }
 }
 
-function markAsked(id: string) {
+function askedBefore(id: string, now: number): boolean {
+  if (askedHere.has(id)) return true;
+  const a = readAsked()[id];
+  if (!a) return false;
+  if (a === "done") return true;
+  return a.times >= 2 || now - a.later < LATER_MS;
+}
+
+function markAsked(id: string, how: "done" | "later") {
   askedHere.add(id);
   try {
-    const list = JSON.parse(localStorage.getItem(ASKED_KEY) ?? "[]");
-    const next = (Array.isArray(list) ? list.filter((x) => x !== id) : []).concat(id).slice(-ASKED_KEPT);
-    localStorage.setItem(ASKED_KEY, JSON.stringify(next));
+    const all = readAsked();
+    const prev = all[id];
+    all[id] = how === "done" ? "done" : { later: Date.now(), times: (prev && prev !== "done" ? prev.times : 0) + 1 };
+    const keys = Object.keys(all).slice(-ASKED_KEPT);
+    localStorage.setItem(ASKED_KEY, JSON.stringify(Object.fromEntries(keys.map((k) => [k, all[k]]))));
   } catch {
     /* storage blocked: the server's answer stops it anyway */
   }
@@ -57,6 +72,7 @@ export function EmailPrompt() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -67,7 +83,7 @@ export function EmailPrompt() {
   useEffect(() => {
     if (!eligible || !userId || open) return;
     const t = setTimeout(() => {
-      if (askedBefore(userId) || busy() || !claimPrompt("email")) return;
+      if (askedBefore(userId, Date.now()) || busy() || !claimPrompt("email")) return;
       lastFocus.current = document.activeElement as HTMLElement | null;
       setEmail("");
       setError("");
@@ -78,13 +94,23 @@ export function EmailPrompt() {
 
   const shown = open !== null && open === userId && eligible;
 
+  // On a phone, focus the heading, not the field: the keyboard should open only when they tap it.
   useEffect(() => {
-    if (shown) inputRef.current?.focus();
+    if (!shown) return;
+    if (window.matchMedia?.("(pointer: coarse)").matches) titleRef.current?.focus();
+    else inputRef.current?.focus();
   }, [shown]);
 
-  // No thanks, the backdrop or Escape: answered, on every device.
+  // A tap outside or Escape: later, on this device only (one more ask, a week on).
+  const later = () => {
+    if (userId) markAsked(userId, "later");
+    setOpen(null);
+    lastFocus.current?.focus?.();
+  };
+
+  // No thanks: answered, on every device.
   const noThanks = () => {
-    if (userId) markAsked(userId);
+    if (userId) markAsked(userId, "done");
     setOpen(null);
     lastFocus.current?.focus?.();
     void (async () => {
@@ -98,7 +124,7 @@ export function EmailPrompt() {
   useEffect(() => {
     if (!shown) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") return noThanks();
+      if (e.key === "Escape") return later();
       if (e.key !== "Tab" || !dialogRef.current) return;
       const items = [...dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
       if (!items.length) return;
@@ -140,7 +166,7 @@ export function EmailPrompt() {
         setError(SAVE_ERROR[e] ?? "Couldn't save. Please try again.");
         return;
       }
-      if (userId) markAsked(userId);
+      if (userId) markAsked(userId, "done");
       setOpen(null);
       lastFocus.current?.focus?.();
       if (p) applyProfile(p);
@@ -153,7 +179,7 @@ export function EmailPrompt() {
 
   return (
     <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-primary-900/40" onClick={noThanks} aria-hidden />
+      <div className="absolute inset-0 bg-primary-900/40" onClick={later} aria-hidden />
       <div
         ref={dialogRef}
         role="dialog"
@@ -165,11 +191,11 @@ export function EmailPrompt() {
         <span className="w-11 h-11 rounded-full bg-accent-50 text-accent-700 inline-flex items-center justify-center" aria-hidden>
           <Mail className="w-5 h-5" />
         </span>
-        <h2 id="email-prompt-title" className="mt-3 font-display text-2xl text-primary-900 leading-tight">
+        <h2 id="email-prompt-title" ref={titleRef} tabIndex={-1} className="mt-3 font-display text-2xl text-primary-900 leading-tight outline-none">
           Want turf deals and game invites?
         </h2>
         <p id="email-prompt-body" className="mt-2 text-[14px] text-primary-600 leading-snug">
-          Add your email and we&rsquo;ll send you offers from turfs and invites to games near you. No spam. Only you can see it.
+          Add your email and we&rsquo;ll send you turf deals and invites to games near you. No spam. We won&rsquo;t show it to other players or turfs.
         </p>
 
         <form
@@ -220,7 +246,7 @@ export function EmailPrompt() {
 
         <p className="mt-4 text-[12px] text-primary-500 text-center">
           Change or remove it any time in your profile.{" "}
-          <Link href="/privacy#email" className="underline underline-offset-2" onClick={() => userId && markAsked(userId)}>
+          <Link href="/privacy#email" className="underline underline-offset-2" onClick={() => userId && markAsked(userId, "later")}>
             Privacy
           </Link>
         </p>

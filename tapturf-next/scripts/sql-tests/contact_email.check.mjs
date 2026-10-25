@@ -27,6 +27,10 @@ create table auth.users (id uuid primary key, email text, raw_app_meta_data json
 create table public.users (id uuid primary key default gen_random_uuid(), email varchar unique, name varchar not null, phone varchar, role varchar default 'user',
   profile_image_url text, created_at timestamptz default now());
 create table public.usernames (user_id uuid primary key, username text unique not null, taggable boolean not null default true);
+create table public.games (id uuid primary key default gen_random_uuid(), creator_id uuid, host_name text, date date);
+create table public.game_requests (id uuid primary key default gen_random_uuid(), user_id uuid, requester_name varchar, status text);
+create function private.clean_name(p_name text) returns text language sql immutable as
+  $$ select nullif(left(regexp_replace(btrim(coalesce(p_name, '')), '[[:space:]]+', ' ', 'g'), 60), '') $$;
 create function public._is_site_owner(p_firebase_token text default null) returns boolean language sql stable as
   $$ select coalesce(current_setting('test.owner', true), '') = 'yes' $$;
 `);
@@ -50,6 +54,19 @@ await q(`insert into public.users (id, name, email, phone) values
 const set = async (user, action, email = null, source = "profile", key = KEY) => (await one("select public.account_set_email($1, $2, $3, $4, $5) r", [key, user, action, email, source])).r;
 const profile = async (user) => (await one("select private.profile_json($1) p", [user])).p;
 const row = (user) => one("select email, answer, source, consent, saves from private.user_contact_emails where user_id = $1", [user]);
+
+// Who may add one at all.
+eq([(await profile(P)).email_editable, (await profile(G)).email_editable, (await profile(OLD)).email_editable], [true, false, false], "phone accounts with no email only");
+
+// A new name also goes on their upcoming games and waiting requests (they keep a copy).
+await q(`insert into public.games (creator_id, host_name, date) values ('${P}', 'Priya', current_date + 1), ('${P}', 'Priya', current_date - 3), ('${P2}', 'Ravi', current_date + 1)`);
+await q(`insert into public.game_requests (user_id, requester_name, status) values ('${P}', 'Priya', 'pending'), ('${P}', 'Priya', 'accepted')`);
+const upd = (await one("select public.account_update($1, $2, $3) r", [KEY, P, "Priya  Sharma"])).r;
+eq([upd.r, upd.name], ["ok", "Priya Sharma"], "renamed");
+eq((await q(`select host_name, date >= current_date as upcoming from public.games where creator_id = '${P}' order by date`)).map((g) => g.host_name), ["Priya", "Priya Sharma"], "the upcoming game, not the past one");
+eq((await q(`select requester_name from public.game_requests where user_id = '${P}' order by status`)).map((r) => r.requester_name), ["Priya", "Priya Sharma"], "the waiting request, not the answered one");
+eq((await one(`select host_name from public.games where creator_id = '${P2}'`)).host_name, "Ravi", "nobody else's");
+eq((await one("select public.account_update($1, $2, $3) r", ["wrong", P, "X"])).r.r, "unavailable", "the key is checked");
 
 // Who is asked.
 eq((await profile(P)).ask_email, true, "a phone account with no email is asked");

@@ -214,6 +214,7 @@ declare
   v_claims jsonb := private.fresh_token_claims(p_token);
 begin
   if v_claims is null or length(p_token) < 100 or length(p_token) > 8000
+     or p_token !~ '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
      or not exists (select 1 from pg_extension where extname = 'http') then
     return null;
   end if;
@@ -258,7 +259,9 @@ begin
      and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
     return 'e:' || v_email;
   end if;
-  if p_token is null or length(p_token) < 100
+  -- Only something shaped like a token is worth a call to Google.
+  if p_token is null or length(p_token) < 100 or length(p_token) > 8000
+     or p_token !~ '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
      or not exists (select 1 from pg_extension where extname = 'http') then
     return null;
   end if;
@@ -300,7 +303,9 @@ begin
      and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
     return true;
   end if;
-  if p_firebase_token is null or length(p_firebase_token) < 100
+  -- Only something shaped like a token is worth a call to Google.
+  if p_firebase_token is null or length(p_firebase_token) < 100 or length(p_firebase_token) > 8000
+     or p_firebase_token !~ '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
      or not exists (select 1 from pg_extension where extname = 'http') then
     return false;
   end if;
@@ -659,8 +664,9 @@ begin
                               else 'unknown' end,
                'signed_up_at', least(u.created_at, coalesce(au.created_at, u.created_at)),
                'last_seen', greatest((select max(l.created_at) from public.user_logins l where l.user_id = u.id), au.last_sign_in_at),
-               -- A Google account whose sign-in never came back to TapTurf has neither.
-               'signin_finished', au.last_sign_in_at is not null or exists (select 1 from public.user_logins l where l.user_id = u.id),
+               -- Google accounts only (null otherwise): one whose sign-in never came back to TapTurf has neither.
+               'signin_finished', case when au.id is null or not (au.raw_app_meta_data ->> 'provider' = 'google' or au.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb) then null
+                                       else au.last_sign_in_at is not null or exists (select 1 from public.user_logins l where l.user_id = au.id) end,
                'other_claims', (select count(*) from public.turf_owners o2
                                  where o2.user_id = u.id and o2.turf_id <> o.turf_id and o2.status in ('active', 'pending'))
              ) end as account

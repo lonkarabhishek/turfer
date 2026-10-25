@@ -15,8 +15,10 @@
 -- (admin_contact_emails) can see it.
 --
 -- 1. private.user_contact_emails, private.clean_email.
--- 2. private.profile_json: adds contact_email and ask_email (same
---    signature and return type).
+-- 2. private.profile_json: adds contact_email, ask_email and email_editable
+--    (same signature and return type).
+-- 2b. public.account_update: a new name also goes on the person's upcoming
+--    games and their requests still waiting, which keep a copy of it.
 -- 3. public.account_set_email: save, skip or remove. Five saves a day.
 -- 4. public.admin_contact_emails: for the admin people list.
 -- Additive: nothing dropped, deleted or merged. Safe to run again.
@@ -69,13 +71,47 @@ as $$
            'contact_email', ce.email,
            -- A phone account with no email that has not answered yet.
            'ask_email', u.email is null and (ce.user_id is null)
-                        and not exists (select 1 from auth.users a where a.id = u.id))
+                        and not exists (select 1 from auth.users a where a.id = u.id),
+           -- Who may add one at all (account_set_email's rule): a phone account with no email.
+           'email_editable', u.email is null and not exists (select 1 from auth.users a where a.id = u.id))
     from public.users u
     left join public.usernames n on n.user_id = u.id
     left join private.user_contact_emails ce on ce.user_id = u.id
    where u.id = p_user_id;
 $$;
 revoke all on function private.profile_json(uuid) from public, anon, authenticated;
+
+-- The signed-in user's name (20261021_accounts_usernames.sql), and the copies of it that games and
+-- requests keep: their games from today on, and their requests still waiting for an answer.
+create or replace function public.account_update(p_key text, p_user_id uuid, p_name text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_name text;
+begin
+  if not private.account_key_ok(p_key) then
+    return jsonb_build_object('r', 'unavailable');
+  end if;
+  v_name := private.clean_name(p_name);
+  if p_user_id is null or v_name is null then
+    return jsonb_build_object('r', 'bad');
+  end if;
+  update public.users set name = v_name where id = p_user_id;
+  if not found then
+    return jsonb_build_object('r', 'bad');
+  end if;
+  update public.games set host_name = v_name
+   where creator_id = p_user_id and date >= (now() at time zone 'Asia/Kolkata')::date and host_name is distinct from v_name;
+  update public.game_requests set requester_name = v_name
+   where user_id = p_user_id and status = 'pending' and requester_name is distinct from v_name;
+  return private.profile_json(p_user_id) || jsonb_build_object('r', 'ok');
+end;
+$$;
+revoke all on function public.account_update(text, uuid, text) from public;
+grant execute on function public.account_update(text, uuid, text) to anon, authenticated;
 
 -- p_action: save (p_email), skip (No thanks) or remove. p_source: signup, prompt or profile.
 -- Answers r: ok (with the profile), email (not an address), limit, bad, unavailable.

@@ -47,6 +47,7 @@ interface AuthContextType {
   /** A longer message about the sign-in itself ("your phone login ended"). */
   notice: string | null;
   dismissNotice: () => void;
+  showNotice: (text: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -66,6 +67,7 @@ const AuthContext = createContext<AuthContextType>({
   dismissWelcome: () => {},
   notice: null,
   dismissNotice: () => {},
+  showNotice: () => {},
 });
 
 export function useAuth() {
@@ -116,6 +118,7 @@ function userFromProfile(p: AccountProfile): AppUser {
     taggable: p.taggable,
     contactEmail: p.contact_email ?? undefined,
     askEmail: p.ask_email === true,
+    emailEditable: p.email_editable === true,
   };
 }
 
@@ -165,6 +168,7 @@ function readPhoneUser(): AppUser | null {
       taggable: typeof p.taggable === "boolean" ? p.taggable : undefined,
       contactEmail: typeof p.contact_email === "string" ? p.contact_email : undefined,
       askEmail: p.ask_email === true,
+      emailEditable: p.email_editable === true,
     };
   } catch {
     return null;
@@ -294,10 +298,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(next);
         setProfileFresh(true);
         // A new account: save how they found us, in the background. The database trigger makes
-        // a Google account before this call, so created is never true for Google: a row made in
-        // the last 15 minutes counts as new (the save keeps the first and refuses old accounts).
-        const made = Date.parse(p.created_at);
-        if ((a.body as { created?: boolean }).created || (Number.isFinite(made) && Date.now() - made < 15 * 60_000)) saveSignupContext(p.id, "google");
+        // a Google account before this call, so created is never true for Google: the server says
+        // fresh for a row made in the last 15 minutes (its clock, not the phone's).
+        const b = a.body as { created?: boolean; fresh?: boolean };
+        if (b.created || b.fresh) saveSignupContext(p.id, "google");
         return;
       }
       // 401: the session is being refreshed or ended; Supabase's own events handle that.
@@ -678,7 +682,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getToken, applyProfile,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
-      notice, dismissNotice,
+      notice, dismissNotice, showNotice,
     }}>
       {children}
     </AuthContext.Provider>

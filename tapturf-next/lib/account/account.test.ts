@@ -254,7 +254,9 @@ test("toProfile keeps the known fields and refuses malformed answers", () => {
     taggable: false,
     contact_email: null,
     ask_email: false,
+    email_editable: false,
   });
+  assert.equal(toProfile({ id: "u1", name: "A", email_editable: true })?.email_editable, true);
   assert.equal(toProfile({ id: "u1", name: "A" })?.taggable, true);
   assert.equal(toProfile({ id: "u1", name: "A", ask_email: true, contact_email: "a@b.co" })?.ask_email, true);
   assert.equal(toProfile({ id: "u1", name: "A", ask_email: "yes" })?.ask_email, false, "only true asks");

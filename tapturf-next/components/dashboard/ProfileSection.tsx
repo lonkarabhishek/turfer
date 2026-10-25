@@ -33,7 +33,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
   const username = draft.username ?? (user.username ?? "");
   const taggable = draft.taggable ?? (user.taggable ?? true);
   // Phone accounts can add an email (for deals and invites); a Google account's comes from Google.
-  const emailEditable = !user.email;
+  const emailEditable = !user.email && user.emailEditable === true;
   const email = draft.email ?? (user.contactEmail ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -202,7 +202,8 @@ export function ProfileSection({ user }: { user: AppUser }) {
         )}
 
         {/* Email: a Google account's is read-only; a phone account can add one */}
-        {user.email ? (
+        {user.email || !emailEditable ? (
+          user.email && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
             <div className="relative">
@@ -215,6 +216,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
               />
             </div>
           </div>
+          )
         ) : (
           <div>
             <label htmlFor="profile-email" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -242,7 +244,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
               {emailIssue ??
                 (user.contactEmail && draft.email !== undefined && !email.trim()
                   ? "Save to remove your email."
-                  : "For turf deals and game invites. Only you can see this.")}
+                  : "For turf deals and game invites. Only the TapTurf team sees it.")}
             </p>
             {!emailIssue && emailTypo(email) && (
               <button type="button" onClick={() => setDraft((d) => ({ ...d, email: emailTypo(email) ?? email }))} className="mt-1 text-xs font-semibold text-accent-700 underline underline-offset-2">

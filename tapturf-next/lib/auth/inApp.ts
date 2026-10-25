@@ -16,9 +16,9 @@ const APPS: [RegExp, string][] = [
 
 export type InApp = { app: string | null; os: "android" | "ios" };
 
-/** The in-app browser this user agent is, or null for a real browser. */
-export function inAppBrowser(ua: string | null | undefined): InApp | null {
-  if (!ua) return null;
+/** The in-app browser this user agent is, or null for a real browser (or TapTurf added to the home screen). */
+export function inAppBrowser(ua: string | null | undefined, standalone = false): InApp | null {
+  if (!ua || standalone) return null;
   const ios = /iPhone|iPad|iPod/.test(ua);
   const android = /Android/.test(ua);
   if (!ios && !android) return null;

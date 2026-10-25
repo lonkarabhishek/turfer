@@ -64,6 +64,10 @@ test("inAppBrowser", () => {
   assert.deepEqual(inAppBrowser(UA.webview), { app: null, os: "android" });
   for (const k of ["chrome", "safari", "crios", "gsaIos", "desktop"] as const) assert.equal(inAppBrowser(UA[k]), null, k);
   assert.equal(inAppBrowser(null), null);
+  // TapTurf added to the iPhone home screen has no "Safari/" either, but it is a real browser.
+  const homeScreen = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+  assert.deepEqual(inAppBrowser(homeScreen), { app: null, os: "ios" });
+  assert.equal(inAppBrowser(homeScreen, true), null);
 });
 
 test("chromeIntent keeps the host fixed", () => {

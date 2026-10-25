@@ -278,6 +278,7 @@ await q(`insert into public.user_logins (user_id, method) values ('${G}', 'googl
 eq((await rpc("admin_owner_claims", [null])).find((c) => c.turf_id === T1 && c.user_key === "e:sam@x.in").account.signin_finished, true, "a logged sign-in counts");
 const cp = claims.find((c) => c.user_key === "p:9800000003");
 eq([cp.account.name, cp.account.method, cp.account.phone], ["Priya Phone", "phone", "+919800000003"], "a phone claim's account");
+eq(cp.account.signin_finished, null, "a phone account is never 'Google sign-in didn't finish'");
 eq(claims.find((c) => c.turf_id === T3 && c.user_key === "e:sam@x.in").account.other_claims, 1, "other turfs the account claims (Two was revoked)");
 eq([c1.account.email_checked, cp.account.email_checked], [true, false], "only a Google email counts as checked");
 eq(c1.their_listed_phone, "9800000001", "the listed number that still lets them in");

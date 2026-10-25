@@ -60,7 +60,10 @@ export async function POST(req: Request) {
     }
     if (emailError) console.warn("account: sign-up email not saved", emailError);
   }
-  return accountReply({ profile, created: r.created, ...(emailError ? { emailError } : {}) });
+  // Google accounts are made by the auth trigger before this call: new means made in the last 15 minutes.
+  const made = Date.parse(profile.created_at);
+  const fresh = r.created || (Number.isFinite(made) && Date.now() - made >= -60_000 && Date.now() - made < 15 * 60_000);
+  return accountReply({ profile, created: r.created, fresh, ...(emailError ? { emailError } : {}) });
 }
 
 /** Change the name, the optional email, the username and/or the "Let others find and tag me" switch. */

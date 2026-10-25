@@ -5,6 +5,13 @@ import { exchangeWhy, hasSessionCookie, providerWhy, type Why } from "@/lib/auth
 import { safeNext } from "@/lib/auth/next";
 
 const PROJECT_REF = "hwfsbpzercuoshodmnuf";
+/** Set when a sign-in finishes here, for 5 minutes: a Back or a second leg of that same sign-in carries on. */
+const DONE_COOKIE = "tt_g_done";
+
+/** This browser just finished a Google sign-in here and still has its session. */
+function justSignedIn(request: NextRequest): boolean {
+  return request.cookies.get(DONE_COOKIE)?.value === "1" && hasSessionCookie(request.cookies.getAll().map((c) => c.name), PROJECT_REF);
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -28,6 +35,10 @@ export async function GET(request: NextRequest) {
   // OAuth provider returned an error (user denied, provider mis-configured, ...)
   if (error) {
     const why = providerWhy(error, searchParams.get("error_code"), searchParams.get("error_description"));
+    // A second leg of a sign-in that already finished here (a double return, Back into Google): carry on.
+    if ((why === "used" || why === "again") && justSignedIn(request)) {
+      return NextResponse.redirect(new URL(`/login/complete?next=${encodeURIComponent(next)}`, origin));
+    }
     return back(why === "denied" ? "oauth" : "callback", why, { error, error_code: searchParams.get("error_code") });
   }
 
@@ -69,12 +80,13 @@ export async function GET(request: NextRequest) {
         /* ignore */
       }
     }
+    response.cookies.set(DONE_COOKIE, "1", { maxAge: 300, path: "/api/auth", httpOnly: true, sameSite: "lax", secure: origin.startsWith("https:") });
     return response;
   }
 
   const why = exchangeWhy(exchangeError);
-  // Back or a refresh onto a code already used, in a browser that is signed in: carry on.
-  if (why === "used" && hasSessionCookie(request.cookies.getAll().map((c) => c.name), PROJECT_REF)) {
+  // Back or a refresh onto a code this browser just used to sign in: carry on.
+  if (why === "used" && justSignedIn(request)) {
     return NextResponse.redirect(successUrl);
   }
   const e = exchangeError as { name?: string; code?: string; status?: number };

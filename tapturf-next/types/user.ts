@@ -13,4 +13,6 @@ export interface AppUser {
   contactEmail?: string;
   /** A phone account with no email that has not answered the ask yet. */
   askEmail?: boolean;
+  /** May add an email (a phone account with no email, and the database has the feature). */
+  emailEditable?: boolean;
 }

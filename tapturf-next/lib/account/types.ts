@@ -33,6 +33,8 @@ export type AccountProfile = {
   contact_email: string | null;
   /** A phone account with no email that has not answered the ask yet. */
   ask_email: boolean;
+  /** May add an email at all: a phone account with no email, on a database that has the feature. */
+  email_editable: boolean;
 };
 
 export type AccountError =
@@ -53,7 +55,7 @@ export type AccountError =
   /** Not an email address we accept. */
   | "email";
 
-export type MeResponse = { profile: AccountProfile; created?: boolean; error?: AccountError; emailError?: AccountError } | { error: AccountError };
+export type MeResponse = { profile: AccountProfile; created?: boolean; fresh?: boolean; error?: AccountError; emailError?: AccountError } | { error: AccountError };
 
 export type UsernameCheckResponse = { ok: true; username: string } | { error: AccountError };
 export type UsernameSuggestResponse = { username: string | null } | { error: AccountError };
