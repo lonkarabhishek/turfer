@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RecaptchaVerifier } from "firebase/auth";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -39,8 +39,10 @@ export function MyHome() {
   if (loading) return <Shell><p className="text-primary-500">Loading…</p></Shell>;
   if (!user) return <Landing claimId={claimId} />;
 
-  // Claims are made as the signed-in account; none to claim as, no claim form.
-  const me: Me | null = home?.signed_in && (home.account || home.admin) ? { kind: home.kind, who: home.who, name: home.account?.name ?? user.name ?? null } : null;
+  // Claims are made as the signed-in account (its name, never this device's copy). None to claim as: no claim form.
+  // A database from before accounts on claims sends no account at all: claim as before.
+  const linked = home?.signed_in && (!("account" in home) || !!home.account || home.admin);
+  const me: Me | null = home?.signed_in && linked ? { kind: home.kind, who: home.who, name: home.account?.name ?? null } : null;
 
   return (
     <Shell>
@@ -59,9 +61,11 @@ export function MyHome() {
         <>
           {claimId && me && <ClaimFocus claimId={claimId} home={home} me={me} onDone={load} />}
 
-          {!home.account && !home.admin && (
+          {!me && !home.admin && (
             <p className="mt-6 rounded-2xl bg-amber-50 px-4 py-3 text-[14px] text-amber-900">
-              Your sign-in isn&rsquo;t linked to a TapTurf account yet, so you can&rsquo;t claim a turf. Sign out, sign in again, then try once more.
+              {home.account_state === "conflict"
+                ? "This number is on a TapTurf account that signed up with Google. Sign in with Google to claim your turf, or email info@tapturf.in."
+                : "Your sign-in isn't linked to a TapTurf account yet, so you can't claim a turf. Sign out, sign in again, then try once more."}
             </p>
           )}
 
@@ -97,7 +101,7 @@ export function MyHome() {
             </section>
           )}
 
-          {home.matches.length > 0 && (
+          {me && home.matches.length > 0 && (
             <section className="mt-8">
               <h2 className="text-[13px] font-semibold text-primary-500 mb-1">Turfs that list your number</h2>
               <p className="text-[13px] text-primary-500 mb-3">Your number {home.who.replace(/^(\d{5})(\d{5})$/, "$1 $2")} is on these listings, so you can open them straight away.</p>
@@ -109,7 +113,7 @@ export function MyHome() {
             </section>
           )}
 
-          <ClaimSearch me={me} onDone={load} owned={new Set(home.turfs.map((t) => t.id))} admin={home.admin} />
+          <ClaimSearch me={me} onDone={load} owned={new Set([...home.turfs.map((t) => t.id), ...(claimId ? [claimId] : [])])} matches={new Set(home.matches.map((t) => t.id))} admin={home.admin} />
 
           {home.admin && (
             <p className="mt-10 text-[13px] text-primary-400">
@@ -192,7 +196,7 @@ function ClaimFocus({ claimId, home, me, onDone }: { claimId: string; home: Extr
 }
 
 /** Find your turf by name and claim it. */
-function ClaimSearch({ me, onDone, owned, admin = false }: { me: Me | null; onDone: () => void; owned: Set<string>; admin?: boolean }) {
+function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | null; onDone: () => void; owned: Set<string>; matches: Set<string>; admin?: boolean }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<OwnerTurfRef[]>([]);
   const [busy, setBusy] = useState(false);
@@ -248,7 +252,7 @@ function ClaimSearch({ me, onDone, owned, admin = false }: { me: Me | null; onDo
                 </Link>
               </li>
             ) : owned.has(t.id) || !me ? null : (
-              <ClaimRow key={t.id} turf={t} me={me} onDone={onDone} />
+              <ClaimRow key={t.id} turf={t} me={me} onDone={onDone} instant={matches.has(t.id)} />
             ),
           )}
         </ul>
@@ -275,7 +279,14 @@ const CLAIM_ERRORS: Record<string, string> = {
   bad_phone: "Enter the 10-digit mobile number, like 98765 43210.",
   not_listed: "That number isn't on this listing.",
   bad_code: "We couldn't confirm that code. Send a new one and try again.",
+  wait: "We just sent a code to this number. Wait a minute and try again.",
+  number_busy: "This number has had a lot of codes today. Sign in to TapTurf with this number instead and it opens straight away, or send your claim for a check.",
+  needs_check: "We need to check this one by hand. Send your claim and we'll confirm it, usually within a day.",
 };
+
+const RESEND_S = 120;
+/** A proof is good for 10 minutes on the server; reuse it a little less than that. */
+const PROOF_MS = 9 * 60_000;
 
 function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpen = false }: { turf: OwnerTurfRef; me: Me; onDone: () => void; instant?: boolean; pending?: boolean; startOpen?: boolean }) {
   const [open, setOpen] = useState(startOpen);
@@ -289,8 +300,22 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
   const [msg, setMsg] = useState("");
   const [why, setWhy] = useState("");
   const sender = useRef<{ code: ClaimCode; verifier: RecaptchaVerifier | null } | null>(null);
+  // A code already proved: a retry after a network blip must not need another SMS.
+  const proofRef = useRef<{ proof: string; at: number } | null>(null);
+  const [hasProof, setHasProof] = useState(false);
+  const keepProof = (p: { proof: string; at: number } | null) => {
+    proofRef.current = p;
+    setHasProof(!!p);
+  };
   const [sentTo, setSentTo] = useState("");
-  const captchaId = `claim-captcha-${turf.id}`;
+  // Seconds until another code may go to the same number.
+  const [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+  const captchaId = `claim-captcha-${useId().replace(/:/g, "")}`;
 
   // What the listing has: no mobile means only a check by hand can help.
   useEffect(() => {
@@ -339,12 +364,23 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     setMsg("");
     const p10 = phone.replace(/\D/g, "").slice(-10);
     if (!/^[6-9]\d{9}$/.test(p10)) return setMsg(CLAIM_ERRORS.bad_phone);
+    // Signed in with this very number: it proved it already, no code needed.
+    if (me.kind === "phone" && p10 === me.who) return void openInstant();
     setBusy(true);
     try {
-      const r = await ownerRpc<{ listed?: boolean; error?: string }>("owner_phone_listed", { p_turf_id: turf.id, p_phone: p10 });
+      const r = await ownerRpc<{ listed?: boolean; blocked?: boolean; status?: string; retry_in?: number; error?: string }>("owner_phone_listed", { p_turf_id: turf.id, p_phone: p10 });
+      if (r.status === "active") return void (await opened());
       if (r.error) {
         fail(r.error === "too_many" ? undefined : r.error);
-        if (r.error === "too_many") setMsg("Too many numbers tried. Wait an hour, or send your claim for a check.");
+        if (r.error === "too_many") setMsg("Too many tries for now. Wait an hour, or send your claim for a check.");
+        if (r.error === "wait" && r.retry_in) {
+          setSentTo(p10);
+          setResendIn(r.retry_in);
+        }
+        if (r.error === "number_busy") setStep("manual");
+      } else if (r.blocked) {
+        setWhy(CLAIM_ERRORS.needs_check);
+        setStep("manual");
       } else if (!r.listed) {
         setWhy(`+91 ${spaced(p10)} isn't on this listing, so we'll check your claim by hand, usually within a day.`);
         setStep("manual");
@@ -353,7 +389,9 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
         if ("error" in sent) setMsg(sent.error);
         else {
           sender.current = sent;
+          keepProof(null);
           setSentTo(p10);
+          setResendIn(r.retry_in ?? RESEND_S);
           setCode("");
           setStep("code");
         }
@@ -366,10 +404,15 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
 
   const verify = async () => {
     const s = sender.current;
-    if (!s || !/^\d{6}$/.test(code)) return setMsg("Enter the 6-digit code from the SMS.");
+    const kept = proofRef.current && Date.now() - proofRef.current.at < PROOF_MS ? proofRef.current : null;
+    if (!kept && (!s || !/^\d{6}$/.test(code))) return setMsg("Enter the 6-digit code from the SMS.");
     setBusy(true);
     setMsg("");
-    const c = await s.code.confirm(code);
+    let c: { proof: string } | { error: string } = kept ? { proof: kept.proof } : { error: "" };
+    if (!kept && s) {
+      c = await s.code.confirm(code);
+      if ("proof" in c) keepProof({ proof: c.proof, at: Date.now() });
+    }
     if ("error" in c) {
       setMsg(c.error);
       setBusy(false);
@@ -380,9 +423,17 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
       const r = await ownerRpc<ClaimResult>("owner_claim_verified", { p_proof: c.proof, p_turf_id: turf.id, p_note: pending ? null : note || null, p_role: pending ? null : role });
       if (r.status === "active") return void (await opened());
       fail(r.error);
-      if (r.error === "bad_code" || r.error === "not_listed") setStep("verify");
+      if (r.error === "bad_code" || r.error === "not_listed") {
+        keepProof(null);
+        setStep("verify");
+      } else if (r.error === "needs_check") {
+        keepProof(null);
+        setWhy(CLAIM_ERRORS.needs_check);
+        setStep("manual");
+      }
     } catch {
-      fail();
+      // The code still counts for a while: Try again needs no new SMS.
+      setMsg("Couldn't reach TapTurf. Your code still counts for a few minutes, so tap Verify and open again.");
     }
     setBusy(false);
   };
@@ -439,7 +490,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
             <span className="text-primary-500"> · {me.kind === "email" ? `Google, ${me.who}` : `phone, +91 ${spaced(me.who)}`}</span>
           </div>
 
-          {!done && (
+          {!done && !pending && (
             <div className="inline-flex rounded-full bg-primary-100 p-0.5" role="radiogroup" aria-label="Your role">
               {ROLES.map((r) => (
                 <button
@@ -480,8 +531,8 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
                   className="min-w-0 flex-1 h-12 px-4 rounded-xl border border-primary-200 text-[16px] focus:outline-none focus:border-primary-400"
                 />
               </div>
-              <button type="button" onClick={() => void sendCode()} disabled={busy || phone.length !== 10} className="mt-2 w-full h-12 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
-                {busy ? "Checking…" : "Send code"}
+              <button type="button" onClick={() => void sendCode()} disabled={busy || phone.length !== 10 || (resendIn > 0 && phone === sentTo)} className="mt-2 w-full h-12 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
+                {busy ? "Checking…" : resendIn > 0 && phone === sentTo ? `Send a new code in ${resendIn}s` : "Send code"}
               </button>
               {!pending && (
                 <button type="button" onClick={() => { setWhy(""); setMsg(""); setStep("manual"); }} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
@@ -494,7 +545,9 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
           {step === "code" && sentTo && (
             <div>
               <p className="font-semibold text-[15px] text-primary-900">Enter the code</p>
-              <p className="text-[13px] text-primary-600">We sent a 6-digit code to +91 {spaced(sentTo)}.</p>
+              <p className="text-[13px] text-primary-600">
+                We sent a 6-digit code to +91 {spaced(sentTo)}. The SMS says it&rsquo;s for tapturf.firebaseapp.com: that&rsquo;s us.
+              </p>
               <input
                 type="text"
                 inputMode="numeric"
@@ -511,7 +564,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
                 className="mt-2 w-full h-12 px-4 rounded-xl border border-primary-200 text-[20px] tracking-[0.3em] text-center focus:outline-none focus:border-primary-400"
                 autoFocus
               />
-              <button type="button" onClick={() => void verify()} disabled={busy || code.length !== 6} className="mt-2 w-full h-12 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
+              <button type="button" onClick={() => void verify()} disabled={busy || (code.length !== 6 && !hasProof)} className="mt-2 w-full h-12 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
                 {busy ? "Checking…" : "Verify and open"}
               </button>
               <button type="button" onClick={() => { setStep("verify"); setMsg(""); }} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">

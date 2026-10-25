@@ -308,8 +308,8 @@ function EmailItem({ p }: { p: Person }) {
       <>
         <a href={`mailto:${c.email}`} className={link}>
           {c.email}
-        </a>
-        <span className="ml-1.5 inline-block rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-semibold text-primary-600">Typed by them, not checked</span>
+        </a>{" "}
+        <span className="ml-1 inline-block rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-semibold text-primary-600">Typed by them, not checked</span>
         {c.shared && <span className="block text-[12px] text-hot-600">Same address as another account</span>}
       </>
     );

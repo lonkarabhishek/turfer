@@ -19,6 +19,8 @@ export type ClaimAccount = {
   otherClaims: number;
   /** False for a Google account whose sign-in never came back to TapTurf. */
   signInFinished: boolean;
+  /** Google checked this email; an old-app email was only typed. */
+  emailChecked: boolean;
 };
 export type AdminClaim = {
   turfId: string;
@@ -39,6 +41,10 @@ export type AdminClaim = {
   verifiedPhone: string | null;
   /** The last number they typed for this turf that was not on the listing. */
   phoneGiven: string | null;
+  /** When TapTurf last turned this claim down, if ever. */
+  rejectedAt: number | null;
+  /** A listed number of theirs that still opens the turf at once (10 digits). */
+  theirListedPhone: string | null;
   /** Stored at claim time: the account's name now (the typed name on old claims). */
   storedName: string | null;
   userId: string | null;
@@ -62,7 +68,7 @@ function toAccount(x: unknown): ClaimAccount | null {
   if (!a || !id) return null;
   const method = typeof a.method === "string" && METHODS.includes(a.method) ? (a.method as Method) : "unknown";
   const other = typeof a.other_claims === "number" && Number.isFinite(a.other_claims) ? Math.max(0, Math.round(a.other_claims)) : 0;
-  return { id, name: str(a.name), username: str(a.username), email: str(a.email), phone: str(a.phone), method, signedUpAt: time(a.signed_up_at), lastSeen: time(a.last_seen), otherClaims: other, signInFinished: a.signin_finished !== false };
+  return { id, name: str(a.name), username: str(a.username), email: str(a.email), phone: str(a.phone), method, signedUpAt: time(a.signed_up_at), lastSeen: time(a.last_seen), otherClaims: other, signInFinished: a.signin_finished !== false, emailChecked: a.email_checked === true };
 }
 
 /** Rows from admin_owner_claims; anything malformed is left out. */
@@ -91,6 +97,8 @@ export function toClaims(data: unknown): AdminClaim[] {
       listedPhones: Array.isArray(r.listed_phones) ? r.listed_phones.filter((p): p is string => typeof p === "string") : [],
       verifiedPhone: str(r.verified_phone),
       phoneGiven: str(r.phone_given),
+      rejectedAt: time(r.rejected_at),
+      theirListedPhone: str(r.their_listed_phone),
       storedName: str(r.name),
       userId: str(r.user_id),
       account: toAccount(r.account),

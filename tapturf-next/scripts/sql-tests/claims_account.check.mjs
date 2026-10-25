@@ -79,7 +79,8 @@ await db.exec(NEW);
 await db.exec(NEW); // safe to run again
 
 const as = async (claims) => q(`select set_config('request.jwt.claims', $1, false)`, [claims ? JSON.stringify(claims) : ""]);
-const google = (sub, email) => as({ sub, email, app_metadata: { provider: "google", providers: ["google"] } });
+const OAUTH = [{ method: "oauth", timestamp: 1 }];
+const google = (sub, email) => as({ sub, email, app_metadata: { provider: "google", providers: ["google"] }, amr: OAUTH });
 const rpc = async (fn, args) => (await one(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(", ")}) r`, args)).r;
 const claim = (turf, opts = {}) => rpc("owner_claim", [opts.token ?? null, turf, opts.name ?? null, opts.note ?? null, opts.role ?? "owner"]);
 const row = (turf, key) => one("select status, via, user_id, name, verified_phone, note, role from public.turf_owners where turf_id = $1 and user_key = $2", [turf, key]);
@@ -94,8 +95,15 @@ eq((await one("select public._caller_key(null) k")).k, "e:sam@x.in", "a Google s
 await as({ sub: E, email: "old@x.in", app_metadata: { provider: "email", providers: ["email"] } });
 eq((await one("select public._caller_key(null) k")).k, null, "an email and password session is not");
 eq(await claim(T1), { error: "sign_in" }, "so it cannot claim");
-await as({ sub: OWNER, email: "lonkarabhishek00@gmail.com", app_metadata: { provider: "email", providers: ["email", "google"] } });
+await as({ sub: OWNER, email: "lonkarabhishek00@gmail.com", app_metadata: { provider: "email", providers: ["email", "google"] }, amr: [{ method: "password", timestamp: 1 }] });
+eq((await one("select public._caller_key(null) k")).k, null, "a password session on an account that also has Google is not");
+eq((await one("select public._is_site_owner(null) o")).o, false, "nor the site owner, for admin");
+await as({ sub: OWNER, email: "lonkarabhishek00@gmail.com", app_metadata: { provider: "email", providers: ["email", "google"] }, amr: OAUTH });
 eq((await one("select public._caller_key(null) k")).k, "e:lonkarabhishek00@gmail.com", "the site owner's linked Google account still is");
+eq((await one("select public._is_site_owner(null) o")).o, true, "and admin still opens for their Google session");
+await as({ sub: G, email: "sam@x.in", app_metadata: { provider: "google", providers: ["google"] } });
+eq((await one("select public._caller_key(null) k")).k, null, "a session without amr is not trusted");
+await as({ sub: OWNER, email: "lonkarabhishek00@gmail.com", app_metadata: { provider: "email", providers: ["email", "google"] }, amr: OAUTH });
 eq(await claim(T1), { status: "active", admin: true }, "the site owner opens any turf");
 eq((await one(`select count(*)::int n from public.turf_owners where user_key = 'e:lonkarabhishek00@gmail.com'`)).n, 0, "with no claim row");
 await as(null);
@@ -135,12 +143,26 @@ await q(`insert into private.users_phone_changes (user_id) values ('${P}')`);
 eq(await afk("p:9800000003"), null, "a number changed through the API does not open the account");
 await q(`truncate private.users_phone_changes`);
 
+// A proof must be a fresh sign-in.
+const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+const tok = (claims) => `${b64u({ alg: "RS256" })}.${b64u(claims)}.sig`;
+const nowS = Math.floor(Date.now() / 1000);
+const fresh = async (t) => (await one("select private.fresh_token_claims($1) c", [t])).c;
+eq((await fresh(tok({ auth_time: nowS - 60, phone_number: "+919800000001" })))?.phone_number, "+919800000001", "a sign-in a minute ago");
+eq(await fresh(tok({ auth_time: nowS - 11 * 60, phone_number: "+919800000001" })), null, "an 11-minute-old sign-in is not a proof");
+eq(await fresh(tok({ phone_number: "+919800000001" })), null, "no auth_time");
+eq(await fresh(tok({ auth_time: "soon" })), null, "auth_time not a number");
+eq(await fresh("not.a-token"), null, "garbage");
+eq(await fresh(null), null, "null");
+eq((await one("select private.firebase_phone10($1) p", [tok({ auth_time: nowS, phone_number: "+919800000001" }) + "x".repeat(100)])).p, null, "no Google here: nothing is trusted without the lookup");
+
 // From here, stand-ins for Firebase.
 await db.exec(`
 create or replace function private.firebase_phone10(p_token text) returns text language sql as
   $$ select case when p_token ~ '^proof:[6-9][0-9]{9}$' then substr(p_token, 7) end $$;
 create or replace function public._caller_key(p_token text) returns text language sql security definer set search_path = public as $$
   select case when lower(coalesce(auth.jwt() ->> 'email', '')) <> '' and coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) @> '["google"]'::jsonb
+                   and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb
               then 'e:' || lower(auth.jwt() ->> 'email')
               when p_token ~ '^phone:[6-9][0-9]{9}$' then 'p:' || substr(p_token, 7) end $$;
 `);
@@ -153,7 +175,7 @@ eq([r.via, r.user_id, r.name, r.verified_phone], ["phone_match", P, "Priya Phone
 
 // Is a number listed? Before any code is sent.
 await google(G, "sam@x.in");
-eq(await rpc("owner_phone_listed", [null, T1, "98000 00001"]), { listed: true }, "the listed number, typed with a space");
+eq(await rpc("owner_phone_listed", [null, T1, "98000 00001"]), { listed: true, retry_in: 120 }, "the listed number, typed with a space");
 eq(await rpc("owner_phone_listed", [null, T1, "+91 9800000002"]), { listed: false }, "another number");
 eq(await rpc("owner_phone_listed", [null, T2, "02025670000"]), { error: "bad_phone" }, "a landline is not a mobile");
 eq(await rpc("owner_phone_listed", [null, OFF, "9800000001"]), { error: "not_found" }, "inactive turf");
@@ -184,19 +206,70 @@ eq(await verify(T1, "proof:9800000001"), { status: "active" }, "again: still act
 eq(await verify(T2, "proof:9800000002"), { status: "active" }, "owner_phone counts");
 eq((await row(T2, "e:sam@x.in")).verified_phone, "9800000002");
 
-// Revoked stays revoked, code or not.
+// Revoked stays revoked, code or not, whichever way they come back.
 await q(`update public.turf_owners set status = 'revoked' where turf_id = '${T2}' and user_key = 'e:sam@x.in'`);
 eq(await verify(T2, "proof:9800000002"), { error: "revoked" }, "a revoked claim stays revoked");
 eq(await claim(T2), { error: "revoked" }, "owner_claim agrees");
+await as(null);
+await q(`insert into public.users (id, name, phone) values ('66666666-6666-4666-8666-666666666666', 'Sam Phone', '+919800000002')`);
+eq(await claim(T2, { token: "phone:9800000002" }), { error: "revoked" }, "not by signing in with the number they proved");
+eq((await rpc("owner_home", ["phone:9800000002"])).matches.some((t) => t.id === T2), false, "and the turf is not offered to them");
+await google(G, "sam@x.in");
 await google(G2, "nobody@x.in");
 eq(await verify(T1, "proof:9800000001"), { error: "no_account" }, "no account, no claim, even with the code");
+
+// A WhatsApp number an owner set in myTapturf does not open the turf at once.
+const T4 = "aaaaaaaa-0000-4000-8000-000000000004";
+await q(`insert into public.turfs (id, name, slug, city, whatsapp_phone, contact_info) values ('${T4}', 'Four', 'four', 'pune', '+919800000007', '{"phone":"9800000008"}')`);
+eq((await one(`select private.turf_trusted_phones('${T4}') p`)).p, ["9800000008", "9800000007"], "both listed numbers count");
+await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T4}', 'e:someone@x.in', '{"whatsapp_phone":null}', '{"whatsapp_phone":"+919800000007"}')`);
+eq((await one(`select private.turf_trusted_phones('${T4}') p`)).p, ["9800000008"], "not the one an owner set");
+eq(await rpc("owner_claim_info", [null, T4]), { mobiles: 1, endings: ["08"] }, "the claim form only offers the other");
+eq(await rpc("owner_phone_listed", [null, T4, "9800000007"]), { listed: false, blocked: true }, "an owner-set number is not a way in: a check by hand");
+await q(`update public.turfs set whatsapp_phone = '+919800000009' where id = '${T4}'`);
+eq((await one(`select private.turf_trusted_phones('${T4}') p`)).p, ["9800000008", "9800000009"], "a number changed since (by TapTurf) counts again");
+
+// One listed number gets a code at most every 2 minutes and 5 a day, whoever asks; one sign-in 10 a day.
+await as(null);
+const listed = (k, turf, ph) => rpc("owner_phone_listed", [`phone:${k}`, turf, ph]);
+const age = (ph, by) => q(`update private.claim_phone_checks set at = at - interval '${by}' where phone = '${ph}'`);
+eq(await listed("9800000011", T4, "9800000008"), { listed: true, retry_in: 120 }, "first code");
+const w = await listed("9800000012", T4, "9800000008");
+ok(w.error === "wait" && w.retry_in > 100 && w.retry_in <= 120, `another sign-in a moment later waits (${JSON.stringify(w)})`);
+for (let i = 2; i <= 5; i++) {
+  await age("9800000008", "3 minutes");
+  eq(await listed(`980000001${i}`, T4, "9800000008"), { listed: true, retry_in: 120 }, `code ${i} of 5 today`);
+}
+await age("9800000008", "3 minutes");
+eq(await listed("9800000016", T4, "9800000008"), { error: "number_busy" }, "a sixth in a day: the number is busy");
+await age("9800000008", "1 day");
+eq(await listed("9800000016", T4, "9800000008"), { listed: true, retry_in: 120 }, "next day");
+// The owner-set WhatsApp number (T4 earlier): on the listing, but only a check by hand.
+await q(`update public.turfs set whatsapp_phone = '+919800000007' where id = '${T4}'`);
+eq(await listed("9800000017", T4, "9800000007"), { listed: false, blocked: true }, "an owner-set number: by hand");
+// Already in, or turned away: said before any code.
+eq(await listed("9800000003", T2, "9800000002"), { status: "active" }, "an active claimant is told they're in");
+eq(await listed("9800000002", T2, "9800000002"), { error: "revoked" }, "a revoked number is told, before any code");
+// A pending phone claim opens once its own number is listed.
+await q(`insert into public.users (id, name, phone) values ('77777777-7777-4777-8777-777777777777', 'Late Owner', '+919800000021')`);
+eq(await claim(T3, { token: "phone:9800000021" }), { status: "pending" }, "no number on the listing yet: pending");
+await q(`update public.turfs set owner_phone = '9800000021' where id = '${T3}'`);
+eq(await claim(T3, { token: "phone:9800000021" }), { status: "active" }, "the number is listed now: open");
+eq((await row(T3, "p:9800000021")).verified_phone, "9800000021");
+await google(G, "sam@x.in");
+
+// Every claim, code and decision is kept.
+const ev = await q(`select turf_id, user_key, from_status, to_status, how from private.turf_owner_events order by id`);
+ok(ev.some((e) => e.turf_id === T1 && e.user_key === "e:sam@x.in" && e.from_status === null && e.to_status === "pending" && e.how === "claim"), "the first claim");
+ok(ev.some((e) => e.turf_id === T1 && e.to_status === "active" && e.how === "code:9800000001"), "the code that opened it");
+ok(ev.some((e) => e.user_key === "p:9800000003" && e.how === "phone_match"), "a phone match");
 
 // Admin sees the account.
 await db.exec(`create or replace function public._is_site_owner(p_firebase_token text default null) returns boolean language sql stable as $$ select coalesce(current_setting('test.owner', true), '') = 'yes' $$;`);
 eq(await rpc("admin_owner_claims", [null]), { error: "forbidden" }, "not the site owner");
 await q(`select set_config('test.owner', 'yes', false)`);
 const claims = await rpc("admin_owner_claims", [null]);
-eq(Array.isArray(claims) && claims.length, 4, "every claim");
+eq(Array.isArray(claims) && claims.length, 5, "every claim");
 const c1 = claims.find((c) => c.turf_id === T1 && c.user_key === "e:sam@x.in");
 eq([c1.user_id, c1.account.name, c1.account.username, c1.account.email, c1.account.method, c1.verified_phone, c1.slug, c1.site_owner], [G, "Sam Account", "sam", "sam@x.in", "google", "9800000001", "one", false], "the claim's account, method and the number proved");
 eq(c1.phone_given, "9800000002", "and the number they typed that was not listed");
@@ -205,6 +278,16 @@ await q(`insert into public.user_logins (user_id, method) values ('${G}', 'googl
 eq((await rpc("admin_owner_claims", [null])).find((c) => c.turf_id === T1 && c.user_key === "e:sam@x.in").account.signin_finished, true, "a logged sign-in counts");
 const cp = claims.find((c) => c.user_key === "p:9800000003");
 eq([cp.account.name, cp.account.method, cp.account.phone], ["Priya Phone", "phone", "+919800000003"], "a phone claim's account");
-eq(claims.find((c) => c.turf_id === T3).account.other_claims, 1, "other turfs the account claims (Two was revoked)");
+eq(claims.find((c) => c.turf_id === T3 && c.user_key === "e:sam@x.in").account.other_claims, 1, "other turfs the account claims (Two was revoked)");
+eq([c1.account.email_checked, cp.account.email_checked], [true, false], "only a Google email counts as checked");
+eq(c1.their_listed_phone, "9800000001", "the listed number that still lets them in");
+eq(c1.rejected_at, null, "never turned down");
+// A rejection is kept when they claim again.
+const r1 = await rpc("admin_decide_owner_claim", [null, T1, "e:sam@x.in", "rejected"]);
+eq(r1, { ok: true }, "rejected");
+eq(await claim(T1), { status: "pending" }, "they claim again");
+const again = (await rpc("admin_owner_claims", [null])).find((c) => c.turf_id === T1 && c.user_key === "e:sam@x.in");
+ok(again.status === "pending" && again.rejected_at !== null, "and admin still sees the rejection");
+eq(await rpc("admin_decide_owner_claim", [null, T1, "e:nobody", "active"]), { ok: false }, "no such claim");
 
 console.log(`claims_account: ${passed} checks passed`);

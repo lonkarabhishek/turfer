@@ -38,6 +38,11 @@ test("a full row", () => {
   assert.equal(c.account?.signInFinished, true, "true unless the database says false");
   const [d] = toClaims([row({ account: { id: "u1", method: "google", signin_finished: false } })]);
   assert.equal(d.account?.signInFinished, false);
+  assert.equal(c.account?.emailChecked, false, "only when the database says so");
+  const [e] = toClaims([row({ rejected_at: "2026-10-20T10:00:00Z", their_listed_phone: "9800000001", account: { id: "u1", method: "google", email_checked: true } })]);
+  assert.equal(e.rejectedAt, Date.parse("2026-10-20T10:00:00Z"));
+  assert.equal(e.theirListedPhone, "9800000001");
+  assert.equal(e.account?.emailChecked, true);
 });
 
 test("no account, odd values", () => {

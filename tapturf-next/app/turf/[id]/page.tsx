@@ -389,6 +389,7 @@ export default async function TurfDetailPage({
                   <p className="font-semibold text-primary-900">Is this your turf?</p>
                   <p className="mt-0.5 text-[14px] text-primary-600 leading-snug">
                     Claim this listing to see how many players view and call you, and keep your prices and hours right. Free.
+                    Have the phone with the number on this page? A code to it gets you in at once.
                   </p>
                 </div>
                 <Link

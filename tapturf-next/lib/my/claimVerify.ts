@@ -80,7 +80,7 @@ export async function sendClaimCode(phone10: string, containerId: string, previo
       }
       return { error: friendlyOtpError(errorCode(e), "Couldn't send the code. Try again in a minute.") };
     }
-    logOtpSend(true, "claim", phone10);
+    logOtpSend(true, null, phone10);
     return {
       verifier,
       code: {

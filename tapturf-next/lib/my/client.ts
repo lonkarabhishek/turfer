@@ -11,6 +11,14 @@ import { getFirebaseAuth } from "@/lib/firebase/client";
 
 /** Firebase ID token for phone sign-ins; null for Google sign-ins. */
 export async function ownerToken(): Promise<string | null> {
+  // Local end-to-end builds only (next.config.ts refuses the flag on Vercel), as lib/account/client.ts firebaseToken.
+  if (process.env.NEXT_PUBLIC_E2E_AUTH === "1") {
+    try {
+      return localStorage.getItem("tt_e2e_fb_token");
+    } catch {
+      return null;
+    }
+  }
   try {
     const auth = await getFirebaseAuth();
     await auth.authStateReady();
@@ -48,8 +56,10 @@ export type OwnerHome =
       who: string;
       kind: "phone" | "email";
       admin: boolean;
-      /** The TapTurf account claims are made as; null when this sign-in opens none. */
-      account: { name: string | null; username: string | null } | null;
+      /** The TapTurf account claims are made as; null when this sign-in opens none. Missing on an older database. */
+      account?: { name: string | null; username: string | null } | null;
+      /** none: no account for this sign-in yet; conflict: its number is on an account it can't open. */
+      account_state?: "ok" | "none" | "conflict";
       turfs: (OwnerTurfRef & { status: "active" | "pending"; via: string; since: string })[];
       matches: OwnerTurfRef[];
     };

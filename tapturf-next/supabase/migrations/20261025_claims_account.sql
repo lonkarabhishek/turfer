@@ -24,6 +24,18 @@
 --    password sessions no longer open myTapturf.
 -- 7. The four-argument owner_claim (unused since 20261019_mytapturf_claims)
 --    forwards to the five-argument one and is closed to the browser.
+-- 8. Which listed numbers open a turf at once: not a WhatsApp number an
+--    owner set themselves in myTapturf (private.turf_trusted_phones).
+-- 9. Revoked stays revoked: a revoked person can't come back through
+--    another sign-in, the same account or the same proved number.
+-- 10. A code's proof must be fresh (signed in within 10 minutes). One
+--    listed number gets a code at most every 2 minutes and 5 a day, and one
+--    sign-in at most 10 a day. A revoked or active claim is answered before
+--    any code is sent.
+-- 11. _caller_key and _is_site_owner also need the session itself to be a
+--    Google one (amr oauth), not only a Google identity on the account.
+-- 12. private.turf_owner_events: every claim, code and decision, so a
+--    rejection is not lost when someone claims again.
 --
 -- Additive: two columns, one table, replaced function bodies with the same
 -- signatures, one revoke. Nothing is dropped, deleted or merged. Safe to
@@ -50,7 +62,63 @@ alter table private.claim_phone_checks add column if not exists turf_id uuid;
 alter table private.claim_phone_checks add column if not exists phone text;
 alter table private.claim_phone_checks add column if not exists listed boolean;
 create index if not exists claim_phone_checks_key_at on private.claim_phone_checks (user_key, at);
+create index if not exists claim_phone_checks_phone_at on private.claim_phone_checks (phone, at);
 revoke all on private.claim_phone_checks from public, anon, authenticated;
+
+-- Every claim, code and admin decision, newest last (the claim row keeps only its latest state).
+create table if not exists private.turf_owner_events (
+  id bigint generated always as identity primary key,
+  turf_id uuid not null,
+  user_key text not null,
+  user_id uuid,
+  from_status text,
+  to_status text not null,
+  how text,
+  at timestamptz not null default now()
+);
+create index if not exists turf_owner_events_turf on private.turf_owner_events (turf_id, user_key, at);
+revoke all on private.turf_owner_events from public, anon, authenticated;
+
+-- ── Which listed numbers open a turf at once ──────────────
+-- All of _turf_phones, except a WhatsApp number an owner set in myTapturf
+-- (owner_update_turf logs it in turf_edit_log): someone with access must
+-- not be able to add a number that gets them, or anyone, back in at once.
+create or replace function private.turf_trusted_phones(p_turf_id uuid)
+returns text[]
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select array_remove(array[
+    public._phone10(t.contact_info ->> 'phone'),
+    public._phone10(t.owner_phone),
+    case when public._phone10(t.whatsapp_phone) is distinct from (
+           select public._phone10(l.after ->> 'whatsapp_phone') from public.turf_edit_log l
+            where l.turf_id = t.id and l.after ? 'whatsapp_phone' order by l.created_at desc limit 1)
+         then public._phone10(t.whatsapp_phone) end
+  ], null)
+  from public.turfs t where t.id = p_turf_id;
+$$;
+revoke all on function private.turf_trusted_phones(uuid) from public, anon, authenticated;
+
+-- Was this person turned away from this turf: the same sign-in, the same account, or the same number.
+create or replace function private.claim_revoked(p_turf_id uuid, p_key text, p_user_id uuid, p_phone text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.turf_owners r
+     where r.turf_id = p_turf_id and r.status = 'revoked'
+       and (r.user_key = p_key
+            or (p_user_id is not null and r.user_id = p_user_id)
+            or (p_phone is not null and (r.verified_phone = p_phone or r.user_key = 'p:' || p_phone))
+            or (left(p_key, 2) = 'p:' and r.verified_phone = substr(p_key, 3))));
+$$;
+revoke all on function private.claim_revoked(uuid, text, uuid, text) from public, anon, authenticated;
 
 -- ── Which account a myTapturf sign-in is ──────────────────
 -- The rules account_resolve uses (20261021_accounts_fixes.sql), read only:
@@ -101,7 +169,40 @@ as $$
 $$;
 revoke all on function private.caller_account(text) from public, anon, authenticated;
 
--- A Firebase ID token's verified phone, as 10 digits (Indian mobiles only), or null.
+-- A Firebase ID token's own claims when it is from a sign-in in the last 10 minutes, else null.
+-- Read without checking the signature: firebase_phone10 asks Google for that.
+create or replace function private.fresh_token_claims(p_token text)
+returns jsonb
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  v_part text := split_part(coalesce(p_token, ''), '.', 2);
+  v_claims jsonb;
+begin
+  if v_part = '' then
+    return null;
+  end if;
+  begin
+    v_claims := convert_from(decode(rpad(translate(v_part, '-_', '+/'), ((length(v_part) + 3) / 4) * 4, '='), 'base64'), 'utf8')::jsonb;
+  exception when others then
+    return null;
+  end;
+  -- coalesce: a missing claim must refuse, not slip through as null.
+  if coalesce(jsonb_typeof(v_claims), '') <> 'object' or coalesce(jsonb_typeof(v_claims -> 'auth_time'), '') <> 'number' then
+    return null;
+  end if;
+  if (v_claims ->> 'auth_time')::numeric < extract(epoch from now() - interval '10 minutes') then
+    return null;
+  end if;
+  return v_claims;
+end;
+$$;
+revoke all on function private.fresh_token_claims(text) from public, anon, authenticated;
+
+-- A Firebase ID token's verified phone, as 10 digits (Indian mobiles only), or null. Only a fresh
+-- sign-in counts: a code just sent, never an old token for that number lying about.
 create or replace function private.firebase_phone10(p_token text)
 returns text
 language plpgsql
@@ -110,8 +211,9 @@ set search_path = ''
 as $$
 declare
   v_phone text;
+  v_claims jsonb := private.fresh_token_claims(p_token);
 begin
-  if p_token is null or length(p_token) < 100 or length(p_token) > 8000
+  if v_claims is null or length(p_token) < 100 or length(p_token) > 8000
      or not exists (select 1 from pg_extension where extname = 'http') then
     return null;
   end if;
@@ -128,7 +230,8 @@ begin
   exception when others then
     return null;
   end;
-  if v_phone is null or v_phone !~ '^\+91[0-9]{10}$' then
+  -- The number Google vouches for, and the one the token itself names.
+  if v_phone is null or v_phone !~ '^\+91[0-9]{10}$' or v_phone is distinct from v_claims ->> 'phone_number' then
     return null;
   end if;
   return public._phone10(v_phone);
@@ -147,9 +250,12 @@ declare
   v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
   v_phone text;
 begin
-  -- A Google sign-in (an old-app email and password session is not one;
-  -- it falls through to the phone check, like no session at all).
-  if v_email <> '' and coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) @> '["google"]'::jsonb then
+  -- A Google sign-in: a Google identity, and this session signed in with it
+  -- (amr oauth). An email and password session is not one, even on an
+  -- account that also has Google; it falls through to the phone check.
+  if v_email <> ''
+     and coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) @> '["google"]'::jsonb
+     and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
     return 'e:' || v_email;
   end if;
   if p_token is null or length(p_token) < 100
@@ -178,6 +284,44 @@ end;
 $$;
 revoke all on function public._caller_key(text) from public, anon, authenticated;
 
+-- The site owner, as before (20261021_phone_identity_exact_india.sql), with
+-- the same rule for the Google path: this session signed in with Google.
+create or replace function public._is_site_owner(p_firebase_token text default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_phone text;
+begin
+  if lower(coalesce(auth.jwt() ->> 'email', '')) = 'lonkarabhishek00@gmail.com'
+     and coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) @> '["google"]'::jsonb
+     and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
+    return true;
+  end if;
+  if p_firebase_token is null or length(p_firebase_token) < 100
+     or not exists (select 1 from pg_extension where extname = 'http') then
+    return false;
+  end if;
+  begin
+    execute $q$
+      select r.content::jsonb #>> '{users,0,phoneNumber}'
+      from extensions.http_post(
+        'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=AIzaSyDQE1iEsJXZqqHLJw5WrtjkD5A0vwpvwxY',
+        json_build_object('idToken', $1)::text,
+        'application/json'
+      ) r
+      where r.status = 200
+    $q$ into v_phone using p_firebase_token;
+  exception when others then
+    return false;
+  end;
+  return coalesce(v_phone, '') = '+919403612979';
+end;
+$$;
+revoke all on function public._is_site_owner(text) from public, anon, authenticated;
+
 -- ── Owner home: plus the account claims are made as ───────
 create or replace function public.owner_home(p_token text default null)
 returns jsonb
@@ -201,6 +345,10 @@ begin
     'account', (select jsonb_build_object('name', u.name, 'username', un.username)
                   from public.users u left join public.usernames un on un.user_id = u.id
                  where u.id = v_uid),
+    -- none: no account for this sign-in yet; conflict: the number is on an account it can't open (a Google one).
+    'account_state', case when v_uid is not null then 'ok'
+                          when left(k, 2) = 'p:' and exists (select 1 from public.users u where u.phone = '+91' || substr(k, 3)) then 'conflict'
+                          else 'none' end,
     'turfs', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', t.id, 'name', t.name, 'city', t.city, 'area', t.area,
@@ -216,7 +364,9 @@ begin
       from public.turfs t
       where t.is_active
         and substr(k, 3) in (public._phone10(t.contact_info ->> 'phone'), public._phone10(t.owner_phone), public._phone10(t.whatsapp_phone))
+        and substr(k, 3) = any(private.turf_trusted_phones(t.id))
         and not exists (select 1 from public.turf_owners o where o.turf_id = t.id and o.user_key = k and o.status in ('active', 'pending'))
+        and not private.claim_revoked(t.id, k, v_uid, null)
     ), '[]'::jsonb) else '[]'::jsonb end
   );
 end;
@@ -234,6 +384,7 @@ declare
   v_uid uuid;
   v_name text;
   v_status text;
+  v_prev text;
   v_role text := case when p_role in ('owner', 'manager', 'staff') then p_role end;
 begin
   if k is null then
@@ -252,23 +403,35 @@ begin
   end if;
   select left(nullif(btrim(u.name), ''), 80) into v_name from public.users u where u.id = v_uid;
   select status into v_status from public.turf_owners where turf_id = p_turf_id and user_key = k;
+  -- A waiting phone claim opens once its own number is on the listing.
+  if v_status = 'pending' and left(k, 2) = 'p:' and substr(k, 3) = any(coalesce(private.turf_trusted_phones(p_turf_id), '{}'))
+     and not private.claim_revoked(p_turf_id, k, v_uid, null) then
+    update public.turf_owners set status = 'active', via = 'phone_match', verified_phone = substr(k, 3), decided_at = now(), user_id = coalesce(user_id, v_uid)
+     where turf_id = p_turf_id and user_key = k and status = 'pending';
+    insert into private.turf_owner_events (turf_id, user_key, user_id, from_status, to_status, how)
+    values (p_turf_id, k, v_uid, 'pending', 'active', 'phone_match');
+    return jsonb_build_object('status', 'active');
+  end if;
   if v_status in ('active', 'pending') then
     -- Same claim again: keep it, and link the account if an old row lacks it.
     update public.turf_owners set user_id = v_uid where turf_id = p_turf_id and user_key = k and user_id is null;
     return jsonb_build_object('status', v_status);
   end if;
-  if v_status = 'revoked' then
+  if v_status = 'revoked' or private.claim_revoked(p_turf_id, k, v_uid, null) then
     return jsonb_build_object('error', 'revoked');
   end if;
   if (select count(*) from public.turf_owners where user_key = k and status = 'pending') >= 5 then
     return jsonb_build_object('error', 'too_many');
   end if;
 
-  if left(k, 2) = 'p:' and substr(k, 3) = any(coalesce(public._turf_phones(p_turf_id), '{}')) then
+  v_prev := v_status;
+  if left(k, 2) = 'p:' and substr(k, 3) = any(coalesce(private.turf_trusted_phones(p_turf_id), '{}')) then
     v_status := 'active';
   else
     v_status := 'pending';
   end if;
+  insert into private.turf_owner_events (turf_id, user_key, user_id, from_status, to_status, how)
+  values (p_turf_id, k, v_uid, v_prev, v_status, case when v_status = 'active' then 'phone_match' else 'claim' end);
 
   insert into public.turf_owners (turf_id, user_key, user_id, status, via, name, note, role, verified_phone, created_at, decided_at)
   values (p_turf_id, k, v_uid, v_status, case when v_status = 'active' then 'phone_match' else 'admin' end,
@@ -278,7 +441,13 @@ begin
   on conflict (turf_id, user_key) do update
     set user_id = excluded.user_id, status = excluded.status, via = excluded.via, name = excluded.name,
         note = excluded.note, role = excluded.role, verified_phone = excluded.verified_phone,
-        created_at = now(), decided_at = excluded.decided_at;
+        created_at = now(), decided_at = excluded.decided_at
+    -- Revoked a moment ago by the admin: that stands.
+    where public.turf_owners.status <> 'revoked'
+  returning status into v_status;
+  if v_status is null then
+    return jsonb_build_object('error', 'revoked');
+  end if;
 
   return jsonb_build_object('status', v_status);
 end;
@@ -317,12 +486,38 @@ begin
   if v_phone is null then
     return jsonb_build_object('error', 'bad_phone');
   end if;
+  -- Answered before any code goes out: already in, or turned away.
+  if public._is_admin_key(k) or exists (select 1 from public.turf_owners o where o.turf_id = p_turf_id and o.user_key = k and o.status = 'active') then
+    return jsonb_build_object('status', 'active');
+  end if;
+  if private.claim_revoked(p_turf_id, k, private.caller_account(k), v_phone) then
+    return jsonb_build_object('error', 'revoked');
+  end if;
   if (select count(*) from private.claim_phone_checks c where c.user_key = k and c.at > now() - interval '1 hour') >= 20 then
     return jsonb_build_object('error', 'too_many');
   end if;
-  v_listed := v_phone = any(coalesce(public._turf_phones(p_turf_id), '{}'));
+  v_listed := v_phone = any(coalesce(private.turf_trusted_phones(p_turf_id), '{}'));
+  -- On the listing, but it can't open it at once (set by an owner, say): a check by hand.
+  if not v_listed and v_phone = any(coalesce(public._turf_phones(p_turf_id), '{}')) then
+    insert into private.claim_phone_checks (user_key, turf_id, phone, listed) values (k, p_turf_id, v_phone, false);
+    return jsonb_build_object('listed', false, 'blocked', true);
+  end if;
+  -- A code goes to this number next: one every 2 minutes and 5 a day to one number, whoever asks,
+  -- and 10 a day for one sign-in.
+  if v_listed then
+    if exists (select 1 from private.claim_phone_checks c where c.phone = v_phone and c.listed and c.at > now() - interval '2 minutes') then
+      return jsonb_build_object('error', 'wait', 'retry_in',
+        ceil(extract(epoch from (select max(c.at) from private.claim_phone_checks c where c.phone = v_phone and c.listed) + interval '2 minutes' - now()))::int);
+    end if;
+    if (select count(*) from private.claim_phone_checks c where c.phone = v_phone and c.listed and c.at > now() - interval '1 day') >= 5 then
+      return jsonb_build_object('error', 'number_busy');
+    end if;
+    if (select count(*) from private.claim_phone_checks c where c.user_key = k and c.listed and c.at > now() - interval '1 day') >= 10 then
+      return jsonb_build_object('error', 'too_many');
+    end if;
+  end if;
   insert into private.claim_phone_checks (user_key, turf_id, phone, listed) values (k, p_turf_id, v_phone, v_listed);
-  return jsonb_build_object('listed', v_listed);
+  return case when v_listed then jsonb_build_object('listed', true, 'retry_in', 120) else jsonb_build_object('listed', false) end;
 end;
 $$;
 revoke all on function public.owner_phone_listed(text, uuid, text) from public;
@@ -347,7 +542,7 @@ begin
   if not exists (select 1 from public.turfs where id = p_turf_id and is_active) then
     return jsonb_build_object('error', 'not_found');
   end if;
-  v_phones := coalesce(public._turf_phones(p_turf_id), '{}');
+  v_phones := coalesce(private.turf_trusted_phones(p_turf_id), '{}');
   return jsonb_build_object(
     'mobiles', cardinality(array(select distinct x from unnest(v_phones) x)),
     'endings', coalesce((select jsonb_agg(e order by e) from (select distinct right(x, 2) as e from unnest(v_phones) x) d), '[]'::jsonb)
@@ -389,17 +584,20 @@ begin
   if v_phone is null then
     return jsonb_build_object('error', 'bad_code');
   end if;
-  if not (v_phone = any(coalesce(public._turf_phones(p_turf_id), '{}'))) then
-    return jsonb_build_object('error', 'not_listed');
+  if not (v_phone = any(coalesce(private.turf_trusted_phones(p_turf_id), '{}'))) then
+    -- On the listing but not one that opens it at once: a check by hand.
+    return jsonb_build_object('error', case when v_phone = any(coalesce(public._turf_phones(p_turf_id), '{}')) then 'needs_check' else 'not_listed' end);
   end if;
   select status into v_status from public.turf_owners where turf_id = p_turf_id and user_key = k;
   if v_status = 'active' then
     return jsonb_build_object('status', 'active');
   end if;
-  -- Access TapTurf removed stays removed, code or not.
-  if v_status = 'revoked' then
+  -- Access TapTurf removed stays removed, code or not, whichever sign-in or number they come back with.
+  if v_status = 'revoked' or private.claim_revoked(p_turf_id, k, v_uid, v_phone) then
     return jsonb_build_object('error', 'revoked');
   end if;
+  insert into private.turf_owner_events (turf_id, user_key, user_id, from_status, to_status, how)
+  values (p_turf_id, k, v_uid, v_status, 'active', 'code:' || v_phone);
   select left(nullif(btrim(u.name), ''), 80) into v_name from public.users u where u.id = v_uid;
 
   insert into public.turf_owners (turf_id, user_key, user_id, status, via, name, note, role, verified_phone, created_at, decided_at)
@@ -407,7 +605,13 @@ begin
   on conflict (turf_id, user_key) do update
     set user_id = excluded.user_id, status = 'active', via = 'phone_match', name = excluded.name,
         note = coalesce(excluded.note, public.turf_owners.note), role = coalesce(excluded.role, public.turf_owners.role),
-        verified_phone = excluded.verified_phone, decided_at = now();
+        verified_phone = excluded.verified_phone, decided_at = now()
+    -- Revoked a moment ago by the admin: that stands.
+    where public.turf_owners.status <> 'revoked'
+  returning status into v_status;
+  if v_status is null then
+    return jsonb_build_object('error', 'revoked');
+  end if;
 
   return jsonb_build_object('status', 'active');
 end;
@@ -436,11 +640,19 @@ begin
                order by c.at desc limit 1) as phone_given,
              o.status = 'pending' as pending,
              public._is_admin_key(o.user_key) as site_owner,
+             -- The last time TapTurf turned this claim down, if ever.
+             (select max(e.at) from private.turf_owner_events e
+               where e.turf_id = o.turf_id and e.user_key = o.user_key and e.to_status = 'rejected') as rejected_at,
+             -- A number of theirs that still opens this turf at once (worth changing on the listing when revoking).
+             (select x from unnest(private.turf_trusted_phones(o.turf_id)) x
+               where x = o.verified_phone or 'p:' || x = o.user_key limit 1) as their_listed_phone,
              t.name as turf_name, t.slug, t.city, t.area, public._turf_phones(t.id) as listed_phones,
              u.id as user_id,
              case when u.id is null then null else jsonb_build_object(
                'id', u.id, 'name', u.name, 'username', un.username,
                'email', coalesce(u.email, au.email), 'phone', u.phone,
+               -- Only a Google account's email was checked (by Google); an old-app email was typed.
+               'email_checked', au.email is not null,
                'method', case when au.id is not null then case when au.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb then 'google' else 'email' end
                               when u.phone is not null then 'phone'
                               when u.email is not null then 'email'
@@ -461,6 +673,35 @@ begin
        limit 200
     ) x
   ), '[]'::jsonb);
+end;
+$$;
+
+-- Admin decisions, as before, now also in the event log.
+create or replace function public.admin_decide_owner_claim(p_firebase_token text, p_turf_id uuid, p_user_key text, p_status text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_prev text;
+  v_uid uuid;
+begin
+  if not public._is_site_owner(p_firebase_token) then
+    return jsonb_build_object('error', 'forbidden');
+  end if;
+  if p_status not in ('active', 'rejected', 'revoked') then
+    return jsonb_build_object('error', 'bad_status');
+  end if;
+  select status, user_id into v_prev, v_uid from public.turf_owners where turf_id = p_turf_id and user_key = p_user_key for update;
+  if not found then
+    return jsonb_build_object('ok', false);
+  end if;
+  update public.turf_owners set status = p_status, decided_at = now()
+  where turf_id = p_turf_id and user_key = p_user_key;
+  insert into private.turf_owner_events (turf_id, user_key, user_id, from_status, to_status, how)
+  values (p_turf_id, p_user_key, v_uid, v_prev, p_status, 'admin');
+  return jsonb_build_object('ok', true);
 end;
 $$;
 

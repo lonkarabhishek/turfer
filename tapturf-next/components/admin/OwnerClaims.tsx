@@ -76,8 +76,14 @@ export function OwnerClaims() {
                   <p className="text-[13px] text-primary-800">
                     <span className="font-semibold">{a.name ?? "No name"}</span>
                     {a.username && <span className="text-primary-500"> @{a.username}</span>}
-                    <span className="ml-1.5 inline-block rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-semibold text-primary-700">{METHOD_NAMES[a.method]}</span>
-                    {c.siteOwner && <span className="ml-1.5 inline-block rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">TapTurf (you)</span>}
+                    {" "}
+                    <span className="ml-1 inline-block rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-semibold text-primary-700">{METHOD_NAMES[a.method]}</span>
+                    {c.siteOwner && (
+                      <>
+                        {" "}
+                        <span className="ml-1 inline-block rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">TapTurf (you)</span>
+                      </>
+                    )}
                     {a.signedUpAt !== null && <span className="text-primary-500"> · joined {istDateTime(a.signedUpAt)}</span>}
                     {a.lastSeen !== null && now > 0 && <span className="text-primary-500"> · last sign-in {ago(a.lastSeen, now)}</span>}
                     {!a.signInFinished && <span className="text-amber-800"> · Google sign-in didn&rsquo;t finish</span>}
@@ -94,11 +100,15 @@ export function OwnerClaims() {
 
                 {a && (a.email || a.phone) && (
                   <p className="text-[13px] text-primary-700">
-                    {a.email && (
-                      <a href={`mailto:${a.email}?subject=${encodeURIComponent(`Your TapTurf claim for ${c.turfName}`)}`} className="underline underline-offset-2">
-                        {a.email}
-                      </a>
-                    )}
+                    {a.email &&
+                      (a.emailChecked ? (
+                        <a href={`mailto:${a.email}?subject=${encodeURIComponent(`Your TapTurf claim for ${c.turfName}`)}`} className="underline underline-offset-2">
+                          {a.email}
+                        </a>
+                      ) : (
+                        // Typed in the old app, never checked: don't offer it as the way to reach them.
+                        <span className="text-primary-500">Old-app email, not checked: {a.email}</span>
+                      ))}
                     {a.email && a.phone && " · "}
                     {a.phone && <span>{a.phone}</span>}
                     {wa && (
@@ -114,7 +124,14 @@ export function OwnerClaims() {
 
                 <p className="text-[13px] text-primary-600">
                   {c.role ?? "role not given"} ·{" "}
-                  {c.verifiedPhone ? `verified by a code to ${spaced(c.verifiedPhone)}` : c.via === "phone_match" ? "number matched" : "needs approval"} ·{" "}
+                  {c.verifiedPhone
+                    ? c.userKey === `p:${c.verifiedPhone}`
+                      ? "signed in with the listed number"
+                      : `verified by a code to ${spaced(c.verifiedPhone)}`
+                    : c.via === "phone_match"
+                      ? "number matched"
+                      : "needs approval"}{" "}
+                  ·{" "}
                   <span className="font-semibold">{c.status}</span>
                   {c.createdAt !== null && ` · claimed ${istDateTime(c.createdAt)}`}
                   {a && a.otherClaims > 0 && ` · also claims ${a.otherClaims} other ${a.otherClaims === 1 ? "turf" : "turfs"}`}
@@ -125,6 +142,12 @@ export function OwnerClaims() {
                   </p>
                 )}
                 {c.note && <p className="text-[13px] text-primary-600">&ldquo;{c.note}&rdquo;</p>}
+                {c.rejectedAt !== null && <p className="text-[13px] text-primary-600">Turned down before, on {istDateTime(c.rejectedAt)}.</p>}
+                {c.status === "active" && c.theirListedPhone && (
+                  <p className="text-[12px] text-amber-800">
+                    Their number +91 {spaced(c.theirListedPhone)} is on this listing, so it can open it again. If you revoke them, change the listing&rsquo;s number too.
+                  </p>
+                )}
                 {typedNameDiffers(c) && <p className="text-[12px] text-primary-500">Name typed on the claim: {c.storedName}</p>}
                 {failed === key && <p className="text-[13px] text-red-700">Couldn&rsquo;t save that. Reload admin and try again.</p>}
               </div>
