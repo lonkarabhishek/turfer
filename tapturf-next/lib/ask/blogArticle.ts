@@ -353,7 +353,7 @@ function read(post: Post): { article: Article; index: Index } {
   const questions: string[] = [];
   // Everything the reader is shown, by sentence, row and card: for inArticle and the label checks.
   const units = new Units();
-  units.prose(post.title, post.hook, post.description);
+  units.prose(post.title, post.hook, post.description, post.heroImage?.alt);
   const body: string[] = ["[S0] Opening"];
 
   // Venues first, so each has its V number wherever it shows: every turf
@@ -558,7 +558,9 @@ function read(post: Post): { article: Article; index: Index } {
     }
   }
 
-  const parts = [`# ${tidy(post.title)}\n${tidy(post.hook)}`, body.join("\n")];
+  // The photo at the top, which a drawing of the thing can follow ("a floodlit box cricket cage").
+  const hero = tidy(post.heroImage?.alt) ? `\nHero image: ${tidy(post.heroImage?.alt)}` : "";
+  const parts = [`# ${tidy(post.title)}\n${tidy(post.hook)}${hero}`, body.join("\n")];
   if (datasets.length) {
     const sets = datasets.map((d) => {
       // Stat tiles are unrelated measures side by side: tiles, never one axis.
@@ -613,7 +615,8 @@ export function inArticle(a: Article, value: number): boolean {
 // ---------------------------------------------------------------------------
 // The visual
 
-const MAX_BARS = 12;
+// Room for a city table (14 rows) whole: a cut drops the rows at one end.
+const MAX_BARS = 16;
 const NOTE_MAX = 160;
 const unitOf = (u: string | null) => clip(u, 24) || null;
 const byValue = (sort: RawVisual["sort"]) => (x: BlogBar, y: BlogBar) => (sort === "desc" ? y.value - x.value : sort === "asc" ? x.value - y.value : 0);
@@ -793,6 +796,43 @@ function barsVisual(a: Article, v: RawVisual): BlogVisual | null {
   return { kind: "bars", title, unit, note: clip(note, NOTE_MAX), bars };
 }
 
+/**
+ * For the short version: bars that differ enough to read. Ten ratings
+ * between 4.8 and 5.0 drawn from zero look the same, so when the model's
+ * column barely varies, the same table's column that varies most
+ * (reviews, or the main rate) is drawn instead, when one varies well.
+ * A rank or serial column never counts. Else the visual as asked.
+ */
+export function livelierBars(a: Article, v: RawVisual): RawVisual {
+  if (v.kind !== "bars") return v;
+  const d = a.datasets.find((x) => x.n === v.dataset);
+  const label = v.label_column;
+  if (!d || d.source === "stats" || label === null || v.value_column === null) return v;
+  const spread = (c: number): number => {
+    if (c < 0 || c >= d.columns.length || c === label) return -1;
+    const drawn = datasetBars(d, label, c, null);
+    if (!drawn || drawn.bars.length < 3) return -1;
+    const values = drawn.bars.map((b) => b.value);
+    const sorted = [...values].sort((x, y) => x - y);
+    // 1, 2, 3 ... is a rank, not a measure.
+    if (sorted.every((x, i) => x === i + 1) || /^(#|rank|no\.?|s\.? ?no\.?|position)$/i.test(tidy(d.columns[c]))) return -1;
+    const max = sorted[sorted.length - 1];
+    return max > 0 ? (max - sorted[0]) / max : -1;
+  };
+  const now = spread(v.value_column);
+  if (now < 0 || now >= 0.1) return v;
+  let best = -1;
+  let at = -1;
+  for (let c = 0; c < d.columns.length; c++) {
+    const s = c === v.value_column ? -1 : spread(c);
+    if (s > best) [best, at] = [s, c];
+  }
+  if (at < 0 || best < 0.25) return v;
+  const header = tidy(d.columns[at]);
+  const named = d.title.split(/(?<=\.)\s+/)[0].replace(/\.$/, "");
+  return { ...v, value_column: at, unit: null, sort: "desc", title: clip(header ? `${header} (${named})` : named, 70), bars: [] };
+}
+
 function stepsVisual(v: RawVisual): BlogVisual | null {
   const steps = v.steps.map((s) => ({ title: clip(s.title, 60), detail: clip(s.detail, 160) })).filter((s) => s.title);
   if (steps.length < 2) return null;
@@ -848,7 +888,7 @@ function statsVisual(a: Article, v: RawVisual): BlogVisual | null {
 }
 
 function artVisual(v: RawVisual, signArt: (brief: string, alt: string) => string | null): BlogVisual | null {
-  const brief = clip(v.art_brief, 400);
+  const brief = clip(v.art_brief, 600);
   if (!brief) return null;
   const alt = tidy(v.alt) ? clip(v.alt, 200) : clip(brief, 160);
   const token = signArt(brief, alt);
@@ -890,9 +930,73 @@ function pick<T extends { n: number }>(list: T[], ns: number[], max: number, sam
   return out;
 }
 
-/** The sections the model cited, in its order; unknown numbers dropped. */
-export function pickSections(a: Article, ns: number[]): BlogSection[] {
-  return pick(a.sections, ns, 4, (s) => String(s.n)).map((s) => ({ ...s }));
+/** The sections the model cited (its first `max`, unknown numbers dropped), in the article's order. */
+export function pickSections(a: Article, ns: number[], max = 4): BlogSection[] {
+  return pick(a.sections, ns, max, (s) => String(s.n))
+    .sort((x, y) => x.n - y.n)
+    .map((s) => ({ ...s }));
+}
+
+const sectionMemo = new WeakMap<Article, string[]>();
+
+/**
+ * Each section's text, by S number, as the model reads it: its prose,
+ * cards and FAQ, and the rows of the tables and tiles placed in it.
+ */
+function sectionTexts(a: Article): string[] {
+  const hit = sectionMemo.get(a);
+  if (hit) return hit;
+  // The body ends where the lists after it start.
+  const body = a.prompt.split(/\n\n(?=DATASETS \(|SOURCES THE ARTICLE CITES\n|VENUES IN THE ARTICLE\n)/)[0];
+  const texts = a.sections.map(() => "");
+  let at = -1;
+  for (const line of body.split("\n")) {
+    const head = /^\[S(\d+)\] /.exec(line);
+    if (head) at = Number(head[1]);
+    if (at < 0 || at >= texts.length) continue;
+    const parts = [line];
+    for (const m of line.matchAll(/\[D(\d+)\]/g)) {
+      const d = a.datasets.find((x) => x.n === Number(m[1]));
+      if (d) parts.push(d.columns.join(" "), ...d.rows.map((r) => r.join(" ")));
+    }
+    texts[at] += `${parts.join("\n")}\n`;
+  }
+  sectionMemo.set(a, texts);
+  return texts;
+}
+
+// Numbers worth tracing to a section: amounts, and figures of three digits or more.
+const TRACE = /(₹\s?)?(\d{1,3}(?:,\d{2,3})+|\d+(?:\.\d+)?)/g;
+const plain = (s: string) => s.replace(/(\d),(?=\d)/g, "$1");
+
+/**
+ * Sections to cite that the model left out: for each claim (a point or
+ * the answer), a section that alone holds one of its amounts or venues.
+ * A number or venue found in two or more sections says nothing about
+ * where the claim came from, so it adds none. In the article's order,
+ * none already in `cited`, at most `room`.
+ */
+export function backingSections(a: Article, claims: string[], cited: number[], room: number): number[] {
+  if (room <= 0) return [];
+  const texts = sectionTexts(a).map((t) => ` ${plain(t).toLowerCase()} `);
+  const holders = (needle: RegExp) => texts.flatMap((t, n) => (needle.test(t) ? [n] : []));
+  const found = new Set<number>();
+  for (const claim of claims) {
+    const c = plain(claim);
+    for (const m of c.matchAll(TRACE)) {
+      const digits = m[2];
+      // "6" or "24" is in every other section; an amount or a longer figure isn't.
+      if (!m[1] && digits.replace(".", "").length < 3) continue;
+      if (/^(19|20)\d\d$/.test(digits)) continue;
+      const at = holders(new RegExp(`(?<![\\d.])${digits.replace(".", "\\.")}(?![\\d]|\\.\\d)`));
+      if (at.length === 1) found.add(at[0]);
+    }
+    for (const v of turfsNamed(a.turfs, claim)) {
+      const at = holders(new RegExp(`\\[v${v.n}\\]`));
+      if (at.length === 1) found.add(at[0]);
+    }
+  }
+  return [...found].filter((n) => !cited.includes(n)).sort((x, y) => x - y).slice(0, room);
 }
 
 export function pickSources(a: Article, ns: number[]): BlogLink[] {
@@ -913,7 +1017,7 @@ const VENUE_WORDS = new Set("the box cricket turf turfs sports sport arena arena
  * before a bracket or dash ("AJ Cricket Club" for "AJ Cricket Club (Box
  * Cricket)"), or its first word when that word is its own ("NexGen").
  */
-export function turfsNamed(turfs: BlogTurf[], text: string): BlogTurf[] {
+export function turfsNamed<T extends BlogTurf>(turfs: T[], text: string): T[] {
   const t = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")} `;
   const has = (s: string) => {
     const k = s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();

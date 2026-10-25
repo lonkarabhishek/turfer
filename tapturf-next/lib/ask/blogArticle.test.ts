@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVisual, cleanFollowups, hashText, inArticle, parseAmount, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "./blogArticle";
+import { backingSections, buildVisual, cleanFollowups, hashText, inArticle, livelierBars, parseAmount, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "./blogArticle";
 import type { RawVisual } from "./blogReply";
 import type { BlogVisual } from "./blogTypes";
 import { ALL_POSTS, type Block, type Post } from "../../content/blog";
@@ -133,7 +133,8 @@ test("every post: datasets have rows, rows fit their columns, and the prompt fit
   let venues = 0;
   for (const p of ALL_POSTS) {
     const a = readArticle(p);
-    assert.ok(a.prompt.startsWith(`# ${p.title}\n${p.hook}\n\n[S0] Opening\n`), p.slug);
+    const hero = p.heroImage?.alt.trim() ? `\nHero image: ${p.heroImage.alt.replace(/\s+/g, " ").trim()}` : "";
+    assert.ok(a.prompt.startsWith(`# ${p.title}\n${p.hook}${hero}\n\n[S0] Opening\n`), p.slug);
     assert.ok(a.prompt.length < 40_000, `${p.slug}: ${a.prompt.length}`);
     for (const d of a.datasets) {
       assert.ok(d.title.trim(), `${p.slug} D${d.n} title`);
@@ -681,7 +682,7 @@ test("bars from a dataset: the article's own cells, 'Call' left out and said so,
   assert.deepEqual(none.bars.map((b) => b.label), rates.rows.filter((r) => parseAmount(r[1]) !== null).map((r) => r[0]));
 });
 
-test("bars from a dataset: ratings from the turf cards, area table; over 12 the note says which 12", () => {
+test("bars from a dataset: ratings from the turf cards, area table; a 14-city table whole", () => {
   const a = HYD();
   const venues = a.datasets.find((d) => d.source === "turfs");
   assert.ok(venues);
@@ -700,21 +701,20 @@ test("bars from a dataset: ratings from the turf cards, area table; over 12 the 
     { label: "Kondapur", value: 4.67, display: "4.67" },
   ]);
 
-  // 14 cities: the 12 kept are named, so the cheapest (or costliest) city isn't lost without a word.
+  // 14 cities, all of them: a cut would drop the cheapest or the costliest (Delhi, the article's headline).
   const india = readArticle(bySlug("india-turf-price-map-2026"));
   const cities = india.datasets.find((d) => d.source === "table");
   assert.ok(cities && cities.rows.length === 14);
   const chart = (sort: RawVisual["sort"]) => kind(buildVisual(india, V({ kind: "bars", title: "Median by city", dataset: cities.n, label_column: 0, value_column: 2, sort, unit: "₹ per hour" }), noArt), "bars");
   const top = chart("desc");
-  assert.equal(top.bars.length, 12);
+  assert.equal(top.bars.length, 14);
   assert.deepEqual(top.bars[0], { label: "Delhi", value: 1500, display: "₹1,500" });
-  assert.ok(!top.bars.some((b) => b.label === "Nashik"));
-  assert.ok(top.note?.endsWith(", Median column. Highest 12 of 14."), top.note ?? "");
+  assert.deepEqual(top.bars[13], { label: "Nashik", value: 600, display: "₹600" });
+  assert.ok(top.note?.endsWith(", Median column."), top.note ?? "");
   const low = chart("asc");
   assert.deepEqual(low.bars[0], { label: "Nashik", value: 600, display: "₹600" });
-  assert.ok(!low.bars.some((b) => b.label === "Delhi"));
-  assert.ok(low.note?.endsWith("Lowest 12 of 14."));
-  assert.ok(chart("none").note?.endsWith("First 12 of 14."));
+  assert.deepEqual(low.bars[13], { label: "Delhi", value: 1500, display: "₹1,500" });
+  assert.ok(!/of 14/.test(chart("none").note ?? ""));
 });
 
 test("bars from every real dataset, column pair and unit: in bounds or none, one kind on the axis, never a number the cell doesn't say", () => {
@@ -739,7 +739,7 @@ test("bars from every real dataset, column pair and unit: in bounds or none, one
               }
               const { bars, title, note } = kind(v, "bars");
               charts++;
-              assert.ok(bars.length >= 2 && bars.length <= 12, at);
+              assert.ok(bars.length >= 2 && bars.length <= 16, at);
               assert.ok(title.length <= 70 && (note ?? "").length <= 160, at);
               const header = d.columns[vc] ? `${d.columns[vc].slice(0, 20)}` : `column ${vc + 1}`;
               assert.ok(note?.includes(header), `${at}: ${note}`);
@@ -945,14 +945,14 @@ test("bars from the text: a label twice is one bar, or no chart when its values 
   assert.equal(buildVisual(a, V({ kind: "bars", unit: "₹ per hour", bars: [{ label: "ASR Sports Arena", value: 900 }, { label: "ASR Sports Arena", value: 1100 }, { label: "Night Riders", value: 1000 }] }), noArt), null);
 });
 
-test("bars from the text: more than 12 are cut after sorting, and the note says so", () => {
-  const nums = Array.from({ length: 15 }, (_, i) => 100 + i);
+test("bars from the text: more than 16 are cut after sorting, and the note says so", () => {
+  const nums = Array.from({ length: 19 }, (_, i) => 100 + i);
   const a = readArticle(make("many-bars-test", [{ type: "p", text: nums.map((n) => `T${n} scored ${n}.`).join(" ") }]));
   const v = kind(buildVisual(a, V({ kind: "bars", sort: "desc", bars: nums.map((n) => ({ label: `T${n}`, value: n })) }), noArt), "bars");
-  assert.equal(v.bars.length, 12);
-  assert.equal(v.bars[0].value, 114);
-  assert.equal(v.bars[11].value, 103);
-  assert.equal(v.note, "Numbers from the article. Highest 12 of 15.");
+  assert.equal(v.bars.length, 16);
+  assert.equal(v.bars[0].value, 118);
+  assert.equal(v.bars[15].value, 103);
+  assert.equal(v.note, "Numbers from the article. Highest 16 of 19.");
 });
 
 test("steps: empty ones dropped, cut to size, two to six", () => {
@@ -1108,10 +1108,10 @@ test("art: signed brief and alt; no token or no brief is no picture", () => {
   const v = kind(buildVisual(a, V({ kind: "art", title: "The cage", art_brief: `  ${cage}  `, alt: " Top view of a box cricket cage " }), sign), "art");
   assert.deepEqual(v, { kind: "art", title: "The cage", alt: "Top view of a box cricket cage", token: `tok:${cage.length}` });
   assert.deepEqual(calls[0], [cage, "Top view of a box cricket cage"]);
-  // No alt: the brief, cut to 160. Long briefs are cut to 400, long alts to 200.
-  const long = kind(buildVisual(a, V({ kind: "art", art_brief: "word ".repeat(120), alt: null }), sign), "art");
+  // No alt: the brief, cut to 160. Long briefs are cut to 600, long alts to 200.
+  const long = kind(buildVisual(a, V({ kind: "art", art_brief: "word ".repeat(150), alt: null }), sign), "art");
   const [brief, alt] = calls[1];
-  assert.ok(brief.length <= 400 && alt.length <= 160 && long.alt === alt);
+  assert.ok(brief.length <= 600 && brief.length > 500 && alt.length <= 160 && long.alt === alt);
   assert.equal(long.title, "Illustration");
   kind(buildVisual(a, V({ kind: "art", art_brief: "A pitch", alt: "x".repeat(300) }), sign), "art");
   assert.ok(calls[2][1].length <= 200);
@@ -1124,13 +1124,15 @@ test("art: signed brief and alt; no token or no brief is no picture", () => {
 // ---------------------------------------------------------------------------
 // pick* and follow-ups
 
-test("pickSections: known numbers, deduped, the model's order, four at most", () => {
+test("pickSections: known numbers, deduped, the model's first four, in the article's order", () => {
   const a = HYD();
   assert.deepEqual(pickSections(a, [3, 99, 0, 3, -1, 1.5]), [
-    { n: 3, title: "Rates at a glance", id: "rates-at-a-glance" },
     { n: 0, title: "Opening", id: null },
+    { n: 3, title: "Rates at a glance", id: "rates-at-a-glance" },
   ]);
-  assert.equal(pickSections(a, [1, 2, 3, 4, 5, 6]).length, 4);
+  // The model's first four (its most relevant), shown in order.
+  assert.deepEqual(pickSections(a, [6, 2, 5, 1, 3, 4]).map((s) => s.n), [1, 2, 5, 6]);
+  assert.deepEqual(pickSections(a, [6, 2, 5, 1, 3, 4], 6).map((s) => s.n), [1, 2, 3, 4, 5, 6]);
   assert.deepEqual(pickSections(a, []), []);
   // Copies: changing one doesn't change the memoised article.
   pickSections(a, [1])[0].title = "changed";
@@ -1207,4 +1209,44 @@ test("venue links only for the venues the answer names", () => {
   assert.deepEqual(names("Most sports arenas and turf cafes charge more for box cricket on weekends."), [], "common words name no venue");
   assert.deepEqual(names("offside, a rule in football"), ["Offside"], "a one-word name counts when it is said");
   assert.deepEqual(names(""), []);
+});
+
+test("backingSections: a section that alone holds a claim's amount or venue", () => {
+  const india = readArticle(bySlug("india-turf-price-map-2026"));
+  const record = india.sections.find((s) => /most expensive hour/i.test(s.title));
+  assert.ok(record);
+  // ₹3,600 (the record venue's morning rate) is only in that section.
+  assert.deepEqual(backingSections(india, ["Its morning rate is ₹3,600."], [], 4), [record.n]);
+  // Already cited, or no room: nothing more.
+  assert.deepEqual(backingSections(india, ["Its morning rate is ₹3,600."], [record.n], 4), []);
+  assert.deepEqual(backingSections(india, ["Its morning rate is ₹3,600."], [], 0), []);
+  // ₹4,400 is in the tiles, the table, that section and the FAQ: it says nothing about where a claim came from.
+  assert.deepEqual(backingSections(india, ["The highest listed rate is ₹4,400 an hour."], [], 4), []);
+  // Small numbers and years never count.
+  assert.deepEqual(backingSections(india, ["Split 6 ways in 2026, it is cheaper."], [], 4), []);
+  // A venue card in one section only.
+  const hyd = HYD();
+  const one = hyd.turfs.find((t) => backingSections(hyd, [t.name], [], 4).length === 1);
+  assert.ok(one, "some venue card sits in one section");
+});
+
+test("livelierBars: the short version swaps ratings that barely differ for the column that varies", () => {
+  const a = HYD();
+  const venues = a.datasets.find((d) => d.source === "turfs");
+  assert.ok(venues);
+  const ratings = V({ kind: "bars", title: "Google rating", dataset: venues.n, label_column: 0, value_column: 2, sort: "desc", unit: "rating out of 5" });
+  const swapped = livelierBars(a, ratings);
+  assert.equal(swapped.value_column, 3, "reviews vary, 140 to 585");
+  assert.equal(swapped.unit, null);
+  assert.equal(swapped.sort, "desc");
+  assert.ok(swapped.title?.startsWith("Reviews"), swapped.title ?? "");
+  const drawn = kind(buildVisual(a, swapped, noArt), "bars");
+  assert.deepEqual(drawn.bars[0], { label: "AJ Cricket Club (Box Cricket)", value: 585, display: "585" });
+  // A column that varies is kept, and so is anything that isn't dataset bars.
+  const reviews = V({ ...ratings, value_column: 3 });
+  assert.equal(livelierBars(a, reviews), reviews);
+  const text = V({ kind: "bars", bars: [{ label: "Off-peak", value: 800 }, { label: "Night", value: 1200 }] });
+  assert.equal(livelierBars(a, text), text);
+  const steps = V({ kind: "steps", steps: [{ title: "a", detail: "b" }] });
+  assert.equal(livelierBars(a, steps), steps);
 });

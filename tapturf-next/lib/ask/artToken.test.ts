@@ -48,9 +48,9 @@ test("signs and reads back what to draw", () => {
     // An empty alt is allowed (the chat falls back to the title).
     assert.deepEqual(readArt(signArt("a", "x", "")!), { slug: "a", brief: "x", alt: "" });
     // Limits are inclusive.
-    const long = signArt("a".repeat(120), "b".repeat(400), "c".repeat(200));
+    const long = signArt("a".repeat(120), "b".repeat(600), "c".repeat(200));
     assert.ok(long && long.length <= 2048);
-    assert.deepEqual(readArt(long), { slug: "a".repeat(120), brief: "b".repeat(400), alt: "c".repeat(200) });
+    assert.deepEqual(readArt(long), { slug: "a".repeat(120), brief: "b".repeat(600), alt: "c".repeat(200) });
   });
 });
 
@@ -149,7 +149,7 @@ test("a valid tag over the wrong contents is still refused", () => {
       { v: 1, s: "a".repeat(121), b: "x", a: "y" },
       { v: 1, s: "a", b: "", a: "y" },
       { v: 1, s: "a", b: " x ", a: "y" },
-      { v: 1, s: "a", b: "b".repeat(401), a: "y" },
+      { v: 1, s: "a", b: "b".repeat(601), a: "y" },
       { v: 1, s: "a", b: "x", a: "c".repeat(201) },
       { v: 1, s: 1, b: "x", a: "y" },
       { v: 1, s: "a", b: ["x"], a: "y" },
@@ -180,10 +180,10 @@ test("signArt refuses parts that don't fit, rather than cutting them", () => {
       ["a".repeat(121), BRIEF, ALT],
       ["a", "", ALT],
       ["a", "   \n", ALT],
-      ["a", "b".repeat(401), ALT],
+      ["a", "b".repeat(601), ALT],
       ["a", BRIEF, "c".repeat(201)],
       // Fits by length, but three bytes a character makes the token longer than 2048.
-      ["a", "न".repeat(400), "न".repeat(200)],
+      ["a", "न".repeat(600), "न".repeat(200)],
     ]) {
       assert.equal(signArt(slug, brief, alt), null, `${slug.slice(0, 20)} / ${brief.slice(0, 20)} / ${alt.length}`);
     }

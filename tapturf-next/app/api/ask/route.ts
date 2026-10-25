@@ -27,7 +27,7 @@ import { toolBySlug, toolPath } from "@/lib/tools/registry";
 import { getHomeDataShared } from "@/lib/home/data";
 import { askChipsFor } from "@/lib/home/select";
 import { getPostBySlug } from "@/content/blog";
-import { articleSearchChips, isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
+import { articleSearchChips, englishChip, isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
 import { answerBlog, type BlogResult } from "@/lib/ai/blogAnswer";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
@@ -197,7 +197,7 @@ export async function GET(req: Request) {
     const mode = isSummaryAsk(q) ? "summary" : "answer";
     const chips = await (chipsLoad ?? []);
     // One of our own search chips (one sits under every answer here): a search, no need to ask.
-    const chip = chips.some((c) => c.toLowerCase() === q.toLowerCase());
+    const chip = chips.some((c) => [c, englishChip(c)].some((x) => x.toLowerCase() === q.toLowerCase()));
     const got: BlogResult = chip
       ? { search: true, usage: null }
       : await answerBlog(post, { mode, question: q, history: history.map((h) => ({ user: h.user, reply: h.reply })) }, started + BLOG_DEADLINE_MS);
@@ -217,7 +217,7 @@ export async function GET(req: Request) {
       // Two questions about the article, then a search for its city.
       const asked = new Set(result.followups.map((f) => f.toLowerCase()));
       // Then one search that fits the article (its sport; none for owners).
-      const followups = [...result.followups, ...articleSearchChips(post, chips).filter((c) => !asked.has(c.toLowerCase()))].slice(0, 3);
+      const followups = [...result.followups, ...articleSearchChips(post, chips, q).filter((c) => !asked.has(c.toLowerCase()))].slice(0, 3);
       const body = {
         query: q,
         intent: "blog",

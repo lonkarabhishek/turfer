@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type Anthropic from "@anthropic-ai/sdk";
-import { cleanWebText, readWebAnswer, webDay, webLinks } from "./webLinks";
+import { cleanWebText, deadPage, readWebAnswer, webDay, webLinks } from "./webLinks";
 
 // Replies shaped like the API's: a search call, its results (a list, or an
 // error object when the search failed), then the answer as text blocks,
@@ -251,4 +251,17 @@ test("the text is cut to 700 characters at a sentence", () => {
   const oneLong = `${"word ".repeat(200)}end.`;
   const u = cleanWebText(oneLong);
   assert.ok(u.length <= 700 && u.endsWith("…"), u.slice(-10));
+});
+
+test("a page that is gone: 404, 410, or a title saying it wasn't found", () => {
+  assert.ok(deadPage(404, ""));
+  assert.ok(deadPage(410, "<html>"));
+  assert.ok(deadPage(200, "<html><head><title>Page not found – KCS</title>"));
+  assert.ok(deadPage(200, "<TITLE>\n  404 | Playo\n</TITLE>"));
+  assert.ok(deadPage(200, "<title>This page does not exist</title>"));
+  // Live pages, and blocks or errors that may pass (shown: the reader may get through).
+  assert.ok(!deadPage(200, "<title>Box Cricket Rules: A Complete Guide</title>"));
+  assert.ok(!deadPage(200, ""));
+  assert.ok(!deadPage(403, "<title>Access denied</title>"));
+  assert.ok(!deadPage(503, ""));
 });

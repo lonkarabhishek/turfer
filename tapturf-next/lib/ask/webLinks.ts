@@ -159,6 +159,17 @@ export function readWebAnswer(content: Block[], stop: Anthropic.StopReason | nul
 }
 
 /**
+ * True when a page a web answer would link to is gone: a 404 or 410, or
+ * a page whose title says so ("Page not found – KCS" came back 404 from a
+ * search result the answer cited). `head` is the start of its HTML.
+ */
+export function deadPage(status: number, head: string): boolean {
+  if (status === 404 || status === 410) return true;
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1] ?? "";
+  return /\b(page not found|not found|404|page (?:doesn't|does not) exist|no longer available)\b/i.test(title.replace(/\s+/g, " "));
+}
+
+/**
  * The day in India (YYYY-MM-DD) at `now`. A web answer is kept for the day
  * it was searched (its cache key carries the day), so the next day
  * searches again.

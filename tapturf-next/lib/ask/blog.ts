@@ -47,13 +47,34 @@ const SPORT_WORDS: [string, RegExp][] = [
 // Search chips that aren't a search for a venue: a tool, a host, a comparison.
 const NOT_SEARCH = /\b(nrr|host|vs|compare)\b/i;
 
+// Words of Hindi in Latin script that English doesn't use ("me" and "kal" are left out: "near me", a name).
+const HINGLISH = /\b(hai|hain|kya|kaun|kaunsa|konsa|kitna|kitne|kitni|kaise|kab|kahan|kidhar|mein|nahi|nahin|sasta|saste|sabse|wala|wale|wali|raat|khule|khula|chahiye|batao|karo|karein|accha|acha|theek|yaar|bhai|kuch|abhi|ke liye|ka|ki|ko|aur)\b/;
+
+/** True when a message is written in Hinglish (Hindi words in Latin script), or in Devanagari. */
+export function isHinglish(q: string): boolean {
+  const t = q.toLowerCase();
+  return /[\u0900-\u097F]/.test(t) || HINGLISH.test(t);
+}
+
+/** The chip as an English reader would type it: "Kothrud me sasta turf" is "Cheapest turf in Kothrud". */
+export function englishChip(chip: string): string {
+  const m = /^(.+?) me sasta turf$/i.exec(chip.trim());
+  return m ? `Cheapest turf in ${m[1]}` : chip;
+}
+
 /**
  * The city's search chips that fit an article, for the one search chip
  * under an answer: those for the sport it is about first, then ones for
  * no sport in particular, never one for another sport or a tool, and none
- * at all on an article for turf owners.
+ * at all on an article for turf owners. Under an English question, a
+ * Hinglish chip is put in English.
  */
-export function articleSearchChips(post: Pick<Post, "slug" | "title">, chips: string[]): string[] {
+export function articleSearchChips(post: Pick<Post, "slug" | "title">, chips: string[], question = ""): string[] {
+  const english = !isHinglish(question);
+  return fittingChips(post, chips).map((c) => (english ? englishChip(c) : c));
+}
+
+function fittingChips(post: Pick<Post, "slug" | "title">, chips: string[]): string[] {
   const about = `${post.slug.replace(/-/g, " ")} ${post.title}`.toLowerCase();
   if (/\b(business|lease|leased|owner|owners|investment|investor)\b/.test(about)) return [];
   const sportsOf = (t: string) => {

@@ -15,7 +15,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 const VERSION = 1;
 const SLUG = /^[a-z0-9-]{1,120}$/;
 const MAX_TOKEN = 2048;
-const MAX_BRIEF = 400;
+const MAX_BRIEF = 600;
 const MAX_ALT = 200;
 const PART = /^[A-Za-z0-9_-]+$/;
 

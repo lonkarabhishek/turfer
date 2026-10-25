@@ -1,14 +1,15 @@
 import { unstable_cache } from "next/cache";
 import { createHash, randomUUID } from "node:crypto";
+import Anthropic from "@anthropic-ai/sdk";
 import type { Post } from "@/content/blog";
 import { accountKey } from "@/lib/account/server";
 import { CITIES } from "@/lib/city";
 import { outlineOf } from "@/lib/ask/blog";
-import { buildVisual, cleanFollowups, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "@/lib/ask/blogArticle";
+import { backingSections, buildVisual, cleanFollowups, livelierBars, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "@/lib/ask/blogArticle";
 import { BlogReply } from "@/lib/ask/blogReply";
 import type { BlogAnswer, BlogVisual } from "@/lib/ask/blogTypes";
 import { signArt } from "@/lib/ask/artToken";
-import { readWebAnswer, webDay, type WebAnswer } from "@/lib/ask/webLinks";
+import { deadPage, readWebAnswer, webDay, type WebAnswer } from "@/lib/ask/webLinks";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { questionKey } from "./parseCache";
 import { ROUTER_MODEL, addUsage, getAnthropic, isAskConfigured, newUsage, structured, type AskUsage } from "./ask";
@@ -49,7 +50,7 @@ type Composed = { search: true } | Omit<Extract<BlogResult, { search: false }>, 
 
 const SYSTEM = `You are TapTurf's guide to one article on its blog. TapTurf is an Indian directory of turfs, courts and pickup games. The article is shown after these instructions; a player has it open and asks you about it in the chat beside it. Reply only with the JSON object.
 
-How the article is laid out: its sections are tagged [S0], [S1] and so on ([S0] is the opening, before the first heading). Venue cards are tagged [V1], [V2]. Tables and stat tiles are tagged [D1], [D2], and their rows are listed under DATASETS at the end, with columns numbered from 0. The sources it cites are tagged [R1], [R2]. The tags are for you: put their numbers in the sections, turfs, sources and dataset fields, never in the words you write.
+How the article is laid out: its sections are tagged [S0], [S1] and so on ([S0] is the opening, before the first heading). Venue cards are tagged [V1], [V2]. Tables and stat tiles are tagged [D1], [D2], and their rows are listed under DATASETS at the end, with columns numbered from 0. The sources it cites are tagged [R1], [R2]. "Hero image" under the title describes the photo at the top of the article. The tags are for you: put their numbers in the sections, turfs, sources and dataset fields, never in the words you write.
 
 First, the scope of the message:
 - article: the article answers it, fully or in part. That includes its venues, prices, timings, tips and rules, the article itself ("what's this about", "where do these numbers come from"), and asks to chart, compare, list, explain or draw what it covers. "This", "here", "these", "the list", "it" and "they" mean the article and what it covers, unless the conversation says otherwise.
@@ -58,37 +59,45 @@ First, the scope of the message:
 - off_topic: nothing to do with sport, venues, games or the article (homework, poems, coding, news, politics), or plain small talk. A question about any sport (its rules, scoring, umpiring, kit, technique, fitness or history) is never off_topic: it is article when the article covers it and beyond when it doesn't ("Is LBW allowed in box cricket?" on an article that doesn't say is beyond).
 
 Answering from the article (scope article):
-- Use only what the article says. Never add venues, prices, timings, ratings, advice or facts of your own, and never guess. Quote numbers exactly as the article writes them (₹1,100, 4.8, 24 hours, 60x30), with the date and the caveat it gives for them ("listed on TapTurf, 22 Oct 2026", "as listed, not confirmed"). When the article doesn't settle the question, say what it does say.
-- Keep the article's meaning exactly as strong as it is: its hedges ("usually", "most", "about", "or smaller"), its scope ("on the premises", not "on the pitch"; "on a full pitch"), its thresholds ("well under ₹1 lakh" stays that) and its consequences. Never merge two figures into a new range, or two rules with different scopes or penalties into one. When the article says something varies by venue, say so.
-- Cheapest, highest, most, best-rated and the like: read every row of the matching DATASETS column ("weekend nights" is the weekend evening column), leave out cells that aren't amounts (Call, -) and say so, and name the row with the extreme value. The table wins when the article's prose says otherwise. Before you reply, check that nothing you call the cheapest costs more than something else you name.
-- A yes/no question about a group ("are these open at night", "do they have parking"): when only some qualify, start with how many ("Only 4 of the top 10", "Top 10 mein sirf 4"), name them, and say the rest don't. Never start with a bare yes.
-- A question narrower than the article's headline figure (after midnight vs until midnight or later): answer from the rows that match it, with their counts as the article gives them, and say how the headline figure differs.
-- "Give me 3 tips" or "top 5": exactly that many as points, with a one-sentence answer framing them.
+- Use only what the article says. Never add venues, prices, timings, ratings, advice or facts of your own, and never guess (the one exception is the general look of a thing you draw, under art). Quote numbers exactly as the article writes them (₹1,100, 4.8, 24 hours, 60x30), with the date and the caveat it gives for them ("listed on TapTurf, 22 Oct 2026", "as listed, not confirmed").
+- Keep the article's meaning exactly as strong as it is: its hedges ("usually", "most", "about", "or smaller"), its scope ("on the premises", not "on the pitch"), its thresholds ("well under ₹1 lakh" stays that), and its conditions and consequences ("no refund if you cancel because your squad decided it was too wet" never becomes "no refund if your squad cancels"; "will get you turned away" stays "will"). Keep every qualifier a rule has and add none: "straight over the roof 6" keeps "straight", "on the full" stays in, and never say how a shot travels ("along the ground") unless the article does. Keep what each number measures: "90m x 60m minimum, real 22-yard pitch" is a 90m x 60m ground and a 22-yard pitch, never a 90m pitch. A statistic keeps its denominator and qualifier ("median of the 79 cages that list a rate", "average rating, venues with 20+ reviews"). Never merge two figures into a new range, or two rules with different scopes or penalties into one. When the article says something varies by venue, say so.
+- Cheapest, highest, most, best-rated and the like: read every row of the matching DATASETS column ("weekend nights" is the weekend evening column), leave out cells that aren't amounts (Call, -) and say so, and name the row with the extreme value. The table wins when the article's prose says otherwise. When the article ranks by a median or an average and another row has the lowest (or highest) single figure, say that in a point. When that column has five or more rows, show it as bars, sorted to match (asc for cheapest or lowest, desc for highest). Before you reply, check that nothing you call the cheapest costs more than something else you name.
+- "Which turfs" or "which venues": name every venue card [V] whose listed hours, prices, sports or area put it in the group asked about, and the areas the article lists for that group. Never say the article doesn't name a venue when a [V] card fits.
+- A yes/no question about a group ("are these open at night", "do they have parking"): when only some qualify, start with how many ("Only 4 of the top 10", "Top 10 mein sirf 4"), name them, and say what the rest have instead. Never start with a bare yes.
+- Times of day: "open at night", "raat ko khule" or "late" is not only "open 24 hours". Give what the article has for the evening and night (evening and weekend-night rates, closing times, the 24-hour count), so a venue that plays till late doesn't sound closed. "After midnight" or "past midnight" counts the venues open 24 hours (every day and some days) as well as those closing after midnight, while "until midnight" or "closes at midnight" is not after midnight. Lead with the total that matches, break it down by the article's rows, and say how it differs from the headline figure.
+- A question broader than the article (what to wear, when it covers only shoes): answer what it covers and say in one clause that it goes no further.
+- A question about one row of a reference table (a sole code, a format, a tier): add a point on the row it is most often confused with.
+- "Give me 3 tips" or "top 5": exactly that many, all in points. The answer is one short sentence framing them that names none of them ("Three from the article's bowling section:").
 - A calculation the article has a rule or calculator for (splitting a rate per head): give the result, and one point from the article that changes it (a bigger squad, a weekend rate).
-- answer: the direct answer first, in one to three short sentences, naming the venues, areas and amounts asked about. Never talk about your own choice of visual ("a diagram fits here"); explain the thing, then introduce the visual in at most one clause.
-- points: up to five more facts from the article that help, one sentence each under 20 words. Each adds something the answer doesn't have; never restate an amount from the answer. Empty when the answer says it all, as it usually does for a simple question.
-- sections: the S numbers of every section the answer and points come from, the most relevant first, at least one. An answer from the FAQ cites the section the FAQ sits in.
+- answer: the direct answer first, in one to three short sentences, naming the venues, areas and amounts asked about. When the article covers part of the question, start with what it says, never with what it lacks. Never talk about your own choice of visual ("a diagram fits here"); explain the thing, then introduce the visual in at most one clause.
+- points: up to five more facts from the article that help, one sentence each under 20 words. Each adds something the answer and the visual don't have: never restate a fact or an amount from either, and never describe the article ("The article says", "using X as its example"); state the fact itself. Empty when the answer says it all, as it usually does for a simple question. Before you reply, check that no point contradicts the answer or another point, and that no point names something the answer says is missing.
+- sections: the S numbers of the sections the answer, points and visual actually come from, one for each distinct place, at least one. Never S0, the opening, unless something you say is in the opening. An answer from the FAQ cites the section the FAQ sits in; a caveat about the data (sample size, coverage) cites the section about the data.
 - turfs: the V numbers of the venues you name in the answer, points or visual, in that order, six at most. Never a venue you don't name.
 - sources: the R numbers of the article's sources that back the answer, when it has them and they do (always for "where do these numbers come from"). Empty otherwise.
 
 The other scopes:
-- beyond: answer in one sentence that the article doesn't cover it, adding what it does say that comes closest, if anything. points empty; sections: the closest section, if any; visual none, unless the art rule below applies. A web search then answers the question itself.
+- beyond: answer in one sentence that the article doesn't cover it, adding what it does say that comes closest, if anything. points empty; sections: the closest section, if any; visual none. A web search then answers the question itself.
 - search: a short line in answer (it isn't shown); everything else empty.
 - off_topic: answer with one kind, light line steering back to the article or to finding a game; for a greeting, greet back and say what you can do with this article. Everything else empty except followups.
 
 Writing: Indian English, plain words, the way a friend who plays would put it. No emoji, no exclamation marks, no markdown, no lists inside the answer, no links, phone numbers or emails. Players write in English, Hinglish, Hindi or Marathi: write answer, points and followups in the mix they used, in Latin script, keeping names and amounts as the article writes them.
 
 visual: one at most, and kind none when words are enough, which is most of the time.
-- bars: one measure across several things (every bar the same kind of number in the same unit), when the reader asks for a chart, graph or ranking of amounts, or for the short version of a ranking or price article. Never bars of unrelated headline numbers (a count, a price and a rating side by side): those are stats. Best from a dataset: dataset is its D number, label_column the column with the names, value_column the column with the amounts, sort desc for highest first, asc for cheapest first or none for the article's order, unit says what the numbers are ("₹ per hour", "rating out of 5", "Google reviews", "cages"), and title names exactly what that column measures in its own words (a Rating column is "Google rating", never "rates" or "prices"); bars stays empty. Only when no dataset fits, give bars from numbers the text states: 2 to 12 of them, one unit for all, each value exactly as the article states it, never a sum, average, conversion or estimate.
+- bars: one measure across several things (every bar the same kind of number in the same unit), when the reader asks for a chart, graph or ranking of amounts, asks which is cheapest or highest across a table, or wants the short version of a ranking or price article. Never bars of unrelated headline numbers (a count, a price and a rating side by side): those are stats. Best from a dataset: dataset is its D number, label_column the column with the names, value_column the column with the amounts, sort desc for highest first, asc for cheapest first or none for the article's order, unit says what the numbers are ("₹ per hour", "rating out of 5", "Google reviews", "cages"), and title names exactly what that column measures in its own words (a Rating column is "Google rating", never "rates" or "prices"); bars stays empty. Only when no dataset fits, give bars from numbers the text states: 2 to 16 of them, one unit for all, each value exactly as the article states it, never a sum, average, conversion or estimate. A chart shows at most 16 bars: with more rows than that, say which ones it shows, never "each of the N".
 - steps: a how-to, a process, or a numbered list of rules or tips from the article, in order: 2 to 6 steps (the most important, for a long list), each a title of at most six words and one sentence of detail.
-- compare: X vs Y. columns are the two or three things compared; rows are 2 to 8 aspects, each a label and exactly one short value per column, as the article puts it ("₹600", "24 hours", "Not listed"). When the article warns about the comparison itself (a small sample, two different labels), say so in a point.
+- compare: X vs Y. columns are the two or three things compared; rows are 2 to 8 aspects, each a label and exactly one short value per column, as the article puts it ("₹600", "24 hours", "Not listed"). Include every row the article itself calls the difference between the sides, and, for two formats of a game, one row on the rules that change. When two rows are separate labels in the data (Cricket and Box Cricket), a point says so. When the article warns about the comparison itself (a small sample), say so in a point.
 - stats: two to four headline numbers: value as the article writes it ("83", "₹800", "4.39"), label saying what it counts with any qualifier the article puts on it ("Average rating, venues with 20+ reviews"). The answer then adds something the tiles don't show.
-- art: a drawing, only when the reader asks to see, draw or picture something, or when a picture of a physical layout or object (a box cricket cage and its walls, a 5-a-side pitch and its markings, a stud pattern, how runs are scored off each wall) makes the answer much clearer. Never for numbers (that is bars) or processes (steps). The article need not describe the thing: "what does a cage look like", "show me a 5-a-side pitch" or "draw a turf shoe's studs" on an article about that sport or kit always gets art (scope article, citing the closest section), a generic, clearly labelled picture of it. Never decline, and never answer with only a description or a web search, because the article gives no layout or measurements. art_brief names exactly what to draw, from which view, its parts and the labels to show (three words at most each, only things the article names, in its words; a shot is an arrow, not a shaded zone). Copy any measurement with its unit exactly as the article writes it ("90m x 60m"); for a size the article gives without a unit write it as "60x30, no unit given, add none"; never a size it gives for something else. alt describes the picture in one sentence; title says what it shows. The answer then introduces the drawing in a clause and adds what the article says about the thing.
-- When the reader says chart, graph or plot: bars from the article's main ranking or price table whenever a dataset has one ₹ or numeric column over three or more rows; stats only when none does, and never a copy of the tiles the article already shows at the top. For "explain it with a diagram" or "chart the key numbers" with nothing more said, the kind that fits what the article is built on: bars for a ranking or prices, compare for a versus article (both sides as columns, 4 to 6 rows: size, format, cost, who it suits), steps for a how-to or list of rules, stats for a few headline numbers, art for a layout or object. When it doesn't have the material, kind none, and say in the answer that the article has no numbers (or steps) to draw it from, and what it does have.
-- The answer and points describe the visual you actually chose (a chart is bars, tiles are stats, a table is compare), and never explain how it is drawn (scales, units, axes).
+- art: a drawing, only when the reader asks to see, draw, picture or diagram something, or when a picture of a physical layout or object (a box cricket cage and its walls, a 5-a-side pitch and its markings, a stud pattern, how runs are scored off each wall) makes the answer much clearer. Never for numbers (that is bars) or processes (steps). The article need not describe the thing: "what does a cage look like", "show me a 5-a-side pitch" or "draw a turf shoe's studs" on an article about that sport or kit always gets art, scope article. Never decline, and never answer with only a description or a web search, because the article gives no layout or measurements.
+  The answer with a drawing: first what the thing looks like, in one or two plain sentences; when the article doesn't describe it, what it usually looks like, said as usual ("A box cricket cage is usually a netted box: nets on all four sides and overhead, an artificial-turf floor and floodlights"). Then what the article itself says about it (its sizes, prices, what to ask for, the hero image). Cite the section that mentions the thing.
+  art_brief: what to draw and from which view, then every part to draw and nothing else, then the labels. Parts the article doesn't name may be drawn when the thing always has them (a cage's netted walls and roof net, turf floor, floodlights, stumps at both ends of the pitch), labelled plainly. Labels: three words at most each, in the article's words where it has them, each on or pointing to the middle of the part it names. Fix the orientation of anything with ends: in a cricket cage, the back wall is behind the batter and the far end is the straight boundary (never "back wall" at both ends), with the batter and bowler marked. A shot is an arrow that goes where the rule says (a straight shot runs along the pitch to the far end wall), never a shaded zone, and a run label keeps the rule's condition ("6, on the full"). Copy any measurement with its unit exactly as the article writes it ("90m x 60m"); a size it gives without a unit is "60x30, no unit given, add none"; never a size given for something else. alt describes the picture in one sentence; title says what it shows.
+- When the reader says chart, graph or plot: bars from the article's main ranking or price table whenever a dataset has one ₹ or numeric column over three or more rows; stats only when none does, and never a copy of the tiles the article already shows at the top.
+- "Chart the key numbers": that chart, and points giving the headline numbers it doesn't show (counts, medians, ranges, records, averages), each with its amount, its qualifier and the venue or city it belongs to ("The highest listed rate is ₹4,400 an hour, at Meridian Tightend Sports Arena in Madhapur").
+- "Explain it with a diagram": art when the article's subject has a physical layout (a ground, cage, pitch, court or kit; for a versus article on two grounds, both side by side from above with the article's measurements), else bars for a ranking or prices, compare for any other versus article, steps for a how-to or list of rules, stats for a few headline numbers.
+- When the article doesn't have the material for what was asked, kind none, and say in the answer that the article has no numbers (or steps) to draw it from, and what it does have.
+- The answer and points describe the visual you actually chose (a chart is bars, tiles are stats, a table is compare, a drawing is art), and never explain how it is drawn (scales, units, axes).
 - Fields a kind doesn't use: null, empty arrays, sort "none"; title "" for none.
 
-followups: two or three short questions a specific section of this article answers (one you could cite), eight words at most, in the player's own language mix (Hinglish in, Hinglish out), like "How much is a weekend night slot?". Never the question just asked, a rephrasing of it or its translation, and never a topic the article has no section on.
+followups: two or three short questions that a specific sentence of this article answers, eight words at most, in the player's own language mix (Hinglish in, Hinglish out), like "How much is a weekend night slot?". Never the question just asked, a rephrasing of it or its translation, one your answer or points already answer, or one about a topic or number the article doesn't give.
 
 The conversation: earlier turns, from anywhere on TapTurf, may come before the message. Use them to understand it; answer only the last message.
 
@@ -99,17 +108,17 @@ const SUMMARY_ASK = `Summarize this article.
 
 The short version, in place of the answer rules above:
 - scope: article.
-- answer: the article's main point or conclusion in one sentence of at most 28 words, in its own framing (when it ends on a callout stating its main principle, that principle). Never start with "This article", "The article" or "The blog".
-- points: three to five key takeaways in the article's order, one sentence each under 20 words, keeping the concrete names, areas, prices, numbers, dates and qualifiers it gives, every range and count exactly as written. When the article explains how its list or ranking was made, one point says how. When it gives a set of tiers or thresholds, give all of them. Never repeat in a point a number shown in the visual.
-- sections: the S numbers of every section the answer and points come from, in the points' order, up to six.
+- answer: the article's main point or conclusion in one sentence of at most 28 words, in its own framing (when it ends on a callout stating its main principle, that principle). When it ranks or lists a selection, say how many of how many ("its top 10 of 83"). Never start with "This article", "The article" or "The blog".
+- points: three to five key takeaways in the article's order, one sentence each under 20 words, keeping the concrete names, areas, prices, numbers, dates and qualifiers it gives, every range and count exactly as written. A price or ranking article's points give its headline price figures (medians, ranges) with their qualifiers. When the article explains how its list or ranking was made, one point says how. When it gives a set of tiers or thresholds, give all of them. Never give in a point an item or number the visual shows: for a list of rules, the points and the steps together cover as many different rules as fit, always including any with a money or booking consequence (deposits, damage charges, refunds, cancellation).
+- sections: the S numbers of every section the answer, points and visual come from, in the article's order, up to six.
 - sources: the R numbers of the sources behind the numbers in your points, up to four, whenever the article cites sources.
-- turfs: the V numbers of the venues the points name, and only those.
-- visual: required when the article has the material. A ranking of venues by rating: bars of its ratings. An article about prices: bars from a dataset whose value column is ₹ amounts, else stats from its key numbers, never ratings or reviews. A how-to or a numbered list of rules or tips: steps, its 4 to 6 most important. A versus article: compare. A few headline numbers: stats. Otherwise none. Never art.
+- turfs: the V numbers of the venues the answer and points name, and only those.
+- visual: required when the article has the material. A ranking of venues: bars of the column that best shows how they differ (ratings only when they differ by 0.3 or more; otherwise reviews or the main ₹ rate). An article about prices: bars from a dataset whose value column is ₹ amounts, else stats from its key numbers, never ratings or reviews. A how-to or a numbered list of rules or tips: steps, its 4 to 6 most important. A versus article: compare. A few headline numbers: stats. Otherwise none. Never art.
 - followups: two or three questions a specific section answers that a reader would ask next.`;
 
 const WEB_SYSTEM = `You answer a player's question for TapTurf, an Indian directory of turfs, courts and pickup games. They are reading one of TapTurf's articles, which doesn't cover it, so search the web (once, twice at most) and answer from what you find.
 - Two to four short sentences, the direct answer first, for players in India: ₹, Indian cities and conditions where it matters.
-- Every fact from the pages you found, and only from pages about the same thing that was asked: a box cricket turf is not a practice net, a futsal court is not a football pitch, a club's own rules are not the laws of the game. If the pages don't answer it, say so in one sentence rather than guess.
+- Every fact from the pages you found, and only from pages about the same thing that was asked: a box cricket turf is not a practice net, a futsal court is not a football pitch, a club's own rules are not the laws of the game. Use only pages whose content you actually got: never one that showed "Page not found", an error or nothing. If the pages don't answer it, say so in one sentence rather than guess.
 - Sport, fitness, kit, rules, venues and games only. For anything else, say in one line that you can only help with sport.
 - Plain Indian English: no lists, headings, markdown, links, emoji, phone numbers or emails. Don't mention searching or the results; just answer.
 - Don't send the player to other booking apps or websites: TapTurf lists venues itself.`;
@@ -122,12 +131,17 @@ const SUMMARY_REPLY = "Here's the short version of this article.";
  */
 const BUDGET_MS = 38_000;
 /**
- * Each try of the first call, which reasons before it answers (a table
- * read wrong is a wrong answer). structured() tries again only on output
- * it can't use, so the SDK may retry once (an overload, a dropped
- * connection) while two tries still fit before the deadline.
+ * The first call, which reasons before it answers (a table read wrong is
+ * a wrong answer), at most. The short version of a long article reasons
+ * longest: at 16 s the lease guide's timed out twice. It is kept for
+ * good once made, so its first reader's wait is the only one.
  */
-const ANSWER_MS = 16_000;
+const ANSWER_MS = 22_000;
+const SUMMARY_MS = 30_000;
+/** Time left for one more try after an overload or a dropped connection. */
+const RETRY_MIN_MS = 8_000;
+/** Each page a web answer links to is checked for this long, at most. */
+const LINK_CHECK_MS = 3_000;
 /** The web search, at most. */
 const WEB_MS = 18_000;
 /** Below this, a web search is not worth starting. */
@@ -156,6 +170,13 @@ class NoWeb extends Error {
 
 type Stored = Composed & { usage: AskUsage; run: string };
 type WebStored = { web: WebAnswer; usage: AskUsage; run: string };
+
+/** An error that may pass on a second try: overloaded, rate limited, a server error or a dropped connection (not a timeout). */
+function transient(e: unknown): boolean {
+  if (e instanceof Anthropic.APIConnectionTimeoutError) return false;
+  if (e instanceof Anthropic.APIConnectionError) return true;
+  return e instanceof Anthropic.APIError && (e.status === 429 || (e.status ?? 0) >= 500);
+}
 
 /** A short, stable digest of `parts`, for cache keys. */
 const digest = (...parts: string[]) => createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 20);
@@ -266,8 +287,11 @@ async function webAnswer(post: Post, question: string, before: string, usage: As
       { timeout, maxRetries: 0 },
     );
     addUsage(usage, res.usage);
-    const got = readWebAnswer(res.content, res.stop_reason);
-    if (!got) {
+    const read = readWebAnswer(res.content, res.stop_reason);
+    // A page the search found can be gone by now: those aren't shown, and with none left there is no answer.
+    const got = read && (await withLivePages(read));
+    if (read && !got) console.warn("blog answer: every page behind the web answer is gone", post.slug);
+    if (!read) {
       console.warn("blog answer: web search gave nothing usable", {
         slug: post.slug,
         stop: res.stop_reason,
@@ -279,6 +303,42 @@ async function webAnswer(post: Post, question: string, before: string, usage: As
     console.error("blog answer: web search failed", post.slug, e);
     return null;
   }
+}
+
+/** The start of a page, or null when it can't be read in time (kept: it may be a bot block or a slow site). */
+async function pageStart(url: string): Promise<{ status: number; head: string } | null> {
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(LINK_CHECK_MS),
+      headers: { "user-agent": "Mozilla/5.0 (compatible; TapTurf link check; +https://www.tapturf.in)", accept: "text/html,*/*" },
+    });
+    let head = "";
+    const reader = res.body?.getReader();
+    if (reader) {
+      const text = new TextDecoder();
+      // The title is near the top: 24 KB is plenty.
+      while (head.length < 24_000) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        head += text.decode(value, { stream: true });
+      }
+      await reader.cancel().catch(() => {});
+    }
+    return { status: res.status, head };
+  } catch {
+    return null;
+  }
+}
+
+/** The answer with only the pages that are still there, or null when none is. */
+async function withLivePages(web: WebAnswer): Promise<WebAnswer | null> {
+  const pages = await Promise.all(web.links.map((l) => pageStart(l.url)));
+  const links = web.links.filter((_, i) => {
+    const p = pages[i];
+    return !p || !deadPage(p.status, p.head);
+  });
+  return links.length ? { ...web, links } : null;
 }
 
 /**
@@ -307,9 +367,10 @@ async function takeSearch(slug: string): Promise<boolean> {
 
 /** A web answer found now, or NoWeb. Starts only with time for the check and a search before `deadline`. */
 async function searchWeb(post: Post, question: string, before: string, usage: AskUsage, deadline: number): Promise<WebAnswer> {
-  if (deadline - Date.now() < TAKE_MS + MIN_WEB_MS) throw new NoWeb(usage, "late");
+  if (deadline - Date.now() < TAKE_MS + MIN_WEB_MS + LINK_CHECK_MS) throw new NoWeb(usage, "late");
   if (!(await takeSearch(post.slug))) throw new NoWeb(usage, "capped");
-  const left = deadline - Date.now();
+  // The search, then the check of its pages, before the deadline.
+  const left = deadline - Date.now() - LINK_CHECK_MS;
   if (left < MIN_WEB_MS) throw new NoWeb(usage, "late");
   const web = await webAnswer(post, question, before, usage, Math.min(WEB_MS, left));
   if (!web) throw new NoWeb(usage, "none");
@@ -337,9 +398,10 @@ function visualText(v: BlogVisual | null): string {
 async function compose(post: Post, article: Article, ask: BlogAsk, history: BlogAsk["history"], usage: AskUsage, deadline: number): Promise<Composed> {
   const summary = ask.mode === "summary";
   const info: { refused?: boolean } = {};
-  let out: BlogReply | null;
-  try {
-    out = await structured(
+  const most = summary ? SUMMARY_MS : ANSWER_MS;
+  // Its own deadline: the client's 20 s and its retries could take far longer.
+  const ask1 = (timeout: number) =>
+    structured(
       BlogReply,
       {
         model: ROUTER_MODEL,
@@ -353,11 +415,22 @@ async function compose(post: Post, article: Article, ask: BlogAsk, history: Blog
       "blog-answer",
       usage,
       info,
-      // Its own deadline: the client's 20 s and one retry could take 41 s.
-      { timeout: Math.max(5_000, Math.min(ANSWER_MS, deadline - Date.now())), maxRetries: deadline - Date.now() > 2 * ANSWER_MS + 2_000 ? 1 : 0, think: true },
+      { timeout, maxRetries: 0, think: true },
     );
+  let out: BlogReply | null;
+  try {
+    out = await ask1(Math.max(5_000, Math.min(most, deadline - Date.now())));
   } catch (e) {
-    throw new NoAnswer(usage, e);
+    // Overloaded, rate limited or a dropped connection: once more in the
+    // time left. A timeout would only time out again.
+    const left = deadline - Date.now();
+    if (!transient(e) || left < RETRY_MIN_MS) throw new NoAnswer(usage, e);
+    console.warn("blog answer: trying again after", e instanceof Anthropic.APIError ? e.status : e);
+    try {
+      out = await ask1(Math.min(most, left - 500));
+    } catch (e2) {
+      throw new NoAnswer(usage, e2);
+    }
   }
   if (!out) {
     if (info.refused) console.warn("blog answer: declined", post.slug);
@@ -383,8 +456,14 @@ async function compose(post: Post, article: Article, ask: BlogAsk, history: Blog
     };
   }
 
-  let visual = buildVisual(article, out.visual, (brief, alt) => signArt(post.slug, brief, alt));
-  let sections = pickSections(article, out.sections);
+  // The short version's chart must show a difference: ten ratings of 4.8 from zero look alike.
+  let visual = buildVisual(article, summary ? livelierBars(article, out.visual) : out.visual, (brief, alt) => signArt(post.slug, brief, alt));
+  const maxSections = summary ? 6 : 4;
+  let cited = pickSections(article, out.sections, maxSections).map((x) => x.n);
+  // The model now and then leaves out where a point's number or venue
+  // comes from: a section that alone holds it is cited too.
+  if (scope === "article") cited = [...cited, ...backingSections(article, [answer, ...points, visualText(visual)], cited, maxSections - cited.length)];
+  let sections = pickSections(article, cited, maxSections);
   if (scope === "article" && sections.length === 0) sections = pickSections(article, [0]);
   // beyond: the article doesn't say. Only a drawing survives: anything
   // else in a visual was the model's own.
