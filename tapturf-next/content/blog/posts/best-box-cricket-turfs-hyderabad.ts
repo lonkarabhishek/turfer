@@ -156,7 +156,7 @@ export const post: Post = {
       area: "Kondapur",
       rating: "4.8",
       reviews: 140,
-      note: "Second Kondapur entry and the cheapest evening rate here: ₹600 by day, ₹800 evenings, ₹1,000 weekend nights. Also does football, volleyball and nets.",
+      note: "Second Kondapur entry and the second-cheapest evening rate in this top 10, after NexGen: ₹600 by day, ₹800 evenings, ₹1,000 weekend nights. Also does football, volleyball and nets.",
     },
 
     { type: "h3", text: "Just outside the ten" },

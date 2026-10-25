@@ -181,21 +181,25 @@ export async function structured<T extends z.ZodType>(
   tag: string,
   usage?: AskUsage,
   info?: { refused?: boolean },
-  opts?: { timeout?: number; maxRetries?: number },
+  opts?: { timeout?: number; maxRetries?: number; think?: boolean },
 ): Promise<z.output<T> | null> {
   const format = zodOutputFormat(schema);
-  let maxTokens = params.max_tokens;
+  const { think = false, ...request } = opts ?? {};
+  // think: reason before answering (adaptive thinking, medium effort), for
+  // answers that must read a table right. It needs room: the caller's
+  // max_tokens is kept for the JSON and the thinking gets its own on top.
+  let maxTokens = think ? params.max_tokens + 4_000 : params.max_tokens;
   for (let attempt = 0; attempt < 2; attempt++) {
-    // Thinking off: in production Haiku spent the whole budget on a
-    // thinking block and the JSON came back cut at max_tokens.
+    // Thinking off by default: in production Haiku spent the whole budget
+    // on a thinking block and the JSON came back cut at max_tokens.
     const res = await getAnthropic().messages.create(
       {
         ...params,
         max_tokens: maxTokens,
-        thinking: { type: "disabled" },
-        output_config: { effort: "low", format },
+        thinking: think ? { type: "adaptive" } : { type: "disabled" },
+        output_config: { effort: think ? "medium" : "low", format },
       },
-      opts,
+      request,
     );
     if (usage && res.usage) addUsage(usage, res.usage);
     if (res.stop_reason === "refusal") {

@@ -749,7 +749,29 @@ function barsVisual(a: Article, v: RawVisual): BlogVisual | null {
   if (!drawn) return null;
   const bars = [...drawn.bars].sort(byValue(v.sort)).slice(0, MAX_BARS);
   if (bars.length < 2) return null;
-  const title = clip(v.title, 70) || (from ? clip(from.title, 70) : "From the article");
+  let title = clip(v.title, 70) || (from ? clip(from.title, 70) : "From the article");
+  let unit = unitOf(v.unit);
+  // The model's words must not say the numbers are something else: ratings
+  // titled "hourly rates", rupees titled "rating". Then the column names them.
+  if (from) {
+    const kinds = bars.map((b) => cellKind(b.display));
+    const barsKind = kinds.filter((k) => k === "₹").length * 2 > kinds.length ? "₹" : kinds.filter((k) => k === "%").length * 2 > kinds.length ? "%" : "";
+    const says = (t: string | null) => {
+      const k = unitKind(t);
+      if (k === "₹" || k === "%") return k;
+      return /\b(ratings?|rated|reviews?|stars?)\b/i.test(t ?? "") ? "rating" : null;
+    };
+    const clash = (t: string | null) => {
+      const k = says(t);
+      return k !== null && (k === "rating" ? barsKind !== "" : k !== barsKind);
+    };
+    if (clash(title)) {
+      const header = tidy(from.columns[v.value_column as number]);
+      const named = from.title.split(/(?<=\.)\s+/)[0].replace(/\.$/, "");
+      title = clip(header ? `${header} (${named})` : named, 70);
+    }
+    if (clash(unit)) unit = null;
+  }
 
   // What the reader is told about the numbers: their table and column, and any cut.
   const tail: string[] = [];
@@ -768,7 +790,7 @@ function barsVisual(a: Article, v: RawVisual): BlogVisual | null {
     const named = from.title.split(/(?<=\.)\s+/)[0].replace(/\.$/, "");
     note = !sameAsTitle && room >= 20 ? `From the article: ${bare(clip(named, room))}${said}` : `From the article's table${said}`;
   }
-  return { kind: "bars", title, unit: unitOf(v.unit), note: clip(note, NOTE_MAX), bars };
+  return { kind: "bars", title, unit, note: clip(note, NOTE_MAX), bars };
 }
 
 function stepsVisual(v: RawVisual): BlogVisual | null {
@@ -879,6 +901,30 @@ export function pickSources(a: Article, ns: number[]): BlogLink[] {
 
 export function pickTurfs(a: Article, ns: number[]): BlogTurf[] {
   return pick(a.turfs, ns, 6, (t) => t.id).map(({ id, name, area }) => ({ id, name, area }));
+}
+
+// Words too common to tell one venue from another on their own.
+const VENUE_WORDS = new Set("the box cricket turf turfs sports sport arena arenas club ground grounds cafe and football court courts zone hub park play".split(" "));
+
+/**
+ * The venues of `turfs` that `text` (the answer, its points and its
+ * visual) actually names, so a card is never linked for a venue the
+ * reader wasn't told about. A venue is named by its full name, the part
+ * before a bracket or dash ("AJ Cricket Club" for "AJ Cricket Club (Box
+ * Cricket)"), or its first word when that word is its own ("NexGen").
+ */
+export function turfsNamed(turfs: BlogTurf[], text: string): BlogTurf[] {
+  const t = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+  const has = (s: string) => {
+    const k = s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    return k.length >= 3 && t.includes(` ${k} `);
+  };
+  return turfs.filter((v) => {
+    const name = tidy(v.name);
+    const short = name.split(/\s*[([]|\s+[–—-]\s+/)[0];
+    const first = short.split(/\s+/)[0] ?? "";
+    return has(name) || has(short) || (first.length >= 4 && !VENUE_WORDS.has(first.toLowerCase()) && has(first));
+  });
 }
 
 /** Follow-up chips: short, distinct, not the question just asked, two at most. */

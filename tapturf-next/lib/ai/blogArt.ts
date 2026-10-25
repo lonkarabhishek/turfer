@@ -28,7 +28,7 @@ import { getAnthropic, isAskConfigured } from "./ask";
 export const ART_MODEL = "claude-opus-5-5";
 
 /** Part of every drawing's key: bump it when the prompt or model changes, and every brief is drawn again. */
-const ART_VERSION = 1;
+const ART_VERSION = 2;
 
 /** Opus gets this long; the art route stops at 60 s, and the store's claim lapses at 90. */
 const DRAW_TIMEOUT_MS = 45_000;
@@ -43,7 +43,8 @@ Reply with only the drawing: one <svg> element with nothing before or after it, 
 - Colours: turf greens #16A34A, #15803D and #DCFCE7; ink #1D1D1F; muted #6B7280; lines #E5E7EB; white; amber #F59E0B and sky #0EA5E9 as accents.
 - Labels: three words at most each, font-family="system-ui, sans-serif", font-size 12 to 16, dark on a light background, inside the viewBox and clear of each other and of busy lines. No sentences, no paragraphs, no heading across the top.
 - No people's faces and no brand logos. Where players matter, show them as simple round markers.
-- Draw exactly what the brief asks, accurately: true proportions and positions where they matter (a pitch's markings, a cage's zones). Show measurements only when the brief gives them.
+- Draw exactly what the brief asks, accurately: true proportions and positions where they matter (a pitch's markings, a cage's walls). Show measurements only when the brief gives them, and only in the unit the brief gives: never add ft, m, yards or any unit the brief doesn't have, and a size given without a unit is written without one or left out.
+- Every label fits: allow about 0.6 x font-size per character, keep each label and any box behind it inside the viewBox and clear of thick lines, and never rotate a label longer than 14 characters (put it outside the shape, level, instead).
 - Keep it light: about 80 elements at most, whole-number coordinates.`;
 
 /**

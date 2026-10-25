@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVisual, cleanFollowups, hashText, inArticle, parseAmount, pickSections, pickSources, pickTurfs, readArticle, type Article } from "./blogArticle";
+import { buildVisual, cleanFollowups, hashText, inArticle, parseAmount, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "./blogArticle";
 import type { RawVisual } from "./blogReply";
 import type { BlogVisual } from "./blogTypes";
 import { ALL_POSTS, type Block, type Post } from "../../content/blog";
@@ -1171,4 +1171,40 @@ test("cleanFollowups: trimmed, short, distinct, not the question, two at most", 
   assert.deepEqual(cleanFollowups(["What does it cost", "What  does it cost?", "Where is it?"], "what does it cost?"), ["Where is it?"]);
   assert.deepEqual(cleanFollowups([], "x"), []);
   assert.equal(cleanFollowups(["a".repeat(60), "b"], "")[0].length, 60);
+});
+
+test("a chart's title can't call its numbers something else (ratings titled as rates, rupees as ratings)", () => {
+  const post = ALL_POSTS.find((p) => p.slug === "best-box-cricket-turfs-hyderabad")!;
+  const a = readArticle(post);
+  const venues = a.datasets.find((d) => d.source === "turfs")!;
+  const rating = venues.columns.findIndex((c) => /rating/i.test(c));
+  const rates = a.datasets.find((d) => d.source === "table" && d.columns.some((c) => /eve/i.test(c)))!;
+  const eve = rates.columns.findIndex((c) => /eve/i.test(c));
+  const base = { kind: "bars" as const, title: "", dataset: null, label_column: 0, value_column: 0, sort: "desc" as const, unit: null, bars: [], steps: [], columns: [], rows: [], stats: [], art_brief: null, alt: null };
+  // As seen in production: the right unit, a title that calls ratings "rates".
+  const ratings = buildVisual(a, { ...base, title: "Published hourly rates for Hyderabad cages", unit: "rating out of 5", dataset: venues.n, value_column: rating }, () => null);
+  assert.ok(ratings && ratings.kind === "bars");
+  if (ratings?.kind === "bars") {
+    assert.ok(!/rates|price|₹/i.test(ratings.title), ratings.title);
+    assert.ok(/rating/i.test(ratings.title), ratings.title);
+    assert.equal(ratings.unit, "rating out of 5");
+  }
+  // And a unit that says something else over a column it can't be (a rupee unit over ratings drops the chart).
+  assert.equal(buildVisual(a, { ...base, title: "Rates", unit: "₹ per hour", dataset: venues.n, value_column: rating }, () => null), null);
+  const rupees = buildVisual(a, { ...base, title: "Google rating of the top 10", unit: null, dataset: rates.n, value_column: eve }, () => null);
+  assert.ok(rupees && rupees.kind === "bars");
+  if (rupees?.kind === "bars") assert.ok(!/rating/i.test(rupees.title), rupees.title);
+  const fine = buildVisual(a, { ...base, title: "Evening rate per hour", unit: "₹ per hour", dataset: rates.n, value_column: eve }, () => null);
+  assert.ok(fine?.kind === "bars" && fine.title === "Evening rate per hour" && fine.unit === "₹ per hour");
+});
+
+test("venue links only for the venues the answer names", () => {
+  const v = (name: string) => ({ id: name, name, area: "" });
+  const all = [v("ASR Sports Arena"), v("NexGen Box Cricket & Cafe"), v("AJ Cricket Club (Box Cricket)"), v("The Turf Cafe – Sports Arena"), v("Offside")];
+  const names = (text: string) => turfsNamed(all, text).map((t) => t.name);
+  assert.deepEqual(names("ASR Sports Arena tops it; NexGen is open all night."), ["ASR Sports Arena", "NexGen Box Cricket & Cafe"]);
+  assert.deepEqual(names("AJ Cricket Club and The Turf Cafe are both in the list."), ["AJ Cricket Club (Box Cricket)", "The Turf Cafe – Sports Arena"]);
+  assert.deepEqual(names("Most sports arenas and turf cafes charge more for box cricket on weekends."), [], "common words name no venue");
+  assert.deepEqual(names("offside, a rule in football"), ["Offside"], "a one-word name counts when it is said");
+  assert.deepEqual(names(""), []);
 });

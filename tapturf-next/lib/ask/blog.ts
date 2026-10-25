@@ -37,6 +37,38 @@ export function looksLikeSearch(q: string): boolean {
   return SEARCHY.test(t) && !ABOUT_ARTICLE.test(rest);
 }
 
+const SPORT_WORDS: [string, RegExp][] = [
+  ["box cricket", /\bbox[ -]?cricket\b/],
+  ["football", /\b(football|futsal|5-a-side|7-a-side)\b/],
+  ["cricket", /\bcricket\b/],
+  ["pickleball", /\bpickleball\b/],
+  ["badminton", /\bbadminton\b/],
+];
+// Search chips that aren't a search for a venue: a tool, a host, a comparison.
+const NOT_SEARCH = /\b(nrr|host|vs|compare)\b/i;
+
+/**
+ * The city's search chips that fit an article, for the one search chip
+ * under an answer: those for the sport it is about first, then ones for
+ * no sport in particular, never one for another sport or a tool, and none
+ * at all on an article for turf owners.
+ */
+export function articleSearchChips(post: Pick<Post, "slug" | "title">, chips: string[]): string[] {
+  const about = `${post.slug.replace(/-/g, " ")} ${post.title}`.toLowerCase();
+  if (/\b(business|lease|leased|owner|owners|investment|investor)\b/.test(about)) return [];
+  const sportsOf = (t: string) => {
+    const l = t.toLowerCase();
+    // "box cricket" is not also "cricket".
+    const found = SPORT_WORDS.filter(([, re]) => re.test(l)).map(([w]) => w);
+    return found.includes("box cricket") ? found.filter((w) => w !== "cricket") : found;
+  };
+  const mine = sportsOf(about);
+  const fit = chips.filter((c) => !NOT_SEARCH.test(c));
+  const ofMine = fit.filter((c) => sportsOf(c).some((w) => mine.includes(w)));
+  const general = fit.filter((c) => sportsOf(c).length === 0);
+  return mine.length ? [...ofMine, ...general] : general.length ? general : fit;
+}
+
 /** Without the model: the article's own description and its section headings. */
 export function outlineOf(post: Post): { gist: string; points: string[] } {
   const heads = post.blocks.filter((b): b is Extract<Block, { type: "h2" }> => b.type === "h2").map((b) => b.text.trim());

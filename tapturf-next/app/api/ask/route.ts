@@ -27,7 +27,7 @@ import { toolBySlug, toolPath } from "@/lib/tools/registry";
 import { getHomeDataShared } from "@/lib/home/data";
 import { askChipsFor } from "@/lib/home/select";
 import { getPostBySlug } from "@/content/blog";
-import { isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
+import { articleSearchChips, isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
 import { answerBlog, type BlogResult } from "@/lib/ai/blogAnswer";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
@@ -216,7 +216,8 @@ export async function GET(req: Request) {
       const source = blog.kind === "outline" ? "keywords" : "claude";
       // Two questions about the article, then a search for its city.
       const asked = new Set(result.followups.map((f) => f.toLowerCase()));
-      const followups = [...result.followups, ...chips.filter((c) => !asked.has(c.toLowerCase()))].slice(0, 3);
+      // Then one search that fits the article (its sport; none for owners).
+      const followups = [...result.followups, ...articleSearchChips(post, chips).filter((c) => !asked.has(c.toLowerCase()))].slice(0, 3);
       const body = {
         query: q,
         intent: "blog",
