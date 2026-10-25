@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAsk } from "./AskProvider";
-import { ArrowRight, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
+import { ArrowRight, BadgeCheck, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import { imageUrlForCard } from "@/lib/utils/images";
 import { summarisePrice } from "@/lib/utils/prices";
@@ -49,7 +49,15 @@ export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distan
         )}
       </div>
       <div className="p-3">
-        <p className="text-[14px] font-semibold text-primary-900 leading-tight truncate group-hover:text-accent-700 transition-colors">{turf.name}</p>
+        <p className="flex min-w-0 items-center gap-1 text-[14px] font-semibold text-primary-900 leading-tight group-hover:text-accent-700 transition-colors">
+          <span className="truncate">{turf.name}</span>
+          {turf.claimed && (
+            <>
+              <BadgeCheck className="w-3.5 h-3.5 shrink-0 text-accent-600" aria-hidden />
+              <span className="sr-only">, managed by the owner</span>
+            </>
+          )}
+        </p>
         <p className="text-[12px] text-primary-500 truncate mt-0.5">{area ?? turf.address}</p>
         <p className="text-[12px] mt-1.5">
           {price.kind === "real" ? (

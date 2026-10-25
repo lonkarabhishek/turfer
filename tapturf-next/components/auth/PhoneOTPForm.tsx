@@ -45,7 +45,12 @@ function useRotatingLine(lines: string[], active: boolean, interval = 2200): str
   return lines[i];
 }
 
-export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
+/**
+ * autoFocusPhone: put the cursor in the number field at once (the popup,
+ * after "Continue with phone" was tapped). Off on /login, where Google
+ * comes first and an open keyboard would pull people to the phone form.
+ */
+export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?: () => void; autoFocusPhone?: boolean }) {
   const { hydrateFromStorage } = useAuth();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
@@ -273,7 +278,7 @@ export function PhoneOTPForm({ onSuccess }: { onSuccess?: () => void }) {
                 onKeyDown={(e) => e.key === "Enter" && handleSendOTP()}
                 placeholder="10-digit number"
                 className={inputClass + " flex-1"}
-                autoFocus
+                autoFocus={autoFocusPhone}
               />
             </div>
           </div>

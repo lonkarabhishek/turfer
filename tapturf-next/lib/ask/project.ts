@@ -50,6 +50,7 @@ export function toAskTurf(t: Turf): Turf {
     changing_room_available: yes(t.changing_room_available),
     has_cafeteria: yes(t.has_cafeteria),
     equipment_provided: yes(t.equipment_provided),
+    claimed: yes(t.claimed),
   };
   for (const k of Object.keys(out)) if (out[k] == null) delete out[k];
   return out as unknown as Turf;

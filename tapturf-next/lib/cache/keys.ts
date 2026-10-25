@@ -73,6 +73,7 @@ export const LIST_COLUMNS: readonly string[] = [
   "start_time", "end_time", "is_24x7", "membership_required", "is_active",
   "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria", "equipment_provided",
   "image_review",
+  "claimed",
 ];
 
 const CITY = /^[a-z][a-z-]{1,30}$/;

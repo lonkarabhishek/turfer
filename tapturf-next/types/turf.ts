@@ -104,6 +104,8 @@ export interface Turf {
 
   // System
   is_active: boolean;
+  /** An owner manages this turf on myTapturf (an active claim). Cards show "Managed by the owner". */
+  claimed?: boolean;
   created_at: string;
   updated_at: string;
 }

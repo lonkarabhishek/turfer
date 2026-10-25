@@ -38,7 +38,7 @@ test("planPurge rejects anything that is not a known key shape", () => {
 
 test("MAX_KEYS matches the flush's batch size", () => {
   assert.equal(MAX_KEYS, 1000);
-  assert.match(sql(), /limit 1000/);
+  assert.match(sql("private.flush_cache()"), /limit 1000/);
 });
 
 test("an update of only ignored columns queues nothing", () => {
@@ -114,13 +114,14 @@ test("every key the legacy rules produce passes the batch parser", () => {
 // The trigger in SQL and these lists must agree, and the list class must
 // cover every column the list pages select.
 
-function sql(): string {
+/** The latest migration that defines this function (the trigger and the flush can live in different files). */
+function sql(fn = "private.mark_turf_dirty()"): string {
   const dir = join(process.cwd(), "supabase", "migrations");
   const latest = readdirSync(dir)
-    .filter((f) => f.endsWith(".sql") && readFileSync(join(dir, f), "utf8").includes("function private.mark_turf_dirty()"))
+    .filter((f) => f.endsWith(".sql") && readFileSync(join(dir, f), "utf8").includes(`function ${fn}`))
     .sort()
     .at(-1);
-  assert.ok(latest, "no migration defines private.mark_turf_dirty()");
+  assert.ok(latest, `no migration defines ${fn}`);
   return readFileSync(join(dir, latest), "utf8");
 }
 

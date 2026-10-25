@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { imageUrlForCard } from "@/lib/utils/images";
@@ -145,7 +145,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
       <article>
         {/* Photo. Only the pager dots sit on top; everything else lives
             below so the picture reads clean, App Store style. The
-            trending pick gets a thin gold frame and one badge. */}
+            trending pick gets a thin gold frame and one badge; a turf its
+            owner manages on myTapturf gets a small label under it. */}
         <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
         <div
           className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100"
@@ -157,11 +158,21 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
           onTouchEnd={onTouchEnd}
           onTouchCancel={onTouchEnd}
         >
-          {trending && (
-            <span className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 rounded-full spotlight-badge px-2.5 py-1 text-[11px] font-semibold shadow-soft pointer-events-none">
-              <Flame className="w-3 h-3 fill-[#e0a92e] text-[#b9851f]" />
-              Trending this week
-            </span>
+          {(trending || turf.claimed) && (
+            <div className="absolute top-2.5 left-2.5 z-10 flex flex-col items-start gap-1.5 pointer-events-none">
+              {trending && (
+                <span className="inline-flex items-center gap-1 rounded-full spotlight-badge px-2.5 py-1 text-[11px] font-semibold shadow-soft">
+                  <Flame className="w-3 h-3 fill-[#e0a92e] text-[#b9851f]" />
+                  Trending this week
+                </span>
+              )}
+              {turf.claimed && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-accent-700 shadow-soft">
+                  <BadgeCheck className="w-3.5 h-3.5" aria-hidden />
+                  Managed by owner
+                </span>
+              )}
+            </div>
           )}
           {rendered.length > 0 ? (
             <div
@@ -248,8 +259,14 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
         {/* Text block */}
         <div className="pt-3 px-0.5">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-[16px] font-semibold text-primary-900 leading-snug truncate">
-              {turf.name}
+            <h3 className="flex min-w-0 items-center gap-1 text-[16px] font-semibold text-primary-900 leading-snug">
+              <span className="truncate">{turf.name}</span>
+              {turf.claimed && (
+                <>
+                  <BadgeCheck className="w-4 h-4 shrink-0 text-accent-600" aria-hidden />
+                  <span className="sr-only">, managed by the owner</span>
+                </>
+              )}
             </h3>
             {turf.rating > 0 && (
               <span className="flex items-center gap-1 text-[14px] text-primary-900 shrink-0">

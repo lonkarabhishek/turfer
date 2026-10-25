@@ -27,6 +27,8 @@ const CARD_COLUMNS = [
   "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria", "equipment_provided",
   // AI cover pass: photos judged unusable are dropped from images below.
   "image_review",
+  // An owner manages it on myTapturf: the card's Managed by the owner mark.
+  "claimed",
 ].join(", ");
 
 // Exported for lib/queries/turfPage.ts (turf pages read the row through
@@ -160,6 +162,7 @@ export function transformTurf(raw: any): Turf {
     good_to_know: typeof raw.good_to_know === "string" && raw.good_to_know.trim() ? raw.good_to_know.trim() : null,
     good_to_know_updated_at: raw.good_to_know_updated_at ?? null,
     is_active: raw.is_active ?? true,
+    claimed: raw.claimed === true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
