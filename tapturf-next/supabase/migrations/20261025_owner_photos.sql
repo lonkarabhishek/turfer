@@ -180,8 +180,9 @@ as $$
 $$;
 
 -- Photos waiting for the judge go on the page, right after the first
--- photo; the cover too when there is none. The caller may hold the turf
--- row already. Returns how many went up.
+-- photo (and after the ones of the same batch already up); the cover
+-- too when there is none. The caller may hold the turf row already.
+-- Returns how many went up.
 create or replace function private.owner_photos_publish(p_turf_id uuid, p_ids uuid[])
 returns integer
 language plpgsql
@@ -192,6 +193,9 @@ declare
   t record;
   v_new jsonb;
   v_images jsonb;
+  v_since timestamptz;
+  v_batch timestamptz;
+  v_after integer;
 begin
   select id, images, image_review into t from public.turfs where id = p_turf_id for update;
   if not found then
@@ -205,8 +209,24 @@ begin
   end if;
   v_images := coalesce(case when jsonb_typeof(t.images) = 'array' then t.images end, '[]'::jsonb)
               - array(select jsonb_array_elements_text(v_new));
+  -- After the first photo and the photos of the same batch (one
+  -- owner_photo_start: one created_at) that an earlier check already put
+  -- up, so a batch keeps its order however many checks it takes.
+  select p.finished_at, p.created_at into v_since, v_batch from public.turf_owner_photos p
+   where p.id = any(p_ids) and p.turf_id = p_turf_id and p.status = 'checking'
+   order by p.finished_at, p.id limit 1;
+  select count(*) into v_after from (
+    select bool_and(exists (select 1 from public.turf_owner_photos o
+                             where o.turf_id = p_turf_id and o.url = x.e and o.status = 'live'
+                               and o.created_at = v_batch and o.finished_at < v_since))
+             over (order by x.i) as earlier
+      from jsonb_array_elements_text(v_images - 0) with ordinality x(e, i)) z
+   where z.earlier;
   v_images := case when jsonb_array_length(v_images) = 0 then v_new
-                   else jsonb_build_array(v_images -> 0) || v_new || (v_images - 0) end;
+                   else jsonb_build_array(v_images -> 0)
+                        || coalesce((select jsonb_agg(x.e order by x.i) from jsonb_array_elements(v_images - 0) with ordinality x(e, i) where x.i <= v_after), '[]'::jsonb)
+                        || v_new
+                        || coalesce((select jsonb_agg(x.e order by x.i) from jsonb_array_elements(v_images - 0) with ordinality x(e, i) where x.i > v_after), '[]'::jsonb) end;
   update public.turfs
      set images = v_images,
          cover_image = coalesce(nullif(cover_image, ''), private.first_visible_image(v_images, t.image_review))
@@ -358,8 +378,10 @@ begin
   end loop;
 
   -- Caps before any ticket, so a refused batch leaves nothing behind.
+  -- A ticket past its 30 minutes can't take an upload any more (only be finished): it holds no place.
   select count(*) into v_live from public.turf_owner_photos
-   where turf_id = p_turf_id and status in ('live', 'checking', 'uploading');
+   where turf_id = p_turf_id
+     and (status in ('live', 'checking') or (status = 'uploading' and created_at > now() - interval '30 minutes'));
   if v_live + v_new > 20 then
     return jsonb_build_object('error', 'too_many', 'left', greatest(0, 20 - v_live));
   end if;

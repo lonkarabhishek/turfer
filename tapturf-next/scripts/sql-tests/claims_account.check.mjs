@@ -48,7 +48,8 @@ create table public.ask_queries (id bigint generated always as identity primary 
 create table public.games (id uuid primary key default gen_random_uuid(), turf_id uuid, date date, status text, created_at timestamptz default now());
 create table public.reviews (id uuid primary key default gen_random_uuid(), turf_id uuid, rating int, comment text, author_name text, source text, created_at timestamptz default now());
 create table public.turf_suggestions (id uuid primary key default gen_random_uuid(), turf_id uuid not null, contact_phone text, whatsapp_phone text,
-  status text not null default 'pending', created_at timestamptz not null default now(), moderated_at timestamptz);
+  status text not null default 'pending', created_at timestamptz not null default now(), moderated_at timestamptz, ai_review jsonb, notes text);
+create table public.turf_suggestion_edits (id uuid primary key default gen_random_uuid(), suggestion_id uuid not null, changes jsonb not null, created_at timestamptz not null default now());
 `);
 
 const sqls = FILES.map((f) => fs.readFileSync(f, "utf8"));
@@ -83,11 +84,19 @@ await q(`insert into public.turfs (id, name, slug, city, is_active) values ('${O
 await q(`insert into public.turf_owners (turf_id, user_key, status, via, name, role) values ('${T3}', 'e:sam@x.in', 'active', 'admin', 'Typed Name', 'owner')`);
 // A number that came from a suggestion approved before this migration (never logged then), and one approved but not used.
 const T6 = "aaaaaaaa-0000-4000-8000-000000000006", T7 = "aaaaaaaa-0000-4000-8000-000000000007";
-await q(`insert into public.turfs (id, name, slug, city, owner_phone, whatsapp_phone) values ('${T6}', 'Six', 'six', 'pune', '+91 98000 00091', '9800000094'), ('${T7}', 'Seven', 'seven', 'pune', '9800000095', null)`);
-await q(`insert into public.turf_suggestions (turf_id, contact_phone, whatsapp_phone, status, moderated_at) values
-  ('${T6}', '9800000091', null, 'approved', now() - interval '3 days'),
-  ('${T7}', '9800000096', null, 'approved', now() - interval '3 days'),
-  ('${T6}', null, '9800000094', 'pending', null)`);
+const T9 = "aaaaaaaa-0000-4000-8000-00000000000a", T10 = "aaaaaaaa-0000-4000-8000-00000000000b", T11 = "aaaaaaaa-0000-4000-8000-00000000000c";
+await q(`insert into public.turfs (id, name, slug, city, owner_phone, whatsapp_phone) values ('${T6}', 'Six', 'six', 'pune', '+91 98000 00091', '9800000094'), ('${T7}', 'Seven', 'seven', 'pune', '9800000095', null),
+  ('${T9}', 'Nine', 'nine', 'pune', '9800000202', '9800000204'), ('${T10}', 'Ten', 'ten', 'pune', '+91 98000 00203', null), ('${T11}', 'Eleven', 'eleven', 'pune', '9800000205', null)`);
+await q(`insert into public.turf_suggestions (turf_id, contact_phone, whatsapp_phone, status, moderated_at, ai_review, notes) values
+  ('${T6}', '9800000091', null, 'approved', now() - interval '3 days', null, null),
+  ('${T7}', '9800000096', null, 'approved', now() - interval '3 days', null, null),
+  ('${T6}', null, '9800000094', 'pending', null, null, null),
+  ('${T9}', null, null, 'approved', now() - interval '2 days', '{"proposed":{"owner_phone":"9800000202"}}', 'new number is 98000 00202'),
+  ('${T9}', null, '9800000204', 'approved', now() - interval '2 days', '{"proposed":{"owner_phone":"9800000204","whatsapp_phone":"9800000204"}}', null),
+  ('${T10}', '9800000203', null, 'approved', null, null, null)`);
+// Approved and applied, then the player edited the phone: back to pending, with the applied number only in the edit.
+await q(`insert into public.turf_suggestions (id, turf_id, contact_phone, status, moderated_at) values ('dddddddd-0000-4000-8000-000000000001', '${T11}', '9800000206', 'pending', now() - interval '2 days')`);
+await q(`insert into public.turf_suggestion_edits (suggestion_id, changes) values ('dddddddd-0000-4000-8000-000000000001', '{"contact_phone":{"from":"9800000205","to":"9800000206"}}')`);
 
 await db.exec(NEW);
 await db.exec(NEW); // safe to run again
@@ -95,6 +104,9 @@ const tp = async (turf) => (await one("select private.turf_trusted_phones($1) p"
 eq(await tp(T6), ["9800000094"], "a number an earlier approved suggestion put on the listing opens nothing at once; a pending one changes nothing");
 eq(await tp(T7), ["9800000095"], "a suggestion whose number isn't on the listing changes nothing");
 eq((await one(`select count(*)::int n from public.turf_edit_log where turf_id = '${T6}' and user_key like 'suggestion:%'`)).n, 1, "logged once, though the migration ran twice");
+eq(await tp(T9), [], "numbers the AI proposed from a suggestion (from notes, or a WhatsApp number put in both fields) open nothing at once");
+eq(await tp(T11), [], "nor a number applied before the suggestion was edited");
+eq(await tp(T10), ["9800000203"], "a suggestion approved in the table editor (never written to the turf) changes nothing");
 // A re-save of the same number in another format keeps it TapTurf's.
 await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T7}', 'p:9800000097', '{"owner_phone":"+91 98000 00095"}', '{"owner_phone":"9800000095"}')`);
 eq(await tp(T7), ["9800000095"], "the same number saved again is still trusted");

@@ -287,6 +287,15 @@ eq(await dirty(), [{ key: "list:nashik", urgent: true }, { key: "turf:empty-box"
 eq([(await photo(j2.id)).verdict.note, (await photo(j3.id)).verdict.note, (await photo(j4.id)).verdict.note], ["A price list", "Kept for a manual look", "Could not read this photo"], "the reasons");
 eq([(await photo(j3.id)).status, (await photo(j3.id)).verdict.usable], ["held", false], "a photo the judge won't look at is held, never passed");
 
+// One batch finished photo by photo and judged in two calls keeps its order, after the first photo.
+const sb = await start(ADMIN, T2, 4, "jpg");
+for (const it of sb.items) { await putBoth(it, 300000, 40000, "image/jpeg"); eq((await finish(ADMIN, T2, [it.id], [300000, 40000])).checking, [it.id], "finished as soon as it's up"); }
+await verdicts(T2, sb.items.slice(0, 2).map((it) => judged(it.id, true)));
+await verdicts(T2, sb.items.slice(2).map((it) => judged(it.id, true)));
+eq((await turf(T2)).images, [BASE + j1.path, ...sb.items.map((it) => BASE + it.path), BASE + j0.path], "in the order uploaded, right after the first photo");
+await q("update public.turf_owner_photos set status = 'removed', files_gone_at = now() where id = any($1)", [sb.items.map((it) => it.id)]);
+await q("update public.turfs set images = $2 where id = $1", [T2, JSON.stringify([BASE + j1.path, BASE + j0.path])]);
+
 // A photo we can't load is tried again, and held at the third try.
 const s4 = await start(OWNER, T, 1);
 await putBoth(s4.items[0]);
@@ -393,6 +402,10 @@ eq(await start(OWNER, T, 3), { error: "too_many", left: 2 }, "two left");
 eq(await tickets(), 0, "no tickets from a refused batch");
 eq((await start(OWNER, T, 2)).items.length, 2, "the 19th and 20th");
 eq(await start(OWNER, T, 1), { error: "too_many", left: 0 }, "the 21st is refused");
+await q("update public.turf_owner_photos set created_at = now() - interval '31 minutes' where status = 'uploading' and turf_id = $1", [T]);
+eq((await start(OWNER, T, 2)).items.length, 2, "tickets past their upload window hold no place (a retry after a 403 fits)");
+await q("update public.turf_owner_photos set status = 'expired' where status = 'uploading' and turf_id = $1 and created_at < now() - interval '30 minutes'", [T]);
+eq(await start(OWNER, T, 1), { error: "too_many", left: 0 }, "the fresh tickets do");
 eq(await start(ADMIN, T, 1), { error: "too_many", left: 0 }, "for the site owner too");
 eq(await start(OWNER, T, 2, "webp", ["hlive", "hlive"]), { ok: true, bucket: "turf-photos", items: [{ duplicate: true }, { duplicate: true }] }, "duplicates need no room");
 await q("update public.turf_owner_photos set status = 'removed', files_gone_at = now() where url like 'https://x.in/%'");

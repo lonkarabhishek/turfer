@@ -12,7 +12,7 @@ type Action = "restore" | "remove" | "check";
 
 function statusOf(p: AdminOwnerPhoto): { label: string; tone: string } {
   if (p.status === "removed") return { label: "Removed", tone: "bg-primary-100 text-primary-600" };
-  if (p.status === "checking") return { label: p.checkTries > 0 ? `Being checked (couldn't load it ${p.checkTries}×)` : "Being checked", tone: "bg-primary-100 text-primary-700" };
+  if (p.status === "checking") return { label: p.checkTries > 0 ? `Being checked (try ${p.checkTries + 1} of 3)` : "Being checked", tone: "bg-primary-100 text-primary-700" };
   if (p.status === "held") return { label: p.unclaimed ? "Kept off: claim taken away" : "Kept off by check", tone: "bg-amber-100 text-amber-900" };
   if (p.override) return { label: "Live (you put it back)", tone: "bg-accent-50 text-accent-700" };
   if (p.checkedAt === null) return { label: "Went up unchecked", tone: "bg-amber-50 text-amber-800" };

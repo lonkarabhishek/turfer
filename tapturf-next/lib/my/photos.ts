@@ -332,9 +332,13 @@ export async function addOwnerPhotos(turfId: string, files: File[], onStep: (s: 
     } catch {
       /* checked by the minute job */
     }
+    // The minute job may have judged some while the rest were uploading: ask where each one is now.
+    const now = await loadOwnerPhotos(turfId).catch(() => null);
+    const status = new Map(now && !("error" in now) ? now.mine.map((m) => [m.id, m.status] as const) : []);
     for (const u of waiting) {
-      if (live.has(u.id)) out.live++;
-      else if (held.has(u.id)) out.held++;
+      const st = status.get(u.id);
+      if (live.has(u.id) || st === "live") out.live++;
+      else if (held.has(u.id) || st === "held") out.held++;
       else out.waiting++;
     }
     if (out.live > 0) await refreshTurfPage(turfId);

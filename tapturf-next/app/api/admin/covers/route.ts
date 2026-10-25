@@ -50,13 +50,16 @@ export async function POST(req: Request) {
         p_firebase_token: token,
       });
       if (werr) throw werr;
+      // What was saved: set_turf_cover keeps an owner's chosen cover, and never takes an owner photo the check held.
+      const { data: saved } = await supabase.from("turfs").select("cover_image").eq("id", row.id).maybeSingle();
+      const cover = (saved as { cover_image?: string | null } | null)?.cover_image ?? pick.cover;
       const flagged = pick.review.filter((r) => !r.usable).length;
       const broken = pick.broken.length;
       results.push({
         id: row.id,
         name: row.name,
-        image: pick.cover,
-        line: [pick.cover ? (pick.cover !== row.cover_image ? "New cover" : "Cover kept") : "No usable photo", flagged ? `${flagged} hidden` : "", broken ? `${broken} dead link${broken === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · "),
+        image: cover,
+        line: [pick.cover ? (cover !== row.cover_image ? "New cover" : "Cover kept") : "No usable photo", flagged ? `${flagged} hidden` : "", broken ? `${broken} dead link${broken === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · "),
         tone: pick.cover ? "ok" : "warn",
       });
     } catch (e) {

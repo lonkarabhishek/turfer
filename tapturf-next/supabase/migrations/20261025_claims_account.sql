@@ -1044,19 +1044,30 @@ $$;
 
 -- ── Numbers from suggestions approved before this migration ──
 -- moderate_suggestion didn't log them until now. A turf number that equals
--- an approved suggestion's, with no log row for it since, is logged as the
--- suggestion's, so it opens nothing at once (a check by hand instead; the
--- admin can still confirm it). Safe to run again.
+-- any number a reviewed suggestion could have put there (its phones, the
+-- numbers the AI proposed from it, or the phones it had before an edit) is
+-- logged as that suggestion's, so it opens nothing at once (a check by hand
+-- instead; the admin can still confirm it). Only suggestions reviewed in
+-- the app (moderated_at set): before that, approving never wrote the turf.
+-- Safe to run again.
 insert into public.turf_edit_log (turf_id, user_key, before, after, created_at)
-select s.turf_id, 'suggestion:' || s.id, jsonb_build_object(x.col, null), jsonb_build_object(x.col, x.val), coalesce(s.moderated_at, s.created_at)
+select s.turf_id, 'suggestion:' || s.id, jsonb_build_object(c.col, null), jsonb_build_object(c.col, c.val), s.moderated_at
   from public.turf_suggestions s
   join public.turfs t on t.id = s.turf_id
- cross join lateral (values ('owner_phone', t.owner_phone, s.contact_phone), ('whatsapp_phone', t.whatsapp_phone, s.whatsapp_phone),
-                            ('whatsapp_phone', t.whatsapp_phone, s.contact_phone)) x(col, val, sug)
- where s.status = 'approved' and x.val is not null and x.sug is not null
-   and public._phone10(x.val) is not null and public._phone10(x.val) = public._phone10(x.sug)
+ cross join lateral (values ('owner_phone', t.owner_phone), ('whatsapp_phone', t.whatsapp_phone)) c(col, val)
+ where s.moderated_at is not null
+   and public._phone10(c.val) is not null
+   and public._phone10(c.val) in (
+         select public._phone10(y.v)
+           from (values (s.contact_phone), (s.whatsapp_phone),
+                        (s.ai_review -> 'proposed' ->> 'owner_phone'), (s.ai_review -> 'proposed' ->> 'whatsapp_phone')) y(v)
+         union all
+         select public._phone10(e.changes -> f.k ->> 'from')
+           from public.turf_suggestion_edits e
+          cross join (values ('contact_phone'), ('whatsapp_phone')) f(k)
+          where e.suggestion_id = s.id)
    and not exists (select 1 from public.turf_edit_log l
-                    where l.turf_id = s.turf_id and l.after ? x.col and l.created_at >= coalesce(s.moderated_at, s.created_at));
+                    where l.turf_id = s.turf_id and l.user_key = 'suggestion:' || s.id and l.after ? c.col);
 
 -- ── Old claims: link the account ──────────────────────────
 update public.turf_owners o
