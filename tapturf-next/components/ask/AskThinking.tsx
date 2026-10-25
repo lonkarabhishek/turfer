@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
 import { useAsk } from "./AskProvider";
 import { SPORT_PAGES, type SportPage } from "@/lib/sports";
 import { CITIES, CITY_ALIASES, getCityPref, labelFor } from "@/lib/city";
+import { isSummaryAsk } from "@/lib/ask/blog";
 
 /** What the reply will show under its text, so the placeholders take the same shape. */
 export type CardsKind = "turf" | "game" | "compare";
@@ -161,7 +162,7 @@ const join = (...parts: (string | null | undefined | false)[]) => parts.filter(B
  * then picking. Each line only says what the server really does for
  * that kind of question; venue names only ever come from the player.
  */
-export function thinkingPlan(text: string, ctx: { city: string | null; turf: string | null; located: boolean; retry?: boolean }): ThinkingPlan {
+export function thinkingPlan(text: string, ctx: { city: string | null; turf: string | null; located: boolean; retry?: boolean; blog?: boolean }): ThinkingPlan {
   const q = ` ${text.toLowerCase().replace(/(\d),(\d)/g, "$1$2").replace(/24\s*[x/]\s*7/g, "24x7").replace(/[^\p{L}\p{M}\p{N}₹\s]+/gu, " ").replace(/\s+/g, " ").trim()} `;
   const t = q.trim().split(" ");
   const read: Stage = { at: AT.read, text: ctx.retry ? "Trying again" : "Reading your question" };
@@ -180,6 +181,8 @@ export function thinkingPlan(text: string, ctx: { city: string | null; turf: str
   const bare = q.trim();
   const asked = QUESTION.test(bare) || /\?\s*$/.test(text);
   if (GREETING.test(bare)) return { cards: null, stages: [{ ...read, text: ctx.retry ? read.text : "Reading your message" }, slow] };
+  // The article on screen, in short (the server answers it the same way: lib/ask/blog.ts).
+  if (ctx.blog && isSummaryAsk(text)) return plan(null, "Reading the article", "Picking out the key points", "Writing the short version");
   for (const [re, line] of TOOLS) if (re.test(q)) return plan(null, line);
   if (HOST.test(bare)) return plan(null);
 
@@ -355,7 +358,7 @@ export function AskSkeleton({ kind, className = "" }: { kind: CardsKind; classNa
  */
 export function AskThinking({ text, since, retry = false, onCards }: { text: string; since: number; retry?: boolean; onCards?: () => void }) {
   const { pageContext, hasLocation } = useAsk();
-  const [plan] = useState(() => thinkingPlan(text, { city: pageContext.city ?? getCityPref(), turf: pageContext.turf?.name ?? null, located: hasLocation, retry }));
+  const [plan] = useState(() => thinkingPlan(text, { city: pageContext.city ?? getCityPref(), turf: pageContext.turf?.name ?? null, located: hasLocation, retry, blog: !!pageContext.blog }));
   const [elapsed, setElapsed] = useState(() => Date.now() - since);
   const cardsShown = useEffectEvent(() => onCards?.());
 

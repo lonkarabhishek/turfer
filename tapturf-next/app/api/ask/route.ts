@@ -26,6 +26,9 @@ import type { Turf } from "@/types/turf";
 import { toolBySlug, toolPath } from "@/lib/tools/registry";
 import { getHomeDataShared } from "@/lib/home/data";
 import { askChipsFor } from "@/lib/home/select";
+import { getPostBySlug } from "@/content/blog";
+import { isSummaryAsk } from "@/lib/ask/blog";
+import { summarisePost } from "@/lib/ai/blogSummary";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -35,12 +38,13 @@ import { askChipsFor } from "@/lib/home/select";
 // chips or a common shape (lib/ai/quick.ts), else from a cache of
 // Claude's readings (lib/ai/parseCache.ts), else by Claude. The
 // Server-Timing header and the logged filters (_t, _usage, _src) show
-// where the time and tokens went.
+// where the time and tokens went. On a blog post, "Summarize this blog"
+// skips all that: the article itself is the answer (lib/ai/blogSummary.ts).
 
 const MAX_Q = 160;
 
-/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords. */
-type Via = "quick" | "cache" | "claude" | "keywords";
+/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: the short version of the article on screen. */
+type Via = "quick" | "cache" | "claude" | "keywords" | "blog";
 
 function ipHash(req: Request): string {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
@@ -49,19 +53,40 @@ function ipHash(req: Request): string {
 
 const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.distanceKm != null ? { distanceKm: t.distanceKm } : {}) });
 
-/** What page the player is on, trimmed. */
-function parseContext(raw: string | null): AskContext {
-  if (!raw) return {};
+/** What page the player is on, trimmed. blog: the slug of the article on screen. */
+function parseContext(raw: string | null): AskContext & { blog: string | null } {
+  if (!raw) return { blog: null };
   try {
-    const o = JSON.parse(raw) as { turf?: unknown; city?: unknown };
+    const o = JSON.parse(raw) as { turf?: unknown; city?: unknown; blog?: unknown };
     return {
       turf: typeof o.turf === "string" ? o.turf.slice(0, 80) : null,
       city: isCity(typeof o.city === "string" ? o.city : null) ? (o.city as AskContext["city"]) : null,
+      blog: typeof o.blog === "string" ? o.blog.slice(0, 120) : null,
     };
   } catch {
-    return {};
+    return { blog: null };
   }
 }
+
+type Db = ReturnType<typeof createReadOnlyClient>;
+type Finish = { filters: Record<string, unknown>; results: number; ms: number; source: "claude" | "keywords"; reply: string; intent: string };
+
+/**
+ * Fills in the ask's log row. after(): the write runs once the reply is
+ * sent, and the function stays alive until it lands (a bare promise
+ * could be cut off).
+ */
+function logFinish(supabase: Db, id: number | null, row: Finish): void {
+  if (id == null) return;
+  after(async () => {
+    await supabase
+      .rpc("ask_finish", { p_id: id, p_filters: row.filters, p_results: row.results, p_ms: row.ms, p_source: row.source, p_reply: row.reply, p_intent: row.intent })
+      .then(() => {}, () => {});
+  });
+}
+
+const timingOf = (ms: Record<string, number>, via: Via) =>
+  ["budget", "turfs", "parse", "handler", "total"].map((k) => `${k};dur=${ms[k] ?? 0}${k === "parse" ? `;desc="${via}"` : ""}`).join(", ");
 
 /** Last three turns from the client, trimmed so a hostile client can't pad the prompt. */
 function parseHistory(raw: string | null): AskTurn[] {
@@ -94,7 +119,7 @@ export async function GET(req: Request) {
   const lng = Number(searchParams.get("lng") || NaN);
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
   const history = parseHistory(searchParams.get("h"));
-  const ctx = parseContext(searchParams.get("ctx"));
+  const { blog: blogSlug, ...ctx } = parseContext(searchParams.get("ctx"));
   // Signed-in players send their account id; visitors a browser id and
   // get three answers a day before sign-in. Phone users have no server
   // session, so both are trusted ids; the per-IP budget caps abuse.
@@ -137,9 +162,59 @@ export async function GET(req: Request) {
     /* logging is best effort */
   }
 
+  const usage = newUsage();
+
+  // "Summarize this blog" on an article: the article is the answer, so
+  // the sentence isn't read and no turfs are searched.
+  const post = blogSlug && isSummaryAsk(q) ? getPostBySlug(blogSlug) : undefined;
+  if (post) {
+    const t0 = performance.now();
+    const [{ digest, usage: paid }, followups] = await Promise.all([
+      summarisePost(post),
+      // What to ask next: the article's city, else the visitor's.
+      getHomeDataShared().then(
+        (d) => askChipsFor(d, post.city ?? prefCity).slice(0, 3),
+        () => [] as string[],
+      ),
+    ]);
+    if (paid) addUsage(usage, paid);
+    ms.handler = Math.round(performance.now() - t0);
+    ms.total = Date.now() - started;
+    const source = digest.kind === "ai" ? "claude" : "keywords";
+    const reply =
+      digest.kind === "ai"
+        ? "Here's the short version of this article."
+        : "I can't write the short version right now, so here's what this article covers.";
+    const body = {
+      query: q,
+      intent: "blog",
+      summary: `Short version of ${post.title}`.slice(0, 120),
+      reply,
+      followups,
+      source,
+      via: "blog",
+      filters: { city: post.city, sport: null, areas: [], maxPrice: null, time: null, when: null, skill: null, open24x7: false, wantsNearby: false, needs: [], players: null, sort: "rating" },
+      needsLocation: false,
+      freeLeft,
+      // A follow-up after the summary is a fresh search, not a refinement of it.
+      memo: { intent: "other", top: [] },
+      relaxed: [],
+      total: 0,
+      blog: { slug: post.slug, title: post.title, readMinutes: post.readMinutes, kind: digest.kind, gist: digest.gist, points: digest.points, cta: post.cta ?? null },
+    };
+    logFinish(supabase, logId, {
+      filters: { intent: "blog", slug: post.slug, kind: digest.kind, _src: "blog", _t: ms, ...(usage.calls ? { _usage: usage } : {}) },
+      results: digest.points.length,
+      ms: Date.now() - started,
+      source,
+      reply,
+      intent: "blog",
+    });
+    return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "blog") } });
+  }
+
   const turfs = await turfsLoad;
   const areas = areasFromTurfs(turfs);
-  const usage = newUsage();
   const parseStart = performance.now();
   const fresh = history.length === 0;
   let filters: AskFilters = keywordFilters(q);
@@ -298,32 +373,22 @@ export async function GET(req: Request) {
   const shown = (body.turfs as { name: string }[] | undefined)?.map((t) => t.name) ?? (body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? [];
   body.memo = { ...(body.memo as Record<string, unknown>), top: shown.slice(0, 5) };
 
-  // after(): the log write runs once the reply is sent, and the
-  // function stays alive until it lands (a bare promise could be cut off).
-  if (logId != null) {
-    after(async () => {
-      await supabase
-        .rpc("ask_finish", {
-          p_id: logId,
-          // shown_ids: which turfs this answer showed (owners see the count on myTapturf).
-          // _src, _t (stage ms) and _usage (tokens across every model call) are for tuning.
-          p_filters: {
-            ...filters,
-            shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12),
-            _src: via,
-            _t: ms,
-            ...(usage.calls ? { _usage: usage } : {}),
-          },
-          p_results: Number(body.total) || (Array.isArray(body.turfs) ? body.turfs.length : 0),
-          p_ms: Date.now() - started,
-          p_source: source,
-          p_reply: filters.reply,
-          p_intent: filters.intent,
-        })
-        .then(() => {}, () => {});
-    });
-  }
+  logFinish(supabase, logId, {
+    // shown_ids: which turfs this answer showed (owners see the count on myTapturf).
+    // _src, _t (stage ms) and _usage (tokens across every model call) are for tuning.
+    filters: {
+      ...filters,
+      shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12),
+      _src: via,
+      _t: ms,
+      ...(usage.calls ? { _usage: usage } : {}),
+    },
+    results: Number(body.total) || (Array.isArray(body.turfs) ? body.turfs.length : 0),
+    ms: Date.now() - started,
+    source,
+    reply: filters.reply,
+    intent: filters.intent,
+  });
 
-  const timing = ["budget", "turfs", "parse", "handler", "total"].map((k) => `${k};dur=${ms[k] ?? 0}${k === "parse" ? `;desc="${via}"` : ""}`).join(", ");
-  return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timing } });
+  return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, via) } });
 }

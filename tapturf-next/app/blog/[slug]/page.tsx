@@ -15,6 +15,7 @@ import { PostCard } from "@/components/blog/PostCard";
 import { TableOfContents } from "@/components/blog/TableOfContents";
 import { ShareBar } from "@/components/blog/ShareBar";
 import { StickyMobileCTA } from "@/components/blog/StickyMobileCTA";
+import { AskPageContext } from "@/components/ask/AskPageContext";
 
 export const revalidate = 3600;
 export const dynamicParams = false;
@@ -288,6 +289,9 @@ export default async function BlogPostPage({
           </div>
         </section>
       )}
+
+      {/* Ask knows the article, so it can offer the short version. */}
+      <AskPageContext blog={{ slug: post.slug, title: post.title }} city={post.city} />
 
       {/* Sticky mobile CTA — only on articles that declare one */}
       {post.cta && <StickyMobileCTA href={post.cta.href} label={post.cta.label} />}

@@ -10,7 +10,7 @@ import type { Game } from "@/types/game";
 
 export type AskResponse = {
   query: string;
-  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other";
+  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog";
   summary: string;
   reply: string;
   followups: string[];
@@ -44,11 +44,13 @@ export type AskResponse = {
   draft?: string;
   /** For tool: the free cricket tool that fits. */
   tool?: { slug: string; name: string; tagline: string; href: string };
+  /** For blog: the short version of the article on screen. outline: the model couldn't, so its sections instead. */
+  blog?: { slug: string; title: string; readMinutes: number; kind: "ai" | "outline"; gist: string; points: string[]; cta: { href: string; label: string } | null };
 };
 
 /** `retry`: the error offers Try again (too slow, no connection, server error). `tries`: times Try again was pressed. */
 export type Turn = { id: string; user: string; res: AskResponse | null; error?: string; retry?: boolean; tries?: number; at: number };
-export type PageContext = { turf?: { id: string; name: string } | null; city?: CityId | null };
+export type PageContext = { turf?: { id: string; name: string } | null; city?: CityId | null; blog?: { slug: string; title: string } | null };
 
 type Ctx = {
   open: boolean;
@@ -194,7 +196,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
           params.set("lng", at.lng.toFixed(4));
         }
         if (history.length) params.set("h", JSON.stringify(history));
-        if (pageContext.turf || pageContext.city) params.set("ctx", JSON.stringify({ turf: pageContext.turf?.name ?? null, city: pageContext.city ?? null }));
+        if (pageContext.turf || pageContext.city || pageContext.blog)
+          params.set("ctx", JSON.stringify({ turf: pageContext.turf?.name ?? null, city: pageContext.city ?? null, blog: pageContext.blog?.slug ?? null }));
         let r: Response;
         try {
           r = await fetch(`/api/ask?${params}`, { signal: ctl.signal });

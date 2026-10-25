@@ -30,6 +30,16 @@ export function StickyMobileCTA({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // The Ask pill sits in this bar's spot on phones: lift it above the bar while it shows.
+  useEffect(() => {
+    if (!visible) return;
+    const root = document.documentElement;
+    root.style.setProperty("--ask-lift", "3rem");
+    return () => {
+      root.style.removeProperty("--ask-lift");
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   return (

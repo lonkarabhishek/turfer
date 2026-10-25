@@ -435,7 +435,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
       const digestDays = f === "month" ? 30 : 7;
       const digest = await getAskDigest(digestDays);
       const st = askStats(rows);
-      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", create_game: "Host a game", tool: "Tool", other: "Chit-chat" };
+      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", create_game: "Host a game", tool: "Tool", blog: "Blog summary", other: "Chit-chat" };
       return {
         count: rows.length,
         node: (
@@ -474,7 +474,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                             {r.reply || <span className="text-primary-400">(no reply stored)</span>}
                             <p className="mt-1 text-[11px] text-primary-400">
                               {intentLabel[r.intent ?? ""] ?? r.intent ?? "?"}
-                              {r.results != null && r.intent !== "other" ? ` · ${r.results} result${r.results === 1 ? "" : "s"}` : ""}
+                              {r.results != null && r.intent !== "other" && r.intent !== "blog" ? ` · ${r.results} result${r.results === 1 ? "" : "s"}` : ""}
                               {r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}
                               {({ quick: " · ready answer", cache: " · cached reading", keywords: " · keyword fallback" } as Record<string, string>)[askVia(r) ?? ""] ?? ""}
                             </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAsk } from "./AskProvider";
 import { ArrowRight, BadgeCheck, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
@@ -227,6 +228,7 @@ export function AskResultBody({
         ))}
 
       {res.intent === "compare" && <CompareBlock res={res} />}
+      {res.intent === "blog" && res.blog && <BlogDigest blog={res.blog} />}
 
       {res.intent === "question" && (
         <>
@@ -307,6 +309,47 @@ function CompareBlock({ res }: { res: AskResponse }) {
           ))}
         </Row>
       </div>
+    </div>
+  );
+}
+
+/** The short version of an article: its point, a few takeaways, and its own next step. */
+function BlogDigest({ blog }: { blog: NonNullable<AskResponse["blog"]> }) {
+  const { closePanel } = useAsk();
+  const pathname = usePathname();
+  const ai = blog.kind === "ai";
+  const href = `/blog/${blog.slug}`;
+  return (
+    <div className="rounded-2xl bg-accent-50 px-4 py-3.5">
+      <p className="flex items-baseline justify-between gap-3 text-[11px]">
+        <span className="font-semibold uppercase tracking-wide text-accent-800">{ai ? "The gist" : "What it covers"}</span>
+        {ai && blog.readMinutes > 1 && <span className="text-primary-500">Saves a {blog.readMinutes} min read</span>}
+      </p>
+      <p className="mt-1.5 text-[15px] font-medium text-primary-900 leading-relaxed">{blog.gist}</p>
+      {blog.points.length > 0 && (
+        <ul className="mt-2.5 space-y-2">
+          {blog.points.map((p) => (
+            <li key={p} className="flex gap-2.5 text-[14px] text-primary-800 leading-snug">
+              <span className="mt-[7px] w-1.5 h-1.5 shrink-0 rounded-full bg-accent-500" aria-hidden />
+              <span>{p}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3.5 flex flex-wrap items-center gap-2">
+        {blog.cta && (
+          <Link href={blog.cta.href} onClick={closePanel} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-primary-900 hover:bg-accent-600 text-white text-[13px] font-semibold cursor-pointer transition-colors">
+            {blog.cta.label} <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        )}
+        {/* Read away from the article (the thread follows the player): a way back to it. */}
+        {pathname !== href && (
+          <Link href={href} onClick={closePanel} className="inline-flex items-center gap-1 h-9 px-1 text-[13px] font-semibold text-accent-700 hover:text-accent-800 cursor-pointer">
+            Read the article <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        )}
+      </div>
+      {ai && <p className="mt-2.5 text-[11px] text-primary-400">Written by AI from the article. Prices and timings can change.</p>}
     </div>
   );
 }

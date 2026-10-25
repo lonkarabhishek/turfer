@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/ai/quick.test.ts", "lib/ask/project.test.ts"]
+  "files": ["lib/ai/quick.test.ts", "lib/ask/project.test.ts", "lib/ask/blog.test.ts"]
 }
