@@ -1,6 +1,6 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
-import { createReadOnlyClient } from "@/lib/supabase/server";
+import { revalidateSecretOk } from "@/lib/cache/secret";
 import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
 
 /**
@@ -38,19 +38,7 @@ import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
  * holds the same secret the database sends. With the batched queue that
  * check runs at most about once a minute. Anything else 401s.
  */
-async function isAuthorized(header: string | null): Promise<boolean> {
-  if (!header) return false;
-  const secret = process.env.REVALIDATE_SECRET;
-  if (secret) return header === secret;
-  try {
-    const { data, error } = await createReadOnlyClient().rpc("check_revalidate_secret", {
-      p_secret: header,
-    });
-    return !error && data === true;
-  } catch {
-    return false;
-  }
-}
+const isAuthorized = revalidateSecretOk;
 
 type Body = {
   keys?: unknown;

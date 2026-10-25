@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
 import { sendClaimCode, type ClaimCode } from "@/lib/my/claimVerify";
+import { imageUrlForCard, normalizeImageUrl } from "@/lib/utils/images";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
@@ -131,11 +132,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function Thumb({ src }: { src: string | null }) {
+  const [broken, setBroken] = useState(false);
+  // The card-sized copy, with Drive and Google links made displayable, as cards do.
+  const url = src ? imageUrlForCard(normalizeImageUrl(src)) : null;
   return (
     <span className="w-14 h-14 shrink-0 rounded-xl bg-primary-100 overflow-hidden">
-      {src ? (
+      {url && !broken ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+        <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" onError={() => setBroken(true)} />
       ) : null}
     </span>
   );

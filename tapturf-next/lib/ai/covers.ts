@@ -36,11 +36,12 @@ For every image give usable, quality 1 to 5, what it shows, and a note under 12 
 - The best cover shows the playing surface (turf, cage, court) clearly, sharp and well lit, ideally landscape, with the whole ground visible. Floodlit night shots are good if the surface is clear. People playing is fine; a crowd blocking the surface is not.
 - best_index is the index of the single best usable photo, or null if none is usable.`;
 
-type Fetched = { index: number; url: string; media: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string };
+export type Fetched = { index: number; url: string; media: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string };
 
-async function fetchImage(url: string, index: number): Promise<Fetched | null> {
+/** The image as base64, or null. Its card-sized copy unless `exact` (the owner photo check judges the file itself). */
+export async function fetchImage(url: string, index: number, exact = false): Promise<Fetched | null> {
   try {
-    const small = imageUrlForCard(url) || url;
+    const small = exact ? url : imageUrlForCard(url) || url;
     const res = await fetch(small, { headers: { "User-Agent": "TapTurf/1.0 (+https://www.tapturf.in)" }, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();

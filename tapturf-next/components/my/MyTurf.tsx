@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Check, Circle, ExternalLink, Loader2, Star } from "lucide-react";
-import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
+import { ArrowLeft, Check, Circle, ExternalLink, Loader2, Star } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { EditListing } from "./EditListing";
+import { OwnerPhotos } from "./OwnerPhotos";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
@@ -19,6 +19,8 @@ export function MyTurf({ id }: { id: string }) {
   const [days, setDays] = useState<number>(30);
   const [data, setData] = useState<OwnerDashboard | null>(null);
   const [failed, setFailed] = useState(false);
+  // Photos the public page shows (the Photos section counts them); until then, the stored count.
+  const [visiblePhotos, setVisiblePhotos] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -126,7 +128,11 @@ export function MyTurf({ id }: { id: string }) {
         </div>
       </section>
 
-      <Health turf={t} />
+      <Health turf={t} photos={visiblePhotos ?? t.photos} />
+
+      <section id="photos" className="mt-10 scroll-mt-20">
+        <OwnerPhotos turfId={t.id} turfName={t.name} onChanged={load} onCount={setVisiblePhotos} />
+      </section>
 
       <EditListing turf={t} onSaved={load} />
 
@@ -158,17 +164,6 @@ export function MyTurf({ id }: { id: string }) {
           </ul>
         </section>
       )}
-
-      <section className="mt-10 rounded-2xl bg-primary-900 text-white p-5">
-        <p className="font-semibold">New photos?</p>
-        <p className="mt-1 text-[14px] text-white/80">Email them to {CONTACT_EMAIL} and we&rsquo;ll add them to your page, usually the same day.</p>
-        <a
-          href={`${CONTACT_MAILTO}?subject=${encodeURIComponent(`Photos for ${t.name} (${t.id})`)}`}
-          className="mt-3 inline-flex items-center gap-1 h-10 px-4 rounded-full bg-accent-500 hover:bg-accent-400 text-[14px] font-semibold"
-        >
-          Send photos <ArrowUpRight className="w-4 h-4" />
-        </a>
-      </section>
     </Shell>
   );
 }
@@ -207,16 +202,19 @@ const LABELS: Record<string, string> = {
   number_of_grounds: "grounds",
   formats: "formats",
   whatsapp_phone: "WhatsApp number",
+  photos_added: "new photos",
+  photo_removed: "removed a photo",
+  cover_image: "cover photo",
 };
 function fieldLabel(f: string) {
   return LABELS[f] ?? f.replace(/_/g, " ").replace(/^(has|is) /, "");
 }
 
 /** What the listing still lacks, most useful first. */
-function Health({ turf: t }: { turf: OwnerTurf }) {
+function Health({ turf: t, photos }: { turf: OwnerTurf; photos: number }) {
   const prices = [t.morning_price, t.afternoon_price, t.evening_price, t.weekend_morning_price, t.weekend_afternoon_price, t.weekend_evening_price];
   const facilities = [t.has_floodlights, t.is_covered, t.parking_available, t.washroom_available, t.changing_room_available, t.has_cafeteria, t.has_drinking_water, t.equipment_provided];
-  const items = [
+  const items: { ok: boolean; text: string; hint: string; href?: string }[] = [
     { ok: prices.some((p) => p != null && p > 0), text: "Hourly prices", hint: "Players filter by budget; turfs with prices get more calls." },
     { ok: !!t.price_owner_confirmed, text: "Prices confirmed by you", hint: "Shows players the prices come from you." },
     { ok: t.is_24x7 === true || (!!t.start_time && !!t.end_time), text: "Opening hours", hint: "So late-night and early-morning searches find you." },
@@ -224,7 +222,7 @@ function Health({ turf: t }: { turf: OwnerTurf }) {
     { ok: !!t.formats?.length, text: "Formats", hint: "5-a-side, 7-a-side, box cricket sizes." },
     { ok: (t.description?.length ?? 0) >= 80, text: "A short description", hint: "Two or three lines in your own words." },
     { ok: !!t.whatsapp_phone, text: "WhatsApp number", hint: "Most players book on WhatsApp." },
-    { ok: t.photos >= 3, text: "At least 3 photos", hint: "Send them on WhatsApp below." },
+    { ok: photos >= 3, text: "At least 3 photos", hint: "Add them in Photos below.", href: "#photos" },
   ];
   const done = items.filter((i) => i.ok).length;
   const pct = Math.round((done / items.length) * 100);
@@ -243,7 +241,12 @@ function Health({ turf: t }: { turf: OwnerTurf }) {
             {i.ok ? <Check className="w-5 h-5 shrink-0 text-accent-600" /> : <Circle className="w-5 h-5 shrink-0 text-primary-300" />}
             <span>
               <span className={`block text-[14px] font-semibold ${i.ok ? "text-primary-500" : "text-primary-900"}`}>{i.text}</span>
-              {!i.ok && <span className="block text-[13px] text-primary-500 leading-snug">{i.hint}</span>}
+              {!i.ok &&
+                (i.href ? (
+                  <a href={i.href} className="block text-[13px] font-semibold text-accent-700 leading-snug hover:underline">{i.hint}</a>
+                ) : (
+                  <span className="block text-[13px] text-primary-500 leading-snug">{i.hint}</span>
+                ))}
             </span>
           </li>
         ))}

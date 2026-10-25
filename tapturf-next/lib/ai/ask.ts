@@ -170,9 +170,16 @@ export function addUsage(to: AskUsage, u: Anthropic.Usage | AskUsage): void {
  * with zod, and try once more (with a doubled budget if it was cut off)
  * when it still does not parse. Null means the model declined or both
  * attempts came back unusable. Pass `usage` to have the tokens of each
- * attempt added to it.
+ * attempt added to it, and `info` to learn whether a null was the model
+ * declining (refused) rather than output we couldn't use.
  */
-export async function structured<T extends z.ZodType>(schema: T, params: StructuredParams, tag: string, usage?: AskUsage): Promise<z.output<T> | null> {
+export async function structured<T extends z.ZodType>(
+  schema: T,
+  params: StructuredParams,
+  tag: string,
+  usage?: AskUsage,
+  info?: { refused?: boolean },
+): Promise<z.output<T> | null> {
   const format = zodOutputFormat(schema);
   let maxTokens = params.max_tokens;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -185,7 +192,10 @@ export async function structured<T extends z.ZodType>(schema: T, params: Structu
       output_config: { effort: "low", format },
     });
     if (usage && res.usage) addUsage(usage, res.usage);
-    if (res.stop_reason === "refusal") return null;
+    if (res.stop_reason === "refusal") {
+      if (info) info.refused = true;
+      return null;
+    }
     if (res.stop_reason === "max_tokens") maxTokens *= 2;
     const text = res.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

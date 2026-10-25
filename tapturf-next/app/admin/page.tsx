@@ -26,6 +26,7 @@ import { DailyChart } from "@/components/admin/DailyChart";
 import { SignupsTrend } from "@/components/admin/SignupsTrend";
 import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
+import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { turfPath } from "@/lib/utils/turfPath";
 
 // Never cache. Always fresh numbers for the owner.
@@ -242,6 +243,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <h2 className="font-semibold text-primary-900 mb-1">myTapturf owners</h2>
         <p className="text-[13px] text-primary-500 mb-4">Owners whose number is on the listing get in at once; approve the rest here.</p>
         <OwnerClaims />
+      </section>
+
+      {/* myTapturf owner photos */}
+      <section className="mb-8 rounded-2xl bg-white border border-primary-200 p-5">
+        <h2 className="font-semibold text-primary-900 mb-1">Owner photos</h2>
+        <p className="text-[13px] text-primary-500 mb-4">Photos owners add go live at once and are checked automatically; anything that isn&rsquo;t the venue is kept off the page until you put it back.</p>
+        <OwnerPhotos />
       </section>
 
       {/* AI tools */}
