@@ -55,6 +55,7 @@ export function SignupPeople({
   now,
   city = null,
   onShowAll,
+  focus = null,
 }: {
   people: Person[] | null;
   start: number;
@@ -65,10 +66,12 @@ export function SignupPeople({
   city?: string | null;
   /** Zoom the chart back out to all time, to search everyone. */
   onShowAll?: () => void;
+  /** An account to start on, searched and open (admin's "Open in people list"). */
+  focus?: string | null;
 }) {
   const id = useId();
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const [query, setQuery] = useState(focus ?? "");
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(focus ? [focus] : []));
   // How many to show, for this window, city and search; a new one starts again at one page.
   const key = `${start}:${end}:${city}:${query}`;
   const [shown, setShown] = useState({ key, n: PAGE });
@@ -211,7 +214,7 @@ export function SignupPeople({
 
 function Frame({ children, onKeyDown }: { children: ReactNode; onKeyDown?: React.KeyboardEventHandler<HTMLDivElement> }) {
   return (
-    <div onKeyDown={onKeyDown} className="mt-6 border-t border-primary-100 pt-5">
+    <div id="people" onKeyDown={onKeyDown} className="mt-6 border-t border-primary-100 pt-5 scroll-mt-20">
       {children}
     </div>
   );

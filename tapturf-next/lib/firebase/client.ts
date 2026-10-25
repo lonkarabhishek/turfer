@@ -9,7 +9,7 @@ import type {
   RecaptchaVerifier as RecaptchaVerifierType,
 } from "firebase/auth";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDQE1iEsJXZqqHLJw5WrtjkD5A0vwpvwxY",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "tapturf.firebaseapp.com",
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "tapturf",
@@ -77,7 +77,7 @@ export function friendlyOtpError(code: string | null | undefined, fallback: stri
   }
 }
 
-function errorCode(error: unknown): string | null {
+export function errorCode(error: unknown): string | null {
   const c = (error as { code?: unknown })?.code;
   return typeof c === "string" ? c : null;
 }
@@ -87,7 +87,7 @@ function errorCode(error: unknown): string | null {
  * of the number, never the full number) so "OTP not coming" reports
  * can be diagnosed from the otp_send_log table. Fire-and-forget.
  */
-function logOtpSend(ok: boolean, code: string | null, phone: string) {
+export function logOtpSend(ok: boolean, code: string | null, phone: string) {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

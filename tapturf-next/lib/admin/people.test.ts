@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_CITY, ago, byCity, cityOf, duration, inCity, initial, istDateTime, joinedBetween, matches, sitePath, sourceOf, toPeople, whatsappLink, type DetailsRow } from "./people";
+import { NO_CITY, ago, byCity, cityOf, duration, inCity, initial, istDateTime, joinedBetween, matches, personId, sitePath, sourceOf, toPeople, whatsappLink, type DetailsRow } from "./people";
 
 const row = (o: Partial<DetailsRow>): DetailsRow => ({
   id: "u1",
@@ -112,6 +112,16 @@ test("search by name, email, username, city or phone digits", () => {
   // Digits also find names and emails.
   const [mail] = toPeople([row({ name: "Team 2024", email: "rahul1995@gmail.com", phone: null })]);
   for (const q of ["1995", "2024"]) assert.ok(matches(mail, q), q);
+});
+
+test("an account id finds that person only (admin's Open in people list)", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const [p, q] = toPeople([row({ id: A, name: "Asha" }), row({ id: "22222222-2222-4222-8222-222222222222", name: A })]);
+  assert.ok(matches(p, A));
+  assert.ok(matches(p, A.toUpperCase()), "any case");
+  assert.ok(!matches(q, A), "never by a name that happens to look like one");
+  assert.equal(personId(A.toUpperCase()), A);
+  for (const x of [undefined, "", "abc", ["x"], `${A}x`]) assert.equal(personId(x), null, String(x));
 });
 
 test("the sign-up time is the first sign-in, and a late row is noted", () => {

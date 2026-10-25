@@ -290,9 +290,13 @@ export function joinedBetween(people: readonly Person[], start: number, end: num
  * A number written the Indian way (+91, 0091 or a leading 0) also finds
  * the 10 digits it stands for; digits also match names and emails.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export function matches(p: Person, query: string): boolean {
   const q = query.trim().toLowerCase().replace(/^@/, "");
   if (!q) return true;
+  // An account id (admin's "Open in people list"): that person only.
+  if (UUID.test(q)) return p.id.toLowerCase() === q;
   const digits = q.replace(/\D/g, "");
   if (digits.length >= 3 && digits.length === q.replace(/[\s+()-]/g, "").length) {
     const national = /^(?:0{0,2}91|0)[6-9]\d{9}$/.test(digits) ? digits.slice(-10) : digits.replace(/^0+(?=[6-9])/, "");
@@ -392,6 +396,11 @@ export function duration(ms: number): string {
 /** "just now", "12 min ago", "3 days ago"; times after now read "just now". */
 export function ago(t: number, now: number): string {
   return now - t < 60_000 ? "just now" : `${duration(now - t)} ago`;
+}
+
+/** An account id from a link, or null. */
+export function personId(x: unknown): string | null {
+  return typeof x === "string" && UUID.test(x.toLowerCase()) ? x.toLowerCase() : null;
 }
 
 export const METHOD_NAMES: Record<Method, string> = { google: "Google", phone: "Phone", email: "Email (old app)", unknown: "Unknown" };

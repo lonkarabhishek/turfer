@@ -48,9 +48,15 @@ export type OwnerHome =
       who: string;
       kind: "phone" | "email";
       admin: boolean;
+      /** The TapTurf account claims are made as; null when this sign-in opens none. */
+      account: { name: string | null; username: string | null } | null;
       turfs: (OwnerTurfRef & { status: "active" | "pending"; via: string; since: string })[];
       matches: OwnerTurfRef[];
     };
+
+/** owner_claim_info: how many mobiles the listing has, and the last two digits of each. */
+export type ClaimInfo = { mobiles: number; endings: string[] } | { error: string };
+export type ClaimResult = { status?: "active" | "pending"; admin?: boolean; error?: string };
 
 export type DayStat = { day: string; views: number; calls: number; whatsapp: number };
 export type OwnerTurf = {

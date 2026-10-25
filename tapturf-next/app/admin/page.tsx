@@ -21,6 +21,7 @@ import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { signupPeople } from "@/lib/queries/adminUsers";
+import { personId } from "@/lib/admin/people";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { SignupsTrend } from "@/components/admin/SignupsTrend";
 import { BreakdownList } from "@/components/admin/BreakdownList";
@@ -52,7 +53,7 @@ function timeAgo(iso: string): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ person?: string | string[] }> }) {
   // Owner-only guard. Non-admins end on a "Page not found" screen;
   // AdminGate first lets a phone-OTP owner hand over their Firebase token.
   const allowed = await isAdmin();
@@ -253,7 +254,7 @@ export default async function AdminPage() {
       {/* Charts */}
       <div className="mb-4">
         {/* A new read (Refresh) starts the chart afresh at its "now". A failed read shows a message there, never a broken page. */}
-        <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} />
+        <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} focus={personId((await searchParams).person)} />
       </div>
       <section className="mb-8">
         <div className="rounded-2xl bg-white border border-primary-200 p-5">
