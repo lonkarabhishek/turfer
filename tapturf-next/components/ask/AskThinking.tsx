@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
 import { useAsk } from "./AskProvider";
 import { SPORT_PAGES, type SportPage } from "@/lib/sports";
 import { CITIES, CITY_ALIASES, getCityPref, labelFor } from "@/lib/city";
-import { isSummaryAsk } from "@/lib/ask/blog";
+import { isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
 
 /** What the reply will show under its text, so the placeholders take the same shape. */
 export type CardsKind = "turf" | "game" | "compare";
@@ -128,6 +128,9 @@ const QUESTION = /^(what|whats|does|do|is|are|can|how|when|where|who|kya|kitna|k
 // Not a name: "these two", "turfs in Powai". "Turf Park" is one.
 const GENERIC = /^(?:(?:two|2|both|them|these|those|the|top|first|it|this)\b|(?:turfs?|venues?|grounds?)(?:$|\s+(?:in|near|at|around|for|with|of)\b))/i;
 const BOTH = /\b(these|those|them|both|top|two|2|first|second|1st|2nd|above)\b/;
+// On an article: asking for a chart, or for a picture (prefixes, so "charts", "comparison", "drawing", "illustrate").
+const CHART = /\b(chart|graph|plot|visual|numbers|compar)/;
+const DRAW = /\b(draw|diagram|picture|illustrat|show me|layout|sketch)/;
 
 /** "Hotfut vs Arena32", "compare Hotfut and Arena32", "Hotfut or Arena32, which is better". */
 function compareNames(raw: string): string[] {
@@ -181,8 +184,15 @@ export function thinkingPlan(text: string, ctx: { city: string | null; turf: str
   const bare = q.trim();
   const asked = QUESTION.test(bare) || /\?\s*$/.test(text);
   if (GREETING.test(bare)) return { cards: null, stages: [{ ...read, text: ctx.retry ? read.text : "Reading your message" }, slow] };
-  // The article on screen, in short (the server answers it the same way: lib/ask/blog.ts).
-  if (ctx.blog && isSummaryAsk(text)) return plan(null, "Reading the article", "Picking out the key points", "Writing the short version");
+  // On an article every message goes to the article first (lib/ai/blogAnswer.ts), so the lines say that.
+  // No placeholder cards: the answer may be words, a chart, a picture, or a search after all.
+  // A plain search that doesn't point at the article ("box cricket near me tonight") goes on to search, so it gets the search lines.
+  if (ctx.blog && !looksLikeSearch(text)) {
+    if (isSummaryAsk(text)) return plan(null, "Reading the article", "Picking out the key points", "Writing the short version");
+    if (CHART.test(q)) return plan(null, "Reading the article", "Pulling the numbers from it", "Drawing the chart");
+    if (DRAW.test(q)) return plan(null, "Reading the article", "Working out the picture", "Putting it together");
+    return plan(null, "Reading the article", "Finding the part that answers this", "Writing your answer");
+  }
   for (const [re, line] of TOOLS) if (re.test(q)) return plan(null, line);
   if (HOST.test(bare)) return plan(null);
 

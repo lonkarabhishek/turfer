@@ -435,7 +435,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
       const digestDays = f === "month" ? 30 : 7;
       const digest = await getAskDigest(digestDays);
       const st = askStats(rows);
-      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", create_game: "Host a game", tool: "Tool", blog: "Blog summary", other: "Chit-chat" };
+      const intentLabel: Record<string, string> = { find_turf: "Turf search", find_game: "Game search", compare: "Compare", question: "Question", create_game: "Host a game", tool: "Tool", blog: "Blog answer", other: "Chit-chat" };
       return {
         count: rows.length,
         node: (

@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, ArrowRight, ArrowUp, RotateCcw, Sparkles, X } from "lucide-react";
-import { useAsk, type AskResponse, type Turn } from "./AskProvider";
+import { useAsk, type AskResponse, type PageContext, type Turn } from "./AskProvider";
 import { AskResultBody } from "./AskResults";
 import { AskSkeleton, AskThinking, type CardsKind } from "./AskThinking";
 import { TypingReply, prefersReducedMotion } from "./TypingReply";
+import { articleWelcome } from "./blogUi";
 import { askChips } from "@/lib/ask/chips";
 import { SUMMARY_CHIP } from "@/lib/ask/blog";
 import { getCityPref } from "@/lib/city";
@@ -26,11 +27,13 @@ export function AskPanel() {
   const threadRef = useRef<HTMLDivElement>(null);
   const [welcome, setWelcome] = useState<string[]>(WELCOME_CHIPS);
   const fresh = turns.length === 0;
+  const onArticle = !!pageContext.blog;
 
   // Opening chips follow the city on screen (or the visitor's city):
   // its own area and turfs, and a games chip only when it has open games.
+  // An article opens with its own questions instead.
   useEffect(() => {
-    if (!open || !fresh) return;
+    if (!open || !fresh || onArticle) return;
     const city = pageContext.city ?? getCityPref();
     let live = true;
     fetch(`/api/ask/chips${city ? `?city=${encodeURIComponent(city)}` : ""}`)
@@ -42,7 +45,7 @@ export function AskPanel() {
     return () => {
       live = false;
     };
-  }, [open, fresh, pageContext.city]);
+  }, [open, fresh, onArticle, pageContext.city]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,9 +91,10 @@ export function AskPanel() {
 
   const last = turns.length ? turns[turns.length - 1] : null;
   const where = pageContext.turf ? pageContext.turf.name : null;
-  // On an article: the short version is on offer until this thread has it.
+  // On an article: the short version is on offer until this thread has it
+  // (an answer to a question about it doesn't count; no mode is an old summary).
   const blog = pageContext.blog ?? null;
-  const offerSummary = !!blog && !turns.some((t) => t.res?.blog?.slug === blog.slug);
+  const offerSummary = !!blog && !turns.some((t) => t.res?.blog?.slug === blog.slug && t.res.blog.mode !== "answer");
   const next = last?.res?.followups?.length ? last.res.followups : fresh ? welcome : [];
   const chips = offerSummary && !fresh ? [SUMMARY_CHIP, ...next.filter((c) => c !== SUMMARY_CHIP)] : next;
   // Signed out with no free answers left: Try again would be refused, so the sign-in card stands in.
@@ -147,7 +151,7 @@ export function AskPanel() {
         <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain" aria-live="polite">
           {/* A parked message shows its sign-in card even when the thread is empty. */}
           {turns.length === 0 && !(gated && pending) ? (
-            <Welcome where={where} blog={offerSummary} chips={chips} onPick={(c) => void send(c)} />
+            <Welcome where={where} article={where ? null : blog} chips={chips} onPick={(c) => void send(c)} />
           ) : (
             <div className="px-4 py-5 space-y-7">
               {turns.map((t, i) => (
@@ -216,7 +220,7 @@ export function AskPanel() {
                 e.currentTarget.scrollIntoView({ block: "nearest" });
               }}
               autoComplete="off"
-              placeholder={!signedIn && freeLeft === 0 ? "Sign in to keep going" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
+              placeholder={!signedIn && freeLeft === 0 ? "Sign in to keep going" : blog ? "Ask anything about this article" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
               className="w-full h-12 pl-4 pr-14 rounded-full border border-primary-200 bg-white shadow-soft text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus-visible:outline-none focus:border-primary-400 transition-colors"
             />
             <button
@@ -246,45 +250,71 @@ export function Orb({ size = 40 }: { size?: number }) {
   );
 }
 
-/** Empty chat: a greeting in the middle and the city's suggestions as a grid. On an article, the short version comes first. */
-function Welcome({ where, blog, chips, onPick }: { where: string | null; blog: boolean; chips: string[]; onPick: (c: string) => void }) {
+/** Chips on an article's opening screen, after its own FAQ questions. */
+const CHART_CHIP = "Chart the key numbers";
+const DIAGRAM_CHIP = "Explain it with a diagram";
+
+/**
+ * Empty chat: a greeting in the middle and the city's suggestions as a
+ * grid. On an article: the short version first, then questions it can
+ * answer (its own FAQ, a chart when it has numbers, a diagram), one per
+ * row so a whole question fits.
+ */
+function Welcome({ where, article, chips, onPick }: { where: string | null; article: PageContext["blog"]; chips: string[]; onPick: (c: string) => void }) {
+  const asks = article ? [...(article.questions ?? []).slice(0, 3), ...(article.charts ? [CHART_CHIP] : []), DIAGRAM_CHIP] : [];
   return (
     <div className="min-h-full flex flex-col justify-center px-5 py-8 ask-message-in">
       <Orb size={44} />
       <h2 className="mt-4 font-display text-[26px] leading-tight text-primary-900">
-        {where ? <>Ask about {where}</> : blog ? <>Short on time?</> : <>What are you playing today?</>}
+        {where ? <>Ask about {where}</> : article ? <>Short on time?</> : <>What are you playing today?</>}
       </h2>
       <p className="mt-1.5 text-[15px] leading-snug text-primary-500">
         {where
           ? "Prices, timings, facilities, or how it compares with another turf."
-          : blog
-            ? "I can give you the short version of this article. Or ask for a turf, a game or a price."
+          : article
+            ? articleWelcome(!!article.charts)
             : "Turfs, open games, prices and comparisons. Hinglish chalega."}
       </p>
-      {blog && (
-        <button
-          type="button"
-          onClick={() => onPick(SUMMARY_CHIP)}
-          className="press-tight mt-6 w-full min-h-[56px] flex items-center gap-2.5 px-4 rounded-2xl bg-primary-900 hover:bg-accent-600 text-white text-[15px] font-semibold text-left cursor-pointer transition-colors"
-        >
-          <Sparkles className="w-4 h-4 shrink-0 text-accent-400" strokeWidth={2.25} aria-hidden />
-          {SUMMARY_CHIP}
-          <ArrowRight className="ml-auto w-4 h-4 shrink-0 text-white/70" aria-hidden />
-        </button>
-      )}
-      {chips.length > 0 && (
-        <div className={`${blog ? "mt-2" : "mt-6"} grid grid-cols-2 gap-2`}>
-          {chips.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => onPick(c)}
-              className="min-h-[56px] text-left px-3.5 py-2.5 rounded-2xl border border-primary-200 bg-white hover:border-primary-400 hover:bg-primary-50 text-[14px] leading-snug font-medium text-primary-800 cursor-pointer transition-colors"
-            >
-              {c}
-            </button>
-          ))}
-        </div>
+      {article ? (
+        <>
+          <button
+            type="button"
+            onClick={() => onPick(SUMMARY_CHIP)}
+            className="press-tight mt-6 w-full min-h-[56px] flex items-center gap-2.5 px-4 rounded-2xl bg-primary-900 hover:bg-accent-600 text-white text-[15px] font-semibold text-left cursor-pointer transition-colors"
+          >
+            <Sparkles className="w-4 h-4 shrink-0 text-accent-400" strokeWidth={2.25} aria-hidden />
+            {SUMMARY_CHIP}
+            <ArrowRight className="ml-auto w-4 h-4 shrink-0 text-white/70" aria-hidden />
+          </button>
+          <p className="mt-5 mb-2 text-[11px] font-semibold uppercase tracking-wide text-primary-400">Or ask</p>
+          <div className="grid grid-cols-1 gap-2">
+            {[...new Set(asks)].map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onPick(c)}
+                className="min-h-[48px] text-left px-3.5 py-2.5 rounded-2xl border border-primary-200 bg-white hover:border-primary-400 hover:bg-primary-50 text-[14px] leading-snug font-medium text-primary-800 cursor-pointer transition-colors"
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        chips.length > 0 && (
+          <div className="mt-6 grid grid-cols-2 gap-2">
+            {chips.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onPick(c)}
+                className="min-h-[56px] text-left px-3.5 py-2.5 rounded-2xl border border-primary-200 bg-white hover:border-primary-400 hover:bg-primary-50 text-[14px] leading-snug font-medium text-primary-800 cursor-pointer transition-colors"
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )
       )}
     </div>
   );

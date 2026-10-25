@@ -26,7 +26,8 @@ export function AskLauncher() {
   const barPages = pathname.startsWith("/turf/") || pathname.startsWith("/game/") || pathname.startsWith("/tools");
   const count = turns.filter((t) => t.res).length;
   const blog = pageContext.blog;
-  const summarized = !!blog && turns.some((t) => t.res?.blog?.slug === blog.slug);
+  // Only the short version counts: a question about the article still leaves the offer open.
+  const summarized = !!blog && turns.some((t) => t.res?.blog?.slug === blog.slug && t.res.blog.mode !== "answer");
   return (
     <>
       {blog && !barPages && !summarized && <BlogNudge key={blog.slug} slug={blog.slug} onSummarize={() => openPanel(SUMMARY_CHIP)} />}

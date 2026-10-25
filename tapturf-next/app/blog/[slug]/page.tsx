@@ -146,6 +146,13 @@ export default async function BlogPostPage({
       }
     : null;
 
+  // Ask's opening offers on this article: a few of its own FAQ questions,
+  // and "Chart the key numbers" only when it has numbers to chart.
+  const askQuestions = (faqBlock?.items ?? []).map((qa) => qa.q.trim()).filter(Boolean).slice(0, 3);
+  const askCharts =
+    post.blocks.some((b) => b.type === "table" || b.type === "stat-grid") ||
+    post.blocks.filter((b) => b.type === "turf").length >= 2;
+
   return (
     <>
       <script
@@ -290,8 +297,8 @@ export default async function BlogPostPage({
         </section>
       )}
 
-      {/* Ask knows the article, so it can offer the short version. */}
-      <AskPageContext blog={{ slug: post.slug, title: post.title }} city={post.city} />
+      {/* Ask knows the article, so it can offer the short version and questions about it. */}
+      <AskPageContext blog={{ slug: post.slug, title: post.title, questions: askQuestions, charts: askCharts }} city={post.city} />
 
       {/* Sticky mobile CTA — only on articles that declare one */}
       {post.cta && <StickyMobileCTA href={post.cta.href} label={post.cta.label} />}

@@ -7,6 +7,7 @@ import { getCityPref, type CityId } from "@/lib/city";
 import { getUserLocation, type Coords } from "@/lib/utils/location";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
+import type { BlogAnswer } from "@/lib/ask/blogTypes";
 
 export type AskResponse = {
   query: string;
@@ -44,13 +45,18 @@ export type AskResponse = {
   draft?: string;
   /** For tool: the free cricket tool that fits. */
   tool?: { slug: string; name: string; tagline: string; href: string };
-  /** For blog: the short version of the article on screen. outline: the model couldn't, so its sections instead. */
-  blog?: { slug: string; title: string; readMinutes: number; kind: "ai" | "outline"; gist: string; points: string[]; cta: { href: string; label: string } | null };
+  /** For blog: the short version of the article on screen, or an answer about it, with its sources. */
+  blog?: BlogAnswer;
 };
 
 /** `retry`: the error offers Try again (too slow, no connection, server error). `tries`: times Try again was pressed. */
 export type Turn = { id: string; user: string; res: AskResponse | null; error?: string; retry?: boolean; tries?: number; at: number };
-export type PageContext = { turf?: { id: string; name: string } | null; city?: CityId | null; blog?: { slug: string; title: string } | null };
+/** blog.questions: the article's own FAQ questions, offered as chips. blog.charts: it has tables or numbers worth a chart. */
+export type PageContext = {
+  turf?: { id: string; name: string } | null;
+  city?: CityId | null;
+  blog?: { slug: string; title: string; questions?: string[]; charts?: boolean } | null;
+};
 
 type Ctx = {
   open: boolean;
@@ -96,6 +102,8 @@ function anonId(): string {
 const MAX_TURNS = 30;
 /** Past this the answer is not coming (the database is struggling): stop waiting and offer Try again. */
 const TIMEOUT = 25_000;
+/** On an article the answer can take a web search after reading it (the route allows 60s). */
+const ARTICLE_TIMEOUT = 45_000;
 const TOO_SLOW = "This is taking too long on our side. Try again in a moment.";
 const OFFLINE = "Couldn't reach TapTurf just now. Check your connection and try again.";
 const TROUBLE = "I'm having trouble right now. Try again in a moment.";
@@ -181,7 +189,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
     async (id: string, q: string, history: ReturnType<typeof historyOf>, loc?: Coords | null) => {
       setBusy(true);
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), TIMEOUT);
+      const timer = setTimeout(() => ctl.abort(), pageContext.blog ? ARTICLE_TIMEOUT : TIMEOUT);
       // Worth a Try again: too slow, no connection, or the server failing.
       let retry = false;
       try {

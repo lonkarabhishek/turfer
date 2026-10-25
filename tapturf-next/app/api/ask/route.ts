@@ -27,8 +27,8 @@ import { toolBySlug, toolPath } from "@/lib/tools/registry";
 import { getHomeDataShared } from "@/lib/home/data";
 import { askChipsFor } from "@/lib/home/select";
 import { getPostBySlug } from "@/content/blog";
-import { isSummaryAsk } from "@/lib/ask/blog";
-import { summarisePost } from "@/lib/ai/blogSummary";
+import { isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
+import { answerBlog, type BlogResult } from "@/lib/ai/blogAnswer";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -38,12 +38,23 @@ import { summarisePost } from "@/lib/ai/blogSummary";
 // chips or a common shape (lib/ai/quick.ts), else from a cache of
 // Claude's readings (lib/ai/parseCache.ts), else by Claude. The
 // Server-Timing header and the logged filters (_t, _usage, _src) show
-// where the time and tokens went. On a blog post, "Summarize this blog"
-// skips all that: the article itself is the answer (lib/ai/blogSummary.ts).
+// where the time and tokens went. On a blog post the article answers
+// first (lib/ai/blogAnswer.ts): its short version, an answer from it, or
+// a web answer when it doesn't say. Only a turf or game search goes on
+// to the reading below.
 
 const MAX_Q = 160;
 
-/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: the short version of the article on screen. */
+// A blog answer can be an answer and then a web search.
+export const maxDuration = 60;
+
+// The chat gives up on an article's answer at 45 s; leave room to send it.
+const BLOG_DEADLINE_MS = 40_000;
+// A search handed on from an article later than this is read without the
+// model: a slow reading on top would run past the chat's wait.
+const BLOG_LATE_MS = 20_000;
+
+/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen. */
 type Via = "quick" | "cache" | "claude" | "keywords" | "blog";
 
 function ipHash(req: Request): string {
@@ -85,8 +96,9 @@ function logFinish(supabase: Db, id: number | null, row: Finish): void {
   });
 }
 
+// blog: the article's answerer, when it handed a search on to the reading.
 const timingOf = (ms: Record<string, number>, via: Via) =>
-  ["budget", "turfs", "parse", "handler", "total"].map((k) => `${k};dur=${ms[k] ?? 0}${k === "parse" ? `;desc="${via}"` : ""}`).join(", ");
+  ["budget", "turfs", ...(ms.blog != null ? ["blog"] : []), "parse", "handler", "total"].map((k) => `${k};dur=${ms[k] ?? 0}${k === "parse" ? `;desc="${via}"` : ""}`).join(", ");
 
 /** Last three turns from the client, trimmed so a hostile client can't pad the prompt. */
 function parseHistory(raw: string | null): AskTurn[] {
@@ -146,6 +158,17 @@ export async function GET(req: Request) {
   // A refused ask returns without awaiting it; after() keeps the shared
   // load running until it finishes.
   after(turfsLoad.catch(() => {}));
+  // On an article, the chips under the answer load meanwhile too: in
+  // memory on a warm instance, else from the data cache.
+  const post = blogSlug ? getPostBySlug(blogSlug) : undefined;
+  const chipsLoad = post
+    ? getHomeDataShared().then(
+        // What to ask next: the article's city, else the visitor's.
+        (d) => askChipsFor(d, post.city ?? prefCity),
+        () => [] as string[],
+      )
+    : null;
+  if (chipsLoad) after(chipsLoad);
 
   // Budgets: null id means this IP has asked too often; free_left -1
   // means the visitor has used today's free answers.
@@ -164,53 +187,75 @@ export async function GET(req: Request) {
 
   const usage = newUsage();
 
-  // "Summarize this blog" on an article: the article is the answer, so
-  // the sentence isn't read and no turfs are searched.
-  const post = blogSlug && isSummaryAsk(q) ? getPostBySlug(blogSlug) : undefined;
+  // On an article, the article answers first: no turfs are searched and
+  // the sentence isn't read, unless it turns out to be a search.
+  // skipModel: the reading below doesn't wait on the model again, because
+  // it just failed here or took too long.
+  let skipModel = false;
   if (post) {
     const t0 = performance.now();
-    const [{ digest, usage: paid }, followups] = await Promise.all([
-      summarisePost(post),
-      // What to ask next: the article's city, else the visitor's.
-      getHomeDataShared().then(
-        (d) => askChipsFor(d, post.city ?? prefCity).slice(0, 3),
-        () => [] as string[],
-      ),
-    ]);
-    if (paid) addUsage(usage, paid);
-    ms.handler = Math.round(performance.now() - t0);
-    ms.total = Date.now() - started;
-    const source = digest.kind === "ai" ? "claude" : "keywords";
-    const reply =
-      digest.kind === "ai"
-        ? "Here's the short version of this article."
-        : "I can't write the short version right now, so here's what this article covers.";
-    const body = {
-      query: q,
-      intent: "blog",
-      summary: `Short version of ${post.title}`.slice(0, 120),
-      reply,
-      followups,
-      source,
-      via: "blog",
-      filters: { city: post.city, sport: null, areas: [], maxPrice: null, time: null, when: null, skill: null, open24x7: false, wantsNearby: false, needs: [], players: null, sort: "rating" },
-      needsLocation: false,
-      freeLeft,
-      // A follow-up after the summary is a fresh search, not a refinement of it.
-      memo: { intent: "other", top: [] },
-      relaxed: [],
-      total: 0,
-      blog: { slug: post.slug, title: post.title, readMinutes: post.readMinutes, kind: digest.kind, gist: digest.gist, points: digest.points, cta: post.cta ?? null },
-    };
-    logFinish(supabase, logId, {
-      filters: { intent: "blog", slug: post.slug, kind: digest.kind, _src: "blog", _t: ms, ...(usage.calls ? { _usage: usage } : {}) },
-      results: digest.points.length,
-      ms: Date.now() - started,
-      source,
-      reply,
-      intent: "blog",
-    });
-    return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "blog") } });
+    const mode = isSummaryAsk(q) ? "summary" : "answer";
+    const chips = await (chipsLoad ?? []);
+    // One of our own search chips (one sits under every answer here): a search, no need to ask.
+    const chip = chips.some((c) => c.toLowerCase() === q.toLowerCase());
+    const got: BlogResult = chip
+      ? { search: true, usage: null }
+      : await answerBlog(post, { mode, question: q, history: history.map((h) => ({ user: h.user, reply: h.reply })) }, started + BLOG_DEADLINE_MS);
+    // No answerer (no model, or it failed) for what reads as a search: search, rather than show the outline.
+    const fallBack = !got.search && got.blog.kind === "outline" && looksLikeSearch(q);
+    skipModel = fallBack || Date.now() - started > BLOG_LATE_MS;
+    const result: BlogResult = fallBack ? { search: true, usage: got.usage } : got;
+    if (result.usage) addUsage(usage, result.usage);
+    if (result.search) {
+      // A turf or game search: on to the usual reading, which logs the tokens spent here too.
+      ms.blog = Math.round(performance.now() - t0);
+    } else {
+      ms.handler = Math.round(performance.now() - t0);
+      ms.total = Date.now() - started;
+      const { blog } = result;
+      const source = blog.kind === "outline" ? "keywords" : "claude";
+      // Two questions about the article, then a search for its city.
+      const asked = new Set(result.followups.map((f) => f.toLowerCase()));
+      const followups = [...result.followups, ...chips.filter((c) => !asked.has(c.toLowerCase()))].slice(0, 3);
+      const body = {
+        query: q,
+        intent: "blog",
+        summary: `Blog: ${post.title}`.slice(0, 120),
+        reply: result.reply,
+        followups,
+        source,
+        via: "blog",
+        filters: { city: post.city, sport: null, areas: [], maxPrice: null, time: null, when: null, skill: null, open24x7: false, wantsNearby: false, needs: [], players: null, sort: "rating" },
+        needsLocation: false,
+        freeLeft,
+        // A follow-up after an answer about the article is a fresh search, not a refinement of one.
+        memo: { intent: "other", top: [] },
+        relaxed: [],
+        total: 0,
+        blog,
+      };
+      logFinish(supabase, logId, {
+        filters: {
+          intent: "blog",
+          slug: post.slug,
+          mode,
+          kind: blog.kind,
+          scope: result.scope,
+          visual: blog.visual?.kind ?? null,
+          web: blog.kind === "web",
+          _src: "blog",
+          _t: ms,
+          ...(usage.calls ? { _usage: usage } : {}),
+        },
+        // 1 for any answer (it may have no points): admin counts 0 as an ask that found nothing.
+        results: blog.kind === "outline" ? 0 : 1,
+        ms: Date.now() - started,
+        source,
+        reply: result.reply,
+        intent: "blog",
+      });
+      return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "blog") } });
+    }
   }
 
   const turfs = await turfsLoad;
@@ -225,7 +270,7 @@ export async function GET(req: Request) {
   if (quickOk?.success) {
     filters = quickOk.data;
     via = "quick";
-  } else if (isAskConfigured()) {
+  } else if (isAskConfigured() && !skipModel) {
     try {
       if (fresh) {
         const got = await parseFresh(q, areas, ctx);
@@ -248,7 +293,7 @@ export async function GET(req: Request) {
   // ask_queries.source only takes these two; the real path is logged as _src.
   const source: "claude" | "keywords" = via === "claude" || via === "cache" ? "claude" : "keywords";
   // Compare and question need a second call; skip it when Claude is down.
-  const canCallClaude = isAskConfigured() && via !== "keywords";
+  const canCallClaude = isAskConfigured() && !skipModel && via !== "keywords";
 
   const base = {
     query: q,

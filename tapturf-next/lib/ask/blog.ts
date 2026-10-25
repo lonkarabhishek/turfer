@@ -3,8 +3,9 @@ import type { Block, Post } from "@/content/blog";
 /**
  * Ask on a blog post: the chip and nudge that offer the short version of
  * the article, the reading of a message as asking for it, and the
- * article as plain text for the model. Pure (type imports only), so the
- * chat's chips and loader lines and /api/ask agree.
+ * article's outline for when the model is unavailable. Pure (type
+ * imports only), so the chat's chips and loader lines and /api/ask agree.
+ * The article as the model reads it is lib/ask/blogArticle.ts.
  */
 
 export const SUMMARY_CHIP = "Summarize this blog";
@@ -19,42 +20,21 @@ export function isSummaryAsk(q: string): boolean {
   return (SUMMARY.test(t) || ABOUT.test(t)) && !/\breviews?\b/.test(t);
 }
 
-/** Most of an article; the longest post is about a third of this. */
-const MAX_TEXT = 30_000;
+// A search, not a question about the article: a time, "near me", booking or games, with nothing pointing back at the article.
+const SEARCHY = /\b(near me|nearby|near by|tonight|today|tomorrow|this weekend|aaj|kal|book|booking|games?|host|cheapest|sasta)\b|\b(turfs?|courts?|grounds?|cages?|venues?|arenas?) (in|near|around|at)\b/;
+const ABOUT_ARTICLE = /\b(this|these|that|those|article|blog|post|list|here|they|them|it)\b/;
 
-function blockText(b: Block): string {
-  switch (b.type) {
-    case "p":
-      return b.text;
-    case "h2":
-      return `\n## ${b.text}`;
-    case "h3":
-      return `### ${b.text}`;
-    case "ul":
-    case "ol":
-      return b.items.map((x) => `- ${x}`).join("\n");
-    case "quote":
-      return `"${b.text}"${b.by ? ` (${b.by})` : ""}`;
-    case "callout":
-      return `${b.title}: ${b.text}`;
-    case "turf":
-      return `${b.rank ? `#${b.rank} ` : ""}${b.name}, ${b.area}${b.rating ? `, rated ${b.rating}` : ""}${b.reviews ? ` from ${b.reviews} reviews` : ""}${b.note ? `: ${b.note}` : ""}`;
-    case "stat-grid":
-      return b.items.map((i) => `${i.label}: ${i.value}${i.hint ? ` (${i.hint})` : ""}`).join("\n");
-    case "table":
-      return [b.caption ?? "", b.columns.join(" | "), ...b.rows.map((r) => r.join(" | "))].filter(Boolean).join("\n");
-    case "faq":
-      return b.items.map((i) => `Q: ${i.q}\nA: ${i.a}`).join("\n");
-    // Buttons, turf card rows, the calculator, images and source links say nothing to summarise.
-    default:
-      return "";
-  }
-}
-
-/** The article as the reader sees it, in plain text: title, deck, then the blocks in order. */
-export function postText(post: Post): string {
-  const body = post.blocks.map(blockText).filter(Boolean).join("\n");
-  return `# ${post.title}\n${post.hook}\n${body}`.slice(0, MAX_TEXT);
+/**
+ * True when a message sent on an article reads like a turf or game
+ * search ("box cricket near me tonight") rather than a question about it.
+ * The chat shows search loader lines for it, and when the answerer can't
+ * run, /api/ask sends it to search instead of the article's outline.
+ */
+export function looksLikeSearch(q: string): boolean {
+  const t = q.toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, " ").replace(/\s+/g, " ").trim();
+  // "this weekend" is a time, not the article.
+  const rest = t.replace(/\bthis (weekend|week|evening|morning|afternoon|night|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g, "");
+  return SEARCHY.test(t) && !ABOUT_ARTICLE.test(rest);
 }
 
 /** Without the model: the article's own description and its section headings. */

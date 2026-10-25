@@ -170,8 +170,10 @@ export function addUsage(to: AskUsage, u: Anthropic.Usage | AskUsage): void {
  * with zod, and try once more (with a doubled budget if it was cut off)
  * when it still does not parse. Null means the model declined or both
  * attempts came back unusable. Pass `usage` to have the tokens of each
- * attempt added to it, and `info` to learn whether a null was the model
- * declining (refused) rather than output we couldn't use.
+ * attempt added to it, `info` to learn whether a null was the model
+ * declining (refused) rather than output we couldn't use, and `opts` to
+ * give each attempt its own timeout or retries (else the client's: 20 s,
+ * one retry, so an attempt can take about 41 s).
  */
 export async function structured<T extends z.ZodType>(
   schema: T,
@@ -179,18 +181,22 @@ export async function structured<T extends z.ZodType>(
   tag: string,
   usage?: AskUsage,
   info?: { refused?: boolean },
+  opts?: { timeout?: number; maxRetries?: number },
 ): Promise<z.output<T> | null> {
   const format = zodOutputFormat(schema);
   let maxTokens = params.max_tokens;
   for (let attempt = 0; attempt < 2; attempt++) {
     // Thinking off: in production Haiku spent the whole budget on a
     // thinking block and the JSON came back cut at max_tokens.
-    const res = await getAnthropic().messages.create({
-      ...params,
-      max_tokens: maxTokens,
-      thinking: { type: "disabled" },
-      output_config: { effort: "low", format },
-    });
+    const res = await getAnthropic().messages.create(
+      {
+        ...params,
+        max_tokens: maxTokens,
+        thinking: { type: "disabled" },
+        output_config: { effort: "low", format },
+      },
+      opts,
+    );
     if (usage && res.usage) addUsage(usage, res.usage);
     if (res.stop_reason === "refusal") {
       if (info) info.refused = true;
