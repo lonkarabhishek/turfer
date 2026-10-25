@@ -62,6 +62,9 @@ export function toProfile(data: unknown): AccountProfile | null {
     created_at: s(d.created_at) ?? "",
     username: s(d.username),
     taggable: d.taggable !== false,
+    contact_email: s(d.contact_email),
+    // Only a database that knows about the ask can start it.
+    ask_email: d.ask_email === true,
   };
 }
 
@@ -110,7 +113,7 @@ export async function resolveAccount(id: Identity, opts: { create?: boolean; log
   return { unavailable: true };
 }
 
-export type ChangeResult = { ok: AccountProfile } | { r: "bad" | "reserved" | "taken" | "limit" } | { unavailable: true };
+export type ChangeResult = { ok: AccountProfile } | { r: "bad" | "reserved" | "taken" | "limit" | "email" } | { unavailable: true };
 
 function changeResult(res: Rpc): ChangeResult {
   if ("unavailable" in res) return res;
@@ -119,8 +122,16 @@ function changeResult(res: Rpc): ChangeResult {
     const p = toProfile(res.data);
     return p ? { ok: p } : { unavailable: true };
   }
-  if (r === "bad" || r === "reserved" || r === "taken" || r === "limit") return { r };
+  if (r === "bad" || r === "reserved" || r === "taken" || r === "limit" || r === "email") return { r };
   return { unavailable: true };
+}
+
+/**
+ * The optional email of a phone account (private.user_contact_emails, never users.email):
+ * save it, skip the ask (No thanks) or remove it.
+ */
+export async function setContactEmail(userId: string, action: "save" | "skip" | "remove", email: string | null, source: "signup" | "prompt" | "profile"): Promise<ChangeResult> {
+  return changeResult(await call("account_set_email", { p_user_id: userId, p_action: action, p_email: email, p_source: source }));
 }
 
 export async function updateName(userId: string, name: string): Promise<ChangeResult> {

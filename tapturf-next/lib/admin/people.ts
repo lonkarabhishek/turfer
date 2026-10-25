@@ -73,6 +73,33 @@ export type Person = {
   city: RecordedCity | null;
   /** A best guess from their activity, with its share of the evidence (0 to 1). */
   likely: { id: string; share: number } | null;
+  /** A phone account's answer to the email ask (private.user_contact_emails), if any. */
+  contact: ContactEmail | null;
+  /** Google made the account (they picked it) but they never came back to finish signing in. */
+  signInUnfinished: boolean;
+  /** The email came from their Google account, which Google confirmed. */
+  emailFromGoogle: boolean;
+};
+
+/** The optional email a phone account typed, or their No thanks. Not checked by anyone. */
+export type ContactEmail = {
+  email: string | null;
+  answer: "saved" | "skipped" | "removed";
+  source: "signup" | "prompt" | "profile";
+  /** Another account has the same address. */
+  shared: boolean;
+  at: number | null;
+};
+
+/** One row as admin_contact_emails returns it. */
+export type ContactEmailRow = {
+  user_id: string;
+  email: string | null;
+  answer: string | null;
+  source: string | null;
+  verified?: boolean | null;
+  answered_at: string | null;
+  same_as_other_account: boolean | null;
 };
 
 /** One row as admin_people returns it. */
@@ -226,7 +253,16 @@ function claimsOf(v: unknown): Claim[] {
 }
 
 /** Rows to people, newest first; a joined time shared by several rows is marked as an import. */
-export function toPeople(rows: readonly DetailsRow[]): Person[] {
+function contactOf(r: ContactEmailRow | undefined): ContactEmail | null {
+  if (!r) return null;
+  const answer = r.answer === "saved" || r.answer === "skipped" || r.answer === "removed" ? r.answer : null;
+  const source = r.source === "signup" || r.source === "prompt" || r.source === "profile" ? r.source : null;
+  if (!answer || !source) return null;
+  return { email: str(r.email), answer, source, shared: r.same_as_other_account === true, at: time(r.answered_at) };
+}
+
+export function toPeople(rows: readonly DetailsRow[], contacts: readonly ContactEmailRow[] = []): Person[] {
+  const byUser = new Map(contacts.filter((c) => typeof c?.user_id === "string").map((c) => [c.user_id, c]));
   const joined = (r: DetailsRow) => time(r.signed_up_at) ?? time(r.created_at);
   const seen = new Map<number, number>();
   for (const r of rows) {
@@ -274,6 +310,10 @@ export function toPeople(rows: readonly DetailsRow[]): Person[] {
         before: beforeOf(r.signup),
         city: recordedCity(r),
         likely: likely ? { id: likely, share } : null,
+        contact: contactOf(byUser.get(r.id)),
+        // admin_people counts every finished Google sign-in (the log, or auth's last sign-in), so none means none.
+        signInUnfinished: method === "google" && num(r.logins) === 0 && time(r.last_login) === null,
+        emailFromGoogle: method === "google" && !!str(r.email),
       },
     ];
   });
@@ -303,7 +343,7 @@ export function matches(p: Person, query: string): boolean {
     if (national.length >= 3 && (p.phone ?? "").replace(/\D/g, "").includes(national)) return true;
   }
   const where = cityOf(p);
-  return [p.name, p.email, p.username, where ? cityLabel(where.id) : null].some((s) => s?.toLowerCase().includes(q));
+  return [p.name, p.email, p.contact?.email ?? null, p.username, where ? cityLabel(where.id) : null].some((s) => s?.toLowerCase().includes(q));
 }
 
 /* ------------------------------------------------------------------ */

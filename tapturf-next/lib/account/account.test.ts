@@ -7,6 +7,7 @@ import { usernameCandidates, usernameProblem } from "./usernames";
 import { createAccountLimiter, toProfile } from "./server";
 import { isTag, readTag, sameTag } from "./tag";
 import { CITY_SRC_HEADER, cityNote } from "./city";
+import { cleanEmail, emailProblem, emailTypo } from "./emails";
 
 /* ------------------------------------------------------------------ */
 /* Tokens                                                              */
@@ -251,8 +252,13 @@ test("toProfile keeps the known fields and refuses malformed answers", () => {
     created_at: "",
     username: "abc",
     taggable: false,
+    contact_email: null,
+    ask_email: false,
   });
   assert.equal(toProfile({ id: "u1", name: "A" })?.taggable, true);
+  assert.equal(toProfile({ id: "u1", name: "A", ask_email: true, contact_email: "a@b.co" })?.ask_email, true);
+  assert.equal(toProfile({ id: "u1", name: "A", ask_email: "yes" })?.ask_email, false, "only true asks");
+  assert.equal(toProfile({ id: "u1", name: "A", contact_email: "a@b.co" })?.contact_email, "a@b.co");
   assert.equal(toProfile({ name: "A" }), null);
   assert.equal(toProfile(null), null);
   assert.equal(toProfile("x"), null);
@@ -311,4 +317,30 @@ test("the city recorded for a sign-in: a pick, then the internet, then nothing",
   // Abroad: no Indian city, but the place is kept with its country; odd characters are dropped.
   assert.deepEqual(cityNote(req({ "x-vercel-ip-country": "AE", "x-vercel-ip-city": "Dubai%3Cscript%3E" })), { city: null, source: "unknown", ipCity: "Dubaiscript (AE)" });
   assert.equal(cityNote(req({ "x-vercel-ip-city": "%E0%A4" })).ipCity, null, "bad percent-encoding");
+});
+
+/* ------------------------------------------------------------------ */
+/* Optional email                                                      */
+/* ------------------------------------------------------------------ */
+
+test("cleanEmail keeps real addresses, lowercased, and refuses the rest", () => {
+  assert.equal(cleanEmail("  Priya.S@GMAIL.com "), "priya.s@gmail.com");
+  assert.equal(cleanEmail("a+b@sub.example.co.in"), "a+b@sub.example.co.in");
+  for (const bad of ["", "a@b", "a@b.c", "a b@c.com", "@c.com", "a@.com", "a..b@c.com", "ü@c.com", "a,b@c.com", "a@c.com."]) assert.equal(cleanEmail(bad), null, bad);
+});
+
+test("emailTypo suggests the common domain fixes only", () => {
+  assert.equal(emailTypo("rahul@gmial.com"), "rahul@gmail.com");
+  assert.equal(emailTypo("Rahul@GMAIL.CO"), "rahul@gmail.com");
+  assert.equal(emailTypo("rahul@gmail"), "rahul@gmail.com");
+  assert.equal(emailTypo("rahul@gmail.com"), null);
+  assert.equal(emailTypo("rahul"), null);
+});
+
+test("emailProblem: empty is fine, a missing @ gets a hint", () => {
+  assert.equal(emailProblem(""), null);
+  assert.equal(emailProblem("  "), null);
+  assert.equal(emailProblem("rahul@gmail.com"), null);
+  assert.match(emailProblem("rahul") ?? "", /after @/);
+  assert.match(emailProblem("rahul@gmail") ?? "", /doesn't look right/);
 });

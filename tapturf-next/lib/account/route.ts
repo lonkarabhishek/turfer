@@ -15,6 +15,7 @@ const STATUS: Record<AccountError, number> = {
   reserved: 422,
   taken: 409,
   limit: 429,
+  email: 422,
 };
 
 export function accountReply(body: object, error?: AccountError): NextResponse {

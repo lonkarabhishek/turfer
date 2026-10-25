@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { X, Loader2, AlertCircle, Phone } from "lucide-react";
+import { safeNext } from "@/lib/auth/next";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
 import { PhoneOTPForm } from "./PhoneOTPForm";
@@ -29,14 +30,13 @@ export function LoginModal() {
     setGoogleError("");
     try {
       const supabase = createClient();
-
-      // Clear any stale/revoked session before starting a fresh OAuth flow
-      try { await supabase.auth.signOut(); } catch { /* ignore */ }
+      // Back to this page afterwards, as /login does. (No signOut first: signInWithOAuth replaces any session.)
+      const next = safeNext(window.location.pathname + window.location.search);
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          redirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
           queryParams: {
             access_type: "offline",
             prompt: "select_account",

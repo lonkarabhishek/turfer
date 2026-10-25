@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf, suggestUsername } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "./useUsernameCheck";
 import { TagSwitch } from "./TagSwitch";
+import { FOCUSABLE, askHere, busy, claimPrompt } from "@/lib/account/prompts";
 
 /** User ids this device has asked already, newest last. Asked once, whatever the answer. */
 const ASKED_KEY = "tapturf_username_asked_v1";
@@ -15,7 +16,7 @@ const ASKED_KEPT = 20;
 /** Asked in this tab, kept even when storage is blocked, so Later is never answered by a new prompt. */
 const askedHere = new Set<string>();
 
-function askedBefore(id: string): boolean {
+export function usernameAskedBefore(id: string): boolean {
   if (askedHere.has(id)) return true;
   try {
     const list = JSON.parse(localStorage.getItem(ASKED_KEY) ?? "[]");
@@ -36,28 +37,12 @@ function markAsked(id: string) {
   }
 }
 
-/** Browsing pages only: never mid sign-in, mid game creation or on the scoring tools. */
-function askHere(path: string): boolean {
-  if (path === "/" || path === "/dashboard" || path === "/turfs" || path === "/games") return true;
-  if (path.startsWith("/c/") || path.startsWith("/turf/")) return true;
-  return /^\/game\/[^/]+$/.test(path) && path !== "/game/create";
-}
-
 const SAVE_ERROR: Record<string, string> = {
   taken: "Someone already has this username.",
   reserved: "This username is not allowed.",
   bad: "3 to 20 letters, digits or _, starting with a letter.",
   limit: "You can't change your username right now.",
 };
-
-/** Something else has the person's attention: another dialog, or a field they are typing in. */
-function busy(): boolean {
-  if (document.querySelector('[aria-modal="true"], [role="dialog"], [role="alertdialog"]')) return true;
-  const el = document.activeElement as HTMLElement | null;
-  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
-}
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Asks a signed-in person without a username to pick one, once per
@@ -88,13 +73,13 @@ export function UsernamePrompt() {
     if (!eligible || !userId || open) return;
     let live = true;
     const t = setTimeout(async () => {
-      if (!live || askedBefore(userId) || busy()) return;
+      if (!live || usernameAskedBefore(userId) || busy()) return;
       const tok = await getToken();
       if (!live || !("token" in tok)) return;
       const a = await suggestUsername(tok.token);
       if (!live || errorOf(a)) return;
       const suggestion = (a.body as { username?: string | null }).username ?? "";
-      if (busy()) return;
+      if (busy() || !claimPrompt("username")) return;
       lastFocus.current = document.activeElement as HTMLElement | null;
       setUsername(suggestion);
       setError("");

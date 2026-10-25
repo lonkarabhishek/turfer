@@ -231,7 +231,7 @@ function highlights(p: Person): string[] {
 }
 
 function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open: boolean; onToggle: () => void; panelId: string }) {
-  const contact = p.phone ?? p.email;
+  const contact = p.phone ?? p.email ?? p.contact?.email;
   const extra = highlights(p);
   const c = cityOf(p);
   return (
@@ -243,6 +243,11 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
             <span className={`font-semibold max-w-full break-words sm:truncate ${p.name ? "text-primary-900" : "text-primary-400"}`}>{p.name ?? "No name"}</span>
             {p.username && <span className="min-w-0 max-w-full truncate text-[13px] text-primary-500">@{p.username}</span>}
             <MethodBadge method={p.method} />
+            {p.signInUnfinished && (
+              <span title="Picked a Google account but never came back to TapTurf" className="inline-block rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                Didn&rsquo;t finish
+              </span>
+            )}
           </p>
           <p className="text-[13px] text-primary-600 truncate">
             {/* Contact first: on a narrow row the city is what gets cut. */}
@@ -283,6 +288,35 @@ function Avatar({ p }: { p: Person }) {
       {letter}
     </span>
   );
+}
+
+/** users.email (Google's, or an old account's), else the email a phone account typed, or what they answered. */
+function EmailItem({ p }: { p: Person }) {
+  if (p.email) {
+    return (
+      <>
+        <a href={`mailto:${p.email}`} className={link}>
+          {p.email}
+        </a>
+        {p.emailFromGoogle && <span className="text-primary-500"> · confirmed by Google</span>}
+      </>
+    );
+  }
+  const c = p.contact;
+  if (c?.email) {
+    return (
+      <>
+        <a href={`mailto:${c.email}`} className={link}>
+          {c.email}
+        </a>
+        <span className="ml-1.5 inline-block rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-semibold text-primary-600">Typed by them, not checked</span>
+        {c.shared && <span className="block text-[12px] text-hot-600">Same address as another account</span>}
+      </>
+    );
+  }
+  if (c?.answer === "skipped") return <span className="text-primary-400">Said no thanks</span>;
+  if (c?.answer === "removed") return <span className="text-primary-400">Removed by them</span>;
+  return p.method === "phone" ? <span className="text-primary-400">Not asked yet</span> : none;
 }
 
 function MethodBadge({ method }: { method: Method }) {
@@ -389,13 +423,7 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
           )}
         </Item>
         <Item label="Email">
-          {p.email ? (
-            <a href={`mailto:${p.email}`} className={link}>
-              {p.email}
-            </a>
-          ) : (
-            none
-          )}
+          <EmailItem p={p} />
         </Item>
         <CityItems p={p} now={now} />
       </Group>
@@ -432,7 +460,15 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
       </Group>
 
       <Group title="Sign-ins">
-        {preLog && p.logins === 0 ? (
+        {p.signInUnfinished ? (
+          <Item label="Times">
+            <span className="text-primary-400">None yet</span>
+            <span className="block text-[12px] text-amber-800">
+              Started with Google on {istDateTime(p.joinedAt)}. Google confirmed their email, but they never came back to TapTurf to finish (closed the
+              tab or lost signal). The account and the email are real.
+            </span>
+          </Item>
+        ) : preLog && p.logins === 0 ? (
           <Item label="Times">
             <span className="text-primary-400">Not recorded. Sign-ins are saved from {LOGINS_SINCE}.</span>
           </Item>

@@ -110,10 +110,23 @@ async function call<T>(token: string, path: string, init: RequestInit = {}): Pro
 
 export const getMe = (token: string) => call<MeResponse>(token, "/api/account/me");
 
-export const postMe = (token: string, name?: string) =>
-  call<MeResponse>(token, "/api/account/me", { method: "POST", body: JSON.stringify(name ? { name } : {}) });
+/** Sign in, making the account if needed. A phone sign-up sends its name, and the optional email with it. */
+export const postMe = (token: string, name?: string, email?: string) =>
+  call<MeResponse>(token, "/api/account/me", { method: "POST", body: JSON.stringify(name ? (email ? { name, email } : { name }) : {}) });
 
-export const patchMe = (token: string, patch: { name?: string; username?: string; taggable?: boolean }) =>
+export type MePatch = {
+  name?: string;
+  username?: string;
+  taggable?: boolean;
+  /** The optional email: a string saves it, null removes it. */
+  email?: string | null;
+  /** Where an email save came from: the one-time ask, or the profile (the default). */
+  emailSource?: "prompt";
+  /** "No thanks" on the ask. */
+  skipEmail?: true;
+};
+
+export const patchMe = (token: string, patch: MePatch) =>
   call<MeResponse>(token, "/api/account/me", { method: "PATCH", body: JSON.stringify(patch) });
 
 export const checkUsername = (token: string, u: string) =>

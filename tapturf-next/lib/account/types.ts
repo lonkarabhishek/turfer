@@ -3,8 +3,11 @@
  * Types only.
  *
  *   GET   /api/account/me                  -> MeResponse (no account is made)
- *   POST  /api/account/me   { name? }      -> MeResponse (makes one; logs a phone sign-in)
- *   PATCH /api/account/me   { name?, username?, taggable? } -> MeResponse
+ *   POST  /api/account/me   { name?, email? } -> MeResponse (makes one; logs a phone sign-in;
+ *                                              email: the optional one at a phone sign-up)
+ *   PATCH /api/account/me   { name?, username?, taggable?, email?, skipEmail? } -> MeResponse
+ *                                              (email: a string saves it, null removes it;
+ *                                               skipEmail: true answers the ask with No thanks)
  *   GET   /api/account/username?u=<name>   -> UsernameCheckResponse
  *   GET   /api/account/username?suggest=1  -> UsernameSuggestResponse
  *   GET   /api/players/search?q=<text>     -> PlayersSearchResponse
@@ -26,6 +29,10 @@ export type AccountProfile = {
   created_at: string;
   username: string | null;
   taggable: boolean;
+  /** The optional email a phone account typed (never users.email; not checked). */
+  contact_email: string | null;
+  /** A phone account with no email that has not answered the ask yet. */
+  ask_email: boolean;
 };
 
 export type AccountError =
@@ -41,10 +48,12 @@ export type AccountError =
   | "conflict"
   | "reserved"
   | "taken"
-  /** Three username changes in 30 days already. */
-  | "limit";
+  /** Three username changes in 30 days already (or five email saves in a day). */
+  | "limit"
+  /** Not an email address we accept. */
+  | "email";
 
-export type MeResponse = { profile: AccountProfile; created?: boolean; error?: AccountError } | { error: AccountError };
+export type MeResponse = { profile: AccountProfile; created?: boolean; error?: AccountError; emailError?: AccountError } | { error: AccountError };
 
 export type UsernameCheckResponse = { ok: true; username: string } | { error: AccountError };
 export type UsernameSuggestResponse = { username: string | null } | { error: AccountError };

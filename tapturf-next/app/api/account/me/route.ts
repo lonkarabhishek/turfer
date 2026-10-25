@@ -2,7 +2,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { cityNote } from "@/lib/account/city";
 import { accountError, accountReply, caller } from "@/lib/account/route";
-import { createAccountLimiter, noteCity, readSmallJson, resolveAccount, setUsername, updateName } from "@/lib/account/server";
+import { cleanEmail } from "@/lib/account/emails";
+import { createAccountLimiter, noteCity, readSmallJson, resolveAccount, setContactEmail, setUsername, updateName } from "@/lib/account/server";
 import type { AccountError, AccountProfile } from "@/lib/account/types";
 
 // The signed-in person's own account (lib/account/types.ts has the API).
@@ -45,10 +46,24 @@ export async function POST(req: Request) {
   // On every sign-in, not only when created: Google accounts are made by a database trigger first,
   // so created is never true for them.
   noteCityLater(req, r.ok.id);
-  return accountReply({ profile: r.ok, created: r.created });
+  let profile = r.ok;
+  let emailError: AccountError | undefined;
+  // The optional email on the sign-up step (phone only). It never fails the sign-in. Left
+  // empty, nothing is kept: they are asked once more later.
+  if (who.id.kind === "phone" && name !== null && typeof body.email === "string" && body.email.trim()) {
+    const email = cleanEmail(body.email.slice(0, 300));
+    if (!email) emailError = "email";
+    else {
+      const e = await setContactEmail(profile.id, "save", email, "signup");
+      if ("ok" in e) profile = e.ok;
+      else emailError = "unavailable" in e ? "unavailable" : e.r;
+    }
+    if (emailError) console.warn("account: sign-up email not saved", emailError);
+  }
+  return accountReply({ profile, created: r.created, ...(emailError ? { emailError } : {}) });
 }
 
-/** Change the name, username and/or the "Let others find and tag me" switch. */
+/** Change the name, the optional email, the username and/or the "Let others find and tag me" switch. */
 export async function PATCH(req: Request) {
   const who = await caller(req, allowWrite);
   if ("reply" in who) return who.reply;
@@ -57,11 +72,19 @@ export async function PATCH(req: Request) {
   const name = body.name;
   const username = body.username;
   const taggable = body.taggable;
+  // A string saves it, null removes it; skipEmail: true is "No thanks" on the ask.
+  const email = body.email;
+  const skipEmail = body.skipEmail;
+  // Where an email save came from, for the admin view: the ask, or the profile.
+  const emailSource = body.emailSource === "prompt" ? "prompt" : "profile";
   if (
     (name !== undefined && typeof name !== "string") ||
     (username !== undefined && typeof username !== "string") ||
     (taggable !== undefined && typeof taggable !== "boolean") ||
-    (name === undefined && username === undefined && taggable === undefined)
+    (email !== undefined && email !== null && (typeof email !== "string" || email.length > 300)) ||
+    (skipEmail !== undefined && skipEmail !== true) ||
+    (email !== undefined && skipEmail !== undefined) ||
+    (name === undefined && username === undefined && taggable === undefined && email === undefined && skipEmail === undefined)
   ) {
     return accountError("bad");
   }
@@ -87,10 +110,23 @@ export async function PATCH(req: Request) {
   }
   return accountReply({ profile }, error ?? undefined);
 
-  /** Name first, then username and the switch; stops at the first refusal. */
+  /** Name first, then the email, then username and the switch; stops at the first refusal. */
   async function applyPatch(): Promise<AccountError | null> {
     if (typeof name === "string" && name.trim() !== profile.name) {
       const r = await updateName(profile.id, name);
+      if ("unavailable" in r) return "unavailable";
+      if ("r" in r) return r.r;
+      profile = r.ok;
+    }
+    if (email !== undefined || skipEmail === true) {
+      let r;
+      if (skipEmail === true) r = await setContactEmail(profile.id, "skip", null, "prompt");
+      else if (email === null || (typeof email === "string" && !email.trim())) r = await setContactEmail(profile.id, "remove", null, "profile");
+      else {
+        const clean = cleanEmail(email as string);
+        if (!clean) return "email";
+        r = await setContactEmail(profile.id, "save", clean, emailSource);
+      }
       if ("unavailable" in r) return "unavailable";
       if ("r" in r) return r.r;
       profile = r.ok;

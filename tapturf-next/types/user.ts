@@ -9,4 +9,8 @@ export interface AppUser {
   username?: string;
   /** "Let others find and tag me". */
   taggable?: boolean;
+  /** The optional email a phone account typed (for deals and invites; not checked). */
+  contactEmail?: string;
+  /** A phone account with no email that has not answered the ask yet. */
+  askEmail?: boolean;
 }

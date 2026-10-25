@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
@@ -8,6 +8,14 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PhoneOTPForm } from "@/components/auth/PhoneOTPForm";
+import { loginErrorText } from "@/lib/auth/callback";
+import { chromeIntent, inAppBrowser, type InApp } from "@/lib/auth/inApp";
+import { safeNext } from "@/lib/auth/next";
+
+// The in-app browser this page is open in (read once, on the client only).
+const noSubscribe = () => () => {};
+let inAppSeen: InApp | null | undefined;
+const readInApp = () => (inAppSeen === undefined ? (inAppSeen = inAppBrowser(navigator.userAgent)) : inAppSeen);
 
 /**
  * Dedicated /login page. Replaces the fragile modal-based flow with a
@@ -30,13 +38,11 @@ function LoginInner() {
   const live = via === "live" || via === "follow";
 
   const [googleBusy, setGoogleBusy] = useState(false);
-  const [errMsg, setErrMsg] = useState<string | null>(
-    errParam === "oauth"
-      ? "Sign-in was cancelled or denied. Try again."
-      : errParam === "callback"
-        ? "Couldn't finish signing you in. Try again."
-        : null,
-  );
+  // One Google start at a time: a second tap would write a new verifier over the first.
+  const starting = useRef(false);
+  const [errMsg, setErrMsg] = useState<string | null>(loginErrorText(errParam, params?.get("why")));
+  // Google refuses sign-ins inside apps like Instagram: say so, and put the phone first.
+  const inApp = useSyncExternalStore(noSubscribe, readInApp, () => null);
 
   // Warm-preload Firebase so the phone-OTP click doesn't trigger a
   // ~300KB chunk fetch on tap.
@@ -52,6 +58,8 @@ function LoginInner() {
   }, [authLoading, user, nextParam, router]);
 
   const handleGoogle = async () => {
+    if (starting.current) return;
+    starting.current = true;
     setGoogleBusy(true);
     setErrMsg(null);
     try {
@@ -73,13 +81,30 @@ function LoginInner() {
       if (error) {
         setErrMsg(error.message || "Sign-in failed. Try again.");
         setGoogleBusy(false);
+        starting.current = false;
       }
       // On success, the browser leaves this page for Google. No cleanup.
     } catch {
       setErrMsg("Something went wrong. Try again.");
       setGoogleBusy(false);
+      starting.current = false;
     }
   };
+
+  const here = `/login?next=${encodeURIComponent(safeNext(nextParam))}`;
+  const inAppNotice = inApp && (
+    <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4" role="note">
+      <p className="text-[14px] text-amber-900 leading-snug">
+        Google sign-in doesn&rsquo;t work inside {inApp.app ?? "this app"}.{" "}
+        {inApp.os === "android" ? "Open TapTurf in Chrome to use Google, or log in with your phone number below." : "Tap the ··· menu and choose Open in Safari, or log in with your phone number below."}
+      </p>
+      {inApp.os === "android" && (
+        <a href={chromeIntent(here)} className="press-tight mt-3 inline-flex h-11 items-center rounded-full bg-primary-900 px-5 text-[14px] font-semibold text-white">
+          Open in Chrome
+        </a>
+      )}
+    </div>
+  );
 
   const phoneSection = (
     <section className="rounded-3xl border border-primary-200 bg-white p-5 mb-5">
@@ -162,10 +187,22 @@ function LoginInner() {
 
         {/* Google first everywhere, phone right under it. The phone form is
             shown directly (not behind a "use phone" tap): that extra tap was
-            itself a friction point. */}
-        {googleButton}
-        {orDivider}
-        {phoneSection}
+            itself a friction point. Inside an app's own browser Google can't
+            work, so the phone comes first there. */}
+        {inAppNotice}
+        {inApp ? (
+          <>
+            {phoneSection}
+            {orDivider}
+            {googleButton}
+          </>
+        ) : (
+          <>
+            {googleButton}
+            {orDivider}
+            {phoneSection}
+          </>
+        )}
 
         <p className="text-center text-[11px] text-primary-400 mt-6">
           By continuing you agree to our <Link href="/terms" className="underline hover:text-primary-600">terms</Link> and{" "}
@@ -174,20 +211,6 @@ function LoginInner() {
       </div>
     </div>
   );
-}
-
-/**
- * Guard against open-redirect: only allow relative in-app paths as
- * `next`. Anything else (external URL, protocol-relative //evil.com,
- * data:) falls back to home.
- */
-function safeNext(next: string): string {
-  if (!next) return "/";
-  if (!next.startsWith("/")) return "/";
-  if (next.startsWith("//")) return "/";
-  // Reject login-related routes so we don't loop.
-  if (next === "/login" || next.startsWith("/login/")) return "/";
-  return next;
 }
 
 export default function LoginPage() {

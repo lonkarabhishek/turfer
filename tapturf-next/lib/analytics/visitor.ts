@@ -183,8 +183,17 @@ export function signupContext(method: "phone" | "google") {
  * Save the summary for a just-created account, once, in the background.
  * keepalive survives the redirect after sign-in; signup never waits on it.
  */
+const SIGNUP_SENT = "tapturf_signup_sent_v1";
+
 export function saveSignupContext(userId: string, method: "phone" | "google") {
   if (typeof window === "undefined" || !userId) return;
+  // Once per account on this device: a Google sign-up is recognised on every load for a while.
+  try {
+    if (localStorage.getItem(SIGNUP_SENT) === userId) return;
+    localStorage.setItem(SIGNUP_SENT, userId);
+  } catch {
+    /* storage blocked: the database keeps the first save anyway */
+  }
   step("signup");
   const ctx = signupContext(method);
   gtag("event", "sign_up", { method, first_source: ctx.first?.utm.source ?? ctx.first?.ref?.split("/")[0] ?? "direct" });

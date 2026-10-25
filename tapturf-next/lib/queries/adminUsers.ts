@@ -2,7 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
-import { toPeople, type DetailsRow, type Person } from "@/lib/admin/people";
+import { toPeople, type ContactEmailRow, type DetailsRow, type Person } from "@/lib/admin/people";
 import { fetchAllRows } from "@/lib/queries/turfs";
 
 export type AdminUserRow = {
@@ -59,8 +59,15 @@ export const signupPeople = cache(async (): Promise<{ people: Person[] | null; r
   try {
     const supabase = await createServerClient();
     const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-    const rows = await fetchAllRows<DetailsRow>((from, to) => supabase.rpc("admin_people", { p_firebase_token: token }).range(from, to));
-    const people = toPeople(rows);
+    // The typed emails come separately (admin_people's columns can't grow); without them the list still loads.
+    const [rows, contacts] = await Promise.all([
+      fetchAllRows<DetailsRow>((from, to) => supabase.rpc("admin_people", { p_firebase_token: token }).range(from, to)),
+      fetchAllRows<ContactEmailRow>((from, to) => supabase.rpc("admin_contact_emails", { p_firebase_token: token }).range(from, to)).catch((e) => {
+        console.warn("admin_contact_emails failed", e);
+        return [] as ContactEmailRow[];
+      }),
+    ]);
+    const people = toPeople(rows, contacts);
     return { people, readAt: Math.max(Date.now(), people[0]?.joinedAt ?? 0) };
   } catch (e) {
     console.warn("admin_people failed", e);

@@ -60,6 +60,12 @@ const SECTIONS: LegalSection[] = [
           itself. To diagnose &ldquo;OTP not arriving&rdquo; problems we keep a log of send attempts with the
           outcome, the error reason and the last two digits of the number only.
         </p>
+        <p id="email" className="scroll-mt-24">
+          <strong>An email, if you add one.</strong> If you signed in with your phone, you can add an email
+          when you sign up or later in your profile. We use it only to send you turf deals and game invites.
+          It is never shown to anyone else, it is not used to sign you in, and you can change or remove it in
+          your profile at any time.
+        </p>
         <p>
           <strong>When you sign in with Google.</strong> Google shares your name, email address and profile
           photo with us. We don&rsquo;t receive your Google password or anything else from your Google account.
@@ -69,6 +75,12 @@ const SECTIONS: LegalSection[] = [
           request, reviews you write, corrections you suggest for a turf (and whether you told us you own or
           play at it), and when you tap Call or WhatsApp on a turf page. We also record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
+        </p>
+        <p id="owners" className="scroll-mt-24">
+          <strong>If you claim a turf on myTapturf.</strong> We keep the TapTurf account you claimed it from,
+          your role and any note you add. If you check a phone number against the listing, we keep that number
+          with your claim so our team can confirm it with you; if you confirm the listed number with a code, we
+          keep which number it was. Only TapTurf&rsquo;s team sees these.
         </p>
         <p id="usernames" className="scroll-mt-24">
           <strong>Your username and public profile.</strong> You can pick a TapTurf username. Your username,

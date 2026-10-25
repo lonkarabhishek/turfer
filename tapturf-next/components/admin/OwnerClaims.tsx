@@ -80,6 +80,7 @@ export function OwnerClaims() {
                     {c.siteOwner && <span className="ml-1.5 inline-block rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">TapTurf (you)</span>}
                     {a.signedUpAt !== null && <span className="text-primary-500"> · joined {istDateTime(a.signedUpAt)}</span>}
                     {a.lastSeen !== null && now > 0 && <span className="text-primary-500"> · last sign-in {ago(a.lastSeen, now)}</span>}
+                    {!a.signInFinished && <span className="text-amber-800"> · Google sign-in didn&rsquo;t finish</span>}
                     {" · "}
                     <a href={`/admin?person=${a.id}#people`} className="font-semibold text-accent-700 hover:underline">
                       Open in people list

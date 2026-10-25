@@ -447,6 +447,8 @@ begin
                               else 'unknown' end,
                'signed_up_at', least(u.created_at, coalesce(au.created_at, u.created_at)),
                'last_seen', greatest((select max(l.created_at) from public.user_logins l where l.user_id = u.id), au.last_sign_in_at),
+               -- A Google account whose sign-in never came back to TapTurf has neither.
+               'signin_finished', au.last_sign_in_at is not null or exists (select 1 from public.user_logins l where l.user_id = u.id),
                'other_claims', (select count(*) from public.turf_owners o2
                                  where o2.user_id = u.id and o2.turf_id <> o.turf_id and o2.status in ('active', 'pending'))
              ) end as account

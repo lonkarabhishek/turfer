@@ -35,6 +35,9 @@ test("a full row", () => {
   assert.equal(c.account?.otherClaims, 2);
   assert.equal(c.account?.signedUpAt, Date.parse("2026-10-24T05:55:59Z"));
   assert.equal(c.createdAt, Date.parse("2026-10-24T05:56:51Z"));
+  assert.equal(c.account?.signInFinished, true, "true unless the database says false");
+  const [d] = toClaims([row({ account: { id: "u1", method: "google", signin_finished: false } })]);
+  assert.equal(d.account?.signInFinished, false);
 });
 
 test("no account, odd values", () => {

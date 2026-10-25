@@ -17,6 +17,8 @@ export type ClaimAccount = {
   signedUpAt: number | null;
   lastSeen: number | null;
   otherClaims: number;
+  /** False for a Google account whose sign-in never came back to TapTurf. */
+  signInFinished: boolean;
 };
 export type AdminClaim = {
   turfId: string;
@@ -60,7 +62,7 @@ function toAccount(x: unknown): ClaimAccount | null {
   if (!a || !id) return null;
   const method = typeof a.method === "string" && METHODS.includes(a.method) ? (a.method as Method) : "unknown";
   const other = typeof a.other_claims === "number" && Number.isFinite(a.other_claims) ? Math.max(0, Math.round(a.other_claims)) : 0;
-  return { id, name: str(a.name), username: str(a.username), email: str(a.email), phone: str(a.phone), method, signedUpAt: time(a.signed_up_at), lastSeen: time(a.last_seen), otherClaims: other };
+  return { id, name: str(a.name), username: str(a.username), email: str(a.email), phone: str(a.phone), method, signedUpAt: time(a.signed_up_at), lastSeen: time(a.last_seen), otherClaims: other, signInFinished: a.signin_finished !== false };
 }
 
 /** Rows from admin_owner_claims; anything malformed is left out. */

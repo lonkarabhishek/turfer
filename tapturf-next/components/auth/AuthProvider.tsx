@@ -114,6 +114,8 @@ function userFromProfile(p: AccountProfile): AppUser {
     profile_image_url: p.profile_image_url ?? undefined,
     username: p.username ?? undefined,
     taggable: p.taggable,
+    contactEmail: p.contact_email ?? undefined,
+    askEmail: p.ask_email === true,
   };
 }
 
@@ -161,6 +163,8 @@ function readPhoneUser(): AppUser | null {
       profile_image_url: p.profile_image_url,
       username: typeof p.username === "string" ? p.username : undefined,
       taggable: typeof p.taggable === "boolean" ? p.taggable : undefined,
+      contactEmail: typeof p.contact_email === "string" ? p.contact_email : undefined,
+      askEmail: p.ask_email === true,
     };
   } catch {
     return null;
@@ -226,6 +230,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sourceRef = useRef<AuthSource>(initial ? "phone" : null);
   /** The Google sign-in's own id (a legacy account's users.id can differ). */
   const authUidRef = useRef<string | null>(null);
+  // Bumped by every profile applied after an edit: a read that started before it is stale.
+  const writeSeq = useRef(0);
   const supabase = supabaseRef.current;
 
   const dismissWelcome = useCallback(() => setWelcomeMessage(null), []);
@@ -244,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Server profile ──
 
   const applyProfile = useCallback((p: AccountProfile) => {
+    writeSeq.current++;
     const next = userFromProfile(p);
     if (sourceRef.current === "phone") {
       storePhoneUser(p);
@@ -286,8 +293,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         store(GOOGLE_PROFILE_KEY, JSON.stringify({ uid: supaUser.id, user: next }));
         setUser(next);
         setProfileFresh(true);
-        // A new account: save how they found us, in the background.
-        if ((a.body as { created?: boolean }).created) saveSignupContext(p.id, "google");
+        // A new account: save how they found us, in the background. The database trigger makes
+        // a Google account before this call, so created is never true for Google: a row made in
+        // the last 15 minutes counts as new (the save keeps the first and refuses old accounts).
+        const made = Date.parse(p.created_at);
+        if ((a.body as { created?: boolean }).created || (Number.isFinite(made) && Date.now() - made < 15 * 60_000)) saveSignupContext(p.id, "google");
         return;
       }
       // 401: the session is being refreshed or ended; Supabase's own events handle that.
@@ -363,9 +373,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     store(FB_MISSING_KEY, null);
+    const seq = writeSeq.current;
     const a = await getMe(t.token);
     if (sourceRef.current !== "phone") return;
     const p = profileOf(a);
+    // An edit saved while this read was out: its answer is newer.
+    if (p && writeSeq.current !== seq) return;
     if (p) {
       store(PROFILE_CHECKED_KEY, String(Date.now()));
       storePhoneUser(p, t.token);
@@ -651,10 +664,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** The account from the server again, for this sign-in. */
   const refreshUser = useCallback(async () => {
+    const seq = writeSeq.current;
     const t = await getToken();
     if (!("token" in t)) return;
     const p = profileOf(await getMe(t.token));
-    if (p) applyProfile(p);
+    // An edit saved while this read was out (a slow phone token, say): keep the edit.
+    if (p && writeSeq.current === seq) applyProfile(p);
   }, [getToken, applyProfile]);
 
   return (

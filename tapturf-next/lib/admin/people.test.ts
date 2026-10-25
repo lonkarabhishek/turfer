@@ -124,6 +124,34 @@ test("an account id finds that person only (admin's Open in people list)", () =>
   for (const x of [undefined, "", "abc", ["x"], `${A}x`]) assert.equal(personId(x), null, String(x));
 });
 
+test("a Google sign-up that never finished, and Google-confirmed emails", () => {
+  const [u] = toPeople([row({ method: "google", email: "s@gmail.com", logins: 0, last_login: null })]);
+  assert.equal(u.signInUnfinished, true);
+  assert.equal(u.emailFromGoogle, true);
+  const [g] = toPeople([row({ method: "google", email: "s@gmail.com", logins: 2, last_login: "2026-10-24T10:00:00Z" })]);
+  assert.equal(g.signInUnfinished, false);
+  const [ph] = toPeople([row({ method: "phone", email: null, logins: 0, last_login: null })]);
+  assert.equal(ph.signInUnfinished, false, "only Google");
+  assert.equal(ph.emailFromGoogle, false);
+});
+
+test("a phone account's typed email and answers", () => {
+  const people = toPeople(
+    [row({ id: "a", method: "phone", email: null, name: "Asha" }), row({ id: "b", method: "phone", email: null }), row({ id: "c", method: "phone", email: null })],
+    [
+      { user_id: "a", email: "asha@gmail.com", answer: "saved", source: "prompt", answered_at: "2026-10-25T05:00:00Z", same_as_other_account: true },
+      { user_id: "b", email: null, answer: "skipped", source: "prompt", answered_at: null, same_as_other_account: false },
+      { user_id: "x", email: "z@x.in", answer: "bogus", source: "prompt", answered_at: null, same_as_other_account: false },
+    ],
+  );
+  const by = Object.fromEntries(people.map((p) => [p.id, p]));
+  assert.deepEqual(by.a.contact, { email: "asha@gmail.com", answer: "saved", source: "prompt", shared: true, at: Date.parse("2026-10-25T05:00:00Z") });
+  assert.equal(by.a.email, null, "never shown as their account email");
+  assert.equal(by.b.contact?.answer, "skipped");
+  assert.equal(by.c.contact, null, "not asked yet");
+  assert.ok(matches(by.a, "asha@gmail"), "searchable");
+});
+
 test("the sign-up time is the first sign-in, and a late row is noted", () => {
   const [p] = toPeople([row({ created_at: "2025-10-30T12:51:56Z", signed_up_at: "2025-09-01T10:00:00Z" })]);
   assert.equal(p.joinedAt, Date.parse("2025-09-01T10:00:00Z"));
