@@ -2,7 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
-import { toPeople, type ContactEmailRow, type DetailsRow, type Person } from "@/lib/admin/people";
+import { confirmedById, toPeople, type Confirmed, type ContactEmailRow, type DetailsRow, type Person, type VerifiedRow } from "@/lib/admin/people";
 import { fetchAllRows } from "@/lib/queries/turfs";
 
 export type AdminUserRow = {
@@ -45,6 +45,28 @@ export function adminUserRows(ids?: string[]): Promise<AdminUserRow[]> {
 }
 
 /**
+ * What each account's sign-ins confirmed (Google's email, a checked phone
+ * code), through admin_verified() with the same owner check. One read per
+ * render; null when not allowed or failing, so callers can fall back to
+ * the old app's is_verified flag.
+ */
+export const adminVerifiedRows = cache(async (): Promise<VerifiedRow[] | null> => {
+  try {
+    const supabase = await createServerClient();
+    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+    return await fetchAllRows<VerifiedRow>((from, to) => supabase.rpc("admin_verified", { p_firebase_token: token }).range(from, to));
+  } catch (e) {
+    console.warn("admin_verified failed", e);
+    return null;
+  }
+});
+
+/** adminVerifiedRows by account; null when that read failed. */
+export async function adminConfirmed(): Promise<Map<string, Confirmed> | null> {
+  return confirmedById(await adminVerifiedRows());
+}
+
+/**
  * Everyone, with everything the admin sign-ups chart and list show
  * (sign-up time, contact, username, sign-ins, activity, sign-up context),
  * through admin_people() with the same owner check. Newest first.
@@ -60,14 +82,16 @@ export const signupPeople = cache(async (): Promise<{ people: Person[] | null; r
     const supabase = await createServerClient();
     const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
     // The typed emails come separately (admin_people's columns can't grow); without them the list still loads.
-    const [rows, contacts] = await Promise.all([
+    const [rows, contacts, verified] = await Promise.all([
       fetchAllRows<DetailsRow>((from, to) => supabase.rpc("admin_people", { p_firebase_token: token }).range(from, to)),
       fetchAllRows<ContactEmailRow>((from, to) => supabase.rpc("admin_contact_emails", { p_firebase_token: token }).range(from, to)).catch((e) => {
         console.warn("admin_contact_emails failed", e);
         return [] as ContactEmailRow[];
       }),
+      // What sign-ins confirmed; without it the list shows the old flag.
+      adminVerifiedRows(),
     ]);
-    const people = toPeople(rows, contacts);
+    const people = toPeople(rows, contacts, verified);
     return { people, readAt: Math.max(Date.now(), people[0]?.joinedAt ?? 0) };
   } catch (e) {
     console.warn("admin_people failed", e);

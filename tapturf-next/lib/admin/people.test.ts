@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_CITY, ago, byCity, cityOf, duration, inCity, initial, istDateTime, joinedBetween, matches, personId, sitePath, sourceOf, toPeople, whatsappLink, type DetailsRow } from "./people";
+import { NO_CITY, ago, byCity, cityOf, confirmedById, duration, inCity, initial, isVerified, istDateTime, joinedBetween, matches, personId, sitePath, sourceOf, toPeople, whatsappLink, type DetailsRow } from "./people";
 
 const row = (o: Partial<DetailsRow>): DetailsRow => ({
   id: "u1",
@@ -213,4 +213,35 @@ test("WhatsApp links", () => {
   assert.equal(whatsappLink("+91 98765 43210"), "https://wa.me/919876543210");
   assert.equal(whatsappLink("9876543210"), "https://wa.me/919876543210");
   assert.equal(whatsappLink("123"), null);
+});
+
+test("verified is what sign-ins confirmed, not the old app's flag", () => {
+  const rows = [
+    row({ id: "g", method: "google", email: "gita@gmail.com", is_verified: false }),
+    row({ id: "p", method: "phone", phone: "+919876543210", is_verified: false }),
+    row({ id: "o", method: "phone", phone: "+919876543211", is_verified: true }),
+    row({ id: "n", method: "phone", phone: "+919876543212" }),
+  ];
+  const verified = [
+    { user_id: "g", email_by_google: true, email_confirmed: true, phone_by_code: false },
+    { user_id: "p", email_by_google: false, email_confirmed: false, phone_by_code: true },
+    { user_id: "o", email_by_google: false, email_confirmed: false, phone_by_code: false },
+  ];
+  const by = Object.fromEntries(toPeople(rows, [], verified).map((x) => [x.id, x]));
+  assert.deepEqual(by.g.confirmed, { email: "google", phone: false });
+  assert.equal(by.g.verified, true, "a Google sign-in's email is verified, whatever the old flag says");
+  assert.deepEqual(by.p.confirmed, { email: null, phone: true });
+  assert.equal(by.p.verified, true);
+  assert.equal(by.o.verified, false, "the old flag alone doesn't count once the facts are read");
+  assert.deepEqual(by.n.confirmed, { email: null, phone: false }, "missing from a read that worked: nothing confirmed");
+  // The read failed: the old flag, and nothing claimed as confirmed.
+  const old = Object.fromEntries(toPeople(rows).map((x) => [x.id, x]));
+  assert.equal(old.g.confirmed, null);
+  assert.equal(old.g.verified, false);
+  assert.equal(old.o.verified, true);
+  // An email confirmed by the old app's link, not by Google.
+  assert.deepEqual(confirmedById([{ user_id: "e", email_by_google: false, email_confirmed: true, phone_by_code: null }])?.get("e"), { email: "link", phone: false });
+  assert.equal(confirmedById(null), null);
+  assert.equal(isVerified({ email: null, phone: false }, true), false);
+  assert.equal(isVerified(null, null), false);
 });

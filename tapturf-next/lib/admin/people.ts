@@ -42,7 +42,10 @@ export type Person = {
   phone: string | null;
   avatar: string | null;
   role: string | null;
+  /** A sign-in confirmed their email or phone (or, when that couldn't be read, the old app's flag said so). */
   verified: boolean;
+  /** What their sign-ins confirmed (admin_verified); null when that couldn't be read. */
+  confirmed: Confirmed | null;
   /** When they signed up: their first sign-in, even for accounts copied into users later. */
   joinedAt: number;
   /** When their users row was made, only when that was more than a minute after they signed up. */
@@ -80,6 +83,33 @@ export type Person = {
   /** The email came from their Google account, which Google confirmed. */
   emailFromGoogle: boolean;
 };
+
+/** What a sign-in confirmed: their email (by Google, or the old app's confirm link) and their phone (by a code TapTurf checked). */
+export type Confirmed = { email: "google" | "link" | null; phone: boolean };
+
+/** One row as admin_verified returns it. */
+export type VerifiedRow = {
+  user_id: string;
+  email_by_google: boolean | null;
+  email_confirmed: boolean | null;
+  phone_by_code: boolean | null;
+};
+
+/** admin_verified's rows by account, or null when the read failed. */
+export function confirmedById(rows: readonly VerifiedRow[] | null): Map<string, Confirmed> | null {
+  if (!rows) return null;
+  const out = new Map<string, Confirmed>();
+  for (const r of rows) {
+    if (typeof r?.user_id !== "string") continue;
+    out.set(r.user_id, { email: r.email_by_google === true ? "google" : r.email_confirmed === true ? "link" : null, phone: r.phone_by_code === true });
+  }
+  return out;
+}
+
+/** True when a sign-in confirmed something; the old app's flag only when what was confirmed couldn't be read. */
+export function isVerified(confirmed: Confirmed | null, legacy: boolean | null | undefined): boolean {
+  return confirmed ? confirmed.email !== null || confirmed.phone : legacy === true;
+}
 
 /** The optional email a phone account typed, or their No thanks. Not checked by anyone. */
 export type ContactEmail = {
@@ -261,8 +291,9 @@ function contactOf(r: ContactEmailRow | undefined): ContactEmail | null {
   return { email: str(r.email), answer, source, shared: r.same_as_other_account === true, at: time(r.answered_at) };
 }
 
-export function toPeople(rows: readonly DetailsRow[], contacts: readonly ContactEmailRow[] = []): Person[] {
+export function toPeople(rows: readonly DetailsRow[], contacts: readonly ContactEmailRow[] = [], verified: readonly VerifiedRow[] | null = null): Person[] {
   const byUser = new Map(contacts.filter((c) => typeof c?.user_id === "string").map((c) => [c.user_id, c]));
+  const confirmedOf = confirmedById(verified);
   const joined = (r: DetailsRow) => time(r.signed_up_at) ?? time(r.created_at);
   const seen = new Map<number, number>();
   for (const r of rows) {
@@ -276,6 +307,8 @@ export function toPeople(rows: readonly DetailsRow[], contacts: readonly Contact
     const rowAt = time(r.created_at);
     const likely = cityId(r.likely_city);
     const share = typeof r.likely_share === "number" && Number.isFinite(r.likely_share) ? Math.min(1, Math.max(0, r.likely_share)) : 0;
+    // An account missing from a read that worked had nothing confirmed.
+    const confirmed = confirmedOf ? (confirmedOf.get(r.id) ?? { email: null, phone: false }) : null;
     return [
       {
         id: r.id,
@@ -284,7 +317,8 @@ export function toPeople(rows: readonly DetailsRow[], contacts: readonly Contact
         phone: str(r.phone),
         avatar: str(r.profile_image_url),
         role: str(r.role),
-        verified: r.is_verified === true,
+        verified: isVerified(confirmed, r.is_verified),
+        confirmed,
         joinedAt,
         rowAddedAt: rowAt !== null && rowAt - joinedAt > 60_000 ? rowAt : null,
         imported: (seen.get(joinedAt) ?? 0) > 1,

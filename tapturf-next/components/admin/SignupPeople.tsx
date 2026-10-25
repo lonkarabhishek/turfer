@@ -298,7 +298,8 @@ function EmailItem({ p }: { p: Person }) {
         <a href={`mailto:${p.email}`} className={link}>
           {p.email}
         </a>
-        {p.emailFromGoogle && <span className="text-primary-500"> · confirmed by Google</span>}
+        {(p.confirmed ? p.confirmed.email === "google" : p.emailFromGoogle) && <span className="text-primary-500"> · confirmed by Google</span>}
+        {p.confirmed?.email === "link" && <span className="text-primary-500"> · confirmed by a link</span>}
       </>
     );
   }
@@ -317,6 +318,20 @@ function EmailItem({ p }: { p: Person }) {
   if (c?.answer === "skipped") return <span className="text-primary-400">Said no thanks</span>;
   if (c?.answer === "removed") return <span className="text-primary-400">Removed by them</span>;
   return p.method === "phone" ? <span className="text-primary-400">Not asked yet</span> : none;
+}
+
+/** What their sign-ins confirmed: Google's email, a phone code TapTurf checked; the old app's flag only when that couldn't be read. */
+function VerifiedItem({ p }: { p: Person }) {
+  const c = p.confirmed;
+  if (!c) return <>{p.verified ? "Yes (old app's flag)" : "No (old app's flag)"}</>;
+  const parts = [c.email === "google" ? "Email, by Google" : c.email === "link" ? "Email, by a confirm link" : null, c.phone ? "Phone, by a code at sign-in" : null].filter(Boolean);
+  if (parts.length) return <>{parts.join(" · ")}</>;
+  return (
+    <span className="text-primary-500">
+      Not yet
+      {p.method === "phone" && <span className="block text-[12px]">No phone sign-in with a code checked here since 22 Oct, when TapTurf started checking codes itself. Their next sign-in confirms the number.</span>}
+    </span>
+  );
 }
 
 function MethodBadge({ method }: { method: Method }) {
@@ -448,7 +463,9 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
           )}
         </Item>
         {p.role && p.role !== "user" && <Item label="Role">{title(p.role)}</Item>}
-        <Item label="Verified">{p.verified ? "Yes" : "No"}</Item>
+        <Item label="Verified">
+          <VerifiedItem p={p} />
+        </Item>
         {p.updatedAt !== null && p.updatedAt - p.joinedAt > 60_000 && (
           <Item label="Profile changed">
             <When t={p.updatedAt} now={now} />

@@ -295,7 +295,13 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                 <td className="px-4 py-3 tabular-nums">{u.gamesHosted}</td>
                 <td className="px-4 py-3 tabular-nums">{u.requestsMade}</td>
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(u.created_at)}</td>
-                <td className="px-4 py-3">{u.is_verified && <Badge className="bg-accent-50 text-accent-700">verified</Badge>}</td>
+                <td className="px-4 py-3">
+                  {u.verified && (
+                    <span title={u.verifiedHow ?? undefined}>
+                      <Badge className="bg-accent-50 text-accent-700">verified</Badge>
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </Table>

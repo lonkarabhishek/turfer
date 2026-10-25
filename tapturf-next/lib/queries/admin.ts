@@ -1,6 +1,7 @@
 import { fetchAllRows } from "@/lib/queries/turfs";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { adminUserRows } from "@/lib/queries/adminUsers";
+import { adminConfirmed, adminUserRows } from "@/lib/queries/adminUsers";
+import { isVerified } from "@/lib/admin/people";
 
 /**
  * Admin dashboard queries. All read-only. Every function is scoped to
@@ -157,7 +158,8 @@ export async function getHeadline(): Promise<AdminHeadline> {
     s.from("game_requests").select("*", { count: "exact", head: true }),
     s.from("notifications").select("*", { count: "exact", head: true }),
     s.from("notifications").select("*", { count: "exact", head: true }).eq("is_read", false),
-    s.from("users").select("id", { count: "exact", head: true }).eq("is_verified", true),
+    // What sign-ins confirmed (Google's email, a checked phone code), not the old app's flag.
+    adminConfirmed(),
     // Full bookings set — table has just been added, so row count is
     // tiny. Fetching amounts inline lets us compute revenue without a
     // second round-trip. Cheap for now, revisit at >5k rows.
@@ -204,7 +206,7 @@ export async function getHeadline(): Promise<AdminHeadline> {
     totalUsers,
     uniquePeople,
     duplicateUsers,
-    verifiedUsers: verified.count ?? 0,
+    verifiedUsers: rows.filter((r) => isVerified(verified ? (verified.get(r.id) ?? { email: null, phone: false }) : null, r.is_verified)).length,
     signups7d,
     signups30d,
     uniqueSignups7d,

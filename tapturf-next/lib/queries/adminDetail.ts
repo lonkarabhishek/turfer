@@ -1,5 +1,6 @@
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { adminUserRows } from "@/lib/queries/adminUsers";
+import { adminConfirmed, adminUserRows } from "@/lib/queries/adminUsers";
+import { isVerified, type Confirmed } from "@/lib/admin/people";
 import { isCity } from "@/lib/city";
 
 /**
@@ -115,6 +116,14 @@ export async function getAdminGames(filter: GameFilter = "all", limit = 500): Pr
 
 // ── Users ───────────────────────────────────────────────
 
+/** "Email confirmed by Google, phone by a code", or null when nothing was. */
+export function confirmedLabel(c: Confirmed): string | null {
+  const parts = [c.email === "google" ? "Email confirmed by Google" : c.email === "link" ? "Email confirmed by a link" : null, c.phone ? "phone by a code at sign-in" : null].filter(Boolean) as string[];
+  if (parts.length === 0) return null;
+  const text = parts.join(", ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export interface AdminUser {
   id: string;
   name: string | null;
@@ -123,6 +132,10 @@ export interface AdminUser {
   is_verified: boolean | null;
   created_at: string | null;
   method: "google" | "phone" | "unknown";
+  /** A sign-in confirmed their email or phone (admin_verified; the old app's flag when that can't be read). */
+  verified: boolean;
+  /** What was confirmed, for the badge's tooltip ("Email confirmed by Google"), or null. */
+  verifiedHow: string | null;
   gamesHosted: number;
   requestsMade: number;
   duplicateOf: number; // size of this person's group if > 1
@@ -146,10 +159,11 @@ const normPhone = (p: string | null) => {
 
 export async function getAdminUsers(filter: UserFilter = "all"): Promise<AdminUser[]> {
   const s = supa();
-  const [{ data: users }, { data: games }, { data: reqs }] = await Promise.all([
+  const [{ data: users }, { data: games }, { data: reqs }, confirmed] = await Promise.all([
     adminUserRows().then((data) => ({ data })),
     s.from("games").select("creator_id, created_at"),
     s.from("game_requests").select("user_id, created_at"),
+    adminConfirmed(),
   ]);
   const rows = users ?? [];
 
@@ -176,17 +190,22 @@ export async function getAdminUsers(filter: UserFilter = "all"): Promise<AdminUs
     return ids;
   };
 
-  let list: AdminUser[] = rows.map((u) => ({
-    ...u,
-    method: u.email ? "google" : u.phone ? "phone" : "unknown",
-    gamesHosted: hosted.get(u.id) ?? 0,
-    requestsMade: requested.get(u.id) ?? 0,
-    duplicateOf: groupSize.get(personKey(u)) ?? 1,
-  }));
+  let list: AdminUser[] = rows.map((u) => {
+    const c = confirmed ? (confirmed.get(u.id) ?? { email: null, phone: false }) : null;
+    return {
+      ...u,
+      method: u.email ? "google" : u.phone ? "phone" : "unknown",
+      verified: isVerified(c, u.is_verified),
+      verifiedHow: c ? confirmedLabel(c) : u.is_verified ? "Marked verified by the old app" : null,
+      gamesHosted: hosted.get(u.id) ?? 0,
+      requestsMade: requested.get(u.id) ?? 0,
+      duplicateOf: groupSize.get(personKey(u)) ?? 1,
+    };
+  });
 
   if (filter === "new7") list = list.filter((u) => (u.created_at ?? "") >= isoDaysAgo(7));
   if (filter === "new30") list = list.filter((u) => (u.created_at ?? "") >= isoDaysAgo(30));
-  if (filter === "verified") list = list.filter((u) => u.is_verified);
+  if (filter === "verified") list = list.filter((u) => u.verified);
   if (filter === "duplicates") list = list.filter((u) => u.duplicateOf > 1).sort((a, b) => personKeySort(a, b));
   if (filter === "active7" || filter === "active30") {
     const ids = activeSince(filter === "active7" ? 7 : 30);
