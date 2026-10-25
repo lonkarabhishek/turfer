@@ -37,6 +37,7 @@ export default function Page() {
   return (
     <ToolPage
       tool={tool}
+      compact
       intro="No coin in your pocket? Call heads or tails, flip, and see who bats. Ready the moment it loads and built for one hand on the turf."
       explainer={[
         {

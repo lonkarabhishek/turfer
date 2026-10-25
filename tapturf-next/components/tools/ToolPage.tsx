@@ -11,8 +11,10 @@ export type Explainer = { title: string; body: ReactNode };
  * (H1, intro, explainer, FAQ, links) is plain server markup; only the
  * tool itself is a client component passed as children, and it sits
  * right under the intro so nobody scrolls past copy to reach it.
+ * `compact` tightens the top on phones, for a tool whose buttons should
+ * show without scrolling.
  */
-export function ToolPage({ tool, intro, children, explainer, faq }: { tool: ToolDef; intro: string; children: ReactNode; explainer: Explainer[]; faq: Faq[] }) {
+export function ToolPage({ tool, intro, children, explainer, faq, compact = false }: { tool: ToolDef; intro: string; children: ReactNode; explainer: Explainer[]; faq: Faq[]; compact?: boolean }) {
   const url = `${TOOLS_BASE}/${tool.slug}`;
   const jsonLd = [
     {
@@ -48,10 +50,10 @@ export function ToolPage({ tool, intro, children, explainer, faq }: { tool: Tool
   const related = tool.related.map((s) => TOOLS.find((t) => t.slug === s)).filter((t): t is ToolDef => !!t);
 
   return (
-    <article className="max-w-3xl mx-auto px-4 sm:px-6 py-6 md:py-10">
+    <article className={`max-w-3xl mx-auto px-4 sm:px-6 ${compact ? "pt-3 pb-6 sm:py-6" : "py-6"} md:py-10`}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <nav aria-label="Breadcrumb" className="text-[13px] text-primary-500 mb-4 flex items-center gap-1">
+      <nav aria-label="Breadcrumb" className={`text-[13px] text-primary-500 ${compact ? "mb-2 sm:mb-4" : "mb-4"} flex items-center gap-1`}>
         <Link href="/tools" className="hover:text-primary-900">
           Tools
         </Link>
@@ -59,10 +61,10 @@ export function ToolPage({ tool, intro, children, explainer, faq }: { tool: Tool
         <span className="text-primary-700 truncate">{tool.name}</span>
       </nav>
 
-      <header className="mb-6">
+      <header className={compact ? "mb-4 sm:mb-6" : "mb-6"}>
         <h1 className="font-display tracking-tight text-primary-900 text-3xl sm:text-4xl md:text-[44px] leading-[1.05]">{tool.h1}</h1>
         <p className="mt-3 text-[16px] md:text-[17px] text-primary-600 leading-relaxed">{intro}</p>
-        <p className="mt-1.5 text-[13px] text-primary-400">Free, no sign-up, works on your phone.</p>
+        <p className={`mt-1.5 text-[13px] text-primary-400${compact ? " hidden sm:block" : ""}`}>Free, no sign-up, works on your phone.</p>
       </header>
 
       {/* The tool. */}

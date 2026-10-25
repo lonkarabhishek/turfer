@@ -549,44 +549,129 @@ p, li { letter-spacing: 0; }
   .ask-think-line[data-on] { transform: none; transition: opacity 200ms ease-out 130ms; }
 }
 
-/* Cricket toss coin (tools/cricket-toss) */
-.coin-scene {
-  width: 140px;
-  height: 140px;
-  perspective: 700px;
-}
-.coin {
+/* Cricket toss coin (components/tools/TossCoin.tsx). Sizes come from
+   lib/tools/tossSim.ts as --toss-* on the stage. The faces and edge are laid
+   out at --k times their size and scaled back down, because Chrome rasterises
+   perspective layers below device resolution and a 1x coin looks soft on a
+   phone; --k stops at 2 to keep GPU memory down. The smooth light layers stay
+   at 1x (.toss-1x). Nothing around the coin may clip, filter, fade or
+   transform, or the flight is cut off or flattened. */
+.toss-stage {
+  --k: 1;
+  --ik: 1;
   position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  will-change: transform;
+  perspective: 900px;
+  perspective-origin: 50% var(--toss-y);
 }
-.coin-face {
+@media (min-resolution: 1.5dppx), (-webkit-min-device-pixel-ratio: 1.5) {
+  .toss-stage { --k: 1.5; --ik: 0.666667; }
+}
+@media (min-resolution: 2dppx), (-webkit-min-device-pixel-ratio: 2) {
+  .toss-stage { --k: 2; --ik: 0.5; }
+}
+.toss-coin, .toss-shadow, .toss-spark, .toss-veil {
   position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 56px;
-  backface-visibility: hidden;
+  left: 50%;
+  top: var(--toss-y);
+  pointer-events: none;
+}
+.toss-coin, .toss-scale {
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+}
+.toss-coin { will-change: transform; }
+.toss-1x { --k: 1; --ik: 1; }
+.toss-scale {
+  position: absolute;
+  transform: scale3d(var(--ik), var(--ik), var(--ik));
+}
+.toss-face {
+  position: absolute;
+  left: calc(var(--toss-d) * var(--k) / -2);
+  top: calc(var(--toss-d) * var(--k) / -2);
+  width: calc(var(--toss-d) * var(--k));
+  height: calc(var(--toss-d) * var(--k));
+  border-radius: 50%;
+  background: center / 100% 100% no-repeat;
   -webkit-backface-visibility: hidden;
-  box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.35), 0 10px 24px rgba(15, 23, 42, 0.18);
+  backface-visibility: hidden;
 }
-.coin-heads {
-  background: radial-gradient(circle at 35% 30%, #fde68a, #d97706 70%);
-  color: #78350f;
+.toss-front { transform: translateZ(calc(var(--toss-t) * var(--k) / 2)); }
+.toss-back { transform: rotateX(180deg) translateZ(calc(var(--toss-t) * var(--k) / 2)); }
+/* Under each face image, a plain gold centre in a steel ring, so a coin shows while it loads. */
+.toss-heads, .toss-tails {
+  --toss-blank: radial-gradient(circle closest-side, #EDCB76, #D7A84A 64.3%, #C3CAD1 64.9%, #DDE1E6 86%, #B4BCC5);
 }
-.coin-tails {
-  background: radial-gradient(circle at 35% 30%, #e5e7eb, #6b7280 70%);
-  color: #1f2937;
-  transform: rotateY(180deg);
+.toss-heads { background-image: url(/tools/toss/heads-448.webp), var(--toss-blank); }
+.toss-tails { background-image: url(/tools/toss/tails-448.webp), var(--toss-blank); }
+@media (min-resolution: 2.5dppx), (-webkit-min-device-pixel-ratio: 2.5) {
+  .toss-heads { background-image: url(/tools/toss/heads-672.webp), var(--toss-blank); }
+  .toss-tails { background-image: url(/tools/toss/tails-672.webp), var(--toss-blank); }
 }
+/* Light over the faces. Lathe and glint carry their face's placement in their own transform. */
+/* A face turned from the light darkens as metal: warm brown on the gold, cool gray on the steel. */
+.toss-shade { background: radial-gradient(circle closest-side, #2E1D07 64.3%, #262D36 64.9%); }
+.toss-lathe {
+  background: conic-gradient(rgba(255,255,255,.6), rgba(255,255,255,0) 32deg, rgba(255,255,255,0) 148deg,
+    rgba(255,255,255,.6) 180deg, rgba(255,255,255,0) 212deg, rgba(255,255,255,0) 328deg, rgba(255,255,255,.6));
+}
+/* Bright only near the middle of the face, so it needs no clipping to the rim. */
+.toss-glint { background: radial-gradient(closest-side, rgba(255,251,240,.95), rgba(255,251,240,.35) 42%, rgba(255,251,240,0) 87%); }
+.toss-edge {
+  position: absolute;
+  display: block;
+  left: calc((var(--toss-t) + 0.8px) * var(--k) / -2);
+  top: calc(var(--toss-el) * var(--k) / -2);
+  width: calc((var(--toss-t) + 0.8px) * var(--k));
+  height: calc(var(--toss-el) * var(--k));
+  transform: rotateZ(calc(var(--i) * var(--toss-seg))) translateX(calc(var(--toss-ap) * var(--k))) rotateY(90deg);
+  background:
+    linear-gradient(90deg, rgba(20,26,34,.55), rgba(20,26,34,0) 22%, rgba(255,255,255,.18) 50%, rgba(20,26,34,0) 78%, rgba(20,26,34,.55)),
+    repeating-linear-gradient(180deg, #F4F6F8 0 calc(1px * var(--k)), #C3C9D0 0 calc(1.8px * var(--k)), #7E8792 0 calc(2.6px * var(--k)), #D9DEE3 0 calc(3.2px * var(--k)));
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.toss-edge-shade { background: #1D232B; }
+.toss-shadow { width: 0; height: 0; }
+.toss-shadow i { position: absolute; display: block; border-radius: 50%; }
+.toss-sh-soft {
+  width: calc(var(--toss-d) * 1.23);
+  height: calc(var(--toss-d) * 1.23);
+  left: calc(var(--toss-d) * -0.615);
+  top: calc(var(--toss-d) * -0.615);
+  background: radial-gradient(closest-side, rgba(17,24,39,.30), rgba(17,24,39,.14) 55%, rgba(17,24,39,0));
+}
+.toss-sh-contact {
+  width: calc(var(--toss-d) + 2px);
+  height: calc(var(--toss-d) + 2px);
+  left: calc(var(--toss-d) / -2 - 1px);
+  top: calc(var(--toss-d) / -2 - 1px);
+  background: radial-gradient(closest-side, rgba(17,24,39,.55) 86%, rgba(17,24,39,.22) 94%, rgba(17,24,39,0));
+}
+/* A glint on the rim just after landing. */
+.toss-spark {
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  opacity: 0;
+  background: radial-gradient(circle, #fff 0%, #fff7d6 30%, rgba(255,240,190,0) 70%);
+  clip-path: polygon(50% 0, 56% 44%, 100% 50%, 56% 56%, 50% 100%, 44% 56%, 0 50%, 44% 44%);
+}
+/* Reduced motion: a white veil covers the coin while it turns over. */
+.toss-veil {
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(closest-side, #fff 74%, rgba(255,255,255,0));
+}
+.toss-pop { animation: tossPop 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes tossPop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .coin { transition: none !important; }
+  .toss-pop { animation: none; }
 }
 
 /* ── City personalisation ─────────────────────────────────────
