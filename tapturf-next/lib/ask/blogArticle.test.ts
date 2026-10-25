@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backingSections, buildVisual, cleanFollowups, hashText, inArticle, livelierBars, parseAmount, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "./blogArticle";
+import { backingSections, buildVisual, cleanFollowups, flatBars, hashText, inArticle, livelierBars, parseAmount, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "./blogArticle";
 import type { RawVisual } from "./blogReply";
 import type { BlogVisual } from "./blogTypes";
 import { ALL_POSTS, type Block, type Post } from "../../content/blog";
@@ -1108,10 +1108,10 @@ test("art: signed brief and alt; no token or no brief is no picture", () => {
   const v = kind(buildVisual(a, V({ kind: "art", title: "The cage", art_brief: `  ${cage}  `, alt: " Top view of a box cricket cage " }), sign), "art");
   assert.deepEqual(v, { kind: "art", title: "The cage", alt: "Top view of a box cricket cage", token: `tok:${cage.length}` });
   assert.deepEqual(calls[0], [cage, "Top view of a box cricket cage"]);
-  // No alt: the brief, cut to 160. Long briefs are cut to 600, long alts to 200.
-  const long = kind(buildVisual(a, V({ kind: "art", art_brief: "word ".repeat(150), alt: null }), sign), "art");
+  // No alt: the brief, cut to 160. Long briefs are cut to 900, long alts to 200.
+  const long = kind(buildVisual(a, V({ kind: "art", art_brief: "word ".repeat(200), alt: null }), sign), "art");
   const [brief, alt] = calls[1];
-  assert.ok(brief.length <= 600 && brief.length > 500 && alt.length <= 160 && long.alt === alt);
+  assert.ok(brief.length <= 900 && brief.length > 800 && alt.length <= 160 && long.alt === alt);
   assert.equal(long.title, "Illustration");
   kind(buildVisual(a, V({ kind: "art", art_brief: "A pitch", alt: "x".repeat(300) }), sign), "art");
   assert.ok(calls[2][1].length <= 200);
@@ -1228,6 +1228,34 @@ test("backingSections: a section that alone holds a claim's amount or venue", ()
   const hyd = HYD();
   const one = hyd.turfs.find((t) => backingSections(hyd, [t.name], [], 4).length === 1);
   assert.ok(one, "some venue card sits in one section");
+  // Plain words that start a venue's name ("night", Night Riders) are not the venue.
+  const top = hyd.sections.find((s) => s.title === "The top 10");
+  assert.ok(top);
+  for (const claim of ["Thirty of the 83 cages are open 24 hours, so you can play at night.", "Night slots are generally charged at the evening rate."]) {
+    assert.ok(!backingSections(hyd, [claim], [], 4).includes(top.n), claim);
+  }
+  // ₹2,000 is an amount, not the year 2000.
+  const football = readArticle(bySlug("best-turfs-pune-football"));
+  const at = football.sections.filter((s) => backingSections(football, ["The top rate is ₹2,000 an hour."], [], 4).includes(s.n));
+  assert.ok(at.length <= 1);
+});
+
+test("turfsNamed strict: full or short names only", () => {
+  const hyd = HYD();
+  const riders = hyd.turfs.filter((t) => /^Night Riders/.test(t.name));
+  assert.ok(riders.length);
+  assert.ok(turfsNamed(riders, "We play at night").length === riders.length, "loose: the first word names it");
+  assert.equal(turfsNamed(riders, "We play at night", { strict: true }).length, 0);
+  assert.ok(turfsNamed(riders, `Try ${riders[0].name.split(/\s*[([]|\s+[–—-]\s+/)[0]} on weekends`, { strict: true }).length >= 1);
+});
+
+test("flatBars: bars that barely differ", () => {
+  const bars = (values: number[]): BlogVisual => ({ kind: "bars", title: "t", unit: null, note: null, bars: values.map((v, i) => ({ label: `x${i}`, value: v, display: String(v) })) });
+  assert.ok(flatBars(bars([5, 4.9, 4.8, 4.8])));
+  assert.ok(!flatBars(bars([2400, 1100, 600])));
+  assert.ok(!flatBars(bars([5])));
+  assert.ok(!flatBars(null));
+  assert.ok(!flatBars({ kind: "steps", title: "t", steps: [] }));
 });
 
 test("livelierBars: the short version swaps ratings that barely differ for the column that varies", () => {

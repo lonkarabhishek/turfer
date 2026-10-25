@@ -796,6 +796,14 @@ function barsVisual(a: Article, v: RawVisual): BlogVisual | null {
   return { kind: "bars", title, unit, note: clip(note, NOTE_MAX), bars };
 }
 
+/** True for a chart whose bars barely differ (under a tenth of the largest): drawn from zero, they look the same. */
+export function flatBars(v: BlogVisual | null): boolean {
+  if (v?.kind !== "bars" || v.bars.length < 2) return false;
+  const values = v.bars.map((b) => b.value);
+  const max = Math.max(...values);
+  return max > 0 && (max - Math.min(...values)) / max < 0.1;
+}
+
 /**
  * For the short version: bars that differ enough to read. Ten ratings
  * between 4.8 and 5.0 drawn from zero look the same, so when the model's
@@ -888,7 +896,7 @@ function statsVisual(a: Article, v: RawVisual): BlogVisual | null {
 }
 
 function artVisual(v: RawVisual, signArt: (brief: string, alt: string) => string | null): BlogVisual | null {
-  const brief = clip(v.art_brief, 600);
+  const brief = clip(v.art_brief, 900);
   if (!brief) return null;
   const alt = tidy(v.alt) ? clip(v.alt, 200) : clip(brief, 160);
   const token = signArt(brief, alt);
@@ -987,11 +995,13 @@ export function backingSections(a: Article, claims: string[], cited: number[], r
       const digits = m[2];
       // "6" or "24" is in every other section; an amount or a longer figure isn't.
       if (!m[1] && digits.replace(".", "").length < 3) continue;
-      if (/^(19|20)\d\d$/.test(digits)) continue;
+      // A bare 2026 is a year; ₹2,000 is an amount.
+      if (!m[1] && /^(19|20)\d\d$/.test(digits)) continue;
       const at = holders(new RegExp(`(?<![\\d.])${digits.replace(".", "\\.")}(?![\\d]|\\.\\d)`));
       if (at.length === 1) found.add(at[0]);
     }
-    for (const v of turfsNamed(a.turfs, claim)) {
+    // By full or short name only: "night" is not Night Riders here.
+    for (const v of turfsNamed(a.turfs, claim, { strict: true })) {
       const at = holders(new RegExp(`\\[v${v.n}\\]`));
       if (at.length === 1) found.add(at[0]);
     }
@@ -1016,8 +1026,10 @@ const VENUE_WORDS = new Set("the box cricket turf turfs sports sport arena arena
  * reader wasn't told about. A venue is named by its full name, the part
  * before a bracket or dash ("AJ Cricket Club" for "AJ Cricket Club (Box
  * Cricket)"), or its first word when that word is its own ("NexGen").
+ * strict: the first word doesn't count, for text that names no venue on
+ * purpose ("play at night" would be Night Riders).
  */
-export function turfsNamed<T extends BlogTurf>(turfs: T[], text: string): T[] {
+export function turfsNamed<T extends BlogTurf>(turfs: T[], text: string, opts: { strict?: boolean } = {}): T[] {
   const t = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ")} `;
   const has = (s: string) => {
     const k = s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -1027,7 +1039,7 @@ export function turfsNamed<T extends BlogTurf>(turfs: T[], text: string): T[] {
     const name = tidy(v.name);
     const short = name.split(/\s*[([]|\s+[–—-]\s+/)[0];
     const first = short.split(/\s+/)[0] ?? "";
-    return has(name) || has(short) || (first.length >= 4 && !VENUE_WORDS.has(first.toLowerCase()) && has(first));
+    return has(name) || has(short) || (!opts.strict && first.length >= 4 && !VENUE_WORDS.has(first.toLowerCase()) && has(first));
   });
 }
 

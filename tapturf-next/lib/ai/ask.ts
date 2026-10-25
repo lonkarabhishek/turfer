@@ -160,6 +160,9 @@ export function addUsage(to: AskUsage, u: Anthropic.Usage | AskUsage): void {
   }
 }
 
+/** A second try of structured() needs at least this long before its deadline. */
+const MIN_RETRY_MS = 5_000;
+
 /**
  * messages.create with a JSON schema, parsed by hand. The SDK's .parse()
  * runs JSON.parse on every text block and throws on the first bad one.
@@ -173,7 +176,8 @@ export function addUsage(to: AskUsage, u: Anthropic.Usage | AskUsage): void {
  * attempt added to it, `info` to learn whether a null was the model
  * declining (refused) rather than output we couldn't use, and `opts` to
  * give each attempt its own timeout or retries (else the client's: 20 s,
- * one retry, so an attempt can take about 41 s).
+ * one retry, so an attempt can take about 41 s), or a deadline that
+ * every attempt ends by.
  */
 export async function structured<T extends z.ZodType>(
   schema: T,
@@ -181,15 +185,22 @@ export async function structured<T extends z.ZodType>(
   tag: string,
   usage?: AskUsage,
   info?: { refused?: boolean },
-  opts?: { timeout?: number; maxRetries?: number; think?: boolean },
+  opts?: { timeout?: number; maxRetries?: number; think?: boolean; deadline?: number },
 ): Promise<z.output<T> | null> {
   const format = zodOutputFormat(schema);
-  const { think = false, ...request } = opts ?? {};
+  const { think = false, deadline, ...request } = opts ?? {};
   // think: reason before answering (adaptive thinking, medium effort), for
   // answers that must read a table right. It needs room: the caller's
   // max_tokens is kept for the JSON and the thinking gets its own on top.
   let maxTokens = think ? params.max_tokens + 4_000 : params.max_tokens;
   for (let attempt = 0; attempt < 2; attempt++) {
+    // deadline (ms since 1970): every try ends by it, and a second try
+    // with too little time left to answer isn't started.
+    const left = deadline === undefined ? Infinity : deadline - Date.now();
+    if (attempt > 0 && left < MIN_RETRY_MS) {
+      console.warn(`ai ${tag}: no time left to ask again`, { left });
+      return null;
+    }
     // Thinking off by default: in production Haiku spent the whole budget
     // on a thinking block and the JSON came back cut at max_tokens.
     const res = await getAnthropic().messages.create(
@@ -199,7 +210,7 @@ export async function structured<T extends z.ZodType>(
         thinking: think ? { type: "adaptive" } : { type: "disabled" },
         output_config: { effort: think ? "medium" : "low", format },
       },
-      request,
+      { ...request, ...(Number.isFinite(left) ? { timeout: Math.max(1_000, Math.min(request.timeout ?? left, left)) } : {}) },
     );
     if (usage && res.usage) addUsage(usage, res.usage);
     if (res.stop_reason === "refusal") {

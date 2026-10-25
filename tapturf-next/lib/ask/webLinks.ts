@@ -96,12 +96,15 @@ function finished(text: string): string {
   return end > 0 ? text.slice(0, end + 1) : "";
 }
 
+/** A page's key: the same page with a #fragment is the same page. */
+export const pageKey = (url: string) => tidy(url).replace(/#.*$/, "");
+
 /**
  * The pages behind the answer: the ones its text cites (text from block
  * `from` on, the part shown), else the first results. Deduped by URL,
- * http(s) only.
+ * http(s) only; pages in `dead` (by pageKey) are never shown.
  */
-export function webLinks(content: Block[], from = 0): BlogLink[] {
+export function webLinks(content: Block[], from = 0, dead: ReadonlySet<string> = new Set()): BlogLink[] {
   const results = new Map<string, Result>();
   for (const b of content) {
     if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
@@ -112,9 +115,8 @@ export function webLinks(content: Block[], from = 0): BlogLink[] {
   const add = (url: string, title: string | null | undefined, max: number) => {
     const u = tidy(url);
     const host = hostOf(u);
-    // The same page with a #fragment is the same page.
-    const key = u.replace(/#.*$/, "");
-    if (!host || seen.has(key) || out.length >= max) return;
+    const key = pageKey(u);
+    if (!host || seen.has(key) || dead.has(key) || out.length >= max) return;
     seen.add(key);
     out.push({ label: tidy(title) || tidy(results.get(url)?.title) || host, url: u, host });
   };
@@ -124,6 +126,48 @@ export function webLinks(content: Block[], from = 0): BlogLink[] {
   }
   if (out.length === 0) for (const r of results.values()) add(r.url, r.title, MAX_RESULTS);
   return out;
+}
+
+/** Every page webLinks could show for this reply (cited anywhere, and the first results), to check before reading it. */
+export function candidatePages(content: Block[]): string[] {
+  const urls = new Set<string>();
+  let results = 0;
+  for (const b of content) {
+    if (b.type === "text") for (const c of b.citations ?? []) if (c.type === "web_search_result_location" && hostOf(tidy(c.url))) urls.add(tidy(c.url));
+    if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
+    for (const r of b.content) {
+      if (r.type !== "web_search_result" || results >= MAX_RESULTS || !hostOf(tidy(r.url)) || urls.has(tidy(r.url))) continue;
+      urls.add(tidy(r.url));
+      results++;
+    }
+  }
+  return [...urls];
+}
+
+/**
+ * The text of these blocks without the sentences that stand only on a
+ * page in `dead`: a sentence goes when a part of it cites pages and every
+ * one of them is dead. (The API splits text into blocks where citations
+ * attach, so a cited part can sit inside a longer sentence.)
+ */
+function withoutDeadClaims(blocks: Anthropic.TextBlock[], dead: ReadonlySet<string>): string {
+  let raw = "";
+  const gone: [number, number][] = [];
+  for (const b of blocks) {
+    const cited = (b.citations ?? []).flatMap((c) => (c.type === "web_search_result_location" ? [pageKey(c.url)] : []));
+    if (cited.length && cited.every((k) => dead.has(k))) gone.push([raw.length, raw.length + b.text.length]);
+    raw += b.text;
+  }
+  if (gone.length === 0) return raw;
+  const kept: string[] = [];
+  let at = 0;
+  for (const part of raw.split(/(?<=[.!?])\s+/)) {
+    const start = raw.indexOf(part, at);
+    const end = start + part.length;
+    at = end;
+    if (!gone.some(([a, z]) => a < end && z > start)) kept.push(part);
+  }
+  return kept.join(" ");
 }
 
 /**
@@ -136,7 +180,7 @@ export function webLinks(content: Block[], from = 0): BlogLink[] {
  * on to more work (another search, or thinking it was cut off in) is a
  * preamble, not the answer, so that is no answer either.
  */
-export function readWebAnswer(content: Block[], stop: Anthropic.StopReason | null): WebAnswer | null {
+export function readWebAnswer(content: Block[], stop: Anthropic.StopReason | null, dead: ReadonlySet<string> = new Set()): WebAnswer | null {
   if (stop === "refusal" || stop === "pause_turn") return null;
   let last = -1;
   let found = false;
@@ -151,9 +195,10 @@ export function readWebAnswer(content: Block[], stop: Anthropic.StopReason | nul
   if (tail.some((b) => b.type === "server_tool_use")) return null;
   // Cut off after its text, while doing something else: that text led into more work.
   if (stop === "max_tokens" && tail.length && tail[tail.length - 1].type !== "text") return null;
-  const raw = tail.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+  // Pages that are gone (lib/ai/blogAnswer.ts checks them) take what they alone said with them.
+  const raw = withoutDeadClaims(tail.filter((b): b is Anthropic.TextBlock => b.type === "text"), dead);
   const text = cleanWebText(stop === "max_tokens" ? finished(tidy(raw)) : raw);
-  const links = webLinks(content, last + 1);
+  const links = webLinks(content, last + 1, dead);
   if (!text || links.length === 0) return null;
   return { text, links };
 }
@@ -165,8 +210,38 @@ export function readWebAnswer(content: Block[], stop: Anthropic.StopReason | nul
  */
 export function deadPage(status: number, head: string): boolean {
   if (status === 404 || status === 410) return true;
-  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1] ?? "";
-  return /\b(page not found|not found|404|page (?:doesn't|does not) exist|no longer available)\b/i.test(title.replace(/\s+/g, " "));
+  const title = (/<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1] ?? "").replace(/\s+/g, " ").trim();
+  // Error-page wording only: "India 404 all out" or "permit not found" is a live page.
+  return /\bpage not found\b|\b404\s*(?:error|not found)\b|\berror\s*404\b|^(?:404|not found)\s*(?:[|\-–—:·]|$)|\bpage (?:doesn't|does not) exist\b|\bno longer available\b/i.test(title);
+}
+
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+/** An address the server must never fetch: loopback, private, link-local, shared (CGNAT), multicast or unspecified, v4 or v6. */
+export function privateAddress(ip: string): boolean {
+  const l = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  const v4 = IPV4.exec(l.startsWith("::ffff:") ? l.slice(7) : l);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  if (!l.includes(":")) return false;
+  // Any other IPv4-mapped form, and the v6 loopback, unspecified, link-local, unique-local and multicast ranges.
+  return l.startsWith("::ffff:") || l === "::" || l === "::1" || /^fe[89ab]/.test(l) || /^f[cd]/.test(l) || l.startsWith("ff");
+}
+
+/** The host to check for a page link, or null when it isn't one to fetch: not http(s), another port, or an IP address in place of a name. */
+export function fetchableHost(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    if (u.port && u.port !== "80" && u.port !== "443") return null;
+    const host = u.hostname.toLowerCase();
+    if (!host || IPV4.test(host) || host.includes(":") || host.startsWith("[") || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal") || !host.includes(".")) return null;
+    return host;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type Anthropic from "@anthropic-ai/sdk";
-import { cleanWebText, deadPage, readWebAnswer, webDay, webLinks } from "./webLinks";
+import { candidatePages, cleanWebText, deadPage, fetchableHost, privateAddress, readWebAnswer, webDay, webLinks } from "./webLinks";
 
 // Replies shaped like the API's: a search call, its results (a list, or an
 // error object when the search failed), then the answer as text blocks,
@@ -259,9 +259,51 @@ test("a page that is gone: 404, 410, or a title saying it wasn't found", () => {
   assert.ok(deadPage(200, "<html><head><title>Page not found – KCS</title>"));
   assert.ok(deadPage(200, "<TITLE>\n  404 | Playo\n</TITLE>"));
   assert.ok(deadPage(200, "<title>This page does not exist</title>"));
+  assert.ok(deadPage(200, "<title>404 Not Found</title>"));
+  assert.ok(deadPage(200, "<title>Error 404</title>"));
+  assert.ok(deadPage(200, "<title> Not Found </title>"));
+  // A live page whose title only mentions the words.
+  assert.ok(!deadPage(200, "<title>India 404 all out: day two report</title>"));
+  assert.ok(!deadPage(200, "<title>Turf permit not found in records, says civic body</title>"));
   // Live pages, and blocks or errors that may pass (shown: the reader may get through).
   assert.ok(!deadPage(200, "<title>Box Cricket Rules: A Complete Guide</title>"));
   assert.ok(!deadPage(200, ""));
   assert.ok(!deadPage(403, "<title>Access denied</title>"));
   assert.ok(!deadPage(503, ""));
+});
+
+test("a dead page takes the sentences only it stood on, and its link", () => {
+  const content = [
+    search("s1"),
+    results("s1", PAGES),
+    say("One set of box cricket rules says "),
+    say("there is no LBW and no leg byes", [{ url: PAGES[0].url }]),
+    say(". "),
+    say("Most cages drop LBW unless the batter blocks on purpose", [{ url: PAGES[1].url }]),
+    say(", and a few keep it. "),
+    say("Check the house rules", [{ url: PAGES[0].url }, { url: PAGES[2].url }]),
+    say(" before you play."),
+  ];
+  const dead = new Set([PAGES[0].url]);
+  const got = readWebAnswer(content, "end_turn", dead);
+  assert.ok(got);
+  assert.equal(got.text, "Most cages drop LBW unless the batter blocks on purpose, and a few keep it. Check the house rules before you play.");
+  assert.deepEqual(got.links.map((l) => l.url), [PAGES[1].url, PAGES[2].url]);
+  // Nothing dead: the same answer as before.
+  assert.equal(readWebAnswer(content, "end_turn")?.links.length, 3);
+  // Every cited page dead and nothing else said: no answer.
+  const only = [search("s1"), results("s1", PAGES.slice(0, 1)), say("There is no LBW", [{ url: PAGES[0].url }]), say(".")];
+  assert.equal(readWebAnswer(only, "end_turn", new Set([PAGES[0].url])), null);
+  // The pages to check: everything cited, then the first three results.
+  assert.deepEqual(candidatePages(content), [PAGES[0].url, PAGES[1].url, PAGES[2].url]);
+  assert.deepEqual(candidatePages([search("s1"), results("s1", PAGES), say("No citations here.")]), PAGES.slice(0, 3).map((p) => p.url));
+});
+
+test("the server checks only public pages: no private addresses, IP hosts or odd ports", () => {
+  for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "::1", "::", "fe80::1", "fd00::1", "fc00::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "ff02::1"]) assert.ok(privateAddress(ip), ip);
+  for (const ip of ["8.8.8.8", "172.32.0.1", "100.128.0.1", "142.250.183.14", "2606:4700::1111", "2404:6800:4009::200e"]) assert.ok(!privateAddress(ip), ip);
+  assert.equal(fetchableHost("https://www.playo.co/blog/box-cricket-rules"), "www.playo.co");
+  assert.equal(fetchableHost("http://pitchreport.in/x"), "pitchreport.in");
+  assert.equal(fetchableHost("https://example.com:443/a"), "example.com");
+  for (const u of ["https://127.0.0.1/a", "http://[::1]/a", "https://example.com:8443/a", "ftp://example.com/a", "https://localhost/a", "https://metadata.google.internal/a", "https://intranet/a", "not a url"]) assert.equal(fetchableHost(u), null, u);
 });
