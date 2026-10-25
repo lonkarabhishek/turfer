@@ -764,7 +764,9 @@ function barsVisual(a: Article, v: RawVisual): BlogVisual | null {
     // Naming the table again under a title that already is its name says nothing.
     const sameAsTitle = title.toLowerCase() === clip(from.title, 70).toLowerCase();
     const room = NOTE_MAX - "From the article: ".length - said.length;
-    note = !sameAsTitle && room >= 20 ? `From the article: ${bare(clip(from.title, room))}${said}` : `From the article's table${said}`;
+    // A long caption ("Listed per-hour rates on 8 October 2026. Day is ...") is named by its first sentence.
+    const named = from.title.split(/(?<=\.)\s+/)[0].replace(/\.$/, "");
+    note = !sameAsTitle && room >= 20 ? `From the article: ${bare(clip(named, room))}${said}` : `From the article's table${said}`;
   }
   return { kind: "bars", title, unit: unitOf(v.unit), note: clip(note, NOTE_MAX), bars };
 }
