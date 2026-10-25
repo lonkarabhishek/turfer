@@ -115,6 +115,14 @@ export function LoginModal() {
             </button>
           )}
 
+          {/* Right under the Google button it belongs to. */}
+          {!showPhone && googleError && (
+            <div className="flex items-start gap-2 p-2.5 mt-3 bg-hot-500/10 border border-hot-500/30 rounded-xl" role="alert">
+              <AlertCircle className="w-4 h-4 text-hot-600 shrink-0 mt-0.5" />
+              <p className="text-[13px] text-hot-600">{googleError}</p>
+            </div>
+          )}
+
           {/* "or" divider — only when phone entry isn't expanded */}
           {!showPhone && (
             <div className="flex items-center gap-3 my-4">
@@ -147,13 +155,6 @@ export function LoginModal() {
                 </button>
               </div>
               <PhoneOTPForm onSuccess={handleClose} />
-            </div>
-          )}
-
-          {googleError && (
-            <div className="flex items-start gap-2 p-2.5 mt-3 bg-hot-500/10 border border-hot-500/30 rounded-xl">
-              <AlertCircle className="w-4 h-4 text-hot-600 shrink-0 mt-0.5" />
-              <p className="text-[13px] text-hot-600">{googleError}</p>
             </div>
           )}
 

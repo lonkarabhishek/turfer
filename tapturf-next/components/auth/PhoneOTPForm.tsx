@@ -278,7 +278,8 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
                 onKeyDown={(e) => e.key === "Enter" && handleSendOTP()}
                 placeholder="10-digit number"
                 className={inputClass + " flex-1"}
-                autoFocus={autoFocusPhone}
+                // Coming back here (change number, an expired code) means phone was chosen: focus it.
+                autoFocus={autoFocusPhone || confirmationResult !== null}
               />
             </div>
           </div>

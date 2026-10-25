@@ -1,13 +1,17 @@
-// Applies 20261025_turf_claimed.sql (twice) to an in-memory Postgres
+// Applies 20261025_turf_claimed.sql and then 20261025_turf_claimed_lock.sql
+// (each twice) to an in-memory Postgres
 // (PGlite) with stand-ins for the cache queue (private.mark_dirty records
 // what it is asked to refresh) and checks that turfs.claimed follows the
 // active claims in turf_owners. Never touches a real database.
-// Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/turf_claimed.check.mjs supabase/migrations/20261025_turf_claimed.sql
+// Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/turf_claimed.check.mjs supabase/migrations/20261025_turf_claimed.sql supabase/migrations/20261025_turf_claimed_lock.sql
+// (Two claim changes at the same moment need two connections; PGlite has
+// one, so the lock itself was checked on a real Postgres 16 by hand.)
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
 import fs from "node:fs";
 import assert from "node:assert/strict";
 
-const [FILE] = process.argv.slice(2);
+const FILES = process.argv.slice(2);
+assert.ok(FILES.length > 0, "pass the migration files");
 const db = new PGlite();
 const q = async (sql, params) => (await db.query(sql, params)).rows;
 let passed = 0;
@@ -28,13 +32,15 @@ const A = "aaaaaaaa-0000-4000-8000-000000000001", B = "aaaaaaaa-0000-4000-8000-0
 await q(`insert into public.turfs (id, slug, name, city) values ('${A}', 'turfit-udaipur', 'Turfit', 'udaipur'), ('${B}', 'b-turf', 'B', 'pune'), ('${C}', 'c-turf', 'C', 'nashik')`);
 await q(`insert into public.turf_owners (turf_id, user_key, status) values ('${A}', 'e:a@x.in', 'active'), ('${B}', 'p:9800000001', 'pending')`);
 
-const sql = fs.readFileSync(FILE, "utf8");
-assert.doesNotMatch(sql, /\bdrop\b|\bdelete\s+from\b|\btruncate\b/i, "nothing dropped or deleted");
-assert.doesNotMatch(sql, /[—–]/, "no em or en dashes");
-await db.exec(sql);
+const sqls = FILES.map((f) => fs.readFileSync(f, "utf8"));
+for (const sql of sqls) {
+  assert.doesNotMatch(sql, /\bdrop\b|\bdelete\s+from\b|\btruncate\b/i, "nothing dropped or deleted");
+  assert.doesNotMatch(sql, /[—–]/, "no em or en dashes");
+}
+for (const sql of sqls) await db.exec(sql);
 // The cache trigger on turfs, as production has it (20261020_cache_queue.sql), with the new function.
 await db.exec(`create trigger turfs_mark_cache_dirty after insert or update or delete on public.turfs for each row execute function private.mark_turf_dirty();`);
-await db.exec(sql); // safe to run again: the backfill finds nothing more to do
+for (const sql of sqls) await db.exec(sql); // safe to run again: the backfill finds nothing more to do
 
 const claimed = async () => Object.fromEntries((await q("select slug, claimed from public.turfs order by slug")).map((r) => [r.slug, r.claimed]));
 const log = async () => { const r = await q("select keys, urgent from private.dirty_log"); await q("truncate private.dirty_log"); return r; };
@@ -74,5 +80,23 @@ eq(await log(), [], "ignored columns refresh nothing");
 await q(`set tapturf.cache_urgent = 'off'`);
 await q(`update public.turfs set claimed = true where id = '${A}'`);
 eq((await log())[0].keys, ["list:udaipur", "turf:turfit-udaipur"], "claimed is a list column");
+
+// The lock migration's recount puts back a turf that drifted, and leaves the rest.
+if (sqls.length > 1) {
+  await q(`set tapturf.cache_urgent = 'off'`);
+  await q(`update public.turfs set claimed = true where id = '${B}'`);
+  await q(`insert into public.turf_owners (turf_id, user_key, status) values ('${C}', 'e:c@x.in', 'active')`);
+  await q(`update public.turfs set claimed = false where id = '${C}'`);
+  eq(await claimed(), { "b-turf": true, "c-turf": false, "turfit-udaipur": true }, "drifted both ways");
+  await log();
+  await db.exec(sqls.at(-1));
+  eq(await claimed(), { "b-turf": false, "c-turf": true, "turfit-udaipur": false }, "the recount sets every turf right");
+  const after = await log();
+  eq(after.every((r) => r.urgent), true, "the recount's refreshes are urgent");
+  eq([...new Set(after.flatMap((r) => r.keys))].sort(), ["list:nashik", "list:pune", "list:udaipur", "turf:b-turf", "turf:c-turf", "turf:turfit-udaipur"], "each drifted turf's lists and page");
+  // Claims still move the flag after the recount, through the locking trigger.
+  await q(`update public.turf_owners set status = 'revoked' where turf_id = '${C}'`);
+  eq((await claimed())["c-turf"], false, "revoked through the new trigger");
+}
 
 console.log(`turf_claimed: ${passed} checks passed`);

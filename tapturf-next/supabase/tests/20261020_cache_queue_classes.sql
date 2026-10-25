@@ -228,14 +228,16 @@ select r from (
     format($q$insert into public.turf_owners (turf_id, user_key, status, via) values (%L, 'cache-test', 'pending', 'admin')$q$, p.id),
     '{}') from pick p
   union all
-  select 25, pg_temp.check('active owner claim: the turf page, urgent',
+  -- 20261025_turf_claimed.sql: a turf's first active claim sets turfs.claimed, so its city lists refresh too.
+  select 25, pg_temp.check('active owner claim: the turf page, and the city lists if it was not claimed yet, urgent',
     format($q$insert into public.turf_owners (turf_id, user_key, status, via) values (%L, 'cache-test', 'active', 'admin');
               do $x$ begin
                 if not (select bool_and(urgent) from private.cache_dirty where marked_xid = pg_current_xact_id()) then
                   raise exception 'claim key not urgent';
                 end if;
               end $x$$q$, p.id),
-    array['turf:' || p.slug]) from pick p
+    array[case when not t.claimed then private.list_key(p.city) end, 'turf:' || p.slug])
+    from pick p join public.turfs t on t.id = p.id
 
   -- flush
   union all

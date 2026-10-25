@@ -167,8 +167,9 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                 </span>
               )}
               {turf.claimed && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-accent-700 shadow-soft">
-                  <BadgeCheck className="w-3.5 h-3.5" aria-hidden />
+                // The h3 says it once for screen readers, next to the name.
+                <span aria-hidden className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-accent-700 shadow-soft">
+                  <BadgeCheck className="w-3.5 h-3.5" />
                   Managed by owner
                 </span>
               )}
