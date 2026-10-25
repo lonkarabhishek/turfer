@@ -245,6 +245,9 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
       {/* Lightbox */}
       {lightboxOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photos"
           className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col animate-lightbox"
           onClick={() => setLightboxOpen(false)}
         >

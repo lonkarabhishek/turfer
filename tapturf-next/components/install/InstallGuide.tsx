@@ -115,7 +115,7 @@ export function InstallGuide({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
+    <div role="dialog" aria-modal="true" aria-label="Install TapTurf" className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-primary-800/50 animate-fade-in"

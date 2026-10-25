@@ -77,17 +77,31 @@ export function OwnerPhotos({ turfId, turfName, onChanged, onCount }: { turfId: 
     return () => clearTimeout(t);
   }, [load]);
 
-  // Photos still being checked: look again every 30 seconds, ten times at most.
+  // Photos still being checked: look again every 30 seconds for 12 minutes
+  // after a batch (past the 10 minutes after which they go up unchecked).
   const polls = useRef(0);
   const checkingCount = list ? list.mine.filter((m) => m.status === "checking").length : 0;
   useEffect(() => {
-    if (checkingCount === 0 || busy || polls.current >= 10) return;
+    if (checkingCount === 0 || busy || polls.current >= 24) return;
     const t = setTimeout(() => {
       polls.current++;
       void load();
     }, 30_000);
     return () => clearTimeout(t);
   }, [checkingCount, busy, list, load]);
+
+  // While uploading: no reload when they come back from another app (PWALifecycle
+  // skips it while a data-modal-open element is on the page), and a warning
+  // before they close the tab.
+  useEffect(() => {
+    if (!busy) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
 
   // Previews are object URLs: free them when the section goes.
   useEffect(() => () => pendingRef.current.forEach((p) => p.preview && URL.revokeObjectURL(p.preview)), []);
@@ -149,7 +163,10 @@ export function OwnerPhotos({ turfId, turfName, onChanged, onCount }: { turfId: 
     setBusy(false);
     setPhase(null);
     setNote(resultNote(res));
-    if (res.added > 0) onChanged();
+    if (res.added > 0) {
+      polls.current = 0;
+      onChanged();
+    }
   };
 
   const cover = async (t: PhotoTile) => {
@@ -199,6 +216,7 @@ export function OwnerPhotos({ turfId, turfName, onChanged, onCount }: { turfId: 
 
   return (
     <>
+      {busy && <span hidden data-modal-open="true" />}
       <h2 className="font-display text-[22px] text-primary-900">Photos</h2>
       <p className="mt-1 text-[14px] text-primary-500">Players look at photos before they call. Add clear photos of your ground: in daylight, under lights, and from a corner so the whole turf shows.</p>
 

@@ -25,6 +25,9 @@ export const PHOTO = {
   qFull: 0.8,
   qCard: 0.78,
   qJpg: 0.82,
+  qJpgCard: 0.74,
+  /** A card that came out no smaller than its photo (a photo already card-sized) is made again at this. */
+  qRetryCard: 0.6,
 } as const;
 
 /** w x h scaled to fit max on its long side; never enlarged. */

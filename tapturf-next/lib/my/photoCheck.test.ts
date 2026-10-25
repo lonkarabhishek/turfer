@@ -28,9 +28,17 @@ test("verdicts: the judge refusing holds every photo it was sent, never passes o
   assert.deepEqual(verdictsFor(items.slice(0, 1), [review(0, true)], true), [{ id: "a", outcome: "refused" }], "even with an answer");
 });
 
-test("verdicts: no usable answer leaves them for the next check", () => {
-  assert.deepEqual(verdictsFor(items, null), []);
-  assert.deepEqual(verdictsFor(items.slice(0, 2), [review(5, true), review(1, true)]).map((v) => v.id), ["b"], "an answer for a photo we didn't send is ignored");
+test("verdicts: a call that answered nothing about a photo marks it unanswered (tried again, then held)", () => {
+  assert.deepEqual(verdictsFor(items.slice(0, 2), null), [
+    { id: "a", outcome: "unanswered" },
+    { id: "b", outcome: "unanswered" },
+  ]);
+  assert.deepEqual(
+    verdictsFor(items.slice(0, 2), [review(5, true), review(1, true)]).map((v) => [v.id, v.outcome]),
+    [["a", "unanswered"], ["b", "judged"]],
+    "an answer for a photo we didn't send is ignored",
+  );
+  assert.equal(verdictsFor([items[0]], [{ ...review(0, true), same: undefined as unknown as boolean }])[0].outcome, "unanswered", "half an answer is none");
 });
 
 test("verdicts: quality kept between 1 and 5, notes kept short", () => {

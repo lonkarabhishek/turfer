@@ -27,13 +27,18 @@ export function OwnerPhotos() {
   const [rows, setRows] = useState<AdminOwnerPhoto[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ id: string; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    const r = await fetch("/api/admin/owner-photos", { cache: "no-store" });
-    const j = (await r.json().catch(() => ({}))) as { photos?: unknown; error?: string };
-    if (!r.ok) setError(j.error === "not_set_up" ? "Owner photos aren't set up in the database yet (20261025_owner_photos.sql)." : (j.error ?? "Couldn't load owner photos"));
-    else setRows(toAdminPhotos(j.photos));
+    try {
+      const r = await fetch("/api/admin/owner-photos", { cache: "no-store" });
+      const j = (await r.json().catch(() => ({}))) as { photos?: unknown; error?: string };
+      if (!r.ok) return setError(j.error === "not_set_up" ? "Owner photos aren't set up in the database yet (20261025_owner_photos.sql)." : (j.error ?? "Couldn't load owner photos"));
+      setRows(toAdminPhotos(j.photos));
+      setError("");
+    } catch {
+      setError("Couldn't load owner photos. Check your connection.");
+    }
   }, []);
 
   useEffect(() => {
@@ -45,28 +50,29 @@ export function OwnerPhotos() {
     if (action === "remove" && !window.confirm(`Remove this photo from ${p.turfName}?`)) return;
     setBusy(p.id);
     setFailed(null);
-    let ok = false;
+    let text: string | null = "Couldn't do that. Reload admin and try again.";
     try {
       const r = await fetch("/api/admin/owner-photos", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action, id: p.id, turfId: p.turfId }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean };
-      ok = r.ok && j.ok === true;
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; skipped?: string };
+      if (r.ok && j.ok === true) text = j.skipped ? "The check isn't available right now (the AI judge is down or not set up). Try again later." : null;
     } catch {
       /* shown below */
     }
     setBusy(null);
-    if (!ok) setFailed(p.id);
+    if (text) setFailed({ id: p.id, text });
     void load();
   };
 
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!rows) return <p className="text-sm text-primary-500">Loading owner photos…</p>;
+  if (!rows) return error ? <p className="text-sm text-red-600">{error}</p> : <p className="text-sm text-primary-500">Loading owner photos…</p>;
   if (rows.length === 0) return <p className="text-sm text-primary-500">No owner photos yet. Owners add them on their turf page in myTapturf.</p>;
 
   return (
+    <>
+    {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
     <ul className="space-y-2">
       {rows.map((p) => {
         const s = statusOf(p);
@@ -88,7 +94,7 @@ export function OwnerPhotos() {
                   {p.note && <span className="ml-1.5">&ldquo;{p.note}&rdquo;</span>}
                   {p.status === "removed" && p.removedBy && <span className="text-primary-500"> · by {p.removedBy === p.userKey ? "the owner" : keyLabel(p.removedBy)}</span>}
                 </p>
-                {failed === p.id && <p className="text-[13px] text-red-700">Couldn&rsquo;t do that. Reload admin and try again.</p>}
+                {failed?.id === p.id && <p className="text-[13px] text-red-700">{failed.text}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
                 {checkable(p) && (
@@ -112,6 +118,7 @@ export function OwnerPhotos() {
         );
       })}
     </ul>
+    </>
   );
 }
 

@@ -37,17 +37,21 @@
 -- 12. private.turf_owner_events: every claim, code and decision, so a
 --    rejection is not lost when someone claims again.
 -- 13. A number from an approved public suggestion is logged (moderate_
---    suggestion) and, like an owner-set one, opens nothing at once. A
+--    suggestion) and, like an owner-set one, opens nothing at once; those
+--    approved before this migration are logged by a backfill at the end.
+--    A re-save of the same number changes nothing. A
 --    number on a revoked claim only goes to a check by hand: its real
 --    holder is never locked out, and the admin can restore the claim.
 -- 14. A claim opened with a code to someone else's number can't change the
---    WhatsApp number for 14 days (owner_update_turf).
+--    WhatsApp number for 14 days (owner_update_turf). A sign-in with the
+--    listed number itself is that number's holder and is not held.
 -- 15. A proof must be a phone sign-in token of TapTurf's own Firebase
 --    project (aud, iss), checked before Google is asked.
 --
--- Additive: two columns, one table, replaced function bodies with the same
--- signatures, one revoke. Nothing is dropped, deleted or merged. Safe to
--- run again. Apply before the code that sends owner_claim_verified.
+-- Additive: new columns and tables, replaced function bodies with the same
+-- signatures, new functions, one revoke, and log rows for numbers from
+-- suggestions approved earlier. Nothing is dropped, deleted or merged.
+-- Safe to run again. Apply before the code that sends owner_claim_verified.
 
 set local lock_timeout = '5s';
 
@@ -69,6 +73,8 @@ create table if not exists private.claim_phone_checks (
 alter table private.claim_phone_checks add column if not exists turf_id uuid;
 alter table private.claim_phone_checks add column if not exists phone text;
 alter table private.claim_phone_checks add column if not exists listed boolean;
+-- The browser said the SMS never went out (owner_phone_code_failed).
+alter table private.claim_phone_checks add column if not exists failed boolean;
 create index if not exists claim_phone_checks_key_at on private.claim_phone_checks (user_key, at);
 create index if not exists claim_phone_checks_phone_at on private.claim_phone_checks (phone, at);
 revoke all on private.claim_phone_checks from public, anon, authenticated;
@@ -99,6 +105,8 @@ as $$
     select not public._is_admin_key(l.user_key) and public._phone10(l.after ->> p_column) is not distinct from public._phone10(p_value)
       from public.turf_edit_log l
      where l.turf_id = p_turf_id and l.after ? p_column
+       -- A re-save of the same number (another format, say) changes nothing.
+       and public._phone10(l.before ->> p_column) is distinct from public._phone10(l.after ->> p_column)
      order by l.created_at desc, l.id desc
      limit 1), false);
 $$;
@@ -572,9 +580,9 @@ begin
   -- A code goes to this number next: one every 2 minutes and 5 a day to one number, whoever asks,
   -- and 10 a day for one sign-in.
   if v_listed then
-    if exists (select 1 from private.claim_phone_checks c where c.phone = v_phone and c.listed and c.at > now() - interval '2 minutes') then
+    if exists (select 1 from private.claim_phone_checks c where c.phone = v_phone and c.listed and not coalesce(c.failed, false) and c.at > now() - interval '2 minutes') then
       return jsonb_build_object('error', 'wait', 'retry_in',
-        ceil(extract(epoch from (select max(c.at) from private.claim_phone_checks c where c.phone = v_phone and c.listed) + interval '2 minutes' - now()))::int);
+        ceil(extract(epoch from (select max(c.at) from private.claim_phone_checks c where c.phone = v_phone and c.listed and not coalesce(c.failed, false)) + interval '2 minutes' - now()))::int);
     end if;
     if (select count(*) from private.claim_phone_checks c where c.phone = v_phone and c.listed and c.at > now() - interval '1 day') >= 5 then
       return jsonb_build_object('error', 'number_busy');
@@ -589,6 +597,34 @@ end;
 $$;
 revoke all on function public.owner_phone_listed(text, uuid, text) from public;
 grant execute on function public.owner_phone_listed(text, uuid, text) to anon, authenticated;
+
+-- The browser couldn't send the code it just asked for (a reCAPTCHA or
+-- network failure, before any SMS): the next try needn't wait 2 minutes.
+-- It still counts toward the 5 a day per number and 10 a day per sign-in,
+-- so this can't be used to send more codes.
+create or replace function public.owner_phone_code_failed(p_token text, p_turf_id uuid, p_phone text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k text := public._caller_key(p_token);
+  v_phone text := public._phone10(p_phone);
+begin
+  if k is null or v_phone is null then
+    return jsonb_build_object('error', 'bad_request');
+  end if;
+  update private.claim_phone_checks c set failed = true
+   where c.ctid = (select c2.ctid from private.claim_phone_checks c2
+                    where c2.user_key = k and c2.turf_id = p_turf_id and c2.phone = v_phone and c2.listed
+                      and not coalesce(c2.failed, false) and c2.at > now() - interval '2 minutes'
+                    order by c2.at desc limit 1);
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.owner_phone_code_failed(text, uuid, text) from public;
+grant execute on function public.owner_phone_code_failed(text, uuid, text) to anon, authenticated;
 
 -- ── What the claim form needs to know about a turf ────────
 -- Whether it lists a mobile at all (no code can help otherwise), and the
@@ -739,7 +775,16 @@ begin
         from public.turf_owners o
         join public.turfs t on t.id = o.turf_id
         left join public.users u on u.id = coalesce(o.user_id, private.account_for_key(o.user_key))
-        left join auth.users au on au.id = u.id
+        -- The account's own auth user; for an e: key on an old-app row (no auth user of its own),
+        -- the Google sign-in with that email, which is who made the claim.
+        left join lateral (
+          select a.id, a.email, a.created_at, a.last_sign_in_at, a.raw_app_meta_data
+            from auth.users a
+           where a.id = u.id
+              or (o.user_key like 'e:%' and lower(a.email) = substr(o.user_key, 3)
+                  and a.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb)
+           order by (a.id = u.id) desc, a.created_at
+           limit 1) au on true
         left join public.usernames un on un.user_id = u.id
        order by o.status = 'pending' desc, o.created_at desc
        limit 200
@@ -873,7 +918,8 @@ begin
     return jsonb_build_object('error', 'bad_patch');
   end if;
   -- Opened with a code to someone else's number: no new WhatsApp number for the first 14 days,
-  -- so a code read out to a stranger can't send players' chats elsewhere straight away.
+  -- so a code read out to a stranger can't send players' chats elsewhere straight away. (Whoever
+  -- then signs in with that number itself is, for TapTurf, its holder, and is not held.)
   if p_patch ? 'whatsapp_phone' and not public._is_admin_key(k) and exists (
        select 1 from public.turf_owners o
         where o.turf_id = p_turf_id and o.user_key = k and o.status = 'active'
@@ -995,6 +1041,22 @@ begin
   return jsonb_build_object('ok', true, 'changed', (select jsonb_agg(key) from jsonb_object_keys(v_after) key));
 end;
 $$;
+
+-- ── Numbers from suggestions approved before this migration ──
+-- moderate_suggestion didn't log them until now. A turf number that equals
+-- an approved suggestion's, with no log row for it since, is logged as the
+-- suggestion's, so it opens nothing at once (a check by hand instead; the
+-- admin can still confirm it). Safe to run again.
+insert into public.turf_edit_log (turf_id, user_key, before, after, created_at)
+select s.turf_id, 'suggestion:' || s.id, jsonb_build_object(x.col, null), jsonb_build_object(x.col, x.val), coalesce(s.moderated_at, s.created_at)
+  from public.turf_suggestions s
+  join public.turfs t on t.id = s.turf_id
+ cross join lateral (values ('owner_phone', t.owner_phone, s.contact_phone), ('whatsapp_phone', t.whatsapp_phone, s.whatsapp_phone),
+                            ('whatsapp_phone', t.whatsapp_phone, s.contact_phone)) x(col, val, sug)
+ where s.status = 'approved' and x.val is not null and x.sug is not null
+   and public._phone10(x.val) is not null and public._phone10(x.val) = public._phone10(x.sug)
+   and not exists (select 1 from public.turf_edit_log l
+                    where l.turf_id = s.turf_id and l.after ? x.col and l.created_at >= coalesce(s.moderated_at, s.created_at));
 
 -- ── Old claims: link the account ──────────────────────────
 update public.turf_owners o

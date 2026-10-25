@@ -63,7 +63,10 @@ function judgeClient(): SupabaseClient {
 
 type Loaded = { item: CheckItem; full: Fetched; card: Fetched };
 
-/** One judge call; throws when the call fails. */
+/** Don't start another judge call after this long: a call can take 20 s, and the functions stop at 60. */
+const CALL_BUDGET_MS = 30_000;
+
+/** One judge call; throws when the call fails. A refusal over several photos is asked again one photo a call, so only the one the judge won't look at is held. */
 async function judge(sent: Loaded[]): Promise<Verdict[]> {
   const content: ({ type: "image"; source: { type: "base64"; media_type: Fetched["media"]; data: string } } | { type: "text"; text: string })[] = [];
   sent.forEach((s, i) => {
@@ -85,6 +88,11 @@ async function judge(sent: Loaded[]): Promise<Verdict[]> {
     undefined,
     info,
   );
+  if (info.refused && sent.length > 1) {
+    const each: Verdict[] = [];
+    for (const one of sent) each.push(...(await judge([one])));
+    return each;
+  }
   return verdictsFor(
     sent.map((s) => s.item),
     out?.photos ?? null,
@@ -92,12 +100,27 @@ async function judge(sent: Loaded[]): Promise<Verdict[]> {
   );
 }
 
+/** The verdicts for one turf, written as each judge call ends (a function cut off later keeps them). */
+async function sendVerdicts(db: SupabaseClient, key: string, turfId: string, verdicts: Verdict[], acc: { checked: number; live: string[]; held: string[] }): Promise<string | null> {
+  if (verdicts.length === 0) return null;
+  const res = await db.rpc("owner_photo_verdicts", { p_key: key, p_turf_id: turfId, p_verdicts: verdicts });
+  if (res.error) return res.error.message;
+  const r = (res.data ?? {}) as { ok?: boolean; checked?: unknown; live?: unknown; held?: unknown; error?: unknown };
+  if (r.ok !== true) return String(r.error ?? "unavailable");
+  const ids = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
+  acc.checked += typeof r.checked === "number" ? r.checked : 0;
+  acc.live.push(...ids(r.live));
+  acc.held.push(...ids(r.held));
+  return null;
+}
+
 /**
  * Judge a turf's photos that are due a check (up to 9 a call; each is
  * claimed for 3 minutes, so two checks never judge one). force: admin's
- * Check now, even while claimed.
+ * Check now, even while claimed. No judge call starts after `until` (a
+ * time in ms); photos left over are judged by the next check.
  */
-export async function checkOwnerPhotos(turfId: string, force = false): Promise<JudgeResult> {
+export async function checkOwnerPhotos(turfId: string, force = false, until = Date.now() + CALL_BUDGET_MS): Promise<JudgeResult> {
   const key = accountKey();
   if (!key) return { ok: false, error: "not_configured" };
   try {
@@ -110,9 +133,11 @@ export async function checkOwnerPhotos(turfId: string, force = false): Promise<J
     // No judge: they wait, and the minute job puts them up after 10 minutes.
     if (!isAskConfigured()) return { ok: true, checked: 0, live: [], held: [], skipped: "not_configured" };
 
-    const verdicts: Verdict[] = [];
+    const acc = { checked: 0, live: [] as string[], held: [] as string[] };
     let down = false;
     for (const part of chunks(items)) {
+      if (Date.now() > until) break;
+      const verdicts: Verdict[] = [];
       const loaded = await Promise.all(
         part.map(async (item): Promise<Loaded | null> => {
           const [full, card] = await Promise.all([fetchImage(item.url, 0, true), fetchImage(item.cardUrl, 1, true)]);
@@ -123,44 +148,34 @@ export async function checkOwnerPhotos(turfId: string, force = false): Promise<J
         if (!loaded[i]) verdicts.push({ id: item.id, outcome: "unloadable" });
       });
       const sent = loaded.filter((l): l is Loaded => !!l);
-      if (sent.length === 0) continue;
-      try {
-        verdicts.push(...(await judge(sent)));
-      } catch (e) {
-        if (judgeFailure(e) === "down") {
-          console.warn("owner photos: judge down", e);
-          down = true;
-          break;
-        }
-        // One file the API can't read fails the whole call: judge them one by one.
-        for (const one of sent) {
-          try {
-            verdicts.push(...(await judge([one])));
-          } catch (e2) {
-            if (judgeFailure(e2) === "down") {
-              down = true;
-              break;
+      if (sent.length > 0) {
+        try {
+          verdicts.push(...(await judge(sent)));
+        } catch (e) {
+          if (judgeFailure(e) === "down") {
+            console.warn("owner photos: judge down", e);
+            down = true;
+          } else {
+            // One file the API can't read fails the whole call: judge them one by one.
+            for (const one of sent) {
+              try {
+                verdicts.push(...(await judge([one])));
+              } catch (e2) {
+                if (judgeFailure(e2) === "down") {
+                  down = true;
+                  break;
+                }
+                verdicts.push({ id: one.item.id, outcome: "unreadable" });
+              }
             }
-            verdicts.push({ id: one.item.id, outcome: "unreadable" });
           }
         }
-        if (down) break;
       }
+      const failed = await sendVerdicts(db, key, turfId, verdicts, acc);
+      if (failed) return { ok: false, error: failed };
+      if (down) break;
     }
-    if (verdicts.length === 0) return { ok: true, checked: 0, live: [], held: [], ...(down ? { skipped: "judge_down" as const } : {}) };
-
-    const res = await db.rpc("owner_photo_verdicts", { p_key: key, p_turf_id: turfId, p_verdicts: verdicts });
-    if (res.error) return { ok: false, error: res.error.message };
-    const r = (res.data ?? {}) as { ok?: boolean; checked?: unknown; live?: unknown; held?: unknown; error?: unknown };
-    if (r.ok !== true) return { ok: false, error: String(r.error ?? "unavailable") };
-    const ids = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
-    return {
-      ok: true,
-      checked: typeof r.checked === "number" ? r.checked : 0,
-      live: ids(r.live),
-      held: ids(r.held),
-      ...(down ? { skipped: "judge_down" as const } : {}),
-    };
+    return { ok: true, ...acc, ...(down ? { skipped: "judge_down" as const } : {}) };
   } catch (e) {
     console.warn("owner photos: check failed", e);
     return { ok: false, error: "unavailable" };
@@ -170,31 +185,22 @@ export async function checkOwnerPhotos(turfId: string, force = false): Promise<J
 export type SweepResult = { ok: true; turfs: number; checked: number; removedFiles: number } | { ok: false; error: string };
 
 /**
- * The minute job's work (/api/my/photos/sweep): check the photos due (a
- * few turfs, within the time a function has), then remove the files of
- * removed photos and unused tickets.
+ * The minute job's work (/api/my/photos/sweep): remove the files of
+ * removed photos and unused tickets, then check the photos due (a few
+ * turfs, with no judge call starting after `budgetMs`).
  */
-export async function sweepOwnerPhotos(budgetMs = 40_000): Promise<SweepResult> {
+export async function sweepOwnerPhotos(budgetMs = CALL_BUDGET_MS): Promise<SweepResult> {
   const key = accountKey();
   if (!key) return { ok: false, error: "not_configured" };
-  const began = Date.now();
+  const until = Date.now() + budgetMs;
   try {
     const db = judgeClient();
     const { data, error } = await db.rpc("owner_photos_sweep_list", { p_key: key });
     if (error) return { ok: false, error: error.message };
     const d = (data ?? {}) as { ok?: boolean; turfs?: unknown; files?: unknown; error?: unknown };
     if (d.ok !== true) return { ok: false, error: String(d.error ?? "unavailable") };
-    const turfs = Array.isArray(d.turfs) ? d.turfs.filter((t): t is string => typeof t === "string") : [];
-    let done = 0;
-    let checked = 0;
-    for (const t of turfs) {
-      if (Date.now() - began > budgetMs) break;
-      const r = await checkOwnerPhotos(t);
-      done++;
-      if (r.ok) checked += r.checked;
-      if (r.ok && r.skipped === "judge_down") break;
-    }
 
+    // Files first: quick, and never left waiting behind a slow check.
     const files = (Array.isArray(d.files) ? d.files : [])
       .map((f) => (f ?? {}) as { id?: unknown; paths?: unknown })
       .filter((f): f is { id: string; paths: string[] } => typeof f.id === "string" && Array.isArray(f.paths) && f.paths.every((p) => typeof p === "string"));
@@ -207,6 +213,17 @@ export async function sweepOwnerPhotos(budgetMs = 40_000): Promise<SweepResult> 
       } else {
         console.warn("owner photos: removing files failed", rm.error.message);
       }
+    }
+
+    const turfs = Array.isArray(d.turfs) ? d.turfs.filter((t): t is string => typeof t === "string") : [];
+    let done = 0;
+    let checked = 0;
+    for (const t of turfs) {
+      if (Date.now() > until) break;
+      const r = await checkOwnerPhotos(t, false, until);
+      done++;
+      if (r.ok) checked += r.checked;
+      if (r.ok && r.skipped) break;
     }
     return { ok: true, turfs: done, checked, removedFiles };
   } catch (e) {

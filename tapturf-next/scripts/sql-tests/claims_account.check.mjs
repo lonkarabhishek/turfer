@@ -47,6 +47,8 @@ create table public.turf_contact_clicks (id bigint generated always as identity 
 create table public.ask_queries (id bigint generated always as identity primary key, filters jsonb, created_at timestamptz default now());
 create table public.games (id uuid primary key default gen_random_uuid(), turf_id uuid, date date, status text, created_at timestamptz default now());
 create table public.reviews (id uuid primary key default gen_random_uuid(), turf_id uuid, rating int, comment text, author_name text, source text, created_at timestamptz default now());
+create table public.turf_suggestions (id uuid primary key default gen_random_uuid(), turf_id uuid not null, contact_phone text, whatsapp_phone text,
+  status text not null default 'pending', created_at timestamptz not null default now(), moderated_at timestamptz);
 `);
 
 const sqls = FILES.map((f) => fs.readFileSync(f, "utf8"));
@@ -79,9 +81,28 @@ await q(`insert into public.turfs (id, name, slug, city, contact_info, owner_pho
   ('${T3}', 'Three', 'three', 'nashik', null, null, null)`);
 await q(`insert into public.turfs (id, name, slug, city, is_active) values ('${OFF}', 'Off', 'off', 'pune', false)`);
 await q(`insert into public.turf_owners (turf_id, user_key, status, via, name, role) values ('${T3}', 'e:sam@x.in', 'active', 'admin', 'Typed Name', 'owner')`);
+// A number that came from a suggestion approved before this migration (never logged then), and one approved but not used.
+const T6 = "aaaaaaaa-0000-4000-8000-000000000006", T7 = "aaaaaaaa-0000-4000-8000-000000000007";
+await q(`insert into public.turfs (id, name, slug, city, owner_phone, whatsapp_phone) values ('${T6}', 'Six', 'six', 'pune', '+91 98000 00091', '9800000094'), ('${T7}', 'Seven', 'seven', 'pune', '9800000095', null)`);
+await q(`insert into public.turf_suggestions (turf_id, contact_phone, whatsapp_phone, status, moderated_at) values
+  ('${T6}', '9800000091', null, 'approved', now() - interval '3 days'),
+  ('${T7}', '9800000096', null, 'approved', now() - interval '3 days'),
+  ('${T6}', null, '9800000094', 'pending', null)`);
 
 await db.exec(NEW);
 await db.exec(NEW); // safe to run again
+const tp = async (turf) => (await one("select private.turf_trusted_phones($1) p", [turf])).p;
+eq(await tp(T6), ["9800000094"], "a number an earlier approved suggestion put on the listing opens nothing at once; a pending one changes nothing");
+eq(await tp(T7), ["9800000095"], "a suggestion whose number isn't on the listing changes nothing");
+eq((await one(`select count(*)::int n from public.turf_edit_log where turf_id = '${T6}' and user_key like 'suggestion:%'`)).n, 1, "logged once, though the migration ran twice");
+// A re-save of the same number in another format keeps it TapTurf's.
+await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T7}', 'p:9800000097', '{"owner_phone":"+91 98000 00095"}', '{"owner_phone":"9800000095"}')`);
+eq(await tp(T7), ["9800000095"], "the same number saved again is still trusted");
+await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T7}', 'p:9800000097', '{"owner_phone":"9800000095"}', '{"owner_phone":"9800000098"}')`);
+await q(`update public.turfs set owner_phone = '9800000098' where id = '${T7}'`);
+eq(await tp(T7), [], "a new number an owner set is not");
+await q(`insert into public.turf_edit_log (turf_id, user_key, before, after) values ('${T7}', 'p:9800000097', '{"owner_phone":"9800000098"}', '{"owner_phone":"+91 98000 00098"}')`);
+eq(await tp(T7), [], "nor after they save it again");
 
 const as = async (claims) => q(`select set_config('request.jwt.claims', $1, false)`, [claims ? JSON.stringify(claims) : ""]);
 const OAUTH = [{ method: "oauth", timestamp: 1 }];
@@ -293,6 +314,21 @@ ok(ev.some((e) => e.turf_id === T1 && e.user_key === "e:sam@x.in" && e.from_stat
 ok(ev.some((e) => e.turf_id === T1 && e.to_status === "active" && e.how === "code:9800000001"), "the code that opened it");
 ok(ev.some((e) => e.user_key === "p:9800000003" && e.how === "phone_match"), "a phone match");
 
+// A code the browser couldn't send frees the 2-minute wait, not the day's count.
+await as(null); // a phone sign-in has no Supabase session
+const T8 = "aaaaaaaa-0000-4000-8000-000000000008";
+await q(`insert into public.turfs (id, name, slug, city, contact_info) values ('${T8}', 'Eight', 'eight', 'pune', '{"phone":"9800000093"}')`);
+const ask8 = () => rpc("owner_phone_listed", ["phone:9800000099", T8, "9800000093"]);
+eq(await ask8(), { listed: true, retry_in: 120 }, "a code may go");
+eq((await ask8()).error, "wait", "a second at once waits");
+eq(await rpc("owner_phone_code_failed", ["phone:9800000099", T8, "9800000093"]), { ok: true }, "the browser couldn't send it");
+eq(await ask8(), { listed: true, retry_in: 120 }, "so the next try needn't wait");
+eq(await rpc("owner_phone_code_failed", [null, T8, "9800000093"]), { error: "bad_request" }, "signed out: nothing");
+for (let i = 0; i < 3; i++) { await rpc("owner_phone_code_failed", ["phone:9800000099", T8, "9800000093"]); await ask8(); }
+await rpc("owner_phone_code_failed", ["phone:9800000099", T8, "9800000093"]);
+eq((await ask8()).error, "number_busy", "failed sends still count toward 5 a day");
+await google(G, "sam@x.in");
+
 // Admin sees the account.
 await db.exec(`create or replace function public._is_site_owner(p_firebase_token text default null) returns boolean language sql stable as $$ select coalesce(current_setting('test.owner', true), '') = 'yes' $$;`);
 eq(await rpc("admin_owner_claims", [null]), { error: "forbidden" }, "not the site owner");
@@ -319,5 +355,14 @@ eq(await claim(T1), { status: "pending" }, "they claim again");
 const again = (await rpc("admin_owner_claims", [null])).find((c) => c.turf_id === T1 && c.user_key === "e:sam@x.in");
 ok(again.status === "pending" && again.rejected_at !== null, "and admin still sees the rejection");
 eq(await rpc("admin_decide_owner_claim", [null, T1, "e:nobody", "active"]), { ok: false }, "no such claim");
+
+// A Google sign-in that landed on an old-app row: admin sees it was Google.
+const L = "c6666666-6666-4666-8666-666666666666", GL = "c7777777-7777-4777-8777-777777777777";
+await q(`insert into public.users (id, name, email) values ('${L}', 'Legacy', 'leg@x.in')`);
+await q(`insert into private.legacy_email_rows (user_id) values ('${L}')`);
+await q(`insert into auth.users (id, email, raw_app_meta_data, last_sign_in_at) values ('${GL}', 'leg@x.in', '{"provider":"google","providers":["google"]}', now())`);
+await q(`insert into public.turf_owners (turf_id, user_key, user_id, status, via, name) values ('${T2}', 'e:leg@x.in', '${L}', 'pending', 'admin', 'Legacy')`);
+const cl = (await rpc("admin_owner_claims", [null])).find((c) => c.user_key === "e:leg@x.in");
+eq([cl.account.name, cl.account.method, cl.account.email_checked, cl.account.signin_finished], ["Legacy", "google", true, true], "the Google sign-in behind it, not 'old-app email, not checked'");
 
 console.log(`claims_account: ${passed} checks passed`);

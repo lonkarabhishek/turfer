@@ -236,8 +236,13 @@ eq((await finish(OWNER, T, [e.id], [FULL, 900])).missing, [e.id], "a file under 
 await putBoth(g);
 eq((await finish(ADMIN, T, [g.id])).missing, [g.id], "only the uploader finishes a ticket");
 await q("update public.turf_owner_photos set created_at = now() - interval '31 minutes' where id = $1", [g.id]);
-eq(await okObj(g.path, "insert"), false, "a ticket runs out after 30 minutes");
-eq((await finish(OWNER, T, [g.id])).missing, [g.id], "and can't be finished");
+eq(await okObj(g.path, "insert"), false, "a ticket stops taking uploads after 30 minutes");
+eq(await okObj(g.path, "select"), false, "its files stay while it can still be finished");
+eq((await finish(OWNER, T, [g.id])).checking, [g.id], "an upload that ended in time is finished in the 5 minutes after");
+await q("update public.turf_owner_photos set status = 'removed', files_gone_at = now() where id = $1", [g.id]);
+await q("update public.turf_owner_photos set created_at = now() - interval '36 minutes' where id = $1", [e.id]);
+eq((await finish(OWNER, T, [e.id], [FULL, CARD])).missing, [e.id], "after 35 minutes a ticket can't be finished");
+eq(await okObj(e.path, "delete"), true, "and its files can go");
 await putBoth(x);
 await q("update storage.objects set is_delete_marker = true where name = $1", [x.card_path]);
 eq((await finish(OWNER, T, [x.id])).missing, [x.id], "a delete marker is not a file");
@@ -293,6 +298,16 @@ for (let i = 1; i <= 2; i++) {
 }
 eq((await verdicts(T, [{ id: lid, outcome: "unloadable" }])).held, [lid], "held at the third");
 eq((await photo(lid)).verdict.note, "Could not load this photo", "with why");
+
+// A photo the judge answers about nothing is tried again too, and held: never up unchecked for good.
+const s4b = await start(OWNER, T, 1);
+await putBoth(s4b.items[0]);
+await finish(OWNER, T, [s4b.items[0].id]);
+const nid = s4b.items[0].id;
+for (let i = 1; i <= 2; i++) eq((await verdicts(T, [{ id: nid, outcome: "unanswered" }])).held, [], `no answer, try ${i}`);
+eq((await verdicts(T, [{ id: nid, outcome: "unanswered" }])).held, [nid], "held at the third");
+eq([(await photo(nid)).verdict.note, (await photo(nid)).check_tries], ["Kept for a manual look", 3], "for a manual look");
+await q("update public.turf_owner_photos set status = 'removed', files_gone_at = now() where id = $1", [nid]);
 
 // Duplicates: a photo already live, held or being checked, or twice in one batch.
 await q("update public.turf_owner_photos set src_hash = 'hheld' where id = $1", [lid]);
@@ -356,6 +371,14 @@ eq((await asAnon(() => db.query(`delete from storage.objects where bucket_id = '
 eq(await rpc("owner_photo_remove", [OWNER, T, a.id]), { error: "not_found" }, "once");
 eq(await rpc("owner_photo_remove", [OWNER, T, j0.id]), { error: "not_found" }, "only this turf's photos");
 eq((await rpc("owner_photo_remove", [OWNER, T, lid])).ok, true, "a held photo can be removed");
+
+// The owner's cover choice holds only while it is the cover: their photo is gone, so the pass may change it.
+await q("select public.set_turf_cover($1, $2, $3, 'site-owner')", [T, S[2], JSON.stringify([{ url: S[0], usable: false, note: "A logo" }])]);
+after = await turf();
+eq([after.cover_image, after.image_review], [S[2], [{ url: S[0], usable: false, note: "A logo" }]], "the pass's cover, and its flag kept");
+await q("select public.set_turf_cover($1, $2, '[]', 'site-owner')", [T, BASE + s4.items[0].path]);
+eq((await turf()).cover_image, S[2], "a removed (or held) owner photo never becomes the cover");
+await q("update public.turfs set cover_image = $2 where id = $1", [T, S[0]]);
 await q(`update public.turfs set image_review = null where id = $1`, [T]);
 
 // The 21st photo is refused, before any ticket; photos being checked count.
@@ -391,6 +414,13 @@ eq((await start(ADMIN, T3, 1)).ok, true, "the site owner has no daily cap");
 await q("update public.turf_owner_photos set status = 'expired' where status = 'uploading'");
 await q("update public.turf_owner_photos set files_gone_at = now() where status in ('removed', 'expired')");
 
+// Make cover when the cover pass flagged every photo: the page shows them all, so it is allowed.
+await q(`update public.turfs set images = '["https://x.in/p1.jpg", "https://x.in/p2.jpg"]', image_review = $2 where id = $1`,
+  [T3, JSON.stringify([{ url: "https://x.in/p1.jpg", usable: false }, { url: "https://x.in/p2.jpg", usable: false }])]);
+eq(await rpc("owner_photo_cover", [OWNER, T3, "https://x.in/p2.jpg"]), { ok: true }, "all flagged: any can be the cover");
+await q(`update public.turfs set image_review = $2 where id = $1`, [T3, JSON.stringify([{ url: "https://x.in/p1.jpg", usable: false }])]);
+eq(await rpc("owner_photo_cover", [OWNER, T3, "https://x.in/p1.jpg"]), { error: "hidden" }, "one hidden among visible ones: not that one");
+
 // The minute job: tickets run out, the judge is down for 10 minutes, the sweep is asked to run.
 await posts();
 await q("truncate private.owner_photos_state");
@@ -400,7 +430,7 @@ const s6 = await start(OWNER, T, 3);
 const [k0, k1, k2] = s6.items;
 await putBoth(k0); await putBoth(k1);
 eq((await finish(OWNER, T, [k0.id, k1.id])).checking, [k0.id, k1.id], "two waiting for the check");
-await q("update public.turf_owner_photos set created_at = now() - interval '31 minutes' where id = $1", [k2.id]);
+await q("update public.turf_owner_photos set created_at = now() - interval '36 minutes' where id = $1", [k2.id]);
 await tick();
 eq((await photo(k2.id)).status, "expired", "an unused ticket expires");
 eq(await posts(), [{ url: "https://www.tapturf.in/api/my/photos/sweep", secret: "rv-secret" }], "the sweep is asked to check, with the secret");
@@ -468,6 +498,8 @@ await q("update public.turf_owners set status = 'active' where turf_id = $1 and 
 eq(await rpc("admin_owner_photos", [null]), { error: "forbidden" }, "admin list: site owner only");
 const al = await rpc("admin_owner_photos", ["site-owner"]);
 ok(al.length > 0 && al.every((p) => ["checking", "live", "held", "removed"].includes(p.status)), "no tickets");
+const waitingFirst = al.map((p) => ["held", "checking"].includes(p.status));
+ok(waitingFirst.indexOf(false) === -1 || waitingFirst.lastIndexOf(true) < waitingFirst.indexOf(false), "held and waiting photos first, so none drops off");
 const ah = al.find((p) => p.id === k1.id);
 eq([ah.turf_name, ah.slug, ah.city, ah.user_key, ah.status, ah.bytes, ah.verdict.note], ["Green Arena", "green-arena", "pune", OWNER_KEY, "held", FULL, "Claim taken away"], "turf, who, status, size, note");
 eq(await rpc("admin_owner_photo_restore", [null, k1.id]), { error: "forbidden" }, "restore: site owner only");

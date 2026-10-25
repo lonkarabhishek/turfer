@@ -166,9 +166,10 @@ function readPhoneUser(): AppUser | null {
       profile_image_url: p.profile_image_url,
       username: typeof p.username === "string" ? p.username : undefined,
       taggable: typeof p.taggable === "boolean" ? p.taggable : undefined,
-      contactEmail: typeof p.contact_email === "string" ? p.contact_email : undefined,
-      askEmail: p.ask_email === true,
-      emailEditable: p.email_editable === true,
+      // As storePhoneUser writes them (userFromProfile's names).
+      contactEmail: typeof p.contactEmail === "string" ? p.contactEmail : undefined,
+      askEmail: p.askEmail === true,
+      emailEditable: p.emailEditable === true,
     };
   } catch {
     return null;

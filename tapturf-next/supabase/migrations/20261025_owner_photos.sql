@@ -13,7 +13,8 @@
 --    uploading (a ticket), checking (uploaded, not on the page yet), live,
 --    held (kept off the page), removed, expired (a ticket never used).
 -- 2. Upload tickets. owner_photo_start checks the caller (_caller_key,
---    _can_manage) and hands out random paths, open for 30 minutes.
+--    _can_manage) and hands out random paths, open for uploads for 30
+--    minutes and for finishing for 35 (an upload ending at 29:59 counts).
 --    20261025_owner_photos_policies.sql adds the storage policies, whose
 --    rule is public.owner_photo_object_ok: a file may be written only at
 --    an open ticket's path, and read (for remove) or removed only once
@@ -34,12 +35,14 @@
 -- 5. owner_photo_cover (any visible photo becomes the first photo and the
 --    cover), owner_photo_remove (photos owners added), owner_photos (what
 --    the Photos section on /my/turf/<id> shows).
--- 6. Admin: admin_owner_photos (the latest 100) and
+-- 6. Admin: admin_owner_photos (held and waiting ones first, then the latest) and
 --    admin_owner_photo_restore (a held photo on the page).
 -- 7. A claim taken away (active to rejected or revoked) holds the photos
 --    that person added, for the admin to put back.
 -- 8. set_turf_cover (the admin AI cover pass) keeps a cover an owner chose
---    and leaves owner photos to their own check.
+--    (while it is the cover and they still manage the turf), leaves owner
+--    photos to their own check, and never makes a held or removed one the
+--    cover.
 -- 9. The minute job (private.owner_photos_tick): expires unused tickets,
 --    puts up photos the judge left waiting 10 minutes, and asks
 --    /api/my/photos/sweep to check what's due and to remove the files of
@@ -85,7 +88,7 @@ create table if not exists public.turf_owner_photos (
   finished_at timestamptz,
   live_at timestamptz,
   checked_at timestamptz,
-  -- Times the judge couldn't load it; held at 3.
+  -- Times the judge couldn't load it or gave no answer for it; held at 3.
   check_tries integer not null default 0,
   -- A check in progress claims the photo until then.
   next_check_at timestamptz,
@@ -287,7 +290,7 @@ begin
        and case
          when p_op = 'insert' then p.status = 'uploading' and p.created_at > now() - interval '30 minutes'
          when p_op in ('select', 'delete') then p.status in ('removed', 'expired')
-                                             or (p.status = 'uploading' and p.created_at <= now() - interval '30 minutes')
+                                             or (p.status = 'uploading' and p.created_at <= now() - interval '35 minutes')
          else false
        end);
 end;
@@ -336,7 +339,7 @@ begin
   perform pg_advisory_xact_lock(hashtext('owner_photos:' || p_turf_id::text));
   perform pg_advisory_xact_lock(hashtext('owner_photos_key:' || k));
   update public.turf_owner_photos set status = 'expired'
-   where turf_id = p_turf_id and status = 'uploading' and created_at < now() - interval '30 minutes';
+   where turf_id = p_turf_id and status = 'uploading' and created_at < now() - interval '35 minutes';
 
   for i in 1..n loop
     h := case when p_hashes is null then null else left(nullif(btrim(p_hashes[i]), ''), 64) end;
@@ -425,7 +428,7 @@ begin
   for p in
     select * from public.turf_owner_photos
      where id = any(p_ids) and turf_id = p_turf_id and user_key = k and status = 'uploading'
-       and created_at > now() - interval '30 minutes'
+       and created_at > now() - interval '35 minutes'
      order by array_position(p_ids, id)
        for update
   loop
@@ -481,7 +484,9 @@ begin
   if p_url is null or coalesce(jsonb_typeof(t.images), '') <> 'array' or not (t.images ? p_url) then
     return jsonb_build_object('error', 'bad_request');
   end if;
-  if private.image_hidden(p_url, t.image_review) then
+  -- Hidden, unless the cover pass flagged them all (the page then shows them all).
+  if private.image_hidden(p_url, t.image_review)
+     and exists (select 1 from jsonb_array_elements_text(t.images) e where not private.image_hidden(e, t.image_review)) then
     return jsonb_build_object('error', 'hidden');
   end if;
   if t.cover_image is not distinct from p_url and t.images ->> 0 = p_url then
@@ -625,9 +630,10 @@ $$;
 -- p_verdicts: [{id, outcome, usable, quality, shows, note}]. outcome:
 -- judged (usable says), refused (the judge wouldn't look: held),
 -- unreadable (the judge couldn't read the file: held), unloadable (we
--- couldn't fetch it: tried again, held at the third). A good photo goes
--- on the page; a held one comes off it. A photo with no verdict is left
--- for the next check.
+-- couldn't fetch it) and unanswered (the judge answered, but not about
+-- this photo): tried again, held at the third. A good photo goes on the
+-- page; a held one comes off it. A photo with no verdict (the judge was
+-- down) is left for the next check.
 create or replace function public.owner_photo_verdicts(p_key text, p_turf_id uuid, p_verdicts jsonb)
 returns jsonb
 language plpgsql
@@ -685,13 +691,13 @@ begin
     elsif v_out = 'unreadable' then
       v_bad := true;
       v_note := 'Could not read this photo';
-    elsif v_out = 'unloadable' then
+    elsif v_out in ('unloadable', 'unanswered') then
       update public.turf_owner_photos set check_tries = check_tries + 1 where id = p.id returning check_tries into v_tries;
       if v_tries < 3 then
         continue;
       end if;
       v_bad := true;
-      v_note := 'Could not load this photo';
+      v_note := case v_out when 'unloadable' then 'Could not load this photo' else 'Kept for a manual look' end;
     else
       continue;
     end if;
@@ -797,7 +803,7 @@ declare
   v_secret text;
 begin
   update public.turf_owner_photos set status = 'expired'
-   where status = 'uploading' and created_at < now() - interval '30 minutes';
+   where status = 'uploading' and created_at < now() - interval '35 minutes';
   if not private.owner_photos_paused() then
     for v_turf in
       select distinct p.turf_id from public.turf_owner_photos p
@@ -853,6 +859,8 @@ declare
   v_ids uuid[];
 begin
   if old.status = 'active' and new.status is distinct from 'active' then
+    -- The turf first, then the photos, as the check, publish and remove do.
+    perform 1 from public.turfs where id = new.turf_id for update;
     update public.turf_owner_photos set status = 'expired'
      where turf_id = new.turf_id and user_key = new.user_key and status = 'uploading';
     select array_agg(p.id) into v_ids from public.turf_owner_photos p
@@ -883,15 +891,16 @@ begin
     return jsonb_build_object('error', 'forbidden');
   end if;
   return coalesce((
-    select jsonb_agg(x order by x.created_at desc) from (
+    select jsonb_agg(x order by (x.status in ('held', 'checking')) desc, x.created_at desc) from (
       select p.id, p.turf_id, p.user_key, p.status, p.url, p.full_bytes as bytes, p.created_at, p.finished_at, p.live_at,
              p.checked_at, p.check_tries, p.verdict, p.removed_at, p.removed_by,
              t.name as turf_name, t.slug, t.city, t.area
         from public.turf_owner_photos p
         left join public.turfs t on t.id = p.turf_id
        where p.status in ('checking', 'live', 'held', 'removed')
-       order by p.created_at desc
-       limit 100
+       -- Held and waiting first, so none drops off the list.
+       order by (p.status in ('held', 'checking')) desc, p.created_at desc
+       limit 200
     ) x
   ), '[]'::jsonb);
 end;
@@ -931,10 +940,12 @@ end;
 $$;
 
 -- ── The AI cover pass and owner photos ────────────────────
--- Same as 20261009_cover_review.sql, except that a turf whose owner chose
--- a cover (owner_photo_cover logs cover_image) keeps it and keeps it
--- visible, and photos owners added are left to their own check (a slow
--- fetch here must not hide one). The rest of the review is saved.
+-- Same as 20261009_cover_review.sql, except: a cover the owner chose
+-- (owner_photo_cover logs cover_image) is kept, and kept visible, while it
+-- is still the cover and its chooser still manages the turf; photos owners
+-- added are left to their own check (a slow fetch here must not hide one),
+-- and one that is no longer live never becomes the cover. The rest of the
+-- review is saved.
 create or replace function public.set_turf_cover(p_turf_id uuid, p_cover text, p_review jsonb, p_firebase_token text default null)
 returns void
 language plpgsql
@@ -942,15 +953,23 @@ security definer
 set search_path = public
 as $$
 declare
-  v_locked boolean;
   v_cover text;
+  v_choice text;
+  v_by text;
+  v_locked boolean;
   v_review jsonb;
 begin
   if not public._is_site_owner(p_firebase_token) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
-  v_locked := exists (select 1 from public.turf_edit_log l where l.turf_id = p_turf_id and l.after ? 'cover_image');
-  select cover_image into v_cover from public.turfs where id = p_turf_id;
+  -- The turf first, so a hold or remove running now is seen below.
+  select cover_image into v_cover from public.turfs where id = p_turf_id for update;
+  select l.after ->> 'cover_image', l.user_key into v_choice, v_by
+    from public.turf_edit_log l
+   where l.turf_id = p_turf_id and l.after ? 'cover_image'
+   order by l.created_at desc, l.id desc
+   limit 1;
+  v_locked := v_choice is not null and v_choice = v_cover and public._can_manage(v_by, p_turf_id);
   v_review := case when jsonb_typeof(p_review) = 'array' then (
       select coalesce(jsonb_agg(r order by i), '[]'::jsonb)
         from jsonb_array_elements(p_review) with ordinality x(r, i)
@@ -958,7 +977,11 @@ begin
          and not (v_locked and r ->> 'usable' = 'false' and r ->> 'url' in (v_cover, private.norm_image_url(v_cover))))
     else p_review end;
   update public.turfs
-  set cover_image = case when v_locked then cover_image else coalesce(p_cover, cover_image) end,
+  set cover_image = case
+        when v_locked then cover_image
+        when exists (select 1 from public.turf_owner_photos o where o.turf_id = p_turf_id and o.url = p_cover and o.status <> 'live') then cover_image
+        else coalesce(p_cover, cover_image)
+      end,
       image_review = v_review,
       cover_reviewed_at = now()
   where id = p_turf_id;

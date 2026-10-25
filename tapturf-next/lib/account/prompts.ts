@@ -13,7 +13,7 @@ export function askHere(path: string): boolean {
 
 /** Something else has the person's attention: another dialog, a field they are typing in, or the profile form (both asks are fields there). */
 export function busy(): boolean {
-  if (document.querySelector('[aria-modal="true"], [role="dialog"], [role="alertdialog"]')) return true;
+  if (document.querySelector('[aria-modal="true"], [role="dialog"], [role="alertdialog"], [data-modal-open="true"]')) return true;
   if (document.getElementById("profile-name")) return true;
   const el = document.activeElement as HTMLElement | null;
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);

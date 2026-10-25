@@ -138,7 +138,10 @@ export function OwnerClaims() {
                 </p>
                 {c.phoneGiven && !c.verifiedPhone && (
                   <p className="text-[13px] text-primary-700">
-                    Number they gave: <span className="font-semibold">+91 {spaced(c.phoneGiven)}</span> (not on the listing)
+                    Number they gave: <span className="font-semibold">+91 {spaced(c.phoneGiven)}</span>{" "}
+                    {c.listedPhones.includes(c.phoneGiven)
+                      ? "(on the listing, but it can't open the turf at once: an owner or a suggestion put it there, or it was on a revoked claim)"
+                      : "(not on the listing)"}
                   </p>
                 )}
                 {c.note && <p className="text-[13px] text-primary-600">&ldquo;{c.note}&rdquo;</p>}

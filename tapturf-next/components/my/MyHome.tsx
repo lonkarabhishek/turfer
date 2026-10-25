@@ -283,7 +283,7 @@ const CLAIM_ERRORS: Record<string, string> = {
   bad_phone: "Enter the 10-digit mobile number, like 98765 43210.",
   not_listed: "That number isn't on this listing.",
   bad_code: "We couldn't confirm that code. Send a new one and try again.",
-  wait: "We just sent a code to this number. Wait a minute and try again.",
+  wait: "A code was asked for this number a moment ago. Wait a minute and try again.",
   number_busy: "This number has had a lot of codes today. Sign in to TapTurf with this number instead and it opens straight away, or send your claim for a check.",
   needs_check: "We need to check this one by hand. Send your claim and we'll confirm it, usually within a day.",
 };
@@ -393,8 +393,11 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
         setStep("manual");
       } else {
         const sent = await sendClaimCode(p10, captchaId, sender.current?.verifier);
-        if ("error" in sent) setMsg(sent.error);
-        else {
+        if ("error" in sent) {
+          setMsg(sent.error);
+          // No SMS went out: the next try needn't wait 2 minutes (it still counts for the day).
+          void ownerRpc("owner_phone_code_failed", { p_turf_id: turf.id, p_phone: p10 }).catch(() => null);
+        } else {
           sender.current = sent;
           keepProof(null);
           setSentTo(p10);

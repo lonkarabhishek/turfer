@@ -149,7 +149,10 @@ export async function compressPhoto(file: Blob, ext: PhotoExt): Promise<Compress
     const c = fitWithin(f.w, f.h, PHOTO.card);
     small = draw(big, c.w, c.h, ext);
     const full = await encode(big, type, ext === "webp" ? PHOTO.qFull : PHOTO.qJpg);
-    const card = await encode(small, type, ext === "webp" ? PHOTO.qCard : PHOTO.qJpg);
+    let card = await encode(small, type, ext === "webp" ? PHOTO.qCard : PHOTO.qJpgCard);
+    // The database wants the card smaller than the photo; a photo already card-sized can tie.
+    if (card.size >= full.size) card = await encode(small, type, PHOTO.qRetryCard);
+    if (card.size >= full.size) throw new PhotoError("unreadable");
     return { full, card, type, width: f.w, height: f.h };
   } finally {
     d.done();
@@ -197,6 +200,17 @@ export type AddStep =
 type Prepared = { index: number; name: string; full: Blob; card: Blob; type: string; hash: string | null };
 type Uploaded = { id: string; index: number; sizes: [number, number] };
 
+/** owner_photo_finish for one uploaded photo: the database checks its files are these, and it waits for the check. */
+async function finishOne(turfId: string, u: Uploaded): Promise<"ok" | string> {
+  try {
+    const f = await ownerRpc<FinishResult>("owner_photo_finish", { p_turf_id: turfId, p_ids: [u.id], p_sizes: u.sizes });
+    if (!f || "error" in f) return f?.error ?? "network";
+    return Array.isArray(f.checking) && f.checking.includes(u.id) ? "ok" : "network";
+  } catch {
+    return "network";
+  }
+}
+
 /**
  * Add photos to a turf: shrink each (one at a time: phones run out of
  * memory on several big photos at once), ask for tickets, upload the full
@@ -237,8 +251,10 @@ export async function addOwnerPhotos(turfId: string, files: File[], onStep: (s: 
   }
   if (ready.length === 0) return out;
 
-  // 2-3. Tickets and uploads. A ticket that ran out is asked for again, once.
-  const uploaded: Uploaded[] = [];
+  // 2-4. Tickets, uploads, and each photo handed to the check as soon as both
+  // its files are up (so a slow batch or a reload loses only what was still
+  // uploading). A ticket that ran out is asked for again, once.
+  const waiting: Uploaded[] = [];
   let todo = ready;
   let total = 0;
   for (let round = 0; round < 2 && todo.length > 0; round++) {
@@ -256,7 +272,7 @@ export async function addOwnerPhotos(turfId: string, files: File[], onStep: (s: 
     if (!start || "error" in start) {
       const error = start?.error ?? "network";
       for (const p of todo) fail(p.index, error);
-      if (uploaded.length === 0) {
+      if (waiting.length === 0) {
         out.error = error;
         const left = start && "left" in start ? start.left : undefined;
         if (typeof left === "number") out.left = left;
@@ -277,12 +293,16 @@ export async function addOwnerPhotos(turfId: string, files: File[], onStep: (s: 
         onStep({ kind: "file", index: p.index, state: "duplicate", reason: "duplicate" });
         continue;
       }
-      onStep({ kind: "phase", phase: "uploading", done: uploaded.length, total });
+      onStep({ kind: "phase", phase: "uploading", done: waiting.length, total });
       onStep({ kind: "file", index: p.index, state: "uploading" });
       const [a, b] = await Promise.all([put(item.path, p.full, p.type), put(item.card_path, p.card, p.type)]);
       if (a === "ok" && b === "ok") {
-        uploaded.push({ id: item.id, index: p.index, sizes: [p.full.size, p.card.size] });
-        onStep({ kind: "file", index: p.index, state: "uploaded" });
+        const u: Uploaded = { id: item.id, index: p.index, sizes: [p.full.size, p.card.size] };
+        const f = await finishOne(turfId, u);
+        if (f === "ok") {
+          waiting.push(u);
+          onStep({ kind: "file", index: p.index, state: "uploaded" });
+        } else fail(p.index, f);
       } else if ((a === "expired" || b === "expired") && round === 0) {
         retry.push(p);
       } else {
@@ -291,30 +311,7 @@ export async function addOwnerPhotos(turfId: string, files: File[], onStep: (s: 
     }
     todo = retry;
   }
-
-  // 4. Uploaded: the database checks the files are these, then the check.
-  const waiting: Uploaded[] = [];
-  if (uploaded.length > 0) {
-    try {
-      const f = await ownerRpc<FinishResult>("owner_photo_finish", {
-        p_turf_id: turfId,
-        p_ids: uploaded.map((u) => u.id),
-        p_sizes: uploaded.flatMap((u) => u.sizes),
-      });
-      if (!f || "error" in f) {
-        for (const u of uploaded) fail(u.index, f?.error ?? "network");
-      } else {
-        const accepted = new Set(Array.isArray(f.checking) ? f.checking : []);
-        for (const u of uploaded) {
-          if (accepted.has(u.id)) waiting.push(u);
-          else fail(u.index, "network");
-        }
-        out.added = waiting.length;
-      }
-    } catch {
-      for (const u of uploaded) fail(u.index, "network");
-    }
-  }
+  out.added = waiting.length;
 
   // 5. The check: good photos go on the page, the rest are kept off it. What
   // it doesn't get to is checked within a few minutes by the minute job.

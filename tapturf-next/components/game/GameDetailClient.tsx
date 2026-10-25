@@ -690,7 +690,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       {showJoinForm && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowJoinForm(false)} />
-          <div className="relative w-full md:max-w-md bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
+          <div role="dialog" aria-modal="true" aria-label="Request to join" className="relative w-full md:max-w-md bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-primary-800">Request to Join</h3>
               <button onClick={() => setShowJoinForm(false)} className="p-1 rounded-full hover:bg-primary-100">
@@ -743,7 +743,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowEditModal(false)} />
-          <div className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[85vh] overflow-y-auto">
+          <div role="dialog" aria-modal="true" aria-label="Edit game" className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-primary-800 flex items-center gap-2">
                 <Pencil className="w-4.5 h-4.5 text-primary-500" />
