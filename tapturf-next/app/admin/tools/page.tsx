@@ -11,10 +11,11 @@ import {
   WHO_FILTERS,
   activityWhat,
   chipText,
+  countFor,
   filterPeople,
-  peoplePerTool,
   shortDevice,
   toolFilter,
+  toolCounts,
   toolLabel,
   toolPeople,
   whoFilter,
@@ -31,7 +32,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
 
-/** People shown at most; the newest first. */
+/** People read and shown at most; the newest first (admin_tool_users caps it in the database). */
 const MAX_PEOPLE = 300;
 const LOG_SINCE = "27 Oct 2026";
 
@@ -177,15 +178,14 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const tool = toolFilter(sp.tool);
   const who = whoFilter(sp.who);
-  const res = await getToolUsers(tool, who);
+  const res = await getToolUsers(tool, who, MAX_PEOPLE);
   const now = readTime();
 
-  const everyone = res.ok ? toolPeople(res.rows) : [];
-  const forWho = filterPeople(everyone, null, who);
-  const people = filterPeople(everyone, tool, who);
-  const perTool = peoplePerTool(forWho);
-  const signed = people.filter((p) => p.userId).length;
-  const uses = people.reduce((s, p) => s + (tool ? (p.tools.find((c) => c.tool === tool)?.n ?? 0) : p.uses), 0);
+  // The database read only the newest people for this tool and who; this keeps that and puts the tool's chip first.
+  const people = res.ok ? filterPeople(toolPeople(res.rows), tool, who).slice(0, MAX_PEOPLE) : [];
+  // The totals and the filters' counts are everyone's (admin_tool_counts), not only those shown.
+  const counts = toolCounts(res.ok ? res.counts : []);
+  const total = countFor(counts, tool);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -195,13 +195,13 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
       <div className="flex flex-wrap items-end justify-between gap-3 mb-2">
         <h1 className="font-display text-3xl md:text-4xl text-primary-900">
           Tool users
-          <span className="ml-3 text-primary-400 text-2xl tabular-nums">{people.length}</span>
+          <span className="ml-3 text-primary-400 text-2xl tabular-nums">{res.ok ? total.people.toLocaleString("en-IN") : ""}</span>
         </h1>
       </div>
       <p className="text-[13px] text-primary-500 mb-5 max-w-3xl">
         Everyone who started or finished something in the free tools since {LOG_SINCE}: signed-in people by their account, guests by a
         random tag their browser keeps. The city is where their internet connection points to (approximate), else the city they picked.
-        Times are India time.
+        A live link is the one their browser sent with the use (only links that exist are shown). Times are India time.
       </p>
 
       <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -218,7 +218,7 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
         {COUNTED_TOOLS.map((t) => (
           <Pill key={t} href={hrefFor(t, who)} on={t === tool}>
             {TOOL_LABELS[t]}
-            {res.ok && <span className={`ml-1.5 tabular-nums ${t === tool ? "text-white/70" : "text-primary-500"}`}>{perTool[t] ?? 0}</span>}
+            {res.ok && <span className={`ml-1.5 tabular-nums ${t === tool ? "text-white/70" : "text-primary-500"}`}>{countFor(counts, t).people}</span>}
           </Pill>
         ))}
       </div>
@@ -235,14 +235,14 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
         <>
           <div className="flex flex-wrap gap-2 mb-3 text-[13px]">
             <Badge className="bg-primary-100 text-primary-700">
-              {people.length} {people.length === 1 ? "person" : "people"}
+              {total.people} {total.people === 1 ? "person" : "people"}
             </Badge>
-            <Badge className="bg-accent-50 text-accent-700">{signed} signed in</Badge>
+            <Badge className="bg-accent-50 text-accent-700">{total.signed} signed in</Badge>
             <Badge className="bg-primary-100 text-primary-700">
-              {people.length - signed} guest{people.length - signed === 1 ? "" : "s"}
+              {total.guests} guest{total.guests === 1 ? "" : "s"}
             </Badge>
             <Badge className="bg-white border border-primary-200 text-primary-700">
-              {uses} use{uses === 1 ? "" : "s"}
+              {total.uses} use{total.uses === 1 ? "" : "s"}
               {tool ? ` of ${TOOL_LABELS[tool]}` : ""}
             </Badge>
           </div>
@@ -253,15 +253,16 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
                 <p className="px-5 py-10 text-center text-sm text-primary-400">No one yet. Uses show here from the moment they happen.</p>
               ) : (
                 <ul>
-                  {people.slice(0, MAX_PEOPLE).map((p) => (
+                  {people.map((p) => (
                     <PersonRow key={p.key} p={p} now={now} />
                   ))}
                 </ul>
               )}
             </div>
-            {people.length > MAX_PEOPLE && (
+            {total.people > people.length && (
               <p className="mt-2 text-[12px] text-primary-500">
-                Showing the {MAX_PEOPLE} who used a tool most recently, of {people.length.toLocaleString("en-IN")}. Pick a tool to narrow it down.
+                Showing the {people.length} who used {tool ? TOOL_LABELS[tool] : "a tool"} most recently, of {total.people.toLocaleString("en-IN")}.
+                {tool ? "" : " Pick a tool to narrow it down."}
               </p>
             )}
           </section>

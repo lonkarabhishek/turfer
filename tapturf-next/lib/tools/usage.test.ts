@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEVICE_RE, gaParams, makeDeviceTag, readDevice, readUse, summarizeToolUsage, toolUseOf, toolUseBody, signedInInit, tagsOf } from "./usage";
+import { DEVICE_RE, gaParams, makeDeviceTag, readDevice, readUse, summarizeToolUsage, toolUseOf, toolUseBody, signedInInit, tagsOf, within } from "./usage";
 
 const CODE = "abcd1234wxyz";
 
@@ -72,7 +72,7 @@ test("what the browser sends: the use and its device tag; signed in, a keepalive
   assert.deepEqual(JSON.parse(body), { tool: "live_scoreboard", event: "started", detail: "football", tags: "football", code: CODE, device: "k3j9x0abc123" });
   assert.equal(readDevice(JSON.parse(body)), "k3j9x0abc123");
   assert.deepEqual(readUse(JSON.parse(body)), use, "the server reads back what was sent");
-  assert.equal("device" in JSON.parse(toolUseBody(use, null)), false, "no tag when storage is blocked");
+  assert.equal("device" in JSON.parse(toolUseBody(use, null)), false, "no tag when signed in (a fallback to a guest use is then tied to nothing) or when storage is blocked");
   const init = signedInInit(body, "tok.en.x");
   assert.equal(init.method, "POST");
   assert.equal(init.keepalive, true, "survives the page closing");
@@ -80,6 +80,15 @@ test("what the browser sends: the use and its device tag; signed in, a keepalive
   assert.equal(new Headers(init.headers).get("authorization"), "Bearer tok.en.x");
   assert.equal(new Headers(init.headers).get("content-type"), "application/json");
   assert.ok(body.length < 600, "under the route's body limit");
+});
+
+test("a match's start waits a moment at most for its live link's code", async () => {
+  assert.equal(await within(Promise.resolve("on"), 50), "on", "the link was quick");
+  assert.equal(await within(new Promise((r) => setTimeout(() => r("late"), 200)), 20), undefined, "too slow: goes without it");
+  assert.equal(await within(Promise.reject(new Error("offline")), 50), undefined, "never rejects");
+  const t0 = Date.now();
+  await within(new Promise(() => {}), 30);
+  assert.ok(Date.now() - t0 < 1_000, "a link that never answers holds nothing up");
 });
 
 test("the admin's summary: totals, this week, live now, board sports", () => {

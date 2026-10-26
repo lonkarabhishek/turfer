@@ -7,7 +7,9 @@ import { gaParams, makeDeviceTag, DEVICE_RE, toolUseOf, toolUseBody, signedInIni
  * tool's started and finished events are also logged for the admin
  * (lib/tools/usage.ts): the tool, the event, a few short tags, a live
  * link's code, and who: this device's sign-in, which the server verifies,
- * else a random device tag kept in this browser.
+ * else a random device tag kept in this browser. The tag goes only with a
+ * signed-out use and starts over on every sign-in and sign-out
+ * (forgetToolDevice), so it is never tied to an account.
  */
 /** tool_action: a milestone inside a longer tool session, like an over or a wicket in the live scorer. */
 export type ToolEvent = "tool_opened" | "tool_used" | "tool_result_generated" | "tool_cta_clicked" | "tool_action";
@@ -29,7 +31,7 @@ const DEVICE_KEY = "tt_tools_device";
 /** A sign-in token that takes longer than this (a cold Firebase load) makes the use a guest's. */
 const TOKEN_WAIT_MS = 5_000;
 
-/** This browser's random tag for a guest's uses, made once; null when storage is blocked. */
+/** This browser's random tag for a guest's uses, made once per signed-out spell; null when storage is blocked. */
 function deviceTag(): string | null {
   try {
     const kept = localStorage.getItem(DEVICE_KEY);
@@ -39,6 +41,19 @@ function deviceTag(): string | null {
     return tag;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Start the guest tag over: AuthProvider calls it on every sign-in and
+ * sign-out, so the uses before signing in, and after signing out, never
+ * share a tag with each other or with the account's.
+ */
+export function forgetToolDevice(): void {
+  try {
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -52,14 +67,16 @@ const tokenSoon = (): Promise<TokenCheck> =>
 
 /**
  * One use to /api/tools/use, never in the way of the tool. Signed out: a
- * beacon at once, so it survives the page closing. Signed in: the sign-in
- * token can't ride a beacon, so a keepalive fetch carries it; no token in
- * time, and it goes as a guest's.
+ * beacon at once with the guest tag, so it survives the page closing.
+ * Signed in: the sign-in token can't ride a beacon, so a keepalive fetch
+ * carries it, and no guest tag goes with it; no token in time, and it goes
+ * as a guest's with no tag (and the server keeps no live link code for a
+ * guest), so nothing ties it to the account or to this browser's tag.
  */
 function logUse(use: ToolUse) {
   try {
-    const body = toolUseBody(use, deviceTag());
-    if (!hasSignIn()) return beacon(body);
+    if (!hasSignIn()) return beacon(toolUseBody(use, deviceTag()));
+    const body = toolUseBody(use, null);
     void tokenSoon()
       .then((t) => ("token" in t ? fetch(USE_URL, signedInInit(body, t.token)).then(() => {}) : beacon(body)))
       .catch(() => {});

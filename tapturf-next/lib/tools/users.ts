@@ -2,28 +2,39 @@ import { COUNTED_TOOLS, type CountedTool } from "./usage";
 
 /**
  * Who used the free tools and what they used, for the admin's Tool users
- * page (app/admin/tools): the rows admin_tool_users and
- * admin_tool_activity return (supabase/migrations/20261027_tool_users.sql)
- * turned into one entry per person, with the tools as chips, and the
- * page's filters. Pure (the page shows times with lib/admin/people.ts
- * istDateTime). Relative imports only (npm run test:toss).
+ * page (app/admin/tools): the rows admin_tool_users, admin_tool_counts
+ * and admin_tool_activity return (supabase/migrations/20261027_tool_users.sql)
+ * turned into one entry per person, with the tools as chips, the
+ * filters' counts and the page's filters. Pure (the page shows times
+ * with lib/admin/people.ts istDateTime). Relative imports only (npm run
+ * test:toss).
  */
 
-/** One person and tool, as admin_tool_users returns it. */
-export type ToolUserRow = {
-  user_id: string | null;
-  device: string | null;
-  name: string | null;
-  username: string | null;
+/** One tool of a person's, as admin_tool_users lists it. */
+export type ToolUserTool = {
   tool: string;
   started: number;
   finished: number;
   first_at: string;
   last_at: string;
-  city: string | null;
   details: string[] | null;
   codes: string[] | null;
 };
+
+/** One person, as admin_tool_users returns them: the newest people only, each with their tools. */
+export type ToolUserRow = {
+  user_id: string | null;
+  device: string | null;
+  name: string | null;
+  username: string | null;
+  city: string | null;
+  first_at: string;
+  last_at: string;
+  tools: ToolUserTool[] | null;
+};
+
+/** One tool's people and uses (tool null: every tool), as admin_tool_counts returns them. */
+export type ToolCountRow = { tool: string | null; signed: number; guests: number; uses: number };
 
 /** One use, as admin_tool_activity returns it. */
 export type ToolActivityRow = {
@@ -102,45 +113,75 @@ export const detailText = (detail: string | null | undefined): string => (detail
 /** The person a row is for. */
 export const personKey = (r: { user_id: string | null; device: string | null }): string => (r.user_id ? `u:${r.user_id}` : r.device ? `d:${r.device}` : "-");
 
-/** The rows as one entry per person, last used first; each person's tools by uses, then name. */
+const chipOf = (t: ToolUserTool): ToolChip => {
+  const started = Number(t.started) || 0;
+  const finished = Number(t.finished) || 0;
+  return {
+    tool: t.tool,
+    label: toolLabel(t.tool),
+    n: started || finished,
+    finished,
+    details: (t.details ?? []).map(detailText).filter(Boolean),
+    codes: (t.codes ?? []).filter((c) => /^[a-z0-9]{12}$/.test(c)),
+    last: time(t.last_at),
+  };
+};
+
+const byUses = (a: ToolChip, b: ToolChip) => b.n - a.n || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0);
+
+/** The rows as one entry per person, last used first; each person's tools by uses, then name. One entry and one chip per tool, whatever the rows. */
 export function toolPeople(rows: readonly ToolUserRow[]): ToolPerson[] {
   const by = new Map<string, ToolPerson>();
-  /** When each person's city was seen: the latest one wins. */
-  const cityAt = new Map<string, number>();
   for (const r of rows) {
-    if (!r || typeof r.tool !== "string") continue;
+    if (!r || typeof r !== "object") continue;
     const key = personKey(r);
-    const first = time(r.first_at);
     const last = time(r.last_at);
-    const started = Number(r.started) || 0;
-    const finished = Number(r.finished) || 0;
-    let p = by.get(key);
-    if (!p) {
-      p = { key, userId: r.user_id, device: r.user_id ? null : r.device, name: r.name, username: r.username, city: null, first, last, uses: 0, tools: [] };
-      by.set(key, p);
+    const had = by.get(key);
+    if (had && had.last >= last) continue;
+    const chips = new Map<string, ToolChip>();
+    for (const t of Array.isArray(r.tools) ? r.tools : []) {
+      if (!t || typeof t.tool !== "string") continue;
+      const c = chipOf(t);
+      const seen = chips.get(c.tool);
+      if (!seen || c.last > seen.last) chips.set(c.tool, c);
     }
-    p.first = Math.min(p.first, first);
-    p.last = Math.max(p.last, last);
-    if (r.city && last > (cityAt.get(key) ?? -1)) {
-      p.city = r.city;
-      cityAt.set(key, last);
-    }
-    const n = started || finished;
-    p.uses += n;
-    p.tools.push({
-      tool: r.tool,
-      label: toolLabel(r.tool),
-      n,
-      finished,
-      details: (r.details ?? []).map(detailText).filter(Boolean),
-      codes: (r.codes ?? []).filter((c) => /^[a-z0-9]{12}$/.test(c)),
+    const tools = [...chips.values()].sort(byUses);
+    by.set(key, {
+      key,
+      userId: r.user_id,
+      device: r.user_id ? null : r.device,
+      name: r.name,
+      username: r.username,
+      city: r.city,
+      first: time(r.first_at),
       last,
+      uses: tools.reduce((s, c) => s + c.n, 0),
+      tools,
     });
   }
-  return [...by.values()]
-    .map((p) => ({ ...p, tools: p.tools.sort((a, b) => b.n - a.n || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0)) }))
-    .sort((a, b) => b.last - a.last || (a.key < b.key ? -1 : 1));
+  return [...by.values()].sort((a, b) => b.last - a.last || (a.key < b.key ? -1 : 1));
 }
+
+export type ToolCount = { people: number; signed: number; guests: number; uses: number };
+const NO_COUNT: ToolCount = { people: 0, signed: 0, guests: 0, uses: 0 };
+
+/** admin_tool_counts as the page reads it: every tool's people and uses, and each tool's. */
+export function toolCounts(rows: readonly ToolCountRow[]): { all: ToolCount; byTool: Record<string, ToolCount> } {
+  let all = NO_COUNT;
+  const byTool: Record<string, ToolCount> = {};
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const signed = Number(r.signed) || 0;
+    const guests = Number(r.guests) || 0;
+    const c = { people: signed + guests, signed, guests, uses: Number(r.uses) || 0 };
+    if (r.tool === null) all = c;
+    else if (typeof r.tool === "string") byTool[r.tool] = c;
+  }
+  return { all, byTool };
+}
+
+/** One tool's count, or every tool's; none when nobody used it. */
+export const countFor = (counts: ReturnType<typeof toolCounts>, tool: string | null): ToolCount => (tool ? (counts.byTool[tool] ?? NO_COUNT) : counts.all);
 
 export type WhoFilter = "all" | "signed" | "guest";
 export const WHO_FILTERS: Record<WhoFilter, string> = { all: "Everyone", signed: "Signed in", guest: "Guests" };
@@ -157,13 +198,6 @@ export function filterPeople(people: readonly ToolPerson[], tool: CountedTool | 
     .filter((p) => (who === "signed" ? p.userId !== null : who === "guest" ? p.userId === null : true))
     .filter((p) => !tool || p.tools.some((c) => c.tool === tool))
     .map((p) => (tool ? { ...p, tools: [...p.tools.filter((c) => c.tool === tool), ...p.tools.filter((c) => c.tool !== tool)] } : p));
-}
-
-/** How many people used each tool, for the tool filter. */
-export function peoplePerTool(people: readonly ToolPerson[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const p of people) for (const c of p.tools) out[c.tool] = (out[c.tool] ?? 0) + 1;
-  return out;
 }
 
 /** "Toss ×3", "Live scoreboard ×1 · Football". */

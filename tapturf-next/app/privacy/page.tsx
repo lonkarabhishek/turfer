@@ -129,8 +129,9 @@ const SECTIONS: LegalSection[] = [
           internet connection points to, else the city you chose on TapTurf. The place is worked out from your
           IP address on that visit and is only approximate; the address itself is never stored. If you are
           signed in, the record is kept with your TapTurf account. If you are not, it is kept with a random tag
-          your browser makes for this, which says nothing about you or your device. Only TapTurf&rsquo;s team
-          sees these records, to learn who uses the tools and how.
+          your browser makes for this, which says nothing about you or your device. The tag is never sent while
+          you are signed in, and your browser makes a new one each time you sign in or out, so it is not tied to
+          your account. Only TapTurf&rsquo;s team sees these records, to learn who uses the tools and how.
         </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
@@ -297,7 +298,7 @@ const SECTIONS: LegalSection[] = [
         <li>The sign-up summary and your city stay with your account and are deleted with it, or sooner if you ask.</li>
         <li>
           Records of your free tool use stay with your account and are deleted with it, or sooner if you ask. Those kept
-          with a browser&rsquo;s random tag are not linked to anyone.
+          with a browser&rsquo;s random tag are not tied to any account.
         </li>
         <li>
           A live score is cleared when you turn its link off, or 30 days after its last update. The

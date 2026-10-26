@@ -106,6 +106,26 @@ export function signedInInit(body: string, token: string): RequestInit {
   return { method: "POST", body, keepalive: true, cache: "no-store", headers: { "content-type": "application/json", Authorization: `Bearer ${token}` } };
 }
 
+/**
+ * How long a match's start waits for its new live link's code at most
+ * (LiveScorer, LiveScoreboard). The link's POST can take up to 12 s on a
+ * bad network, and a tab closed meanwhile would lose the start: past this
+ * it goes without the code, and the match's end carries it.
+ */
+export const START_CODE_WAIT_MS = 1_500;
+
+/** What p resolves to, or undefined once ms pass first (or p fails). Never rejects. */
+export function within<T>(p: PromiseLike<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    const done = (v: T | undefined) => {
+      clearTimeout(timer);
+      resolve(v);
+    };
+    p.then(done, () => done(undefined));
+  });
+}
+
 /** An event's params for Google Analytics: without the live link's code, which is for TapTurf's own log only. */
 export function gaParams<T extends Record<string, unknown>>(params: T): Omit<T, "code"> {
   const out: Record<string, unknown> = {};

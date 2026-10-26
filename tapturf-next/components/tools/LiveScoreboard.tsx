@@ -5,6 +5,7 @@ import { Check, Link2, Play, Plus, Trash2 } from "lucide-react";
 import { boardShape, deriveBoard } from "@/lib/board";
 import type { Board, BoardSport, BoardView } from "@/lib/board/types";
 import { trackTool } from "@/lib/analytics/tools";
+import { START_CODE_WAIT_MS, within } from "@/lib/tools/usage";
 import { sportIcon } from "@/components/board/shared";
 import { useWatchers } from "@/components/live/useWatchers";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -208,7 +209,8 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
     savePrefs(b.id, prefs);
     setNewOpen(false);
     // The start carries the match's live link code for the admin's list of tool users (never sent to GA),
-    // so with a new link it is tracked once the link is on, or isn't.
+    // so with a new link it waits for the link a moment (START_CODE_WAIT_MS), never longer: past that it
+    // goes without the code, which the match's end then carries.
     const used = { action: "match_started", sport: b.sport, live: liveLinks && opts.on };
     const trackStart = () => {
       const code = live.codeNow(b.id);
@@ -218,7 +220,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
       if (opts.keep && prev && live.move(prev.id, b.id)) {
         trackStart();
         trackTool("tool_action", TOOL, { action: "live_link_kept" });
-      } else void startLink(b.id).then(trackStart, trackStart);
+      } else void within(startLink(b.id), START_CODE_WAIT_MS).then(trackStart);
     } else trackStart();
     openScorer();
   };

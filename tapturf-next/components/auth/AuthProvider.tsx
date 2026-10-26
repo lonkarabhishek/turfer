@@ -9,6 +9,7 @@ import type { AccountProfile } from "@/lib/account/types";
 import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, setSignInToken, supabaseToken, type TokenCheck } from "@/lib/account/client";
 import { loginErrorText } from "@/lib/auth/callback";
 import { clearAllDrafts } from "@/lib/reviews/draft";
+import { forgetToolDevice } from "@/lib/analytics/tools";
 
 /** What a write says when the server couldn't confirm a Google sign-in's account (confirmedUser gave null). */
 export const ACCOUNT_NOT_CONFIRMED = "Couldn't load your TapTurf account. Check your connection and try again.";
@@ -501,7 +502,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // The free tools send the sign-in with each use they log (lib/analytics/tools.ts). Read quietly:
   // a missing Firebase session there only makes the use a guest's, never a sign-out.
   const toolSignIn = user ? signedInWith : null;
+  const hadToolSignIn = useRef(false);
   useEffect(() => {
+    // Signed in, or just signed out: the tools' random guest tag starts over, so no tag spans an account's session.
+    if (toolSignIn || hadToolSignIn.current) forgetToolDevice();
+    hadToolSignIn.current = toolSignIn !== null;
     if (!toolSignIn) {
       setSignInToken(null);
       return;
