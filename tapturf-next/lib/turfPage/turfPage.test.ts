@@ -89,6 +89,24 @@ test("reviews: players' own first, newest first within each, nobody's upvote", (
   assert.ok(out.every((r) => r.viewer_has_upvoted === false));
 });
 
+test("reviews: no booking app's name in a report's tip or a Google review; other venue names stay", () => {
+  const out = shapeReviews([
+    { id: "a", rating: 5, comment: "Booked on Playo, cheaper than calling. Great lights.", source: null },
+    { id: "b", rating: 4, comment: "Booked on Playo", source: null },
+    { id: "c", rating: 4, comment: "Great pitch.\nBook it on Hudle for the 7pm slot. Lights are bright.", source: "google" },
+    { id: "d", rating: 5, comment: "Played at PlayOn last week, great turf.", source: null },
+  ]);
+  assert.deepEqual(
+    out.map((r) => [r.id, r.comment]),
+    [
+      ["a", "Great lights."],
+      ["b", null],
+      ["d", "Played at PlayOn last week, great turf."],
+      ["c", "Great pitch.\nLights are bright."],
+    ],
+  );
+});
+
 test("reviews: junk in, nothing out", () => {
   assert.deepEqual(shapeReviews(null), []);
   assert.deepEqual(shapeReviews([null, 3, { comment: "no id" }]), []);

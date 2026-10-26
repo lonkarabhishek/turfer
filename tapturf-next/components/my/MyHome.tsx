@@ -11,6 +11,7 @@ import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
 import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
 import { firstImageUrl, imageUrlForCard } from "@/lib/utils/images";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
@@ -160,7 +161,7 @@ function usePublicTurf(id: string | null) {
       .eq("is_active", true)
       .maybeSingle()
       .then(({ data }) => {
-        if (live && data) setTurf({ id: data.id, name: data.name, city: data.city, area: data.area, cover: firstImageUrl(data.cover_image) });
+        if (live && data) setTurf({ id: data.id, name: cleanVenueName(data.name), city: data.city, area: data.area, cover: firstImageUrl(data.cover_image) });
       });
     return () => {
       live = false;
@@ -218,7 +219,8 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
       .ilike("name", `%${s.replace(/[%_,()]/g, " ")}%`)
       .order("total_reviews", { ascending: false })
       .limit(8);
-    setHits((data ?? []).map((t) => ({ id: t.id, name: t.name, city: t.city, area: t.area, cover: firstImageUrl(t.cover_image) })));
+    // The name as the turf page shows it: no booking app's attribution ("FS Turf, Churchgate - by SPORLOC").
+    setHits((data ?? []).map((t) => ({ id: t.id, name: cleanVenueName(t.name), city: t.city, area: t.area, cover: firstImageUrl(t.cover_image) })));
     setBusy(false);
   };
 

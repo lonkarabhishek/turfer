@@ -4,6 +4,7 @@ import type { TurfSuggestion } from "../queries/suggestions";
 import { isAspect, isWhen } from "../reviews/catalog";
 import { parseAspects } from "../reviews/payload";
 import type { AspectCount, PlayAgainCounts, ReportFields } from "../reviews/types";
+import { scrubBookingApps } from "../utils/bookingApps";
 
 /**
  * Shapes the parts of public.turf_page (one call per turf page render,
@@ -62,7 +63,12 @@ export function shapeReportFields(r: Raw): ReportFields {
   return out;
 }
 
-/** Latest reviews, players' own first; who upvoted is per viewer, so false here. */
+/**
+ * Latest reviews, players' own first; who upvoted is per viewer, so false
+ * here. The text goes out without any booking app's name (a report's tip,
+ * a Google review), as the AI summary of the same reviews does: the save
+ * rules stop links and numbers, not a bare "Booked on Playo".
+ */
 export function shapeReviews(raw: unknown): ReviewWithUser[] {
   if (!Array.isArray(raw)) return [];
   const rows = raw.filter(isObj).filter((r) => typeof r.id === "string");
@@ -74,7 +80,7 @@ export function shapeReviews(raw: unknown): ReviewWithUser[] {
       turf_id: str(r.turf_id) ?? "",
       booking_id: null,
       rating: num(r.rating),
-      comment: str(r.comment),
+      comment: scrubBookingApps(str(r.comment)),
       created_at: str(r.created_at),
       updated_at: null,
       source: str(r.source),

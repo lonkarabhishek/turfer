@@ -6,6 +6,7 @@ import { BAR_MIN, partCounts, playAgainLine } from "@/lib/reviews/insights";
 import type { OwnerReviews } from "@/lib/my/client";
 import { playedLine, ReportChips } from "@/components/turf/reviews/ui";
 import { PartBar } from "@/components/turf/reviews/Scorecard";
+import { scrubBookingApps } from "@/lib/utils/bookingApps";
 
 /**
  * "Player reports" on /my › a turf: what TapTurf players said in the last
@@ -128,6 +129,8 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
               const tap = r.source !== "google";
               const played = tap ? playedLine(r.sport, r.played_when) : "";
               const answer = tap ? playAgainWords(r.play_again) : null;
+              // As on the turf page (shapeReviews): no booking app's name in a tip or a Google review.
+              const tip = scrubBookingApps(r.comment);
               return (
                 <li key={r.id ?? i} className="rounded-2xl border border-primary-200 bg-white p-4">
                   <p className="text-[13px] text-primary-500 flex flex-wrap items-center gap-x-1.5">
@@ -142,7 +145,7 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
                   </p>
                   {tap && <ReportChips aspects={r.aspects} sport={r.sport} turfSports={turfSports} />}
                   {answer && <p className="mt-1.5 text-[13px] font-medium text-primary-700">{answer}</p>}
-                  {r.comment && <p className="mt-1 text-[14px] text-primary-800 leading-snug whitespace-pre-line">{r.comment}</p>}
+                  {tip && <p className="mt-1 text-[14px] text-primary-800 leading-snug whitespace-pre-line">{tip}</p>}
                 </li>
               );
             })}
