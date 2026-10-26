@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
 // ── Game CRUD ──────────────────────────────────────────
@@ -34,7 +35,7 @@ export async function getAvailableGames(filters?: {
       .in("id", turfIds);
 
     if (turfs) {
-      const turfsMap = Object.fromEntries(turfs.map((t) => [t.id, t]));
+      const turfsMap = Object.fromEntries(turfs.map((t) => [t.id, { ...t, name: cleanVenueName(t.name) }]));
       data.forEach((game: Record<string, unknown>) => {
         if (game.turf_id && turfsMap[game.turf_id as string]) {
           game.turfs = turfsMap[game.turf_id as string];
@@ -84,7 +85,7 @@ export async function getGameById(gameId: string) {
       .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
       .eq("id", data.turf_id)
       .single();
-    if (turf) (data as Record<string, unknown>).turfs = turf;
+    if (turf) (data as Record<string, unknown>).turfs = { ...turf, name: cleanVenueName(turf.name) };
   }
 
   return { data: data as Game, error: null };
@@ -108,7 +109,7 @@ export async function getUserGames(userId: string) {
       .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
       .in("id", turfIds);
     if (turfs) {
-      const turfsMap = Object.fromEntries(turfs.map((t) => [t.id, t]));
+      const turfsMap = Object.fromEntries(turfs.map((t) => [t.id, { ...t, name: cleanVenueName(t.name) }]));
       data.forEach((game: Record<string, unknown>) => {
         if (game.turf_id && turfsMap[game.turf_id as string]) {
           game.turfs = turfsMap[game.turf_id as string];

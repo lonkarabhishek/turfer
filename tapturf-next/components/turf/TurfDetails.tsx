@@ -12,6 +12,7 @@ import {
 import type { Turf } from "@/types/turf";
 import { normaliseOpeningHours, istWeekdayName, formatSpan } from "@/lib/utils/hours";
 import { formatLabel } from "@/lib/utils/formats";
+import { publicLink, scrubBookingApps } from "@/lib/utils/bookingApps";
 
 export function TurfDetails({ turf }: { turf: Turf }) {
   const hoursRows = normaliseOpeningHours(turf.opening_hours, {
@@ -93,12 +94,17 @@ export function TurfDetails({ turf }: { turf: Turf }) {
   }
 
   // Public links from research. nofollow: these are venue pages, not endorsements.
+  // A booking app's page for the venue (playspots.in, open.turftown.in,
+  // link.district.in: 35 active turfs on 26 Oct) is no website of its
+  // own, and TapTurf links to no booking app.
   const links: { href: string; label: string; icon: React.ReactNode; text: string }[] = [];
-  if (turf.website_url) {
-    links.push({ href: turf.website_url, label: "Website", icon: <Globe className="w-5 h-5 text-primary-400" />, text: hostOf(turf.website_url) });
+  const website = publicLink(turf.website_url);
+  const instagram = publicLink(turf.instagram_url);
+  if (website) {
+    links.push({ href: website, label: "Website", icon: <Globe className="w-5 h-5 text-primary-400" />, text: hostOf(website) });
   }
-  if (turf.instagram_url) {
-    links.push({ href: turf.instagram_url, label: "Instagram", icon: <Instagram className="w-5 h-5 text-primary-400" />, text: handleOf(turf.instagram_url) });
+  if (instagram) {
+    links.push({ href: instagram, label: "Instagram", icon: <Instagram className="w-5 h-5 text-primary-400" />, text: handleOf(instagram) });
   }
 
   // "Closed Mondays": mark that day in the table too.
@@ -115,7 +121,7 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     });
   }
   const hasFacts = details.length > 0 || links.length > 0;
-  const note = turf.good_to_know;
+  const note = scrubBookingApps(turf.good_to_know);
 
   return (
     <div className="section-divider">

@@ -102,7 +102,7 @@ export const post: Post = {
     },
     {
       type: "p",
-      text: "Running costs, before rent, in our scenarios come to about ₹54,300 a month: two attendants at the Maharashtra Zone I unskilled minimum wage (₹14,155 each), floodlight electricity of about ₹3,500 at the MSEDCL commercial tariff, ₹12,500 for maintenance, and ₹10,000 set aside to replace the grass after about six years. We also take 10% of slot revenue for booking platform and payment costs. One contractor puts all-in running costs much higher, at ₹1.5 to 3.5 lakh a month (Stark Sports), so treat our number as the lean case.",
+      text: "Running costs, before rent, in our scenarios come to about ₹54,300 a month: two attendants at the Maharashtra Zone I unskilled minimum wage (₹14,155 each), floodlight electricity of about ₹3,500 at the MSEDCL commercial tariff, ₹12,500 for maintenance, and ₹10,000 set aside to replace the grass after about six years. We also take 10% of slot revenue for booking commissions and payment fees. One contractor puts all-in running costs much higher, at ₹1.5 to 3.5 lakh a month (Stark Sports), so treat our number as the lean case.",
     },
 
     {

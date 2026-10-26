@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { imageUrlForCard } from "@/lib/utils/images";
+import { isBookingAppUrl } from "@/lib/utils/bookingApps";
 import { ROUTER_MODEL, structured } from "./ask";
 
 /**
@@ -63,7 +64,9 @@ export type CoverResult = {
 };
 
 export async function pickCover(images: string[]): Promise<CoverResult> {
-  const urls = images.slice(0, MAX_IMAGES);
+  // A booking app's photo (playo.gumlet.io, cdn.district.in) is never a
+  // cover, nor judged: TapTurf shows none of them (bookingApps.ts).
+  const urls = images.filter((u) => !isBookingAppUrl(u)).slice(0, MAX_IMAGES);
   const fetched = (await Promise.all(urls.map((u, i) => fetchImage(u, i)))).filter((f): f is Fetched => !!f);
   const broken = urls.filter((u) => !fetched.some((f) => f.url === u));
   if (fetched.length === 0) return { cover: null, review: broken.map((url) => ({ url, usable: false, quality: 1, shows: "other", note: "Could not load" })), broken };

@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { createRowStore, type ListMeta, type ListPart, type RowStore } from "@/lib/cache/rowStore";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
+import { cleanPriceMentions, cleanVenueName } from "@/lib/utils/bookingApps";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
@@ -59,8 +60,10 @@ export function transformTurf(raw: any): Turf {
 
   // Parse images
   const rawImages = Array.isArray(raw.images) ? raw.images : [];
-  // convertImageUrls splits comma-joined entries, drops placeholders
-  // and duplicates, and normalizes Google / Drive links.
+  // convertImageUrls splits comma-joined entries, drops placeholders,
+  // booking apps' photos (playo.gumlet.io, cdn.district.in…) and
+  // duplicates, and normalizes Google / Drive links. firstImageUrl does
+  // the same for the cover, so an app's cover is no cover.
   let images = convertImageUrls(rawImages);
   // Photos the cover pass flagged (logos, screenshots, blur) stay in the
   // row but never reach a card or gallery.
@@ -89,7 +92,9 @@ export function transformTurf(raw: any): Turf {
   return {
     id: raw.id,
     slug: raw.slug ?? null,
-    name: raw.name,
+    // Without a booking app's attribution ("FS Turf, Churchgate - by
+    // SPORLOC"), so the heading, title, JSON-LD, cards and Ask agree.
+    name: cleanVenueName(raw.name),
     address: raw.address,
     description: raw.description || null,
     sports,
@@ -142,7 +147,9 @@ export function transformTurf(raw: any): Turf {
     has_cafeteria: raw.has_cafeteria ?? null,
     coaching_available: raw.coaching_available ?? null,
     opening_hours: raw.opening_hours ?? null,
-    price_mentions: Array.isArray(raw.price_mentions) ? raw.price_mentions : null,
+    // Without booking apps' names, grids and links (bookingApps.ts), so the
+    // card, the page's header and its Pricing section agree on what is reported.
+    price_mentions: cleanPriceMentions(raw.price_mentions),
     data_sources: raw.data_sources ?? null,
     field_confidence: raw.field_confidence ?? null,
     data_verified_at: raw.data_verified_at ?? null,
@@ -452,9 +459,10 @@ export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Tur
  * One active turf by id, or null when there is none. A failed read
  * throws: .single() reported a missing row as an error too, so this
  * once read an outage as "no such turf" (the 20 Oct turf page 404s came
- * from the same pattern).
+ * from the same pattern). `storedName` keeps the name as stored, for
+ * the admin listing check, which flags a booking app in it.
  */
-export async function getTurfById(id: string): Promise<Turf | null> {
+export async function getTurfById(id: string, { storedName = false }: { storedName?: boolean } = {}): Promise<Turf | null> {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("turfs")
@@ -463,7 +471,9 @@ export async function getTurfById(id: string): Promise<Turf | null> {
     .maybeSingle();
 
   if (error) throw new Error(`Turf read failed for ${id}: ${error.message}`);
-  return data ? transformTurf(data) : null;
+  if (!data) return null;
+  const turf = transformTurf(data);
+  return storedName ? { ...turf, name: data.name } : turf;
 }
 
 export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {

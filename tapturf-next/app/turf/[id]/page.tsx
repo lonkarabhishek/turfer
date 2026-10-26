@@ -11,7 +11,7 @@ import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { playerPriceRange, positivePrice, priceRangeText, priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { turfPhotos } from "@/lib/utils/images";
-import { stripBookingClaims } from "@/lib/utils/bookingClaims";
+import { googleMapsUrl, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
 import { areaFor } from "@/lib/utils/area";
 import { dailyHoursSummary } from "@/lib/utils/hours";
 import { guessCityFromAddress, labelFor, isCity } from "@/lib/city";
@@ -212,8 +212,24 @@ export default async function TurfDetailPage({
       ? { morning: positivePrice(turf.morning_price), afternoon: positivePrice(turf.afternoon_price), evening: positivePrice(turf.evening_price), min: sidebarPrice.min }
       : null;
   // The research pass wrote "It is publicly bookable on Playo." into
-  // 1,509 descriptions; the page links to no booking app.
-  const description = stripBookingClaims(turf.description);
+  // 1,509 descriptions; the page names, links and shows no booking app
+  // (lib/utils/bookingApps.ts), whatever the row says.
+  const description = scrubBookingApps(turf.description);
+  const accessNotes = scrubBookingApps(turf.access_notes);
+  // "Read them on Google" goes to Google Maps only.
+  const googleReviewUrl = googleMapsUrl(turf.external_review_url);
+  // "What players say" is made from reviews, which can name an app.
+  const playersSay = (() => {
+    const s = turf.review_summary;
+    if (!s) return null;
+    const out = {
+      ...s,
+      summary: scrubBookingApps(s.summary) ?? "",
+      likes: s.likes.filter((l) => !mentionsBookingApp(l)),
+      gripes: s.gripes.filter((g) => !mentionsBookingApp(g)),
+    };
+    return out.summary || out.likes.length || out.gripes.length ? out : null;
+  })();
   const hoursLine = dailyHoursSummary(turf.opening_hours, {
     start_time: turf.start_time,
     end_time: turf.end_time,
@@ -314,15 +330,15 @@ export default async function TurfDetailPage({
           </div>
 
           {/* Members-only clubs: say so up front, with the access rules. */}
-          {(membersOnly || turf.access_notes) && (
+          {(membersOnly || accessNotes) && (
             <div className="mt-4 flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-200/70 px-4 py-3">
               <KeyRound className="w-4.5 h-4.5 text-amber-700 shrink-0 mt-0.5" />
               <div className="min-w-0">
                 {membersOnly && (
                   <p className="text-[14px] font-semibold text-amber-900">Members&apos; club</p>
                 )}
-                {turf.access_notes && (
-                  <p className="text-[14px] text-amber-900/85 leading-snug">{turf.access_notes}</p>
+                {accessNotes && (
+                  <p className="text-[14px] text-amber-900/85 leading-snug">{accessNotes}</p>
                 )}
               </div>
             </div>
@@ -467,8 +483,8 @@ export default async function TurfDetailPage({
               playerPrice={playerPriceRange(page.suggestions)}
               googleRating={turf.rating}
               googleReviewCount={turf.total_reviews}
-              googleReviewUrl={turf.external_review_url}
-              playersSay={turf.review_summary ?? null}
+              googleReviewUrl={googleReviewUrl}
+              playersSay={playersSay}
             />
           </div>
 
@@ -538,7 +554,7 @@ export default async function TurfDetailPage({
                 <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200/70 px-3.5 py-2.5">
                   <p className="text-[13px] font-semibold text-amber-900">Members&apos; club</p>
                   <p className="text-[13px] text-amber-900/80 leading-snug mt-0.5">
-                    {turf.access_notes || "Booking is for members. Call to ask about guest access."}
+                    {accessNotes || "Booking is for members. Call to ask about guest access."}
                   </p>
                 </div>
               )}

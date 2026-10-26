@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 
 export async function searchTurfs(query?: string) {
   const supabase = createClient();
@@ -18,5 +19,6 @@ export async function searchTurfs(query?: string) {
   }
 
   const { data, error } = await q;
-  return { data: data || [], error: error?.message || null };
+  // Names without a booking app's attribution, as on the turf's own page.
+  return { data: (data || []).map((t) => ({ ...t, name: cleanVenueName(t.name) })), error: error?.message || null };
 }

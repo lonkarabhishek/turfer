@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { BlogLink } from "./blogTypes";
+import { isBookingAppHost, mentionsBookingApp, scrubBookingApps } from "../utils/bookingApps";
 
 /**
  * The web answer Ask TapTurf gives on a blog post when the article
@@ -8,7 +9,8 @@ import type { BlogLink } from "./blogTypes";
  * sees and the pages it stands on. Links come only from the search
  * itself (the pages the answer cites, else the first results), never
  * from words the model typed, and an answer with no page behind it is
- * no answer. Pure (type imports only), so node --test can run it.
+ * no answer. Pure (type imports and lib/utils/bookingApps.ts only), so
+ * node --test can run it.
  */
 
 export type WebAnswer = { text: string; links: BlogLink[] };
@@ -20,10 +22,12 @@ const MAX_RESULTS = 3;
 type Block = Anthropic.ContentBlock;
 type Result = Anthropic.WebSearchResultBlock;
 
+/** A page's host for a link, or null when it is no page to link (not http(s), or a booking app's: TapTurf links to none). */
 function hostOf(url: string): string | null {
   try {
     const u = new URL(url);
     if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    if (isBookingAppHost(u.hostname)) return null;
     return u.hostname.replace(/^www\./, "") || null;
   } catch {
     return null;
@@ -71,8 +75,8 @@ const CONTACT = new RegExp(
 /**
  * The model's words as one plain paragraph: no citation markers, markdown
  * or list bullets, and no sentence that carries a phone number, an email,
- * a UPI id or handle, a URL or a site's name. Cut to 700 characters at a
- * sentence.
+ * a UPI id or handle, a URL or a site's name, or names a turf-booking app
+ * (lib/utils/bookingApps.ts). Cut to 700 characters at a sentence.
  */
 export function cleanWebText(raw: string): string {
   const flat = raw
@@ -87,7 +91,7 @@ export function cleanWebText(raw: string): string {
     .trim();
   // Split where a sentence ends, so "4.8" and "₹1.5 lakh" stay whole.
   const kept = flat.split(/(?<=[.!?])\s+/).filter((s) => s && !CONTACT.test(s));
-  return clip(kept.join(" "), MAX_TEXT);
+  return clip(scrubBookingApps(kept.join(" ")) ?? "", MAX_TEXT);
 }
 
 /** Text written after a cut-off: only the sentences that finished. */
@@ -119,7 +123,9 @@ export function webLinks(content: Block[], from = 0, dead: ReadonlySet<string> =
     const key = pageKey(u);
     if (!host || seen.has(key) || dead.has(key) || out.length >= max) return;
     seen.add(key);
-    out.push({ label: tidy(title) || tidy(results.get(url)?.title) || host, url: u, host });
+    // A page title that names a booking app ("Best turfs on Playo") shows as its host.
+    const label = [tidy(title), tidy(results.get(url)?.title)].find((t) => t && !mentionsBookingApp(t)) || host;
+    out.push({ label, url: u, host });
   };
   let cited = false;
   for (const b of content.slice(from)) {

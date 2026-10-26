@@ -6,7 +6,7 @@ import { labelFor } from "@/lib/city";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
 import { priceUnitSuffix } from "@/lib/utils/prices";
-import { stripBookingClaims } from "@/lib/utils/bookingClaims";
+import { priceFigures, publicLink, scrubBookingApps } from "@/lib/utils/bookingApps";
 import type { Turf } from "@/types/turf";
 import { ROUTER_MODEL, structured, type AskUsage } from "./ask";
 
@@ -66,15 +66,23 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
       ? [...new Set(hoursRows.map((r) => (r.closed ? "closed" : r.spans.map(formatSpan).join(", "))))].join(" / ")
       : null;
 
+  // Reported prices as numbers only: a note's words said where it came
+  // from ("booking-app listing: …"), and the sheet names no booking app.
+  // priceFigures reads ₹-marked amounts and bare ones said as a price
+  // ("Rates are 1000 per hour", "800/-"), as most Google quotes are.
+  const reported = [...new Set((t.price_mentions ?? []).flatMap((m) => (m.price_inr ? [`₹${m.price_inr}`] : priceFigures(m.text))))].slice(0, 4);
+
+  // Every free-text field without booking apps (lib/utils/bookingApps.ts):
+  // the model repeats what the sheet says.
   const facts: TurfFacts = {
     name: t.name,
     area: areaFor(t),
     city: t.city ? labelFor(t.city as never) : null,
-    address: t.address,
+    address: scrubBookingApps(t.address),
     sports: t.sports,
     google_rating: t.total_reviews > 0 ? `${t.rating} from ${t.total_reviews} Google reviews` : null,
     rates: Object.keys(rates).length ? rates : null,
-    reported_prices_unverified: t.price_mentions?.map((m) => m.price_inr ? `₹${m.price_inr}` : m.text).filter(Boolean).slice(0, 4) ?? null,
+    reported_prices_unverified: reported.length ? reported : null,
     hours,
     floodlights: t.has_floodlights === true ? "yes" : null,
     covered: t.is_covered === true ? "yes" : null,
@@ -93,7 +101,7 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
         ? `nets, ${t.net_condition.toLowerCase()} condition`
         : null,
     listed_prices_per_hour: bandSummary(t.pricing_bands),
-    good_to_know: t.good_to_know,
+    good_to_know: scrubBookingApps(t.good_to_know),
     parking: t.parking_available === true ? "yes" : null,
     washroom: t.washroom_available === true ? "yes" : null,
     changing_room: t.changing_room_available === true ? "yes" : null,
@@ -101,15 +109,17 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
     sitting_area: t.sitting_area_available === true ? "yes" : null,
     amenities: t.amenities?.length ? t.amenities : null,
     members_only: t.membership_required ? "yes" : null,
-    access_notes: t.access_notes,
+    access_notes: scrubBookingApps(t.access_notes),
     phone_listed: getPhone(t) ? "yes, on the TapTurf page" : getWhatsAppPhone(t) ? "WhatsApp only, on the TapTurf page" : "no",
-    website: t.website_url ? "yes" : null,
+    // The page shows no booking app's page as the venue's website.
+    website: publicLink(t.website_url) ? "yes" : null,
     // Without "bookable on Playo" lines: players book by call or WhatsApp.
-    description: stripBookingClaims(t.description)?.slice(0, 500) ?? null,
+    description: scrubBookingApps(t.description)?.slice(0, 500) ?? null,
     recent_reviews: reviews
-      .filter((r) => r.comment && r.comment.trim().length > 10)
+      .map((r) => ({ ...r, comment: scrubBookingApps(r.comment) }))
+      .filter((r) => r.comment && r.comment.length > 10)
       .slice(0, 8)
-      .map((r) => ({ stars: r.rating, text: r.comment!.trim().slice(0, 240), from: r.source === "google" ? "Google" : "TapTurf" })),
+      .map((r) => ({ stars: r.rating, text: r.comment!.slice(0, 240), from: r.source === "google" ? "Google" : "TapTurf" })),
   };
   for (const k of Object.keys(facts)) if (facts[k] == null || (Array.isArray(facts[k]) && (facts[k] as unknown[]).length === 0)) delete facts[k];
   return facts;
@@ -149,10 +159,11 @@ Rules:
 - verdict: at most 40 words, plain and specific, naming the venues. Say which suits which kind of player and why, from the data. Do not pick a winner when the data does not support one.
 - best_for: one phrase of at most 6 words per venue, same order as the sheets.
 - caveats: at most 25 words on what the sheets do not cover (missing rates, hours), or null.
+- Never name, recommend or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow and the like), and never say a venue is booked online or through an app.
 - Currency is ₹. Spell Indian place names as given. No hedging language and no marketing adjectives.`;
 
 export async function compareTurfs(sheets: TurfFacts[], usage?: AskUsage): Promise<CompareOut | null> {
-  return structured(
+  const out = await structured(
     CompareOut,
     {
       model: COMPARE_MODEL,
@@ -163,6 +174,16 @@ export async function compareTurfs(sheets: TurfFacts[], usage?: AskUsage): Promi
     "compare",
     usage,
   );
+  if (!out) return null;
+  // The sheets name no booking app; nor does what is shown, whatever the model wrote.
+  const verdict = scrubBookingApps(out.verdict);
+  if (!verdict) return null;
+  return {
+    verdict,
+    rows: out.rows.map((r) => ({ label: r.label, values: r.values.map((v) => scrubBookingApps(v) ?? "Not listed") })),
+    best_for: out.best_for.map((b) => scrubBookingApps(b) ?? ""),
+    caveats: scrubBookingApps(out.caveats),
+  };
 }
 
 export const AnswerOut = z.object({
@@ -180,12 +201,13 @@ Rules:
 - If the sheet does not cover the question, set covered to false and answer like "TapTurf doesn't list parking for CC Turf Pardi yet. The venue can confirm on the phone." Do not include a number. Do not guess.
 - Never use the words "sheet", "fact sheet", "data" or "the information given", and never add a sentence about what more detail is or is not available. Speak as TapTurf: "TapTurf lists...", "reviewers mention...". Example: "Yes, TapTurf lists floodlights at Hindu Gymkhana Kothrud."
 - Reviews are opinions: attribute them ("reviewers mention..."). Reported prices are unverified: say so. good_to_know is a note from public reviews: attribute it the same way.
-- listed_prices_per_hour are per hour by format, from the venue's online listing: say "listed at". For a budget question, compare the budget with those prices (or rates) and say plainly which formats fit.
+- listed_prices_per_hour are the rates TapTurf lists per hour by format: say "listed at". For a budget question, compare the budget with those prices (or rates) and say plainly which formats fit.
 - Size: use size, formats and grounds when present ("TapTurf lists it as a 6-a-side ground, 2 grounds").
+- Never name, recommend or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow and the like), and never say the venue is booked online or through an app.
 - No preamble, no restating the question.`;
 
 export async function answerQuestion(question: string, sheet: TurfFacts, usage?: AskUsage): Promise<AnswerOut | null> {
-  return structured(
+  const out = await structured(
     AnswerOut,
     {
       model: ROUTER_MODEL,
@@ -196,4 +218,7 @@ export async function answerQuestion(question: string, sheet: TurfFacts, usage?:
     "answer",
     usage,
   );
+  // A question that names an app ("is it on Playo?") must not get it named back.
+  const answer = out ? scrubBookingApps(out.answer) : null;
+  return out && answer ? { ...out, answer } : null;
 }

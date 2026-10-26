@@ -1,4 +1,5 @@
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { sportBySlug } from "@/lib/sports";
 import { haversineKm, type Coords } from "@/lib/utils/location";
 import { isGameExpired, sortGamesByDateTime } from "@/lib/utils/game";
@@ -50,7 +51,8 @@ export async function loadOpenGames({ strict = false }: { strict?: boolean } = {
     const { data: turfs, error: turfsError } = await supabase.from("turfs").select(TURF_COLS).in("id", turfIds);
     // Without their turfs the games have no city, so the home would list none.
     if (turfsError && strict) throw new Error(`open games turfs read failed: ${turfsError.message}`);
-    for (const t of turfs ?? []) turfsMap[(t as { id: string }).id] = t as Game["turfs"];
+    // Names without a booking app's attribution, as on the turf's own page.
+    for (const t of turfs ?? []) turfsMap[(t as { id: string }).id] = { ...(t as NonNullable<Game["turfs"]>), name: cleanVenueName((t as { name: string }).name) };
   }
   return (data as Game[])
     .map((g) => ({ ...g, host_phone: "", turfs: g.turf_id ? turfsMap[g.turf_id] : undefined }))

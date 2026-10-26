@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
@@ -26,7 +27,7 @@ export async function getAvailableGamesServer(): Promise<Game[]> {
       .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
       .in("id", turfIds);
     if (turfs) {
-      const map = Object.fromEntries(turfs.map((t) => [t.id, t]));
+      const map = Object.fromEntries(turfs.map((t) => [t.id, { ...t, name: cleanVenueName(t.name) }]));
       data.forEach((g: Record<string, unknown>) => {
         if (g.turf_id && map[g.turf_id as string]) g.turfs = map[g.turf_id as string];
       });
@@ -52,7 +53,7 @@ export async function getGameByIdServer(gameId: string): Promise<Game | null> {
       .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
       .eq("id", g.turf_id)
       .limit(1);
-    if (turfs?.[0]) (g as Record<string, unknown>).turfs = turfs[0];
+    if (turfs?.[0]) (g as Record<string, unknown>).turfs = { ...turfs[0], name: cleanVenueName(turfs[0].name) };
   }
 
   return g as Game;

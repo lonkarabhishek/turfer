@@ -1,4 +1,5 @@
-import type { Turf, PriceMention } from "@/types/turf";
+import type { Turf, PriceBand, PriceMention } from "@/types/turf";
+import { cleanPriceMentions } from "./bookingApps";
 
 type NumericMention = PriceMention & { price_inr: number };
 
@@ -75,7 +76,7 @@ export function getMaximumPrice(turf: Turf): number | null {
  * mentions array is empty or missing.
  */
 export function getReportedPriceRange(
-  turf: Turf,
+  turf: Pick<Turf, "price_mentions">,
 ): { min: number; max: number; mentions: NumericMention[] } | null {
   const mentions = (turf.price_mentions ?? []).filter(
     (m): m is NumericMention => !!m && positivePrice(m.price_inr) != null,
@@ -108,7 +109,7 @@ export function priceUnitSuffix(turf: Pick<Turf, "price_unit" | "slot_minutes">,
  * Research notes about prices (free text with a source). Shown as
  * "Reported" lines with an unverified label; never numbers we claim.
  */
-export function getTextPriceMentions(turf: Turf): PriceMention[] {
+export function getTextPriceMentions(turf: Pick<Turf, "price_mentions">): PriceMention[] {
   return (turf.price_mentions ?? []).filter((m) => !!m && typeof m.text === "string" && m.text.trim().length > 0);
 }
 
@@ -117,8 +118,19 @@ export function getTextPriceMentions(turf: Turf): PriceMention[] {
  * section. summarisePrice() puts these in the header as a "reported"
  * range, so the section has to show what the range came from.
  */
-export function getNumericPriceMentions(turf: Turf): NumericMention[] {
+export function getNumericPriceMentions(turf: Pick<Turf, "price_mentions">): NumericMention[] {
   return getReportedPriceRange(turf)?.mentions ?? [];
+}
+
+/**
+ * What the Pricing section lists when the turf has no price table: notes
+ * first, then bare numbers from reviews, three at most. Cleaned of any
+ * booking app first (cleanPriceMentions), so a note that was only an
+ * app's listing or grid never decides that this view shows.
+ */
+export function reportedMentions(turf: Pick<Turf, "price_mentions">): PriceMention[] {
+  const clean = { price_mentions: cleanPriceMentions(turf.price_mentions) };
+  return [...getTextPriceMentions(clean), ...getNumericPriceMentions(clean).filter((m) => !m.text?.trim())].slice(0, 3);
 }
 
 /**
@@ -203,6 +215,30 @@ export function getBandPriceRange(turf: Pick<Turf, "pricing_bands">): { min: num
     .filter((p): p is number => p != null);
   return values.length ? { min: Math.min(...values), max: Math.max(...values) } : null;
 }
+
+/** A price band as the page's table shows it: no source note. */
+export type BandRow = Pick<PriceBand, "band" | "days" | "price_per_hour"> & { format: string | null };
+
+/**
+ * The bands for the Pricing table, which is a client component: only what
+ * it shows goes into the page. The stored source notes ("listing:booking-app
+ * grid 2026-10-16") stay on the server.
+ */
+export function bandRows(bands: readonly PriceBand[] | null | undefined): BandRow[] {
+  return (bands ?? []).map((b) => ({ band: b.band, days: b.days, format: b.format ?? null, price_per_hour: b.price_per_hour }));
+}
+
+/** The latest YYYY-MM-DD named in the bands' source notes, as "Oct 2026"; null when none names a date. */
+export function bandsCheckedOn(bands: readonly PriceBand[] | null | undefined): string | null {
+  let best = "";
+  for (const b of bands ?? []) for (const d of (typeof b.source === "string" ? b.source : "").match(/\d{4}-\d{2}-\d{2}/g) ?? []) if (d > best) best = d;
+  if (!best) return null;
+  const [y, m] = best.split("-").map(Number);
+  if (!(m >= 1 && m <= 12)) return null;
+  return `${MONTHS[m - 1]} ${y}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /**
  * Whether the turf page's Pricing table shows the listed price bands

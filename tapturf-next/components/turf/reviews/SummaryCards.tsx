@@ -1,4 +1,5 @@
 import { ExternalLink, Star } from "lucide-react";
+import { googleMapsUrl } from "@/lib/utils/bookingApps";
 
 export type PlayersSay = { summary: string; likes: string[]; gripes: string[]; based_on: number; sources: string[] };
 
@@ -50,8 +51,10 @@ export function PlayersSayCard({ playersSay }: { playersSay: PlayersSay }) {
  * fastest social proof on any turf page. A score without a review count is
  * still a score (14 Pune turfs); only the count line is hidden then.
  */
-export function GoogleCard({ rating, count, url }: { rating: number; count: number | null | undefined; url: string | null | undefined }) {
+export function GoogleCard({ rating, count, url: link }: { rating: number; count: number | null | undefined; url: string | null | undefined }) {
   const hasCount = typeof count === "number" && count > 0;
+  // "Read them on Google" opens Google Maps and nothing else (no booking app, no search page).
+  const url = googleMapsUrl(link);
   return (
     <a
       href={url || undefined}

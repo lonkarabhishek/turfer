@@ -2,15 +2,17 @@ import Link from "next/link";
 import { ExternalLink, IndianRupee } from "lucide-react";
 import type { PriceMention, Turf } from "@/types/turf";
 import {
+  bandRows,
+  bandsCheckedOn,
   formatPrice,
-  getNumericPriceMentions,
-  getTextPriceMentions,
   ownerSetPrices,
   positivePrice,
   priceRangeText,
   priceUnitSuffix,
+  reportedMentions,
   showsPriceBands,
 } from "@/lib/utils/prices";
+import { publicLink } from "@/lib/utils/bookingApps";
 import { PriceBands } from "./PriceBands";
 import { SuggestInfoButton } from "./TurfSuggestions";
 
@@ -42,10 +44,12 @@ export function TurfPricing({
   // Listed prices by format and time band are the richest we have,
   // unless the owner set their own on myTapturf: theirs win.
   if (showsPriceBands(turf)) {
+    // PriceBands runs in the browser: it gets only what it shows (the
+    // bands' source notes name the booking app they came from).
     return (
       <div className="section-divider">
         <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
-        <PriceBands bands={turf.pricing_bands ?? []} />
+        <PriceBands bands={bandRows(turf.pricing_bands)} checked={bandsCheckedOn(turf.pricing_bands)} />
       </div>
     );
   }
@@ -54,11 +58,10 @@ export function TurfPricing({
   // Research notes ("Rs 500 per hour (Day), Rs 600 (Night)" with a
   // source), then bare numbers from reviews: the header shows those as a
   // "reported" range, so this section says where it came from. Shown
-  // when we have no price table of our own.
-  const mentions: PriceMention[] = [
-    ...getTextPriceMentions(turf),
-    ...getNumericPriceMentions(turf).filter((m) => !m.text?.trim()),
-  ].slice(0, 3);
+  // when we have no price table of our own. Cleaned of booking apps
+  // before anything is decided: a note that was only an app's listing
+  // never makes this view show.
+  const mentions: PriceMention[] = reportedMentions(turf);
 
   // Only real, positive prices make a row or a cell; a missing slot is a
   // dash with no unit, never "N/A/hr" or ₹0.
@@ -83,40 +86,44 @@ export function TurfPricing({
       <div className="section-divider">
         <h2 className="text-[22px] font-bold text-primary-800 mb-2 font-serif">Pricing</h2>
         <p className="text-[13px] text-primary-500 mb-4">
-          Reported prices from the turf&apos;s website or reviews. Unverified, confirm with the turf.
+          Reported prices, not confirmed by the turf. Check the rate with the turf before you book.
         </p>
         <ul className="space-y-3">
-          {mentions.map((m, i) => (
-            <li key={i} className="rounded-2xl border border-cream-300 bg-cream-50 px-4 py-3">
-              <p className="text-[15px] leading-snug text-primary-800">
-                <span className="font-semibold text-primary-500">Reported: </span>
-                {m.text?.trim() ? (
-                  m.text
-                ) : (
-                  <>
-                    {formatPrice(m.price_inr)}
-                    {unit}
-                    {m.context ? `, ${m.context}` : ""}
-                  </>
-                )}
-              </p>
-              {(m.date || m.source_url) && (
-                <p className="mt-1.5 text-[12px] text-primary-400 flex flex-wrap items-center gap-x-3">
-                  {m.date && <span>{formatMentionDate(m.date)}</span>}
-                  {m.source_url && (
-                    <a
-                      href={m.source_url}
-                      target="_blank"
-                      rel="noopener nofollow"
-                      className="inline-flex items-center gap-1 text-accent-600 hover:text-accent-700"
-                    >
-                      Source <ExternalLink className="w-3 h-3" />
-                    </a>
+          {mentions.map((m, i) => {
+            // A plain web page only: "external-listing" rendered as a link to /turf/external-listing.
+            const source = publicLink(m.source_url);
+            return (
+              <li key={i} className="rounded-2xl border border-cream-300 bg-cream-50 px-4 py-3">
+                <p className="text-[15px] leading-snug text-primary-800">
+                  <span className="font-semibold text-primary-500">Reported: </span>
+                  {m.text?.trim() ? (
+                    m.text
+                  ) : (
+                    <>
+                      {formatPrice(m.price_inr)}
+                      {unit}
+                      {m.context ? `, ${m.context}` : ""}
+                    </>
                   )}
                 </p>
-              )}
-            </li>
-          ))}
+                {(m.date || source) && (
+                  <p className="mt-1.5 text-[12px] text-primary-400 flex flex-wrap items-center gap-x-3">
+                    {m.date && <span>{formatMentionDate(m.date)}</span>}
+                    {source && (
+                      <a
+                        href={source}
+                        target="_blank"
+                        rel="noopener nofollow"
+                        className="inline-flex items-center gap-1 text-accent-600 hover:text-accent-700"
+                      >
+                        Source <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
     );

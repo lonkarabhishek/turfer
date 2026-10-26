@@ -42,7 +42,8 @@ export async function POST(req: Request) {
     let name = id;
     try {
       // A failed read throws and the turf is retried on a later batch; null (no active turf by that id) is skipped.
-      const turf = await getTurfById(id);
+      // The name as stored: the check flags a booking app in it ("… - by SPORLOC").
+      const turf = await getTurfById(id, { storedName: true });
       if (!turf) continue;
       name = turf.name;
       const review = await checkListing(turf);

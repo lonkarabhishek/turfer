@@ -6,7 +6,7 @@ import type { Post } from "../types";
 // and Turf, listed under Tathawade but named "SP's Sports Academy Wakad" in its
 // address (12 venues). Kridangan Turf & Badminton mentions Wakad in its address
 // but is listed in Rahatani, so it is not counted.
-// Prices and hours are as listed (mostly from Google Maps and booking-app
+// Prices and hours are as listed (mostly from Google Maps and other public
 // listings), not owner-verified.
 
 export const post: Post = {
@@ -44,7 +44,7 @@ export const post: Post = {
     {
       type: "callout",
       title: "Read this first",
-      text: "These figures describe turfs listed on TapTurf, not every turf in Wakad. Listings are compiled mainly from Google Maps and booking-app pages. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
+      text: "These figures describe turfs listed on TapTurf, not every turf in Wakad. Listings are compiled from Google Maps and other public sources. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
     },
     {
       type: "stat-grid",
@@ -260,7 +260,7 @@ export const post: Post = {
       items: [
         "Source: TapTurf database, 25 October 2026 (queried the same day, read-only).",
         "Scope: 11 active Pune listings with Wakad as the area, plus SP Sports Academy and Turf, which is listed under Tathawade but names Wakad in its address. Kridangan Turf & Badminton is listed in Rahatani and is not counted.",
-        "Prices: 9 venues have a listed hourly price. Each can list up to six rates (morning, afternoon and evening, weekday and weekend). Prices are compiled from public listings and booking-app pages and are not owner-confirmed.",
+        "Prices: 9 venues have a listed hourly price. Each can list up to six rates (morning, afternoon and evening, weekday and weekend). Prices are compiled from public sources and are not owner-confirmed.",
         "The all-rates median of ₹1,000 uses all 54 listed rates across the 9 venues, the same method as our India turf price map, whose Pune-wide median is ₹1,000 (172 priced Pune venues, 23 October 2026).",
         "Hours: listed for 11 of the 12 venues, mainly from Google Maps. Not confirmed by owners.",
         "Ratings and review counts are as shown on TapTurf on 25 October 2026. PIFA Football Academy and Turf has no rating on file.",

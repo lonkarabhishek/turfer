@@ -31,6 +31,7 @@ import { askChipsFor } from "@/lib/home/select";
 import { getPostBySlug } from "@/content/blog";
 import { articleSearchChips, englishChip, hinglishChip, isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
 import { answerBlog, type BlogResult } from "@/lib/ai/blogAnswer";
+import { mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -82,6 +83,23 @@ function parseContext(raw: string | null): AskContext & { blog: string | null } 
 }
 
 type Db = ReturnType<typeof createReadOnlyClient>;
+/**
+ * The player's words reach the model, so a booking app they name ("Hudle
+ * pe Baner me football turf?") can come back in the reply, the summary or
+ * the chips: never shown (lib/utils/bookingApps.ts). What is left when
+ * the scrub takes all of it is the box's plain line for the intent.
+ */
+function withoutBookingApps(f: AskFilters): AskFilters {
+  if (!mentionsBookingApp(f.reply) && !mentionsBookingApp(f.summary) && !f.followups.some(mentionsBookingApp)) return f;
+  const game = f.intent === "find_game";
+  const reply = mentionsBookingApp(f.reply)
+    ? (scrubBookingApps(f.reply) ??
+      (game ? "Here are the open games that match." : f.intent === "other" ? "I can find you a turf or a game, compare two venues or answer a question about one." : "Here is what matches on TapTurf."))
+    : f.reply;
+  const summary = mentionsBookingApp(f.summary) ? (scrubBookingApps(f.summary) ?? (game ? "Open games" : "Turfs on TapTurf")) : f.summary;
+  return { ...f, reply, summary, followups: f.followups.filter((x) => !mentionsBookingApp(x)) };
+}
+
 type Finish = { filters: Record<string, unknown>; results: number; ms: number; source: "claude" | "keywords"; reply: string; intent: string };
 
 /**
@@ -293,6 +311,7 @@ export async function GET(req: Request) {
     }
   }
   ms.parse = Math.round(performance.now() - parseStart);
+  filters = withoutBookingApps(filters);
   // ask_queries.source only takes these two; the real path is logged as _src.
   const source: "claude" | "keywords" = via === "claude" || via === "cache" ? "claude" : "keywords";
   // Compare and question need a second call; skip it when Claude is down.

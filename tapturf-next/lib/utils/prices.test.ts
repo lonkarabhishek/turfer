@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatPrice,
+  bandRows,
+  bandsCheckedOn,
   getBandPriceRange,
   getMaximumPrice,
   getMinimumPrice,
@@ -10,6 +12,7 @@ import {
   playerPriceRange,
   positivePrice,
   priceRangeText,
+  reportedMentions,
   showsPriceBands,
   summarisePagePrice,
   summarisePrice,
@@ -144,4 +147,57 @@ test("player-shared rates: the range across suggestions, never ₹0", () => {
     playerPriceRange([{ price_min: 600, price_max: 900 }, { price_min: null, price_max: 1000 }, { price_min: 0, price_max: null }]),
     { min: 600, max: 1000, count: 2 },
   );
+});
+
+// 26 Oct: 1,248 turfs had notes like "booking-app listing: …" with
+// source_url "external-listing" (a relative link to /turf/external-listing).
+test("reported prices: notes naming a booking app are cleaned or dropped before the view is chosen", () => {
+  const grid = {
+    text: "booking-app live booking grid (hourly = 2×30-min slots): Thu 23 Oct: cheapest turf court 'Turf 1' (Box Cricket) hourly morning ₹800 | Sat 25 Oct: x",
+    source_url: "external-listing",
+  };
+  // Only an app's grid: nothing to report, so the page shows "Prices not listed yet".
+  assert.deepEqual(reportedMentions(turf({ price_mentions: [grid] })), []);
+  const listed = reportedMentions(
+    turf({ price_mentions: [grid, { text: "booking-app listing: '₹999 onwards' (slot length and unit not stated)", source_url: "external-listing" }] }),
+  );
+  assert.deepEqual(
+    listed.map((m) => [m.text, m.source_url]),
+    [["₹999 onwards (slot length and unit not stated)", null]],
+  );
+  // A plain note and a review number stay; a link stays only to a plain web page.
+  const plain = reportedMentions(
+    turf({
+      price_mentions: [
+        { text: "Rs 500 per hour (Day)", source_url: "https://www.niwec.org/sport-fees/" },
+        { price_inr: 700, context: "a reviewer", source_url: "https://hudle.in/x" },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    plain.map((m) => [m.text ?? m.price_inr, m.source_url]),
+    [
+      ["Rs 500 per hour (Day)", "https://www.niwec.org/sport-fees/"],
+      [700, null],
+    ],
+  );
+  assert.ok(!/booking|external|hudle/i.test(JSON.stringify(plain)));
+  assert.deepEqual(reportedMentions(turf()), []);
+});
+
+test("price bands for the client table: no source notes, and the month they were checked", () => {
+  const bands = [
+    band(800, { source: "listing:booking-app grid 2026-10-16" }),
+    band(1000, { band: "night", days: "weekend", format: "6-a-side", source: "listing:booking-app grid 2026-09-30; external-listing" }),
+  ];
+  const rows = bandRows(bands);
+  assert.deepEqual(rows, [
+    { band: "evening", days: "all", format: null, price_per_hour: 800 },
+    { band: "night", days: "weekend", format: "6-a-side", price_per_hour: 1000 },
+  ]);
+  assert.ok(!/booking|listing|external/i.test(JSON.stringify(rows)));
+  assert.equal(bandsCheckedOn(bands), "Oct 2026");
+  assert.equal(bandsCheckedOn([band(800)]), null);
+  assert.equal(bandsCheckedOn([band(800, { source: "checked 2026-13-01" })]), null);
+  assert.deepEqual(bandRows(null), []);
 });
