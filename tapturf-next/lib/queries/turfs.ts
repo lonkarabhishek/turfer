@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
+import { createRowStore, type ListMeta, type ListPart, type RowStore } from "@/lib/cache/rowStore";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
@@ -14,6 +15,13 @@ import type { PriceBand, Turf } from "@/types/turf";
  * shipped descriptions, data_sources and field_confidence for 240+
  * turfs on every listing: /turfs was 3.4 MB of HTML. Detail pages
  * still use "*" via getTurfById().
+ *
+ * The list snapshot carries the same columns (v_cols in
+ * private.build_turf_list(), 20261026_cache_list_snapshot.sql; keys.test.ts
+ * checks they agree). To add a column, replace that function first: a
+ * snapshot with extra columns still serves this code. A column added here
+ * first makes this app read the table itself (once per list build per
+ * process) until the snapshot has it.
  */
 const CARD_COLUMNS = [
   "id", "slug", "name", "address", "area", "city", "sports", "images", "cover_image",
@@ -241,65 +249,6 @@ export async function fetchAllRows<T>(page: (from: number, to: number) => Promis
   return out;
 }
 
-// Calls that arrive while the list is being read share that read. Only
-// reads in flight are shared, never a finished one, so a turf edit is
-// never hidden. Each caller still gets its own transformed rows.
-let inflight: Promise<Record<string, unknown>[]> | null = null;
-
-function readActiveRows(): Promise<Record<string, unknown>[]> {
-  inflight ??= (async () => {
-    const t0 = Date.now();
-    const rows = await fetchAllRows<Record<string, unknown>>((from, to) => {
-      const supabase = createServerClient();
-      return supabase
-        .from("turfs")
-        .select(CARD_COLUMNS)
-        .eq("is_active", true)
-        .order("rating", { ascending: false })
-        .order("id")
-        .range(from, to) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: unknown }>;
-    });
-    // One line per full read, so the logs show how often it happens
-    // (should be about once per instance per purge or hour).
-    console.info("turf full read", { rows: rows.length, ms: Date.now() - t0 });
-    // Thousands of turfs are active: none at all is a read that went wrong, and kept it would
-    // empty every listing (and 404 every city/sport page) until the next purge. Throwing keeps
-    // the last good copy serving.
-    if (rows.length === 0) throw new Error("turf full read returned no active turfs");
-    return rows;
-  })().finally(() => {
-    inflight = null;
-  });
-  return inflight;
-}
-
-/**
- * Every active turf row, from one copy in Next's data cache shared by
- * all pages and routes. Before this, each page rebuild read every turf
- * from Supabase (the heaviest query we run: about 2,500 wide rows,
- * sorted on disk). On 20 Oct those reads timed out, the rebuilds retried,
- * and the database stayed overloaded for hours. Now the database sees
- * one full read an hour, or after a turf change marks the "turf-data"
- * tag stale; while a refresh fails the last copy keeps serving.
- *
- * The rows (about 2.7 KB each) are split by id into 32 pieces, each
- * cached on its own, because the data cache refuses anything over 2 MB
- * (16 pieces would hit that at about 13k turfs, 32 at about 25k).
- * 3600 s, not 600: unstable_cache lowers the revalidate of every page
- * that reads it to its own, so 600 made the hourly pages rebuild every
- * 10 minutes. Changes no longer wait for the timer: the cache queue
- * (supabase/migrations/20261020_cache_queue.sql) purges within minutes.
- * Bump the key when the row shape or the piece count changes.
- */
-const SHARDS = 32;
-const shardOf = (id: unknown) => (parseInt(String(id).slice(0, 2), 16) || 0) % SHARDS;
-const rowPieces = Array.from({ length: SHARDS }, (_, i) =>
-  unstable_cache(async () => (await readActiveRows()).filter((r) => shardOf(r.id) === i), ["turf-rows-v2", String(i)], {
-    revalidate: 3600,
-    tags: ["turf-data"],
-  }),
-);
-
 /** Rating high to low (no rating first, as Postgres sorts DESC), then id: the order the query returns. */
 function byRatingThenId(a: Record<string, unknown>, b: Record<string, unknown>): number {
   const ra = a.rating == null ? Infinity : Number(a.rating);
@@ -308,18 +257,187 @@ function byRatingThenId(a: Record<string, unknown>, b: Record<string, unknown>):
   return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
 }
 
+type Row = Record<string, unknown>;
+
 /**
- * The merged rows, once per render: React cache() shares them between
- * generateMetadata, the page and every getAllActiveTurfs(city) call in
- * it. /turf-near-me asked once per city (54) in both, which was 108
- * merges of every piece, each one parsing all the rows again. Callers
- * must not mutate the array. Outside a render (route handlers) this is
- * a plain call.
+ * One retry while `next build` prerenders (a failed read there fails the
+ * whole deploy), none while serving: on 20 Oct retries turned one slow
+ * statement into four against a database that was already overloaded.
+ * Same rule as fetchAllRows.
  */
-const activeRows = cache(async (): Promise<Record<string, unknown>[]> => {
-  const parts = await Promise.all(rowPieces.map((p) => p()));
-  return parts.flat().sort(byRatingThenId);
+async function buildRetry<T extends { error: unknown }>(call: () => PromiseLike<T>): Promise<T> {
+  let res = await call();
+  if (res.error && process.env.NEXT_PHASE === "phase-production-build") {
+    await new Promise((r) => setTimeout(r, 1500));
+    res = await call();
+  }
+  return res;
+}
+
+/**
+ * unstable_cache keys an entry on cb.toString() as well as its key parts,
+ * and the minifier names things differently in the page bundle, the
+ * route-handler bundle and each build: the same list meta was stored under
+ * two keys, so a cold route handler read the database even with the entry
+ * cached. A fixed toString leaves the key parts to name the entry, in every
+ * bundle and across deploys. Bump a key part when the cached shape changes.
+ */
+function cacheKeyed<A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
+  const cb = (...args: A) => fn(...args);
+  cb.toString = () => name;
+  return cb;
+}
+
+/** The list snapshot's version, or null before the first build. A failed read throws. */
+async function readListMeta(): Promise<ListMeta | null> {
+  const { data, error } = await buildRetry(() => createServerClient().rpc("turf_list_version"));
+  if (error) {
+    console.error("turf_list_version failed:", error);
+    throw new Error("Turf list version read failed");
+  }
+  return (data ?? null) as ListMeta | null;
+}
+
+async function readListPart(i: number): Promise<ListPart<Row> | null> {
+  const { data, error } = await buildRetry(() => createServerClient().rpc("turf_list_part", { p_part: i }));
+  if (error) {
+    console.error("turf_list_part failed:", { part: i, error });
+    throw new Error(`Turf list part ${i} read failed`);
+  }
+  return (data ?? null) as ListPart<Row> | null;
+}
+
+/**
+ * Part i of version v, shared through Next's data cache. A version's parts
+ * never change once built, so an entry is keyed by the version (and the
+ * database) and kept with no tag and no timer: revalidate false never
+ * lowers a page's revalidate, and it adds no tag. This is the copy that a
+ * process without the rows in memory starts from (route handlers, a
+ * page's first render, a new instance), and it still answers while the
+ * database is failing, as the 32 row pieces did before 26 Oct. A
+ * regeneration skips the read and fetches the part from the database
+ * (once per process per version), then stores it here.
+ *
+ * Only a part of version v is stored. When the database answers with
+ * another build (it built again since the meta was read) or no part, the
+ * callback throws, which stores nothing, and the answer is handed back to
+ * the store, which checks it. The fetch inside never lands in Next's fetch
+ * cache (Next treats fetches inside unstable_cache as no-store), so a
+ * build cannot pick up parts another build stored. Each part stays under
+ * 1.5 MB (private.turf_list_state.part_bytes), below the data cache's 2 MB
+ * per entry.
+ */
+const listPartCached = unstable_cache(
+  cacheKeyed("turf-list-part", async (v: number, i: number): Promise<ListPart<Row>> => {
+    const part = await readListPart(i);
+    if (part && part.v === v) return part;
+    throw Object.assign(new Error(`turf list part ${i}: not from v${v}`), { otherBuild: part });
+  }),
+  ["turf-list-part-v1", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""],
+  { revalidate: false },
+);
+
+async function readSnapshotPart(i: number, v: number): Promise<ListPart<Row> | null> {
+  try {
+    return await listPartCached(v, i);
+  } catch (e) {
+    if (e && typeof e === "object" && "otherBuild" in e) return (e as { otherBuild: ListPart<Row> | null }).otherBuild;
+    throw e;
+  }
+}
+
+const INSTANCE = Math.random().toString(36).slice(2, 8);
+let liveReadNo = 0;
+
+/**
+ * Every active turf straight from the table: only while no snapshot is
+ * usable. While `next build` prerenders, a page's own fetches go into
+ * Next's fetch cache, keyed by URL and headers, kept between builds and
+ * judged fresh by each reader's revalidate: pages of rows from an earlier
+ * build or an earlier read could come back, mixed with fresh ones. A header
+ * unique to each build-time read keeps it its own. Serving, those fetches
+ * are never cached.
+ */
+function readLiveRows(): Promise<Row[]> {
+  const tag = process.env.NEXT_PHASE === "phase-production-build" ? `${INSTANCE}.${++liveReadNo}` : null;
+  return fetchAllRows<Row>((from, to) => {
+    const query = createServerClient()
+      .from("turfs")
+      .select(CARD_COLUMNS)
+      .eq("is_active", true)
+      .order("rating", { ascending: false })
+      .order("id")
+      .range(from, to);
+    return (tag ? query.setHeader("x-tapturf-read", tag) : query) as unknown as PromiseLike<{ data: Row[] | null; error: unknown }>;
+  });
+}
+
+/**
+ * The version, as one tiny entry in Next's data cache. Every list page
+ * that reads the rows gets its "turf-data" tag (so a list purge still marks
+ * them all stale) and its 3600 s ceiling, exactly as the 32 row pieces gave
+ * them. A regeneration that skips the data cache reads the version fresh,
+ * which is the point: it is the one read such a regeneration makes. A
+ * missing RPC fails the build, so the migration goes first.
+ */
+const listMeta = unstable_cache(cacheKeyed("turf-list-meta", readListMeta), ["turf-list-meta-v1", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""], {
+  revalidate: 3600,
+  tags: ["turf-data"],
 });
+
+/**
+ * Every active turf row, from one copy per server process, keyed by the
+ * list snapshot's version (lib/cache/rowStore.ts has the rules).
+ *
+ * Until 26 Oct the rows sat in Next's data cache as 32 unstable_cache
+ * pieces (turf-rows-v2) and this comment promised one full read an hour or
+ * per purge. A page that Vercel regenerates skips every unstable_cache read
+ * (next's unstable-cache.js: isOnDemandRevalidate), so the pieces never
+ * served a regeneration: each one read every turf again (7 sorted
+ * statements, about 8.6 MB for 3,183 rows). On the 26 Oct import day that
+ * was 11 to 100 full reads per purge batch, 8 to 16 s each when they piled
+ * up, and 5 s timeouts. The in-flight sharing helped only reads that
+ * overlapped in one process; a crawler walking pages one at a time, the
+ * page and its RSC request landing on two instances, and the 600 s timers
+ * each paid a full read.
+ *
+ * Now the database builds the list once per list purge
+ * (private.build_turf_list, which the cache queue's flush runs just
+ * before it posts the purge), a regeneration reads only the version, and a
+ * process fetches the prebuilt parts once per version (from the data cache
+ * when it can, see listPartCached). A regeneration with an unchanged
+ * version makes no other read; the first one after a purge waits for the
+ * new rows (a version this process cannot load throws, so the last good
+ * page keeps serving instead of old rows being stored as fresh). On
+ * globalThis, so the page runtime and the route-handler runtime (which
+ * bundles its own copy of this module) share one copy and one load.
+ */
+const makeRowStore = () =>
+  createRowStore<Row>({
+    cols: CARD_COLUMNS,
+    readPart: readSnapshotPart,
+    readLive: readLiveRows,
+    order: byRatingThenId,
+    // inst tells instances apart in the logs (the region field there is the edge PoP, not where this ran).
+    log: (msg, extra) => console.info(msg, { ...extra, inst: INSTANCE, region: process.env.VERCEL_REGION ?? null }),
+  });
+const shared = globalThis as typeof globalThis & { __tapturfTurfRowsV1?: RowStore<Row> };
+// next dev evaluates this module again after every edit, while globalThis
+// stays: a kept store would keep the old columns, readers and sort. So dev
+// makes a new store per evaluation (no sharing with route handlers there).
+const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shared.__tapturfTurfRowsV1 ??= makeRowStore());
+
+/**
+ * The rows, once per render: React cache() shares them between
+ * generateMetadata, the page and every getAllActiveTurfs(city) call in it
+ * (/turf-near-me asks once per city). The array is frozen and sorted
+ * (rating, then id); callers copy before they sort. Outside a render
+ * (route handlers) this is a plain call.
+ */
+const activeRows = cache(async (): Promise<readonly Row[]> => rowStore.rowsFor(await listMeta()));
+
+/** The raw active rows (card columns), for lib/queries/cities.ts. Read-only. */
+export const activeTurfRows = activeRows;
 
 export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
   const city = cityFilter && isCity(cityFilter) ? cityFilter : null;

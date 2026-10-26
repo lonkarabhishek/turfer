@@ -11,17 +11,26 @@ import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
  * { keys: ["list:pune", "turf:turf-up-hinjewadi", ...] } (see
  * lib/cache/keys.ts and supabase/migrations/20261020_cache_queue.sql).
  * The old per-row webhook payload ({ type, table, record, old_record })
- * is still accepted until notify_turf_change() is dropped.
+ * is still accepted, but only purges the turf page it names: never the
+ * lists. On the 26 Oct import day that webhook was still live next to the
+ * queue (its removal was never applied) and sent 141 of the 165 list
+ * purges, up to 44 at once; each one marked every list page stale. The
+ * queue already sends the same list keys in its batch, so per-row posts
+ * can no longer mark the lists stale, whether or not the webhook is on
+ * (20261026_cache_legacy_webhook_off.sql turns it into a no-op).
  *
  * Until 20 Oct each changed row expired every turf cache and about 990
  * pages at once. An expired page rebuilds with the data cache bypassed,
  * so every rebuild read the whole turf table again; with imports and
  * admin batches that load took the database down. Now:
- * - any list:* key marks the "turf-data" tag stale ('max'), not expired.
- *   Every list page carries that tag (unstable_cache copies it from the
- *   turf rows), so they all keep serving their copy while one refresh of
- *   the rows rebuilds them in the background. No per-city path purges:
- *   those were hard expiries.
+ * - any list:* key in a batch marks the "turf-data" tag stale ('max'),
+ *   not expired. Every list page carries that tag (unstable_cache copies
+ *   it from the list version, see lib/queries/turfs.ts), so they all keep
+ *   serving their copy while they rebuild in the background. The batch
+ *   comes from private.flush_lists(), at most once per gap (15 minutes by
+ *   default), right after it rebuilt the list snapshot, so the rebuilds
+ *   read the new version. No per-city path purges: those were hard
+ *   expiries.
  * - turf:<key> purges that one turf page, /turf/<key>. revalidatePath
  *   with no profile is a hard expiry, not 'max': the next visitor waits
  *   for one render (a single turf_page call) and that render skips the
@@ -64,6 +73,7 @@ export async function POST(req: Request) {
   }
 
   let keys: unknown[];
+  const legacy = !Array.isArray(body.keys);
   if (Array.isArray(body.keys)) {
     // The flush never sends more; a bigger batch is a bug, not a retry.
     if (body.keys.length > MAX_KEYS) {
@@ -79,7 +89,9 @@ export async function POST(req: Request) {
   const plan = planPurge(keys);
   if (plan.rejected.length) console.warn("revalidate: skipped keys", plan.rejected.slice(0, 10));
 
-  if (plan.cities.length) {
+  // Legacy per-row posts never purge the lists (see above): the queue's batch does.
+  const listPurge = plan.cities.length > 0 && !legacy;
+  if (listPurge) {
     try {
       revalidateTag("turf-data", "max");
     } catch (e) {
@@ -96,7 +108,7 @@ export async function POST(req: Request) {
     }
   }
 
-  console.info("revalidate", { lists: plan.cities.length, turfs: plan.turfs.length, games: plan.games, legacy: !Array.isArray(body.keys) });
+  console.info("revalidate", { lists: plan.cities.length, turfs: plan.turfs.length, games: plan.games, legacy, listPurge });
   return NextResponse.json({ ok: true, lists: plan.cities, turfs: plan.turfs.length });
 }
 

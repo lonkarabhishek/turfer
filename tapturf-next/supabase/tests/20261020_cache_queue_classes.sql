@@ -1,7 +1,10 @@
 -- Proves the cache queue's rules (supabase/migrations/20261020_cache_queue.sql):
 -- which row changes queue which keys, urgency, re-arming and the flush.
+-- Since 20261026_cache_list_cap.sql list:* keys wait in
+-- private.cache_list_dirty and private.flush_lists() posts them at most once
+-- per gap; turf:* and games keys stay in private.cache_dirty.
 --
--- Run after that migration, in one go (Supabase SQL editor, or
+-- Run after that migration and the list cap, in one go (Supabase SQL editor, or
 -- execute_sql). Every case runs in its own subtransaction that is undone
 -- before the next, and the script ends in ROLLBACK, so nothing is kept:
 -- no turf edit, no queued key and no webhook (pg_net only sends
@@ -9,15 +12,21 @@
 -- exists, also fires here and is rolled back the same way.
 --
 -- Result: one row per case. Every row should start with "ok". The flush
--- cases (26, 28) can report FAIL if the cron flush happens to run at that
--- very moment (it holds the flush lock), or (28) if a real trending
+-- cases (26, 28, 31) can report FAIL if the cron flush happens to run at
+-- that very moment (it holds the flush lock), or (28) if a real trending
 -- window opened or closed in the last 5 minutes; run the script again.
+-- Case 31 also rebuilds the turf list snapshot (about 0.5 s) when
+-- 20261026_cache_list_snapshot.sql is applied; that is rolled back too.
 
 begin;
 
--- Keys queued by this transaction, sorted.
+-- Keys queued by this transaction, sorted: page keys and list keys.
 create function pg_temp.queued() returns text[] language sql as $$
-  select coalesce(array_agg(key order by key), '{}') from private.cache_dirty where marked_xid = pg_current_xact_id();
+  select coalesce(array_agg(key order by key), '{}') from (
+    select key from private.cache_dirty where marked_xid = pg_current_xact_id()
+    union all
+    select key from private.cache_list_dirty where marked_xid = pg_current_xact_id()
+  ) s;
 $$;
 
 -- Run p_sql, return the keys it queued, then undo all of it.
@@ -166,26 +175,30 @@ select r from (
               end $x$$q$, p.id),
     array['list:' || p.city, 'turf:' || p.slug]) from pick p
   union all
-  select 15, pg_temp.check('a change after a key was sent: back to unsent',
-    format($q$select private.mark_dirty(array['list:' || %L]);
-              update private.cache_dirty set sent_at = now(), request_id = -1, marked_xid = null where key = 'list:' || %L;
+  select 15, pg_temp.check('a change after a key was sent: back to unsent (list key and page key)',
+    format($q$select private.mark_dirty(array['list:' || %L, 'turf:' || %L]);
+              update private.cache_list_dirty set posted_at = now(), marked_xid = null where key = 'list:' || %L;
+              update private.cache_dirty set sent_at = now(), request_id = -1, marked_xid = null where key = 'turf:' || %L;
               update public.turfs set name = name || ' ' where id = %L;
               do $x$ begin
-                if exists (select 1 from private.cache_dirty where key = 'list:' || %L and (sent_at is not null or request_id is not null)) then
-                  raise exception 'key not re-armed';
+                if exists (select 1 from private.cache_list_dirty where key = 'list:' || %L and posted_at is not null) then
+                  raise exception 'list key not re-armed';
                 end if;
-              end $x$$q$, p.city, p.city, p.id, p.city),
+                if exists (select 1 from private.cache_dirty where key = 'turf:' || %L and (sent_at is not null or request_id is not null)) then
+                  raise exception 'page key not re-armed';
+                end if;
+              end $x$$q$, p.city, p.slug, p.city, p.slug, p.id, p.city, p.slug),
     array['list:' || p.city, 'turf:' || p.slug]) from pick p
   union all
   select 16, pg_temp.check('owner save (update, then its turf_edit_log row): its keys urgent, other transactions'' keys not',
-    format($q$insert into private.cache_dirty (key, marked_xid) values ('list:cache-test-other', null) on conflict do nothing;
+    format($q$insert into private.cache_dirty (key, marked_xid) values ('turf:cache-test-other', null) on conflict do nothing;
               update public.turfs set name = name || ' ' where id = %L;
               insert into public.turf_edit_log (turf_id, user_key, before, after) values (%L, 'cache-test', '{}', '{"name": "x"}');
               do $x$ begin
                 if not (select bool_and(urgent) from private.cache_dirty where marked_xid = pg_current_xact_id()) then
                   raise exception 'owner save keys not urgent';
                 end if;
-                if (select urgent from private.cache_dirty where key = 'list:cache-test-other') then
+                if (select urgent from private.cache_dirty where key = 'turf:cache-test-other') then
                   raise exception 'another transaction''s key turned urgent';
                 end if;
               end $x$$q$, p.id, p.id),
@@ -241,15 +254,15 @@ select r from (
 
   -- flush
   union all
-  select 26, pg_temp.check('flush posts an urgent key at once',
-    format($q$select private.mark_dirty(array['list:' || %L], true);
+  select 26, pg_temp.check('flush posts an urgent page key at once',
+    format($q$select private.mark_dirty(array['turf:' || %L], true);
               select private.flush_cache();
               do $x$ begin
-                if not exists (select 1 from private.cache_dirty where key = 'list:' || %L and sent_at is not null and request_id is not null) then
+                if not exists (select 1 from private.cache_dirty where key = 'turf:' || %L and sent_at is not null and request_id is not null) then
                   raise exception 'urgent key not sent';
                 end if;
-              end $x$$q$, p.city, p.city),
-    array['list:' || p.city]) from pick p
+              end $x$$q$, p.slug, p.slug),
+    array['turf:' || p.slug]) from pick p
 
   -- trending takeover and votes
   union all
@@ -278,6 +291,43 @@ select r from (
   select 30, pg_temp.check('a vote removed: its review''s turf page',
     format('delete from public.review_votes where id = %L', v.id),
     array[v.turf_key]) from vote_pick v
+
+  -- the list cap (20261026_cache_list_cap.sql)
+  union all
+  -- Urgency does not skip the gap for lists: the owner's page is urgent, the cards follow.
+  select 31, pg_temp.check('list flush: a settled list key goes out once the gap has passed (and the snapshot is rebuilt first)',
+    format($q$select private.mark_dirty(array['list:' || %L], true);
+              update private.cache_list_dirty set first_at = now() - interval '4 minutes', last_at = now() - interval '4 minutes'
+               where key = 'list:' || %L;
+              update private.cache_list_state set last_post = null, last_request = null where id;
+              select private.flush_lists();
+              do $x$
+              declare v_built timestamptz;
+              begin
+                if not exists (select 1 from private.cache_list_dirty where key = 'list:' || %L and posted_at is not null) then
+                  raise exception 'list key not posted';
+                end if;
+                if (select last_request from private.cache_list_state where id) is null then
+                  raise exception 'no list post recorded';
+                end if;
+                -- 20261026_cache_list_snapshot.sql, once applied: the rows are rebuilt in the same tick.
+                if to_regclass('private.turf_list_state') is not null then
+                  execute 'select built_at from private.turf_list_state where id' into v_built;
+                  if v_built is distinct from now() then
+                    raise exception 'list posted without a snapshot build';
+                  end if;
+                end if;
+              end $x$$q$, p.city, p.city, p.city),
+    array['list:' || p.city]) from pick p
+  union all
+  select 32, pg_temp.check('a list key waits in cache_list_dirty, never in cache_dirty',
+    format($q$update public.turfs set name = name || ' ' where id = %L;
+              do $x$ begin
+                if exists (select 1 from private.cache_dirty where marked_xid = pg_current_xact_id() and key like 'list:%%') then
+                  raise exception 'list key in cache_dirty';
+                end if;
+              end $x$$q$, p.id),
+    array['list:' || p.city, 'turf:' || p.slug]) from pick p
 ) cases
 order by n;
 

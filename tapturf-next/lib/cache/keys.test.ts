@@ -125,9 +125,9 @@ function sql(fn = "private.mark_turf_dirty()"): string {
   return readFileSync(join(dir, latest), "utf8");
 }
 
-function sqlArray(name: string): string[] {
-  const m = sql().match(new RegExp(`${name} constant text\\[\\] := array\\[([^\\]]*)\\]`));
-  assert.ok(m, `${name} not found`);
+function sqlArray(name: string, fn = "private.mark_turf_dirty()"): string[] {
+  const m = sql(fn).match(new RegExp(`${name} constant text\\[\\] := array\\[([^\\]]*)\\]`));
+  assert.ok(m, `${name} not found in ${fn}`);
   return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
 }
 
@@ -148,6 +148,13 @@ test("LIST_COLUMNS matches the trigger's v_list", () => {
 
 test("LIST_COLUMNS is CARD_COLUMNS plus is_active, city and slug", () => {
   assert.deepEqual(sorted([...LIST_COLUMNS]), sorted([...new Set([...cardColumns(), "is_active", "city", "slug"])]));
+});
+
+// The list snapshot is a third copy of the card columns, served to anon:
+// it must carry exactly what the pages select (a drift makes the app read
+// the table itself instead, once per version).
+test("the list snapshot's v_cols is CARD_COLUMNS, in the same order", () => {
+  assert.deepEqual(sqlArray("v_cols", "private.build_turf_list()"), cardColumns());
 });
 
 test("no column is both ignored and listed", () => {

@@ -7,9 +7,10 @@ import type { Turf } from "@/types/turf";
  * Every active turf, cut down to what one API needs, for routes that
  * scan the whole list (Ask TapTurf, game drafts, near me).
  *
- * The rows come from the cached turf pieces in lib/queries/turfs.ts and
+ * The rows come from the process's copy of the list snapshot in
+ * lib/queries/turfs.ts (shared with the pages, one load per version) and
  * a warm function instance keeps the projected list in memory for a
- * minute, so a turf edit shows within about a minute everywhere.
+ * minute, so a turf edit shows within about a minute of its list purge.
  *
  * These used to be cached pieces of their own (ask-turfs-v1,
  * near-turfs-v1) built from getAllActiveTurfs(). Next skips the cache

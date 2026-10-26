@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { activeTurfRows } from "@/lib/queries/turfs";
 import { CITIES, cityCopyFrom, cityInfo, isCitySlug, type CityInfo } from "@/lib/city";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
@@ -98,53 +99,47 @@ export async function getCityCopy(): Promise<CityCopy> {
 /**
  * Cities with enough turfs for an indexable "<sport> in <city>" page,
  * per sport, biggest first: the same rule the sitemap applies, so
- * cross-links and the sitemap name the same pages. One fetch of
- * (city, sports) for every active turf, cached for an hour. A failed
- * read throws (see getLiveCities): it used to cache an empty or partial
- * map for an hour.
+ * cross-links and the sitemap name the same pages. Counted from the
+ * active turf rows the page already has (activeTurfRows), once per
+ * snapshot version: the rows array is the same object until the version
+ * moves, so the map is kept next to it.
+ *
+ * This was its own hourly unstable_cache read of (city, sports) for every
+ * active turf. A regeneration skips the data cache, so each /<city>/<sport>
+ * rebuild (the page group with the most turf list reads: 194 of the 513
+ * logged on 25-26 Oct) ran those 4 statements on top of the list. Its only
+ * caller is /<city>/<sport>, which reads the rows anyway, so no page gains
+ * a tag or a shorter revalidate. A failed read throws, as before.
  */
-const getSportCityCounts = unstable_cache(
-  async (): Promise<Record<string, LiveCity[]>> => {
-    const out: Record<string, LiveCity[]> = {};
-    const supabase = createReadOnlyClient();
-    const rows: { city: string | null; sports: unknown }[] = [];
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase
-        .from("turfs")
-        .select("city, sports")
-        .eq("is_active", true)
-        .order("id")
-        .range(from, from + 999);
-      if (error) {
-        console.error("getSportCityCounts failed", error);
-        throw new Error("Sport city counts read failed");
-      }
-      rows.push(...((data ?? []) as { city: string | null; sports: unknown }[]));
-      if (!data || data.length < 1000) break;
+const sportCityCounts = new WeakMap<object, Record<string, LiveCity[]>>();
+
+async function getSportCityCounts(): Promise<Record<string, LiveCity[]>> {
+  const rows = await activeTurfRows();
+  const known = sportCityCounts.get(rows);
+  if (known) return known;
+  const out: Record<string, LiveCity[]> = {};
+  const split = (raw: unknown): string[] =>
+    (Array.isArray(raw) ? raw : [])
+      .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
+      .map((x) => x.trim())
+      .filter(Boolean);
+  const order = new Map(CITIES.map((c, i) => [c.id, i]));
+  for (const sp of SPORT_PAGES) {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const city = typeof r.city === "string" ? r.city : null;
+      if (!isCitySlug(city)) continue;
+      if (!turfPlaysSport(split(r.sports), sp)) continue;
+      counts.set(city, (counts.get(city) ?? 0) + 1);
     }
-    const split = (raw: unknown): string[] =>
-      (Array.isArray(raw) ? raw : [])
-        .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
-        .map((x) => x.trim())
-        .filter(Boolean);
-    const order = new Map(CITIES.map((c, i) => [c.id, i]));
-    for (const sp of SPORT_PAGES) {
-      const counts = new Map<string, number>();
-      for (const r of rows) {
-        if (!isCitySlug(r.city)) continue;
-        if (!turfPlaysSport(split(r.sports), sp)) continue;
-        counts.set(r.city, (counts.get(r.city) ?? 0) + 1);
-      }
-      out[sp.slug] = [...counts.entries()]
-        .filter(([, n]) => n >= MIN_TURFS_TO_INDEX)
-        .map(([city, n]) => ({ ...cityInfo(city), n }))
-        .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
-    }
-    return out;
-  },
-  ["sport-city-counts"],
-  { revalidate: 3600 },
-);
+    out[sp.slug] = [...counts.entries()]
+      .filter(([, n]) => n >= MIN_TURFS_TO_INDEX)
+      .map(([city, n]) => ({ ...cityInfo(city), n }))
+      .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
+  }
+  sportCityCounts.set(rows, out);
+  return out;
+}
 
 /** Cities where a "<sport> in <city>" page is indexable, biggest first. */
 export async function getCitiesForSport(slug: string): Promise<LiveCity[]> {
