@@ -94,8 +94,13 @@ export function priceChips(listed: number | null | undefined, players: { min: nu
 
 export const rupees = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
-/** The text "Send to your team" shares. */
-export function shareText(turfName: string, slug: string): { text: string; url: string } {
+/**
+ * What "Send to your team" shares: text and url apart for the phone's share
+ * sheet (which puts the link after the text itself, so it would show twice
+ * if the text carried it too), and the two joined for a WhatsApp link.
+ */
+export function shareText(turfName: string, slug: string): { text: string; url: string; message: string } {
   const url = `https://tapturf.in/turf/${slug}?rate=1`;
-  return { text: `We played at ${turfName}. Rate your game too, it takes 20 seconds: ${url}`, url };
+  const text = `We played at ${turfName}. Rate your game too, it takes 20 seconds:`;
+  return { text, url, message: `${text} ${url}` };
 }

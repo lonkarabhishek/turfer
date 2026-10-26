@@ -10,6 +10,8 @@ import type { AspectCount, PlayAgainCounts } from "./types";
 
 /** A part gets its bar once this many reports rated it (in the last 12 months). */
 export const BAR_MIN = 3;
+/** The "★ 4.6 on TapTurf · 11 players" row shows from this many live reports, as the bars do: one report is not a score. */
+export const SCORE_MIN = 3;
 /** The play-again share shows once this many players answered. */
 export const PLAY_AGAIN_MIN = 3;
 
@@ -87,6 +89,15 @@ export function scorecard(counts: readonly AspectCount[], turfSports: readonly s
   return { bars, waiting };
 }
 
+/** The counts under a bar, in words, so they never rest on colour: "Great 2 · Okay 1 · Needs work 1" (none of a kind: left out). */
+export function partCounts(c: Pick<AspectCount, "great" | "okay" | "needs_work">): string {
+  return [
+    c.great > 0 ? `Great ${c.great}` : null,
+    c.okay > 0 ? `Okay ${c.okay}` : null,
+    c.needs_work > 0 ? `Needs work ${c.needs_work}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
 /** "Lights", "Lights and Washroom", "Lights, Staff and Washroom". */
 export function listWords(words: string[]): string {
   if (words.length <= 1) return words[0] ?? "";
@@ -99,8 +110,16 @@ export function waitingLine(waiting: AspectId[], turfSports: readonly string[] =
   return `${names} ${waiting.length === 1 ? "needs" : "need"} a few more ratings.`;
 }
 
-/** Before any part has its bar. */
-export const emptyScorecardLine = (reports: number) => `The scorecard goes live at ${BAR_MIN} player reports. ${reports} so far.`;
+/**
+ * Under the score row while no part has its bar yet: nothing on a turf with no
+ * reports; else what the bars wait for, worded by part (a report can be stars
+ * alone, so the count of reports says nothing about the bars).
+ */
+export function emptyScorecardLine(reports: number, waiting: AspectId[], turfSports: readonly string[] = []): string | null {
+  if (reports <= 0) return null;
+  if (waiting.length) return `${waitingLine(waiting, turfSports)} A part gets its bar once ${BAR_MIN} players rate it.`;
+  return `A part gets its bar once ${BAR_MIN} players rate it. Tap the pitch, lights and more when you rate.`;
+}
 
 /**
  * "9 of 10 would play again", in tens: once PLAY_AGAIN_MIN players answered,

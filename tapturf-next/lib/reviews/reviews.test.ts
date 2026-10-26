@@ -4,11 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { ASPECTS, catalogRows, pitchLabel, rowsFor, sportRow, starWord, whenOf } from "./catalog";
 import { parseReport } from "./payload";
-import { cleanText, contactProblem } from "./screen";
-import { barWords, pickChips, playAgainLine, scorecard, waitingLine } from "./insights";
+import { cleanText, contactProblem, dialDigits } from "./screen";
+import { barWords, emptyScorecardLine, partCounts, pickChips, playAgainLine, scorecard, waitingLine } from "./insights";
 import { unlockLine } from "./unlock";
 import { listedFor, priceChips, rateTitle, shareText, tipPlaceholder } from "./sheet";
-import { emptyDraft, hasAnswers, readDraft } from "./draft";
+import { draftFor, emptyDraft, HANDOFF_MS, hasAnswers, readDraft, waitingFresh } from "./draft";
 import { summaryLine, writtenEnough } from "./summaryLine";
 import { shapePlayAgain, shapeReviewAspects, shapeReviews } from "../turfPage/shape";
 
@@ -113,6 +113,16 @@ test("parseReport: malformed is bad", () => {
   bad({ price_paid: 1200.5 });
 });
 
+test("parseReport: base, the report an edit replaces, is a uuid or nothing", () => {
+  const ok = parseReport({ turf_id: TURF, rating: 4, base: "CCCCCCCC-CCCC-4CCC-8CCC-000000000001" });
+  assert.ok("ok" in ok);
+  assert.equal(ok.ok.base, "cccccccc-cccc-4ccc-8ccc-000000000001");
+  const none = parseReport({ turf_id: TURF, rating: 4, base: null });
+  assert.ok("ok" in none && !("base" in none.ok));
+  assert.ok("bad" in parseReport({ turf_id: TURF, rating: 4, base: "someone's" }));
+  assert.ok("bad" in parseReport({ turf_id: TURF, rating: 4, base: 7 }));
+});
+
 test("parseReport: note body null clears it; channel and ms only when sensible", () => {
   const r = parseReport({ turf_id: TURF, rating: 4, note: { body: "   ", show_name: true }, channel: "evil", ms: -5 });
   assert.ok("ok" in r);
@@ -127,6 +137,20 @@ test("screen: phone numbers, emails and links are caught", () => {
   for (const t of ["Call 9876543210", "+91 98765 43210", "+91-98765-43210", "98765-43210 for bookings", "ring 09876543210", "919876543210",
     "abc.def@gmail.com", "https://example.com", "see www.kingsturf.in", "wa.me/919876543210", "kingsturf.com", "tapturf.in/turf/x", "bit.ly/abc"]) {
     assert.equal(contactProblem(t), "contact_info", t);
+  }
+});
+
+test("screen: numbers however they are written, and the short domain endings", () => {
+  const deva = [0x0966, 0x0967].map((c) => String.fromCharCode(c)); // Devanagari 0 and 1
+  const devaNumber = "9876543210".split("").map((x) => String.fromCharCode(0x0966 + Number(x))).join("");
+  const wide = "9876543210".split("").map((x) => String.fromCharCode(0xff10 + Number(x))).join("");
+  assert.equal(dialDigits(`${deva[1]}${deva[0]} (98) 76.5/4-3 2 overs`), "1098765432 overs");
+  for (const t of ["call 98765 - 43210", "98765.43210", "98765/43210", "(98765) 43210", "(+91) 98765 43210", devaNumber, `${deva[0]}${devaNumber}`, wide,
+    "book at cheapturf.in or call", "boxcricketnashik.in", "cheapturf.net is cheaper", "slots on turfbook.co", "BoxCricketNashik.in"]) {
+    assert.equal(contactProblem(t), "contact_info", t);
+  }
+  for (const t of ["Rs 800 - 1200 - 1500 by slot", "26/10/2026 at 7.30-9.30 pm", "We were 10 9 of us came", "Go.In the evening", "Played here.In the evening", "Paid 1,200/hr"]) {
+    assert.equal(contactProblem(t), null, t);
   }
 });
 
@@ -174,6 +198,14 @@ test("scorecard: bars from 3 ratings in catalogue order, the rest waiting", () =
   assert.equal(waitingLine(s.waiting), "Lights and Washroom need a few more ratings.");
   assert.equal(waitingLine(["value"]), "Value needs a few more ratings.");
   assert.equal(waitingLine([]), null);
+});
+
+test("scorecard words: counts in words under a bar; what the bars wait for, never a count of reports", () => {
+  assert.equal(partCounts({ great: 2, okay: 1, needs_work: 1 }), "Great 2 · Okay 1 · Needs work 1");
+  assert.equal(partCounts({ great: 0, okay: 0, needs_work: 1 }), "Needs work 1");
+  assert.equal(emptyScorecardLine(0, []), null, "a turf with no reports shows no line at all");
+  assert.equal(emptyScorecardLine(3, []), "A part gets its bar once 3 players rate it. Tap the pitch, lights and more when you rate.", "3 stars-only reports: no '3 so far'");
+  assert.equal(emptyScorecardLine(4, ["lights", "washroom"]), "Lights and Washroom need a few more ratings. A part gets its bar once 3 players rate it.");
 });
 
 test("play again: from 3 answers, in tens past 10", () => {
@@ -236,29 +268,56 @@ test("rate card title: a game, a call, a WhatsApp tap, or the plain one", () => 
   assert.equal(rateTitle("Kings", { kind: "whatsapp", at: "2026-10-14T09:00:00+05:30" }, now), "You messaged Kings on 14 Oct. Played there?");
 });
 
-test("share text points at the 20-second link", () => {
-  assert.deepEqual(shareText("Kings Turf", "kings-turf"), {
-    text: "We played at Kings Turf. Rate your game too, it takes 20 seconds: https://tapturf.in/turf/kings-turf?rate=1",
+test("share text points at the 20-second link, once", () => {
+  const s = shareText("Kings Turf", "kings-turf");
+  assert.deepEqual(s, {
+    text: "We played at Kings Turf. Rate your game too, it takes 20 seconds:",
     url: "https://tapturf.in/turf/kings-turf?rate=1",
+    message: "We played at Kings Turf. Rate your game too, it takes 20 seconds: https://tapturf.in/turf/kings-turf?rate=1",
   });
+  assert.equal(s.text.includes("http"), false, "the share sheet adds url after text itself: text never carries it");
 });
 
 /* ---------------- the draft ---------------- */
 
 test("draft: read back field by field; old or broken is nothing", () => {
   const now = 1_800_000_000_000;
-  const d = { ...emptyDraft(now), stars: 4, sport: "Football", when: "evening", aspects: { lights: { score: -1, tags: ["dim"] } }, step: 2, waiting: true };
+  const d = { ...emptyDraft(now), stars: 4, sport: "Football", when: "evening", aspects: { lights: { score: -1, tags: ["dim"] } }, step: 2, by: "acc-1", waiting: true };
   const back = readDraft(JSON.stringify(d), now + 1000);
   assert.ok(back);
   assert.equal(back.stars, 4);
   assert.deepEqual(back.aspects, { lights: { score: -1, tags: ["dim"] } });
-  assert.equal(back.waiting, true);
+  assert.equal(back.by, "acc-1");
+  assert.equal("waiting" in back, false, "an old waiting flag is not read: only this tab's mark can post a draft by itself");
   assert.equal(hasAnswers(back), true);
   assert.equal(hasAnswers(emptyDraft(now)), false);
   assert.equal(readDraft(JSON.stringify(d), now + 15 * 86_400_000), null, "two weeks on, it's another game");
   assert.equal(readDraft("{not json", now), null);
   assert.equal(readDraft(JSON.stringify({ ...d, v: 2 }), now), null);
   assert.equal(readDraft(JSON.stringify({ ...d, stars: 9, aspects: { pitch: { score: 7 } } }), now + 1)?.stars, 0);
+});
+
+test("draft: a phone can be shared, so a viewer picks up only their own", () => {
+  const now = 1_800_000_000_000;
+  const mine = { ...emptyDraft(now), stars: 2, by: "acc-1" };
+  const anon = { ...emptyDraft(now), stars: 2, by: null };
+  assert.equal(draftFor(mine, "acc-1", now + 5 * 86_400_000), mine, "their own, for two weeks");
+  assert.equal(draftFor(mine, "acc-2", now), null, "never another account's");
+  assert.equal(draftFor(mine, null, now), null, "nor, signed out, a signed-in one's");
+  assert.equal(draftFor(anon, null, now + 86_400_000), anon, "signed out: the signed-out draft");
+  assert.equal(draftFor(anon, "acc-2", now + HANDOFF_MS - 1), anon, "signed in straight after writing it signed out (the login from the sheet)");
+  assert.equal(draftFor(anon, "acc-2", now + HANDOFF_MS + 1), null, "but not later: someone else may have written it");
+  assert.equal(draftFor(null, "acc-1", now), null);
+});
+
+test("draft: the Log in to post mark is for one turf, for 30 minutes", () => {
+  const now = 1_800_000_000_000;
+  const mark = JSON.stringify({ turf: TURF, at: now });
+  assert.equal(waitingFresh(mark, TURF, now + 60_000), true);
+  assert.equal(waitingFresh(mark, TURF, now + HANDOFF_MS + 1), false, "an abandoned login posts nothing later");
+  assert.equal(waitingFresh(mark, "another-turf", now), false);
+  assert.equal(waitingFresh("{", TURF, now), false);
+  assert.equal(waitingFresh(null, TURF, now), false);
 });
 
 /* ---------------- the AI summary's lines ---------------- */

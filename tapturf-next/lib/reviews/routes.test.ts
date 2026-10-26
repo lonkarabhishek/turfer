@@ -31,8 +31,19 @@ test("post: the account comes from the verified sign-in, never the body", async 
   const report = call.args.p_report as Record<string, unknown>;
   assert.equal("user_id" in report || "turf_id" in report || "p_user_id" in report, false);
   assert.equal(report.rating, 5);
+  assert.equal("base" in report, false, "a new report names no base");
   // The sign-in was checked, and no account was made for it.
   assert.equal(net.calls("account_resolve")[0].args.p_create, false);
+});
+
+test("post: an edit passes on the report it replaces (base), and only a well-formed one", async () => {
+  signedIn();
+  net.rpc.review_save = () => ({ r: "ok", created: false, review: { id: REVIEW, status: "live" }, note: null, after: { tapturf_n: 2, aspects: {} }, price_saved: false });
+  const res = await postReview(req("/api/reviews", { method: "POST", token: phoneToken(), body: { turf_id: TURF, rating: 4, base: REVIEW.toUpperCase() } }));
+  assert.equal(res.status, 200);
+  assert.equal((net.calls("review_save")[0].args.p_report as Record<string, unknown>).base, REVIEW);
+  assert.equal((await postReview(req("/api/reviews", { method: "POST", token: phoneToken(), body: { turf_id: TURF, rating: 4, base: "x" } }))).status, 400);
+  assert.equal(net.calls("review_save").length, 1);
 });
 
 test("post: a Google sign-in works the same", async () => {
@@ -63,6 +74,7 @@ test("post: no sign-in, a bad body, or a new number never reach review_save", as
 test("post: the database's refusals, as the sheet reads them", async () => {
   const cases: [Record<string, unknown>, number, Record<string, unknown>][] = [
     [{ r: "own_turf" }, 409, { reason: "own_turf", error: "not_allowed" }],
+    [{ r: "exists", review: { id: REVIEW, rating: 3, status: "live", note: null } }, 409, { reason: "exists", review: { id: REVIEW, rating: 3, status: "live", note: null }, error: "conflict" }],
     [{ r: "contact_info", field: "note" }, 400, { reason: "contact_info", field: "note", error: "bad" }],
     [{ r: "contact_info", field: "comment" }, 400, { reason: "contact_info", field: "comment", error: "bad" }],
     [{ r: "gone" }, 400, { reason: "gone", error: "bad" }],

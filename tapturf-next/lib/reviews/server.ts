@@ -31,6 +31,9 @@ function refusal(d: Record<string, unknown>): NextResponse {
   switch (d.r) {
     case "own_turf":
       return accountReply({ reason: "own_turf" }, "not_allowed");
+    case "exists":
+      // The caller's own report, so the sheet can offer to edit it or replace it.
+      return accountReply({ reason: "exists", review: d.review ?? null }, "conflict");
     case "contact_info":
       return accountReply({ reason: "contact_info", field: d.field === "note" ? "note" : "comment" }, "bad");
     case "gone":

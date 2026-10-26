@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EyeOff, Loader2 } from "lucide-react";
+import { Clock, EyeOff, Loader2 } from "lucide-react";
 import type { ReviewWithUser } from "@/types/review";
 import type { Mine } from "./ReportSheet";
 import { ReviewRow } from "./ReviewRow";
@@ -61,6 +61,14 @@ export function ReviewList({
                 {own.status === "hidden" && (
                   <p className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-[12px] font-semibold text-primary-700">
                     <EyeOff className="w-3.5 h-3.5" aria-hidden /> Hidden by TapTurf for breaking the review rules
+                  </p>
+                )}
+                {own.status === "held" && (
+                  <p className="mb-2 text-[13px] text-primary-600">
+                    <span className="mr-1.5 inline-flex items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-[12px] font-semibold text-primary-700">
+                      <Clock className="w-3.5 h-3.5" aria-hidden /> Under review
+                    </span>
+                    Only you see it until it&apos;s checked.
                   </p>
                 )}
                 {!confirm ? (

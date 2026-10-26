@@ -15,6 +15,7 @@ import { monthYear } from "../ui";
 export function Thanks({
   firstName,
   edited,
+  held,
   preview,
   turfSports,
   unlock,
@@ -26,33 +27,38 @@ export function Thanks({
   firstName: string;
   /** An edit, not a new report or one posted again. */
   edited: boolean;
+  /** Waiting for a check before it shows (status held). */
+  held: boolean;
   preview: ReviewWithUser;
   turfSports: readonly string[];
   unlock: string;
-  note: { delivers: "tomorrow" | "on_claim"; at: string } | null;
+  note: { delivers: "tomorrow" | "batch" | "on_claim"; at: string | null } | null;
   turfName: string;
   slug: string;
   onDone: () => void;
 }) {
   const share = async () => {
-    const { text, url } = shareText(turfName, slug);
+    const { text, url, message } = shareText(turfName, slug);
     try {
       if (navigator.share) {
+        // The link goes in url only: the share sheet adds it after the text itself.
         await navigator.share({ title: turfName, text, url });
         return;
       }
     } catch {
       return; // they closed the share sheet
     }
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener");
   };
   const noteLine = !note
     ? null
     : note.delivers === "on_claim"
       ? "We'll keep your note for the owner."
-      : dayWords(note.at, new Date(), false) === "today"
-        ? "Your note reaches the owner at 9 this morning."
-        : "Your note reaches the owner tomorrow morning.";
+      : note.delivers === "batch" || !note.at
+        ? "Your note goes to the owner together with other players' notes, so it can't be traced to you."
+        : dayWords(note.at, new Date(), false) === "today"
+          ? "Your note reaches the owner at 9 this morning."
+          : "Your note reaches the owner tomorrow morning.";
 
   return (
     <div className="pt-4 pb-4" aria-live="polite">
@@ -63,14 +69,16 @@ export function Thanks({
           </svg>
         </div>
         <h2 className="mt-4 text-[22px] font-bold text-primary-900">
-          {edited ? "Saved." : `Posted. Thanks${firstName ? `, ${firstName}` : ""}!`}
+          {held ? `Thanks${firstName ? `, ${firstName}` : ""}. We'll check it first.` : edited ? "Saved." : `Posted. Thanks${firstName ? `, ${firstName}` : ""}!`}
         </h2>
         <p className="mt-1 text-[15px] text-primary-500">
-          {edited
-            ? preview.edited_at
-              ? `Your report now shows Updated ${monthYear(preview.edited_at)}.`
-              : "Your report is up to date."
-            : "That helps the next team pick right."}
+          {held
+            ? "Reports from turf owners, and many at once on one turf, are checked before they show. Yours goes on the page once it's through."
+            : edited
+              ? preview.edited_at
+                ? `Your report now shows Updated ${monthYear(preview.edited_at)}.`
+                : "Your report is up to date."
+              : "That helps the next team pick right."}
         </p>
       </div>
 
@@ -78,7 +86,7 @@ export function Thanks({
         <ReviewRow r={preview} turfSports={turfSports} hydrated mine preview />
       </div>
 
-      {!edited && <p className="mt-4 rounded-2xl bg-accent-50 px-4 py-3 text-[14px] font-medium text-accent-800">{unlock}</p>}
+      {!edited && !held && <p className="mt-4 rounded-2xl bg-accent-50 px-4 py-3 text-[14px] font-medium text-accent-800">{unlock}</p>}
       {noteLine && <p className="mt-3 text-[13px] text-primary-600">{noteLine}</p>}
 
       <div className="mt-6 flex items-center gap-3">

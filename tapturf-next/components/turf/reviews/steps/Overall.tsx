@@ -60,7 +60,7 @@ export function StarsBar({ stars, onPick }: { stars: number; onPick: (n: number)
               buzz();
               onPick(n);
             }}
-            className="w-9 h-11 flex items-center justify-center"
+            className="w-11 h-11 flex items-center justify-center"
           >
             <Star className={`w-6 h-6 ${n <= stars ? "fill-accent-500 text-accent-500" : "fill-none text-primary-300"}`} aria-hidden />
           </button>

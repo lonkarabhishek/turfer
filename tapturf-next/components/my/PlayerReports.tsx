@@ -1,17 +1,20 @@
 "use client";
 
 import { Lock, Star, Wrench } from "lucide-react";
-import { ASPECT_ORDER, aspectShort, playAgainWords, tagLabel } from "@/lib/reviews/catalog";
-import { BAR_MIN, playAgainLine } from "@/lib/reviews/insights";
+import { ASPECT_ORDER, aspectShort, playAgainWords, SHOW_GAME_BADGE, tagLabel } from "@/lib/reviews/catalog";
+import { BAR_MIN, partCounts, playAgainLine } from "@/lib/reviews/insights";
 import type { OwnerReviews } from "@/lib/my/client";
 import { playedLine, ReportChips } from "@/components/turf/reviews/ui";
+import { PartBar } from "@/components/turf/reviews/Scorecard";
 
 /**
  * "Player reports" on /my › a turf: what TapTurf players said in the last
  * 90 days, from owner_dashboard (no new call, no new way in). What to fix
  * first works from the very first report, since every report is public
- * anyway; private notes are anonymous unless the player chose otherwise,
- * arrive at the next 09:00 and never link to a report. Owners can't hide,
+ * anyway, and counts a part rated Needs work with no reason picked too;
+ * private notes are anonymous unless the player chose otherwise, those
+ * arrive only in batches of 3 or more players, and none links to a
+ * report. A part's bar shows from 3 ratings. Owners can't hide,
  * edit or remove a report, and TapTurf never removes one for being negative.
  */
 export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; turfSports: readonly string[] }) {
@@ -24,7 +27,7 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
     `${n} report${n === 1 ? "" : "s"}`,
     n > 0 && reviews.average != null ? `${Number(reviews.average).toFixed(1)} average` : null,
     again,
-    reviews.verified ? `${reviews.verified} played in a TapTurf game` : null,
+    SHOW_GAME_BADGE && reviews.verified ? `${reviews.verified} played in a TapTurf game` : null,
   ].filter(Boolean);
   const aspects = ASPECT_ORDER.map((a) => reviews.aspects?.find((x) => x.aspect === a)).filter((x): x is NonNullable<typeof x> => !!x);
 
@@ -45,8 +48,8 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
               {reviews.fix_first?.length ? (
                 <ul className="mt-2 space-y-2">
                   {reviews.fix_first.map((f) => (
-                    <li key={`${f.aspect}:${f.tag}`} className="text-[14px] text-primary-800 leading-snug">
-                      <span className="font-semibold">{label(f.aspect)}</span> · {tagLabel(f.aspect, f.tag)}
+                    <li key={`${f.aspect}:${f.tag ?? "-"}`} className="text-[14px] text-primary-800 leading-snug">
+                      <span className="font-semibold">{label(f.aspect)}</span> · {f.tag ? tagLabel(f.aspect, f.tag) : "Needs work, no reason given"}
                       <span className="text-primary-500"> · {f.n} player{f.n === 1 ? "" : "s"} · last on {day(f.last_at)}</span>
                     </li>
                   ))}
@@ -54,7 +57,7 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
               ) : (
                 <p className="mt-2 text-[14px] text-primary-600">Nothing flagged in the last 90 days.</p>
               )}
-              <p className="mt-2 text-[11px] text-primary-400">From players&apos; Needs work taps.</p>
+              <p className="mt-2 text-[12px] text-primary-500">From players&apos; Needs work taps, with or without a reason.</p>
             </div>
 
             <div className="rounded-2xl border border-primary-200 bg-white p-4">
@@ -66,14 +69,17 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
                       <div className="flex items-baseline justify-between gap-2 text-[13px]">
                         <span className="font-semibold text-primary-800">{label(a.aspect)}</span>
                         <span className="text-primary-500 tabular-nums">
-                          {a.n < BAR_MIN ? `${a.n} rating${a.n === 1 ? "" : "s"} so far` : `Great ${a.great} · Okay ${a.okay} · Needs work ${a.needs_work}`}
+                          {a.n} rating{a.n === 1 ? "" : "s"}
                         </span>
                       </div>
-                      <div className="mt-1 flex h-2 rounded-full overflow-hidden bg-primary-100" aria-hidden>
-                        <span className="h-full bg-accent-500" style={{ width: `${(a.great / a.n) * 100}%` }} />
-                        <span className="h-full bg-primary-300" style={{ width: `${(a.okay / a.n) * 100}%` }} />
-                        <span className="h-full bg-hot-400" style={{ width: `${(a.needs_work / a.n) * 100}%` }} />
-                      </div>
+                      {a.n < BAR_MIN ? (
+                        // One or two ratings are not a share of anything: words, no bar.
+                        <p className="mt-0.5 text-[12px] text-primary-600 tabular-nums">
+                          {partCounts(a)}. The bar shows from {BAR_MIN}.
+                        </p>
+                      ) : (
+                        <PartBar label={label(a.aspect)} n={a.n} great={a.great} okay={a.okay} needs_work={a.needs_work} thin />
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -93,7 +99,9 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
             <h3 className="text-[15px] font-bold text-primary-900 inline-flex items-center gap-1.5">
               <Lock className="w-4 h-4 text-primary-500" aria-hidden /> Private notes
             </h3>
-            <p className="text-[12px] text-primary-500">Only you see these. Players choose whether to show their name.</p>
+            <p className="text-[12px] text-primary-500">
+              Only you see these. Players choose whether to show their name; notes without one arrive in batches of three or more, so no one is singled out.
+            </p>
             {reviews.notes?.length ? (
               <ul className="mt-3 space-y-2">
                 {reviews.notes.map((x, i) => (
@@ -129,7 +137,8 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
                     </span>
                     <span>· {tap ? "TapTurf" : "Google"}</span>
                     {played && <span>· {played}</span>}
-                    {r.verified_via === "game" && <span className="text-accent-700 font-semibold">· Played in a TapTurf game</span>}
+                    {tap && r.created_at && <span>· {day(r.created_at)}</span>}
+                    {SHOW_GAME_BADGE && r.verified_via === "game" && <span className="text-accent-700 font-semibold">· Played in a TapTurf game</span>}
                   </p>
                   {tap && <ReportChips aspects={r.aspects} sport={r.sport} turfSports={turfSports} />}
                   {answer && <p className="mt-1.5 text-[13px] font-medium text-primary-700">{answer}</p>}

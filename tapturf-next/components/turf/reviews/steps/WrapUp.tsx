@@ -26,7 +26,7 @@ export function WrapUp({
   priceAsk,
   comment,
   onComment,
-  placeholder,
+  prompt,
   noteOpen,
   onNoteOpen,
   note,
@@ -47,7 +47,8 @@ export function WrapUp({
   priceAsk: { chips: PriceChip[]; mine: number | null } | null;
   comment: string;
   onComment: (v: string) => void;
-  placeholder: string;
+  /** What to write about, from their taps ("You flagged the lights. ..."): shown above the box, not as a faint placeholder. */
+  prompt: string;
   noteOpen: boolean;
   onNoteOpen: () => void;
   note: string;
@@ -135,6 +136,7 @@ export function WrapUp({
         <label htmlFor="report-tip" className="text-[14px] font-semibold text-primary-900">
           Tip for the next team
         </label>
+        <p id="report-tip-prompt" className="mt-0.5 text-[13px] text-primary-600">{prompt}</p>
         <textarea
           id="report-tip"
           ref={tipRef}
@@ -142,10 +144,10 @@ export function WrapUp({
           value={comment}
           maxLength={TIP_MAX}
           onChange={(e) => onComment(e.target.value)}
-          placeholder={placeholder}
+          placeholder="Type here, or leave it"
           aria-invalid={tipBad}
-          aria-describedby="report-tip-help"
-          className={`mt-2 w-full resize-none rounded-xl bg-primary-100 px-4 py-3 text-[16px] leading-6 text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 ${
+          aria-describedby="report-tip-prompt report-tip-help"
+          className={`mt-2 w-full resize-none rounded-xl bg-primary-100 px-4 py-3 text-[16px] leading-6 text-primary-900 placeholder:text-primary-500 focus:outline-none focus:ring-2 ${
             tipBad ? "ring-2 ring-hot-500 focus:ring-hot-500" : "focus:ring-accent-500/40"
           }`}
         />
@@ -173,7 +175,7 @@ export function WrapUp({
               onChange={(e) => onNote(e.target.value)}
               placeholder="Something you'd tell the owner, not everyone. e.g. The light near the gate is off."
               aria-invalid={noteBad}
-              className={`mt-2 w-full resize-none rounded-xl bg-primary-100 px-4 py-3 text-[16px] leading-6 text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 ${
+              className={`mt-2 w-full resize-none rounded-xl bg-primary-100 px-4 py-3 text-[16px] leading-6 text-primary-900 placeholder:text-primary-500 focus:outline-none focus:ring-2 ${
                 noteBad ? "ring-2 ring-hot-500 focus:ring-hot-500" : "focus:ring-accent-500/40"
               }`}
             />
@@ -196,7 +198,9 @@ export function WrapUp({
               </span>
             </label>
             {!showName && (
-              <p className="text-[12px] text-primary-500">They&apos;ll see something like &ldquo;An evening box cricket player&rdquo;. At a small turf they may still guess.</p>
+              <p className="text-[12px] text-primary-500">
+                They&apos;ll see &ldquo;A player&rdquo;. Notes without a name reach the owner only in batches of three or more, so the timing doesn&apos;t give you away. What you write still might.
+              </p>
             )}
           </div>
         )}

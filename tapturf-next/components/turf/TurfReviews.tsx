@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { removeReport, voteReview } from "@/lib/reviews/client";
-import { loadDraft } from "@/lib/reviews/draft";
+import { hasWaiting, loadDraft, takeWaiting } from "@/lib/reviews/draft";
 import { PRICE_ASK_BELOW, type ListedPrices } from "@/lib/reviews/sheet";
-import type { AspectCount, PlayAgainCounts, VoteResponse } from "@/lib/reviews/types";
+import type { AspectCount, PlayAgainCounts, ReportChannel, VoteResponse } from "@/lib/reviews/types";
 import type { ReviewSummary, ReviewWithUser } from "@/types/review";
 import { RateInline } from "./reviews/RateInline";
 import { ReportSheet, type SavedReport, type SheetOpen } from "./reviews/ReportSheet";
@@ -25,6 +25,9 @@ const noop = () => () => {};
  * /api/reviews after hydration, for signed-in viewers only. Every write
  * goes through /api/reviews, so phone and Google sign-ins can both edit
  * and remove their report. The sheet lives in components/turf/reviews.
+ * A sheet asked for by a link or a button opens only once we know whether
+ * this viewer already rated here, and then on their own report: a blank
+ * one would post over it.
  */
 export function TurfReviews(props: {
   turfId: string;
@@ -48,10 +51,16 @@ export function TurfReviews(props: {
   googleReviewUrl?: string | null;
 }) {
   const { turfId, turfName, sports } = props;
-  const { user, login, getToken } = useAuth();
+  const { user, loading: authLoading, login, getToken } = useAuth();
   const me = useMyReport(turfId);
   const [reviews, setReviews] = useState(props.initialReviews);
   const [sheet, setSheet] = useState<SheetOpen | null>(null);
+  /** A sheet asked for (a "Rate your game" button, the ?rate=1 link) before we know whether they already rated here. */
+  const [asked, setAsked] = useState<{ stars?: number; channel: ReportChannel } | null>(null);
+  /** Their report here that a new one would replace: live, held or hidden. */
+  const mine = me.mine && me.mine.status !== "removed" ? me.mine : null;
+  /** We know whether this viewer has a report here: signed out, or their own read is in. */
+  const known = !authLoading && (!user || me.loaded);
   // Dates and the rate card's day words read the visitor's clock: after hydration only.
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
   const [now, setNow] = useState<Date | null>(null);
@@ -64,30 +73,50 @@ export function TurfReviews(props: {
   useEffect(() => {
     const onOpen = (e: Event) => {
       const d = (e as CustomEvent<OpenReportDetail>).detail ?? {};
-      setSheet({ stars: d.stars, channel: d.channel ?? "turf_page", editing: null });
+      setAsked({ stars: d.stars, channel: d.channel ?? "turf_page" });
     };
     window.addEventListener(OPEN_REPORT_EVENT, onOpen);
     const url = new URL(window.location.href);
+    let t: ReturnType<typeof setTimeout> | undefined;
     if (url.searchParams.get("rate") === "1") {
       url.searchParams.delete("rate");
       window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
-      const t = setTimeout(() => setSheet({ channel: "link", editing: null }), 0);
-      return () => {
-        clearTimeout(t);
-        window.removeEventListener(OPEN_REPORT_EVENT, onOpen);
-      };
+      t = setTimeout(() => setAsked({ channel: "link" }), 0);
     }
-    return () => window.removeEventListener(OPEN_REPORT_EVENT, onOpen);
+    return () => {
+      if (t) clearTimeout(t);
+      window.removeEventListener(OPEN_REPORT_EVENT, onOpen);
+    };
   }, []);
 
-  // Back from the login with a report waiting to post: open the sheet, which posts it.
+  // Open what was asked for once we know: their own report to edit when they have one here.
   useEffect(() => {
-    if (!user) return;
-    const d = loadDraft(turfId);
-    if (!d?.waiting) return;
-    const t = setTimeout(() => setSheet({ channel: d.channel, editing: null, autoPost: true }), 0);
+    if (!asked || !known) return;
+    const t = setTimeout(() => {
+      setAsked(null);
+      if (me.blocked) return; // the rate card says why
+      setSheet(mine ? { stars: asked.stars, channel: "edit", editing: mine } : { stars: asked.stars, channel: asked.channel, editing: null });
+    }, 0);
     return () => clearTimeout(t);
-  }, [user, turfId]);
+  }, [asked, known, mine, me.blocked]);
+
+  // Straight back from a login started at "Log in to post" (this tab, within 30 minutes): post the
+  // draft, or, when they already rated here or the draft has a private note, show it to check first.
+  useEffect(() => {
+    if (!user || !me.loaded || !hasWaiting(turfId)) return;
+    const t = setTimeout(() => {
+      if (!takeWaiting(turfId)) return;
+      const d = loadDraft(turfId, user.id);
+      if (!d?.stars || me.blocked) return;
+      const note = d.noteOpen && !!d.note.trim();
+      setSheet(
+        mine || note
+          ? { channel: d.channel, editing: mine, resume: true, confirm: mine ? "replace" : "note" }
+          : { channel: d.channel, editing: null, resume: true, autoPost: true },
+      );
+    }, 0);
+    return () => clearTimeout(t);
+  }, [user, me.loaded, me.blocked, mine, turfId]);
 
   // A vote this viewer made counts at least once until the cached page catches up.
   const voted = me.voted;
@@ -136,7 +165,6 @@ export function TurfReviews(props: {
 
   const tapturfN = props.initialSummary.count;
   const hasGoogle = typeof props.googleRating === "number" && props.googleRating > 0;
-  const mine = me.mine && me.mine.status !== "removed" ? me.mine : null;
   const priceAsk = (props.playerPrice?.count ?? 0) < PRICE_ASK_BELOW ? { listed: props.listedPrices, players: props.playerPrice, mine: me.myPrice } : null;
 
   return (
@@ -152,6 +180,8 @@ export function TurfReviews(props: {
         now={now}
         mine={mine}
         blocked={me.blocked}
+        state={!known ? "loading" : user && me.failed ? "failed" : "ready"}
+        onRetry={() => void reload()}
         onRate={(stars) => setSheet({ stars, channel: "turf_page", editing: null })}
         onEdit={() => mine && setSheet({ channel: "edit", editing: mine })}
       />
@@ -180,6 +210,7 @@ export function TurfReviews(props: {
           priceAsk={priceAsk}
           players={props.playerPrice}
           userName={user ? user.name || "a player" : null}
+          userId={user?.id ?? null}
           getToken={getToken}
           login={login}
           onClose={() => setSheet(null)}

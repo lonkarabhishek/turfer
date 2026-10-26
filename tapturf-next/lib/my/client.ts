@@ -134,9 +134,10 @@ export type OwnerReviews = {
   play_again?: { yes: number; maybe: number; no: number };
   verified?: number;
   aspects?: Omit<AspectCount, "tags">[];
-  fix_first?: { aspect: AspectId; tag: string; n: number; last_at: string }[];
+  /** tag null: rated Needs work with no reason picked. */
+  fix_first?: { aspect: AspectId; tag: string | null; n: number; last_at: string }[];
   love?: { aspect: AspectId; tag: string; n: number }[];
-  /** Private notes, once due. Anonymous ones carry only a rough context and the month. */
+  /** Private notes, once they arrived. Unnamed ones arrive in batches of 3 or more players and say "A player" (or a context 3 of the batch share) and the month. */
   notes?: { context: string | null; month: string; name: string | null; rating_word: string | null; body: string }[];
 };
 

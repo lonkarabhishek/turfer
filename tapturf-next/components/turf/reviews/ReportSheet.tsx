@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
-import { rowsFor, type PlayedWhen, type Score } from "@/lib/reviews/catalog";
+import { rowsFor, starWord, type PlayedWhen, type Score } from "@/lib/reviews/catalog";
 import { problemOf, saveReport, type SaveProblem } from "@/lib/reviews/client";
-import { clearDraft, emptyDraft, hasAnswers, loadDraft, saveDraft, type Draft, type Step } from "@/lib/reviews/draft";
+import { clearDraft, emptyDraft, hasAnswers, loadDraft, markWaiting, saveDraft, type Draft, type Step } from "@/lib/reviews/draft";
 import { contactProblem } from "@/lib/reviews/screen";
 import { listedFor, priceChips, tipPlaceholder, type ListedPrices } from "@/lib/reviews/sheet";
 import type { Aspects, MineResponse, RateHint, ReportBody, ReportChannel, SaveResponse } from "@/lib/reviews/types";
@@ -17,6 +17,7 @@ import { Overall, StarsBar } from "./steps/Overall";
 import { QuickScorecard } from "./steps/QuickScorecard";
 import { CONTACT_MESSAGE, otherPrice, WrapUp } from "./steps/WrapUp";
 import { Thanks } from "./steps/Thanks";
+import { monthYear } from "./ui";
 
 export type Mine = NonNullable<Extract<MineResponse, { mine: unknown }>["mine"]>;
 export type SavedReport = Extract<SaveResponse, { r: "ok" }>;
@@ -25,10 +26,14 @@ export type SheetOpen = {
   /** A star tapped on the page: the sheet opens on screen 2 with it set. */
   stars?: number;
   channel: ReportChannel;
-  /** Edit: the report as it is now, with its note. */
+  /** The report this save replaces, with its note (an edit); null for a new one. */
   editing: Mine | null;
-  /** Signed out at Post and back from the login: post at once. */
+  /** Back from the login: start from this phone's draft (even over editing), on its last screen. */
+  resume?: boolean;
+  /** And post it at once (no report here yet, no note to look over). */
   autoPost?: boolean;
+  /** Or ask first: "replace" they already rated here; "note" the draft has a private note. */
+  confirm?: "replace" | "note";
 };
 
 export type SheetTurf = { id: string; name: string; slug: string; sports: string[]; claimed: boolean };
@@ -42,6 +47,7 @@ const MESSAGES: Record<SaveProblem, string> = {
   gone: "This turf isn't taking reports right now.",
   bad: "Something in this report didn't go through. Check it and try again.",
   unavailable: "Couldn't post just now. Your answers are saved on this phone.",
+  exists: "You've already rated this turf. Posting this replaces that report.",
 };
 
 function track(event: string, params: Record<string, unknown>) {
@@ -52,28 +58,36 @@ function track(event: string, params: Record<string, unknown>) {
   }
 }
 
-/** The draft the sheet starts from: the report being edited, else this phone's draft, else a new one. */
-function startDraft(turf: SheetTurf, open: SheetOpen, hint: RateHint | null, myPrice: number | null): Draft {
-  if (open.editing) {
-    const e = open.editing;
-    return {
-      ...emptyDraft(),
-      stars: e.rating,
-      sport: e.sport ?? null,
-      when: e.played_when ?? null,
-      aspects: e.aspects ?? {},
-      playAgain: e.play_again ?? null,
-      comment: e.comment ?? "",
-      noteOpen: !!e.note,
-      note: e.note?.body ?? "",
-      showName: e.note?.show_name ?? false,
-      price: myPrice,
-      step: 2,
-      channel: "edit",
-    };
+/** A report as the sheet edits it: its answers, on screen 2. */
+function draftOf(e: Mine, myPrice: number | null, userId: string | null): Draft {
+  return {
+    ...emptyDraft(),
+    stars: e.rating,
+    sport: e.sport ?? null,
+    when: e.played_when ?? null,
+    aspects: e.aspects ?? {},
+    playAgain: e.play_again ?? null,
+    comment: e.comment ?? "",
+    noteOpen: !!e.note,
+    note: e.note?.body ?? "",
+    showName: e.note?.show_name ?? false,
+    price: myPrice,
+    step: 2,
+    channel: "edit",
+    by: userId,
+  };
+}
+
+/** The draft the sheet starts from: the report being edited, else this phone's draft (theirs only), else a new one. */
+function startDraft(turf: SheetTurf, open: SheetOpen, hint: RateHint | null, myPrice: number | null, userId: string | null): Draft {
+  if (open.editing && !open.resume) {
+    const d = draftOf(open.editing, myPrice, userId);
+    if (open.stars) d.stars = open.stars;
+    return d;
   }
-  const saved = loadDraft(turf.id);
-  const d: Draft = saved ? { ...saved, waiting: false } : { ...emptyDraft(), channel: open.channel };
+  const saved = loadDraft(turf.id, userId);
+  if (open.resume && saved) return { ...saved, step: 3, by: userId };
+  const d: Draft = saved ? { ...saved, by: userId } : { ...emptyDraft(), channel: open.channel, by: userId };
   if (!saved) {
     // What we already know: the one sport the turf lists, or the game's sport and time.
     const fromGame = hint?.kind === "game";
@@ -104,6 +118,8 @@ function bodyOf(d: Draft, turfId: string, editing: Mine | null, ask: { mine: num
     play_again: d.playAgain,
     comment: d.comment.trim() || null,
     channel: editing ? "edit" : d.channel,
+    // The report this replaces: without it the server answers "exists" and changes nothing.
+    base: editing && editing.status !== "removed" ? editing.id : null,
   };
   if (ms >= 0 && ms <= 600_000) body.ms = Math.round(ms);
   if (d.noteOpen || editing?.note) body.note = { body: d.note.trim() || null, show_name: d.showName };
@@ -119,6 +135,7 @@ export function ReportSheet({
   priceAsk,
   players,
   userName,
+  userId,
   getToken,
   login,
   onClose,
@@ -133,41 +150,47 @@ export function ReportSheet({
   players: { min: number; max: number } | null;
   /** The signed-in player's name; null when signed out. */
   userName: string | null;
+  /** The signed-in account (drafts are kept per account); null when signed out. */
+  userId: string | null;
   getToken: () => Promise<TokenCheck>;
   login: () => void;
   onClose: () => void;
   onSaved: (saved: SavedReport) => void;
 }) {
-  const [d, setD] = useState<Draft>(() => startDraft(turf, open, hint, priceAsk?.mine ?? null));
+  const [d, setD] = useState<Draft>(() => startDraft(turf, open, hint, priceAsk?.mine ?? null, userId));
   const [posting, setPosting] = useState(false);
-  const [error, setError] = useState<{ problem: SaveProblem; field?: "comment" | "note" } | null>(null);
+  const [error, setError] = useState<{ problem: SaveProblem; field?: "comment" | "note"; existing?: Mine } | null>(null);
   const [done, setDone] = useState<{ saved: SavedReport; body: ReportBody } | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // The report this save replaces: the one opened for editing, or the one they chose to replace.
+  const [editing, setEditing] = useState<Mine | null>(open.editing);
   const panel = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const advance = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editing = open.editing;
   const signedIn = userName !== null;
 
   const patch = useCallback((p: Partial<Draft>) => setD((prev) => ({ ...prev, ...p })), []);
-  // Every tap is kept on this phone (not once posted).
+  // Every tap is kept on this phone, as this account's (not once posted).
   useEffect(() => {
-    if (!done) saveDraft(turf.id, d);
-  }, [d, done, turf.id]);
+    if (!done) saveDraft(turf.id, { ...d, by: userId });
+  }, [d, done, turf.id, userId]);
 
   const close = useCallback(() => {
     if (done || posting || !hasAnswers(d)) onClose();
     else setConfirmLeave(true);
   }, [done, posting, d, onClose]);
 
+  // Off to log in: the draft stays on this phone, and this tab waits to post it when the login comes straight back.
   const toLogin = useCallback(() => {
-    saveDraft(turf.id, { ...d, waiting: true });
+    saveDraft(turf.id, { ...d, by: userId });
+    markWaiting(turf.id);
     onClose();
     login();
-  }, [d, turf.id, onClose, login]);
+  }, [d, turf.id, userId, onClose, login]);
 
   // The latest post(), for the auto-post and the retry once back online.
   const postRef = useRef<() => Promise<void>>(async () => {});
-  const post = useCallback(async () => {
+  const post = useCallback(async (replacing: Mine | null = editing) => {
     if (posting || !d.stars) return;
     setError(null);
     if (contactProblem(d.comment)) {
@@ -189,7 +212,7 @@ export function ReportSheet({
       setError({ problem: "unavailable" });
       return;
     }
-    const body = bodyOf(d, turf.id, editing, priceAsk);
+    const body = bodyOf(d, turf.id, replacing, priceAsk);
     const a = await saveReport(t.token, body);
     setPosting(false);
     const p = problemOf(a);
@@ -204,9 +227,22 @@ export function ReportSheet({
     const problem = p ?? { problem: "unavailable" as const };
     setError(problem);
     if (problem.problem === "contact_info") patch({ step: 3, noteOpen: d.noteOpen || problem.field === "note" });
+    if (problem.problem === "exists") patch({ step: 3 });
     // Offline: try once more when the connection is back.
     if (a.status === 0) window.addEventListener("online", () => void postRef.current?.(), { once: true });
   }, [posting, d, signedIn, toLogin, getToken, turf.id, editing, priceAsk, onSaved, patch]);
+
+  // "You've already rated this turf": replace that report with this one, or edit that one instead.
+  const replaceIt = (existing: Mine) => {
+    setEditing(existing);
+    setError(null);
+    void post(existing);
+  };
+  const editThatOne = (existing: Mine) => {
+    setEditing(existing);
+    setError(null);
+    setD(draftOf(existing, priceAsk?.mine ?? null, userId));
+  };
   useEffect(() => {
     postRef.current = post;
   }, [post]);
@@ -271,6 +307,10 @@ export function ReportSheet({
   const rows = rowsFor(d.sport, d.when);
   const tappedHere = rows.some((a) => d.aspects[a]) || d.when !== null;
   const step: Step | 4 = done ? 4 : d.step;
+  // Each screen opens at its top (the screens share one scroll box).
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, [step]);
   const first = (userName ?? "").trim().split(/\s+/)[0] ?? "";
 
   let thanks: React.ReactNode = null;
@@ -301,6 +341,7 @@ export function ReportSheet({
       <Thanks
         firstName={first}
         edited={!!editing && editing.status !== "removed"}
+        held={r.status === "held"}
         preview={preview}
         turfSports={turf.sports}
         unlock={unlock}
@@ -341,7 +382,7 @@ export function ReportSheet({
         </div>
         {(step === 2 || step === 3) && <StarsBar stars={d.stars} onPick={(n) => patch({ stars: n })} />}
 
-        <div className="overflow-y-auto overscroll-contain px-5" style={step === 4 ? { paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" } : undefined}>
+        <div ref={scroller} className="overflow-y-auto overscroll-contain px-5" style={step === 4 ? { paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" } : undefined}>
           {step === 1 && <Overall turfName={turf.name} stars={d.stars} onPick={pickOverall} />}
           {step === 2 && (
             <QuickScorecard
@@ -365,7 +406,7 @@ export function ReportSheet({
               priceAsk={priceAsk && { chips: priceChips(listedFor(priceAsk.listed, d.when), priceAsk.players), mine: priceAsk.mine }}
               comment={d.comment}
               onComment={(v) => patch({ comment: v })}
-              placeholder={tipPlaceholder(Object.fromEntries(rows.filter((a) => d.aspects[a]).map((a) => [a, d.aspects[a]])), d.sport, turf.sports)}
+              prompt={tipPlaceholder(Object.fromEntries(rows.filter((a) => d.aspects[a]).map((a) => [a, d.aspects[a]])), d.sport, turf.sports)}
               noteOpen={d.noteOpen}
               onNoteOpen={() => patch({ noteOpen: true })}
               note={d.note}
@@ -382,7 +423,29 @@ export function ReportSheet({
 
         {step !== 4 && (
           <div className="border-t border-primary-100 bg-white px-5 pt-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
-            {error && (
+            {open.confirm && !error && step === 3 && (
+              <p className="mb-3 rounded-xl bg-primary-50 px-4 py-3 text-[14px] text-primary-800">
+                {open.confirm === "replace"
+                  ? "Welcome back. You'd already rated this turf: posting saves these answers over that report."
+                  : "Welcome back. Check your answers and your note, then post."}
+              </p>
+            )}
+            {error?.problem === "exists" && error.existing ? (
+              <div role="alert" className="mb-3 rounded-xl bg-primary-50 px-4 py-3 text-[14px] text-primary-800">
+                <p>
+                  You rated this turf {starWord(error.existing.rating).toLowerCase()}
+                  {error.existing.created_at ? ` in ${monthYear(error.existing.edited_at ?? error.existing.created_at)}` : ""}. Post this one in its place?
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => replaceIt(error.existing!)} className="press-tight min-h-11 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold">
+                    Replace it
+                  </button>
+                  <button type="button" onClick={() => editThatOne(error.existing!)} className="press-tight min-h-11 px-4 rounded-full bg-white border border-primary-200 text-primary-900 text-[14px] font-semibold">
+                    Edit that one instead
+                  </button>
+                </div>
+              </div>
+            ) : error && (
               <div role="alert" className="mb-3 rounded-xl bg-hot-500/10 px-4 py-3 text-[14px] text-hot-600">
                 {MESSAGES[error.problem]}
                 {error.problem === "own_turf" && (
@@ -409,7 +472,7 @@ export function ReportSheet({
                   type="button"
                   onClick={() => void post()}
                   disabled={!d.stars || posting}
-                  className="press-tight min-h-11 px-2 text-[15px] font-semibold text-primary-700 hover:text-primary-900 disabled:text-primary-300"
+                  className="press-tight min-h-11 px-2 text-[15px] font-semibold text-primary-700 hover:text-primary-900 disabled:text-primary-400"
                 >
                   {editing ? "Save now" : "Post now"}
                 </button>
@@ -418,7 +481,7 @@ export function ReportSheet({
                 <button
                   type="button"
                   onClick={() => void post()}
-                  disabled={!d.stars || posting}
+                  disabled={!d.stars || posting || error?.problem === "exists"}
                   className="press-tight min-h-12 px-7 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[16px] font-semibold disabled:opacity-60 inline-flex items-center gap-2"
                 >
                   {posting && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}

@@ -12,6 +12,16 @@ export type AspectId = "pitch" | "lights" | "nets" | "goals" | "lines" | "staff"
 export type Score = -1 | 0 | 1;
 export type PlayedWhen = "morning" | "afternoon" | "evening" | "night";
 
+/**
+ * "Played in a TapTurf game" on reports, and the owner's count of them. Off
+ * while anyone can add a game or join one (public.games and
+ * game_participants take writes from the browser), since a faked game would
+ * make a faked report look the most trustworthy. The database keeps working
+ * it out at every save (reviews.verified_via); turn this on once games are
+ * written through a server route.
+ */
+export const SHOW_GAME_BADGE: boolean = false;
+
 export type TagDef = { id: string; label: string };
 export type AspectDef = {
   id: AspectId;

@@ -20,7 +20,12 @@ export type Aspects = Partial<Record<AspectId, AspectRating>>;
 
 export type ReportChannel = "turf_page" | "link" | "edit";
 
-/** POST /api/reviews. Leaving note out keeps the note; note.body null clears it. */
+/**
+ * POST /api/reviews. Leaving note out keeps the note; note.body null clears it.
+ * base: the id of the report this save replaces (the one being edited), null for
+ * a new one. When the account already has a report here and base doesn't name
+ * it, nothing is saved: the answer is reason "exists" with that report.
+ */
 export type ReportBody = {
   turf_id: string;
   rating: number;
@@ -33,6 +38,7 @@ export type ReportBody = {
   price_paid?: number | null;
   channel?: ReportChannel;
   ms?: number;
+  base?: string | null;
 };
 
 export type ReviewStatus = "live" | "held" | "hidden" | "removed";
@@ -77,9 +83,12 @@ export type MyReview = {
   source?: null;
 } & ReportFields;
 
+/** The author's own report, with their note as they wrote it. */
+export type MyReport = MyReview & { note: { body: string; show_name: boolean } | null };
+
 export type MineResponse =
   | {
-      mine: (MyReview & { note: { body: string; show_name: boolean } | null }) | null;
+      mine: MyReport | null;
       voted: string[];
       blocked: "own_turf" | null;
       hint: RateHint | null;
@@ -92,11 +101,15 @@ export type SaveResponse =
       r: "ok";
       created: boolean;
       review: MyReview;
-      /** tomorrow: the next 09:00 IST at least 8 hours on; on_claim: the turf has no owner on TapTurf yet. */
-      note: { delivers: "tomorrow" | "on_claim"; at: string } | null;
+      /**
+       * tomorrow: the next 09:00 IST at least 8 hours on (a named note, or the one that made a batch);
+       * batch: a note without a name, waiting until 3 or more players' are waiting, to go out together;
+       * on_claim: the turf has no owner on TapTurf yet.
+       */
+      note: { delivers: "tomorrow" | "batch" | "on_claim"; at: string | null } | null;
       after: { tapturf_n: number; aspects: Partial<Record<AspectId, number>> };
       price_saved: boolean;
     }
-  | { error: string; reason?: "own_turf" | "contact_info" | "gone"; field?: "comment" | "note" };
+  | { error: string; reason?: "own_turf" | "contact_info" | "gone" | "exists"; field?: "comment" | "note"; review?: MyReport };
 
 export type VoteResponse = { r: "ok"; on: boolean; upvotes: number } | { error: string; reason?: "own" | "google" | "gone" };

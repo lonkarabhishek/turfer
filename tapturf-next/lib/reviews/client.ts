@@ -1,4 +1,4 @@
-import type { MineResponse, ReportBody, SaveResponse, VoteResponse } from "./types";
+import type { MineResponse, MyReport, ReportBody, SaveResponse, VoteResponse } from "./types";
 
 /**
  * Browser side of game reports: calls to /api/reviews with this device's
@@ -41,11 +41,15 @@ export const voteReview = (token: string, reviewId: string, on: boolean) =>
   call<VoteResponse>(token, "/api/reviews/vote", { method: "POST", body: JSON.stringify({ review_id: reviewId, on }) });
 
 /** What went wrong, in the sheet's words (lib/reviews/server.ts refusal). */
-export type SaveProblem = "own_turf" | "contact_info" | "limit" | "new" | "sign_in" | "gone" | "bad" | "unavailable";
+export type SaveProblem = "own_turf" | "contact_info" | "limit" | "new" | "sign_in" | "gone" | "bad" | "unavailable" | "exists";
 
-export function problemOf(a: ReviewAnswer<unknown>): { problem: SaveProblem; field?: "comment" | "note" } | null {
-  const b = (a.body ?? {}) as { error?: string; reason?: string; field?: string };
+export function problemOf(a: ReviewAnswer<unknown>): { problem: SaveProblem; field?: "comment" | "note"; existing?: MyReport } | null {
+  const b = (a.body ?? {}) as { error?: string; reason?: string; field?: string; review?: unknown };
   if (!b.error) return null;
+  if (b.reason === "exists") {
+    const r = b.review as MyReport | null | undefined;
+    return r && typeof r === "object" && typeof r.id === "string" && typeof r.rating === "number" ? { problem: "exists", existing: r } : { problem: "exists" };
+  }
   if (b.reason === "own_turf" || b.reason === "contact_info" || b.reason === "gone") {
     return { problem: b.reason, field: b.field === "note" ? "note" : b.field === "comment" ? "comment" : undefined };
   }

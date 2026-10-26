@@ -1,7 +1,7 @@
 "use client";
 
 import { BadgeCheck, ChevronUp, ExternalLink, User } from "lucide-react";
-import { playAgainWords, starWord } from "@/lib/reviews/catalog";
+import { playAgainWords, SHOW_GAME_BADGE, starWord } from "@/lib/reviews/catalog";
 import type { ReviewWithUser } from "@/types/review";
 import { monthYear, playedLine, ReportChips, StarsShown } from "./ui";
 
@@ -55,7 +55,7 @@ export function ReviewRow({
           <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5 min-w-0">
             <span className="truncate">{google ? r.author_name || "Google user" : r.user_name || "TapTurf player"}</span>
             {google && <GoogleBadge href={r.author_url || r.source_url} />}
-            {!google && r.verified_via === "game" && (
+            {!google && SHOW_GAME_BADGE && r.verified_via === "game" && (
               <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">
                 <BadgeCheck className="w-3.5 h-3.5" aria-hidden /> Played in a TapTurf game
               </span>
@@ -81,7 +81,7 @@ export function ReviewRow({
             onClick={() => onVote(r.id)}
             aria-pressed={!!voted}
             aria-label={voted ? "Remove your Helpful vote" : "Mark this report helpful"}
-            className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3 min-h-9 text-xs font-bold transition-colors ${
+            className={`press-tight inline-flex items-center gap-1.5 rounded-full border px-3.5 min-h-11 text-xs font-bold transition-colors ${
               voted ? "bg-accent-500 border-accent-500 text-white hover:bg-accent-600" : "bg-white border-primary-200 text-primary-700 hover:border-accent-400 hover:text-accent-700"
             }`}
           >

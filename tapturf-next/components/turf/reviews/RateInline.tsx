@@ -13,6 +13,9 @@ import { buzz, StarsShown } from "./ui";
  * that opens the sheet on its second screen. Worded for the viewer when
  * they called or played here lately (review_mine's hint), so there is
  * nothing to dismiss and nothing nags. Signed-out visitors get it too.
+ * For a signed-in viewer it waits for their own read (GET /api/reviews):
+ * offering fresh stars to someone who already rated here would start a
+ * new report over theirs.
  */
 export function RateInline({
   turfName,
@@ -20,6 +23,8 @@ export function RateInline({
   now,
   mine,
   blocked,
+  state,
+  onRetry,
   onRate,
   onEdit,
 }: {
@@ -28,13 +33,37 @@ export function RateInline({
   /** The visitor's clock, after hydration (the hint's day words read it). */
   now: Date | null;
   /** Their live, held or hidden report. */
-  mine: { rating: number } | null;
+  mine: { rating: number; status?: string } | null;
   blocked: boolean;
+  /** loading: the sign-in or their own read isn't in yet; failed: their own read didn't come back. */
+  state: "ready" | "loading" | "failed";
+  onRetry: () => void;
   onRate: (stars: number) => void;
   onEdit: () => void;
 }) {
   const [hover, setHover] = useState(0);
   const [picked, setPicked] = useState(0);
+
+  if (state === "loading") {
+    return (
+      <div className="rounded-2xl border border-primary-200 bg-white p-4 md:p-5" aria-busy="true" aria-label="Loading your report">
+        <div className="h-5 w-56 max-w-full rounded-full bg-primary-100 animate-pulse" />
+        <div className="mt-2 h-4 w-40 rounded-full bg-primary-100 animate-pulse" />
+        <div className="mt-3 h-11 w-56 rounded-full bg-primary-50" />
+      </div>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-white px-4 py-3">
+        <p className="text-[14px] text-primary-700">Couldn&apos;t check your report here just now.</p>
+        <button type="button" onClick={onRetry} className="press-tight min-h-11 px-4 rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] font-semibold text-primary-900">
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (blocked) {
     return (
@@ -54,6 +83,7 @@ export function RateInline({
           <span className="font-semibold text-primary-900">Your report:</span>
           <StarsShown n={mine.rating} />
           <span>{starWord(mine.rating)}</span>
+          {mine.status === "held" && <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[12px] font-semibold text-primary-700">Under review</span>}
         </p>
         <button type="button" onClick={onEdit} className="press-tight min-h-11 px-4 rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] font-semibold text-primary-900">
           Edit

@@ -101,6 +101,12 @@ export function parseReport(body: Record<string, unknown> | null): ParsedReport 
     price = p;
   }
 
+  let base: string | null = null;
+  if (body.base != null) {
+    if (!isUuid(body.base)) return { bad: "base" };
+    base = body.base.toLowerCase();
+  }
+
   const channel = CHANNELS.includes(body.channel as ReportChannel) ? (body.channel as ReportChannel) : "turf_page";
   const ms = typeof body.ms === "number" && Number.isInteger(body.ms) && body.ms >= 0 && body.ms <= 600_000 ? body.ms : undefined;
 
@@ -108,5 +114,6 @@ export function parseReport(body: Record<string, unknown> | null): ParsedReport 
   if (note) out.note = note;
   if (price != null) out.price_paid = price;
   if (ms !== undefined) out.ms = ms;
+  if (base) out.base = base;
   return { ok: out };
 }
