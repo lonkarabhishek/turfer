@@ -1,4 +1,4 @@
-import { ASPECT_ORDER, pitchLabel, type AspectId } from "./catalog";
+import { ASPECT_ORDER, pitchLabel, type AspectId, type PlayedWhen } from "./catalog";
 import type { Aspects, RateHint } from "./types";
 
 /**
@@ -61,6 +61,16 @@ const round50 = (n: number) => Math.round(n / 50) * 50;
 const inRange = (n: number) => n >= 100 && n <= 20_000;
 
 export type PriceChip = { amount: number; listed?: boolean };
+
+/** The turf's listed weekday hourly rates, and its lowest (a turf that lists per hour). */
+export type ListedPrices = { morning: number | null; afternoon: number | null; evening: number | null; min: number | null };
+
+/** The listed rate for the time of day they played: an evening or night game is the evening rate. */
+export function listedFor(p: ListedPrices | null | undefined, when: PlayedWhen | null): number | null {
+  if (!p) return null;
+  const at = when === "evening" || when === "night" ? p.evening : when === "afternoon" ? p.afternoon : when === "morning" ? p.morning : null;
+  return at && at > 0 ? at : p.min && p.min > 0 ? p.min : null;
+}
 
 /**
  * The amounts offered for "What did you pay for an hour?": the listed

@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Review, ReviewWithUser, ReviewSummary } from "@/types/review";
 
+// Reads only. Writes (a report, an edit, removing it, Helpful) go through
+// /api/reviews (lib/reviews/client.ts): the server verifies who is calling.
+
 // Small helper: keep a single browser client instance (createClient is
 // already a singleton) but skip re-creating one on every call.
 const supa = () => createClient();
@@ -83,79 +86,6 @@ export async function getReviewsForTurf(
 }
 
 /**
- * Which of these reviews the viewer has upvoted. Per viewer, so it is not
- * in the cached turf page (turf_page); the page asks only for a signed-in
- * visitor and only for reviews that have votes. Null on error.
- */
-export async function getViewerUpvotes(
-  reviewIds: string[],
-  viewerId: string,
-): Promise<Set<string> | null> {
-  try {
-    const { data, error } = await supa()
-      .from("review_votes")
-      .select("review_id")
-      .eq("user_id", viewerId)
-      .in("review_id", reviewIds);
-    if (error) return null;
-    return new Set((data || []).map((v) => v.review_id as string));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Toggle an upvote. Returns the new state so the caller can update
- * optimistically without a follow-up fetch. Idempotent: repeated
- * calls flip between voted and not-voted.
- *
- * The DB has a UNIQUE(review_id, user_id) constraint so we treat any
- * insert conflict as "already voted — remove it".
- */
-export async function toggleReviewUpvote(
-  reviewId: string,
-  userId: string,
-): Promise<{ ok: boolean; upvoted: boolean; error?: string }> {
-  try {
-    const s = supa();
-    // Cheap existence check to decide direction. Alternative would be
-    // "insert, catch 23505, delete on catch" — one round-trip instead
-    // of two — but that trades read latency for less code and worse
-    // observability. Two calls at ~50ms each is fine here.
-    const { data: existing } = await s
-      .from("review_votes")
-      .select("id")
-      .eq("review_id", reviewId)
-      .eq("user_id", userId)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      const { error } = await s
-        .from("review_votes")
-        .delete()
-        .eq("review_id", reviewId)
-        .eq("user_id", userId);
-      if (error) return { ok: false, upvoted: true, error: error.message };
-      return { ok: true, upvoted: false };
-    }
-
-    const { error } = await s
-      .from("review_votes")
-      .insert([{ review_id: reviewId, user_id: userId }]);
-    if (error) {
-      // Race: someone else inserted between our check and insert. Treat
-      // as "already voted" success.
-      if (String(error.code) === "23505") return { ok: true, upvoted: true };
-      return { ok: false, upvoted: false, error: error.message };
-    }
-    return { ok: true, upvoted: true };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, upvoted: false, error: msg };
-  }
-}
-
-/**
  * Aggregate stats for a turf's in-app reviews. Imported Google rows are
  * left out: their score is already on the turf as rating/total_reviews,
  * and mixing 5 imported rows into "N in-app" misread as our own.
@@ -192,38 +122,4 @@ export async function getReviewSummary(turfId: string): Promise<ReviewSummary> {
 
 function zeroSummary(): ReviewSummary {
   return { count: 0, average: 0, histogram: [0, 0, 0, 0, 0] };
-}
-
-/**
- * Post a new review. Returns { ok, error } so the caller can render
- * a specific message instead of a generic failure.
- */
-export async function submitReview(input: {
-  turfId: string;
-  userId: string;
-  rating: number;
-  comment?: string | null;
-  bookingId?: string | null;
-}): Promise<{ ok: boolean; error?: string; review?: Review }> {
-  const clean = {
-    turf_id: input.turfId,
-    user_id: input.userId,
-    booking_id: input.bookingId ?? null,
-    rating: Math.max(1, Math.min(5, Math.round(input.rating))),
-    comment: input.comment?.trim() || null,
-  };
-
-  try {
-    const s = supa();
-    const { data, error } = await s
-      .from("reviews")
-      .insert([clean])
-      .select()
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, review: data as Review };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: msg };
-  }
 }

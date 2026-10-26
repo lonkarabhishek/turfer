@@ -7,8 +7,9 @@ import { parseReport } from "./payload";
 import { cleanText, contactProblem } from "./screen";
 import { barWords, pickChips, playAgainLine, scorecard, waitingLine } from "./insights";
 import { unlockLine } from "./unlock";
-import { priceChips, rateTitle, shareText, tipPlaceholder } from "./sheet";
+import { listedFor, priceChips, rateTitle, shareText, tipPlaceholder } from "./sheet";
 import { emptyDraft, hasAnswers, readDraft } from "./draft";
+import { summaryLine, writtenEnough } from "./summaryLine";
 import { shapePlayAgain, shapeReviewAspects, shapeReviews } from "../turfPage/shape";
 
 const TURF = "bbbbbbbb-bbbb-4bbb-8bbb-000000000001";
@@ -207,6 +208,16 @@ test("price chips: listed rate with ₹200 either side; else players' range; els
   assert.deepEqual(priceChips(null, null), [{ amount: 600 }, { amount: 1000 }, { amount: 1500 }]);
 });
 
+test("listed rate follows the time of day played", () => {
+  const p = { morning: 800, afternoon: null, evening: 1200, min: 800 };
+  assert.equal(listedFor(p, "night"), 1200);
+  assert.equal(listedFor(p, "evening"), 1200);
+  assert.equal(listedFor(p, "morning"), 800);
+  assert.equal(listedFor(p, "afternoon"), 800, "no afternoon rate: the lowest");
+  assert.equal(listedFor(p, null), 800);
+  assert.equal(listedFor(null, "night"), null);
+});
+
 test("tip placeholder follows the taps", () => {
   assert.equal(tipPlaceholder({ pitch: { score: 1 }, lights: { score: -1 } }, null), "You flagged the lights. What should the next team know?");
   assert.equal(tipPlaceholder({ pitch: { score: -1 } }, "Badminton"), "You flagged the court. What should the next team know?");
@@ -248,6 +259,20 @@ test("draft: read back field by field; old or broken is nothing", () => {
   assert.equal(readDraft("{not json", now), null);
   assert.equal(readDraft(JSON.stringify({ ...d, v: 2 }), now), null);
   assert.equal(readDraft(JSON.stringify({ ...d, stars: 9, aspects: { pitch: { score: 7 } } }), now + 1)?.stars, 0);
+});
+
+/* ---------------- the AI summary's lines ---------------- */
+
+test("summary lines: taps become words; Google rows as before; a tapped report counts without a tip", () => {
+  assert.equal(
+    summaryLine({ rating: 4, comment: "Ask for court 2.", source: null, sport: "Box Cricket", played_when: "evening", play_again: 1,
+      aspects: { pitch: { score: 1, tags: ["bounce"] }, lights: { score: -1, tags: ["dim"] } } }),
+    "- 4 stars (TapTurf, Box Cricket, evening): Pitch great (true bounce); Lights needs work (dim corners). Would play again. Ask for court 2.",
+  );
+  assert.equal(summaryLine({ rating: 5, comment: "Lovely ground", source: "google" }), "- 5 stars (Google): Lovely ground");
+  assert.equal(writtenEnough({ rating: 3, comment: null, source: null, aspects: { pitch: { score: 0 }, staff: { score: 1 } } }), true);
+  assert.equal(writtenEnough({ rating: 3, comment: null, source: null, aspects: { pitch: { score: 0 } } }), false);
+  assert.equal(writtenEnough({ rating: 3, comment: "ok", source: "google" }), false);
 });
 
 /* ---------------- the turf page's shape, old payloads and new ---------------- */

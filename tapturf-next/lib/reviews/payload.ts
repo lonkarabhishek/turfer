@@ -1,4 +1,4 @@
-import { ASPECT_ORDER, ASPECTS, isAspect, isWhen, MAX_ASPECTS, MAX_TAGS, SPORT_ROWS, sportRow, type AspectId, type Score } from "./catalog";
+import { ASPECT_ORDER, ASPECTS, isWhen, MAX_ASPECTS, MAX_TAGS, SPORT_ROWS, sportRow, type AspectId, type Score } from "./catalog";
 import { cleanText, NOTE_MAX, TIP_MAX } from "./screen";
 import type { Aspects, ReportBody, ReportChannel } from "./types";
 

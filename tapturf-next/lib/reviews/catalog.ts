@@ -204,4 +204,5 @@ export const PLAY_AGAIN: { id: Score; label: string; line: string }[] = [
   { id: 0, label: "Maybe", line: "Might play again" },
   { id: -1, label: "No", line: "Wouldn't play again" },
 ];
-export const playAgainLine = (v: number | null | undefined): string | null => PLAY_AGAIN.find((x) => x.id === v)?.line ?? null;
+/** One player's answer on their report: "Would play again". (insights.ts playAgainLine is the turf's share.) */
+export const playAgainWords = (v: number | null | undefined): string | null => PLAY_AGAIN.find((x) => x.id === v)?.line ?? null;
