@@ -1101,9 +1101,10 @@ end;
 $function$;
 
 -- 20261019_mytapturf.sql, with only the reviews block changed: tapturf and recent
--- count live rows only; recent carries each report's id, scorecard, play-again
--- answer and the player's public name (the page already shows it); and the keys
--- of private.owner_review_block (last 90 days) are added.
+-- count live rows only; recent lists every TapTurf report (not only those with a
+-- comment) with its id, scorecard, play-again answer and the player's public name
+-- (the page already shows it); and the keys of private.owner_review_block (last
+-- 90 days) are added.
 create or replace function public.owner_dashboard(p_token text, p_turf_id uuid, p_days integer default 30)
 returns jsonb
 language plpgsql
@@ -1176,7 +1177,8 @@ begin
           from public.reviews x
           left join public.users u on u.id = x.user_id and x.source is null
           where x.turf_id = p_turf_id and x.status = 'live'
-            and ((x.comment is not null and length(trim(x.comment)) > 0) or jsonb_typeof(x.aspects) = 'object')
+            -- Every TapTurf report (stars alone say something too); Google rows with text, as before.
+            and (x.source is null or (x.comment is not null and length(trim(x.comment)) > 0))
           order by x.created_at desc limit 5
         ) r
       ), '[]'::jsonb)

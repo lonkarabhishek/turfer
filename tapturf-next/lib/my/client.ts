@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { getFirebaseAuth } from "@/lib/firebase/client";
+import type { AspectId } from "@/lib/reviews/catalog";
+import type { AspectCount, ReportFields } from "@/lib/reviews/types";
 
 /**
  * Browser side of myTapturf. Every owner call goes to a database
@@ -107,6 +109,37 @@ export type OwnerTurf = {
   formats: string[] | null;
   whatsapp_phone: string | null;
 };
+/** One of the latest reviews on /my: a TapTurf report (with its scorecard) or a Google review. */
+export type OwnerRecentReview = {
+  id?: string;
+  rating: number;
+  comment: string | null;
+  /** The player's public name (as the turf page shows it), or the Google reviewer's. */
+  author: string;
+  source: string;
+  created_at: string;
+} & ReportFields;
+
+/**
+ * owner_dashboard.reviews. The keys after recent come with game reports
+ * (20261027_game_reports.sql), always over the last 90 days, and are
+ * missing on an older database.
+ */
+export type OwnerReviews = {
+  tapturf: number;
+  recent: OwnerRecentReview[];
+  window_days?: number;
+  n?: number;
+  average?: number | null;
+  play_again?: { yes: number; maybe: number; no: number };
+  verified?: number;
+  aspects?: Omit<AspectCount, "tags">[];
+  fix_first?: { aspect: AspectId; tag: string; n: number; last_at: string }[];
+  love?: { aspect: AspectId; tag: string; n: number }[];
+  /** Private notes, once due. Anonymous ones carry only a rough context and the month. */
+  notes?: { context: string | null; month: string; name: string | null; rating_word: string | null; body: string }[];
+};
+
 export type OwnerDashboard =
   | { error: string }
   | {
@@ -116,6 +149,6 @@ export type OwnerDashboard =
       prev: { views: number; calls: number; whatsapp: number; ask: number };
       ask: number;
       games: { hosted: number; upcoming: number };
-      reviews: { tapturf: number; recent: { rating: number; comment: string; author: string; source: string; created_at: string }[] };
+      reviews: OwnerReviews;
       edits: { created_at: string; fields: string[] }[];
     };

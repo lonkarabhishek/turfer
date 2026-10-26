@@ -79,6 +79,15 @@ const SECTIONS: LegalSection[] = [
           play at it), and when you tap Call or WhatsApp on a turf page. We also record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
         </p>
+        <p id="reports" className="scroll-mt-24">
+          <strong>When you rate a turf.</strong> We store your stars, the parts you tapped, the sport and time
+          of day you picked, whether you&rsquo;d play again, the rate you paid, your tip, and any private note
+          to the owner. Your name, stars, taps, tip and rate are public. A private note is seen only by the
+          turf&rsquo;s verified owner and TapTurf, without your name unless you choose to show it. If you played
+          a TapTurf game at the turf we mark your report Played in a TapTurf game. We may use your TapTurf
+          games and your Call or WhatsApp taps to ask how your game went; taps are never shown to anyone else.
+          You can edit or remove your report from the turf page at any time.
+        </p>
         <p id="owners" className="scroll-mt-24">
           <strong>If you claim a turf on myTapturf.</strong> We keep the TapTurf account you claimed it from,
           your role and any note you add. If you check a phone number against the listing, we keep that number

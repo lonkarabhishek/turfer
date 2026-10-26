@@ -392,6 +392,7 @@ eq(["average", "play_again", "verified", "window_days", "aspects", "fix_first", 
 eq(d.reviews.tapturf, (await one(`select count(*)::int n from public.reviews where turf_id = '${T(1)}' and source is null and status = 'live'`)).n, "tapturf counts live rows");
 ok(d.reviews.recent.every((r) => r.id && r.author !== "A player"), "recent rows carry an id and the player's public name");
 ok(!d.reviews.recent.some((r) => r.author === "Rejected Claim"), "and leave out rows that aren't live");
+ok(d.reviews.recent.some((r) => r.author === "Hint Person" && r.comment === null && r.aspects === null), "a stars-only TapTurf report is listed too");
 await save(U(1), T(1), { rating: 4, aspects: { lights: { score: -1, tags: ["dim"] }, staff: { score: 1, tags: ["quick"] } } });
 await save(U(3), T(1), { rating: 3, aspects: { lights: { score: -1, tags: ["dim", "glare"] }, staff: { score: 1, tags: ["quick", "on_time"] } } }).catch(() => null);
 d = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(1)])).d;
