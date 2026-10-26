@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { User, Check, X, Loader2 } from "lucide-react";
 import type { GameRequest } from "@/types/game";
+import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 
 interface Props {
   request: GameRequest;
@@ -38,6 +39,7 @@ export function GameRequestCard({ request, onAccept, onDecline, compact }: Props
             </div>
           )}
           <span className="text-sm text-gray-700">{request.requester_name}</span>
+          <VerifiedTickFor id={request.user_id} className="-ml-2" />
         </div>
         <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
           request.status === "accepted"
@@ -64,6 +66,7 @@ export function GameRequestCard({ request, onAccept, onDecline, compact }: Props
             </div>
           )}
           <span className="text-sm font-medium text-gray-900 truncate">{request.requester_name}</span>
+          <VerifiedTickFor id={request.user_id} className="-ml-1" />
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           <button
@@ -100,7 +103,10 @@ export function GameRequestCard({ request, onAccept, onDecline, compact }: Props
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">{request.requester_name}</p>
+          <p className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+            {request.requester_name}
+            <VerifiedTickFor id={request.user_id} />
+          </p>
           {request.note && (
             <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">&ldquo;{request.note}&rdquo;</p>
           )}

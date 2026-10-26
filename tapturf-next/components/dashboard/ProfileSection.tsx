@@ -10,6 +10,8 @@ import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "@/componen
 import { TagSwitch } from "@/components/account/TagSwitch";
 import { GoogleLinkActions } from "@/components/account/GoogleLinkActions";
 import { PhoneAddForm } from "@/components/account/PhoneAddForm";
+import { VerifiedTick } from "@/components/account/VerifiedTick";
+import { VerifyCard } from "@/components/account/VerifyCard";
 import { PROFILE_PATH, spacedPhone } from "@/lib/account/display";
 import type { MePatch } from "@/lib/account/client";
 import type { AccountError } from "@/lib/account/types";
@@ -46,6 +48,8 @@ export function ProfileSection({ user }: { user: AppUser }) {
 
   // Back from the Google sign-in the phone row asked for (?add=phone): open it, and take the word out of the address.
   const [addPhoneNow] = useState(() => params.get("add") === "phone");
+  // The verified tick card's "Add phone number": opens the phone row's own form.
+  const [phoneSignal, setPhoneSignal] = useState(0);
   useEffect(() => {
     if (params.get("add") === "phone") router.replace(PROFILE_PATH, { scroll: false });
   }, [params, router]);
@@ -183,9 +187,19 @@ export function ProfileSection({ user }: { user: AppUser }) {
   );
 
   // The phone row: a Google account whose own way in is Google can add, confirm, change or remove its number.
+  // Confirmed means proved with an OTP where the database knows (the tick): a number that opens the
+  // account but was never proved is offered Confirm, which gives the tick its phone half.
   const phoneRow =
     byGoogle && user.phoneSettable ? (
-      <PhoneAddForm current={user.phone} confirmed={user.phoneConfirmed === true} autoOpen={addPhoneNow} disabled={dirty} googleEmail={user.email} />
+      <PhoneAddForm
+        current={user.phone}
+        confirmed={user.phoneProven ?? user.phoneConfirmed === true}
+        opens={user.phoneConfirmed === true}
+        autoOpen={addPhoneNow}
+        openSignal={phoneSignal}
+        disabled={dirty}
+        googleEmail={user.email}
+      />
     ) : user.phone ? (
       <>
         {readOnly("phone", spacedPhone(user.phone))}
@@ -216,7 +230,10 @@ export function ProfileSection({ user }: { user: AppUser }) {
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-lg font-semibold text-gray-900 truncate">{user.name}</p>
+          <p className="flex items-center gap-1.5 min-w-0 text-lg font-semibold text-gray-900">
+            <span className="truncate">{user.name}</span>
+            {user.verified && <VerifiedTick />}
+          </p>
           {user.username ? (
             <p className="text-sm text-gray-500 truncate">@{user.username}</p>
           ) : (
@@ -224,6 +241,8 @@ export function ProfileSection({ user }: { user: AppUser }) {
           )}
         </div>
       </div>
+
+      <VerifyCard user={user} dirty={dirty} onAddPhone={() => setPhoneSignal((n) => n + 1)} />
 
       <div className="space-y-5">
         {/* Name */}

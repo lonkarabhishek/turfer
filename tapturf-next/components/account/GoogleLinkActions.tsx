@@ -291,6 +291,7 @@ export function GoogleLinkActions({
   disabled?: boolean;
   onRemoved?: () => void;
 }) {
+  const { user } = useAuth();
   const [confirm, setConfirm] = useState<"swap" | "remove" | null>(null);
   const link = useGoogleLink({
     onRemoved: () => {
@@ -355,7 +356,7 @@ export function GoogleLinkActions({
         />
       ) : confirm === "remove" ? (
         <ConfirmBox
-          text={`Remove ${googleEmail ?? "your Google account"}? Google won't open this account any more. If you log in with it later, we'll ask you to use your phone number. Your games and history stay as they are.`}
+          text={`Remove ${googleEmail ?? "your Google account"}? Google won't open this account any more. If you log in with it later, we'll ask you to use your phone number. Your games and history stay as they are.${user?.verified ? " You'll lose the verified tick." : ""}`}
           yes="Remove"
           danger
           busy={link.busy}

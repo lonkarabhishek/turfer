@@ -47,6 +47,8 @@ export type Person = {
   verified: boolean;
   /** What their sign-ins confirmed (admin_verified); null when that couldn't be read. */
   confirmed: Confirmed | null;
+  /** The verified tick players see, and which half is proved (admin_ticks); null when that couldn't be read. */
+  tick: Tick | null;
   /** When they signed up: their first sign-in, even for accounts copied into users later. */
   joinedAt: number;
   /** When their users row was made, only when that was more than a minute after they signed up. */
@@ -91,6 +93,34 @@ export type Person = {
 
 /** What a sign-in confirmed: their email (by Google, or the old app's confirm link) and their phone (by a code TapTurf checked). */
 export type Confirmed = { email: "google" | "link" | null; phone: boolean };
+
+/** The verified tick (a number proved by OTP and an email proved by Google) and its two halves. */
+export type Tick = { verified: boolean; phone: boolean; email: boolean };
+
+/** One row as admin_ticks returns it. */
+export type TickRow = { user_id: string; verified: boolean | null; phone_proven: boolean | null; email_proven: boolean | null };
+
+/** admin_ticks' rows by account, or null when the read failed. */
+export function ticksById(rows: readonly TickRow[] | null): Map<string, Tick> | null {
+  if (!rows) return null;
+  const out = new Map<string, Tick>();
+  for (const r of rows) {
+    if (typeof r?.user_id !== "string") continue;
+    const phone = r.phone_proven === true;
+    const email = r.email_proven === true;
+    out.set(r.user_id, { verified: r.verified === true && phone && email, phone, email });
+  }
+  return out;
+}
+
+/** What the admin says about the tick: shown, or which half is missing. */
+export function tickText(t: Tick | null): string {
+  if (!t) return "Couldn't read";
+  if (t.verified) return "Shown: phone and email proven";
+  if (t.phone) return "Not yet: phone proven, email not";
+  if (t.email) return "Not yet: email proven, phone not";
+  return "Not yet: neither proven";
+}
 
 /** One row as admin_verified returns it. */
 export type VerifiedRow = {
@@ -301,10 +331,12 @@ export function toPeople(
   contacts: readonly ContactEmailRow[] = [],
   verified: readonly VerifiedRow[] | null = null,
   links: readonly SignInLinkRow[] = [],
+  ticks: readonly TickRow[] | null = null,
 ): Person[] {
   const byUser = new Map(contacts.filter((c) => typeof c?.user_id === "string").map((c) => [c.user_id, c]));
   const linkOf = linksById(links);
   const confirmedOf = confirmedById(verified);
+  const tickOf = ticksById(ticks);
   const joined = (r: DetailsRow) => time(r.signed_up_at) ?? time(r.created_at);
   const seen = new Map<number, number>();
   for (const r of rows) {
@@ -330,6 +362,8 @@ export function toPeople(
         role: str(r.role),
         verified: isVerified(confirmed, r.is_verified),
         confirmed,
+        // An account missing from a read that worked has no tick.
+        tick: tickOf ? (tickOf.get(r.id) ?? { verified: false, phone: false, email: false }) : null,
         joinedAt,
         rowAddedAt: rowAt !== null && rowAt - joinedAt > 60_000 ? rowAt : null,
         imported: (seen.get(joinedAt) ?? 0) > 1,

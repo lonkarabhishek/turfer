@@ -7,6 +7,7 @@ import { errorOf, searchPlayers } from "@/lib/account/client";
 import type { PlayerHit } from "@/lib/account/types";
 import type { Tag } from "@/lib/account/tag";
 import { USERNAME_RE } from "@/lib/account/tag";
+import { VerifiedTick } from "@/components/account/VerifiedTick";
 
 /**
  * Pick a TapTurf profile to tag on a player: recently tagged profiles
@@ -107,9 +108,11 @@ export function PlayerSearch({ onPick, exclude = [] }: { onPick: (p: PlayerHit) 
     };
   }, [open, ready, query, getToken]);
 
+  // The tick is for the results list only: never kept on this device or put in a match.
   const pick = (p: PlayerHit) => {
-    rememberTagged(p);
-    onPick(p);
+    const hit: PlayerHit = { u: p.u, name: p.name, photo: p.photo };
+    rememberTagged(hit);
+    onPick(hit);
   };
 
   const recentShown = recent.filter((p) => !exclude.includes(p.u)).slice(0, 6);
@@ -186,7 +189,10 @@ export function PlayerSearch({ onPick, exclude = [] }: { onPick: (p: PlayerHit) 
                     <button type="button" onClick={() => pick(p)} className="w-full min-h-14 px-3 py-2 flex items-center gap-3 text-left hover:bg-primary-50">
                       <Avatar photo={p.photo} />
                       <span className="min-w-0">
-                        <span className="block text-[15px] font-semibold text-primary-900 truncate">{p.name}</span>
+                        <span className="flex items-center gap-1 min-w-0 text-[15px] font-semibold text-primary-900">
+                          <span className="truncate">{p.name}</span>
+                          {p.v && <VerifiedTick />}
+                        </span>
                         <span className="block text-[13px] text-primary-500">@{p.u}</span>
                       </span>
                     </button>

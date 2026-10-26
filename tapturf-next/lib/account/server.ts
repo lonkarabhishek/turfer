@@ -73,6 +73,10 @@ export function toProfile(data: unknown): AccountProfile | null {
     phone_confirmed: d.phone_confirmed === true,
     phone_settable: d.phone_settable === true,
     ask_google: d.ask_google === true,
+    // The verified tick: null on a database from before it, so nothing is shown or asked.
+    verified: typeof d.verified === "boolean" ? d.verified : null,
+    phone_proven: d.phone_proven === true,
+    email_proven: d.email_proven === true,
   };
 }
 
@@ -213,7 +217,7 @@ export async function searchPlayers(q: string): Promise<{ ok: PlayerHit[] } | { 
   const players: PlayerHit[] = [];
   for (const p of list) {
     const o = (p ?? {}) as Record<string, unknown>;
-    if (typeof o.u === "string" && typeof o.name === "string") players.push({ u: o.u, name: o.name, photo: s(o.photo) });
+    if (typeof o.u === "string" && typeof o.name === "string") players.push({ u: o.u, name: o.name, photo: s(o.photo), ...(o.v === true ? { v: true as const } : {}) });
   }
   return { ok: players };
 }

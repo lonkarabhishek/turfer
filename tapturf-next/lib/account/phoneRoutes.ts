@@ -2,6 +2,7 @@ import type { NextResponse } from "next/server";
 import { checkFirebaseIdToken } from "../firebase/verifyIdToken";
 import { freshGoogle, freshPhone, nowSeconds } from "./fresh";
 import type { GoogleIdentity } from "./identity";
+import { refreshTickPage } from "./profilePage";
 import { accountError, accountReply, caller } from "./route";
 import { createAccountLimiter, readSmallJson, removePhone, setPhone } from "./server";
 
@@ -48,7 +49,10 @@ export async function addPhone(req: Request): Promise<NextResponse> {
   if (!fresh) return accountError("proof");
   const r = await setPhone(who.id.uid, fresh.phone, fresh.proofKey);
   if ("unavailable" in r) return accountError("unavailable");
-  if ("ok" in r) return accountReply({ profile: r.ok });
+  if ("ok" in r) {
+    refreshTickPage(r.ok);
+    return accountReply({ profile: r.ok });
+  }
   if (r.r === "taken") {
     const { r: error, ...holder } = r;
     return accountReply(holder, error);
@@ -63,6 +67,9 @@ export async function deletePhone(req: Request): Promise<NextResponse> {
   if ("reply" in who) return who.reply;
   const r = await removePhone(who.id.uid);
   if ("unavailable" in r) return accountError("unavailable");
-  if ("ok" in r) return accountReply({ profile: r.ok });
+  if ("ok" in r) {
+    refreshTickPage(r.ok);
+    return accountReply({ profile: r.ok });
+  }
   return accountError(r.r);
 }

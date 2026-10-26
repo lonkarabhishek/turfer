@@ -26,7 +26,7 @@ type View =
   | { kind: "attached"; email: string; otherEmpty: boolean; otherMadeOn: string | null }
   | { kind: "working" }
   | { kind: "opening" }
-  | { kind: "done"; email: string }
+  | { kind: "done"; email: string; tick?: boolean }
   | { kind: "already"; email: string }
   | { kind: "has_account"; empty: boolean; madeOn: string | null }
   | { kind: "other_account" }
@@ -167,7 +167,7 @@ function LinkInner() {
     if (p) {
       applyProfile(p);
       const email = p.google_email ?? (view.kind === "attached" ? view.email : "");
-      return setView({ kind: "done", email });
+      return setView({ kind: "done", email, tick: p.verified === true });
     }
     const e = errorOf(a);
     if (a.status === 401) return setView({ kind: "phone_gone" });
@@ -255,6 +255,7 @@ function LinkInner() {
             <span className="font-semibold text-primary-900 break-all">{view.email || "Your Google account"}</span> is added. Next time, log in with Google or your phone
             number. Both open this account.
           </p>
+          {view.tick && <p className="font-semibold text-sky-800">You&rsquo;ve got the verified tick.</p>}
           <Actions>
             <Btn onClick={exit}>{toProfile ? "Back to profile" : "Continue"}</Btn>
           </Actions>

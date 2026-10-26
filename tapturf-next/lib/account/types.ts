@@ -60,6 +60,15 @@ export type AccountProfile = {
   phone_settable: boolean;
   /** Asked once to add Google (a phone account with no email that has not answered yet). */
   ask_google: boolean;
+  /**
+   * The verified tick: a number proved with an OTP and an email proved with Google, both still
+   * the account's own (20261027_verified_tick.sql). null: the database has no tick yet.
+   */
+  verified: boolean | null;
+  /** The number on the account opens it by OTP and was proved with one. */
+  phone_proven: boolean;
+  /** Google confirmed the account's email for a sign-in that opens it. */
+  email_proven: boolean;
 };
 
 export type AccountError =
@@ -147,6 +156,6 @@ export type PhoneSetResponse =
 export type UsernameCheckResponse = { ok: true; username: string } | { error: AccountError };
 export type UsernameSuggestResponse = { username: string | null } | { error: AccountError };
 
-/** A profile people can tag: no ids, phone or email. */
-export type PlayerHit = { u: string; name: string; photo: string | null };
+/** A profile people can tag: no ids, phone or email. v: the verified tick (search results only, never kept). */
+export type PlayerHit = { u: string; name: string; photo: string | null; v?: true };
 export type PlayersSearchResponse = { players: PlayerHit[] } | { error: AccountError };

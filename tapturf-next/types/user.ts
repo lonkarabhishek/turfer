@@ -21,4 +21,10 @@ export interface AppUser {
   phoneSettable?: boolean;
   /** Asked once to add Google (a phone account with no email that has not answered yet). */
   askGoogle?: boolean;
+  /** The verified tick (a number proved by OTP and an email proved by Google); null or missing: the database can't say yet. */
+  verified?: boolean | null;
+  /** The number on the account was proved with an OTP (only when verified is known). */
+  phoneProven?: boolean;
+  /** Google confirmed the account's email (only when verified is known). */
+  emailProven?: boolean;
 }

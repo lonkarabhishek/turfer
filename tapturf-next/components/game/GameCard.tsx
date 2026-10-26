@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MapPin, Clock, Users, User, Zap } from "lucide-react";
 import type { Game } from "@/types/game";
 import { formatDate, formatTimeSlot, capitalizeSkillLevel } from "@/lib/utils/game";
+import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 
 export function GameCard({ game, hideVenue = false, cityLabel, now }: {
   game: Game;
@@ -146,6 +147,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now }: {
                 </div>
               )}
               <span className="text-xs text-primary-600 truncate">{game.host_name}</span>
+              <VerifiedTickFor id={game.creator_id} className="-ml-1" />
             </div>
 
             {game.price_per_player > 0 ? (

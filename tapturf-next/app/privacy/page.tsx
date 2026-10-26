@@ -172,6 +172,11 @@ const SECTIONS: LegalSection[] = [
           public on your profile page and in player search, unless you turn off &ldquo;Let others find and tag
           me&rdquo;. Your phone number and email are never shown there.
         </p>
+        <p id="tick" className="scroll-mt-24">
+          <strong>The verified tick.</strong> When you have confirmed both your phone number (with a one-time
+          code) and your email (with Google), a tick shows next to your name on TapTurf: on your profile, in
+          player search, on games and on your reports. We never show either one, or which one is missing.
+        </p>
         <p>
           <strong>Venues.</strong> We don&rsquo;t pass your details to turf owners. When you tap Call or
           WhatsApp you contact the venue yourself, and from then on their own privacy terms apply.

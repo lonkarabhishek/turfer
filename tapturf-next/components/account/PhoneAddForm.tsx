@@ -69,20 +69,27 @@ function phoneErrorText(e: AccountError | null, b: { until?: string; holderOpens
 export function PhoneAddForm({
   current,
   confirmed,
+  opens = false,
   autoOpen = false,
+  openSignal = 0,
   disabled = false,
   googleEmail,
 }: {
   current?: string;
+  /** The number was proved with an OTP (else Confirm is offered). */
   confirmed: boolean;
+  /** The number already opens the account by OTP (proved or not): Confirm is then only for the tick. */
+  opens?: boolean;
   /** Back from the Google round trip this form asked for: open it at once. */
   autoOpen?: boolean;
+  /** Bumped by the profile's verified tick card: open the add or confirm step. */
+  openSignal?: number;
   /** The profile has unsaved changes. */
   disabled?: boolean;
   /** For Google's account chooser. */
   googleEmail?: string;
 }) {
-  const { getToken, applyProfile } = useAuth();
+  const { getToken, applyProfile, user } = useAuth();
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const captchaId = `phone-add-captcha-${uid}`;
   const [state, setState] = useState<State>("idle");
@@ -175,6 +182,13 @@ export function PhoneAddForm({
     return () => clearTimeout(t);
   }, [autoOpen, disabled]);
 
+  // The tick card's button: the same step the row's own button opens.
+  useEffect(() => {
+    if (!openSignal) return;
+    const t = setTimeout(() => void openRef.current(intentRef.current()), 0);
+    return () => clearTimeout(t);
+  }, [openSignal]);
+
   /** A normal Google sign-in, coming back to this form (the sign-in callback, then the profile with add=phone). */
   const viaGoogle = async () => {
     setBusy(true);
@@ -225,12 +239,14 @@ export function PhoneAddForm({
     setState("checking");
     const tok = await googleToken();
     if (!tok) return setState("code");
+    const hadTick = user?.verified === true;
     const a = await addPhone(tok, proof);
     const p = profileIn(a);
     if (p) {
       kept.current = null;
       applyProfile(p);
-      setDoneText(DONE[intent]);
+      const said = intent === "confirm" && opens ? "Number confirmed." : DONE[intent];
+      setDoneText(p.verified === true && !hadTick ? `${said} You’ve got the verified tick.` : said);
       setState("done");
       return;
     }
@@ -345,7 +361,11 @@ export function PhoneAddForm({
             </>
           ) : !confirmed ? (
             <>
-              <p className="text-[13px] text-primary-600 leading-snug">Not confirmed yet. Confirm it with an OTP so you can log in with this number.</p>
+              <p className="text-[13px] text-primary-600 leading-snug">
+                {opens
+                  ? `You log in with this number, but it isn’t confirmed with an OTP here yet.${user?.emailProven ? " Confirm it to get the verified tick." : ""}`
+                  : "Not confirmed yet. Confirm it with an OTP so you can log in with this number."}
+              </p>
               <button type="button" onClick={() => void open("confirm")} disabled={off} className={`mt-2 ${primary}`}>
                 {busy && <Loader2 className="w-4 h-4 animate-spin" />}
                 Confirm with OTP
@@ -371,7 +391,7 @@ export function PhoneAddForm({
       {state === "remove_confirm" && current && (
         <div className="mt-2">
           <ConfirmBox
-            text={`Remove ${spacedPhone(current)}? You won\u2019t be able to log in with it any more.`}
+            text={`Remove ${spacedPhone(current)}? You won\u2019t be able to log in with it any more.${user?.verified ? " You\u2019ll lose the verified tick." : ""}`}
             yes="Remove"
             danger
             busy={busy}

@@ -11,6 +11,7 @@ import { GameRequestCard } from "./GameRequestCard";
 import { GameDistance } from "./GameDistance";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
+import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 
 /** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */
 function waNumber(phone: string): string {
@@ -392,6 +393,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                     </div>
                   )}
                   <span className="text-sm font-medium text-primary-800">{p.name || "Player"}</span>
+                  <VerifiedTickFor id={p.user_id} className="-ml-1" />
                 </div>
               ))}
               {participants.length === 0 && (
@@ -460,7 +462,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-primary-800 truncate">{game.host_name}</p>
+                <p className="flex items-center gap-1 min-w-0 text-sm font-semibold text-primary-800">
+                  <span className="truncate">{game.host_name}</span>
+                  <VerifiedTickFor id={game.creator_id} />
+                </p>
                 {/* The host's number is for players, not for anyone who finds
                     the page: shown only after sign-in. */}
                 {game.host_phone && user ? (

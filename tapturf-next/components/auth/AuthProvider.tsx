@@ -153,6 +153,10 @@ function userFromProfile(p: AccountProfile): AppUser {
     phoneConfirmed: p.phone_confirmed === true,
     phoneSettable: p.phone_settable === true,
     askGoogle: p.ask_google === true,
+    // The verified tick, and its halves only when the database knows the tick.
+    verified: p.verified,
+    phoneProven: p.verified === null ? undefined : p.phone_proven,
+    emailProven: p.verified === null ? undefined : p.email_proven,
   };
 }
 
@@ -208,6 +212,9 @@ function readPhoneUser(): AppUser | null {
       phoneConfirmed: p.phoneConfirmed === true,
       phoneSettable: p.phoneSettable === true,
       askGoogle: p.askGoogle === true,
+      verified: typeof p.verified === "boolean" ? p.verified : null,
+      phoneProven: typeof p.phoneProven === "boolean" ? p.phoneProven : undefined,
+      emailProven: typeof p.emailProven === "boolean" ? p.emailProven : undefined,
     };
   } catch {
     return null;
