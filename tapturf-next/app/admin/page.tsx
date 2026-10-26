@@ -28,6 +28,7 @@ import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { turfPath } from "@/lib/utils/turfPath";
+import { getToolUsage } from "@/lib/queries/adminTools";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -52,6 +53,39 @@ function timeAgo(iso: string): string {
   if (hrs < 24) return `${hrs} hr ago`;
   const days = Math.round(hrs / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+const dayLabel = (d: string | null) => (d ? new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
+
+/** Live scoreboard links and the tools' counted uses. */
+function ToolTiles({ tools }: { tools: Awaited<ReturnType<typeof getToolUsage>> }) {
+  const { live, uses } = tools;
+  const n = (r: Record<string, number> | undefined, ...keys: string[]) => keys.reduce((s, k) => s + (r?.[k] ?? 0), 0);
+  const since = uses?.since ? `Counted since ${dayLabel(uses.since)}` : "Counting from today";
+  const scorecards = n(uses?.started, "live_scorer", "live_scoreboard");
+  const sports = Object.entries(uses?.boardSports ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s, c]) => `${s} ${c}`).join(", ");
+  const others: [string, string][] = [["nrr_calculator", "NRR"], ["team_generator", "Teams"], ["tournament_scorer", "Tournaments"], ["scorecard_maker", "Scorecard images"]];
+  const otherTotal = n(uses?.started, ...others.map(([k]) => k));
+  return (
+    <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
+      <StatTile
+        label="Live scoreboards shared"
+        value={live ? live.total : "-"}
+        sub={live ? `+${live.last7} this week · ${live.liveNow} live now` : "Couldn't load"}
+      />
+      <StatTile
+        label="Scorecards started"
+        value={uses ? scorecards : "-"}
+        sub={uses ? `${n(uses.finished, "live_scorer", "live_scoreboard")} finished${sports ? ` · ${sports}` : ""} · ${since}` : "Couldn't load"}
+      />
+      <StatTile label="Coin tosses" value={uses ? n(uses.started, "toss") : "-"} sub={uses ? `${n(uses.started7, "toss")} this week · ${since}` : "Couldn't load"} />
+      <StatTile
+        label="Other tools"
+        value={uses ? otherTotal : "-"}
+        sub={uses ? others.map(([k, name]) => `${name} ${n(uses.started, k)}`).join(" · ") : "Couldn't load"}
+      />
+    </section>
+  );
 }
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ person?: string | string[] }> }) {
@@ -81,6 +115,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     contact30,
     adminGames,
     logins,
+    tools,
   ] = await Promise.all([
     getHeadline(),
     getDailyGames(30),
@@ -96,6 +131,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     getContactClickStats(30),
     getAdminGames("all", 200),
     getRecentLogins(300),
+    getToolUsage(),
   ]);
   const loginNums = logins.ok ? loginStats(logins.rows) : null;
   const lastLogin = loginNums?.latest;
@@ -201,6 +237,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           />
         </div>
       </section>
+
+      {/* The free tools: live scoreboard links, and uses counted since 26 Oct 2026 (lib/tools/usage.ts). */}
+      <ToolTiles tools={tools} />
 
       {/* Signup windows (requests + notifications are further down in
           the reviews snapshot to keep the layout de-duped). */}

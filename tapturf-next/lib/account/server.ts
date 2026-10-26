@@ -4,6 +4,7 @@ import { clientNetwork, windowCounter } from "../limits";
 import type { CityNote } from "./city";
 import type { Identity } from "./identity";
 import type { AccountProfile, PlayerHit } from "./types";
+import type { ToolUse } from "../tools/usage";
 
 export type { AccountProfile, PlayerHit };
 
@@ -262,6 +263,19 @@ export async function notePhoneChecked(userId: string, phone: string): Promise<v
     phoneChecked.set(userId, day);
   } catch (e) {
     console.warn("account: account_phone_checked threw", e);
+  }
+}
+
+/** Count one use of a free tool for the admin (tool_use_count). Run it after the reply: it never throws. */
+export async function countToolUse(use: ToolUse): Promise<void> {
+  const key = accountKey();
+  if (!key) return;
+  try {
+    cityClient ??= makeClient(cityFetch);
+    const { data, error } = await cityClient.rpc("tool_use_count", { p_key: key, p_tool: use.tool, p_event: use.event, p_detail: use.detail });
+    if (error || data !== true) console.warn("tools: tool_use_count failed", error?.message ?? data);
+  } catch (e) {
+    console.warn("tools: tool_use_count threw", e);
   }
 }
 

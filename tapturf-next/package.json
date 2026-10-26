@@ -20,7 +20,7 @@
     "test:account": "tsc -p tsconfig.test-account.json && node --test .test-out/account/lib/account/account.test.js .test-out/account/lib/auth/auth.test.js",
     "test:trend": "tsc -p tsconfig.test-trend.json && node --test .test-out/trend/lib/admin/trend.test.js .test-out/trend/lib/admin/people.test.js .test-out/trend/lib/admin/claims.test.js",
     "test:photos": "tsc -p tsconfig.test-photos.json && node --test .test-out/photos/lib/my/photoMath.test.js .test-out/photos/lib/my/photoCheck.test.js",
-    "test:toss": "tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js"
+    "test:toss": "tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
