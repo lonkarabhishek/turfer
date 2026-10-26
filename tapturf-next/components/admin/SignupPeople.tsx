@@ -15,11 +15,13 @@ import {
   joinedBetween,
   matches,
   sitePath,
+  tickText,
   whatsappLink,
   type Method,
   type Person,
   type RecordedCity,
 } from "@/lib/admin/people";
+import { VerifiedTick } from "@/components/account/VerifiedTick";
 
 /**
  * Who signed up in the stretch the chart shows (and the city picked in
@@ -241,6 +243,7 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
             <span className={`font-semibold max-w-full break-words sm:truncate ${p.name ? "text-primary-900" : "text-primary-400"}`}>{p.name ?? "No name"}</span>
+            {p.tick?.verified && <VerifiedTick className="-ml-1" />}
             {p.username && <span className="min-w-0 max-w-full truncate text-[13px] text-primary-500">@{p.username}</span>}
             <MethodBadge method={p.method} />
             {p.signInUnfinished && (
@@ -505,9 +508,17 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
           )}
         </Item>
         {p.role && p.role !== "user" && <Item label="Role">{title(p.role)}</Item>}
-        <Item label="Verified">
+        <Item label="Confirmed">
           <VerifiedItem p={p} />
         </Item>
+        {!p.noAccount && (
+          <Item label="Tick">
+            <span className={p.tick?.verified ? "inline-flex items-center gap-1" : p.tick ? "text-primary-500" : "text-hot-600"}>
+              {p.tick?.verified && <VerifiedTick />}
+              {tickText(p.tick)}
+            </span>
+          </Item>
+        )}
         <AddedItems p={p} />
         {p.updatedAt !== null && p.updatedAt - p.joinedAt > 60_000 && (
           <Item label="Profile changed">

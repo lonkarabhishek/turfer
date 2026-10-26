@@ -23,6 +23,7 @@ import {
   readLinkCookie,
   revokeSession,
 } from "./link";
+import { refreshTickPage } from "./profilePage";
 import { accountError, accountReply, caller, later } from "./route";
 import {
   createAccountLimiter,
@@ -206,6 +207,7 @@ export async function completeLink(req: Request): Promise<NextResponse> {
     const profile = r.ok;
     const phone = who.id.phone;
     later(() => notePhoneChecked(profile.id, phone));
+    refreshTickPage(profile);
     return finish(accountReply({ profile }), req);
   }
   const { r: error, ...brief } = r;
@@ -250,6 +252,7 @@ export async function removeGoogle(req: Request): Promise<NextResponse> {
   const r = await unlinkGoogle(who.id.phone, fresh.fresh.sub, fresh.fresh.authTime, fresh.fresh.proofKey);
   if ("unavailable" in r) return accountError("unavailable");
   if ("r" in r) return accountError(r.r === "stale" ? "reauth" : r.r);
+  refreshTickPage(r.ok);
   return accountReply({ profile: r.ok });
 }
 

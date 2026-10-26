@@ -4,6 +4,7 @@ import { BadgeCheck, ChevronUp, ExternalLink, User } from "lucide-react";
 import { playAgainWords, SHOW_GAME_BADGE, starWord } from "@/lib/reviews/catalog";
 import type { ReviewWithUser } from "@/types/review";
 import { monthYear, playedLine, ReportChips, StarsShown } from "./ui";
+import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 
 /**
  * One review on the turf page. A TapTurf report reads as its stars and
@@ -54,6 +55,8 @@ export function ReviewRow({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5 min-w-0">
             <span className="truncate">{google ? r.author_name || "Google user" : r.user_name || "TapTurf player"}</span>
+            {/* Read after hydration, never baked into the cached turf page: a tick that ends goes at once. */}
+            {!google && <VerifiedTickFor id={r.user_id} />}
             {google && <GoogleBadge href={r.author_url || r.source_url} />}
             {!google && SHOW_GAME_BADGE && r.verified_via === "game" && (
               <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-semibold text-accent-700">

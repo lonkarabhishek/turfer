@@ -157,6 +157,7 @@ export function googleOnlyPeople(rows: readonly UnfinishedRow[]): Person[] {
       emailFromGoogle: !!str(r.email),
       links: null,
       noAccount: true,
+      tick: null,
     }));
 }
 

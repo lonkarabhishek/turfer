@@ -4,9 +4,12 @@ import { cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
 import { User } from "lucide-react";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { VerifiedTick } from "@/components/account/VerifiedTick";
+import { OwnerVerifyNote } from "@/components/account/OwnerVerifyNote";
 
-// A TapTurf player's public profile: username, name, photo and join
-// month, nothing else. Tags on live scorecards link here. Only for people
+// A TapTurf player's public profile: username, name, photo, join month
+// and the verified tick (a number and an email both confirmed; never
+// which one is missing), nothing else. Tags on live scorecards link here. Only for people
 // who left "Let others find and tag me" on; an old username 308s to the
 // current one. Kept out of search engines and the sitemap.
 
@@ -17,7 +20,7 @@ export function generateStaticParams() {
   return [];
 }
 
-type Profile = { u: string; name: string; photo: string | null; since: string | null };
+type Profile = { u: string; name: string; photo: string | null; since: string | null; verified: boolean };
 type Found = { profile: Profile } | { movedTo: string } | null;
 
 /** Throws when the database cannot be read, so an outage is never cached as "no such player". */
@@ -35,6 +38,7 @@ const loadProfile = cache(async (raw: string): Promise<Found> => {
       name: d.name,
       photo: typeof d.photo === "string" ? d.photo : null,
       since: typeof d.since === "string" ? d.since : null,
+      verified: d.verified === true,
     },
   };
 });
@@ -68,7 +72,7 @@ export default async function PlayerProfilePage({ params }: Props) {
   const found = await loadProfile(raw);
   if (!found) notFound();
   if ("movedTo" in found) permanentRedirect(`/u/${found.movedTo}`);
-  const { u, name, photo, since } = found.profile;
+  const { u, name, photo, since, verified } = found.profile;
   if (raw !== u) permanentRedirect(`/u/${u}`);
   const month = sinceText(since);
 
@@ -87,10 +91,16 @@ export default async function PlayerProfilePage({ params }: Props) {
             <User className="w-10 h-10 text-primary-400" />
           </div>
         )}
-        <h1 className="mt-4 font-display text-3xl text-primary-900 leading-tight break-words">{name}</h1>
+        <h1 className="mt-4 font-display text-3xl text-primary-900 leading-tight break-words">
+          {name}
+          {verified && <VerifiedTick size="lg" className="ml-1.5 align-[-0.1em]" />}
+        </h1>
         <p className="mt-1 text-[15px] text-primary-500">@{u}</p>
+        {verified && <p className="mt-1 text-[13px] font-medium text-sky-700">Verified · Phone and email confirmed</p>}
         {month && <p className="mt-3 text-[13px] text-primary-500">On TapTurf since {month}</p>}
       </div>
+
+      <OwnerVerifyNote username={u} />
 
       <div className="mt-6 text-center space-y-3">
         <p className="text-[14px] text-primary-600">Find a turf near you and get a game going.</p>

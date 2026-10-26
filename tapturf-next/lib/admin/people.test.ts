@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_CITY, ago, byCity, cityOf, confirmedById, duration, inCity, initial, isVerified, istDateTime, joinedBetween, matches, personId, sitePath, sourceOf, toPeople, whatsappLink, type DetailsRow } from "./people";
+import { NO_CITY, ago, byCity, cityOf, confirmedById, duration, inCity, initial, isVerified, istDateTime, joinedBetween, matches, personId, sitePath, sourceOf, tickText, ticksById, toPeople, whatsappLink, type DetailsRow } from "./people";
 
 const row = (o: Partial<DetailsRow>): DetailsRow => ({
   id: "u1",
@@ -244,4 +244,34 @@ test("verified is what sign-ins confirmed, not the old app's flag", () => {
   assert.equal(confirmedById(null), null);
   assert.equal(isVerified({ email: null, phone: false }, true), false);
   assert.equal(isVerified(null, null), false);
+});
+
+test("the verified tick: shown only with both halves; the old flag never gives it", () => {
+  const rows = [
+    row({ id: "t", method: "google", email: "t@gmail.com", phone: "+919876543210" }),
+    row({ id: "p", method: "phone", phone: "+919876543211" }),
+    row({ id: "e", method: "google", email: "e@gmail.com" }),
+    row({ id: "o", method: "phone", phone: "+919876543212", email: "typed@x.in", is_verified: true }),
+    row({ id: "n", method: "phone", phone: "+919876543213" }),
+  ];
+  const ticks = [
+    { user_id: "t", verified: true, phone_proven: true, email_proven: true },
+    { user_id: "p", verified: false, phone_proven: true, email_proven: false },
+    { user_id: "e", verified: false, phone_proven: false, email_proven: true },
+    { user_id: "o", verified: false, phone_proven: false, email_proven: false },
+    { user_id: "x", verified: true, phone_proven: false, email_proven: false },
+  ];
+  const by = Object.fromEntries(toPeople(rows, [], null, [], ticks).map((x) => [x.id, x]));
+  assert.deepEqual(by.t.tick, { verified: true, phone: true, email: true });
+  assert.equal(tickText(by.t.tick), "Shown: phone and email proven");
+  assert.equal(tickText(by.p.tick), "Not yet: phone proven, email not");
+  assert.equal(tickText(by.e.tick), "Not yet: email proven, phone not");
+  assert.equal(tickText(by.o.tick), "Not yet: neither proven", "the old app's flag says nothing about the tick");
+  assert.deepEqual(by.n.tick, { verified: false, phone: false, email: false }, "missing from a read that worked: no tick");
+  assert.equal(ticksById(ticks)?.get("x")?.verified, false, "a tick without both halves is never shown");
+  // The read failed (or the database is from before the tick).
+  const failed = Object.fromEntries(toPeople(rows, [], null, []).map((x) => [x.id, x]));
+  assert.equal(failed.t.tick, null);
+  assert.equal(tickText(null), "Couldn't read");
+  assert.equal(ticksById(null), null);
 });

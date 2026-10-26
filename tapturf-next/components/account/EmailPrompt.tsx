@@ -185,6 +185,9 @@ export function EmailPrompt() {
 
   if (!shown) return after;
 
+  // The tick's words only once the database has the tick (before it, the ask is as it was).
+  const tick = user?.verified === false;
+
   return (
     <>
       <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
@@ -201,10 +204,12 @@ export function EmailPrompt() {
             <GoogleMark />
           </span>
           <h2 id="email-prompt-title" ref={titleRef} tabIndex={-1} style={{ outline: "none" }} className="mt-3 font-display text-2xl text-primary-900 leading-tight">
-            Add your email with Google?
+            {tick ? "Get the verified tick" : "Add your email with Google?"}
           </h2>
           <p id="email-prompt-body" className="mt-2 text-[14px] text-primary-600 leading-snug">
-            Then you can log in with Google or this phone number. Both open this same account. No spam, and we never show your email to other players or turfs.
+            {tick
+              ? "Add your email with Google. Players then see a ✓ next to your name, and Google or this phone number both open this account. We never show your email to other players or turfs."
+              : "Then you can log in with Google or this phone number. Both open this same account. No spam, and we never show your email to other players or turfs."}
           </p>
 
           <div className="mt-5 flex gap-3">

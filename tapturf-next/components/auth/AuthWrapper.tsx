@@ -7,6 +7,7 @@ import { WelcomeToast } from "./WelcomeToast";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { UsernamePrompt } from "@/components/account/UsernamePrompt";
 import { EmailPrompt } from "@/components/account/EmailPrompt";
+import { PhonePrompt } from "@/components/account/PhonePrompt";
 import { PolicyNotice } from "@/components/legal/PolicyNotice";
 
 /**
@@ -28,6 +29,7 @@ export function AuthWrapper({ children }: { children: ReactNode }) {
       <WelcomeToast />
       <UsernamePrompt />
       <EmailPrompt />
+      <PhonePrompt />
       <PolicyNotice />
     </AuthProvider>
   );

@@ -1,5 +1,5 @@
 /**
- * The one-time asks after sign-in (a username, an email): where and when
+ * The one-time asks after sign-in (a username, an email, a number): where and when
  * they may open. At most one opens per visit, so nobody gets two sheets in
  * a row.
  */
@@ -35,7 +35,7 @@ export function promptedThisVisit(): boolean {
 }
 
 /** Take this visit's one ask for `which`; false when another ask already had it. */
-export function claimPrompt(which: "username" | "email"): boolean {
+export function claimPrompt(which: "username" | "email" | "phone"): boolean {
   if (claimedHere) return claimedHere === which;
   try {
     const had = sessionStorage.getItem(VISIT_KEY);

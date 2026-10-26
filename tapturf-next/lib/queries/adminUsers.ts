@@ -2,7 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
-import { confirmedById, toPeople, type Confirmed, type ContactEmailRow, type DetailsRow, type Person, type VerifiedRow } from "@/lib/admin/people";
+import { confirmedById, toPeople, type Confirmed, type ContactEmailRow, type DetailsRow, type Person, type TickRow, type VerifiedRow } from "@/lib/admin/people";
 import { fetchAllRows } from "@/lib/queries/turfs";
 import { googleOnlyPeople } from "@/lib/admin/links";
 import { googleUnfinishedRows, signInLinkRows } from "@/lib/queries/adminLinks";
@@ -63,6 +63,23 @@ export const adminVerifiedRows = cache(async (): Promise<VerifiedRow[] | null> =
   }
 });
 
+/**
+ * The verified tick players see and its two halves, for every account,
+ * through admin_ticks() with the same owner check. One read per render;
+ * null when not allowed or failing (or before 20261027_verified_tick.sql),
+ * so the list says it couldn't read it.
+ */
+export const adminTickRows = cache(async (): Promise<TickRow[] | null> => {
+  try {
+    const supabase = await createServerClient();
+    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+    return await fetchAllRows<TickRow>((from, to) => supabase.rpc("admin_ticks", { p_firebase_token: token }).range(from, to));
+  } catch (e) {
+    console.warn("admin_ticks failed", e);
+    return null;
+  }
+});
+
 /** adminVerifiedRows by account; null when that read failed. */
 export async function adminConfirmed(): Promise<Map<string, Confirmed> | null> {
   return confirmedById(await adminVerifiedRows());
@@ -85,7 +102,7 @@ export const signupPeople = cache(async (): Promise<{ people: Person[] | null; r
     const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
     // The typed emails come separately (admin_people's columns can't grow); without them the list still loads.
     // So do the ways in added from the profile, and the Google sign-ins that made no account.
-    const [rows, contacts, verified, links, unfinished] = await Promise.all([
+    const [rows, contacts, verified, links, unfinished, ticks] = await Promise.all([
       fetchAllRows<DetailsRow>((from, to) => supabase.rpc("admin_people", { p_firebase_token: token }).range(from, to)),
       fetchAllRows<ContactEmailRow>((from, to) => supabase.rpc("admin_contact_emails", { p_firebase_token: token }).range(from, to)).catch((e) => {
         console.warn("admin_contact_emails failed", e);
@@ -95,10 +112,12 @@ export const signupPeople = cache(async (): Promise<{ people: Person[] | null; r
       adminVerifiedRows(),
       signInLinkRows(),
       googleUnfinishedRows(),
+      // The tick and its halves; without it the list says it couldn't read them.
+      adminTickRows(),
     ]);
     // A Google sign-in that never came back used to get an empty account from the auth trigger;
     // now it gets none, so it is counted here instead and the sign-ups series keeps its meaning.
-    const people = [...toPeople(rows, contacts, verified, links), ...googleOnlyPeople(unfinished)].sort(
+    const people = [...toPeople(rows, contacts, verified, links, ticks), ...googleOnlyPeople(unfinished)].sort(
       (a, b) => b.joinedAt - a.joinedAt || (a.id < b.id ? -1 : 1),
     );
     return { people, readAt: Math.max(Date.now(), people[0]?.joinedAt ?? 0) };
