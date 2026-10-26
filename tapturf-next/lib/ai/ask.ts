@@ -70,7 +70,7 @@ export function isAskConfigured(): boolean {
 }
 
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
-export const ROUTER_VERSION = 4;
+export const ROUTER_VERSION = 5;
 
 /**
  * Stable system prompt (cacheable): cities, sports, and the areas we

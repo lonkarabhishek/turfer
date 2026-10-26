@@ -95,10 +95,14 @@ export const CITIES: {
   { id: "ranchi",             label: "Ranchi",             labelUpper: "RANCHI",             state: "Jharkhand" },
   { id: "satara",             label: "Satara",             labelUpper: "SATARA",             state: "Maharashtra" },
   { id: "kalaburagi",         label: "Kalaburagi",         labelUpper: "KALABURAGI",         state: "Karnataka" },
+  { id: "jamnagar",           label: "Jamnagar",           labelUpper: "JAMNAGAR",           state: "Gujarat" },
   { id: "jabalpur",           label: "Jabalpur",           labelUpper: "JABALPUR",           state: "Madhya Pradesh" },
   { id: "kurnool",            label: "Kurnool",            labelUpper: "KURNOOL",            state: "Andhra Pradesh" },
+  { id: "puducherry",         label: "Puducherry",         labelUpper: "PUDUCHERRY",         state: "Puducherry" },
   { id: "amritsar",           label: "Amritsar",           labelUpper: "AMRITSAR",           state: "Punjab" },
   { id: "prayagraj",          label: "Prayagraj",          labelUpper: "PRAYAGRAJ",          state: "Uttar Pradesh" },
+  { id: "bhavnagar",          label: "Bhavnagar",          labelUpper: "BHAVNAGAR",          state: "Gujarat" },
+  { id: "bikaner",            label: "Bikaner",            labelUpper: "BIKANER",            state: "Rajasthan" },
   { id: "jalna",              label: "Jalna",              labelUpper: "JALNA",              state: "Maharashtra" },
   { id: "belagavi",           label: "Belagavi",           labelUpper: "BELAGAVI",           state: "Karnataka" },
   { id: "ajmer",              label: "Ajmer",              labelUpper: "AJMER",              state: "Rajasthan" },
@@ -112,11 +116,15 @@ export const CITIES: {
   { id: "davanagere",         label: "Davanagere",         labelUpper: "DAVANAGERE",         state: "Karnataka" },
   { id: "kannur",             label: "Kannur",             labelUpper: "KANNUR",             state: "Kerala" },
   { id: "nellore",            label: "Nellore",            labelUpper: "NELLORE",            state: "Andhra Pradesh" },
+  { id: "jalandhar",          label: "Jalandhar",          labelUpper: "JALANDHAR",          state: "Punjab" },
   { id: "yavatmal",           label: "Yavatmal",           labelUpper: "YAVATMAL",           state: "Maharashtra" },
   { id: "shivamogga",         label: "Shivamogga",         labelUpper: "SHIVAMOGGA",         state: "Karnataka" },
   { id: "siliguri",           label: "Siliguri",           labelUpper: "SILIGURI",           state: "West Bengal" },
+  { id: "anand",              label: "Anand",              labelUpper: "ANAND",              state: "Gujarat" },
+  { id: "tirunelveli",        label: "Tirunelveli",        labelUpper: "TIRUNELVELI",        state: "Tamil Nadu" },
   { id: "gwalior",            label: "Gwalior",            labelUpper: "GWALIOR",            state: "Madhya Pradesh" },
   { id: "ujjain",             label: "Ujjain",             labelUpper: "UJJAIN",             state: "Madhya Pradesh" },
+  { id: "cuttack",            label: "Cuttack",            labelUpper: "CUTTACK",            state: "Odisha" },
   { id: "ratnagiri",          label: "Ratnagiri",          labelUpper: "RATNAGIRI",          state: "Maharashtra" },
   { id: "beed",               label: "Beed",               labelUpper: "BEED",               state: "Maharashtra" },
   { id: "dhanbad",            label: "Dhanbad",            labelUpper: "DHANBAD",            state: "Jharkhand" },
@@ -261,7 +269,7 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   // Every other curated city by its label, biggest first, on a word
   // boundary so "Goa" does not match "goal" or "Kota" "Kotamangalam".
   for (const c of CITIES) {
-    if (new RegExp(`\\b${c.label.toLowerCase()}\\b`).test(a)) return c.id;
+    if (!NOT_IN_TEXT.has(c.id) && new RegExp(`\\b${c.label.toLowerCase()}\\b`).test(a)) return c.id;
   }
   // Then the other names ("Davangere", "Hanamkonda", "Calicut"), after
   // every label so "Trichy Road, Coimbatore" stays Coimbatore.
@@ -394,14 +402,26 @@ export const CITY_ALIASES: Record<string, CityId> = {
   // Part of Greater Warangal; most Warangal turf addresses say Hanamkonda.
   hanamkonda: "warangal",
   hanumakonda: "warangal",
+  pondicherry: "puducherry",
+  pondy: "puducherry",
+  jullundur: "jalandhar",
+  nellai: "tirunelveli",
 };
+
+/**
+ * Cities free text never names: Anand is also a first name and an area
+ * name ("Anand Vihar" in Delhi, "Anand Nagar" in many cities), and alone
+ * it would beat no other city. Detection by IP or GPS and Claude's reading
+ * of an Ask message still know it.
+ */
+export const NOT_IN_TEXT: ReadonlySet<CityId> = new Set(["anand"]);
 
 /**
  * Every phrase that names a curated city (label, id or alias), longest
  * first, so "navi mumbai" is tried before "mumbai".
  */
 const CITY_PHRASES: [string, CityId][] = [
-  ...CITIES.flatMap((c): [string, CityId][] => [[c.label.toLowerCase(), c.id], [c.id, c.id]]),
+  ...CITIES.filter((c) => !NOT_IN_TEXT.has(c.id)).flatMap((c): [string, CityId][] => [[c.label.toLowerCase(), c.id], [c.id, c.id]]),
   ...Object.entries(CITY_ALIASES),
 ].sort((a, b) => b[0].length - a[0].length);
 
@@ -545,6 +565,15 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   siliguri: { lat: 26.7271, lng: 88.3953 },
   ujjain: { lat: 23.1765, lng: 75.7885 },
   dhanbad: { lat: 23.7957, lng: 86.4304 },
+  // Added 26 Oct evening; each within about 5 km of its turfs' median.
+  jamnagar: { lat: 22.4707, lng: 70.0577 },
+  puducherry: { lat: 11.9416, lng: 79.8083 },
+  bhavnagar: { lat: 21.7645, lng: 72.1519 },
+  bikaner: { lat: 28.0229, lng: 73.3119 },
+  jalandhar: { lat: 31.3260, lng: 75.5762 },
+  anand: { lat: 22.5645, lng: 72.9289 },
+  tirunelveli: { lat: 8.7139, lng: 77.7567 },
+  cuttack: { lat: 20.4625, lng: 85.8830 },
 };
 
 export function cityCoords(id: string): { lat: number; lng: number } | null {

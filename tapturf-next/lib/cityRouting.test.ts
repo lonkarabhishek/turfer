@@ -434,7 +434,7 @@ test("isCitySlug: any slug-shaped city, never a reserved word or garbage", () =>
 });
 
 test("the curated list: every live city on 26 Oct, each with a centroid and nothing else", () => {
-  assert.equal(CITIES.length, 88);
+  assert.equal(CITIES.length, 96);
   assert.equal(new Set(CITIES.map((c) => c.id)).size, CITIES.length);
   for (const c of CITIES) {
     assert.ok(cityCoords(c.id), `${c.id} has no centroid`);
@@ -459,12 +459,25 @@ test("nearest city: the south of Kerala is Thiruvananthapuram, not Kochi", () =>
   assert.equal(nearestCity(8.4, 77.1), "thiruvananthapuram"); // Neyyattinkara side
   assert.equal(nearestCity(9.97, 76.29), "kochi");
   assert.equal(nearestCity(31.62, 74.88), "amritsar");
+  // Cities the data team added on the evening of 26 Oct.
+  assert.equal(nearestCity(22.45, 70.07), "jamnagar");
+  assert.equal(nearestCity(11.94, 79.80), "puducherry");
+  assert.equal(nearestCity(8.70, 77.74), "tirunelveli");
+  assert.equal(nearestCity(20.45, 85.82), "cuttack"); // not Bhubaneswar, 25 km away
+  assert.equal(nearestCity(22.54, 72.94), "anand");
   // Far from everything (Imphal): null, and the closest is still named.
   assert.equal(nearestCity(24.82, 93.94), null);
   assert.equal(nearestCityAny(24.82, 93.94).id, "guwahati");
 });
 
 test("cityInText: whole words only, old names too", () => {
+  assert.equal(cityInText("box cricket in Pondicherry"), "puducherry");
+  assert.equal(cityInText("turf in jullundur"), "jalandhar");
+  // Anand is also a name and an area: free text never reads it as the city.
+  assert.equal(cityInText("turf near Anand Vihar"), null);
+  assert.equal(cityInText("box cricket anand nagar pune"), "pune");
+  assert.equal(guessCityFromAddress("Anand Nagar, Jamnagar, Gujarat"), "jamnagar");
+  assert.equal(guessCityFromAddress("Near Anand Vihar ISBT"), null);
   assert.equal(cityInText("football goal post"), null);
   assert.equal(cityInText("kotak bank turf"), null);
   assert.equal(cityInText("agrasen ground"), null);

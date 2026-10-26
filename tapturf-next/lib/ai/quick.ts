@@ -1,4 +1,4 @@
-import { CITIES, CITY_ALIASES, CITY_IDS, type CityId } from "../city";
+import { CITIES, CITY_ALIASES, CITY_IDS, NOT_IN_TEXT, type CityId } from "../city";
 import { sportBySlug, type SportPage } from "../sports";
 import { norm, resolveTurfNames } from "./names";
 import type { Turf } from "../../types/turf";
@@ -127,7 +127,8 @@ add(
 const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
 const CITY_WORDS = new Map<string, Slot>();
-for (const c of CITIES) CITY_WORDS.set(norm(c.label), { k: "city", id: c.id, label: c.label });
+// A city that is also a common name ("Anand Vihar" is in Delhi) is left to Claude.
+for (const c of CITIES) CITY_WORDS.set(norm(c.label), NOT_IN_TEXT.has(c.id) ? { k: "clash" } : { k: "city", id: c.id, label: c.label });
 // Aliases keep the name as typed: "Bengaluru" stays "Bengaluru" in the reply.
 // One that names only part of a city ("Navi Mumbai" is not all of Mumbai) is left to Claude.
 const PART_OF_CITY = new Set(["navi mumbai", "thane", "new delhi", "secunderabad", "hanamkonda", "hanumakonda"]);
