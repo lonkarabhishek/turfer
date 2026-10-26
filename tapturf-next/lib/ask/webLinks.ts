@@ -101,8 +101,9 @@ export const pageKey = (url: string) => tidy(url).replace(/#.*$/, "");
 
 /**
  * The pages behind the answer: the ones its text cites (text from block
- * `from` on, the part shown), else the first results. Deduped by URL,
- * http(s) only; pages in `dead` (by pageKey) are never shown.
+ * `from` on, the part shown), else, when it cites none, the first three
+ * results. Deduped by URL, http(s) only; pages in `dead` (by pageKey) are
+ * never shown, and text whose cited pages are all dead gets no page.
  */
 export function webLinks(content: Block[], from = 0, dead: ReadonlySet<string> = new Set()): BlogLink[] {
   const results = new Map<string, Result>();
@@ -120,11 +121,18 @@ export function webLinks(content: Block[], from = 0, dead: ReadonlySet<string> =
     seen.add(key);
     out.push({ label: tidy(title) || tidy(results.get(url)?.title) || host, url: u, host });
   };
+  let cited = false;
   for (const b of content.slice(from)) {
     if (b.type !== "text") continue;
-    for (const c of b.citations ?? []) if (c.type === "web_search_result_location") add(c.url, c.title, MAX_CITED);
+    for (const c of b.citations ?? []) {
+      // A citation of no web page (javascript:, ftp:) is no citation.
+      if (c.type !== "web_search_result_location" || !hostOf(tidy(c.url))) continue;
+      cited = true;
+      add(c.url, c.title, MAX_CITED);
+    }
   }
-  if (out.length === 0) for (const r of results.values()) add(r.url, r.title, MAX_RESULTS);
+  // Only the results candidatePages checks (the first three web pages), and only for text that cited none.
+  if (!cited) for (const r of [...results.values()].filter((x) => hostOf(tidy(x.url))).slice(0, MAX_RESULTS)) add(r.url, r.title, MAX_RESULTS);
   return out;
 }
 

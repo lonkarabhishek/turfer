@@ -307,3 +307,11 @@ test("the server checks only public pages: no private addresses, IP hosts or odd
   assert.equal(fetchableHost("https://example.com:443/a"), "example.com");
   for (const u of ["https://127.0.0.1/a", "http://[::1]/a", "https://example.com:8443/a", "ftp://example.com/a", "https://localhost/a", "https://metadata.google.internal/a", "https://intranet/a", "not a url"]) assert.equal(fetchableHost(u), null, u);
 });
+
+test("text whose cited pages are all gone gets no page, never an unchecked result", () => {
+  const content = [search("s1"), results("s1", PAGES), say("Box cricket has no LBW", [{ url: PAGES[0].url }]), say(". Rules vary by venue, so ask the manager.")];
+  assert.equal(readWebAnswer(content, "end_turn", new Set([PAGES[0].url])), null);
+  // Text that cites nothing falls back to the first three results, the ones candidatePages checks, less the dead.
+  const plain = [search("s1"), results("s1", PAGES), say("Rules vary by venue.")];
+  assert.deepEqual(readWebAnswer(plain, "end_turn", new Set([PAGES[1].url]))?.links.map((l) => l.url), [PAGES[0].url, PAGES[2].url]);
+});

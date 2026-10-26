@@ -3,7 +3,8 @@ import { after } from "next/server";
 import { cityNote } from "@/lib/account/city";
 import { accountError, accountReply, caller } from "@/lib/account/route";
 import { cleanEmail } from "@/lib/account/emails";
-import { createAccountLimiter, noteCity, readSmallJson, resolveAccount, setContactEmail, setUsername, updateName } from "@/lib/account/server";
+import { createAccountLimiter, noteCity, notePhoneChecked, readSmallJson, resolveAccount, setContactEmail, setUsername, updateName } from "@/lib/account/server";
+import type { Identity } from "@/lib/account/identity";
 import type { AccountError, AccountProfile } from "@/lib/account/types";
 
 // The signed-in person's own account (lib/account/types.ts has the API).
@@ -23,6 +24,16 @@ function noteCityLater(req: Request, userId: string) {
   }
 }
 
+/** After the reply: a phone token the server just verified is a checked number, for the admin's Verified line. */
+function notePhoneLater(id: Identity, userId: string) {
+  if (id.kind !== "phone") return;
+  try {
+    after(() => notePhoneChecked(userId, id.phone));
+  } catch (e) {
+    console.warn("account: phone check note skipped", e);
+  }
+}
+
 export async function GET(req: Request) {
   const who = await caller(req, allowRead);
   if ("reply" in who) return who.reply;
@@ -30,6 +41,7 @@ export async function GET(req: Request) {
   if ("unavailable" in r) return accountError("unavailable");
   if ("r" in r) return accountError(r.r);
   noteCityLater(req, r.ok.id);
+  notePhoneLater(who.id, r.ok.id);
   return accountReply({ profile: r.ok });
 }
 
@@ -46,6 +58,7 @@ export async function POST(req: Request) {
   // On every sign-in, not only when created: Google accounts are made by a database trigger first,
   // so created is never true for them.
   noteCityLater(req, r.ok.id);
+  notePhoneLater(who.id, r.ok.id);
   let profile = r.ok;
   let emailError: AccountError | undefined;
   // The optional email on the sign-up step (phone only). It never fails the sign-in. Left

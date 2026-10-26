@@ -329,7 +329,7 @@ function VerifiedItem({ p }: { p: Person }) {
   return (
     <span className="text-primary-500">
       Not yet
-      {p.method === "phone" && <span className="block text-[12px]">No phone sign-in with a code checked here since 22 Oct, when TapTurf started checking codes itself. Their next sign-in confirms the number.</span>}
+      {p.method === "phone" && <span className="block text-[12px]">Not seen here with a code-checked number since TapTurf started recording it. Their next visit or sign-in confirms the number.</span>}
     </span>
   );
 }

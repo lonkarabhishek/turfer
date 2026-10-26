@@ -1,6 +1,9 @@
 import { unstable_cache } from "next/cache";
 import { createHash, randomUUID } from "node:crypto";
-import { lookup } from "node:dns/promises";
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
+import { request as httpRequest, type ClientRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import type { LookupFunction } from "node:net";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Post } from "@/content/blog";
 import { accountKey } from "@/lib/account/server";
@@ -126,8 +129,10 @@ const WEB_SYSTEM = `You answer a player's question for TapTurf, an Indian direct
 
 const SUMMARY_REPLY = "Here's the short version of this article.";
 
-/** The reader asked for a chart in so many words. */
-const CHART_ASK = /\b(chart|graph|plot|bars?|visuali[sz]e)\b/i;
+/** The reader asked for a picture of some kind: a chart, a graph, a diagram. */
+const VISUAL_ASK = /\b(charts?|graphs?|plots?|bars?|diagrams?|visuals?|visuali[sz](?:e|ation))\b/i;
+/** The reader asked about ratings themselves. */
+const RATINGS_ASK = /\b(ratings?|rated|stars?)\b/i;
 
 /**
  * By default the answer must be ready this long after answerBlog starts.
@@ -329,47 +334,71 @@ async function webAnswer(post: Post, question: string, before: string, usage: As
   }
 }
 
+/** dns.lookup that refuses names pointing into a private network, checked on the address the request then connects to. */
+const publicLookup = ((hostname: string, options: LookupOptions, callback: (err: NodeJS.ErrnoException | null, address?: string | LookupAddress[], family?: number) => void) => {
+  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err);
+    const list = addresses as LookupAddress[];
+    if (list.length === 0 || list.some((x) => privateAddress(x.address))) {
+      return callback(Object.assign(new Error(`${hostname} is a private address`), { code: "EPRIVATE" }));
+    }
+    if (options.all) callback(null, list);
+    else callback(null, list[0].address, list[0].family);
+  });
+}) as unknown as LookupFunction;
+
 /**
  * The start of a page a web answer would link to; "blocked" when it is
  * no page to send a reader to (not http(s) on the usual ports, an IP
  * address, or a name that points into a private network: never fetched
- * from here); null when it can't be read by `until` (kept: a bot block
- * or a slow site may still open for the reader). A redirect is not
- * followed: it counts as a live page.
+ * from here, and the check is on the address it would connect to); null
+ * when it can't be read by `until` (kept: a bot block or a slow site may
+ * still open for the reader). A redirect is not followed: it counts as a
+ * live page.
  */
-async function pageStart(url: string, until: number): Promise<{ status: number; head: string } | "blocked" | null> {
-  const host = fetchableHost(url);
-  if (!host) return "blocked";
-  try {
-    const left = until - Date.now();
-    const addrs = await Promise.race([lookup(host, { all: true }), new Promise<null>((r) => setTimeout(() => r(null), Math.max(0, left)))]);
-    if (addrs === null) return null;
-    if (addrs.length === 0 || addrs.some((x) => privateAddress(x.address))) return "blocked";
-  } catch {
-    return null;
-  }
-  try {
-    const res = await fetch(url, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(Math.max(250, until - Date.now())),
-      headers: { "user-agent": "Mozilla/5.0 (compatible; TapTurf link check; +https://www.tapturf.in)", accept: "text/html,*/*" },
-    });
-    let head = "";
-    const reader = res.body?.getReader();
-    if (reader) {
-      const text = new TextDecoder();
-      // The title is near the top: 24 KB is plenty.
-      while (head.length < 24_000) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        head += text.decode(value, { stream: true });
-      }
-      await reader.cancel().catch(() => {});
+function pageStart(url: string, until: number): Promise<{ status: number; head: string } | "blocked" | null> {
+  if (!fetchableHost(url)) return Promise.resolve("blocked");
+  return new Promise((resolve) => {
+    let settled = false;
+    let req: ClientRequest | null = null;
+    const done = (v: { status: number; head: string } | "blocked" | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      req?.destroy();
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(null), Math.max(250, until - Date.now()));
+    try {
+      const u = new URL(url);
+      req = (u.protocol === "https:" ? httpsRequest : httpRequest)(
+        u,
+        {
+          method: "GET",
+          // A fresh connection every time, so the address check above always runs (a pooled one wouldn't look up again).
+          agent: false,
+          lookup: publicLookup,
+          headers: { "user-agent": "Mozilla/5.0 (compatible; TapTurf link check; +https://www.tapturf.in)", accept: "text/html,*/*" },
+        },
+        (res) => {
+          const status = res.statusCode ?? 0;
+          let head = "";
+          res.setEncoding("utf8");
+          // The title is near the top: 24 KB is plenty.
+          res.on("data", (chunk: string) => {
+            head += chunk;
+            if (head.length >= 24_000) done({ status, head });
+          });
+          res.on("end", () => done({ status, head }));
+          res.on("error", () => done({ status, head }));
+        },
+      );
+      req.on("error", (e: NodeJS.ErrnoException) => done(e.code === "EPRIVATE" ? "blocked" : null));
+      req.end();
+    } catch {
+      done(null);
     }
-    return { status: res.status, head };
-  } catch {
-    return null;
-  }
+  });
 }
 
 /** The pages of `urls` that are gone or no page for a reader, by pageKey. Takes LINK_CHECK_MS at most. */
@@ -499,8 +528,15 @@ async function compose(post: Post, article: Article, ask: BlogAsk, history: Blog
 
   // The short version's chart must show a difference: ten ratings of 4.8 from zero look alike.
   let visual = buildVisual(article, summary ? livelierBars(article, out.visual) : out.visual, (brief, alt) => signArt(post.slug, brief, alt));
-  // A chart nobody asked for that shows no difference (best-rated: ten bars of 4.8 to 5.0) says nothing the answer doesn't.
-  if (!summary && flatBars(visual) && !CHART_ASK.test(ask.question)) visual = null;
+  // Bars that show no difference (ten ratings of 4.8 to 5.0): unasked, they say nothing the answer
+  // doesn't; asked for a picture, not of the ratings themselves, the table's column that varies.
+  if (!summary && flatBars(visual)) {
+    if (!VISUAL_ASK.test(ask.question)) visual = null;
+    else if (!RATINGS_ASK.test(ask.question)) {
+      const varied = buildVisual(article, livelierBars(article, out.visual), (brief, alt) => signArt(post.slug, brief, alt));
+      if (varied && !flatBars(varied)) visual = varied;
+    }
+  }
   // A summary of a rules list can draw on a dozen sections; an answer on a few.
   const maxSections = summary ? 12 : 4;
   let cited = pickSections(article, out.sections, maxSections).map((x) => x.n);

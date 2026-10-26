@@ -39,7 +39,7 @@ function accountClient(): SupabaseClient {
   return client;
 }
 
-// City notes get a breaker of their own too: when they fail, sign-ins must not.
+// City notes (and phone checks) get a breaker of their own too: when they fail, sign-ins must not.
 const cityFetch = createGuardedFetch(defaultGuardOptions());
 let cityClient: SupabaseClient | null = null;
 
@@ -230,6 +230,38 @@ export async function noteCity(userId: string, note: CityNote): Promise<void> {
     notedCity.set(userId, rank);
   } catch (e) {
     console.warn("account: account_note_city threw", e);
+  }
+}
+
+/** Per instance: the day (in ms, UTC) each account's phone check was last recorded, so most calls skip the database. */
+const phoneChecked = new Map<string, number>();
+const DAY_MS = 86_400_000;
+
+/**
+ * Record that the server just verified a Firebase phone token for this
+ * account's own number (a sign-in, or a visit restoring the session), for
+ * the admin's "Phone, by a code" (account_phone_checked). At most one
+ * write a day per account. Run it after the reply: it never throws and
+ * never affects the sign-in.
+ */
+export async function notePhoneChecked(userId: string, phone: string): Promise<void> {
+  const day = Math.floor(Date.now() / DAY_MS);
+  if (phoneChecked.get(userId) === day) return;
+  const key = accountKey();
+  if (!key) return;
+  try {
+    cityClient ??= makeClient(cityFetch);
+    const { data, error } = await cityClient.rpc("account_phone_checked", { p_key: key, p_user_id: userId, p_phone: phone });
+    const r = (data as { r?: unknown } | null)?.r;
+    // "other": the number isn't this account's (a typed one); nothing to record, today or later.
+    if (error || (r !== "ok" && r !== "other")) {
+      console.warn("account: account_phone_checked failed", error?.message ?? r);
+      return;
+    }
+    if (phoneChecked.size >= 5_000) phoneChecked.delete(phoneChecked.keys().next().value as string);
+    phoneChecked.set(userId, day);
+  } catch (e) {
+    console.warn("account: account_phone_checked threw", e);
   }
 }
 
