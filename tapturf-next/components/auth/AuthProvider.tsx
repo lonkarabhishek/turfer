@@ -6,7 +6,7 @@ import type { AppUser } from "@/types/user";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { saveSignupContext } from "@/lib/analytics/visitor";
 import type { AccountProfile } from "@/lib/account/types";
-import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, supabaseToken, type TokenCheck } from "@/lib/account/client";
+import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, setSignInToken, supabaseToken, type TokenCheck } from "@/lib/account/client";
 import { loginErrorText } from "@/lib/auth/callback";
 import { clearAllDrafts } from "@/lib/reviews/draft";
 
@@ -497,6 +497,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else if ("token" in t) store(FB_MISSING_KEY, null);
     return t;
   }, [forcePhoneSignOut]);
+
+  // The free tools send the sign-in with each use they log (lib/analytics/tools.ts). Read quietly:
+  // a missing Firebase session there only makes the use a guest's, never a sign-out.
+  const toolSignIn = user ? signedInWith : null;
+  useEffect(() => {
+    if (!toolSignIn) {
+      setSignInToken(null);
+      return;
+    }
+    setSignInToken(() => (sourceRef.current === "oauth" ? supabaseToken() : sourceRef.current === "phone" ? firebaseToken() : Promise.resolve<TokenCheck>({ none: true })));
+    return () => setSignInToken(null);
+  }, [toolSignIn]);
 
   /**
    * Phone: check this device's sign-in with the server, at most once a

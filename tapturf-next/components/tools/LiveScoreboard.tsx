@@ -207,11 +207,19 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
     persist(b);
     savePrefs(b.id, prefs);
     setNewOpen(false);
-    trackTool("tool_used", TOOL, { action: "match_started", sport: b.sport, live: liveLinks && opts.on });
+    // The start carries the match's live link code for the admin's list of tool users (never sent to GA),
+    // so with a new link it is tracked once the link is on, or isn't.
+    const used = { action: "match_started", sport: b.sport, live: liveLinks && opts.on };
+    const trackStart = () => {
+      const code = live.codeNow(b.id);
+      trackTool("tool_used", TOOL, code ? { ...used, code } : used);
+    };
     if (liveLinks && opts.on) {
-      if (opts.keep && prev && live.move(prev.id, b.id)) trackTool("tool_action", TOOL, { action: "live_link_kept" });
-      else void startLink(b.id);
-    }
+      if (opts.keep && prev && live.move(prev.id, b.id)) {
+        trackStart();
+        trackTool("tool_action", TOOL, { action: "live_link_kept" });
+      } else void startLink(b.id).then(trackStart, trackStart);
+    } else trackStart();
     openScorer();
   };
 

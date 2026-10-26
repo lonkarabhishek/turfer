@@ -1,4 +1,4 @@
-import { CITY_COOKIE, confirmedCity, isKnownCity, parseCityCookie } from "../city";
+import { CITY_COOKIE, cityInfo, confirmedCity, isKnownCity, parseCityCookie } from "../city";
 import { detectCityFromHeaders } from "../cityRouting";
 
 /**
@@ -79,4 +79,14 @@ export function cityNote(get: Get, acceptPick: (city: string) => boolean = () =>
   // The proxy's last guess (always curated); a refused pick is not a guess.
   if (choice?.kind === "city" && choice.src === "geo") return { city: choice.city, source: "ip", ipCity };
   return { city: null, source: "unknown", ipCity };
+}
+
+/**
+ * Where a visit comes from, for the free tools' use log (signed in or
+ * not): the place the internet connection points to (with its country
+ * when not India), else the curated city cityNote found (a pick, or the
+ * proxy's earlier guess) by its label. Null when nothing is known.
+ */
+export function visitCity(note: CityNote): string | null {
+  return note.ipCity ?? (note.city ? cityInfo(note.city).label : null);
 }

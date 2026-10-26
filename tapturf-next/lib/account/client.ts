@@ -88,6 +88,25 @@ export async function supabaseToken(): Promise<TokenCheck> {
   }
 }
 
+let signedInToken: (() => Promise<TokenCheck>) | null = null;
+
+/**
+ * AuthProvider keeps this to the device's current sign-in (null when
+ * signed out), for code outside React that sends the sign-in with a call:
+ * the free tools' use log (lib/analytics/tools.ts).
+ */
+export function setSignInToken(get: (() => Promise<TokenCheck>) | null): void {
+  signedInToken = get;
+}
+
+/** Whether this device is signed in, as AuthProvider last said. */
+export const hasSignIn = (): boolean => signedInToken !== null;
+
+/** This device's sign-in token, read quietly: never signs anyone out. 'none' when signed out. */
+export function signInToken(): Promise<TokenCheck> {
+  return signedInToken ? signedInToken().catch((): TokenCheck => ({ unknown: true })) : Promise.resolve({ none: true });
+}
+
 export type Answer<T> = { status: number; body: T | { error: AccountError } };
 
 /** How the city in the tt_city cookie was chosen (lib/city.ts setCityPref), for the server's city note. */

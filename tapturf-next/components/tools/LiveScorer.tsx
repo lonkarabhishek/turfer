@@ -197,11 +197,19 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
     setMatch(m);
     persist(m);
     setNewOpen(false);
-    trackTool("tool_used", TOOL, { action: "match_started", overs: m.setup.overs, players: m.setup.playersPerSide, named: m.setup.players.a.length + m.setup.players.b.length > 0, live: liveLinks && opts.on });
+    // The start carries the match's live link code for the admin's list of tool users (never sent to GA),
+    // so with a new link it is tracked once the link is on, or isn't.
+    const used = { action: "match_started", overs: m.setup.overs, players: m.setup.playersPerSide, named: m.setup.players.a.length + m.setup.players.b.length > 0, live: liveLinks && opts.on };
+    const trackStart = () => {
+      const code = live.codeNow(m.id);
+      trackTool("tool_used", TOOL, code ? { ...used, code } : used);
+    };
     if (liveLinks && opts.on) {
-      if (opts.keep && prev && live.move(prev.id, m.id)) trackTool("tool_action", TOOL, { action: "live_link_kept" });
-      else void startLink(m.id);
-    }
+      if (opts.keep && prev && live.move(prev.id, m.id)) {
+        trackStart();
+        trackTool("tool_action", TOOL, { action: "live_link_kept" });
+      } else void startLink(m.id).then(trackStart, trackStart);
+    } else trackStart();
     openScorer();
   };
 

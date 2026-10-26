@@ -196,7 +196,9 @@ export function ScoringScreen({
       if (inn.wickets) fire(`wkt:${inn.index}:${inn.wickets}`, "tool_action", { action: "wicket", innings: inn.index + 1 });
       if (inn.ended) fire(`inn:${inn.index}`, "tool_action", { action: "innings_end", innings: inn.index + 1, reason: inn.ended });
     }
-    if (v.status === "done") fire("end", "tool_result_generated", { action: "match_end", result: v.result?.kind ?? "none", overs: v.setup.overs, players: v.setup.playersPerSide });
+    // The live link's code goes to the admin's list of tool users only (lib/analytics/tools.ts leaves it out of GA).
+    const code: Record<string, string> = live?.info.on && live.info.link ? { code: live.info.link.code } : {};
+    if (v.status === "done") fire("end", "tool_result_generated", { action: "match_end", result: v.result?.kind ?? "none", overs: v.setup.overs, players: v.setup.playersPerSide, ...code });
   };
 
   /** Apply one tap's events together (same timestamp, so undo takes them back together). */

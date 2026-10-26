@@ -51,8 +51,9 @@ const SECTIONS: LegalSection[] = [
       <>
         <p>
           <strong>Browsing without an account.</strong> You can look at every turf, court and game without
-          signing in. We then collect only standard analytics (see section 5) and the preferences stored on
-          your device (section 6).
+          signing in. We then collect only standard analytics (see section 5), the preferences stored on
+          your device (section 6), and a record of each use of our free tools under a random tag your browser
+          keeps (see &ldquo;When you use our free tools&rdquo; below).
         </p>
         <p>
           <strong>When you sign in with your phone number.</strong> We store your mobile number and the
@@ -112,10 +113,24 @@ const SECTIONS: LegalSection[] = [
           can follow it: the team and player names, the title and venue if you added them, every ball, point,
           goal or card with its time, the match clock, and the result. We also keep a one-way
           hash of your network address (never the address itself) so one network cannot make links in bulk.
-          You log in to turn on a live link or to keep following one, but the link is not tied to your account:
-          your own name, number or email does not go with it. If you tag players with their TapTurf usernames,
+          You log in to turn on a live link or to keep following one, but the live score others see is not tied
+          to your account: your own name, number or email does not go with it. Our own record of the match
+          starting notes your account and the link (see &ldquo;When you use our free tools&rdquo;), and only
+          TapTurf&rsquo;s team sees it. If you tag players with their TapTurf usernames,
           those usernames go with the match. While you follow a live score, your browser joins a count of
           people watching it. Nothing about you is sent.
+        </p>
+        <p id="tools" className="scroll-mt-24">
+          <strong>When you use our free tools.</strong> Each time you start or finish something in a free tool
+          (a toss, a match on the Live Cricket Scorer or Live Scoreboard, a scorecard, a tournament, a team
+          split or a net run rate), we record which tool, when, whether it was started or finished, a few short
+          details the tool already knows (the sport, the format, how many overs, players, teams or matches; never
+          names or anything you type), the code of the match&rsquo;s live link if it has one, and the place your
+          internet connection points to, else the city you chose on TapTurf. The place is worked out from your
+          IP address on that visit and is only approximate; the address itself is never stored. If you are
+          signed in, the record is kept with your TapTurf account. If you are not, it is kept with a random tag
+          your browser makes for this, which says nothing about you or your device. Only TapTurf&rsquo;s team
+          sees these records, to learn who uses the tools and how.
         </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
@@ -142,6 +157,7 @@ const SECTIONS: LegalSection[] = [
         <li>To show your public profile and let friends tag you on live scores, unless you turn that off.</li>
         <li>To keep the service safe: rate-limiting sign-ins and OTP sends, and investigating misuse.</li>
         <li>To understand which turfs, cities and features people use, in aggregate, so we can improve them.</li>
+        <li>To see who uses our free tools and what for, so we know which to improve and which sports and formats to add.</li>
         <li>
           To learn how new members find us and what they came for, so we know which cities and sports to add
           and which links bring players (see &ldquo;When you sign up&rdquo; below).
@@ -256,11 +272,11 @@ const SECTIONS: LegalSection[] = [
         asked you to pick a username, the TapTurf profiles you tagged recently, the WhatsApp number you last
         gave players for a game, the short visit note
         described under &ldquo;When you sign up&rdquo;, and the matches and tournaments you score with our
-        free tools. For a live link it also keeps the key that lets only this browser update that
+        free tools, and the random tag described under &ldquo;When you use our free tools&rdquo;. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
         token, which identifies you to our server, the city you picked and whether you picked it or let your
         location find it (for the city note described under &ldquo;Your city&rdquo;), that one summary when
-        you create an account, and a match while its live link is on. Clearing site data in your browser removes all of it. A live link that was
+        you create an account, the random tag with each use of a free tool, and a match while its live link is on. Clearing site data in your browser removes all of it. A live link that was
         on then stops updating and is cleared 30 days after its last update, or sooner if you email us.
       </p>
     ),
@@ -279,6 +295,10 @@ const SECTIONS: LegalSection[] = [
         <li>Sign-in and OTP logs are kept for up to 12 months, then removed.</li>
         <li>Call and WhatsApp tap counts are kept as totals; the link to your account is dropped after 90 days.</li>
         <li>The sign-up summary and your city stay with your account and are deleted with it, or sooner if you ask.</li>
+        <li>
+          Records of your free tool use stay with your account and are deleted with it, or sooner if you ask. Those kept
+          with a browser&rsquo;s random tag are not linked to anyone.
+        </li>
         <li>
           A live score is cleared when you turn its link off, or 30 days after its last update. The
           one-way hash of the network address is kept for 2 days to stop misuse.
