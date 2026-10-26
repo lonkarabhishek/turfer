@@ -15,6 +15,7 @@ import {
   type CityChoice,
   type CityId,
 } from "./city";
+import { sportBySlug, sportPageForLabel } from "./sports";
 
 /**
  * Public URLs that have a per-city ISR twin under app/c/[city] and a
@@ -116,6 +117,28 @@ export function publicPathFromInternal(pathname: string): string {
   return rest.length ? `/${rest.join("/")}` : "/";
 }
 
+/**
+ * The sport page an old /sport/<label> URL means, or null. Until 30 Sep
+ * turf pages linked each sport tag as /sport/<label in lower case>, so
+ * Google still crawls /sport/cricket%20nets, /sport/box%20cricket and
+ * /sport/table%20tennis, which 404. A label or a differently cased slug
+ * with a page now 308s to it; anything else (squash, which has no page)
+ * stays a 404. A real slug never redirects.
+ */
+export function sportPagePath(pathname: string): string | null {
+  const m = /^\/sport\/([^/]+)$/.exec(pathname);
+  if (!m) return null;
+  let seg: string;
+  try {
+    seg = decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+  if (sportBySlug(seg)) return null;
+  const page = sportPageForLabel(seg) ?? sportBySlug(seg.trim().toLowerCase());
+  return page ? `/sport/${page.slug}` : null;
+}
+
 export type ProxyInput = { method: string; pathname: string; search: string; header: Get; cookie: string | undefined };
 export type ProxyDecision =
   | { action: "redirect"; location: string }
@@ -125,7 +148,8 @@ export type ProxyDecision =
 /**
  * One request in, one routing decision out:
  * 1. Internal /c paths 308 to their public URL (except ISR revalidation).
- * 2. Only GET and HEAD are personalised.
+ * 2. Only GET and HEAD are personalised. Old /sport/<label> URLs 308 to
+ *    their sport page (sportPagePath).
  * 3. A confirmed pick wins. Without one (no cookie, an IP guess
  *    geo.<city>, "unknown" or the retired "all"), a human gets IP
  *    detection, so the pick screen offers the city they are in today; an
@@ -148,6 +172,8 @@ export function decide(i: ProxyInput): ProxyDecision {
     return { action: "redirect", location: publicPathFromInternal(pathname) + search };
   }
   if (i.method !== "GET" && i.method !== "HEAD") return { action: "next", debug: "method" };
+  const sportPage = sportPagePath(pathname);
+  if (sportPage) return { action: "redirect", location: sportPage + search };
 
   const raw = i.cookie;
   let choice: CityChoice | null = parseCityCookie(raw);

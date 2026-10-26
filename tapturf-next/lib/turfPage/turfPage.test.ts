@@ -1,11 +1,81 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shapeGames, shapeReviews, shapeReviewStats, shapeSuggestions, trendingFor } from "./shape";
+import { createClient } from "@supabase/supabase-js";
+import { shapeGames, shapeReviews, shapeReviewStats, shapeSuggestions, trendingFor, turfPagePayload } from "./shape";
+import { createGuardedFetch } from "../supabase/guard";
 import { isLikelyBot } from "../analytics/bot";
 import { UNREAD_EVERY_MS, UNREAD_MAX_WAIT_MS, unreadWait, wakeWait } from "../notifications/unreadPoll";
 
 // turf_page output as Postgres sends it (supabase/migrations/20261020_turf_page.sql).
 const venue = { id: "t1", name: "Turf Up", address: "Hinjewadi, Pune" };
+
+// The turf page's read (lib/queries/turfPage.ts): the real client over a
+// stubbed database, through the same guard, into the same check. A 404 is
+// cached for a day, so only "no active turf" may give one; on 19/20 Oct a
+// failed read gave one and Google saw some 120 live turf pages as gone.
+const KEY = "turf-up-hinjewadi";
+const quiet = () => {};
+async function readTurfPage(fetchImpl: typeof fetch) {
+  const db = createClient("http://db.test", "anon", {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: fetchImpl },
+  });
+  return turfPagePayload(await db.rpc("turf_page", { p_key: KEY }), KEY);
+}
+const answer = (status: number, body: string): typeof fetch => async () =>
+  new Response(body, { status, headers: { "content-type": "application/json" } });
+
+test("turf page read: no active turf is null (the page 404s)", async () => {
+  assert.equal(await readTurfPage(answer(200, JSON.stringify({ found: false }))), null);
+});
+
+test("turf page read: an empty or null reply throws, never a 404", async () => {
+  // An empty 200 reads as data null, just like a bare JSON null: neither says the turf is gone.
+  await assert.rejects(readTurfPage(answer(200, "")), /turf_page sent nothing for turf-up-hinjewadi/);
+  await assert.rejects(readTurfPage(answer(200, "null")), /turf_page sent nothing for turf-up-hinjewadi/);
+  // "found: false" next to a turf is not "no such turf".
+  await assert.rejects(readTurfPage(answer(200, JSON.stringify({ found: false, turf: null }))), /turf_page sent no turf/);
+});
+
+test("turf page read: a turf comes back as sent", async () => {
+  const out = await readTurfPage(answer(200, JSON.stringify({ turf: { id: "t1", slug: KEY }, reviews: [] })));
+  assert.deepEqual(out, { turf: { id: "t1", slug: KEY }, reviews: [] });
+});
+
+test("turf page read: a database error throws, never a 404", async () => {
+  const schema = JSON.stringify({ code: "PGRST002", message: "Could not query the database for the schema cache. Retrying." });
+  await assert.rejects(readTurfPage(answer(503, schema)), /turf_page failed for turf-up-hinjewadi: Could not query/);
+  const statement = JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" });
+  await assert.rejects(readTurfPage(answer(500, statement)), /statement timeout/);
+  // Cloudflare's 522 page from 20 Oct: not JSON at all.
+  await assert.rejects(readTurfPage(answer(522, "<html>522: Connection timed out</html>")), /turf_page failed/);
+});
+
+test("turf page read: the guard's timeout and open breaker throw", async () => {
+  // The client hands both back as { data: null, error }: data alone reads as "no turf".
+  const hang: typeof fetch = (_input, init) =>
+    new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+  // AbortSignal.timeout's timer does not hold the process open (see guard.test.ts).
+  const keepAlive = setTimeout(() => {}, 5000);
+  await assert.rejects(readTurfPage(createGuardedFetch({ timeoutMs: 20, fetchImpl: hang, log: quiet })), /turf_page failed .*TimeoutError/);
+  clearTimeout(keepAlive);
+
+  let calls = 0;
+  const down: typeof fetch = async (...args) => {
+    calls++;
+    return answer(503, JSON.stringify({ message: "down" }))(...args);
+  };
+  const guarded = createGuardedFetch({ threshold: 1, fetchImpl: down, log: quiet });
+  await assert.rejects(readTurfPage(guarded), /turf_page failed .*down/);
+  await assert.rejects(readTurfPage(guarded), /turf_page failed .*CircuitOpenError/);
+  assert.equal(calls, 1);
+});
+
+test("turf page read: a payload without a turf throws", async () => {
+  for (const body of ["{}", JSON.stringify({ turf: null, reviews: [] }), JSON.stringify({ turf: "t1" }), "[]", JSON.stringify("t1"), "3"]) {
+    await assert.rejects(readTurfPage(answer(200, body)), /turf_page sent no turf for turf-up-hinjewadi/, body);
+  }
+});
 
 test("reviews: players' own first, newest first within each, nobody's upvote", () => {
   const out = shapeReviews([

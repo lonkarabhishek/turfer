@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { sportBySlug, venueWord } from "@/lib/sports";
+import { citySportHref, sportBySlug, venueWord } from "@/lib/sports";
 import type { HomeScope } from "@/lib/home/select";
 
 type Tile = { slug: string; name: string; count: number };
@@ -13,7 +13,7 @@ function Grid({ tiles, cityId, cityLabel }: { tiles: Tile[]; cityId: string | nu
         return (
           <li key={s.slug}>
             <Link
-              href={cityId ? `/${cityId}/${s.slug}` : `/sport/${s.slug}`}
+              href={(cityId && citySportHref(cityId, s.slug, s.count)) || `/sport/${s.slug}`}
               className="press-tight focus-neon flex flex-col justify-between rounded-2xl bg-primary-50 hover:bg-primary-100 px-4 py-3.5 min-h-[76px] transition-colors"
             >
               <span className="block w-5 h-0.5 rounded-full bg-accent-500" aria-hidden />

@@ -28,7 +28,11 @@ export type TurfFacts = Record<string, unknown>;
 export async function loadFacts(id: string): Promise<{ turf: Turf; facts: TurfFacts } | null> {
   // The row and its reviews in parallel: both only need the id.
   const [turf, { data }] = await Promise.all([
-    getTurfById(id),
+    // A failed read skips this turf (logged), rather than failing the whole comparison.
+    getTurfById(id).catch((e) => {
+      console.warn("compare: turf read failed", id, e);
+      return null;
+    }),
     createReadOnlyClient()
       .from("reviews")
       .select("rating, comment, source, author_name")

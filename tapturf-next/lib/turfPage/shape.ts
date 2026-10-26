@@ -16,6 +16,29 @@ const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
+/**
+ * What one turf_page call means for the page. Only a null result is "no
+ * such turf" (no active row matches the key) and gives a 404, which is
+ * cached for a day. Everything else throws: an RPC error, which includes
+ * the 5 s guard timeout and the open breaker (supabase-js hands those
+ * back as `error`), and a payload without a turf object, such as after a
+ * change to the function's shape. A throw keeps the last good page on a
+ * revalidation and gives a 500 on a first render, which Google retries.
+ * Until 20 Oct a failed read returned null here, and an outage cached
+ * 404s for some 120 live turf pages.
+ */
+export function turfPagePayload(res: { data: unknown; error: { message: string } | null }, key: string): Raw | null {
+  if (res.error) throw new Error(`turf_page failed for ${key}: ${res.error.message}`);
+  // "No such turf" is said in so many words (20261026_turf_page_found.sql). A bare null is
+  // also what an empty reply reads as, so it is a failure, never a 404.
+  if (isObj(res.data) && res.data.found === false && !("turf" in res.data)) return null;
+  if (res.data === null) throw new Error(`turf_page sent nothing for ${key}`);
+  if (!isObj(res.data) || !isObj(res.data.turf)) {
+    throw new Error(`turf_page sent no turf for ${key}: ${Array.isArray(res.data) ? "array" : typeof res.data}`);
+  }
+  return res.data;
+}
+
 /** Latest reviews, players' own first; who upvoted is per viewer, so false here. */
 export function shapeReviews(raw: unknown): ReviewWithUser[] {
   if (!Array.isArray(raw)) return [];

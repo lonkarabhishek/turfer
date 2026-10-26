@@ -31,7 +31,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .in("status", ["open", "upcoming", "active"]),
   ]);
 
-  const sports = SPORT_PAGES.map((sp) => sp.slug);
   // Every city with active turfs, from the database.
   const liveCities = await getLiveCities();
 
@@ -108,8 +107,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  const sportPages: MetadataRoute.Sitemap = sports.map((sport) => ({
-    url: `${BASE}/sport/${sport}`,
+  const splitSports = (raw: unknown): string[] =>
+    (Array.isArray(raw) ? raw : [])
+      .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+  // Sport pages with at least one venue: one with none is an empty page.
+  const sportPages: MetadataRoute.Sitemap = SPORT_PAGES.filter((sp) =>
+    (turfs ?? []).some((t) => turfPlaysSport(splitSports(t.sports), sp)),
+  ).map((sp) => ({
+    url: `${BASE}/sport/${sp.slug}`,
     lastModified: new Date(),
     changeFrequency: "daily",
     priority: 0.8,
@@ -117,11 +125,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // "<sport> turfs in <city>" pages, only where there are enough turfs
   // to be indexable (same threshold the page uses for noindex).
-  const splitSports = (raw: unknown): string[] =>
-    (Array.isArray(raw) ? raw : [])
-      .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
-      .map((x) => x.trim())
-      .filter(Boolean);
   const citySportPages: MetadataRoute.Sitemap = liveCities.flatMap((c) =>
     SPORT_PAGES.filter(
       (sp) =>

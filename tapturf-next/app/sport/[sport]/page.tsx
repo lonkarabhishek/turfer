@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { SportTurfList } from "@/components/sport/SportTurfList";
-import { SPORT_PAGES, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
+import { SPORT_PAGES, citySportHref, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
 import { CITY_IDS, isCity, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
@@ -21,12 +21,15 @@ const turfsFor = cache((info: SportPage) => getTurfsBySport(info));
  * Grouped from the turfs themselves, so a city the database has and
  * lib/city.ts does not still gets its chip.
  */
-function citiesFor(turfs: Turf[]): { id: string; label: string; count: number }[] {
+function citiesFor(turfs: Turf[], sport: SportPage): { id: string; label: string; count: number; href: string }[] {
   const rank = new Map(CITY_IDS.map((id, i) => [id, i]));
   const counts = new Map<string, number>();
   for (const t of turfs) if (isCity(t.city)) counts.set(t.city, (counts.get(t.city) ?? 0) + 1);
   return [...counts.entries()]
-    .map(([id, count]) => ({ id, label: labelFor(id), count }))
+    .flatMap(([id, count]) => {
+      const href = citySportHref(id, sport.slug, count);
+      return href ? [{ id, label: labelFor(id), count, href }] : [];
+    })
     .sort((a, b) => b.count - a.count || (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
 }
 
@@ -65,7 +68,7 @@ export async function generateMetadata({
 
   const lower = info.name.toLowerCase();
   const word = venueWord(info, 1);
-  const cities = citiesFor(await turfsFor(info));
+  const cities = citiesFor(await turfsFor(info), info);
   const place = placeFor(cities);
   return {
     // Layout's title template appends "| TapTurf".
@@ -98,7 +101,7 @@ export default async function SportPage({
   if (!info) notFound();
 
   const turfs = await turfsFor(info);
-  const perCity = citiesFor(turfs);
+  const perCity = citiesFor(turfs, info);
   const place = placeFor(perCity);
 
   return (
@@ -141,7 +144,7 @@ export default async function SportPage({
             {perCity.map((c) => (
               <Link
                 key={c.id}
-                href={`/${c.id}/${info.slug}`}
+                href={c.href}
                 className="h-10 px-4 inline-flex items-center gap-1.5 rounded-full bg-accent-50 hover:bg-accent-100 text-[14px] font-medium text-accent-700"
               >
                 {sportVenues(info)} in {c.label}

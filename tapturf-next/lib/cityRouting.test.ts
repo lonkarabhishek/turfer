@@ -526,3 +526,32 @@ test("a legacy pick that matches the IP guess reloads before the pick screen pai
   assert.equal(guard.reloads, 1);
   assert.equal(guard.style.visibility, "hidden");
 });
+
+test("old /sport/<label> URLs 308 to their sport page, for crawlers and people", () => {
+  // Turf pages linked /sport/<label> until 30 Sep; Google still has these.
+  const cases: [string, string][] = [
+    ["/sport/cricket%20nets", "/sport/cricket-nets"],
+    ["/sport/box%20cricket", "/sport/box-cricket"],
+    ["/sport/table%20tennis", "/sport/table-tennis"],
+    ["/sport/ultimate%20frisbee", "/sport/ultimate-frisbee"],
+    ["/sport/lawn%20tennis", "/sport/tennis"],
+    ["/sport/indoor%20cricket%20net", "/sport/cricket-nets"],
+    ["/sport/bowling%20machine", "/sport/cricket-nets"],
+    ["/sport/Football", "/sport/football"],
+    ["/sport/Box-Cricket", "/sport/box-cricket"],
+  ];
+  for (const [path, location] of cases) {
+    for (const ua of [GOOGLEBOT, CHROME]) {
+      assert.deepEqual(decide(req({ path, ua, headers: PUNE })), { action: "redirect", location }, `${ua} ${path}`);
+    }
+  }
+  assert.deepEqual(decide(req({ path: "/sport/box%20cricket?utm_source=x" })), { action: "redirect", location: "/sport/box-cricket?utm_source=x" });
+});
+
+test("real sport slugs, sports with no page and other paths never redirect", () => {
+  const paths = ["/sport/cricket-nets", "/sport/football", "/sport/futsal", "/sport/squash", "/sport/%E0%A4", "/sport/box%20cricket/pune", "/pune/box%20cricket", "/sport"];
+  for (const path of paths) {
+    assert.notEqual(decide(req({ path, ua: GOOGLEBOT })).action, "redirect", path);
+  }
+  assert.equal(decide(req({ path: "/sport/box%20cricket", method: "POST" })).action, "next");
+});

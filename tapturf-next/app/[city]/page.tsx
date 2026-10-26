@@ -10,7 +10,7 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
-import { SPORT_PAGES, turfPlaysSport, venueWord } from "@/lib/sports";
+import { citySportLinks, venueWord } from "@/lib/sports";
 import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
@@ -78,10 +78,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const otherCities = pickOtherCities(liveCities, cityId);
   const spotlight = trendingPick ? toSpotlights({ [cityId]: trendingPick }, turfs) : [];
   const trendingId = spotlight[0]?.turfId ?? null;
-  const sportCounts = SPORT_PAGES.map((sp) => ({
-    ...sp,
-    count: turfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
-  })).filter((sp) => sp.count > 0);
+  const sportCounts = citySportLinks(cityId, turfs);
   // "Top-rated" block: only turfs with enough reviews to trust the score.
   const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
 
@@ -165,7 +162,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             {sportCounts.map((sp) => (
               <li key={sp.slug}>
                 <Link
-                  href={`/${cityId}/${sp.slug}`}
+                  href={sp.href}
                   className="flex items-center gap-3 rounded-2xl bg-primary-50 hover:bg-primary-100 px-4 py-3 transition-colors"
                 >
                   <span className="text-2xl" aria-hidden>{sp.icon}</span>

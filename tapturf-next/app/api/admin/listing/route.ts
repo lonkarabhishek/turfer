@@ -39,9 +39,12 @@ export async function POST(req: Request) {
 
   const results: { id: string; name: string; line: string; tone: "ok" | "warn" }[] = [];
   for (const id of ids) {
-    const turf = await getTurfById(id);
-    if (!turf) continue;
+    let name = id;
     try {
+      // A failed read throws and the turf is retried on a later batch; null (no active turf by that id) is skipped.
+      const turf = await getTurfById(id);
+      if (!turf) continue;
+      name = turf.name;
       const review = await checkListing(turf);
       if (!review) throw new Error("no review");
       const { error: werr } = await supabase.rpc("set_listing_review", { p_turf_id: id, p_review: review, p_firebase_token: token });
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
       results.push({ id, name: turf.name, line: review.ok ? "Looks fine" : `${review.summary} (${n} issue${n === 1 ? "" : "s"})`, tone: review.ok ? "ok" : "warn" });
     } catch (e) {
       console.error("listing check: failed for", id, e);
-      results.push({ id, name: turf.name, line: "Could not check, will retry", tone: "warn" });
+      results.push({ id, name, line: "Could not check, will retry", tone: "warn" });
     }
   }
 

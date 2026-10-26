@@ -7,6 +7,7 @@ import {
   shapeReviewStats,
   shapeSuggestions,
   trendingFor,
+  turfPagePayload,
 } from "@/lib/turfPage/shape";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
@@ -39,14 +40,15 @@ export interface TurfPageData {
  * the RPC is a POST, which Next's fetch memoisation does not dedupe.
  * `key` is the URL segment: a slug, or an old id link.
  *
- * Returns null when no active turf matches (the page 404s). A database
- * error throws instead, so a revalidation keeps the last good page and a
- * first render shows the error page, rather than caching a 404 for a day.
+ * Returns null only when no active turf matches (the page 404s). A
+ * database error or a payload without a turf throws instead, so a
+ * revalidation keeps the last good page and a first render shows the
+ * error page, rather than caching a 404 for a day (turfPagePayload has
+ * the rule, lib/turfPage/turfPage.test.ts pins it).
  */
 export const loadTurfPage = cache(async (key: string): Promise<TurfPageData | null> => {
-  const { data, error } = await createReadOnlyClient().rpc("turf_page", { p_key: key });
-  if (error) throw new Error(`turf_page failed for ${key}: ${error.message}`);
-  if (!data || typeof data !== "object" || !data.turf) return null;
+  const data = turfPagePayload(await createReadOnlyClient().rpc("turf_page", { p_key: key }), key);
+  if (!data) return null;
 
   const turf = transformTurf(data.turf);
   return {

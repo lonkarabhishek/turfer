@@ -5,7 +5,6 @@ import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
-import { isTurfId } from "@/lib/utils/turfPath";
 import type { PriceBand, Turf } from "@/types/turf";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -263,6 +262,10 @@ function readActiveRows(): Promise<Record<string, unknown>[]> {
     // One line per full read, so the logs show how often it happens
     // (should be about once per instance per purge or hour).
     console.info("turf full read", { rows: rows.length, ms: Date.now() - t0 });
+    // Thousands of turfs are active: none at all is a read that went wrong, and kept it would
+    // empty every listing (and 404 every city/sport page) until the next purge. Throwing keeps
+    // the last good copy serving.
+    if (rows.length === 0) throw new Error("turf full read returned no active turfs");
     return rows;
   })().finally(() => {
     inflight = null;
@@ -327,16 +330,22 @@ export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Tur
   return data.map((r) => transformTurf(r as never)).sort(compareTopRated);
 }
 
+/**
+ * One active turf by id, or null when there is none. A failed read
+ * throws: .single() reported a missing row as an error too, so this
+ * once read an outage as "no such turf" (the 20 Oct turf page 404s came
+ * from the same pattern).
+ */
 export async function getTurfById(id: string): Promise<Turf | null> {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("turfs")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) return null;
-  return transformTurf(data);
+  if (error) throw new Error(`Turf read failed for ${id}: ${error.message}`);
+  return data ? transformTurf(data) : null;
 }
 
 export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
@@ -349,14 +358,6 @@ export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {
     .map((r) => transformTurf(r as never))
     .filter((t) => turfPlaysSport(t.sports, sport))
     .sort(compareTopRated);
-}
-
-/** A turf by its slug or, for old links, its id. */
-export async function getTurfBySlugOrId(key: string): Promise<Turf | null> {
-  if (isTurfId(key)) return getTurfById(key);
-  const { data, error } = await createServerClient().from("turfs").select("*").eq("slug", key.toLowerCase()).maybeSingle();
-  if (error || !data) return null;
-  return transformTurf(data);
 }
 
 /** URL keys for the active turf pages built at deploy: the slug, or the id for a turf without one. */

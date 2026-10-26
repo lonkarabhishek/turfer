@@ -6,7 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
-import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
+import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
@@ -33,6 +33,10 @@ const load = cache(async (cityParam: string, sportParam: string) => {
   if (!sport) return null;
   const city = cityParam as CityId;
   const cityTurfs = await getAllActiveTurfs(city);
+  // A live city has active turfs, so an empty list is a bad read, not a
+  // missing page: throw (the last good page keeps serving) rather than
+  // cache a 404. /bangalore/swimming, 17 pools, was a 404 to Google on 18 Oct.
+  if (cityTurfs.length === 0) throw new Error(`No turfs read for live city ${city}`);
   const turfs = cityTurfs.filter((t) => turfPlaysSport(t.sports, sport));
   return { city, sport, turfs, cityTurfs };
 });
@@ -51,6 +55,7 @@ export async function generateMetadata({
   const lower = s.name.toLowerCase();
   const word = venueWord(s, 1);
   const url = `https://www.tapturf.in/${data.city}/${s.slug}`;
+  const noun = s.venue === "turf" ? "Ground" : `${s.venue[0].toUpperCase()}${s.venue.slice(1)}`;
 
   const bits = [
     `Find a ${lower} ${word} near you in ${cityLabel}: ${stats.count} ${venueWord(s, stats.count)} with ratings, prices, timings and location.`,
@@ -65,7 +70,7 @@ export async function generateMetadata({
 
   return {
     // Layout's template appends "| TapTurf".
-    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${s.venue === "turf" ? "Grounds" : `${s.venue[0].toUpperCase()}${s.venue.slice(1)}s`}, Prices & Timings`,
+    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${noun}${stats.count === 1 ? "" : "s"}, Prices & Timings`,
     description: bits.join(" "),
     keywords: [
       `${lower} ${word} in ${cityLabel.toLowerCase()}`,
@@ -113,10 +118,11 @@ export default async function CitySportPage({
   // indexable (same threshold as the sitemap), same state first, then
   // the biggest, plus the home cities so /nashik/<sport> keeps its
   // sibling links.
-  const otherCities = pickOtherCities(await getCitiesForSport(s.slug), cityId);
-  const otherSports = SPORT_PAGES.filter((sp) => sp.slug !== s.slug)
-    .map((sp) => ({ ...sp, count: data.cityTurfs.filter((t) => turfPlaysSport(t.sports, sp)).length }))
-    .filter((sp) => sp.count > 0);
+  const otherCities = pickOtherCities(await getCitiesForSport(s.slug), cityId).flatMap((c) => {
+    const href = citySportHref(c.id, s.slug, c.n);
+    return href ? [{ ...c, href }] : [];
+  });
+  const otherSports = citySportLinks(cityId, data.cityTurfs).filter((sp) => sp.slug !== s.slug);
 
   const jsonLd = [
     {
@@ -245,7 +251,7 @@ export default async function CitySportPage({
             {otherCities.map((c) => (
               <Link
                 key={c.id}
-                href={`/${c.id}/${s.slug}`}
+                href={c.href}
                 className="h-9 px-4 inline-flex items-center rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] text-primary-900"
               >
                 {venues} in {c.label}
@@ -260,7 +266,7 @@ export default async function CitySportPage({
               {otherSports.map((sp) => (
                 <Link
                   key={sp.slug}
-                  href={`/${cityId}/${sp.slug}`}
+                  href={sp.href}
                   className="h-9 px-4 inline-flex items-center rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] text-primary-900"
                 >
                   {sp.name} ({sp.count})

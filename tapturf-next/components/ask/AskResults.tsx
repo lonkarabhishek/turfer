@@ -11,7 +11,7 @@ import { areaFor } from "@/lib/utils/area";
 import { formatDistance } from "@/lib/utils/location";
 import { formatDate, formatTimeSlot } from "@/lib/utils/game";
 import { labelFor, isCity } from "@/lib/city";
-import { sportBySlug } from "@/lib/sports";
+import { citySportHref, sportBySlug } from "@/lib/sports";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { AskResponse } from "./AskProvider";
@@ -122,9 +122,11 @@ function MoreLink({ href, label }: { href: string; label: string }) {
 
 function moreLink(r: AskResponse): string {
   const { city, sport } = r.filters;
-  if (city && isCity(city) && sport) return `/${city}/${sport}`;
+  // r.total counts this city's venues for the sport, so the page exists.
+  const citySport = city && isCity(city) && sport ? citySportHref(city, sport, r.total) : null;
+  if (citySport) return citySport;
   if (city && isCity(city)) return `/${city}`;
-  if (sport) return `/sport/${sport}`;
+  if (sport && sportBySlug(sport)) return `/sport/${sport}`;
   return "/turfs";
 }
 

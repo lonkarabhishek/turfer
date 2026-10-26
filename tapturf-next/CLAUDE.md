@@ -41,7 +41,7 @@ components/
   dashboard/  — DashboardClient, MyGames, MyRequests, NotificationsList, ProfileSection
   turf/       — TurfCard, TurfImageGallery, TurfMap, TurfPricing, TurfAmenities, TurfDetails
   layout/     — Header (client, with auth), Footer, MobileNav (fixed bottom bar)
-  ui/         — CTAButtons, StarRating, ExternalImage, Badge, SportChip
+  ui/         — CTAButtons, StarRating, ExternalImage, Badge
   search/     — TurfListingClient
 lib/
   supabase/   — client.ts (browser), server.ts (SSG/SSR read-only)

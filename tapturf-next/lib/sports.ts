@@ -156,6 +156,35 @@ export function turfPlaysSport(turfSports: string[], sport: SportPage): boolean 
   return turfSports.some((s) => wanted.has(s.trim().toLowerCase()));
 }
 
+/**
+ * The "<sport> in <city>" page, /<city>/<sport>, or null when the city has
+ * no venue for the sport: that page 404s. Every city/sport link goes
+ * through here with the count it shows. From 15 to 18 Oct the "<Sport> in
+ * other cities" row linked every curated city, and Google crawled
+ * /akola/badminton, /chandrapur/cricket and others as 404s.
+ */
+export function citySportHref(city: string, sport: string, count: number): string | null {
+  if (!(count > 0) || !BY_SLUG.has(sport) || !/^[a-z][a-z-]{1,30}$/.test(city)) return null;
+  return `/${city}/${sport}`;
+}
+
+/**
+ * The sport pages one city's turfs fill, in link order, with how many
+ * venues each has and its /<city>/<sport> link. Sports with none there are
+ * left out (citySportHref). `turfs` must be that city's own list, the one
+ * its pages read (getAllActiveTurfs(city)).
+ */
+export function citySportLinks(
+  city: string,
+  turfs: readonly { sports: string[] }[],
+): (SportPage & { count: number; href: string })[] {
+  return SPORT_PAGES.flatMap((sp) => {
+    const count = turfs.filter((t) => turfPlaysSport(t.sports, sp)).length;
+    const href = citySportHref(city, sp.slug, count);
+    return href ? [{ ...sp, count, href }] : [];
+  });
+}
+
 /** "turf" / "turfs" or "court" / "courts" for this sport. */
 export function venueWord(sport: SportPage, count = 2): string {
   return count === 1 ? sport.venue : `${sport.venue}s`;

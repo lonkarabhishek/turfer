@@ -51,6 +51,8 @@ import { decide } from "./lib/cityRouting";
  * - Every other page (turf pages, /<city>, sport pages, blog, tools,
  *   /turfs?q= search) is never gated.
  * - Direct hits on /c are 308'd to the public URL.
+ * - Old /sport/<label> URLs (/sport/cricket%20nets) are 308'd to the
+ *   sport page for that label (sportPagePath).
  *
  * Caching: one public URL now returns different bodies by cookie and IP,
  * yet keeps Next's s-maxage and has no Vary: Cookie (that would split

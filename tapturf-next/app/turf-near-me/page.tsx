@@ -5,7 +5,7 @@ import { ChevronRight, MapPin } from "lucide-react";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { labelFor, type CityId } from "@/lib/city";
 import { getLiveCities } from "@/lib/queries/cities";
-import { SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport } from "@/lib/sports";
+import { citySportLinks, sportBySlug, sportVenues, turfPlaysSport } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
 import { slugify } from "@/lib/utils/slugify";
 import { TurfCard } from "@/components/turf/TurfCard";
@@ -40,7 +40,7 @@ type CityBlock = {
   areas: { area: string; turfs: Turf[] }[];
   /** Turfs in one-turf areas or with no known area. */
   more: { turf: Turf; area: string | null }[];
-  sports: { slug: string; label: string; icon: string; count: number }[];
+  sports: { slug: string; label: string; icon: string; count: number; href: string }[];
 };
 
 // Built once per render: generateMetadata and the page share it (React
@@ -70,12 +70,13 @@ const load = cache(async () => {
             .map((g) => ({ turf: g.turfs[0], area: g.area as string | null })),
           ...noArea.map((turf) => ({ turf, area: null })),
         ];
-        const sports = SPORT_PAGES.map((sp) => ({
+        const sports = citySportLinks(c.id, turfs).map((sp) => ({
           slug: sp.slug,
           label: sportVenues(sp),
           icon: sp.icon,
-          count: turfs.filter((t) => turfPlaysSport(t.sports, sp)).length,
-        })).filter((s) => s.count > 0);
+          count: sp.count,
+          href: sp.href,
+        }));
         return { id: c.id, label: labelFor(c.id), turfs, areas, more, sports };
       }),
     )
@@ -383,7 +384,7 @@ export default async function TurfNearMePage() {
               {b.sports.map((s) => (
                 <Link
                   key={s.slug}
-                  href={`/${b.id}/${s.slug}`}
+                  href={s.href}
                   className="h-10 px-4 inline-flex items-center gap-2 rounded-full ring-1 ring-primary-200 hover:bg-primary-50 text-[14px] text-primary-900"
                 >
                   <span aria-hidden>{s.icon}</span>
