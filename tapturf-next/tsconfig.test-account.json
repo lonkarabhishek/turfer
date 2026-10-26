@@ -18,6 +18,10 @@
   },
   "files": [
     "lib/account/account.test.ts",
-    "lib/auth/auth.test.ts"
+    "lib/account/fresh.test.ts",
+    "lib/account/link.test.ts",
+    "lib/account/routes.test.ts",
+    "lib/auth/auth.test.ts",
+    "lib/account/display.test.ts"
   ]
 }

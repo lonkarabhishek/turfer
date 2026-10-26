@@ -5,9 +5,9 @@
  * Google button. Relative imports only (npm run test:account).
  */
 
-export type Why = "denied" | "again" | "google" | "lost" | "used" | "expired" | "slow" | "other";
+export type Why = "denied" | "again" | "google" | "lost" | "used" | "expired" | "slow" | "other" | "linking" | "replaced";
 
-const WHYS: readonly Why[] = ["denied", "again", "google", "lost", "used", "expired", "slow", "other"];
+const WHYS: readonly Why[] = ["denied", "again", "google", "lost", "used", "expired", "slow", "other", "linking", "replaced"];
 
 /** Supabase sent ?error= back instead of a code. */
 export function providerWhy(error: string | null, errorCode: string | null, description: string | null): Why {
@@ -51,10 +51,15 @@ const TEXT: Record<Why, string> = {
   expired: "That sign-in took too long and ran out. Tap Continue with Google to try again.",
   slow: "Signing in is taking longer than usual. Tap Continue with Google to try again.",
   other: "Couldn't finish signing you in. Tap Continue with Google to try again.",
+  // error=account: the sign-in worked, but this Google account opens no TapTurf account right now.
+  linking:
+    "You were adding this Google account to a TapTurf account that logs in with a phone number. Finish it on that phone, or wait 10 minutes and try again.",
+  replaced:
+    "This Google account was taken off your TapTurf account. Log in with your phone number, or add it again from your profile.",
 };
 
 /** The line /login shows for ?error= and ?why=, or null. */
 export function loginErrorText(error: string | null | undefined, why: string | null | undefined): string | null {
-  if (error !== "oauth" && error !== "callback") return null;
+  if (error !== "oauth" && error !== "callback" && error !== "account") return null;
   return TEXT[readWhy(why) ?? (error === "oauth" ? "denied" : "other")];
 }

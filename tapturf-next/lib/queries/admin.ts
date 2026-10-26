@@ -2,6 +2,8 @@ import { fetchAllRows } from "@/lib/queries/turfs";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { adminConfirmed, adminUserRows } from "@/lib/queries/adminUsers";
 import { isVerified } from "@/lib/admin/people";
+import { notFinishedSignupRows } from "@/lib/admin/links";
+import { googleUnfinishedRows } from "@/lib/queries/adminLinks";
 
 /**
  * Admin dashboard queries. All read-only. Every function is scoped to
@@ -15,7 +17,10 @@ const supa = () => createReadOnlyClient();
 // ── Types ──
 
 export interface AdminHeadline {
+  /** Accounts, plus the Google sign-ups that never came back (unfinishedSignups), as the sign-ups chart counts. */
   totalUsers: number;
+  /** Google sign-ins that made no account (each used to be a users row the auth trigger made). */
+  unfinishedSignups: number;
   uniquePeople: number;
   duplicateUsers: number;
   verifiedUsers: number;
@@ -136,6 +141,7 @@ export async function getHeadline(): Promise<AdminHeadline> {
   const iso30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
+    unfinished,
     allUsers,
     games,
     games7,
@@ -148,6 +154,9 @@ export async function getHeadline(): Promise<AdminHeadline> {
     bookingRows,
     reviewRows,
   ] = await Promise.all([
+    // Google sign-ins that never came back (no account since 20261026_account_links.sql): counted
+    // as the sign-ups chart counts them, since each used to be a users row ([] before that migration).
+    googleUnfinishedRows(),
     // Full user set so we can dedupe in memory. Only ~50 rows today, and
     // even at 10k this is fine for an owner-only page.
     adminUserRows().then((data) => ({ data })),
@@ -167,7 +176,9 @@ export async function getHeadline(): Promise<AdminHeadline> {
     s.from("reviews").select("rating"),
   ]);
 
-  const rows = allUsers.data || [];
+  const accounts = allUsers.data || [];
+  const unfinishedSignups = notFinishedSignupRows(unfinished).filter((u) => !accounts.some((a) => a.id === u.id));
+  const rows = [...accounts, ...unfinishedSignups];
   const totalUsers = rows.length;
   const people = dedupeUsers(rows);
   const uniquePeople = people.length;
@@ -206,7 +217,8 @@ export async function getHeadline(): Promise<AdminHeadline> {
     totalUsers,
     uniquePeople,
     duplicateUsers,
-    verifiedUsers: rows.filter((r) => isVerified(verified ? (verified.get(r.id) ?? { email: null, phone: false }) : null, r.is_verified)).length,
+    unfinishedSignups: unfinishedSignups.length,
+    verifiedUsers: accounts.filter((r) => isVerified(verified ? (verified.get(r.id) ?? { email: null, phone: false }) : null, r.is_verified)).length,
     signups7d,
     signups30d,
     uniqueSignups7d,

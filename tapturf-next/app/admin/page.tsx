@@ -24,6 +24,7 @@ import { signupPeople } from "@/lib/queries/adminUsers";
 import { personId } from "@/lib/admin/people";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { SignupsTrend } from "@/components/admin/SignupsTrend";
+import { LinkRefusals } from "@/components/admin/LinkRefusals";
 import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
@@ -271,7 +272,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           label="Total users"
           href="/admin/users"
           value={headline.totalUsers}
-          sub="Raw row count"
+          sub={
+            headline.unfinishedSignups > 0
+              ? `Raw row count, with ${headline.unfinishedSignups} Google sign-up${headline.unfinishedSignups === 1 ? "" : "s"} that didn't finish`
+              : "Raw row count"
+          }
         />
         <StatTile
           label="Total games"
@@ -373,6 +378,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         {/* A new read (Refresh) starts the chart afresh at its "now". A failed read shows a message there, never a broken page. */}
         <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} focus={personId((await searchParams).person)} />
       </div>
+      {/* What couldn't be added to an account, for the owner to follow up by hand. */}
+      <LinkRefusals />
       <section className="mb-8">
         <div className="rounded-2xl bg-white border border-primary-200 p-5">
           <DailyChart
@@ -443,7 +450,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             label="Verified users"
           href="/admin/users?f=verified"
             value={headline.verifiedUsers}
-            sub={`of ${headline.totalUsers} total`}
+            sub={`of ${headline.totalUsers - headline.unfinishedSignups} accounts`}
           />
         </div>
       </section>

@@ -9,10 +9,16 @@ export interface AppUser {
   username?: string;
   /** "Let others find and tag me". */
   taggable?: boolean;
-  /** The optional email a phone account typed (for deals and invites; not checked). */
+  /** An email a phone account typed into an earlier TapTurf (not checked, never used to log in). */
   contactEmail?: string;
-  /** A phone account with no email that has not answered the ask yet. */
-  askEmail?: boolean;
-  /** May add an email (a phone account with no email, and the database has the feature). */
-  emailEditable?: boolean;
+  /** The Google account added to this phone account from the profile. */
+  googleEmail?: string;
+  /** May add, change or remove a Google account (from a phone sign-in). */
+  googleLinkable?: boolean;
+  /** The number on the account opens it with an OTP. */
+  phoneConfirmed?: boolean;
+  /** Google is this account's own way in: it may add, confirm, change or remove the number. */
+  phoneSettable?: boolean;
+  /** Asked once to add Google (a phone account with no email that has not answered yet). */
+  askGoogle?: boolean;
 }

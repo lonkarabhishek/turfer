@@ -9,7 +9,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
-import { sendClaimCode, type ClaimCode } from "@/lib/my/claimVerify";
+import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
 import { imageUrlForCard, normalizeImageUrl } from "@/lib/utils/images";
 
 const place = (t: { area: string | null; city: string | null }) =>
@@ -65,7 +65,7 @@ export function MyHome() {
           {!me && !home.admin && (
             <p className="mt-6 rounded-2xl bg-amber-50 px-4 py-3 text-[14px] text-amber-900">
               {home.account_state === "conflict"
-                ? "This number is on a TapTurf account that signed up with Google. Sign in with Google to claim your turf, or email info@tapturf.in."
+                ? "This number is on an account that logs in with Google. Log in with Google, open Profile and tap Confirm with OTP. Then this number works here too."
                 : "Your sign-in isn't linked to a TapTurf account yet, so you can't claim a turf. Sign out, sign in again, then try once more."}
             </p>
           )}
@@ -279,6 +279,7 @@ const CLAIM_ERRORS: Record<string, string> = {
   no_account: "We couldn't find your TapTurf account for this sign-in. Sign out, sign in again, then try once more.",
   too_many: "You have five claims waiting already. We'll get to them soon.",
   revoked: "Access to this turf was removed. Email info@tapturf.in.",
+  other_account: "This login's earlier claim on this turf belongs to another TapTurf account. Email info@tapturf.in and we'll sort it out.",
   not_found: "This turf isn't on TapTurf any more.",
   bad_phone: "Enter the 10-digit mobile number, like 98765 43210.",
   not_listed: "That number isn't on this listing.",

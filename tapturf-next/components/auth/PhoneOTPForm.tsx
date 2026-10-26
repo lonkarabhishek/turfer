@@ -6,7 +6,6 @@ import { phoneAuthHelpers } from "@/lib/firebase/client";
 import { errorOf, firebaseToken, postMe, profileOf } from "@/lib/account/client";
 import { storePhoneUser, useAuth } from "./AuthProvider";
 import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
-import { cleanEmail, emailProblem, emailTypo } from "@/lib/account/emails";
 import { saveSignupContext } from "@/lib/analytics/visitor";
 
 type Step = "phone" | "otp" | "name";
@@ -52,14 +51,13 @@ function useRotatingLine(lines: string[], active: boolean, interval = 2200): str
  * comes first and an open keyboard would pull people to the phone form.
  */
 export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?: () => void; autoFocusPhone?: boolean }) {
-  const { hydrateFromStorage, showNotice } = useAuth();
+  const { hydrateFromStorage } = useAuth();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [name, setName] = useState("");
-  // Optional, on the sign-up step: for turf deals and game invites.
-  const [email, setEmail] = useState("");
-  const [emailTip, setEmailTip] = useState("");
+  // The number opened another account lately (that account changed its number): said on the name step.
+  const [wasUsed, setWasUsed] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
@@ -69,7 +67,6 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
   const [retry, setRetry] = useState(false);
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const emailRef = useRef<HTMLInputElement | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
   // Unique per form instance, so two mounted forms never share one
   // reCAPTCHA container.
@@ -155,8 +152,8 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
    * The account for the number Firebase just verified, from the server
    * (made when newName is given). The server logs the sign-in.
    */
-  const signInWithServer = async (token: string, newName?: string, newEmail?: string) => {
-    const a = await postMe(token, newName, newName ? newEmail : undefined);
+  const signInWithServer = async (token: string, newName?: string) => {
+    const a = await postMe(token, newName);
     const profile = profileOf(a);
     if (profile) {
       setRetry(false);
@@ -164,17 +161,16 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
       // A new account: save how they found us, in the background.
       if ((a.body as { created?: boolean }).created) saveSignupContext(profile.id, "phone");
       finishLogin(profile.name?.split(" ")[0] || "");
-      // The email never holds up the sign-in; if it didn't save, say so (they're asked again later).
-      if ((a.body as { emailError?: string }).emailError) showNotice("You're in! We couldn't save your email. Add it any time in your profile.");
       return;
     }
     const e = errorOf(a);
     if (e === "name") {
       setRetry(false);
+      setWasUsed((a.body as { wasUsed?: boolean }).wasUsed === true);
       setStep("name");
     } else if (e === "conflict") {
       setRetry(false);
-      setError("This number is linked to a Google account. Sign in with Google, or contact us.");
+      setError("This number is on an account that logs in with Google. Log in with Google, open Profile and tap Confirm with OTP, and this number will work too.");
     } else {
       setRetry(true);
       setError("Couldn't reach TapTurf. Check your connection and try again.");
@@ -187,7 +183,7 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
     setLoading(true);
     try {
       const t = await firebaseToken();
-      if ("token" in t) await signInWithServer(t.token, step === "name" ? name.trim() : undefined, step === "name" ? cleanEmail(email) ?? undefined : undefined);
+      if ("token" in t) await signInWithServer(t.token, step === "name" ? name.trim() : undefined);
       else if ("none" in t) {
         setRetry(false);
         setStep("phone");
@@ -224,12 +220,6 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
   const handleCreateUser = async () => {
     if (!name.trim()) {
       setError("Please enter your name");
-      return;
-    }
-    // The email is optional: empty is fine, a broken one is pointed out, never sent.
-    const problem = emailProblem(email);
-    if (problem) {
-      setEmailTip(problem);
       return;
     }
     await retryWithServer();
@@ -389,6 +379,11 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
 
       {step === "name" && (
         <>
+          {wasUsed && (
+            <p className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] leading-snug text-amber-900" role="note">
+              This number used to open a TapTurf account. If that was you, log in with Google instead. Or carry on to make a new account.
+            </p>
+          )}
           <div className="text-center">
             <p className="text-[13px] text-primary-600">Welcome! What should we call you?</p>
           </div>
@@ -397,44 +392,13 @@ export function PhoneOTPForm({ onSuccess, autoFocusPhone = true }: { onSuccess?:
             type="text"
             value={name}
             onChange={(e) => { setName(e.target.value); setError(""); }}
-            onKeyDown={(e) => e.key === "Enter" && (name.trim() ? emailRef.current?.focus() : handleCreateUser())}
+            onKeyDown={(e) => e.key === "Enter" && !loading && handleCreateUser()}
             placeholder="Your name"
             aria-label="Your name"
             autoComplete="name"
             className={inputClass}
             autoFocus
           />
-
-          <div>
-            <label htmlFor={`${recaptchaId}-email`} className="block text-[13px] font-medium text-primary-700 mb-1">
-              Email <span className="font-normal text-primary-500">(optional)</span>
-            </label>
-            <input
-              ref={emailRef}
-              id={`${recaptchaId}-email`}
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              maxLength={254}
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setEmailTip(""); setError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && handleCreateUser()}
-              placeholder="you@gmail.com"
-              aria-describedby={`${recaptchaId}-email-help`}
-              className={inputClass}
-            />
-            <p id={`${recaptchaId}-email-help`} className={`mt-1 text-[12px] leading-snug ${emailTip ? "text-hot-600" : "text-primary-500"}`}>
-              {emailTip || "For turf deals and game invites. No spam. We won't show it to other players or turfs."}
-            </p>
-            {!emailTip && emailTypo(email) && (
-              <button type="button" onClick={() => setEmail(emailTypo(email) ?? email)} className="mt-1 text-[12px] font-semibold text-accent-700 underline underline-offset-2">
-                Did you mean {emailTypo(email)}?
-              </button>
-            )}
-          </div>
 
           <button
             onClick={handleCreateUser}

@@ -19,7 +19,7 @@ function waNumber(phone: string): string {
 }
 
 export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string; liveLinks?: boolean }) {
-  const { user, login } = useAuth();
+  const { user, login, confirmedUser } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
   const [participants, setParticipants] = useState<GameParticipant[]>([]);
   const [requests, setRequests] = useState<GameRequest[]>([]);
@@ -79,7 +79,14 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const handleJoin = async () => {
     if (!user) { login(); return; }
     setJoining(true);
-    const { error } = await sendJoinRequest(gameId, user.id, joinNote, user.name);
+    // The account the server confirms for this sign-in, never only what this device kept.
+    const me = await confirmedUser();
+    if (!me) {
+      setJoining(false);
+      setJoinStatus("error");
+      return;
+    }
+    const { error } = await sendJoinRequest(gameId, me.id, joinNote, me.name);
     setJoining(false);
     if (error) {
       setJoinStatus("error");

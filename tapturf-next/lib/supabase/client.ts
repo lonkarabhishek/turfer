@@ -22,6 +22,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // storage events + a hard reload on iOS PWA return), so switching to
 // the in-process `processLock` is safe and eliminates the entire class
 // of cross-tab timeouts.
+//
+// Why detectSessionInUrl false: Google sign-ins come back to
+// /api/auth/callback, which exchanges the code on the server and first
+// checks the account (a Google account being added to a phone account,
+// or taken off one, gets no session). No page may turn a `?code=` into a
+// session behind it, e.g. a code GoTrue sent to the Site URL.
 let browserClient: SupabaseClient | null = null;
 
 export function createClient(): SupabaseClient {
@@ -31,7 +37,7 @@ export function createClient(): SupabaseClient {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
-        auth: { lock: processLock },
+        auth: { lock: processLock, detectSessionInUrl: false },
       },
     );
   }
@@ -40,7 +46,7 @@ export function createClient(): SupabaseClient {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
-        auth: { lock: processLock },
+        auth: { lock: processLock, detectSessionInUrl: false },
       },
     );
   }

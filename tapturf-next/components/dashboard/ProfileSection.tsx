@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, Save, Phone, Mail, AtSign } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { User, Save, Phone, Mail, AtSign, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "@/components/account/useUsernameCheck";
 import { TagSwitch } from "@/components/account/TagSwitch";
-import { cleanEmail, emailProblem, emailTypo } from "@/lib/account/emails";
+import { GoogleLinkActions } from "@/components/account/GoogleLinkActions";
+import { PhoneAddForm } from "@/components/account/PhoneAddForm";
+import { PROFILE_PATH, spacedPhone } from "@/lib/account/display";
 import type { MePatch } from "@/lib/account/client";
 import type { AccountError } from "@/lib/account/types";
 import type { AppUser } from "@/types/user";
@@ -19,25 +22,33 @@ const SAVE_ERROR: Partial<Record<AccountError, string>> = {
   limit: "You can change your username 3 times in 30 days. Try again later.",
   sign_in: "Your login ended. Please log in again.",
   new: "Your login ended. Please log in again.",
-  email: "That email doesn't look right.",
   conflict: "We need to check this account. Email info@tapturf.in and we'll sort it out.",
   slow: "Too many tries. Wait a minute and try again.",
   unavailable: "Couldn't reach TapTurf. Check your connection and try again.",
 };
 
 export function ProfileSection({ user }: { user: AppUser }) {
-  const { getToken, applyProfile, refreshUser } = useAuth();
+  const { getToken, applyProfile, refreshUser, signedInWith } = useAuth();
+  const router = useRouter();
+  const params = useSearchParams();
   // What the person typed; until then, what the server sent.
-  const [draft, setDraft] = useState<{ name?: string; username?: string; taggable?: boolean; email?: string }>({});
+  const [draft, setDraft] = useState<{ name?: string; username?: string; taggable?: boolean }>({});
   const name = draft.name ?? (user.name || "");
   const username = draft.username ?? (user.username ?? "");
   const taggable = draft.taggable ?? (user.taggable ?? true);
-  // Phone accounts can add an email (for deals and invites); a Google account's comes from Google.
-  const emailEditable = !user.email && user.emailEditable === true;
-  const email = draft.email ?? (user.contactEmail ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  // The email row's own news ("Google account removed.") and the typed email's Remove.
+  const [emailNote, setEmailNote] = useState("");
+  const [removingTyped, setRemovingTyped] = useState(false);
+  const [typedError, setTypedError] = useState("");
+
+  // Back from the Google sign-in the phone row asked for (?add=phone): open it, and take the word out of the address.
+  const [addPhoneNow] = useState(() => params.get("add") === "phone");
+  useEffect(() => {
+    if (params.get("add") === "phone") router.replace(PROFILE_PATH, { scroll: false });
+  }, [params, router]);
 
   // The latest from the server, once: another device may have changed it.
   useEffect(() => {
@@ -52,13 +63,12 @@ export function ProfileSection({ user }: { user: AppUser }) {
   const nameChanged = draft.name !== undefined && name.trim() !== user.name;
   // The switch belongs to a username: with none (now or typed), there is nothing to save it on.
   const taggableChanged = draft.taggable !== undefined && taggable !== (user.taggable ?? true) && (!!u || !!user.username);
-  const emailIssue = emailEditable && draft.email !== undefined ? emailProblem(email) : null;
-  const emailNext = email.trim() ? cleanEmail(email) : null;
-  const emailChanged = emailEditable && draft.email !== undefined && !emailIssue && emailNext !== (user.contactEmail ?? null);
   // A username can be changed but not removed.
   const usernameCleared = usernameChanged && !u && !!user.username;
-  const anyChange = nameChanged || (usernameChanged && !!u) || taggableChanged || emailChanged;
-  const canSave = !saving && !!name.trim() && anyChange && !emailIssue && !usernameCleared && (!usernameChanged || (!!u && usernameSavable(availability)));
+  const anyChange = nameChanged || (usernameChanged && !!u) || taggableChanged;
+  // Going to Google (or changing the number) would lose what was typed here.
+  const dirty = anyChange || usernameCleared;
+  const canSave = !saving && !!name.trim() && anyChange && !usernameCleared && (!usernameChanged || (!!u && usernameSavable(availability)));
 
   const handleSave = async () => {
     setError("");
@@ -71,7 +81,6 @@ export function ProfileSection({ user }: { user: AppUser }) {
       }
       const patch: MePatch = {};
       if (nameChanged) patch.name = name.trim();
-      if (emailChanged) patch.email = emailNext;
       if (usernameChanged && u) patch.username = u;
       if (taggableChanged) patch.taggable = taggable;
       const a = await patchMe(tok.token, patch);
@@ -79,9 +88,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
       if (p) applyProfile(p);
       const e = errorOf(a);
       if (e) {
-        // The email is saved before the username, so a limit with an email change is the email's.
-        const limitIsEmail = e === "limit" && emailChanged && p?.contact_email !== emailNext;
-        setError(limitIsEmail ? "You've changed your email a few times today. Try again tomorrow." : SAVE_ERROR[e] ?? "Couldn't save. Please try again.");
+        setError(SAVE_ERROR[e] ?? "Couldn't save. Please try again.");
         return;
       }
       setDraft({});
@@ -92,7 +99,105 @@ export function ProfileSection({ user }: { user: AppUser }) {
     }
   };
 
+  /** The email typed into an earlier TapTurf goes (it never logged anyone in). */
+  const removeTyped = async () => {
+    setTypedError("");
+    setRemovingTyped(true);
+    try {
+      const tok = await getToken();
+      if (!("token" in tok)) return setTypedError("Couldn't remove it. Try again.");
+      const a = await patchMe(tok.token, { email: null });
+      const p = profileOf(a);
+      if (p) applyProfile(p);
+      if (errorOf(a) || !p) setTypedError("Couldn't remove it. Try again.");
+    } finally {
+      setRemovingTyped(false);
+    }
+  };
+
   const status = AVAILABILITY_TEXT[availability];
+  const byPhone = signedInWith === "phone";
+  const byGoogle = signedInWith === "google";
+  const readOnly = (icon: "mail" | "phone", value: string) => (
+    <div className="relative">
+      {icon === "mail" ? (
+        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      ) : (
+        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      )}
+      <input
+        type={icon === "mail" ? "email" : "tel"}
+        value={value}
+        disabled
+        aria-label={icon === "mail" ? "Email" : "Phone"}
+        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500 truncate"
+      />
+    </div>
+  );
+
+  // The email row: the Google account added to a phone account, the Google account an account logs in with, or the way to add one.
+  const emailRow = user.googleEmail ? (
+    <>
+      {readOnly("mail", user.googleEmail)}
+      {byPhone ? (
+        <>
+          <p className="mt-1.5 mb-2 text-xs text-gray-500">Log in with Google or your phone number. Both open this account.</p>
+          {user.googleLinkable && (
+            <GoogleLinkActions mode="linked" then={PROFILE_PATH} googleEmail={user.googleEmail} disabled={dirty} onRemoved={() => setEmailNote("Google account removed.")} />
+          )}
+        </>
+      ) : (
+        <p className="mt-1.5 text-xs text-gray-500">To change or remove this Google account, log in with your phone number.</p>
+      )}
+    </>
+  ) : user.email ? (
+    <>
+      {readOnly("mail", user.email)}
+      <p className="mt-1.5 text-xs text-gray-500">This is the Google account you log in with. It can&rsquo;t be changed here.</p>
+    </>
+  ) : byPhone && user.googleLinkable ? (
+    <GoogleLinkActions mode="add" then={PROFILE_PATH} typedEmail={user.contactEmail} disabled={dirty} />
+  ) : null;
+
+  const typedRow = user.contactEmail && (
+    <div className="mt-3 rounded-xl bg-primary-50 px-3 py-2.5">
+      <p className="text-[13px] text-primary-700 leading-snug break-words">
+        Email you typed earlier: <span className="font-medium text-primary-900">{user.contactEmail}</span>. It isn&rsquo;t used to log in.
+      </p>
+      <button
+        type="button"
+        onClick={() => void removeTyped()}
+        disabled={removingTyped}
+        aria-label="Remove typed email"
+        className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-hot-600 underline underline-offset-2 disabled:opacity-50 cursor-pointer"
+      >
+        {removingTyped && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+        Remove
+      </button>
+      {typedError && (
+        <p className="mt-1 text-[12px] font-medium text-hot-600" role="alert">
+          {typedError}
+        </p>
+      )}
+    </div>
+  );
+
+  // The phone row: a Google account whose own way in is Google can add, confirm, change or remove its number.
+  const phoneRow =
+    byGoogle && user.phoneSettable ? (
+      <PhoneAddForm current={user.phone} confirmed={user.phoneConfirmed === true} autoOpen={addPhoneNow} disabled={dirty} googleEmail={user.email} />
+    ) : user.phone ? (
+      <>
+        {readOnly("phone", spacedPhone(user.phone))}
+        <p className="mt-1.5 text-xs text-gray-500">
+          {byPhone
+            ? "This is the number you log in with. Only you can see it."
+            : user.googleEmail
+              ? "This is the number your account logs in with. To change it, email info@tapturf.in."
+              : "Only you can see this."}
+        </p>
+      </>
+    ) : null;
 
   return (
     <div className="max-w-md">
@@ -184,73 +289,25 @@ export function ProfileSection({ user }: { user: AppUser }) {
           )}
         </div>
 
-        {/* Phone (read-only: it is the login number) */}
-        {user.phone && (
+        {/* Phone */}
+        {phoneRow && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
-            <div className="relative">
-              <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="tel"
-                value={user.phone}
-                disabled
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
-              />
-            </div>
-            <p className="mt-1.5 text-xs text-gray-500">Only you can see this.</p>
+            <p className="block text-sm font-medium text-gray-700 mb-1.5">Phone</p>
+            {phoneRow}
           </div>
         )}
 
-        {/* Email: a Google account's is read-only; a phone account can add one */}
-        {user.email || !emailEditable ? (
-          user.email && (
+        {/* Email: from Google only; an email typed into an earlier TapTurf can be removed */}
+        {(emailRow || typedRow || emailNote) && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="email"
-                value={user.email}
-                disabled
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-500"
-              />
-            </div>
-          </div>
-          )
-        ) : (
-          <div>
-            <label htmlFor="profile-email" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Email <span className="font-normal text-gray-500">(optional)</span>
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                id="profile-email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                maxLength={254}
-                value={email}
-                placeholder="you@gmail.com"
-                aria-describedby="profile-email-help"
-                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
-            </div>
-            <p id="profile-email-help" className={`mt-1.5 text-xs ${emailIssue ? "text-hot-600" : "text-gray-500"}`}>
-              {emailIssue ??
-                (user.contactEmail && draft.email !== undefined && !email.trim()
-                  ? "Save to remove your email."
-                  : "For turf deals and game invites. Only the TapTurf team sees it.")}
-            </p>
-            {!emailIssue && emailTypo(email) && (
-              <button type="button" onClick={() => setDraft((d) => ({ ...d, email: emailTypo(email) ?? email }))} className="mt-1 text-xs font-semibold text-accent-700 underline underline-offset-2">
-                Did you mean {emailTypo(email)}?
-              </button>
+            <p className="block text-sm font-medium text-gray-700 mb-1.5">Email</p>
+            {emailNote && !user.googleEmail && (
+              <p className="mb-2 rounded-xl bg-accent-50 px-3 py-2 text-[13px] text-accent-800" role="status">
+                {emailNote}
+              </p>
             )}
+            {emailRow}
+            {typedRow}
           </div>
         )}
 

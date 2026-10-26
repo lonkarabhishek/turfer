@@ -28,7 +28,7 @@ async function getAuthLazy(): Promise<Auth> {
       import("firebase/app"),
       import("firebase/auth"),
     ]);
-    // The default app by name: the claim check (lib/my/claimVerify.ts) runs a second, named one.
+    // The default app by name: the proofs (lib/firebase/proof.ts) run named ones of their own.
     const app = getApps().find((a) => a.name === "[DEFAULT]") ?? initializeApp(firebaseConfig);
     const a = getAuth(app);
     a.languageCode = "en";
@@ -109,11 +109,31 @@ export function logOtpSend(ok: boolean, code: string | null, phone: string) {
   }
 }
 
+/**
+ * Local end-to-end builds only (next.config.ts refuses the flag on Vercel): no
+ * reCAPTCHA and no SMS. 123456 is the code, and the sign-in's token is the one
+ * the test put in localStorage tt_e2e_fb_token (signed with the test's own key,
+ * which the server trusts only off Vercel), as lib/firebase/proof.ts does for proofs.
+ */
+const E2E = process.env.NEXT_PUBLIC_E2E_AUTH === "1";
+
+function e2eConfirmation(phoneNumber: string): ConfirmationResult {
+  return {
+    verificationId: "e2e",
+    confirm: async (code: string) => {
+      const token = code === "123456" ? localStorage.getItem("tt_e2e_fb_token") : null;
+      if (!token) throw Object.assign(new Error("e2e: wrong code"), { code: "auth/invalid-verification-code" });
+      return { user: { uid: "e2e", phoneNumber, getIdToken: async () => token } };
+    },
+  } as unknown as ConfirmationResult;
+}
+
 export const phoneAuthHelpers = {
   async setupRecaptcha(
     containerId: string,
     previous?: RecaptchaVerifierType | null,
   ): Promise<RecaptchaVerifierType> {
+    if (E2E) return { clear: () => {} } as unknown as RecaptchaVerifierType;
     const auth = await getAuthLazy();
     const { RecaptchaVerifier } = await import("firebase/auth");
     // A reCAPTCHA token is single-use. Tear down the old verifier
@@ -145,6 +165,10 @@ export const phoneAuthHelpers = {
   },
 
   async sendOTP(phoneNumber: string, recaptchaVerifier: RecaptchaVerifierType) {
+    if (E2E) {
+      const formatted = phoneNumber.startsWith("+") ? phoneNumber : `+91${phoneNumber}`;
+      return { success: true as const, confirmationResult: e2eConfirmation(formatted), error: null, code: null };
+    }
     try {
       const auth = await getAuthLazy();
       const { signInWithPhoneNumber } = await import("firebase/auth");

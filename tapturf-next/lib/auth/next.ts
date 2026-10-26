@@ -1,8 +1,9 @@
 /**
  * Where to go after signing in: only a path on this site. Anything else
  * (another site, //evil.com, /\evil.com, a scheme) goes home, and the
- * sign-in pages never send you back to themselves. Relative imports only
- * (npm run test:account).
+ * sign-in pages never send you back to themselves. Nor to /account/link:
+ * adding Google to a phone account starts only from the profile, never
+ * from a sign-in's `next`. Relative imports only (npm run test:account).
  */
 export function safeNext(next: string | null | undefined): string {
   if (!next || !next.startsWith("/")) return "/";
@@ -10,5 +11,6 @@ export function safeNext(next: string | null | undefined): string {
   if (next.startsWith("//") || next.startsWith("/\\")) return "/";
   if (/[\u0000-\u001f]/.test(next)) return "/";
   if (next === "/login" || next.startsWith("/login/") || next.startsWith("/login?") || next.startsWith("/api/auth/")) return "/";
+  if (next === "/account/link" || /^\/account\/link[/?#]/.test(next)) return "/";
   return next;
 }
