@@ -107,6 +107,11 @@ export function SignupPeople({
   const inView = useMemo(() => joinedBetween(scoped, start, end), [scoped, start, end]);
   const found = useMemo(() => inView.filter((p) => matches(p, query)), [inView, query]);
   const elsewhere = useMemo(() => (query.trim() ? scoped.filter((p) => matches(p, query)).length - found.length : 0), [scoped, query, found]);
+  // With Verified only on, the matches in this stretch it hides (those without the tick).
+  const hidden = useMemo(
+    () => (onlyTicked && query.trim() ? joinedBetween(inCityList, start, end).filter((p) => matches(p, query)).length - found.length : 0),
+    [onlyTicked, query, inCityList, start, end, found],
+  );
   const where = city === null ? null : city === NO_CITY ? "no known city" : cityLabel(city);
 
   if (people === null) {
@@ -201,7 +206,21 @@ export function SignupPeople({
         <div className="mt-3 rounded-xl bg-primary-50 px-4 py-6 text-center text-sm text-primary-600 break-words">
           {query.trim() ? (
             <>
-              <p>No one here matches &ldquo;{query.trim()}&rdquo;.</p>
+              <p>
+                No one{onlyTicked ? " with the tick" : ""} here matches &ldquo;{query.trim()}&rdquo;.
+              </p>
+              {hidden > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTicked(false);
+                    inputRef.current?.focus();
+                  }}
+                  className="mt-2 mx-auto block font-semibold text-primary-800 underline underline-offset-2"
+                >
+                  {count(hidden, "match", "matches")} without the tick: show everyone
+                </button>
+              )}
               {elsewhere > 0 && onShowAll && (
                 <button
                   type="button"
