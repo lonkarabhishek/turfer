@@ -43,6 +43,13 @@
 -- public.live_matches (a code is as the browser sent it, and the row is
 -- made by the link's first write, which can land after the use).
 --
+-- Erasing an account: user_id has no foreign key (like private.user_cities
+-- and the other private per-user tables, so nothing here cascades from
+-- public.users), and the privacy page promises these rows go with the
+-- account. On an erasure request, clear this table's rows for the
+-- account's id by hand along with its other rows (tool_use_log_user finds
+-- them). Guest rows carry no account and stay.
+--
 -- Additive: one table in the private schema, three indexes and new
 -- functions; tool_use_count stays for instances still on the old code.
 -- Written without the destructive SQL keywords. Safe to run again.
