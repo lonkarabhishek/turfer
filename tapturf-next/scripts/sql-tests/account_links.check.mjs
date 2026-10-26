@@ -115,6 +115,54 @@ await db.exec(core);
 await db.exec(reads);
 await db.exec(reads);
 
+// Each replaced function keeps production's signature, result, security definer,
+// volatility and search_path (pg_proc on production, read 2026-10-26).
+const SIGS = [
+  `private.account_for_key(p_key text) -> uuid true s search_path=""`,
+  `private.caller_account(p_key text) -> uuid true s search_path=""`,
+  `private.profile_json(p_user_id uuid) -> jsonb true s search_path=""`,
+  `public._can_manage(p_key text, p_turf_id uuid) -> boolean true s search_path=public`,
+  `public.account_resolve(p_key text, p_kind text, p_phone text DEFAULT NULL::text, p_uid uuid DEFAULT NULL::uuid, p_email text DEFAULT NULL::text, p_name text DEFAULT NULL::text, p_avatar text DEFAULT NULL::text, p_create boolean DEFAULT false, p_log boolean DEFAULT false) -> jsonb true v search_path=""`,
+  `public.account_set_email(p_key text, p_user_id uuid, p_action text, p_email text DEFAULT NULL::text, p_source text DEFAULT 'profile'::text) -> jsonb true v search_path=""`,
+  `public.admin_people(p_firebase_token text DEFAULT NULL::text) -> TABLE(id uuid, name text, email text, phone text, profile_image_url text, role text, is_verified boolean, created_at timestamp with time zone, signed_up_at timestamp with time zone, updated_at timestamp with time zone, method text, username text, taggable boolean, logins integer, last_login timestamp with time zone, login_methods text[], games_hosted integer, requests integer, requests_accepted integer, games_joined integer, reviews integer, contact_taps integer, contacted jsonb, asks integer, recent_asks text[], suggestions integer, turfs jsonb, last_active timestamp with time zone, signup jsonb, city text, city_source text, city_ip text, city_at_signup boolean, city_at timestamp with time zone, likely_city text, likely_share real) true s search_path=""`,
+  `public.admin_verified(p_firebase_token text DEFAULT NULL::text) -> TABLE(user_id uuid, email_by_google boolean, email_confirmed boolean, phone_by_code boolean) true s search_path=""`,
+  `public.get_recent_logins(p_limit integer DEFAULT 200, p_firebase_token text DEFAULT NULL::text) -> TABLE(user_id uuid, name text, phone text, email text, method text, logged_in_at timestamp with time zone) true v search_path=public`,
+  `public.handle_auth_user_created() -> trigger true v search_path=""`,
+  `public.owner_claim(p_token text, p_turf_id uuid, p_name text DEFAULT NULL::text, p_note text DEFAULT NULL::text) -> jsonb true v search_path=public`,
+  `public.owner_claim(p_token text, p_turf_id uuid, p_name text DEFAULT NULL::text, p_note text DEFAULT NULL::text, p_role text DEFAULT NULL::text) -> jsonb true v search_path=public`,
+  `public.owner_claim_verified(p_token text, p_proof text, p_turf_id uuid, p_note text DEFAULT NULL::text, p_role text DEFAULT NULL::text) -> jsonb true v search_path=public`,
+  `public.owner_home(p_token text DEFAULT NULL::text) -> jsonb true v search_path=public`,
+  `public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb) -> jsonb true v search_path=public`,
+];
+eq((await q(`select n.nspname || '.' || p.proname || '(' || pg_get_function_arguments(p.oid) || ') -> ' || pg_get_function_result(p.oid)
+                    || ' ' || p.prosecdef::text || ' ' || p.provolatile::text || ' ' || coalesce(array_to_string(p.proconfig, ','), '') sig
+               from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where (n.nspname, p.proname) in (('private','profile_json'),('public','account_resolve'),('public','handle_auth_user_created'),
+                     ('private','account_for_key'),('private','caller_account'),('public','account_set_email'),('public','admin_verified'),
+                     ('public','_can_manage'),('public','owner_home'),('public','owner_claim'),('public','owner_claim_verified'),
+                     ('public','owner_update_turf'),('public','admin_people'),('public','get_recent_logins'))
+              order by 1`)).map((x) => x.sig), SIGS, "every replaced function keeps its live signature, result and settings");
+// And production's EXECUTE grants (anon, authenticated, public), read the same day.
+const GRANTS = {
+  "private.account_for_key(p_key text)": "---", "private.caller_account(p_key text)": "---", "private.profile_json(p_user_id uuid)": "---",
+  "public._can_manage(p_key text, p_turf_id uuid)": "---",
+  "public.account_resolve(p_key text, p_kind text, p_phone text, p_uid uuid, p_email text, p_name text, p_avatar text, p_create boolean, p_log boolean)": "aa-",
+  "public.account_set_email(p_key text, p_user_id uuid, p_action text, p_email text, p_source text)": "aa-",
+  "public.admin_people(p_firebase_token text)": "aa-", "public.admin_verified(p_firebase_token text)": "aa-",
+  "public.get_recent_logins(p_limit integer, p_firebase_token text)": "aa-", "public.handle_auth_user_created()": "---",
+  "public.owner_claim(p_token text, p_turf_id uuid, p_name text, p_note text)": "---",
+  "public.owner_claim(p_token text, p_turf_id uuid, p_name text, p_note text, p_role text)": "aap",
+  "public.owner_claim_verified(p_token text, p_proof text, p_turf_id uuid, p_note text, p_role text)": "aa-",
+  "public.owner_home(p_token text)": "aap", "public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb)": "aap",
+};
+eq(Object.fromEntries((await q(`select n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' f,
+                    case when has_function_privilege('anon', p.oid, 'execute') then 'a' else '-' end
+                    || case when has_function_privilege('authenticated', p.oid, 'execute') then 'a' else '-' end
+                    || case when has_function_privilege('public', p.oid, 'execute') then 'p' else '-' end g
+               from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' = any($1)`, [Object.keys(GRANTS)]))
+  .map((x) => [x.f, x.g])), GRANTS, "and its live EXECUTE grants");
+
 // Firebase can't be reached here: _caller_key and firebase_phone10 stand-ins, as in claims_account.check.mjs.
 await db.exec(`
 create or replace function private.firebase_phone10(p_token text) returns text language sql as

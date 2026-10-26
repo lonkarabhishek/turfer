@@ -687,6 +687,8 @@ begin
   return new;
 end;
 $$;
+-- As on production: nobody calls it but the trigger.
+revoke all on function public.handle_auth_user_created() from public, anon, authenticated;
 
 -- ── myTapturf: which account a sign-in is ─────────────────
 -- 20261025_claims_account.sql, plus links both ways (links first).
