@@ -254,11 +254,11 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           Turf pages embed Google Maps, and photos load from Google&rsquo;s and other public servers. Loading these shares your
-          IP address with Google under{" "}
+          IP address with those servers (with Google under{" "}
           <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
             Google&rsquo;s privacy policy
           </a>
-          . Maps load only when you tap &ldquo;Show map&rdquo;.
+          ). Maps load only when you tap &ldquo;Show map&rdquo;.
         </p>
         <p>
           Some venue pages show reviews that were publicly posted on Google Maps, with the reviewer&rsquo;s
