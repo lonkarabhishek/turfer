@@ -6,7 +6,7 @@ import { AdminGate } from "@/components/admin/AdminGate";
 import { ago, istDateTime, tickedIds } from "@/lib/admin/people";
 import { getToolUsers } from "@/lib/queries/adminTools";
 import { adminTickRows } from "@/lib/queries/adminUsers";
-import { VerifiedTick } from "@/components/account/VerifiedTick";
+import { NameWithTick } from "@/components/account/VerifiedTick";
 import { COUNTED_TOOLS, type CountedTool } from "@/lib/tools/usage";
 import {
   TOOL_LABELS,
@@ -85,9 +85,9 @@ function Who({ p, ticked }: { p: Pick<ToolPerson, "userId" | "name" | "username"
     return (
       <span className="inline-flex flex-wrap items-baseline gap-x-1.5 min-w-0">
         <Link href={personHref(p.userId)} className={`font-semibold hover:text-accent-600 break-words ${p.name?.trim() ? "text-primary-900" : "text-primary-400"}`}>
-          {whoName(p)}
+          {/* The tick on the name's last line: a wrapping name never strands it. */}
+          <NameWithTick name={whoName(p)} ticked={ticked.has(p.userId.toLowerCase())} />
         </Link>
-        {ticked.has(p.userId.toLowerCase()) && <VerifiedTick className="-ml-1 self-center" />}
         {p.username && <span className="text-[13px] text-primary-500 truncate">@{p.username}</span>}
       </span>
     );
@@ -291,7 +291,10 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
                 </ul>
               )}
             </div>
-            <p className="mt-2 text-[12px] text-primary-400">The latest {res.activity.length} uses, newest first.</p>
+            {/* Starts and finishes, one row each: not "uses", which count a start (the badge and the rows above). */}
+            <p className="mt-2 text-[12px] text-primary-400">
+              The latest {res.activity.length} {res.activity.length === 1 ? "entry" : "entries"} (starts and finishes), newest first.
+            </p>
           </section>
         </>
       )}

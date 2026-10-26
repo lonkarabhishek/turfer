@@ -22,10 +22,11 @@ import {
   whatsappLink,
   type Half,
   type Method,
+  type PhoneHalf,
   type Person,
   type RecordedCity,
 } from "@/lib/admin/people";
-import { VerifiedTick } from "@/components/account/VerifiedTick";
+import { NameWithTick, VerifiedTick } from "@/components/account/VerifiedTick";
 
 /**
  * Who signed up in the stretch the chart shows (and the city picked in
@@ -299,8 +300,10 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
         <Avatar p={p} />
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-            <span className={`font-semibold max-w-full break-words sm:truncate ${p.name ? "text-primary-900" : "text-primary-400"}`}>{p.name ?? "No name"}</span>
-            {p.tick?.verified && <VerifiedTick className="-ml-1" />}
+            {/* The tick inside the name, on its last word's line: a wrapping name never strands it. */}
+            <span className={`font-semibold max-w-full break-words ${p.name ? "text-primary-900" : "text-primary-400"}`}>
+              <NameWithTick name={p.name ?? "No name"} ticked={p.tick?.verified === true} />
+            </span>
             {p.username && <span className="min-w-0 max-w-full truncate text-[13px] text-primary-500">@{p.username}</span>}
             <MethodBadge method={p.method} />
             {p.signInUnfinished && (
@@ -442,17 +445,18 @@ function AddedItems({ p }: { p: Person }) {
   );
 }
 
-const HALF_STYLE: Record<Half, string> = {
+const HALF_STYLE: Record<PhoneHalf, string> = {
   proved: "bg-sky-50 border-sky-200 text-sky-800",
+  old: "bg-white border-sky-200 text-sky-700",
   typed: "bg-primary-50 border-primary-200 text-primary-600",
   none: "border-dashed border-primary-200 text-primary-400",
 };
 
-/** One half of the tick: "Phone ✓ proved", "Phone typed" or "No phone" (the same for the email). Never the number or the address. */
-function HalfChip({ kind, half }: { kind: "phone" | "email"; half: Half }) {
-  const { text, title } = HALF_TEXT[kind][half];
+/** One half of the tick: "Phone ✓ proved", "Phone: old OTP", "Phone typed" or "No phone" (the email has all but old). Never the number or the address. */
+function HalfChip(p: { kind: "phone"; half: PhoneHalf } | { kind: "email"; half: Half }) {
+  const { text, title } = p.kind === "phone" ? HALF_TEXT.phone[p.half] : HALF_TEXT.email[p.half];
   return (
-    <span title={title} className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${HALF_STYLE[half]}`}>
+    <span title={title} className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${HALF_STYLE[p.half]}`}>
       {text}
     </span>
   );

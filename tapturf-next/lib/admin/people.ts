@@ -130,11 +130,24 @@ export const tickedOnly = (x: unknown): boolean => (Array.isArray(x) ? x[0] : x)
 
 /** One half of the tick in the people list: proved, on the account but never proved, or not there. */
 export type Half = "proved" | "typed" | "none";
+/**
+ * The phone half can also be "old": a phone sign-up's number (it signs the
+ * account in by OTP) with no OTP the tick trusts, because every one is from
+ * before the sign-in log was locked on 21 Oct 2026 (44 accounts on 26 Oct).
+ */
+export type PhoneHalf = Half | "old";
+
+type Words = { text: string; title: string };
 
 /** Each chip's words and tooltip. Never the number or the address itself. */
-export const HALF_TEXT: Record<"phone" | "email", Record<Half, { text: string; title: string }>> = {
+export const HALF_TEXT: { phone: Record<PhoneHalf, Words>; email: Record<Half, Words> } = {
   phone: {
     proved: { text: "Phone ✓ proved", title: "The number on the account was proved with an OTP" },
+    old: {
+      text: "Phone: old OTP",
+      title:
+        "The number signs in to this account by OTP, but only from before the sign-in log was locked in October, so the tick doesn't count it yet. Their next phone sign-in, or an OTP from the profile, proves it",
+    },
     typed: { text: "Phone typed", title: "A number is on the account, but no OTP proved it" },
     none: { text: "No phone", title: "No number on the account" },
   },
@@ -147,16 +160,20 @@ export const HALF_TEXT: Record<"phone" | "email", Record<Half, { text: string; t
 
 /**
  * The tick's two halves for the people list's chips: proved (admin_ticks),
- * else typed when the account has one (a number; its email, the Google
- * account added from the profile, or the address a phone account typed),
- * else none. Null when the ticks couldn't be read, and for a Google
- * sign-in that made no account: then the list shows no chips.
+ * else old for a phone sign-up's own number (signed in by OTP, but only
+ * before the log could be trusted), else typed when the account has one (a
+ * number; its email, the Google account added from the profile, or the
+ * address a phone account typed), else none. Null when the ticks couldn't
+ * be read, and for a Google sign-in that made no account: then the list
+ * shows no chips.
  */
-export function tickHalves(p: Pick<Person, "tick" | "phone" | "email" | "links" | "contact" | "noAccount">): { phone: Half; email: Half } | null {
+export function tickHalves(
+  p: Pick<Person, "tick" | "phone" | "email" | "links" | "contact" | "noAccount" | "method">,
+): { phone: PhoneHalf; email: Half } | null {
   if (!p.tick || p.noAccount) return null;
   const email = !!(p.email || p.links?.googleEmail || p.contact?.email);
   return {
-    phone: p.tick.phone ? "proved" : p.phone ? "typed" : "none",
+    phone: p.tick.phone ? "proved" : p.phone ? (p.method === "phone" ? "old" : "typed") : "none",
     email: p.tick.email ? "proved" : email ? "typed" : "none",
   };
 }

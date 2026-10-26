@@ -304,7 +304,7 @@ test("the verified tick: shown only with both halves; the old flag never gives i
   assert.equal(ticksById(null), null);
 });
 
-test("the tick's two halves as chips: proved, typed or none, never the number or the address", () => {
+test("the tick's two halves as chips: proved, old, typed or none, never the number or the address", () => {
   const L = "11111111-2222-4333-8444-555555555555";
   const rows = [
     row({ id: "t", method: "google", email: "t@gmail.com", phone: "+919876543210", created_at: "2026-10-22T06:00:00+00:00" }),
@@ -313,6 +313,7 @@ test("the tick's two halves as chips: proved, typed or none, never the number or
     row({ id: "c", method: "phone", phone: "+919876543212", created_at: "2026-10-22T03:00:00+00:00" }),
     row({ id: L, method: "phone", phone: "+919876543213", created_at: "2026-10-22T02:00:00+00:00" }),
     row({ id: "n", method: "email", email: null, phone: null, created_at: "2026-10-22T01:00:00+00:00" }),
+    row({ id: "g", method: "google", email: "g@gmail.com", phone: "+919876543214", created_at: "2026-10-22T00:00:00+00:00" }),
   ];
   const contacts = [{ user_id: "c", email: "typed@x.in", answer: "saved", source: "prompt", answered_at: null, same_as_other_account: false }];
   const links = [{ user_id: L, google_email: "linked@gmail.com", google_linked_at: null, google_links: 1, google_removed_at: null, phone_added_at: null, phone_opens: null }];
@@ -326,18 +327,21 @@ test("the tick's two halves as chips: proved, typed or none, never the number or
   assert.deepEqual(tickHalves(by.t), { phone: "proved", email: "proved" });
   assert.deepEqual(tickHalves(by.p), { phone: "proved", email: "none" });
   assert.deepEqual(tickHalves(by.e), { phone: "none", email: "proved" });
-  assert.deepEqual(tickHalves(by.c), { phone: "typed", email: "typed" }, "an address a phone account typed is typed, not proved");
-  assert.deepEqual(tickHalves(by[L]), { phone: "typed", email: "typed" }, "a Google account added but not proved (yet) is typed");
+  // A phone sign-up's own number signed in by OTP, only before the log could be trusted: old, never "typed".
+  assert.deepEqual(tickHalves(by.c), { phone: "old", email: "typed" }, "an address a phone account typed is typed, not proved");
+  assert.deepEqual(tickHalves(by[L]), { phone: "old", email: "typed" }, "a Google account added but not proved (yet) is typed");
   assert.deepEqual(tickHalves(by.n), { phone: "none", email: "none" });
+  assert.deepEqual(tickHalves(by.g), { phone: "typed", email: "typed" }, "a number typed onto a Google account is typed");
   assert.deepEqual(
     people.map((p) => tickHalves(p)).map((h) => h && [HALF_TEXT.phone[h.phone].text, HALF_TEXT.email[h.email].text]),
     [
       ["Phone ✓ proved", "Email ✓ Google"],
       ["Phone ✓ proved", "No email"],
       ["No phone", "Email ✓ Google"],
-      ["Phone typed", "Email typed"],
-      ["Phone typed", "Email typed"],
+      ["Phone: old OTP", "Email typed"],
+      ["Phone: old OTP", "Email typed"],
       ["No phone", "No email"],
+      ["Phone typed", "Email typed"],
     ],
   );
   // The chips and their tooltips say what, never which number or address.
