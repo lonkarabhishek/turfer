@@ -15,7 +15,7 @@ import type { BlogAnswer, BlogVisual } from "@/lib/ask/blogTypes";
 import { signArt } from "@/lib/ask/artToken";
 import { candidatePages, deadPage, fetchableHost, pageKey, privateAddress, readWebAnswer, webDay, type WebAnswer } from "@/lib/ask/webLinks";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { BOOKING_APP_DOMAINS } from "@/lib/utils/bookingApps";
+import { BOOKING_APP_DOMAINS, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
 import { questionKey } from "./parseCache";
 import { ROUTER_MODEL, addUsage, getAnthropic, isAskConfigured, newUsage, structured, type AskUsage } from "./ask";
 
@@ -85,7 +85,7 @@ The other scopes:
 - search: a short line in answer (it isn't shown); everything else empty.
 - off_topic: answer with one kind, light line steering back to the article or to finding a game; for a greeting, greet back and say what you can do with this article. Everything else empty except followups.
 
-Writing: Indian English, plain words, the way a friend who plays would put it. No emoji, no exclamation marks, no markdown, no lists inside the answer, no links, phone numbers or emails. Players write in English, Hinglish, Hindi or Marathi: write answer, points and followups in the mix they used, in Latin script, keeping names and amounts as the article writes them.
+Writing: Indian English, plain words, the way a friend who plays would put it. No emoji, no exclamation marks, no markdown, no lists inside the answer, no links, phone numbers or emails. Never name, recommend or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow, Turfwala, TIDA Sports, Sporloc and the like), not even when the player or the conversation names one, and never say a venue is booked online or through an app: TapTurf lists venues itself. Players write in English, Hinglish, Hindi or Marathi: write answer, points and followups in the mix they used, in Latin script, keeping names and amounts as the article writes them.
 
 visual: one at most, and kind none when words are enough, which is most of the time.
 - bars: one measure across several things (every bar the same kind of number in the same unit), when the reader asks for a chart, graph or ranking of amounts, asks which is cheapest or highest across a table, or wants the short version of a ranking or price article. Never bars of unrelated headline numbers (a count, a price and a rating side by side): those are stats. Best from a dataset: dataset is its D number, label_column the column with the names, value_column the column with the amounts, sort desc for highest first, asc for cheapest first or none for the article's order, unit says what the numbers are ("₹ per hour", "rating out of 5", "Google reviews", "cages"), and title names exactly what that column measures in its own words (a Rating column is "Google rating", never "rates" or "prices"); bars stays empty. Only when no dataset fits, give bars from numbers the text states: 2 to 16 of them, one unit for all, each value exactly as the article states it, never a sum, average, conversion or estimate. A chart shows at most 16 bars: with more rows than that, say which ones it shows, never "each of the N".
@@ -129,6 +129,8 @@ const WEB_SYSTEM = `You answer a player's question for TapTurf, an Indian direct
 - Never name, quote or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow, Turfwala, TIDA Sports, Sporloc and the like), even when a page you found is one or mentions one, and don't send the player to other websites: TapTurf lists venues itself.`;
 
 const SUMMARY_REPLY = "Here's the short version of this article.";
+/** A beyond answer that said only what a booking app has ("The article doesn't say whether these are on Playo"). */
+const NOT_COVERED = "This article doesn't cover that.";
 
 /** The reader asked for a picture of some kind: a chart, a graph, a diagram. */
 const VISUAL_ASK = /\b(charts?|graphs?|plots?|bars?|diagrams?|visuals?|visuali[sz](?:e|ation))\b/i;
@@ -515,13 +517,16 @@ async function compose(post: Post, article: Article, ask: BlogAsk, history: Blog
   const scope = summary ? "article" : out.scope;
   if (scope === "search") return { search: true };
 
-  const answer = untag(out.answer);
-  const points = [...new Set(out.points.map((p) => clip(untag(p), 220)).filter(Boolean))].slice(0, 5);
+  // The player's own words reach the model, so a booking app they name
+  // can come back ("…whether these turfs are on Playo"): never shown, nor
+  // kept in the cache below.
+  const answer = scrubBookingApps(untag(out.answer)) ?? (scope === "beyond" ? NOT_COVERED : "");
+  const points = [...new Set(out.points.map((p) => clip(scrubBookingApps(untag(p)) ?? "", 220)).filter(Boolean))].slice(0, 5);
   if (!answer || (summary && points.length === 0)) throw new NoAnswer(usage);
   // In the message's own language: an English question never gets Hinglish follow-ups.
   const english = !isHinglish(summary ? "" : ask.question);
   const followups = cleanFollowups(
-    out.followups.map(untag).filter((f) => !english || !isHinglish(f)),
+    out.followups.map(untag).filter((f) => !mentionsBookingApp(f) && (!english || !isHinglish(f))),
     ask.question,
   );
   const base = { slug: post.slug, title: post.title, readMinutes: post.readMinutes, mode: ask.mode, cta: post.cta ?? null };

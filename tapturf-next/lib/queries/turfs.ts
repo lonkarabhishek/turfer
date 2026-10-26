@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { createRowStore, type ListMeta, type ListPart, type RowStore } from "@/lib/cache/rowStore";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
-import { cleanPriceMentions } from "@/lib/utils/bookingApps";
+import { cleanPriceMentions, cleanVenueName } from "@/lib/utils/bookingApps";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
@@ -92,7 +92,9 @@ export function transformTurf(raw: any): Turf {
   return {
     id: raw.id,
     slug: raw.slug ?? null,
-    name: raw.name,
+    // Without a booking app's attribution ("FS Turf, Churchgate - by
+    // SPORLOC"), so the heading, title, JSON-LD, cards and Ask agree.
+    name: cleanVenueName(raw.name),
     address: raw.address,
     description: raw.description || null,
     sports,
@@ -457,9 +459,10 @@ export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Tur
  * One active turf by id, or null when there is none. A failed read
  * throws: .single() reported a missing row as an error too, so this
  * once read an outage as "no such turf" (the 20 Oct turf page 404s came
- * from the same pattern).
+ * from the same pattern). `storedName` keeps the name as stored, for
+ * the admin listing check, which flags a booking app in it.
  */
-export async function getTurfById(id: string): Promise<Turf | null> {
+export async function getTurfById(id: string, { storedName = false }: { storedName?: boolean } = {}): Promise<Turf | null> {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("turfs")
@@ -468,7 +471,9 @@ export async function getTurfById(id: string): Promise<Turf | null> {
     .maybeSingle();
 
   if (error) throw new Error(`Turf read failed for ${id}: ${error.message}`);
-  return data ? transformTurf(data) : null;
+  if (!data) return null;
+  const turf = transformTurf(data);
+  return storedName ? { ...turf, name: data.name } : turf;
 }
 
 export async function getTurfsBySport(sport: SportPage): Promise<Turf[]> {

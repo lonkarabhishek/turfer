@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BOOKING_APP_DOMAINS,
+  cleanVenueName,
   cleanPriceMention,
   cleanPriceMentions,
   cleanPriceNote,
@@ -186,10 +187,112 @@ test("venue names and plain words that look alike stay", () => {
     "The venue was earlier listed online as Chowdhary Turf.",
     "Max 14 players per football booking and 16 per box cricket booking; external coaches and parties not permitted.",
     "It has two large turfs that can be booked separately or together for a full-pitch cricket game, and it is often used for corporate tournaments.",
+    // The venues Turf Town (Hatte Nagar) and The Turf Town (Gwalior), and "play spots" as a phrase.
+    "Groups play on Turf Town's big pitch most evenings.",
+    "Players rate the lights on The Turf Town highly.",
+    "The Turf Town listing on Google Maps shows it open 24 hours.",
+    "Turf Town shows strong reviews for its floodlights.",
+    "It is one of the best play spots in Kothrud.",
+    // Online booking names no app: a reviewer's price and a venue's own site stay.
+    "Online booking shows ₹1000 but when you reach the court they shamelessly demand ₹1500. (Google review, a year ago)",
+    "The venue's own website offers online booking and a membership plan.",
+    "Online booking is available on the club website.",
   ]) {
     assert.equal(mentionsBookingApp(s), false, s);
     assert.equal(scrubBookingApps(s), s, s);
   }
+});
+
+test("abbreviations and numbers end no sentence, so nothing is left ending on one", () => {
+  for (const [s, kept] of [
+    ["Slots cost Rs. 800 an hour on Playo.", null],
+    ["It costs Rs. 800 an hour on Playo.", null],
+    ["It is near St. Xavier School and is bookable on Playo.", "It is near St. Xavier School."],
+    ["The turf is on Plot No. 5 and is listed on Playo.", "The turf is on Plot No. 5."],
+    ["A good ground. Book on Playo at Rs. 700/hr. Parking is free.", "A good ground. Parking is free."],
+    ["Hit Zone is a box cricket turf at Plot No. 5, listed on Playo.", "Hit Zone is a box cricket turf at Plot No. 5."],
+    [
+      "Astro Park – St. Stanislaus Sports Complex is a football venue at St. Stanislaus school, bookable on Playo.",
+      "Astro Park – St. Stanislaus Sports Complex is a football venue at St. Stanislaus school.",
+    ],
+    ["The turf is opp. D-Mart and is bookable on Hudle.", "The turf is opp. D-Mart."],
+    ["It sits at Sy. No. 12, Dr. Ambedkar Road. It is publicly bookable on Playo.", "It sits at Sy. No. 12, Dr. Ambedkar Road."],
+  ] as const) {
+    assert.equal(scrubBookingApps(s), kept, s);
+  }
+  // Text that names no app is never split or touched.
+  assert.equal(scrubBookingApps("Plot No. 5, opp. D-Mart, St. Xavier Rd."), "Plot No. 5, opp. D-Mart, St. Xavier Rd.");
+});
+
+test("line breaks end a sentence: one line naming an app goes, the other lines stay", () => {
+  assert.equal(
+    scrubBookingApps("Floodlit 7-a-side turf in Baner with parking and washrooms\n\nBook slots on Playo or call the manager"),
+    "Floodlit 7-a-side turf in Baner with parking and washrooms",
+  );
+  assert.equal(
+    scrubBookingApps("Spacious box cricket turf with high nets and bright lights\nAvailable on Hudle\nFree parking for cars and bikes"),
+    "Spacious box cricket turf with high nets and bright lights\nFree parking for cars and bikes",
+  );
+  assert.equal(
+    scrubBookingApps("Welcome to Kick Off Arena! Premium FIFA-grade turf for football and box cricket\nNow on Playo"),
+    "Welcome to Kick Off Arena! Premium FIFA-grade turf for football and box cricket",
+  );
+  assert.equal(scrubBookingApps("Now on Playo\nBook on Hudle"), null);
+});
+
+test("asides between commas go with both commas, and a clause that leans on a dropped one goes too", () => {
+  for (const [s, kept] of [
+    // Live row 93da1857 uses the ", also listed … as …," form.
+    ["Terna Turf, also listed on Playo as Urban Sports turf, is a large artificial-turf ground in Nerul.", "Terna Turf is a large artificial-turf ground in Nerul."],
+    ["Its facilities, listed by booking platforms, include parking and washrooms.", "Its facilities include parking and washrooms."],
+    ["Gamepoint Shoreline, bookable on Hudle, is a large multi-sport centre.", "Gamepoint Shoreline is a large multi-sport centre."],
+    ["Popular options include Turf Up, Kaizen and Arena32, all bookable on Playo.", "Popular options include Turf Up, Kaizen and Arena32."],
+    ["Morning and evening slots available on Playo.", null],
+    ["LBW is usually not given in box cricket, according to Playo, and most venues follow the same rule.", "LBW is usually not given in box cricket, and most venues follow the same rule."],
+    ["Turf shoes with rubber studs are standard, as Playo's guide notes.", "Turf shoes with rubber studs are standard."],
+    ["A standard box cricket cage is about 60 by 30 feet, according to KheloMore's guide.", "A standard box cricket cage is about 60 by 30 feet."],
+    ["Many turfs in Pune list their rules on Playo, and most ban metal studs.", null],
+    ["Playo lists it as open 24 hours, and these fill fast on weekends.", null],
+    // A venue's stored name repeated by a model: the attribution goes, the sentence stays.
+    [
+      "FS Turf, Churchgate - by SPORLOC suits evening players who want floodlights, while Turf X is cheaper by day.",
+      "FS Turf, Churchgate suits evening players who want floodlights, while Turf X is cheaper by day.",
+    ],
+  ] as const) {
+    assert.equal(scrubBookingApps(s), kept, s);
+  }
+});
+
+test("venue names: a booking app's attribution goes, the name and look-alikes stay", () => {
+  for (const [n, kept] of [
+    ["FS Turf, Churchgate - by SPORLOC", "FS Turf, Churchgate"],
+    ["Arena One Turf, Mira Road - by SPORLOC", "Arena One Turf, Mira Road"],
+    ["Box Park (Playo)", "Box Park"],
+    ["Hit Zone | Hudle", "Hit Zone"],
+    ["Kick Off (by Sporloc) Andheri", "Kick Off Andheri"],
+    ["Goal Arena, operated by Sporloc", "Goal Arena"],
+  ]) {
+    assert.equal(cleanVenueName(n), kept, n);
+  }
+  for (const n of [
+    "PlayOn Kochi Football & Cricket Turf",
+    "Playon Sports Arena",
+    "PlayOrbit",
+    "The Turf Town",
+    "Turf Town",
+    "The Turf District",
+    "District 9, Noida",
+    "Khelo Noida",
+    "Khelo Patna Elite Turf - Bihar's Tallest Turf",
+    "KhelO Box Cricket",
+    "Smash2Play Box Cricket & Football Turf | Connaught Place",
+    "CoPlay | Sec 50 Noida",
+    // Never the whole name.
+    "Playo",
+  ]) {
+    assert.equal(cleanVenueName(n), n, n);
+  }
+  assert.equal(cleanVenueName(null), null);
 });
 
 test("paragraph breaks survive, a dropped sentence takes no words with it, and nothing left is null", () => {
@@ -217,11 +320,19 @@ test("no output is a fragment or has stray punctuation", () => {
     "On Playo, it is listed as Fitbox.",
     "The venue (Playo) has lights.",
     "Booking via Hudle; walk-ins are welcome.",
+    "Terna Turf, also listed on Playo as Urban Sports turf, is a large artificial-turf ground.",
+    "Its facilities, listed by booking platforms, include parking and washrooms.",
+    "Gamepoint Shoreline, bookable on Hudle, is a large multi-sport centre.",
+    "Popular options include Turf Up, Kaizen and Arena32, all bookable on Playo.",
+    "Morning and evening slots available on Playo.",
+    "Slots cost Rs. 800 an hour on Playo.",
+    "It is near St. Xavier School and is bookable on Playo.",
+    "Many turfs in Pune list their rules on Playo, and most ban metal studs.",
   ];
   for (const s of inputs) {
     const out = scrubBookingApps(s);
     if (out == null) continue;
-    assert.doesNotMatch(out, /\s[,.;:!?]|,[.!?]|,,|\(\s*\)|^\W|\b(?:is|are|on|by|and|the)\.$/, `${s} -> ${out}`);
+    assert.doesNotMatch(out, /\s[,.;:!?]|,[.!?]|,,|\(\s*\)|^\W|\b(?:is|are|on|by|and|the|all|both|each|rs|no|st|opp)\.$/i, `${s} -> ${out}`);
     assert.equal(mentionsBookingApp(out), false, `${s} -> ${out}`);
     assert.ok(out.split(/\s+/).length >= 3, `${s} -> ${out}`);
   }
@@ -238,7 +349,8 @@ test("what counts as naming an app", () => {
     "Khelo More",
     "Playspots",
     "the Turf Town app",
-    "on Turf Town",
+    "booked on Turf Town",
+    "via Turf Town",
     "on District",
     "District lists parking",
     "Kixar",
@@ -252,12 +364,25 @@ test("what counts as naming an app", () => {
     "external-listing",
     "both apps",
     "on the app",
-    "with online booking",
     "playo.co",
     "https://img1.hudle.in/venues/1.jpg",
+    "Booked a game through the Turf Town App and paid ₹920.",
+    "Slots are bookable on Turf Town.",
+    "Sportomic",
   ]) {
     assert.equal(mentionsBookingApp(s), true, s);
   }
+  for (const s of ["with online booking", "play spots", "The Turf Town", "Turf Town's pitch", "on The Turf Town"]) {
+    assert.equal(mentionsBookingApp(s), false, s);
+  }
+});
+
+test("with online booking: taken out of a description, though it names no app", () => {
+  assert.equal(
+    scrubBookingApps("STS Sports Arena is a cricket and football turf at Deglur Naka, with online booking."),
+    "STS Sports Arena is a cricket and football turf at Deglur Naka.",
+  );
+  assert.equal(scrubBookingApps("A turf with online booking and late-night hours."), "A turf with late-night hours.");
 });
 
 test("booking app hosts: the apps' domains, their subdomains and stand-ins; venues that look alike are not", () => {
@@ -286,6 +411,11 @@ test("booking app hosts: the apps' domains, their subdomains and stand-ins; venu
     "www.playspots.in/v",
     "external-listing",
     "https://img1.booking-app.com/venues/1.jpg",
+    // Marketplaces stored as several unrelated venues' websites.
+    "https://sportomic.com/master-turf",
+    "https://app.lobbi.in/venue-turf/madurai/gta-sports",
+    "https://zappoapp.com/venues/691f452b1452ca022a774dd1",
+    "https://to.bkysta.com/dccyb9",
   ]) {
     assert.equal(isBookingAppUrl(u), true, u);
   }
@@ -299,6 +429,10 @@ test("booking app hosts: the apps' domains, their subdomains and stand-ins; venu
     "https://www.claygrounds.com",
     "https://www.playall.in",
     "https://playon.in",
+    // A chain's own site, and a business directory.
+    "https://www.smash2play.com/",
+    "https://venues.coplay.in/coplay/noida/Sector-50/x/home",
+    "http://www.chattybao.com/The-Phoenix-Turf",
     "https://d1234.cloudfront.net/x.jpg",
     "/turf/external-listing-arena",
     "",
@@ -361,6 +495,10 @@ test("price notes: the app's name and grid out, a plain price statement kept", (
   assert.equal(cleanPriceNote("Listed on Playo"), null);
   // Notes that name no app stay as written.
   assert.equal(cleanPriceNote("Rs 500 per hour (Day), Rs 600 (Night)"), "Rs 500 per hour (Day), Rs 600 (Night)");
+  assert.equal(cleanPriceNote("Online booking shows ₹1000 but they demand ₹1500. (Google review)"), "Online booking shows ₹1000 but they demand ₹1500. (Google review)");
+  // A bare number said as a price is a price statement once the app clause goes.
+  assert.equal(cleanPriceNote("Rates are 1000 per hour, but it is cheaper if you book on the app."), "Rates are 1000 per hour.");
+  assert.equal(cleanPriceNote("We played 2 hours, booked on Playo."), null);
 });
 
 test("price mentions: dropped when only the app's note is left, else cleaned, and the link only to a plain web page", () => {
@@ -403,5 +541,13 @@ test("price figures: the rupee amounts alone", () => {
   assert.deepEqual(priceFigures("₹999 onwards (slot length not stated)"), ["₹999"]);
   assert.deepEqual(priceFigures("Rs 500 per hour (Day), Rs 600 (Night), rs.1,200 weekends, ₹500 again"), ["₹500", "₹600", "₹1,200"]);
   assert.deepEqual(priceFigures("Call for rates"), []);
+  // Google review quotes with bare numbers (216 of 442 non-app notes on 26 Oct).
+  assert.deepEqual(priceFigures("Rates are 1000 per hour. (Google review, 2 years ago)"), ["₹1,000"]);
+  assert.deepEqual(priceFigures("800/- per hour for day time"), ["₹800"]);
+  assert.deepEqual(priceFigures("Like we paid 1500/- Rs for 1 hour"), ["₹1,500"]);
+  assert.deepEqual(priceFigures("1,200 rs a slot, 900 an hour on weekdays"), ["₹1,200", "₹900"]);
+  assert.deepEqual(priceFigures("We played 2 hours with 10 players, 7 per side"), []);
+  assert.deepEqual(priceFigures("The rate is 1300₹ per hour, they charge 1000 for an hour on weekdays"), ["₹1,300", "₹1,000"]);
+  assert.deepEqual(priceFigures("Charges are 2500-2600 for two hours."), ["₹2,600"]);
   assert.deepEqual(priceFigures(null), []);
 });

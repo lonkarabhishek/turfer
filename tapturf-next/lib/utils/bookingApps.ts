@@ -4,8 +4,11 @@ import type { PriceMention } from "../../types/turf";
  * TapTurf names no other turf-booking app, links to none and shows none of
  * their photos (the owner, 26 Oct: "Nothing related to Playo"). The apps:
  * Playo, Hudle, KheloMore, Playspots, Turf Town (the app), District
- * (Zomato's), Kixar, BookMyShow, Turfwala, TIDA Sports and Sporloc. Yappe
- * is a business directory, not one of them.
+ * (Zomato's), Kixar, BookMyShow, Turfwala, TIDA Sports and Sporloc, and
+ * the other marketplaces whose pages were stored as several unrelated
+ * venues' websites (Sportomic, Lobbi, Zappo, bkysta booking links). Yappe
+ * and ChattyBao are business directories, and a chain's own site
+ * (Smash2Play, PlayAll, CoPlay) is the venue's: not one of them.
  *
  * The turf data came from research that read those apps (descriptions
  * said "It is publicly bookable on Playo." on 1,509 turfs, photos came
@@ -23,6 +26,8 @@ import type { PriceMention } from "../../types/turf";
  * - isBookingAppUrl / isBookingAppHost: the apps' hosts (photos, links).
  * - httpUrl, publicLink, googleMapsUrl: links a page may render.
  * - cleanPriceMentions: price notes without the app's name or its link.
+ * - cleanVenueName: a stored name without an app's attribution
+ *   ("FS Turf, Churchgate - by SPORLOC" is FS Turf, Churchgate).
  *
  * Venue names that look alike are other names and stay: PlayOn, PlayOrbit,
  * Huddle, The Turf Town, The Turf District, District 9, Khelo Noida,
@@ -55,6 +60,13 @@ export const BOOKING_APP_DOMAINS = [
   "turfwala.com",
   "tidasports.com",
   "sporloc.com",
+  // Marketplaces stored as the website of several unrelated venues (26 Oct):
+  // sportomic.com/<venue> (4), app.lobbi.in/venue-turf/<city>/<venue> (2),
+  // zappoapp.com/venues/<id> (4), to.bkysta.com booking links (2).
+  "sportomic.com",
+  "lobbi.in",
+  "zappoapp.com",
+  "bkysta.com",
   // A booking app's photo store: the photos of it in turfs.images came in
   // with venue listings the data team relabelled external-listing
   // (photos_2026-09-26_batch2b), next to img1.hudle.in links.
@@ -148,12 +160,26 @@ export function googleMapsUrl(url: unknown): string | null {
 // ── Text: what counts as naming an app ──
 
 // Names that only ever mean the app. Word-bounded, so PlayOn, PlayOrbit,
-// Huddle, Khelo Noida and Tidake are other names.
-const NAME = String.raw`playo|hudle|khelo\s?more|play\s?spots|kixar|book\s?my\s?show|turf\s?wala|tida\s+sports|sporloc`;
+// Huddle, Khelo Noida and Tidake are other names, and "play spots" is a
+// plain phrase ("one of the best play spots in Kothrud").
+const NAME = String.raw`playo|hudle|khelo\s?more|playspots|kixar|book\s?my\s?show|turf\s?wala|tida\s+sports|sporloc|sportomic|lobbi|zappo\s?app`;
 const NAMED = new RegExp(String.raw`\b(?:${NAME})\b`, "i");
-// Turf Town is also a venue name: the app only as "the Turf Town app", "on Turf Town", "Turf Town lists".
-const TURF_TOWN =
-  /\bturf\s?town\s+app\b|\b(?:on|via|through|using)\s+(?:the\s+)?turf\s?town\b(?!\s+(?:turf|arena|ground|sports?|club|box|cricket|football))|\bturf\s?town\s+(?:lists?|listing|sells?|shows?)\b/i;
+// Turf Town is also a venue name (Turf Town in Hatte Nagar, The Turf Town
+// in Gwalior): the app only as "the Turf Town app", booked or listed "on
+// Turf Town", "via Turf Town", "Turf Town lists". Never "The Turf Town"
+// (the venue), "Turf Town's big pitch", "play on Turf Town" or "the Turf
+// Town listing on Google Maps". Case is spelt out so "The" can tell them apart.
+const TT = String.raw`(?<!The\s)\b[Tt](?:urf|URF)\s?[Tt](?:own|OWN)\b(?!['’]s)`;
+const TT_VENUE = String.raw`(?!\s+(?:[Tt]urf|[Aa]rena|[Gg]round|[Ss]ports?|[Cc]lub|[Bb]ox|[Cc]ricket|[Ff]ootball))`;
+const TURF_TOWN = new RegExp(
+  [
+    String.raw`\b[Tt](?:urf|URF)\s?[Tt](?:own|OWN)\s+[Aa](?:pp|PP)\b`,
+    String.raw`\b(?:[Bb]ook(?:able|ed|ings?)?|[Ll]isted|[Aa]vailable|[Ss]old|[Ss]lots?|[Rr]eserved?)\b[^.!?]{0,40}?\b(?:on|via|through|using)\s+(?:the\s+)?${TT}${TT_VENUE}`,
+    String.raw`\b(?:[Vv]ia|[Tt]hrough|[Uu]sing)\s+(?:the\s+)?${TT}${TT_VENUE}`,
+    String.raw`${TT}\s+(?:lists?|sells?)\b`,
+    String.raw`${TT}\s+(?:listing|page)\b(?!\s+(?:on|in)\s+(?:[Gg]oogle|[Mm]aps))`,
+  ].join("|"),
+);
 // District is also a plain word and part of place and venue names (the
 // Financial District, The Turf District, District 9, District Road): the
 // app only capitalised and in context.
@@ -168,7 +194,6 @@ const STAND_IN = new RegExp(
     String.raw`\b(?:both|all|several|many|multiple|various|major|main|popular|other|third[\s-]party|sports?|turf|venue|online)\s+(?:booking\s+)?(?:apps|platforms|aggregators)\b`,
     String.raw`\bapp\s+listings?\b`,
     String.raw`\b(?:on|via|through|from|using|in)\s+(?:the|an?)\s+app\b(?!\s+store)`,
-    String.raw`\bonline\s+booking\b`,
   ].join("|"),
   "i",
 );
@@ -205,8 +230,15 @@ const re = (s: string, flags = "i") => new RegExp(s, flags);
 const ASIDE = /\s*[([]([^()[\]]*)[)\]]/g;
 /** "…, operated by Sporloc." / "FS Turf - by SPORLOC". */
 const RUN_BY = re(String.raw`(?:\s*,\s*|\s+[-–—]\s*|\s+)(?:operated|run|managed|powered|owned)?\s*by\s+(?:the\s+)?(?:${NAME})\b${CLAUSE_END}`, "gi");
+/** "FS Turf, Churchgate - by SPORLOC suits…" (a venue's stored name, repeated): the dash and app go wherever they sit. */
+const RUN_BY_DASH = re(String.raw`\s+[-–—]\s*(?:(?:operated|run|managed|powered|owned)\s+)?by\s+(?:the\s+)?(?:${NAME})\b`, "gi");
 /** "According to Playo, it opens at 6." → "It opens at 6." */
 const ACCORDING = /^(?:according\s+to|as\s+per|per)\s+([^,]+),\s*(.+)$/i;
+/** "…box cricket, according to Playo, and most…" / "…, as Playo notes." : an aside in mid-sentence or at its end. */
+const ACCORDING_MID = re(
+  String.raw`\s*,\s*(?:(?:according\s+to|as\s+per|per)\s+(?:${APPS})(?:['’]s\s+[\w-]+)?|as\s+(?:${APPS})(?:['’]s\s+[\w-]+)?\s+(?:notes?|says?|states?|mentions?|puts\s+it|shows?))${CLAUSE_END}`,
+  "gi",
+);
 /** "It does not appear on the main booking apps, so slots are booked directly with the venue." → "Slots are booked…" */
 const SO_CLAUSE = /^([^,;]+),\s+(?:so|and\s+so|which\s+means)\s+(.+)$/i;
 /** "Maps and Playo list it as open round the clock." → "Maps lists it as…" */
@@ -223,9 +255,14 @@ const AND_BOOKABLE = re(
   String.raw`(?:\s*,\s*|\s+)(?:and|but)\s+(?:(?:the\s+(?:venue|turf|ground|club)|it|they|slots|courts?)\s+)?(?:(?:is|are|can\s+(?:also\s+)?be)\s+)?(?:also\s+)?(?:publicly\s+)?(?:bookable|booked|listed|available|sold)\b[^,;.!?]*?\b(?:on|via|through|with)\s+(?:${APPS})${TAIL}${CLAUSE_END}`,
   "gi",
 );
-/** "…in the MIDC area, listed on Playo." / "…Kompally, listed on Playo as Fitbox Kompally." */
+/** The sentence's own verb after an aside between commas: "Terna Turf, also listed on Playo, is…" keeps no comma before "is". */
+const PREDICATE = String.raw`(?:is|are|was|were|has|have|had|offers?|includes?|provides?|features?|runs?|sits?|lies|lie|stands?|operates?|hosts?|opens?|closes?|charges?|costs?|can|will|also|comes?|gets?)\b`;
+/**
+ * "…in the MIDC area, listed on Playo." / "…Kompally, listed on Playo as Fitbox Kompally." /
+ * "…and Arena32, all bookable on Playo." / "Its facilities, listed by booking platforms, include…"
+ */
 const COMMA_LISTED = re(
-  String.raw`\s*,\s*(?:(?:it\s+is|and)\s+)?(?:also\s+)?(?:publicly\s+)?(?:listed|bookable|available|sold|found)\s+(?:on|via|through)\s+(?:${APPS})${TAIL}${CLAUSE_END}`,
+  String.raw`\s*,\s*(?:(?:it\s+is|and|all|both|each|(?:which|that)\s+(?:is|are))\s+)?(?:also\s+)?(?:publicly\s+)?(?:listed|bookable|available|sold|found)\s+(?:on|via|through|by)\s+(?:${APPS})${TAIL}(?:\s*,(?=\s*${PREDICATE})|${CLAUSE_END})`,
   "gi",
 );
 /** "…washrooms and parking listed by booking platforms." → "…washrooms and parking." (not "Parking is listed on Playo.") */
@@ -237,16 +274,29 @@ const LISTED_BY = re(
 const AND_APP_DOES = re(String.raw`(?:\s*,\s*|\s+)(?:and|but|while|whereas|though)\s+(?:${APPS})\s+(?:also\s+)?[a-z]+\b[^;]*?(?=[.!?]?\s*$)`);
 /** "…small-sided games, booking listings cover formats from 4- to 11-a-side, and coaching…" */
 const MID_CLAUSE = re(String.raw`,\s*(?:the\s+|its\s+)?(?:${APPS})\b[^,;]*(?=,)`, "gi");
-/** "…with online booking and late-night hours." → "…with late-night hours." */
+/**
+ * "…with online booking and late-night hours." → "…with late-night hours."
+ * Online booking names no app (a venue's own site has it too), so it is
+ * only wording to take out of a description, never a reason to drop a
+ * sentence or a reviewer's price ("Online booking shows ₹1000…").
+ */
 const WITH_ONLINE_AND = /\bwith\s+online\s+booking\s+and\s+/gi;
 const WITH_ONLINE = /,?\s+with\s+online\s+booking(?=\s*(?:[,;]|[.!?]?\s*$))/gi;
+const ONLINE_WORDING = /\bwith\s+online\s+booking\b/i;
 
-/** "is listed on Playo", "publicly bookable on Playo": the listing is the sentence's verb, not a note on a noun. */
-const BE = /^(?:is|are|was|were|be|been|being|also|not|now|still|only|currently|\w+ly)$/i;
+/** What a sentence without an app may still lose: "with online booking". */
+function withoutOnlineBooking(s: string): string {
+  return ONLINE_WORDING.test(s) ? tidy(s.replace(WITH_ONLINE_AND, "with ").replace(WITH_ONLINE, "")) : s;
+}
+
+/** "is listed on Playo", "publicly bookable on Playo": the listing is the sentence's verb, not a note on a noun. "all bookable on Playo": no noun to keep. */
+const BE = /^(?:is|are|was|were|be|been|being|also|not|now|still|only|currently|\w+ly|all|both|each|many|some|most|several|which|that|who)$/i;
+/** A finite verb before the note: "It offers … parking listed by booking platforms" keeps "…parking"; "Morning slots available on Playo" has none, so it goes. */
+const FINITE = /\b(?:is|are|was|were|has|have|had|offers?|includes?|provides?|features?|comes?|gets?|runs?|hosts?|boasts?|can|will|does|do)\b/i;
 /** What "It has …" may be followed by: a list of things, not "it as…", hours or prices. */
 const NOT_A_THING = /^(?:(?:it|its|it's|the\s+(?:venue|turf|ground|place|club)|this|that|them|these|those|as|hours?|timings?|opening|open|slots?|prices?|rates?|no|nothing|only|one\s+of|rs|inr)\b|₹)/i;
 /** Words a sentence cannot end on: "Parking and washrooms are.", "It is listed on." */
-const DANGLING = /\b(?:is|are|was|were|be|been|by|on|via|through|and|or|but|with|the|a|an|of|to|for|as|at|in|its|their|from|can|will|also|which|that|so)[.!?]?$|\b(?:is|are|was|were)\s+\w+ly[.!?]?$/i;
+const DANGLING = /\b(?:is|are|was|were|be|been|by|on|via|through|and|or|but|with|the|a|an|of|to|for|as|at|in|its|their|from|can|will|also|which|that|so|all|both|each)[.!?]?$|\b(?:is|are|was|were)\s+\w+ly[.!?]?$/i;
 
 const cap = (s: string) => s.replace(/^(\W*)(\p{Ll})/u, (_, pre: string, c: string) => pre + c.toUpperCase());
 
@@ -268,6 +318,12 @@ function tidy(s: string): string {
 
 /** A clause that can stand as a sentence of its own starts like this ("reviewers praise…", "it opens…"), not "costs ₹800". */
 const SUBJECT = /^\s*(?:it|its|the|they|there|this|these|those|a|an|some|most|many|one|two|reviewers?|players?|regulars|visitors|staff|slots|parking|google|maps|coaching|floodlights|prices|rates)\b/i;
+/**
+ * A clause that leans on the one before it: "most ban metal studs", "most
+ * venues follow the same rule", "these fill fast". Without that clause it
+ * means nothing, so the sentence goes whole.
+ */
+const LEANS_BACK = /^\s*(?:(?:most|many|some|these|those|this|that|both|all|each|several|few|others?)\b(?!\s+(?:players?|reviewers?|regulars|visitors|people|users|reviews?)\b)|.*\b(?:the\s+same|too|either|as\s+well)\b)/i;
 
 /**
  * A sentence of clauses joined by ", and" (", but", "; " …) where one
@@ -286,7 +342,7 @@ function dropSide(s: string): string {
   for (let i = 1; i < parts.length; i += 2) {
     const tail = parts.slice(i + 1).join("");
     // After a semicolon the rest is a clause of its own; after ", and" only when it starts like one.
-    const standsAlone = parts[i].startsWith(";") || SUBJECT.test(tail);
+    const standsAlone = (parts[i].startsWith(";") || SUBJECT.test(tail)) && !LEANS_BACK.test(tail);
     if (mentionsBookingApp(parts.slice(0, i).join("")) && !mentionsBookingApp(tail) && standsAlone) return cap(tail.trim());
   }
   return s;
@@ -296,10 +352,14 @@ function dropSide(s: string): string {
 function cleanSentence(sentence: string): string | null {
   const s = sentence.trim();
   if (!s) return null;
-  if (!mentionsBookingApp(s)) return s;
+  if (!mentionsBookingApp(s)) return withoutOnlineBooking(s);
   const end = /[.!?]$/.test(s) ? s.slice(-1) : "";
 
-  let out = s.replace(ASIDE, (m, inner: string) => (mentionsBookingApp(inner) ? "" : m)).replace(RUN_BY, "");
+  let out = s
+    .replace(ASIDE, (m, inner: string) => (mentionsBookingApp(inner) ? "" : m))
+    .replace(RUN_BY_DASH, "")
+    .replace(RUN_BY, "")
+    .replace(ACCORDING_MID, "");
 
   const according = ACCORDING.exec(out);
   if (according && mentionsBookingApp(according[1]) && !mentionsBookingApp(according[2])) out = cap(according[2]);
@@ -319,7 +379,7 @@ function cleanSentence(sentence: string): string | null {
   out = out
     .replace(AND_BOOKABLE, "")
     .replace(COMMA_LISTED, "")
-    .replace(LISTED_BY, (m, before: string) => (BE.test(before) ? m : before))
+    .replace(LISTED_BY, (m, before: string, offset: number, whole: string) => (BE.test(before) || !FINITE.test(whole.slice(0, offset)) ? m : before))
     .replace(AND_APP_DOES, "")
     .replace(MID_CLAUSE, "")
     .replace(WITH_ONLINE_AND, "with ")
@@ -339,20 +399,48 @@ function cleanSentence(sentence: string): string | null {
 }
 
 /**
+ * A period after one of these ends no sentence: "Rs. 800", "Plot No. 5",
+ * "St. Xavier School", "Sy. No. 12", "opp. D-Mart", "Dr. Ambedkar Road".
+ */
+const ABBREV = /(?:^|[\s(.,/-])(?:rs|no|nos|st|sr|sy|dr|opp|nr|rd|approx|bldg|ph|sec|sect|govt|dist|mr|mrs|ms|jr|vs)\.$/i;
+
+/**
+ * The text as [sentence, the whitespace after it] pairs. Line breaks end a
+ * sentence too (an owner's lines often have no full stop), and a period
+ * after an abbreviation, or before a lower-case word or a number, doesn't.
+ */
+function sentencesOf(text: string): [string, string][] {
+  const out: [string, string][] = [];
+  const lines = text.split(/(\s*\n\s*)/);
+  for (let i = 0; i < lines.length; i += 2) {
+    const lineBreak = lines[i + 1] ?? "";
+    const parts = lines[i].split(/(?<=[.!?])(\s+)/);
+    const line: [string, string][] = [];
+    for (let j = 0; j < parts.length; j += 2) {
+      const prev = line[line.length - 1];
+      if (prev && (ABBREV.test(prev[0]) || /^[\p{Ll}\d₹]/u.test(parts[j]))) {
+        prev[0] += prev[1] + parts[j];
+        prev[1] = parts[j + 1] ?? "";
+      } else line.push([parts[j], parts[j + 1] ?? ""]);
+    }
+    line[line.length - 1][1] += lineBreak;
+    out.push(...line);
+  }
+  return out;
+}
+
+/**
  * The text without what names a booking app or a stand-in for one; null
  * when nothing is left. Sentences that don't name one come back as they
- * were, and paragraph breaks stay.
+ * were, and paragraph and line breaks stay.
  */
 export function scrubBookingApps(text: string | null | undefined): string | null {
   if (!text || typeof text !== "string") return null;
-  if (!mentionsBookingApp(text)) return text.trim() || null;
-  // Sentences and the whitespace after each, so paragraph breaks survive.
-  const parts = text.split(/(?<=[.!?])(\s+)/);
+  if (!mentionsBookingApp(text) && !ONLINE_WORDING.test(text)) return text.trim() || null;
   let out = "";
   let gap = "";
-  for (let i = 0; i < parts.length; i += 2) {
-    const after = parts[i + 1] ?? "";
-    const kept = cleanSentence(parts[i]);
+  for (const [sentence, after] of sentencesOf(text)) {
+    const kept = cleanSentence(sentence);
     if (kept) {
       out += (out ? gap : "") + kept;
       gap = after;
@@ -368,6 +456,27 @@ function countBreaks(s: string): number {
   return (s.match(/\n/g) ?? []).length;
 }
 
+// ── Venue names ──
+
+const BY_APP = String.raw`(?:(?:operated|run|managed|powered|owned|hosted)\s+)?by\s+`;
+const APP_NAME = String.raw`(?:the\s+)?(?:(?:${NAME})(?:\s+app)?|turf\s?town\s+app|district\s+app)`;
+/** "(by Sporloc)", "[Playo]", "(on Hudle)" anywhere in the name. */
+const NAME_ASIDE = re(String.raw`\s*[([]\s*(?:${BY_APP}|on\s+|via\s+)?${APP_NAME}\s*[)\]]`, "gi");
+/** " - by SPORLOC", " | Hudle", ", operated by Sporloc", " by Playo" at the end. */
+const NAME_TAIL = re(String.raw`(?:\s*[-–—|:,]\s*(?:${BY_APP})?|\s+${BY_APP})${APP_NAME}\s*$`);
+
+/**
+ * A venue's name without a booking app's attribution: "FS Turf, Churchgate
+ * - by SPORLOC" is "FS Turf, Churchgate". Only a bracketed or trailing
+ * attribution goes, never the whole name, and names that look alike stay
+ * (PlayOn, PlayOrbit, The Turf Town, District 9, Khelo Noida).
+ */
+export function cleanVenueName<T>(name: T): T {
+  if (typeof name !== "string") return name;
+  const out = name.replace(NAME_ASIDE, "").replace(NAME_TAIL, "").replace(/\s{2,}/g, " ").replace(/[\s,;:|–—-]+$/, "").trim();
+  return (out.length >= 2 ? out : name) as T;
+}
+
 // ── Price notes ──
 
 /**
@@ -379,7 +488,9 @@ function countBreaks(s: string): number {
  */
 const NOTE_SOURCE = re(String.raw`^\s*(?:${APP_WORD})(?:['’]s)?[^:\n]{0,120}?:\s*`);
 const NOTE_LEAD = re(String.raw`^\s*(?:${APP_WORD})(?:['’]s)?(?:\s+(?:listing|page|grid))?\s+(?:price\s+range|shows|says|lists?|header|from)\s+`);
-const AMOUNT = /(?:₹|\brs\.?|\binr)\s?\d/i;
+/** A bare number said as a price: "1000 per hour", "800/-", "1500 rs", "1300₹", "1000 for an hour", "2600 for two hours". */
+const BARE_PRICE = String.raw`(\d[\d,]*(?:\.\d+)?)\s*(?:₹|\/-|\/\s*(?:hr|hour|h)\b|(?:rs|rupees|inr)\b|(?:for\s+)?(?:per|an|a|one|\/)\s*(?:hour|hr|slot|head|person|player|match|game)s?\b|for\s+(?:two|three|2|3)\s+(?:hours?|hrs?)\b)`;
+const AMOUNT = new RegExp(String.raw`(?:₹|\brs\.?|\binr)\s?\d|\b${BARE_PRICE}`, "i");
 
 /**
  * A price note's text without the app: "booking-app listing: '₹999
@@ -432,9 +543,11 @@ export function cleanPriceMentions(list: unknown): PriceMention[] | null {
 export function priceFigures(text: string | null | undefined): string[] {
   if (!text || typeof text !== "string") return [];
   const out: string[] = [];
-  for (const m of text.matchAll(/(?:₹|\brs\.?|\binr)\s?(\d[\d,]*(?:\.\d+)?)/gi)) {
-    const n = Number(m[1].replace(/,/g, ""));
-    if (!Number.isFinite(n) || n <= 0) continue;
+  // ₹1,200, Rs 500, rs.900; or a bare number said as a price ("1000 per hour", "800/-"), not "2 hours".
+  for (const m of text.matchAll(new RegExp(String.raw`(?:₹|\brs\.?|\binr)\s?(\d[\d,]*(?:\.\d+)?)|\b${BARE_PRICE}`, "gi"))) {
+    const bare = m[1] == null;
+    const n = Number((m[1] ?? m[2]).replace(/,/g, ""));
+    if (!Number.isFinite(n) || n <= 0 || (bare && n < 100)) continue;
     const label = `₹${n.toLocaleString("en-IN")}`;
     if (!out.includes(label)) out.push(label);
   }

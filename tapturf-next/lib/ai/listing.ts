@@ -52,10 +52,14 @@ export function listingFacts(t: Turf): Record<string, unknown> {
   delete facts.recent_reviews;
   // buildFacts gives the text as players see it (booking apps taken out);
   // the editor gets the stored text, and which fields still name an app.
-  const stored = { name: t.name, description: t.description, good_to_know: t.good_to_know, access_notes: t.access_notes, website: t.website_url, review_link: t.external_review_url, instagram: t.instagram_url };
-  const appFields = Object.entries(stored)
-    .filter(([, v]) => mentionsBookingApp(v) || isBookingAppUrl(v))
-    .map(([k]) => k);
+  // A link counts by its host only: a Google Maps link carries the venue's
+  // Google name in its path ("Titans+Turf+-+by+SPORLOC") and is fine.
+  const text = { name: t.name, description: t.description, good_to_know: t.good_to_know, access_notes: t.access_notes };
+  const links = { website: t.website_url, review_link: t.external_review_url, instagram: t.instagram_url };
+  const appFields = [
+    ...Object.entries(text).filter(([, v]) => mentionsBookingApp(v)),
+    ...Object.entries(links).filter(([, v]) => isBookingAppUrl(v)),
+  ].map(([k]) => k);
   return {
     ...facts,
     good_to_know_full: t.good_to_know ?? null,

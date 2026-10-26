@@ -68,6 +68,8 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
 
   // Reported prices as numbers only: a note's words said where it came
   // from ("booking-app listing: …"), and the sheet names no booking app.
+  // priceFigures reads ₹-marked amounts and bare ones said as a price
+  // ("Rates are 1000 per hour", "800/-"), as most Google quotes are.
   const reported = [...new Set((t.price_mentions ?? []).flatMap((m) => (m.price_inr ? [`₹${m.price_inr}`] : priceFigures(m.text))))].slice(0, 4);
 
   // Every free-text field without booking apps (lib/utils/bookingApps.ts):
