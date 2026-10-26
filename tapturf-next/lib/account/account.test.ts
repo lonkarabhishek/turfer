@@ -29,14 +29,24 @@ const nowS = () => Math.floor(Date.now() / 1000);
 
 function firebaseToken(over: Record<string, unknown> = {}, header?: object): string {
   return jwt(
-    { iss: FIREBASE_ISSUER, aud: "tapturf", sub: "fb-uid", iat: nowS() - 10, auth_time: nowS() - 10, exp: nowS() + 3600, phone_number: "+919876543210", ...over },
+    {
+      iss: FIREBASE_ISSUER,
+      aud: "tapturf",
+      sub: "fb-uid",
+      iat: nowS() - 10,
+      auth_time: nowS() - 10,
+      exp: nowS() + 3600,
+      phone_number: "+919876543210",
+      firebase: { sign_in_provider: "phone", identities: { phone: ["+919876543210"] } },
+      ...over,
+    },
     header,
   );
 }
 
 /** An unsigned token in Supabase's shape: the checker asks GoTrue, never checks it itself. */
 const supabaseToken = (over: Record<string, unknown> = {}) =>
-  `${b64({ alg: "HS256" })}.${b64({ iss: `${SUPABASE}/auth/v1`, exp: nowS() + 3600, sub: "x", ...over })}.sig`;
+  `${b64({ alg: "HS256" })}.${b64({ iss: `${SUPABASE}/auth/v1`, exp: nowS() + 3600, sub: "x", amr: [{ method: "oauth", timestamp: nowS() - 30 }], ...over })}.sig`;
 
 type Call = { url: string; auth?: string };
 
@@ -102,37 +112,51 @@ test("peekToken reads iss and exp, refuses junk", () => {
 });
 
 test("phoneIdentity: +91 and exactly 10 digits only", () => {
-  const c = (phone_number?: string) => phoneIdentity({ sub: "s", exp: 1, phone_number });
-  assert.deepEqual(c("+919876543210"), { kind: "phone", phone: "+919876543210" });
+  const c = (phone_number?: string) => phoneIdentity({ sub: "s", exp: 1, iat: 5, auth_time: 4, sign_in_provider: "phone", phone_number });
+  assert.deepEqual(c("+919876543210"), { kind: "phone", phone: "+919876543210", sub: "s", authTime: 4, iat: 5, provider: "phone" });
+  assert.deepEqual(phoneIdentity({ sub: "s", exp: 1, iat: 5, phone_number: "+919876543210" }), {
+    kind: "phone",
+    phone: "+919876543210",
+    sub: "s",
+    authTime: null,
+    iat: 5,
+    provider: null,
+  });
   for (const bad of [undefined, "", "9876543210", "+19876543210", "+91987654321", "+9198765432100", "+91 9876543210", "919876543210"]) {
     assert.equal(c(bad), null, String(bad));
   }
 });
 
 test("googleIdentity: Google sign-ins only, never anonymous", () => {
-  assert.deepEqual(googleIdentity(GOOGLE_USER), {
+  const AT = 1_790_000_000;
+  assert.deepEqual(googleIdentity(GOOGLE_USER, AT), {
     kind: "google",
     uid: GOOGLE_USER.id,
     email: "someone@example.com",
     name: "Some One",
     avatar: "https://lh3.googleusercontent.com/a/x",
+    oauthAt: AT,
   });
-  assert.equal(googleIdentity({ ...GOOGLE_USER, app_metadata: { providers: ["email"] } }), null);
-  assert.equal(googleIdentity({ ...GOOGLE_USER, app_metadata: {} }), null);
-  assert.equal(googleIdentity({ ...GOOGLE_USER, is_anonymous: true }), null);
-  assert.equal(googleIdentity({ ...GOOGLE_USER, id: "not-a-uuid" }), null);
-  assert.equal(googleIdentity(null), null);
-  // Google added to an email account still counts: the email is Google's.
-  assert.ok(googleIdentity({ ...GOOGLE_USER, app_metadata: { providers: ["email", "google"] } }));
+  assert.equal(googleIdentity({ ...GOOGLE_USER, app_metadata: { providers: ["email"] } }, AT), null);
+  assert.equal(googleIdentity({ ...GOOGLE_USER, app_metadata: {} }, AT), null);
+  assert.equal(googleIdentity({ ...GOOGLE_USER, is_anonymous: true }, AT), null);
+  assert.equal(googleIdentity({ ...GOOGLE_USER, id: "not-a-uuid" }, AT), null);
+  assert.equal(googleIdentity(null, AT), null);
+  // Not from a Google sign-in (no amr oauth): not Google, even with a Google identity on the account.
+  assert.equal(googleIdentity(GOOGLE_USER, null), null);
+  // Google added to an email account still counts when this session came from Google: the email is Google's.
+  assert.ok(googleIdentity({ ...GOOGLE_USER, app_metadata: { providers: ["email", "google"] } }, AT));
 });
 
 test("Firebase token: verified, phone kept, cached until checked again", async () => {
   const f = fakeFetch();
   const check = checker(f);
-  const t = firebaseToken();
-  assert.deepEqual(await check(t), { ok: { kind: "phone", phone: "+919876543210" } });
+  const at = nowS() - 10;
+  const t = firebaseToken({ iat: at, auth_time: at });
+  const want = { ok: { kind: "phone", phone: "+919876543210", sub: "fb-uid", authTime: at, iat: at, provider: "phone" } };
+  assert.deepEqual(await check(t), want);
   const n = f.calls.length;
-  assert.deepEqual(await check(t), { ok: { kind: "phone", phone: "+919876543210" } });
+  assert.deepEqual(await check(t), want);
   assert.equal(f.calls.length, n, "second check comes from the cache");
 });
 
@@ -255,6 +279,11 @@ test("toProfile keeps the known fields and refuses malformed answers", () => {
     contact_email: null,
     ask_email: false,
     email_editable: false,
+    google_email: null,
+    google_linkable: false,
+    phone_confirmed: false,
+    phone_settable: false,
+    ask_google: false,
   });
   assert.equal(toProfile({ id: "u1", name: "A", email_editable: true })?.email_editable, true);
   assert.equal(toProfile({ id: "u1", name: "A" })?.taggable, true);

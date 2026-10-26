@@ -15,6 +15,12 @@ export type FirebaseIdClaims = {
   phone_number?: string;
   email?: string;
   exp: number;
+  /** When this token was minted (a refresh mints a new one). */
+  iat: number;
+  /** When the person signed in (the OTP was checked); a refresh keeps it. */
+  auth_time?: number;
+  /** How they signed in: "phone" for an OTP (payload.firebase.sign_in_provider). */
+  sign_in_provider?: string;
 };
 
 /**
@@ -101,10 +107,14 @@ export async function checkFirebaseIdToken(
   if (typeof payload.iat !== "number" || payload.iat > now + skew) return { invalid: true };
   if (typeof payload.auth_time === "number" && payload.auth_time > now + skew) return { invalid: true };
 
+  const firebase = payload.firebase && typeof payload.firebase === "object" ? (payload.firebase as Record<string, unknown>) : {};
   return {
     ok: {
       sub: payload.sub,
       exp: payload.exp,
+      iat: payload.iat,
+      auth_time: typeof payload.auth_time === "number" ? payload.auth_time : undefined,
+      sign_in_provider: typeof firebase.sign_in_provider === "string" ? firebase.sign_in_provider : undefined,
       phone_number: typeof payload.phone_number === "string" ? payload.phone_number : undefined,
       email: typeof payload.email === "string" ? payload.email : undefined,
     },

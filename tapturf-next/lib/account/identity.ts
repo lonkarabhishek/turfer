@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 import { checkFirebaseIdToken, FIREBASE_ISSUER, type FirebaseIdClaims } from "../firebase/verifyIdToken";
+import { INDIAN_E164_RE, oauthAmrAt } from "./fresh";
+
+export { INDIAN_E164_RE };
 
 /**
  * Who is calling an account route, from the Bearer token the browser
@@ -11,16 +14,40 @@ import { checkFirebaseIdToken, FIREBASE_ISSUER, type FirebaseIdClaims } from "..
  *   ok          a verified identity
  *   invalid     not a valid, current sign-in: answer 401 sign_in
  *   unavailable could not check right now: answer 503, never "signed out"
+ *
+ * Google means Google: a Supabase session counts only when its token's
+ * `amr` has `method: oauth` (the rule private._caller_key uses), so an
+ * email and password session is refused even on an account that also has
+ * Google. Both kinds carry what lib/account/fresh.ts needs to tell a
+ * fresh sign-in from an old one.
  */
 
-export type Identity =
-  | { kind: "phone"; phone: string }
-  | { kind: "google"; uid: string; email: string | null; name: string | null; avatar: string | null };
+export type PhoneIdentity = {
+  kind: "phone";
+  phone: string;
+  /** The Firebase user. */
+  sub: string;
+  /** When the OTP sign-in happened (seconds); null when the token does not say. */
+  authTime: number | null;
+  /** When this token was minted (seconds). */
+  iat: number;
+  /** firebase.sign_in_provider: "phone" for an OTP. */
+  provider: string | null;
+};
+
+export type GoogleIdentity = {
+  kind: "google";
+  uid: string;
+  email: string | null;
+  name: string | null;
+  avatar: string | null;
+  /** When the person signed in with Google (the amr oauth timestamp, seconds). A refresh keeps it. */
+  oauthAt: number;
+};
+
+export type Identity = PhoneIdentity | GoogleIdentity;
 
 export type IdentityResult = { ok: Identity } | { invalid: true } | { unavailable: true };
-
-/** Phone sign-ins are Indian numbers only: "+91" and exactly 10 digits. */
-export const INDIAN_E164_RE = /^\+91\d{10}$/;
 
 /** Longer than any real token; anything past it is refused before parsing. */
 const MAX_TOKEN_CHARS = 8_000;
@@ -45,9 +72,17 @@ export function bearerToken(req: Request): string | null {
 }
 
 /** A verified Firebase token's identity: only a phone sign-in with an Indian number counts. */
-export function phoneIdentity(claims: FirebaseIdClaims): Identity | null {
+export function phoneIdentity(claims: FirebaseIdClaims): PhoneIdentity | null {
   const phone = claims.phone_number ?? "";
-  return INDIAN_E164_RE.test(phone) ? { kind: "phone", phone } : null;
+  if (!INDIAN_E164_RE.test(phone)) return null;
+  return {
+    kind: "phone",
+    phone,
+    sub: claims.sub,
+    authTime: typeof claims.auth_time === "number" ? claims.auth_time : null,
+    iat: claims.iat,
+    provider: claims.sign_in_provider ?? null,
+  };
 }
 
 const str = (x: unknown): string | null => (typeof x === "string" && x.trim() ? x.trim() : null);
@@ -55,8 +90,11 @@ const str = (x: unknown): string | null => (typeof x === "string" && x.trim() ? 
 /**
  * A GoTrue user's identity: only a Google sign-in counts (not email, not
  * anonymous). Name and photo come from Google's profile, as before.
+ * oauthAt is the amr oauth timestamp of that same session's access token
+ * (oauthAmrAt); without one it is not a Google sign-in.
  */
-export function googleIdentity(user: unknown): Identity | null {
+export function googleIdentity(user: unknown, oauthAt: number | null): GoogleIdentity | null {
+  if (oauthAt === null || !Number.isFinite(oauthAt)) return null;
   if (!user || typeof user !== "object") return null;
   const u = user as Record<string, unknown>;
   const uid = str(u.id);
@@ -71,6 +109,7 @@ export function googleIdentity(user: unknown): Identity | null {
     email: str(u.email)?.toLowerCase() ?? null,
     name: str(meta.full_name) ?? str(meta.name),
     avatar: str(meta.avatar_url) ?? str(meta.picture),
+    oauthAt,
   };
 }
 
@@ -125,7 +164,8 @@ export function createIdentityChecker(deps: IdentityDeps) {
     } catch {
       return { unavailable: true };
     }
-    const id = googleIdentity(user);
+    // GoTrue accepted this token, so its payload can be read: it must come from a Google sign-in.
+    const id = googleIdentity(user, oauthAmrAt(token));
     return id ? { ok: id } : { invalid: true };
   }
 
@@ -171,7 +211,8 @@ export function identify(req: Request): Promise<IdentityResult> {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, ""),
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     checkFirebase: checkFirebaseIdToken,
-    fetchImpl: fetch,
+    // Resolved per call, so Next's patched fetch (and a test's) is the one used.
+    fetchImpl: (input, init) => fetch(input, init),
     now: Date.now,
   });
   return shared(bearerToken(req));

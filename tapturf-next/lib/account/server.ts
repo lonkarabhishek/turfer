@@ -2,8 +2,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createGuardedFetch, defaultGuardOptions } from "../supabase/guard";
 import { clientNetwork, windowCounter } from "../limits";
 import type { CityNote } from "./city";
-import type { Identity } from "./identity";
-import type { AccountProfile, PlayerHit } from "./types";
+import type { GoogleIdentity, Identity } from "./identity";
+import type { AccountProfile, LinkState, PlayerHit } from "./types";
 import type { ToolUse } from "../tools/usage";
 
 export type { AccountProfile, PlayerHit };
@@ -67,6 +67,12 @@ export function toProfile(data: unknown): AccountProfile | null {
     // Only a database that knows about the ask can start it, or offer the field.
     ask_email: d.ask_email === true,
     email_editable: d.email_editable === true,
+    // The same for adding Google or a number: only a database that has the links offers them.
+    google_email: s(d.google_email),
+    google_linkable: d.google_linkable === true,
+    phone_confirmed: d.phone_confirmed === true,
+    phone_settable: d.phone_settable === true,
+    ask_google: d.ask_google === true,
   };
 }
 
@@ -90,29 +96,51 @@ async function call(fn: string, args: Record<string, unknown>): Promise<Rpc> {
 }
 
 export type ResolveResult =
-  | { ok: AccountProfile; created: boolean }
-  | { r: "new" | "conflict" | "name" | "bad" }
+  /**
+   * knowsLinks: the database has the account links (20261026_account_links.sql;
+   * its profile has ask_google). Only that one logs a Google sign-in itself.
+   */
+  | { ok: AccountProfile; created: boolean; knowsLinks: boolean }
+  /** wasUsed: this number opened another account lately (it left that one in the last 90 days). */
+  | { r: "new" | "name"; wasUsed: boolean }
+  /** linking: being added to a phone account right now; replaced: taken off one (Google only). */
+  | { r: "conflict" | "bad" | "linking" | "replaced" }
   | { unavailable: true };
+
+function resolveResult(res: Rpc): ResolveResult {
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok") {
+    const p = toProfile(res.data);
+    return p ? { ok: p, created: res.data.created === true, knowsLinks: typeof res.data.ask_google === "boolean" } : { unavailable: true };
+  }
+  if (r === "new" || r === "name") return { r, wasUsed: res.data.was_used === true };
+  if (r === "conflict" || r === "bad" || r === "linking" || r === "replaced") return { r };
+  return { unavailable: true };
+}
 
 /**
  * The account for a verified identity. create makes one if there is
- * none (a phone sign-up needs a name); log records a phone sign-in for
- * the admin list. Never deletes or merges accounts.
+ * none (a phone sign-up needs a name); log records the sign-in for the
+ * admin list, on the account it opens: phone sign-ins from POST
+ * /api/account/me, Google ones once per real sign-in from the sign-in
+ * callback. Never deletes or merges accounts.
  */
 export async function resolveAccount(id: Identity, opts: { create?: boolean; log?: boolean; name?: string | null } = {}): Promise<ResolveResult> {
   const args =
     id.kind === "phone"
       ? { p_kind: "phone", p_phone: id.phone, p_name: opts.name ?? null }
       : { p_kind: "google", p_uid: id.uid, p_email: id.email, p_name: id.name ?? opts.name ?? null, p_avatar: id.avatar };
-  const res = await call("account_resolve", { ...args, p_create: !!opts.create, p_log: !!opts.log && id.kind === "phone" });
-  if ("unavailable" in res) return res;
-  const r = res.data.r;
-  if (r === "ok") {
-    const p = toProfile(res.data);
-    return p ? { ok: p, created: res.data.created === true } : { unavailable: true };
-  }
-  if (r === "new" || r === "conflict" || r === "name" || r === "bad") return { r };
-  return { unavailable: true };
+  return resolveResult(await call("account_resolve", { ...args, p_create: !!opts.create, p_log: !!opts.log }));
+}
+
+/**
+ * "Make a new TapTurf account with Google", for a Google account taken off
+ * a phone account (account_resolve answers replaced). Any other Google
+ * sign-in gets what account_resolve would give it.
+ */
+export async function googleFresh(id: GoogleIdentity): Promise<ResolveResult> {
+  return resolveResult(await call("account_google_fresh", { p_uid: id.uid, p_email: id.email, p_name: id.name, p_avatar: id.avatar }));
 }
 
 export type ChangeResult = { ok: AccountProfile } | { r: "bad" | "reserved" | "taken" | "limit" | "email" } | { unavailable: true };
@@ -179,6 +207,185 @@ export async function searchPlayers(q: string): Promise<{ ok: PlayerHit[] } | { 
     if (typeof o.u === "string" && typeof o.name === "string") players.push({ u: o.u, name: o.name, photo: s(o.photo) });
   }
   return { ok: players };
+}
+
+/* ------------------------------------------------------------------ */
+/* Two ways into one account                                           */
+/* ------------------------------------------------------------------ */
+
+const str = (x: unknown): string | undefined => (typeof x === "string" ? x : undefined);
+const bool = (x: unknown): boolean | undefined => (typeof x === "boolean" ? x : undefined);
+const defined = <T extends Record<string, unknown>>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+
+/** Whether the other account is empty and the day it was made (IST), when the answer says. */
+export type Brief = { otherEmpty?: boolean; otherMadeOn?: string };
+const briefOf = (d: Record<string, unknown>): Brief => defined({ otherEmpty: bool(d.other_empty), otherMadeOn: str(d.other_made_on) });
+
+const isoSeconds = (s: number) => new Date(s * 1000).toISOString();
+type Unavailable = { unavailable: true };
+
+export type LinkStartResult =
+  | { ok: { expiresAt: string } }
+  | { r: "new" | "conflict" | "not_allowed" | "stale" | "used" | "bad" }
+  | { r: "limit"; until: string | null }
+  | Unavailable;
+
+/** Start adding Google (account_link_start): an intent and its first leg, for a phone sign-in made in the last 5 minutes. */
+export async function linkStart(phone: string, sub: string, authTime: number, proofKey: string, legHash: string): Promise<LinkStartResult> {
+  const res = await call("account_link_start", {
+    p_phone: phone,
+    p_fb_sub: sub,
+    p_auth_time: isoSeconds(authTime),
+    p_proof_key: proofKey,
+    p_secret_hash: legHash,
+  });
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok" && typeof res.data.expires_at === "string") return { ok: { expiresAt: res.data.expires_at } };
+  if (r === "limit") return { r, until: str(res.data.until) ?? null };
+  if (r === "new" || r === "conflict" || r === "not_allowed" || r === "stale" || r === "used" || r === "bad") return { r };
+  return { unavailable: true };
+}
+
+export type LinkLegResult = { ok: { expiresAt: string } } | { r: "expired" | "mismatch" | "bad" } | { r: "limit"; until: string | null } | Unavailable;
+
+/** Another Google round trip on the same intent (account_link_leg), from the newest leg's cookie. */
+export async function linkLeg(legHash: string, sub: string, newLegHash: string): Promise<LinkLegResult> {
+  const res = await call("account_link_leg", { p_secret_hash: legHash, p_fb_sub: sub, p_new_secret_hash: newLegHash });
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok" && typeof res.data.expires_at === "string") return { ok: { expiresAt: res.data.expires_at } };
+  if (r === "limit") return { r, until: str(res.data.until) ?? null };
+  if (r === "expired" || r === "mismatch" || r === "bad") return { r };
+  return { unavailable: true };
+}
+
+export type LinkAttachResult = ({ r: "ok" | "used" | "expired" | "has_account" | "other_account" | "unverified" | "bad" } & Brief) | Unavailable;
+
+/** Which Google account came back on a leg (account_link_attach). ok with a brief: it has its own empty account the link would go over. */
+export async function linkAttach(legHash: string, authUid: string): Promise<LinkAttachResult> {
+  const res = await call("account_link_attach", { p_secret_hash: legHash, p_auth_uid: authUid });
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok" || r === "used" || r === "expired" || r === "has_account" || r === "other_account" || r === "unverified" || r === "bad") {
+    return { r, ...briefOf(res.data) };
+  }
+  return { unavailable: true };
+}
+
+export type LinkStatus = {
+  state: LinkState;
+  googleEmail?: string | null;
+  problem?: string;
+  outcome?: string;
+  expiresAt?: string;
+  legsLeft?: number;
+} & Brief;
+
+/** Where an attempt to add Google stands (account_link_status), for the same phone sign-in only. */
+export async function linkStatus(legHash: string, sub: string): Promise<LinkStatus | Unavailable> {
+  const res = await call("account_link_status", { p_secret_hash: legHash, p_fb_sub: sub });
+  if ("unavailable" in res) return res;
+  const d = res.data;
+  const state = d.state;
+  if (d.r !== "ok" || (state !== "none" && state !== "waiting" && state !== "attached" && state !== "refused" && state !== "closed")) {
+    return { unavailable: true };
+  }
+  return defined<LinkStatus>({
+    state: state as LinkState,
+    googleEmail: state === "attached" || state === "closed" ? (str(d.google_email) ?? null) : undefined,
+    problem: str(d.problem),
+    outcome: str(d.outcome),
+    expiresAt: str(d.expires_at),
+    legsLeft: typeof d.legs_left === "number" ? d.legs_left : undefined,
+    ...briefOf(d),
+  });
+}
+
+export type LinkGoogleResult =
+  | { ok: AccountProfile }
+  | ({ r: "expired" | "mismatch" | "not_allowed" | "has_account" | "other_account" | "unverified" | "bad" } & Brief)
+  | Unavailable;
+
+/** The person confirmed: make the link (account_link_google), from the same phone sign-in that started it. */
+export async function linkGoogle(legHash: string, phone: string, sub: string): Promise<LinkGoogleResult> {
+  const res = await call("account_link_google", { p_secret_hash: legHash, p_phone: phone, p_fb_sub: sub });
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok") {
+    const p = toProfile(res.data);
+    return p ? { ok: p } : { unavailable: true };
+  }
+  if (r === "expired" || r === "mismatch" || r === "not_allowed" || r === "has_account" || r === "other_account" || r === "unverified" || r === "bad") {
+    return { r, ...briefOf(res.data) };
+  }
+  return { unavailable: true };
+}
+
+/** Give up on an attempt (Cancel, log out). Never throws. */
+export async function linkCancel(legHash: string): Promise<void> {
+  const res = await call("account_link_cancel", { p_secret_hash: legHash });
+  if ("data" in res && res.data.r !== "ok") console.warn("account: account_link_cancel answered", res.data.r);
+}
+
+export type UnlinkResult = { ok: AccountProfile } | { r: "new" | "not_allowed" | "stale" | "used" | "bad" } | Unavailable;
+
+/** Take the Google account off a phone account (account_unlink_google), after a fresh OTP. */
+export async function unlinkGoogle(phone: string, sub: string, authTime: number, proofKey: string): Promise<UnlinkResult> {
+  const res = await call("account_unlink_google", { p_phone: phone, p_fb_sub: sub, p_auth_time: isoSeconds(authTime), p_proof_key: proofKey });
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok") {
+    const p = toProfile(res.data);
+    return p ? { ok: p } : { unavailable: true };
+  }
+  if (r === "new" || r === "not_allowed" || r === "stale" || r === "used" || r === "bad") return { r };
+  return { unavailable: true };
+}
+
+export type SetPhoneResult =
+  | { ok: AccountProfile }
+  | { r: "taken"; holderOpens: boolean; holderEmpty?: boolean; holderMadeOn?: string | null }
+  | { r: "limit"; until: string | null }
+  | { r: "new" | "not_allowed" | "used" | "bad" }
+  | Unavailable;
+
+/** Add, confirm or change the number of a Google sign-in's own account (account_set_phone). Never moves a number. */
+export async function setPhone(authUid: string, phone: string, proofKey: string): Promise<SetPhoneResult> {
+  const res = await call("account_set_phone", { p_auth_uid: authUid, p_phone: phone, p_proof_key: proofKey });
+  if ("unavailable" in res) return res;
+  const d = res.data;
+  const r = d.r;
+  if (r === "ok") {
+    const p = toProfile(d);
+    return p ? { ok: p } : { unavailable: true };
+  }
+  if (r === "taken") {
+    return defined<SetPhoneResult>({
+      r: "taken",
+      holderOpens: d.holder_opens === true,
+      holderEmpty: bool(d.holder_empty),
+      holderMadeOn: "holder_made_on" in d ? (str(d.holder_made_on) ?? null) : undefined,
+    });
+  }
+  if (r === "limit") return { r, until: str(d.until) ?? null };
+  if (r === "new" || r === "not_allowed" || r === "used" || r === "bad") return { r };
+  return { unavailable: true };
+}
+
+export type RemovePhoneResult = { ok: AccountProfile } | { r: "new" | "not_allowed" | "bad" } | Unavailable;
+
+/** Take the number off a Google sign-in's own account (account_remove_phone). */
+export async function removePhone(authUid: string): Promise<RemovePhoneResult> {
+  const res = await call("account_remove_phone", { p_auth_uid: authUid });
+  if ("unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok") {
+    const p = toProfile(res.data);
+    return p ? { ok: p } : { unavailable: true };
+  }
+  if (r === "new" || r === "not_allowed" || r === "bad") return { r };
+  return { unavailable: true };
 }
 
 /* ------------------------------------------------------------------ */
