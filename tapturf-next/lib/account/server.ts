@@ -76,7 +76,16 @@ export function toProfile(data: unknown): AccountProfile | null {
   };
 }
 
-type Rpc = { data: Record<string, unknown> } | { unavailable: true };
+export type Rpc = { data: Record<string, unknown> } | { unavailable: true };
+
+/**
+ * A server-key RPC (p_key added here) on the account client. Unavailable when
+ * the key is unset, the call fails or the function answers r: unavailable.
+ * The review routes use it too (lib/reviews/server.ts).
+ */
+export async function accountRpc(fn: string, args: Record<string, unknown>): Promise<Rpc> {
+  return call(fn, args);
+}
 
 async function call(fn: string, args: Record<string, unknown>): Promise<Rpc> {
   const key = accountKey();

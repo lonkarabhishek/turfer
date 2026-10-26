@@ -3,6 +3,8 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { transformTurf } from "@/lib/queries/turfs";
 import {
   shapeGames,
+  shapePlayAgain,
+  shapeReviewAspects,
   shapeReviews,
   shapeReviewStats,
   shapeSuggestions,
@@ -13,6 +15,7 @@ import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { ReviewSummary, ReviewWithUser } from "@/types/review";
 import type { TurfSuggestion } from "@/lib/queries/suggestions";
+import type { AspectCount, PlayAgainCounts } from "@/lib/reviews/types";
 
 export interface TurfPageData {
   turf: Turf;
@@ -22,6 +25,10 @@ export interface TurfPageData {
   trending: { city: string; tagline: string | null } | null;
   reviews: ReviewWithUser[];
   reviewStats: ReviewSummary;
+  /** Per part of the turf: how TapTurf players rated it in the last 12 months ([] before any). */
+  reviewAspects: AspectCount[];
+  /** Would play again [no, maybe, yes], last 12 months; null from an older database. */
+  playAgain: PlayAgainCounts | null;
   suggestions: TurfSuggestion[];
   /** Upcoming games here, soonest first; the list drops started ones. */
   games: Game[];
@@ -57,6 +64,8 @@ export const loadTurfPage = cache(async (key: string): Promise<TurfPageData | nu
     trending: trendingFor(data.trending, turf.city),
     reviews: shapeReviews(data.reviews),
     reviewStats: shapeReviewStats(data.review_stats),
+    reviewAspects: shapeReviewAspects(data.review_aspects),
+    playAgain: shapePlayAgain(data.review_stats),
     suggestions: shapeSuggestions(data.suggestions),
     games: shapeGames(data.games, turf),
     renderedAt: Date.now(),

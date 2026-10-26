@@ -1,7 +1,11 @@
-// Reviews are player-written 1-5 star ratings on a turf, optionally
-// linked to the booking they came from. Mirrors public.reviews.
+import type { ReportFields } from "../lib/reviews/types";
 
-export interface Review {
+// Reviews are player-written 1-5 star ratings on a turf, optionally
+// linked to the booking they came from. Mirrors public.reviews. A game
+// report adds a scorecard and a few answers (ReportFields, all optional:
+// older rows and the imported Google ones have none).
+
+export interface Review extends ReportFields {
   id: string;
   user_id: string;
   turf_id: string;
