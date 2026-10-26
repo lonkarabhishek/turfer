@@ -80,10 +80,14 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     });
   }
 
+  // has_nets means boundary nets or a net cage around the ground (the
+  // column's own definition), not cricket practice nets: those are the
+  // "Cricket Nets" sport tag. "Nets" alone read as practice nets, even on
+  // football-only turfs.
   if (turf.has_nets || turf.net_condition) {
     details.push({
       icon: <span className="text-lg">🥅</span>,
-      label: "Nets",
+      label: "Boundary nets",
       value: turf.net_condition ? `${turf.has_nets ? "Yes, " : ""}${turf.has_nets ? turf.net_condition.toLowerCase() : turf.net_condition} condition` : "Yes",
     });
   }

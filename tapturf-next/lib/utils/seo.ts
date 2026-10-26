@@ -1,15 +1,24 @@
 import type { Turf } from "@/types/turf";
-import { getMinimumPrice, getMaximumPrice } from "./prices";
-import { normalizeImageUrl } from "./images";
+import { summarisePagePrice } from "./prices";
+import { isOwnPhoto, normalizeImageUrl, orderPhotos } from "./images";
+import { stripBookingClaims } from "./bookingClaims";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
 import { turfUrl } from "./turfPath";
 
 export function generateTurfJsonLd(turf: Turf) {
-  const minPrice = getMinimumPrice(turf);
-  const maxPrice = getMaximumPrice(turf);
+  // The rate the page's own Pricing table shows (listed bands or slot
+  // columns), so priceRange never states a rate missing from the page.
+  const pagePrice = summarisePagePrice(turf);
+  const minPrice = pagePrice.kind === "real" ? pagePrice.min : null;
+  const maxPrice = pagePrice.kind === "real" ? pagePrice.max : null;
   const phone = getPhone(turf);
+  // Our own copies first; when we have any, the Google links (which
+  // expire, see orderPhotos) are left out. No photos, no image field.
+  const photos = orderPhotos(turf.images ?? []);
+  const own = photos.filter(isOwnPhoto);
+  const image = (own.length ? own : photos).slice(0, 5).map((img) => normalizeImageUrl(img));
   // Locality follows the turf's own city, then its address; with
   // neither on record the address carries no locality rather than a
   // guessed one (a wrong locality is worse for rich results than none).
@@ -33,7 +42,7 @@ export function generateTurfJsonLd(turf: Turf) {
     "@id": turfUrl(turf),
     name: turf.name,
     description:
-      turf.description || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
+      stripBookingClaims(turf.description) || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
     address: {
       "@type": "PostalAddress",
       streetAddress: turf.address,
@@ -60,13 +69,14 @@ export function generateTurfJsonLd(turf: Turf) {
     ...(hasRealPriceRange && {
       priceRange: minPrice === maxPrice ? `₹${minPrice}` : `₹${minPrice}–₹${maxPrice}`,
     }),
-    image: turf.images
-      ?.slice(0, 5)
-      .map((img) => normalizeImageUrl(img)),
+    ...(image.length > 0 && { image }),
     ...(normalizedPhone && { telephone: normalizedPhone.e164 }),
     ...(() => {
+      // A WhatsApp link or group invite stored as the website is not the
+      // venue's own page.
       const sameAs = [turf.external_review_url, turf.website_url, turf.instagram_url].filter(
-        (u): u is string => typeof u === "string" && /^https?:\/\//.test(u),
+        (u): u is string =>
+          typeof u === "string" && /^https?:\/\//.test(u) && !/^https?:\/\/(?:[\w-]+\.)?(?:wa\.me|whatsapp\.com)\b/i.test(u),
       );
       return sameAs.length ? { sameAs } : {};
     })(),

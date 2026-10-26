@@ -8,14 +8,15 @@ import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "l
 import { getTopTurfKeys } from "@/lib/queries/turfs";
 import { loadTurfPage } from "@/lib/queries/turfPage";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
-import { priceUnitSuffix, summarisePrice } from "@/lib/utils/prices";
+import { playerPriceRange, priceRangeText, priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
-import { convertGoogleDriveUrl } from "@/lib/utils/images";
+import { turfPhotos } from "@/lib/utils/images";
+import { stripBookingClaims } from "@/lib/utils/bookingClaims";
 import { areaFor } from "@/lib/utils/area";
 import { dailyHoursSummary } from "@/lib/utils/hours";
 import { guessCityFromAddress, labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
-import { TurfPricing } from "@/components/turf/TurfPricing";
+import { TurfPricing, slotRatesHint } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
@@ -57,12 +58,13 @@ export async function generateMetadata({
   const turf = (await loadTurfPage(decodeURIComponent(id)))?.turf;
   if (!turf) return { title: "Turf not found", robots: { index: false } };
 
-  const priceSummary = summarisePrice(turf);
+  // Same numbers as the page's Pricing table (bands when it lists them).
+  const priceSummary = summarisePagePrice(turf);
   const sports = turf.sports.join(", ");
   const primarySport = turf.sports[0]?.trim();
-  const firstImage =
-    turf.cover_image ||
-    (turf.images[0] ? convertGoogleDriveUrl(turf.images[0]) : null);
+  // Share preview: our own copy before a Google link, which can expire.
+  // Images are already normalised by transformTurf.
+  const firstImage = turfPhotos(turf)[0] ?? null;
 
   // City-aware metadata: the turf's own city, then its address. A turf
   // with neither is described by name and area only, never placed in a
@@ -97,7 +99,8 @@ export async function generateMetadata({
   const displayName = cleanTurfName(turf.name);
   const usp = (() => {
     if (priceSummary.kind === "real" && priceSummary.min != null) {
-      return `₹${priceSummary.min}${priceUnitSuffix(turf, { short: true })}`;
+      // Listed bands are always per hour; the slot columns follow price_unit.
+      return `₹${priceSummary.min}${showsPriceBands(turf) ? priceSummary.unit : priceUnitSuffix(turf, { short: true })}`;
     }
     // No price: a well reviewed Google rating is the next thing a
     // searcher checks before clicking.
@@ -135,6 +138,14 @@ export async function generateMetadata({
   const photoCount = turf.images?.length ?? 0;
   const photoClause = photoCount > 0 ? ` ${photoCount} photo${photoCount === 1 ? "" : "s"}.` : "";
   const locationClause = cityAndArea ? ` in ${cityAndArea}` : "";
+  // Promise prices only when the page has some (1,608 turfs had none on 26 Oct).
+  const seeClause = priceSummary.kind === "unknown" ? "See timings, photos and location" : "See prices, timings, photos and location";
+  // Only the channels the page offers: a landline-only turf gets Call
+  // alone ("Landline, so no WhatsApp"), 5 active turfs on 26 Oct.
+  const canCall = !!getPhone(turf);
+  const canWhatsApp = !!getWhatsAppPhone(turf);
+  const contactClause =
+    canCall && canWhatsApp ? ", then call or WhatsApp to book" : canCall ? ", then call to book" : canWhatsApp ? ", then WhatsApp to book" : "";
 
   // Lead with the venue's name and place: most searches for these pages
   // are the venue's name, and Google bolds the words that match.
@@ -144,7 +155,7 @@ export async function generateMetadata({
       `${displayName}${cityAndArea ? `, ${cityAndArea}` : ""}: ${(turfType ?? (sports || "sports turf")).toLowerCase()}.` +
       (turfType && sports ? ` Sports: ${sports}.` : "") +
       `${priceClause}${hours ? ` ${hours}.` : ""}${ratingClause}${photoClause}` +
-      ` See prices, timings, photos and location${getPhone(turf) ? ", then call or WhatsApp to book" : ""}.`,
+      ` ${seeClause}${contactClause}.`,
     keywords: [
       turf.name,
       area ? `turf in ${area.toLowerCase()}` : null,
@@ -157,8 +168,10 @@ export async function generateMetadata({
       title: cityAndArea ? `${turf.name}, ${cityAndArea}` : turf.name,
       description: `${sports || "Multi-sport"}${locationClause}.${priceClause}${ratingClause}`,
       url: turfUrl(turf),
+      // No width/height: stored photos are 4:3 (1600x1200 and the like),
+      // and the old 1200x630 told crawlers the wrong shape.
       ...(firstImage && {
-        images: [{ url: firstImage, width: 1200, height: 630 }],
+        images: [{ url: firstImage }],
       }),
       type: "website",
       locale: "en_IN",
@@ -184,7 +197,17 @@ export default async function TurfDetailPage({
 
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);
-  const sidebarPrice = summarisePrice(turf);
+  // A WhatsApp number alone is a way to reach the turf too (an owner who
+  // saved only "WhatsApp number for bookings").
+  const hasContact = !!(phone || whatsappPhone);
+  const contact = { call: !!phone, whatsapp: !!whatsappPhone };
+  const sidebarPrice = summarisePagePrice(turf);
+  // Rates players shared (From players): the Pricing section points to
+  // them when the turf lists none.
+  const playerPrice = sidebarPrice.kind === "unknown" ? playerPriceRange(page.suggestions) : null;
+  // The research pass wrote "It is publicly bookable on Playo." into
+  // 1,509 descriptions; the page links to no booking app.
+  const description = stripBookingClaims(turf.description);
   const hoursLine = dailyHoursSummary(turf.opening_hours, {
     start_time: turf.start_time,
     end_time: turf.end_time,
@@ -275,7 +298,7 @@ export default async function TurfDetailPage({
                 ? sidebarPrice.label
                 : sidebarPrice.kind === "reported_text"
                   ? "Reported prices below"
-                  : "Price on request"}
+                  : "Prices not listed yet"}
             </span>
             {hoursLine && <> · {hoursLine}</>}
           </p>
@@ -346,17 +369,17 @@ export default async function TurfDetailPage({
             )}
 
             {/* Description */}
-            {turf.description && (
+            {description && (
               <div className="section-divider">
                 <p className="text-base text-primary-600 leading-relaxed whitespace-pre-line [overflow-wrap:anywhere]">
-                  {turf.description}
+                  {description}
                 </p>
               </div>
             )}
 
             <TurfAmenities turf={turf} />
             <TurfDetails turf={turf} />
-            <TurfPricing turf={turf} />
+            <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
             <TurfGames
@@ -372,7 +395,7 @@ export default async function TurfDetailPage({
             <TurfSuggestions
               turfId={turf.id}
               turfName={turf.name}
-              hasPhone={!!phone}
+              hasPhone={hasContact}
               turfUrl={turfUrl(turf)}
               initial={page.suggestions}
             />
@@ -470,10 +493,12 @@ export default async function TurfDetailPage({
                 ) : (
                   <div>
                     <span className="text-[22px] font-bold text-primary-800 font-serif">
-                      Price on request
+                      Prices not listed yet
                     </span>
                     <p className="text-[13px] text-primary-500 mt-1">
-                      {phone ? "Call or WhatsApp for slot rates" : "Contact details not listed yet"}
+                      {playerPrice
+                        ? `${playerPrice.count === 1 ? "A player reports" : "Players report"} ${priceRangeText(playerPrice.min, playerPrice.max)} an hour, see From players`
+                        : (slotRatesHint(contact) ?? "Contact details not listed yet")}
                     </p>
                   </div>
                 )}
@@ -503,7 +528,7 @@ export default async function TurfDetailPage({
                   </p>
                 </div>
               )}
-              {phone ? (
+              {hasContact ? (
                 <CTAButtons
                   turfId={turf.id}
                   phone={phone}
@@ -542,7 +567,7 @@ export default async function TurfDetailPage({
 
       {/* Mobile fixed CTA: Call / WhatsApp, or the "we don't have
           the number yet" bar that opens the suggest form. */}
-      {phone ? (
+      {hasContact ? (
         <CTAButtons
           turfId={turf.id}
           phone={phone}

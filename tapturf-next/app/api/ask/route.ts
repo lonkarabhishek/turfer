@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { createHash } from "node:crypto";
 import { getAskTurfs } from "@/lib/queries/turfCache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { isCity } from "@/lib/city";
+import { isCity, labelFor } from "@/lib/city";
 import { forCard } from "@/lib/utils/cardTurf";
 import {
   AskFilters,
@@ -15,10 +15,12 @@ import {
   parseAsk,
   relaxedLabel,
   resolveTurfNames,
+  SPORT_FALLBACK,
   type AskContext,
   type AskTurn,
 } from "@/lib/ai/ask";
 import { quickAnswer } from "@/lib/ai/quick";
+import { widenedReply } from "@/lib/ai/relax";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
@@ -347,6 +349,8 @@ export async function GET(req: Request) {
       case "find_game": {
         const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10 });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, games: r.games };
+        // The budget was dropped to find any game: no "Under ₹X" chip over games that cost more.
+        if (r.relaxed.includes("price")) body.filters = { ...base.filters, maxPrice: null };
         // No open game yet: show turfs for the same sport and place, so
         // the player can book one and host the game instead of hitting a wall.
         if (r.games.length === 0) {
@@ -406,6 +410,31 @@ export async function GET(req: Request) {
       default: {
         const r = applyAskFilters(turfs, filters, { prefCity, loc, limit: 12 });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, turfs: r.turfs.map(card) };
+        // The chip and the "more" link follow the cards: cricket when no
+        // practice nets were listed in the place (Nashik on 26 Oct).
+        if (r.sport !== filters.sport) body.filters = { ...(body.filters as typeof base.filters), sport: r.sport };
+        // The budget survives a widened area (relaxSteps), so a dropped
+        // budget means no matching turf lists a rate within it (most list
+        // none: Gota had 3 box cricket turfs on 26 Oct, none priced). No
+        // "Under ₹1,000/hr" chip over cards that aren't.
+        if (r.relaxed.includes("price")) body.filters = { ...(body.filters as typeof base.filters), maxPrice: null };
+        // The parsed reply describes the search as asked ("football turfs in
+        // Kothrud under ₹1,000"); say what was widened instead.
+        const prefScoped = !filters.city && !filters.wants_nearby && filters.areas.length === 0 ? prefCity : null;
+        const stayedIn = filters.city ?? (prefScoped && !r.relaxed.includes("pref_city") ? prefScoped : null);
+        const widened =
+          r.total > 0
+            ? widenedReply({
+                relaxed: r.relaxed,
+                maxPrice: filters.max_price_per_hour,
+                cheapestFirst: filters.sort === "price_low",
+                areas: filters.areas,
+                city: stayedIn && isCity(stayedIn) ? labelFor(stayedIn) : null,
+                prefCity: prefScoped ? labelFor(prefScoped) : null,
+                narrowed: filters.sport ? (SPORT_FALLBACK[filters.sport] ?? null) : null,
+              })
+            : null;
+        if (widened) body.reply = widened;
       }
     }
   } catch (e) {

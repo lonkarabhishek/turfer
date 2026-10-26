@@ -8,8 +8,12 @@ import { useAuth } from "@/components/auth/AuthProvider";
 
 interface CTAButtonsProps {
   turfId: string;
-  /** Number to call. Mobile or landline; landlines get a Call button only. */
-  phone: string;
+  /**
+   * Number to call. Mobile or landline; landlines get a Call button only.
+   * Null when the turf lists only a WhatsApp number (an owner who saved
+   * just "WhatsApp number for bookings"): then WhatsApp shows alone.
+   */
+  phone: string | null;
   /** Number for WhatsApp when it differs from `phone`. Must be a mobile. */
   whatsappPhone?: string | null;
   turfName: string;
@@ -37,12 +41,12 @@ export function CTAButtons({
 }: CTAButtonsProps) {
   const { user, login } = useAuth();
   const normalized = normalizeIndianPhone(phone);
-  if (!normalized) return null;
-
-  const telHref = `tel:${normalized.e164}`;
   // WhatsApp needs a mobile: the dedicated whatsapp_phone, else the call
   // number itself when it is one. Landline-only turfs get Call alone.
-  const wa = normalizeIndianMobile(whatsappPhone) ?? (normalized.type === "mobile" ? normalized : null);
+  const wa = normalizeIndianMobile(whatsappPhone) ?? (normalized?.type === "mobile" ? normalized : null);
+  if (!normalized && !wa) return null;
+
+  const telHref = normalized ? `tel:${normalized.e164}` : null;
   const whatsappUrl = wa
     ? buildWhatsAppLink({
         phone: wa.digits,
@@ -68,18 +72,20 @@ export function CTAButtons({
     return (
       <div className="fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 pt-3 flex gap-3 md:hidden animate-slide-up"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
-        <a
-          href={telHref}
-          onClick={guard("call")}
-          className={`flex-1 flex items-center justify-center gap-2 text-[17px] font-semibold h-12 rounded-full transition-colors cursor-pointer ${
-            whatsappUrl
-              ? "bg-primary-100 active:bg-primary-200 text-primary-900"
-              : "bg-accent-500 active:bg-accent-600 text-white"
-          }`}
-        >
-          <Phone className="w-5 h-5" />
-          {whatsappUrl ? "Call" : normalized.type === "landline" ? "Call (landline)" : "Call"}
-        </a>
+        {telHref && (
+          <a
+            href={telHref}
+            onClick={guard("call")}
+            className={`flex-1 flex items-center justify-center gap-2 text-[17px] font-semibold h-12 rounded-full transition-colors cursor-pointer ${
+              whatsappUrl
+                ? "bg-primary-100 active:bg-primary-200 text-primary-900"
+                : "bg-accent-500 active:bg-accent-600 text-white"
+            }`}
+          >
+            <Phone className="w-5 h-5" />
+            {whatsappUrl ? "Call" : normalized?.type === "landline" ? "Call (landline)" : "Call"}
+          </a>
+        )}
         {whatsappUrl && (
           <a
             href={whatsappUrl}
@@ -98,29 +104,35 @@ export function CTAButtons({
 
   return (
     <div className="space-y-3">
-      <a
-        href={telHref}
-        onClick={guard("call")}
-        className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-600 text-white font-semibold h-12 rounded-full transition-colors text-[17px]"
-      >
-        <Phone className="w-5 h-5" />
-        {callLabel}
-      </a>
+      {telHref && (
+        <a
+          href={telHref}
+          onClick={guard("call")}
+          className="w-full flex items-center justify-center gap-2 bg-accent-500 hover:bg-accent-600 text-white font-semibold h-12 rounded-full transition-colors text-[17px]"
+        >
+          <Phone className="w-5 h-5" />
+          {callLabel}
+        </a>
+      )}
       {whatsappUrl ? (
         <a
           href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
           onClick={guard("whatsapp")}
-          className="w-full flex items-center justify-center gap-2 bg-primary-100 hover:bg-primary-200 text-primary-900 font-semibold h-12 rounded-full transition-colors text-[17px]"
+          className={`w-full flex items-center justify-center gap-2 font-semibold h-12 rounded-full transition-colors text-[17px] ${
+            telHref ? "bg-primary-100 hover:bg-primary-200 text-primary-900" : "bg-accent-500 hover:bg-accent-600 text-white"
+          }`}
         >
           <MessageCircle className="w-5 h-5" />
           WhatsApp
         </a>
       ) : (
-        <p className="text-[12px] text-primary-400 text-center">
-          Landline, so no WhatsApp. +91 {normalized.local}
-        </p>
+        normalized && (
+          <p className="text-[12px] text-primary-400 text-center">
+            Landline, so no WhatsApp. +91 {normalized.local}
+          </p>
+        )
       )}
       {!user && (
         <p className="text-[11px] text-primary-400 text-center leading-snug">

@@ -153,8 +153,14 @@ test("generic chips and the most asked questions", () => {
   f = hit("Which Nashik turf is open 24 hours?");
   assert.deepEqual([f.city, f.open_24x7, f.sport], ["nashik", true, null]);
 
+  // Nets are the practice-nets page, not every cricket ground.
   f = hit("Cricket nets nearby");
-  assert.deepEqual([f.sport, f.wants_nearby], ["cricket", true]);
+  assert.deepEqual([f.sport, f.wants_nearby], ["cricket-nets", true]);
+  assert.equal(f.reply, "Here are cricket practice nets close to you, nearest first.");
+  f = hit("net practice in Pune");
+  assert.deepEqual([f.sport, f.city], ["cricket-nets", "pune"]);
+  f = hit("cricket ground in Pune");
+  assert.deepEqual([f.sport, f.city], ["cricket", "pune"]);
 
   // "Me" is Hinglish filler, but not in these English phrases.
   for (const q of ["football turf near to me", "nearby me football turf", "football turf near by me", "football turf nearest to me"]) {

@@ -60,6 +60,28 @@ function listJoin(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
+/**
+ * The price answer when too few venues are priced to quote a range.
+ * "Most share rates on request" holds only when most do (Vijayawada
+ * pickleball had 4 of 4 priced on 26 Oct), and about 85 city + sport
+ * pages have a single venue, so the count reads as a sentence, never
+ * "All of these 1 turfs". "Rates", not "hourly rates": some are per slot
+ * or per person.
+ */
+function fewPricedAnswer(s: SportCityStats, one: string, many: string, cityLabel: string): string {
+  const confirm = "confirm the price when you call or WhatsApp the venue.";
+  if (s.count === 1) {
+    return s.priced > 0
+      ? `This ${one} lists its rates on TapTurf. Open it to see them by time slot, and ${confirm}`
+      : `This ${one} doesn't list its rates on TapTurf yet. Open it and call or WhatsApp the venue for current slot prices.`;
+  }
+  if (s.priced * 2 > s.count) {
+    const who = s.priced < s.count ? `${s.priced} of these ${s.count} ${many}` : s.count === 2 ? `Both of these ${many}` : `All ${s.count} of these ${many}`;
+    return `${who} list their rates on TapTurf. Open one to see its rates by time slot, and ${confirm}`;
+  }
+  return `Most ${cityLabel} ${many} share rates on request. Open one on TapTurf and call or WhatsApp the venue for current slot prices.`;
+}
+
 /** FAQ for the page and its FAQPage JSON-LD. Every answer is a fact from the data. */
 export function sportCityFaq(sport: SportPage, city: CityId, s: SportCityStats) {
   const cityLabel = labelFor(city);
@@ -84,7 +106,7 @@ export function sportCityFaq(sport: SportPage, city: CityId, s: SportCityStats) 
     a:
       s.priceMin != null && s.priceMax != null
         ? `${s.priced} of these ${many} list hourly rates on TapTurf, from ${inr(s.priceMin)} to ${inr(s.priceMax)} per hour. Rates usually change by time slot and on weekends, so confirm the price when you call or WhatsApp the venue.`
-        : `Most ${cityLabel} ${many} share rates on request. Open one on TapTurf and call or WhatsApp the venue for current slot prices.`,
+        : fewPricedAnswer(s, one, many, cityLabel),
   });
 
   if (s.topRated.length > 0) {

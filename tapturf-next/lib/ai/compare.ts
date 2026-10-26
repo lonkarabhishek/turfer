@@ -3,9 +3,10 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { getTurfById } from "@/lib/queries/turfs";
 import { areaFor } from "@/lib/utils/area";
 import { labelFor } from "@/lib/city";
-import { getPhone } from "@/lib/utils/seo";
+import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
 import { priceUnitSuffix } from "@/lib/utils/prices";
+import { stripBookingClaims } from "@/lib/utils/bookingClaims";
 import type { Turf } from "@/types/turf";
 import { ROUTER_MODEL, structured, type AskUsage } from "./ask";
 
@@ -82,6 +83,15 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
     size: t.length_feet && t.width_feet ? `${t.length_feet} ft x ${t.width_feet} ft${t.height_feet ? `, ${t.height_feet} ft high` : ""}` : null,
     grounds: t.number_of_grounds && t.number_of_grounds > 1 ? `${t.number_of_grounds} grounds` : null,
     formats: t.formats?.length ? t.formats : t.ground_format ? [t.ground_format] : null,
+    // has_nets means boundary nets or a net cage (the column's own
+    // definition), not practice nets; the page shows it as "Boundary nets".
+    nets: t.has_nets
+      ? t.net_condition
+        ? `boundary nets, ${t.net_condition.toLowerCase()} condition`
+        : "boundary nets"
+      : t.net_condition
+        ? `nets, ${t.net_condition.toLowerCase()} condition`
+        : null,
     listed_prices_per_hour: bandSummary(t.pricing_bands),
     good_to_know: t.good_to_know,
     parking: t.parking_available === true ? "yes" : null,
@@ -92,9 +102,10 @@ export function buildFacts(t: Turf, reviews: ReviewRow[]): TurfFacts {
     amenities: t.amenities?.length ? t.amenities : null,
     members_only: t.membership_required ? "yes" : null,
     access_notes: t.access_notes,
-    phone_listed: getPhone(t) ? "yes, on the TapTurf page" : "no",
+    phone_listed: getPhone(t) ? "yes, on the TapTurf page" : getWhatsAppPhone(t) ? "WhatsApp only, on the TapTurf page" : "no",
     website: t.website_url ? "yes" : null,
-    description: t.description ? t.description.slice(0, 500) : null,
+    // Without "bookable on Playo" lines: players book by call or WhatsApp.
+    description: stripBookingClaims(t.description)?.slice(0, 500) ?? null,
     recent_reviews: reviews
       .filter((r) => r.comment && r.comment.trim().length > 10)
       .slice(0, 8)

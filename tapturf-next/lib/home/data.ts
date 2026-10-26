@@ -11,7 +11,7 @@ import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { hasEnoughReviews } from "@/lib/utils/ranking";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
-import { imageUrlForCard, upsizeGoogleUserContent } from "@/lib/utils/images";
+import { imageUrlForCard, turfPhotos, upsizeGoogleUserContent } from "@/lib/utils/images";
 import { getSortedPosts } from "@/content/blog";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
@@ -42,7 +42,8 @@ function isGoogleHosted(url: string): boolean {
 }
 
 function toTile(t: Turf, cityLabel?: string): HomeTile {
-  const photoRaw = t.cover_image ?? t.images[0] ?? null;
+  // Our own copy first: Google photo links expire, and a tile has one photo.
+  const photoRaw = turfPhotos(t)[0] ?? null;
   // Cards are 236px wide on phones; 480x360 is plenty for lh3 photos
   // and imageUrlForCard handles Drive thumbnails and other hosts.
   const photo = photoRaw ? upsizeGoogleUserContent(imageUrlForCard(photoRaw), 480, 360) : null;
