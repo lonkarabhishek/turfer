@@ -44,7 +44,11 @@
 -- the empty row stays exactly as it is (nothing removed, changed or
 -- moved). The link is reported (link_over_empty) and admin lists it next
 -- to the refusals. An own row with any activity, and an old-app row the
--- Google account lands on, are still refused (has_account).
+-- Google account lands on, are still refused (has_account). When such a
+-- link ends (a swap or a removal), that Google account gets r = 'replaced'
+-- like any other taken off a phone account, never the old row in silence
+-- (private.google_own_row); "Make a new TapTurf account with Google"
+-- (account_google_fresh) then opens that row again, as it is.
 --
 -- Rules kept: no users row is ever removed or merged, nothing moves from
 -- one account to another, a Google account or number that already has a
@@ -159,6 +163,18 @@ revoke all on private.phone_links from public, anon, authenticated;
 create unique index if not exists phone_links_open on private.phone_links (user_id) where ended_at is null;
 create index if not exists phone_links_user_at on private.phone_links (user_id, at);
 
+-- "Make a new TapTurf account with Google", asked by a Google account that
+-- was taken off a phone account and still has its own row from before (the
+-- empty one the link was made over): from then on it opens that row again.
+-- Rows are never removed; the newest one after the link ended counts.
+create table if not exists private.google_own_row_asked (
+  id bigint generated always as identity primary key,
+  auth_uid uuid not null,
+  at timestamptz not null default now()
+);
+revoke all on private.google_own_row_asked from public, anon, authenticated;
+create index if not exists google_own_row_asked_auth on private.google_own_row_asked (auth_uid, at);
+
 -- ── Shared rules ───────────────────────────────────────────
 
 -- This account's number was proved with an OTP from the profile, and nothing changed it since.
@@ -266,10 +282,34 @@ as $$
 $$;
 revoke all on function private.google_open_link(uuid) from public, anon, authenticated;
 
+-- The Google account's own row, or null. Null also when a link was made
+-- while that row was there (over it: it was empty, google_link_problem) and
+-- has ended since (a swap or a removal), unless the person asked for the
+-- row back afterwards (account_google_fresh). Such a Google account gets
+-- r = 'replaced' and the choice, never that row in silence. A row made
+-- after the link ended (account_google_fresh) is its own as usual.
+create or replace function private.google_own_row(p_auth_uid uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select u.id from public.users u
+   where u.id = p_auth_uid
+     and not exists (
+       select 1 from private.account_google_links l
+        where l.auth_uid = u.id and l.ended_at is not null and u.created_at <= l.ended_at
+          and not exists (select 1 from private.google_own_row_asked c where c.auth_uid = u.id and c.at >= l.ended_at));
+$$;
+revoke all on function private.google_own_row(uuid) from public, anon, authenticated;
+
 -- The account a Google sign-in opens, or null. The link comes first: a
 -- Google account with a link has no used row of its own (google_link_problem
 -- refuses one that has), so its own row (an empty one the link was made
--- over, or one forged since) can't take the link's place.
+-- over, or one forged since) can't take the link's place. With a row of its
+-- own it never lands on an old-app row, also while that row is set aside
+-- (google_own_row).
 create or replace function private.google_account(p_auth_uid uuid)
 returns uuid
 language sql
@@ -279,13 +319,15 @@ set search_path = ''
 as $$
   select coalesce(
     private.google_open_link(p_auth_uid),
-    (select u.id from public.users u where u.id = p_auth_uid),
-    private.google_legacy_row(p_auth_uid));
+    case when exists (select 1 from public.users u where u.id = p_auth_uid)
+         then private.google_own_row(p_auth_uid)
+         else private.google_legacy_row(p_auth_uid) end);
 $$;
 revoke all on function private.google_account(uuid) from public, anon, authenticated;
 
--- The account this Google sign-in is the main way into (its own row, or
--- the old-app row it lands on), never one it was added to.
+-- The row in the way of adding this Google account to a phone account (its
+-- own row, or the old-app row it lands on), for has_account and its brief.
+-- What a Google sign-in opens is google_account.
 create or replace function private.google_own_account(p_auth_uid uuid)
 returns uuid
 language sql
@@ -558,9 +600,11 @@ begin
     -- also over the Google account's own row (an empty one the link was made over).
     v_id := private.google_open_link(p_uid);
     if v_id is null then
-      select u.id into v_id from public.users u where u.id = p_uid;
+      -- (8) Its own row, unless a link was made over it and ended since
+      -- (google_own_row): then 'replaced' below, never that row in silence.
+      v_id := private.google_own_row(p_uid);
     end if;
-    if v_id is null and p_email is not null then
+    if v_id is null and p_email is not null and not exists (select 1 from public.users u where u.id = p_uid) then
       -- An account from the old app with this email, on the list taken
       -- when this was deployed: the person lands on it as before.
       -- Reported, never merged.
@@ -576,7 +620,8 @@ begin
       end if;
     end if;
     if v_id is null then
-      -- (4) Taken off a phone account: never a new empty account unasked (account_google_fresh).
+      -- (4) Taken off a phone account: never a new empty account unasked, nor
+      -- the own row the link was made over (account_google_fresh asks).
       if exists (select 1 from private.account_google_links l where l.auth_uid = p_uid) then
         return jsonb_build_object('r', 'replaced');
       end if;
@@ -586,7 +631,7 @@ begin
       -- (5) account_link_attach and account_link_google hold this lock until
       -- they commit: a link finishing right now is seen, not raced.
       perform pg_advisory_xact_lock(hashtext('account_link_google'));
-      v_id := coalesce(private.google_open_link(p_uid), (select u.id from public.users u where u.id = p_uid));
+      v_id := coalesce(private.google_open_link(p_uid), private.google_own_row(p_uid));
       if v_id is null then
         if exists (select 1 from private.account_google_links l where l.auth_uid = p_uid) then
           return jsonb_build_object('r', 'replaced');
@@ -626,8 +671,11 @@ revoke all on function public.account_resolve(text, text, text, uuid, text, text
 grant execute on function public.account_resolve(text, text, text, uuid, text, text, text, boolean, boolean) to anon, authenticated;
 
 -- A Google account taken off a phone account asks for an account of its
--- own ("Make a new TapTurf account"). Any other Google sign-in gets what
--- account_resolve would give it.
+-- own ("Make a new TapTurf account"). When it still has its own row from
+-- before (the empty one the link was made over), that row is what it gets,
+-- as it is, and opens from now on (google_own_row_asked); otherwise a new
+-- one is made. Any other Google sign-in gets what account_resolve would
+-- give it.
 -- r: ok (with the profile, created), linking, conflict, bad, unavailable.
 create or replace function public.account_google_fresh(p_key text, p_uid uuid, p_email text default null, p_name text default null, p_avatar text default null)
 returns jsonb
@@ -656,6 +704,12 @@ begin
   if exists (select 1 from private.account_link_intents i
               where i.auth_uid = p_uid and i.closed_at is null and i.expires_at > now()) then
     return jsonb_build_object('r', 'linking');
+  end if;
+  -- Its own row from before, set aside since the link ended: that one, untouched, never a second.
+  if exists (select 1 from public.users u where u.id = p_uid) then
+    insert into private.google_own_row_asked (auth_uid) values (p_uid);
+    perform private.report('google_fresh_after_link', jsonb_build_object('auth_uid', p_uid, 'own_row', true));
+    return private.profile_json(p_uid) || jsonb_build_object('r', 'ok', 'created', false);
   end if;
   v_id := private.google_make_account(p_uid, p_email, p_name, p_avatar);
   if v_id is null then
@@ -700,21 +754,24 @@ security definer
 set search_path = ''
 as $$
   select case left(coalesce(p_key, ''), 2)
-    when 'e:' then coalesce(
-      -- A Google account added to a phone account from the profile.
-      (select l.user_id from auth.users a
-         join private.account_google_links l on l.auth_uid = a.id and l.ended_at is null
-        where lower(a.email) = substr(p_key, 3)
-          and a.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb
-        order by a.created_at limit 1),
-      (select u.id from auth.users a join public.users u on u.id = a.id
-        where lower(a.email) = substr(p_key, 3)
-          and a.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb
-        order by a.created_at limit 1),
-      (select u.id from public.users u join private.legacy_email_rows g on g.user_id = u.id
-        where lower(u.email) = substr(p_key, 3)
-          and not exists (select 1 from auth.users a where a.id = u.id)
-        order by u.created_at limit 1))
+    -- What the Google account with this address opens (google_account): the phone account it was
+    -- added to first, then its own row (none while set aside after a link made over it ended),
+    -- then the old-app row it lands on. The one with a link first, then one with a row.
+    when 'e:' then (
+      select case when g.id is not null then private.google_account(g.id)
+                  else (select u.id from public.users u join private.legacy_email_rows lg on lg.user_id = u.id
+                         where lower(u.email) = substr(p_key, 3)
+                           and not exists (select 1 from auth.users a where a.id = u.id)
+                         order by u.created_at limit 1) end
+        from (select 1) one
+        left join lateral (
+          select a.id from auth.users a
+           where lower(a.email) = substr(p_key, 3)
+             and a.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb
+           order by (private.google_open_link(a.id) is not null) desc,
+                    exists (select 1 from public.users u where u.id = a.id) desc,
+                    a.created_at
+           limit 1) g on true)
     when 'p:' then private.phone_account('+91' || substr(p_key, 3))
   end;
 $$;
@@ -727,10 +784,12 @@ stable
 security definer
 set search_path = ''
 as $$
+  -- A Google session: what its own sign-in opens (the link, else its own row unless set aside),
+  -- by auth.uid() first; only a session with neither is looked up by its key.
   select case when left(coalesce(p_key, ''), 2) = 'e:'
-              then coalesce(private.google_open_link(auth.uid()),
-                            (select u.id from public.users u where u.id = auth.uid()),
-                            private.account_for_key(p_key))
+                   and (private.google_open_link(auth.uid()) is not null
+                        or exists (select 1 from public.users u where u.id = auth.uid()))
+              then private.google_account(auth.uid())
               else private.account_for_key(p_key) end;
 $$;
 revoke all on function private.caller_account(text) from public, anon, authenticated;
@@ -988,9 +1047,12 @@ begin
     if v_problem = 'has_account' then
       v_brief := private.account_brief(private.google_own_account(p_auth_uid));
     end if;
+    -- The other account, so admin can open both: the Google account's own (has_account), or
+    -- the phone account it is already on (other_account).
     perform private.report('link_' || v_problem,
       jsonb_build_object('user_id', v_i.user_id, 'auth_uid', p_auth_uid,
-                         'other_user_id', case when v_problem = 'has_account' then private.google_own_account(p_auth_uid) end) || v_brief);
+                         'other_user_id', case v_problem when 'has_account' then private.google_own_account(p_auth_uid)
+                                                         when 'other_account' then private.google_open_link(p_auth_uid) end) || v_brief);
     if (select count(*) from private.account_link_legs l where l.intent_id = v_i.id and l.outcome <> 'ok') >= 5 then
       update private.account_link_intents set closed_at = now(), outcome = 'gave_up' where id = v_i.id;
     end if;
@@ -1133,6 +1195,8 @@ begin
     if v_problem = 'has_account' then
       v_other := private.google_own_account(v_i.auth_uid);
       v_brief := private.account_brief(v_other);
+    elsif v_problem = 'other_account' then
+      v_other := private.google_open_link(v_i.auth_uid);
     end if;
     perform private.report('link_' || v_problem,
       jsonb_build_object('user_id', v_user, 'auth_uid', v_i.auth_uid, 'other_user_id', v_other) || v_brief);
@@ -1289,7 +1353,8 @@ begin
   if private.google_open_link(p_auth_uid) is not null then
     return jsonb_build_object('r', 'not_allowed');
   end if;
-  v_user := private.google_own_account(p_auth_uid);
+  -- With no open link: its own row (none while set aside), or the old-app row it lands on.
+  v_user := private.google_account(p_auth_uid);
   if v_user is null then
     return jsonb_build_object('r', 'new');
   end if;
@@ -1361,7 +1426,7 @@ begin
   if private.google_open_link(p_auth_uid) is not null then
     return jsonb_build_object('r', 'not_allowed');
   end if;
-  v_user := private.google_own_account(p_auth_uid);
+  v_user := private.google_account(p_auth_uid);
   if v_user is null then
     return jsonb_build_object('r', 'new');
   end if;

@@ -6,6 +6,13 @@
 // the owner's decision of 2026-10-26 that a Google account's own row that was never
 // used (private.account_is_empty) does not block a link: the link is made over it,
 // the row stays untouched, and a row with any kind of activity is still refused.
+// When such a link ends the Google account gets 'replaced' (never the old row in
+// silence) until it asks for that row back. Also: an old-app row's typed number
+// gives no turf until proved; a sign-in taken off an account (Google removed or
+// swapped, a number changed or recycled) loses that account's turfs and can't take
+// over the claim row under its key; _can_manage reads the key's own account; a
+// Google session saves suggestions for the account it opens; admin refusals name
+// the other account.
 // Never touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/account_links.check.mjs supabase/migrations \
 //   supabase/migrations/20261026_account_links.sql supabase/migrations/20261026_account_links_reads.sql
@@ -122,6 +129,7 @@ const SIGS = [
   `private.caller_account(p_key text) -> uuid true s search_path=""`,
   `private.profile_json(p_user_id uuid) -> jsonb true s search_path=""`,
   `public._can_manage(p_key text, p_turf_id uuid) -> boolean true s search_path=public`,
+  `public._turf_suggestion_caller_ok(p_user_id uuid) -> boolean true s search_path=public`,
   `public.account_resolve(p_key text, p_kind text, p_phone text DEFAULT NULL::text, p_uid uuid DEFAULT NULL::uuid, p_email text DEFAULT NULL::text, p_name text DEFAULT NULL::text, p_avatar text DEFAULT NULL::text, p_create boolean DEFAULT false, p_log boolean DEFAULT false) -> jsonb true v search_path=""`,
   `public.account_set_email(p_key text, p_user_id uuid, p_action text, p_email text DEFAULT NULL::text, p_source text DEFAULT 'profile'::text) -> jsonb true v search_path=""`,
   `public.admin_people(p_firebase_token text DEFAULT NULL::text) -> TABLE(id uuid, name text, email text, phone text, profile_image_url text, role text, is_verified boolean, created_at timestamp with time zone, signed_up_at timestamp with time zone, updated_at timestamp with time zone, method text, username text, taggable boolean, logins integer, last_login timestamp with time zone, login_methods text[], games_hosted integer, requests integer, requests_accepted integer, games_joined integer, reviews integer, contact_taps integer, contacted jsonb, asks integer, recent_asks text[], suggestions integer, turfs jsonb, last_active timestamp with time zone, signup jsonb, city text, city_source text, city_ip text, city_at_signup boolean, city_at timestamp with time zone, likely_city text, likely_share real) true s search_path=""`,
@@ -132,6 +140,7 @@ const SIGS = [
   `public.owner_claim(p_token text, p_turf_id uuid, p_name text DEFAULT NULL::text, p_note text DEFAULT NULL::text, p_role text DEFAULT NULL::text) -> jsonb true v search_path=public`,
   `public.owner_claim_verified(p_token text, p_proof text, p_turf_id uuid, p_note text DEFAULT NULL::text, p_role text DEFAULT NULL::text) -> jsonb true v search_path=public`,
   `public.owner_home(p_token text DEFAULT NULL::text) -> jsonb true v search_path=public`,
+  `public.owner_phone_listed(p_token text, p_turf_id uuid, p_phone text) -> jsonb true v search_path=public`,
   `public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb) -> jsonb true v search_path=public`,
 ];
 eq((await q(`select n.nspname || '.' || p.proname || '(' || pg_get_function_arguments(p.oid) || ') -> ' || pg_get_function_result(p.oid)
@@ -140,7 +149,8 @@ eq((await q(`select n.nspname || '.' || p.proname || '(' || pg_get_function_argu
               where (n.nspname, p.proname) in (('private','profile_json'),('public','account_resolve'),('public','handle_auth_user_created'),
                      ('private','account_for_key'),('private','caller_account'),('public','account_set_email'),('public','admin_verified'),
                      ('public','_can_manage'),('public','owner_home'),('public','owner_claim'),('public','owner_claim_verified'),
-                     ('public','owner_update_turf'),('public','admin_people'),('public','get_recent_logins'))
+                     ('public','owner_update_turf'),('public','admin_people'),('public','get_recent_logins'),
+                     ('public','owner_phone_listed'),('public','_turf_suggestion_caller_ok'))
               order by 1`)).map((x) => x.sig), SIGS, "every replaced function keeps its live signature, result and settings");
 // And production's EXECUTE grants (anon, authenticated, public), read the same day.
 const GRANTS = {
@@ -154,6 +164,7 @@ const GRANTS = {
   "public.owner_claim(p_token text, p_turf_id uuid, p_name text, p_note text, p_role text)": "aap",
   "public.owner_claim_verified(p_token text, p_proof text, p_turf_id uuid, p_note text, p_role text)": "aa-",
   "public.owner_home(p_token text)": "aap", "public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb)": "aap",
+  "public.owner_phone_listed(p_token text, p_turf_id uuid, p_phone text)": "aa-", "public._turf_suggestion_caller_ok(p_user_id uuid)": "---",
 };
 eq(Object.fromEntries((await q(`select n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' f,
                     case when has_function_privilege('anon', p.oid, 'execute') then 'a' else '-' end
@@ -430,11 +441,21 @@ eq((await status("h1", `fb-${PHF}`)).outcome, "has_account", "and the intent clo
 eq(await count("private.account_google_links", `auth_uid = '${F}'`), 0, "no link");
 eq(await count("private.account_reports", `kind = 'link_has_account' and detail ->> 'other_user_id' = '${F}'`), 1, "reported with the other account");
 eq((await resolve({ kind: "google", uid: F, email: "late.use@gmail.com" })).id, F, "F still opens its own row");
-// Taken off again: the Google account opens its own row, as it was.
+// Taken off again: the Google account is told so ('replaced'), never sent to its old row in silence.
 r = await rpc("account_unlink_google", [KEY, PHE, `fb-${PHE}`, AGO(20), H("ge-u")]);
 eq([r.r, r.google_email], ["ok", null], "Google taken off the phone account");
-r = await resolve({ kind: "google", uid: E, email: "empty.g@gmail.com", create: true });
-eq([r.r, r.id, r.created], ["ok", E, false], "then the Google account opens its own row again");
+r = await resolve({ kind: "google", uid: E, email: "empty.g@gmail.com", create: true, log: true });
+eq([r.r, r.id], ["replaced", undefined], "then the Google account gets 'replaced', not its own empty row");
+eq((await resolve({ kind: "google", uid: E, email: "empty.g@gmail.com" })).r, "replaced", "also without create");
+eq(await count("public.user_logins", `user_id = '${E}'`), eLogins, "and no login is written on that row");
+eq((await one(`select private.google_account('${E}') a`)).a, null, "google_account: none");
+eq((await one(`select private.account_for_key('e:empty.g@gmail.com') a`)).a, null, "myTapturf e: key: none");
+await asJwt(gE);
+eq((await one(`select private.caller_account('e:empty.g@gmail.com') a`)).a, null, "caller_account: none");
+eq((await rpc("owner_home", [null])).account_state, "none", "myTapturf: no account for this sign-in");
+eq((await one(`select public._turf_suggestion_caller_ok('${E}') o`)).o, false, "no suggestions saved on the set-aside row");
+await asJwt(null);
+eq((await rpc("account_set_phone", [KEY, E, "+919000000024", H("ge-p")])).r, "new", "no number set on the set-aside row");
 eq(await row(E), eRow, "still exactly as it was");
 // And it can be added again, over the same untouched row.
 eq((await start(PHE, "g2")).r, "ok");
@@ -600,12 +621,174 @@ await assert.rejects(q("select * from public.admin_sign_in_links(null)"), /not a
 await assert.rejects(q("select * from public.admin_link_refusals(null)"), /not allowed/);
 passed += 2;
 
+// ── 12. A link made over an empty own row, swapped out, then asked back ("Make a new TapTurf account"). ──
+const E2 = U(51), PHE2 = "+919000000025";
+await google(E2, "empty2.g@gmail.com", { name: "Ezra" });
+eq((await resolve({ kind: "google", uid: E2, email: "empty2.g@gmail.com", name: "Ezra", create: true })).id, E2, "E2 has its own empty row");
+const e2Row = await row(E2);
+const PE2 = (await resolve({ kind: "phone", phone: PHE2, name: "Ira", create: true })).id;
+eq((await start(PHE2, "s1")).r, "ok");
+eq((await attach("s1", E2)).r, "ok");
+eq((await complete("s1", PHE2)).id, PE2, "linked over E2's empty row");
+await google(U(52), "ira.new@gmail.com");
+eq((await start(PHE2, "s2")).r, "ok");
+eq((await attach("s2", U(52))).r, "ok");
+eq((await complete("s2", PHE2)).google_email, "ira.new@gmail.com", "swapped to another Google account");
+eq((await resolve({ kind: "google", uid: E2, email: "empty2.g@gmail.com", create: true })).r, "replaced", "the swapped-out one: 'replaced'");
+await q(`select set_config('test.owner', 'yes', false)`);
+eq((await one(`select state from public.admin_google_unfinished(null) where auth_uid = '${E2}'`))?.state, "replaced", "admin lists it as taken off a phone account");
+await q(`select set_config('test.owner', '', false)`);
+r = await rpc("account_google_fresh", [KEY, E2, "empty2.g@gmail.com", "Ezra", null]);
+eq([r.r, r.id, r.created], ["ok", E2, false], "asked for: its own row from before, not a new one");
+eq(await row(E2), e2Row, "that row exactly as it was");
+eq(await count("public.users", `id = '${E2}'`), 1, "one row");
+eq((await resolve({ kind: "google", uid: E2, email: "empty2.g@gmail.com" })).id, E2, "and it opens that row from then on");
+eq((await one(`select private.google_account('${E2}') a`)).a, E2);
+// Still empty, so it can be added again; taken off again, it is set aside again.
+eq((await start(PHE2, "s3")).r, "ok");
+eq((await attach("s3", E2)).r, "ok", "added again over the same empty row");
+eq((await complete("s3", PHE2)).id, PE2);
+eq((await rpc("account_unlink_google", [KEY, PHE2, `fb-${PHE2}`, AGO(15), H("s-u")])).r, "ok");
+eq((await resolve({ kind: "google", uid: E2, email: "empty2.g@gmail.com", create: true })).r, "replaced", "taken off again: 'replaced' again");
+eq(await row(E2), e2Row, "the row never touched");
+// A Google account taken off with no row of its own still gets a new one only when asked (section 4).
+
+// ── 13. An old-app row's number was never proved: no turf from it until it is (account_phone10). ──
+const L = U(80), GL = U(81), T80 = "bbbbbbbb-0000-4000-8000-000000000080";
+await q(`insert into public.turfs (id, name, slug, city, contact_info) values ('${T80}', 'Eighty', 'eighty', 'pune', '{"phone":"+91 90000 00088"}')`);
+await q(`insert into public.users (id, name, email, phone, created_at) values ('${L}', 'Old Row', 'old.row@gmail.com', '+919000000088', '2025-01-01')`);
+await q(`insert into private.legacy_email_rows (user_id) values ('${L}')`);
+await google(GL, "old.row@gmail.com");
+eq((await resolve({ kind: "google", uid: GL, email: "old.row@gmail.com", create: true })).id, L, "Google lands on the old-app row");
+eq((await one(`select private.account_phone10('${L}') p`)).p, null, "its typed number counts for nothing");
+const gL = { sub: GL, email: "old.row@gmail.com", app_metadata: { providers: ["google"] }, amr: [{ method: "oauth" }] };
+await asJwt(gL);
+h = await rpc("owner_home", [null]);
+eq([h.account_state, h.matches], ["ok", []], "no turf offered from the typed number");
+eq(await rpc("owner_claim", [null, T80, null, null, null]), { status: "pending" }, "a claim waits for a check, no code: not in at once");
+eq(await rpc("owner_update_turf", [null, T80, { whatsapp_phone: "9111111111" }]), { error: "forbidden" }, "and can't change the turf");
+await asJwt(null);
+// Proved with an OTP from the profile: now it counts.
+eq((await rpc("account_set_phone", [KEY, GL, "+919000000088", H("l1")])).r, "ok", "the number confirmed with a code");
+eq((await one(`select private.account_phone10('${L}') p`)).p, "9000000088", "now it counts");
+await asJwt(gL);
+eq(await rpc("owner_claim", [null, T80, null, null, null]), { status: "active" }, "the waiting claim opens by the proved number");
+eq((await rpc("owner_update_turf", [null, T80, { whatsapp_phone: "9111111111" }])).ok, true, "a code to its own number is no hold");
+await asJwt(null);
+// An old-app row a phone sign-in opened before the login log could be faked: its number counts.
+const L2 = U(82);
+await q(`insert into public.users (id, name, email, phone, created_at) values ('${L2}', 'Old Phone', 'old.phone@gmail.com', '+919000000089', '2025-01-01')`);
+await q(`insert into private.legacy_email_rows (user_id) values ('${L2}')`);
+eq((await one(`select private.account_phone10('${L2}') p`)).p, null);
+await q(`insert into public.user_logins (user_id, method, created_at) values ('${L2}', 'phone', '2026-10-01')`);
+eq((await one(`select private.account_phone10('${L2}') p`)).p, "9000000089", "a trusted phone sign-in to it counts");
+// A phone account's own number (made by OTP) counts as always.
+eq((await one(`select private.account_phone10('${P7}') p`)).p, "9000000017");
+
+// ── 14. A sign-in taken off an account loses that account's turfs. ──
+const can = async (key, turf) => (await one(`select public._can_manage($1, $2) c`, [key, turf])).c;
+// T1 was claimed from G7's sign-in for P7 (section 9): 'e:typed.g@gmail.com', user_id P7, active.
+eq(await one(`select user_key, user_id, status from public.turf_owners where turf_id = '${T1}'`), { user_key: "e:typed.g@gmail.com", user_id: P7, status: "active" });
+eq(await can("e:typed.g@gmail.com", T1), true, "G7 manages T1 while linked");
+// (a) Removal.
+eq((await rpc("account_unlink_google", [KEY, PH7, `fb-${PH7}`, AGO(10), H("t-u1")])).r, "ok", "P7 takes G7 off");
+eq(await can("e:typed.g@gmail.com", T1), false, "removed: G7 no longer manages T1");
+await as(g7);
+h = await rpc("owner_home", [null]);
+eq([h.account_state, h.turfs], ["none", []], "nor sees it");
+eq(await rpc("owner_update_turf", [null, T1, { whatsapp_phone: "9888888888" }]), { error: "forbidden" }, "nor changes it");
+await as(null);
+eq(await can("p:9000000017", T1), true, "the phone sign-in still manages it");
+eq((await rpc("owner_home", ["phone:9000000017"])).turfs.map((t) => t.id), [T1, T2], "and sees it");
+// (b) Added back, then a swap to another Google account.
+eq((await start(PH7, "t1")).r, "ok");
+eq((await attach("t1", U(7))).r, "ok");
+eq((await complete("t1", PH7)).id, P7, "G7 added back");
+eq(await can("e:typed.g@gmail.com", T1), true, "manages T1 again");
+await google(U(110), "swap.g@gmail.com");
+eq((await start(PH7, "t2")).r, "ok");
+eq((await attach("t2", U(110))).r, "ok");
+eq((await complete("t2", PH7)).google_email, "swap.g@gmail.com", "swapped to G110");
+eq(await can("e:typed.g@gmail.com", T1), false, "swapped out: G7 no longer manages T1");
+eq(await can("e:swap.g@gmail.com", T1), true, "the new Google account does");
+// (c) G7 asks for an account of its own: T1's claim under its key stays P7's.
+eq((await rpc("account_google_fresh", [KEY, U(7), "typed.g@gmail.com", "Gee Seven", null])).created, true, "G7 gets its own account");
+eq(await can("e:typed.g@gmail.com", T1), false, "which doesn't manage P7's turf");
+await as(g7);
+eq((await rpc("owner_home", [null])).turfs, [], "nor lists it");
+eq(await rpc("owner_claim", [null, T1, null, null, null]), { error: "other_account" }, "and can't take over the claim row under its key");
+eq(await rpc("owner_claim_verified", [null, "proof:9000000017", T1, null, null]), { error: "other_account" }, "not even with a code");
+ok((await rpc("owner_phone_listed", [null, T1, "9000000017"])).status !== "active", "nor is told it is in");
+await as(null);
+eq(await one(`select user_key, user_id, status from public.turf_owners where turf_id = '${T1}'`), { user_key: "e:typed.g@gmail.com", user_id: P7, status: "active" }, "the claim row is unchanged");
+// (d) A Google account's number changed: the old number's sign-in loses the turf.
+const T3 = "bbbbbbbb-0000-4000-8000-000000000003";
+await q(`insert into public.turfs (id, name, slug, city, contact_info) values ('${T3}', 'Three', 'three', 'pune', '{"phone":"+91 90000 00010"}')`);
+eq(await rpc("owner_claim", ["phone:9000000010", T3, null, null, null]), { status: "active" }, "U6's number opens T3 at once");
+eq((await one(`select user_id from public.turf_owners where turf_id = '${T3}'`)).user_id, U(6));
+eq(await can("p:9000000010", T3), true);
+eq((await rpc("account_set_phone", [KEY, U(6), "+919000000013", H("t-p1")])).r, "ok", "U6 changes its number");
+eq(await can("p:9000000010", T3), false, "the old number no longer manages T3");
+eq(await rpc("owner_update_turf", ["phone:9000000010", T3, { whatsapp_phone: "9777777777" }]), { error: "forbidden" }, "nor changes it");
+eq(await can("e:typed@gmail.com", T3), true, "U6's Google sign-in still does");
+eq(await can("p:9000000013", T3), true, "and so does its new number");
+// The old number recycled to a new person: no way in through the old claim row.
+const Z = (await resolve({ kind: "phone", phone: "+919000000010", name: "Zed", create: true })).id;
+ok(Z && Z !== U(6), "a new account with the recycled number");
+eq(await can("p:9000000010", T3), false, "doesn't manage U6's turf");
+h = await rpc("owner_home", ["phone:9000000010"]);
+eq([h.turfs, h.matches], [[], []], "nor sees it, nor is offered a claim it couldn't make");
+eq(await rpc("owner_claim", ["phone:9000000010", T3, null, null, null]), { error: "other_account" }, "a claim under that key stays U6's");
+
+// ── 15. _can_manage reads the key's own account, not the caller's (set_turf_cover checks other people's keys). ──
+// The site owner, on /admin with their own Google session, asks whether the person who chose a cover still manages it.
+await google(U(111), "owner.g@gmail.com");
+await resolve({ kind: "google", uid: U(111), email: "owner.g@gmail.com", create: true });
+await as({ sub: U(111), email: "owner.g@gmail.com", app_metadata: { providers: ["google"] }, amr: [{ method: "oauth" }] });
+eq(await can("e:swap.g@gmail.com", T1), true, "a linked Google key that manages through its account: yes, whoever asks");
+await q(`insert into public.turf_owners (turf_id, user_key, user_id, status, via) values ('${T2}', 'e:owner.g@gmail.com', '${U(111)}', 'active', 'admin')`);
+eq(await can("e:typed.g@gmail.com", T2), false, "and the asker's own claim doesn't count for someone else's key");
+await as(null);
+
+// ── 16. Suggestions: a Google session saves for the account it opens. ──
+await as({ sub: U(110), email: "swap.g@gmail.com", app_metadata: { providers: ["google"] }, amr: [{ method: "oauth" }] });
+eq((await one(`select public._turf_suggestion_caller_ok('${P7}') o`)).o, true, "a linked Google session: the phone account");
+eq((await one(`select public._turf_suggestion_caller_ok('${U(110)}') o`)).o, false, "not its own uid");
+await as(gL);
+eq((await one(`select public._turf_suggestion_caller_ok('${L}') o`)).o, true, "a Google session on an old-app row: that row");
+await as({ sub: U(1), email: "g1@gmail.com", app_metadata: { providers: ["google"] }, amr: [{ method: "oauth" }] });
+eq((await one(`select public._turf_suggestion_caller_ok('${U(1)}') o`)).o, true, "its own row, as before");
+eq((await one(`select public._turf_suggestion_caller_ok('${P7}') o`)).o, false, "never someone else's");
+await as(null);
+eq((await one(`select public._turf_suggestion_caller_ok('${P7}') o`)).o, true, "no session: a phone account, as before");
+eq((await one(`select public._turf_suggestion_caller_ok('${U(1)}') o`)).o, false, "but never a Google account's row");
+
+// ── 17. Admin: an 'already on another account' refusal names that account. ──
+// At the confirm too: the Google account is added to another phone account between its return and the confirm.
+await google(U(112), "race.g@gmail.com");
+const PHR1 = "+919000000026", PHR2 = "+919000000027";
+const PR1 = (await resolve({ kind: "phone", phone: PHR1, name: "Ria", create: true })).id;
+const PR2 = (await resolve({ kind: "phone", phone: PHR2, name: "Raj", create: true })).id;
+eq((await start(PHR1, "r1")).r, "ok");
+eq((await attach("r1", U(112))).r, "ok", "Ria's attempt: the Google account came back");
+eq((await start(PHR2, "r2")).r, "ok");
+eq((await attach("r2", U(112))).r, "ok");
+eq((await complete("r2", PHR2)).id, PR2, "meanwhile added to Raj's account");
+eq((await complete("r1", PHR1)).r, "other_account", "Ria confirms: already on another account");
+eq(await count("private.account_reports", `kind = 'link_other_account' and detail ->> 'user_id' = '${PR1}' and detail ->> 'other_user_id' = '${PR2}'`), 1, "reported with Raj's account");
+await q(`select set_config('test.owner', 'yes', false)`);
+const ref2 = await q("select kind, user_id, other_user_id from public.admin_link_refusals(null)");
+ok(ref2.some((x) => x.kind === "link_other_account" && x.user_id === PR1 && x.other_user_id === PR2), "admin can open both accounts");
+ok(ref2.some((x) => x.kind === "link_other_account" && x.user_id === P2 && x.other_user_id === P), "the earlier one too (section 3)");
+await q(`select set_config('test.owner', '', false)`);
+eq(await count("private.account_reports", `kind = 'link_other_account' and detail ->> 'other_user_id' is null`), 0, "every such report names the other account");
+
 // ── 11. Grants. ──
-for (const t of ["account_google_links", "account_link_intents", "account_link_legs", "otp_proofs", "phone_links"]) {
+for (const t of ["account_google_links", "account_link_intents", "account_link_legs", "otp_proofs", "phone_links", "google_own_row_asked"]) {
   eq((await one(`select has_table_privilege('anon', 'private.${t}', 'select') a`)).a, false, `${t} closed`);
 }
 for (const f of ["private.phone_account(text)", "private.google_account(uuid)", "private.phone_link_ok(uuid, text)", "private.account_phone10(uuid)",
-  "private.google_make_account(uuid, text, text, text)", "private.account_is_empty(uuid)"]) {
+  "private.google_make_account(uuid, text, text, text)", "private.account_is_empty(uuid)", "private.google_own_row(uuid)"]) {
   eq((await one(`select has_function_privilege('anon', '${f}', 'execute') a`)).a, false, `${f} closed`);
 }
 eq((await one(`select has_any_column_privilege('anon', 'public.users', 'INSERT') a`)).a, false, "users closed to API inserts");

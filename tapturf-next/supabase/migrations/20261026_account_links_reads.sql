@@ -4,22 +4,32 @@
 -- Body-only changes, same signatures and return types, each copied from the
 -- live body (the file named above it) with the changes marked (n):
 --   _can_manage, owner_home, owner_claim, owner_claim_verified,
---   owner_update_turf: a claim belongs to the account, so either of its
---     sign-ins (the phone, or the Google account added to it; Google, or
---     the number added to it) sees and manages it, and never makes a
---     second claim on the same turf.
+--   owner_update_turf, owner_phone_listed: a claim belongs to the account,
+--     so either of its sign-ins (the phone, or the Google account added to
+--     it; Google, or the number added to it) sees and manages it, and never
+--     makes a second claim on the same turf. A claim made under a sign-in
+--     counts for that sign-in only while it still opens the account the
+--     claim was made for: a Google account taken off a phone account, or a
+--     number taken off a Google account, loses that account's turfs.
 --   admin_people, get_recent_logins: a Google sign-in counts for the
 --     account it opens (a linked phone account, an old-app row), and a code
 --     exchange that only added Google to a phone account is not a sign-in.
 --     A Google account's myTapturf key is the phone account's it was added
 --     to, never its own row's (an empty one the link was made over).
+--   _turf_suggestion_caller_ok: a Google session acts for the account it
+--     opens (a linked phone account, an old-app row), not only its own row.
 -- One new helper, private.account_phone10. Written without the destructive
 -- SQL keywords. Safe to run again.
 
 set local lock_timeout = '5s';
 
 -- The 10 digits of the number this account opens with by OTP (its phone
--- sign-in, or a number proved from the profile), or null.
+-- sign-in, or a number proved from the profile), or null. A number on an
+-- old-app row (private.legacy_email_rows) was typed into the old app and
+-- never proved, so it counts only once it is: an OTP from the profile
+-- (phone_link_ok), or a phone sign-in to that row before the login log
+-- could be faked. A Google sign-in that lands on such a row gets no turf
+-- from its number until then.
 create or replace function private.account_phone10(p_user_id uuid)
 returns text
 language sql
@@ -30,7 +40,12 @@ as $$
   select public._phone10(u.phone::text)
     from public.users u
    where u.id = p_user_id and u.phone is not null
-     and private.phone_account(u.phone::text) = u.id;
+     and private.phone_account(u.phone::text) = u.id
+     and (private.phone_link_ok(u.id, u.phone::text)
+          or not exists (select 1 from private.legacy_email_rows g where g.user_id = u.id)
+          or exists (select 1 from public.user_logins l
+                      where l.user_id = u.id and l.method = 'phone'
+                        and l.created_at < private.phone_logins_trusted_before()));
 $$;
 revoke all on function private.account_phone10(uuid) from public, anon, authenticated;
 
@@ -45,11 +60,15 @@ set search_path = public
 as $$
   select p_key is not null and (
     public._is_admin_key(p_key)
-    or exists (select 1 from public.turf_owners o where o.turf_id = p_turf_id and o.user_key = p_key and o.status = 'active')
-    -- (1) The same account's claim made from its other sign-in.
+    -- (1) A claim made for the account this key opens now, under this key or the account's
+    -- other sign-in; under this key alone only a claim from before claims named the account.
+    -- So a sign-in taken off an account (a Google account removed or swapped, a number
+    -- changed) loses that account's turfs. The key's own account, not the caller's: other
+    -- people's keys are checked too (set_turf_cover).
     or exists (select 1 from public.turf_owners o
                 where o.turf_id = p_turf_id and o.status = 'active'
-                  and o.user_id is not null and o.user_id = private.caller_account(p_key))
+                  and ((o.user_key = p_key and o.user_id is null)
+                       or (o.user_id is not null and o.user_id = (select private.account_for_key(p_key)))))
   );
 $$;
 
@@ -96,7 +115,8 @@ begin
                  'status', o.status, 'via', o.via, 'since', o.created_at) as j
           from public.turf_owners o join public.turfs t on t.id = o.turf_id
          where o.status in ('active', 'pending')
-           and (o.user_key = k or (v_uid is not null and o.user_id = v_uid))
+           -- Under this key only while it opens the account the claim was made for (or from before claims named one).
+           and ((o.user_key = k and o.user_id is null) or (v_uid is not null and o.user_id = v_uid))
          order by o.turf_id, (o.status = 'active') desc, (o.user_key = k) desc, o.created_at
       ) x
     ), '[]'::jsonb),
@@ -108,6 +128,8 @@ begin
       where t.is_active
         and v_p10 in (public._phone10(t.contact_info ->> 'phone'), public._phone10(t.owner_phone), public._phone10(t.whatsapp_phone))
         and v_p10 = any(private.turf_trusted_phones(t.id))
+        -- Not offered when this account claimed it already, or when a claim under this very key
+        -- exists for another account (owner_claim can't make a second row under the key: other_account).
         and not exists (select 1 from public.turf_owners o
                          where o.turf_id = t.id and (o.user_key = k or (v_uid is not null and o.user_id = v_uid))
                            and o.status in ('active', 'pending'))
@@ -136,6 +158,7 @@ declare
   v_p10 text;
   v_okey text;
   v_ostatus text;
+  v_kuser uuid;
   v_role text := case when p_role in ('owner', 'manager', 'staff') then p_role end;
 begin
   if k is null then
@@ -155,7 +178,12 @@ begin
   select left(nullif(btrim(u.name), ''), 80) into v_name from public.users u where u.id = v_uid;
   -- (1) The number this account opens with, from either sign-in.
   v_p10 := case when left(k, 2) = 'p:' then substr(k, 3) else private.account_phone10(v_uid) end;
-  select status into v_status from public.turf_owners where turf_id = p_turf_id and user_key = k;
+  select status, user_id into v_status, v_kuser from public.turf_owners where turf_id = p_turf_id and user_key = k;
+  -- (4) This sign-in's claim was made for another account (the sign-in was taken off it since):
+  -- never opened, reused or written over from here. Access TapTurf removed is still told below.
+  if v_kuser is not null and v_kuser is distinct from v_uid and v_status is distinct from 'revoked' then
+    return jsonb_build_object('error', 'other_account');
+  end if;
   -- A waiting phone claim opens once its own number is on the listing.
   if v_status = 'pending' and v_p10 is not null and v_p10 = any(coalesce(private.turf_trusted_phones(p_turf_id), '{}'))
      and not private.claim_revoked(p_turf_id, k, v_uid, null) then
@@ -242,6 +270,7 @@ declare
   v_status text;
   v_okey text;
   v_ostatus text;
+  v_kuser uuid;
   v_role text := case when p_role in ('owner', 'manager', 'staff') then p_role end;
 begin
   if k is null then
@@ -269,7 +298,12 @@ begin
     -- On the listing but not one that opens it at once: a check by hand.
     return jsonb_build_object('error', case when v_phone = any(coalesce(public._turf_phones(p_turf_id), '{}')) then 'needs_check' else 'not_listed' end);
   end if;
-  select status into v_status from public.turf_owners where turf_id = p_turf_id and user_key = k;
+  select status, user_id into v_status, v_kuser from public.turf_owners where turf_id = p_turf_id and user_key = k;
+  -- (2) This sign-in's claim was made for another account (the sign-in was taken off it since):
+  -- never opened or written over from here.
+  if v_kuser is not null and v_kuser is distinct from v_uid and v_status is distinct from 'revoked' then
+    return jsonb_build_object('error', 'other_account');
+  end if;
   -- (1) The same account's claim from its other sign-in: open that one, never a second row.
   if v_status is null then
     select o.user_key, o.status into v_okey, v_ostatus from public.turf_owners o
@@ -352,8 +386,10 @@ begin
   if p_patch ? 'whatsapp_phone' and not public._is_admin_key(k) and exists (
        select 1 from public.turf_owners o
         where o.turf_id = p_turf_id and o.status = 'active'
-          -- (1) The claim of this account, from whichever of its sign-ins.
-          and (o.user_key = k or (o.user_id is not null and o.user_id = private.caller_account(k)))
+          -- (1) A claim that lets this sign-in in (_can_manage): this account's, from whichever of
+          -- its sign-ins, or one under this key from before claims named the account.
+          and ((o.user_key = k and o.user_id is null)
+               or (o.user_id is not null and o.user_id = (select private.account_for_key(k))))
           and o.verified_phone is not null and o.user_key <> 'p:' || o.verified_phone
           -- (2) A code to the account's own number is not someone else's.
           and o.verified_phone is distinct from private.account_phone10(o.user_id)
@@ -477,6 +513,90 @@ $$;
 
 grant execute on function public.owner_update_turf(text, uuid, jsonb) to anon, authenticated;
 
+-- 20261025_claims_account.sql
+
+create or replace function public.owner_phone_listed(p_token text, p_turf_id uuid, p_phone text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k text := public._caller_key(p_token);
+  v_phone text := public._phone10(p_phone);
+  v_listed boolean;
+begin
+  if k is null then
+    return jsonb_build_object('error', 'sign_in');
+  end if;
+  if not exists (select 1 from public.turfs where id = p_turf_id and is_active) then
+    return jsonb_build_object('error', 'not_found');
+  end if;
+  if v_phone is null then
+    return jsonb_build_object('error', 'bad_phone');
+  end if;
+  -- Answered before any code goes out: already in, or turned away.
+  -- (1) Already in: the same rule as managing it (_can_manage), from either sign-in of the account.
+  if public._can_manage(k, p_turf_id) then
+    return jsonb_build_object('status', 'active');
+  end if;
+  if private.claim_revoked(p_turf_id, k, private.caller_account(k), v_phone) then
+    return jsonb_build_object('error', 'revoked');
+  end if;
+  if (select count(*) from private.claim_phone_checks c where c.user_key = k and c.at > now() - interval '1 hour') >= 20 then
+    return jsonb_build_object('error', 'too_many');
+  end if;
+  v_listed := v_phone = any(coalesce(private.turf_trusted_phones(p_turf_id), '{}'));
+  -- On the listing, but it can't open it at once (set by an owner, say): a check by hand.
+  if not v_listed and v_phone = any(coalesce(public._turf_phones(p_turf_id), '{}')) then
+    insert into private.claim_phone_checks (user_key, turf_id, phone, listed) values (k, p_turf_id, v_phone, false);
+    return jsonb_build_object('listed', false, 'blocked', true);
+  end if;
+  -- A code goes to this number next: one every 2 minutes and 5 a day to one number, whoever asks,
+  -- and 10 a day for one sign-in.
+  if v_listed then
+    if exists (select 1 from private.claim_phone_checks c where c.phone = v_phone and c.listed and not coalesce(c.failed, false) and c.at > now() - interval '2 minutes') then
+      return jsonb_build_object('error', 'wait', 'retry_in',
+        ceil(extract(epoch from (select max(c.at) from private.claim_phone_checks c where c.phone = v_phone and c.listed and not coalesce(c.failed, false)) + interval '2 minutes' - now()))::int);
+    end if;
+    if (select count(*) from private.claim_phone_checks c where c.phone = v_phone and c.listed and c.at > now() - interval '1 day') >= 5 then
+      return jsonb_build_object('error', 'number_busy');
+    end if;
+    if (select count(*) from private.claim_phone_checks c where c.user_key = k and c.listed and c.at > now() - interval '1 day') >= 10 then
+      return jsonb_build_object('error', 'too_many');
+    end if;
+  end if;
+  insert into private.claim_phone_checks (user_key, turf_id, phone, listed) values (k, p_turf_id, v_phone, v_listed);
+  return case when v_listed then jsonb_build_object('listed', true, 'retry_in', 120) else jsonb_build_object('listed', false) end;
+end;
+$$;
+
+revoke all on function public.owner_phone_listed(text, uuid, text) from public;
+grant execute on function public.owner_phone_listed(text, uuid, text) to anon, authenticated;
+
+-- 20260930_turf_suggestions_edit.sql
+
+create or replace function public._turf_suggestion_caller_ok(p_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    -- (1) A Google session acts for the account it opens: the phone account it was added to,
+    -- its own row, or the old-app row it lands on. A session with no TapTurf account yet, as
+    -- before; one taken off a phone account (its own row set aside) for none (false, never null).
+    when auth.uid() is not null then coalesce(p_user_id = coalesce(
+      private.google_account(auth.uid()),
+      case when not exists (select 1 from public.users u where u.id = auth.uid()) then auth.uid() end), false)
+    else not exists (select 1 from auth.users a where a.id = p_user_id)
+         and exists (select 1 from public.users u where u.id = p_user_id)
+  end;
+$$;
+
+revoke all on function public._turf_suggestion_caller_ok(uuid) from public, anon, authenticated;
+
 -- 20261022_people_fixes.sql
 
 create or replace function public.admin_people(p_firebase_token text default null)
@@ -561,8 +681,10 @@ begin
       select distinct on (m.user_id) m.user_id, au.last_sign_in_at as at,
              case when au.raw_app_meta_data ->> 'provider' = 'google' or au.raw_app_meta_data -> 'providers' @> '["google"]'::jsonb then 'google' else 'email' end as method
         from auth.users au
-        cross join lateral (select coalesce(private.google_account(au.id), au.id) as user_id) m
+        cross join lateral (select private.google_account(au.id) as user_id) m
        where au.last_sign_in_at is not null
+         -- A sign-in that opens no account (taken off a phone account, say) is nobody's login.
+         and m.user_id is not null
          and not exists (select 1 from private.account_link_legs lg
                           where lg.auth_uid = au.id
                             and lg.returned_at between au.last_sign_in_at - interval '10 minutes' and au.last_sign_in_at + interval '10 minutes')
@@ -636,7 +758,8 @@ begin
        where k.user_key is not null
     ), o as (
       -- myTapturf claims, every status.
-      -- (6) By the keys the account holds, and by the account the claim was made for.
+      -- (6) By the account the claim was made for, and by the keys the account holds for claims
+      -- from before claims named one (never another account's claim under a key it holds now).
       select c.user_id,
              jsonb_agg(jsonb_build_object(
                          'turf', coalesce(t.name::text, 'A removed turf'),
@@ -645,6 +768,7 @@ begin
                          'role', tow.role) order by tow.created_at desc, tow.turf_id) as list
         from (select k.user_id, tow0.turf_id, tow0.user_key
                 from keys k join public.turf_owners tow0 on tow0.user_key = k.user_key
+                                                         and (tow0.user_id is null or tow0.user_id = k.user_id)
               union
               select tow0.user_id, tow0.turf_id, tow0.user_key
                 from public.turf_owners tow0 where tow0.user_id is not null) c

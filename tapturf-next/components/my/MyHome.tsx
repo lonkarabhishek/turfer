@@ -279,6 +279,7 @@ const CLAIM_ERRORS: Record<string, string> = {
   no_account: "We couldn't find your TapTurf account for this sign-in. Sign out, sign in again, then try once more.",
   too_many: "You have five claims waiting already. We'll get to them soon.",
   revoked: "Access to this turf was removed. Email info@tapturf.in.",
+  other_account: "This login's earlier claim on this turf belongs to another TapTurf account. Email info@tapturf.in and we'll sort it out.",
   not_found: "This turf isn't on TapTurf any more.",
   bad_phone: "Enter the 10-digit mobile number, like 98765 43210.",
   not_listed: "That number isn't on this listing.",
