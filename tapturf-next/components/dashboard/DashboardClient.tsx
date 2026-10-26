@@ -27,6 +27,14 @@ export function DashboardClient() {
   const asked = searchParams.get("tab");
   const initialTab: TabKey = TABS.find((t) => t.key === asked)?.key ?? "games";
   const [tab, setTab] = useState<TabKey>(initialTab);
+  // A link to another tab while the dashboard is open (the phone ask, the header's Alerts) changes
+  // only the address: Next keeps this page mounted, so the tab follows the address here.
+  const [tabAsked, setTabAsked] = useState(asked);
+  if (asked !== tabAsked) {
+    setTabAsked(asked);
+    const k = TABS.find((t) => t.key === asked)?.key;
+    if (k) setTab(k);
+  }
   const pick = (key: TabKey) => {
     setTab(key);
     router.replace(`/dashboard?tab=${key}`, { scroll: false });

@@ -137,7 +137,8 @@ $$;
 revoke all on function private.user_verified(uuid) from public, anon, authenticated;
 
 -- Public: which of these accounts have the tick. Only those ids, sorted;
--- nothing else about anyone. At most the first 100 ids are read.
+-- nothing else about anyone. At most the first 100 ids are read, counted
+-- as elements (a slice would keep every row of a many-dimensional array).
 create or replace function public.users_verified(p_ids uuid[])
 returns uuid[]
 language sql
@@ -146,14 +147,17 @@ security definer
 set search_path = ''
 as $$
   select coalesce(array_agg(x.id order by x.id), '{}'::uuid[])
-    from (select distinct t.id from unnest(p_ids[1:100]) as t(id) where t.id is not null) x
+    from (select distinct t.id
+            from (select u.id from unnest(p_ids) with ordinality as u(id, n) order by u.n limit 100) t
+           where t.id is not null) x
    where private.user_verified(x.id);
 $$;
 revoke all on function public.users_verified(uuid[]) from public;
 grant execute on function public.users_verified(uuid[]) to anon, authenticated;
 
 -- Public: the same for current usernames people may tag (live scorecard
--- tags), as typed in ASCII and lowercased. At most the first 64 are read.
+-- tags), as typed in ASCII and lowercased. At most the first 64 are read,
+-- counted as elements, as above.
 create or replace function public.usernames_verified(p_usernames text[])
 returns text[]
 language sql
@@ -162,8 +166,9 @@ security definer
 set search_path = ''
 as $$
   select coalesce(array_agg(n.username order by n.username), '{}'::text[])
-    from (select distinct lower(x) as name from unnest(p_usernames[1:64]) as x
-           where x ~ '^[A-Za-z][A-Za-z0-9_]{2,19}$') a
+    from (select distinct lower(t.x) as name
+            from (select u.x from unnest(p_usernames) with ordinality as u(x, n) order by u.n limit 64) t
+           where t.x ~ '^[A-Za-z][A-Za-z0-9_]{2,19}$') a
     join public.usernames n on n.username = a.name and n.taggable
    where private.user_verified(n.user_id);
 $$;

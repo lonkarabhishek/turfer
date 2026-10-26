@@ -104,9 +104,16 @@ export function tickSteps(u: TickUser | null | undefined, signedInWith: "phone" 
   };
 }
 
-/** Where the profile sends someone to do the missing step (the owner's line on /u). */
+/**
+ * The profile's number step, opened from elsewhere (the phone ask, the owner's line on /u): it
+ * opens as the row's own button does, so a Google sign-in over 5 minutes old goes to Google first.
+ * Not add=phone: that is the way back from the form's own Google round trip, which skips that check.
+ */
+export const PHONE_STEP = "phone-step";
+
+/** Where the profile sends someone to do the missing step (the owner's line on /u, the phone ask). */
 export function tickStepHref(action: "phone" | "email"): string {
-  return action === "phone" ? "/dashboard?tab=profile&add=phone" : "/dashboard?tab=profile#verify";
+  return action === "phone" ? `/dashboard?tab=profile&add=${PHONE_STEP}` : "/dashboard?tab=profile#verify";
 }
 
 /** The Google sign-in this long ago or less: the number form needs no second trip to Google. */

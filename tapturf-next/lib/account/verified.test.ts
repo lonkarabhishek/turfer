@@ -264,7 +264,7 @@ test("card: nothing with the tick, before the database has it, or signed out", (
 });
 
 test("owner's line: where each step is done", () => {
-  assert.equal(tickStepHref("phone"), "/dashboard?tab=profile&add=phone");
+  assert.equal(tickStepHref("phone"), "/dashboard?tab=profile&add=phone-step", "not add=phone, the way back from Google that skips the freshness check");
   assert.equal(tickStepHref("email"), "/dashboard?tab=profile#verify");
 });
 

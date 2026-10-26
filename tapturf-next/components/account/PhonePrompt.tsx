@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { oauthAgeS } from "@/lib/account/client";
 import { spacedPhone } from "@/lib/account/display";
 import { askHere, busy, claimPrompt } from "@/lib/account/prompts";
-import { askAnswered, askWaits, phoneAskFresh, readAskedRecords, tickSteps, type AskedRecord } from "@/lib/account/verified";
+import { askAnswered, askWaits, phoneAskFresh, readAskedRecords, tickStepHref, tickSteps, type AskedRecord } from "@/lib/account/verified";
 import { useInApp } from "@/lib/auth/useInApp";
 import { Sheet } from "./Sheet";
 import { usernameAskedBefore } from "./UsernamePrompt";
@@ -40,8 +40,6 @@ function markAsked(id: string, how: "done" | "later") {
     /* storage blocked: this tab's set still holds */
   }
 }
-
-const PROFILE_ADD_PHONE = "/dashboard?tab=profile&add=phone";
 
 /**
  * Asks a Google sign-in whose email is proved to add (or confirm) its
@@ -94,7 +92,8 @@ export function PhonePrompt() {
   const go = () => {
     markAsked(open, "done");
     setOpen(null);
-    router.push(PROFILE_ADD_PHONE);
+    // The number step as the profile's own button opens it (on /dashboard too: the tab follows the address).
+    router.push(tickStepHref("phone"));
   };
 
   return (

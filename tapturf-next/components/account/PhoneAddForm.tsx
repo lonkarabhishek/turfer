@@ -245,7 +245,9 @@ export function PhoneAddForm({
     if (p) {
       kept.current = null;
       applyProfile(p);
-      const said = intent === "confirm" && opens ? "Number confirmed." : DONE[intent];
+      // A Confirm whose number was edited to another one changed (or, never opening, added) it.
+      const changed = intent === "confirm" && phone10(number) !== phone10(current);
+      const said = changed ? (opens ? DONE.change : DONE.add) : intent === "confirm" && opens ? "Number confirmed." : DONE[intent];
       setDoneText(p.verified === true && !hadTick ? `${said} You’ve got the verified tick.` : said);
       setState("done");
       return;
@@ -366,10 +368,23 @@ export function PhoneAddForm({
                   ? `You log in with this number, but it isn’t confirmed with an OTP here yet.${user?.emailProven ? " Confirm it to get the verified tick." : ""}`
                   : "Not confirmed yet. Confirm it with an OTP so you can log in with this number."}
               </p>
-              <button type="button" onClick={() => void open("confirm")} disabled={off} className={`mt-2 ${primary}`}>
-                {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-                Confirm with OTP
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" onClick={() => void open("confirm")} disabled={off} className={primary}>
+                  {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Confirm with OTP
+                </button>
+                {/* It opens the account: it can still be changed or taken off without its SIM. */}
+                {opens && (
+                  <>
+                    <button type="button" onClick={() => void open("change")} disabled={off} className={quiet}>
+                      Change number
+                    </button>
+                    <button type="button" onClick={() => void open("remove")} disabled={off} className={danger} aria-label="Remove phone number">
+                      Remove
+                    </button>
+                  </>
+                )}
+              </div>
             </>
           ) : (
             <>

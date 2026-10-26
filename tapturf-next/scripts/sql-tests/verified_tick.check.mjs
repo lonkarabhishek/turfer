@@ -412,6 +412,11 @@ eq(await rpc("users_verified", [null]), [], "null");
 const many = Array.from({ length: 100 }, (_, i) => U(1000 + i));
 eq(await rpc("users_verified", [[...many, P1]]), [], "only the first 100 ids are read");
 eq(await rpc("users_verified", [[...many.slice(1), P1]]), [P1], "the 100th is read");
+// A many-dimensional array: still 100 ids in all (a slice would keep every row).
+const grid = (rows) => `{${rows.map((r) => `{${r.join(",")}}`).join(",")}}`;
+const many2 = Array.from({ length: 100 }, (_, i) => U(2000 + i));
+eq((await one(`select public.users_verified($1::uuid[]) r`, [grid([many, [...many2.slice(1), P1]])])).r, [], "a 2-D array: only its first 100 ids are read");
+eq((await one(`select public.users_verified($1::uuid[]) r`, [grid([[P1, G], [GT, E]])])).r, [P1, GT].sort(), "a small 2-D array is read in full");
 // As the API's anon role.
 await db.exec(`set role anon`);
 eq((await one(`select public.users_verified($1) v`, [[P1, G]])).v, [P1], "anon can ask");
@@ -452,6 +457,8 @@ eq(await rpc("usernames_verified", [["Asha_Two", "asha_p", "gita_g", "tara_t", "
   ["asha_old", "asha_two"], "usernames_verified: ticked current taggable names, lowercased; old, untaggable, unknown and non-ASCII ones left out");
 eq(await rpc("usernames_verified", [null]), [], "null");
 eq(await rpc("usernames_verified", [[...Array.from({ length: 64 }, (_, i) => `nobody${i}`), "asha_two"]]), [], "only the first 64 names are read");
+eq((await one(`select public.usernames_verified($1::text[]) r`, [grid([Array.from({ length: 64 }, (_, i) => `nobody${i}`), [...Array.from({ length: 63 }, (_, i) => `noone${i}`), "asha_two"]])])).r, [],
+  "a 2-D array: only its first 64 names are read");
 
 // ── 8. Admin. ──
 await assert.rejects(q(`select * from public.admin_ticks(null)`), /not allowed/, "admin_ticks: the site owner only");

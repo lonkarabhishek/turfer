@@ -13,6 +13,7 @@ import { PhoneAddForm } from "@/components/account/PhoneAddForm";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { VerifyCard } from "@/components/account/VerifyCard";
 import { PROFILE_PATH, spacedPhone } from "@/lib/account/display";
+import { PHONE_STEP } from "@/lib/account/verified";
 import type { MePatch } from "@/lib/account/client";
 import type { AccountError } from "@/lib/account/types";
 import type { AppUser } from "@/types/user";
@@ -48,10 +49,12 @@ export function ProfileSection({ user }: { user: AppUser }) {
 
   // Back from the Google sign-in the phone row asked for (?add=phone): open it, and take the word out of the address.
   const [addPhoneNow] = useState(() => params.get("add") === "phone");
-  // The verified tick card's "Add phone number": opens the phone row's own form.
-  const [phoneSignal, setPhoneSignal] = useState(0);
+  // The verified tick card's "Add phone number", and the tick's asks elsewhere (?add=phone-step): the
+  // phone row's own step, as its button opens it (Google first when that sign-in is over 5 minutes old).
+  const [phoneSignal, setPhoneSignal] = useState(() => (params.get("add") === PHONE_STEP ? 1 : 0));
   useEffect(() => {
-    if (params.get("add") === "phone") router.replace(PROFILE_PATH, { scroll: false });
+    const add = params.get("add");
+    if (add === "phone" || add === PHONE_STEP) router.replace(PROFILE_PATH, { scroll: false });
   }, [params, router]);
 
   // The latest from the server, once: another device may have changed it.
@@ -188,7 +191,8 @@ export function ProfileSection({ user }: { user: AppUser }) {
 
   // The phone row: a Google account whose own way in is Google can add, confirm, change or remove its number.
   // Confirmed means proved with an OTP where the database knows (the tick): a number that opens the
-  // account but was never proved is offered Confirm, which gives the tick its phone half.
+  // account but was never proved is offered Confirm, which gives the tick its phone half, next to
+  // its Change and Remove (it still opens the account).
   const phoneRow =
     byGoogle && user.phoneSettable ? (
       <PhoneAddForm
