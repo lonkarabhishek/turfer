@@ -20,6 +20,24 @@ export function positivePrice(p: unknown): number | null {
 }
 
 /**
+ * The per-hour range players shared on the turf page ("From players"),
+ * or null when none shared a price. Only positive numbers count, so a
+ * stray 0 never reads as ₹0.
+ */
+export function playerPriceRange(
+  list: readonly { price_min?: number | null; price_max?: number | null }[],
+): { min: number; max: number; count: number } | null {
+  const num = (v: unknown) => positivePrice(typeof v === "string" ? Number(v) : v);
+  const ranges = list.flatMap((s) => {
+    const lo = num(s.price_min) ?? num(s.price_max);
+    const hi = num(s.price_max) ?? lo;
+    return lo != null && hi != null ? [{ lo: Math.min(lo, hi), hi: Math.max(lo, hi) }] : [];
+  });
+  if (!ranges.length) return null;
+  return { min: Math.min(...ranges.map((r) => r.lo)), max: Math.max(...ranges.map((r) => r.hi)), count: ranges.length };
+}
+
+/**
  * Collect only real, positive prices from a turf. 1,909 of 3,120 active
  * turfs (26 Oct) have every price column NULL; this returns [] for
  * those. Never defaults to a fake number.

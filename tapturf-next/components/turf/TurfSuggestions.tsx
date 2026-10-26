@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
+import { playerPriceRange } from "@/lib/utils/prices";
 import { generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
 import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
 import {
@@ -271,16 +272,13 @@ export function TurfSuggestions({
         if (key && !phones.has(key)) phones.set(key, { call: s.contact_phone, wa: s.whatsapp_phone });
       }
     }
-    const priced = list.filter((s) => s.price_min != null || s.price_max != null);
-    const lows = priced.map((s) => (s.price_min ?? s.price_max) as number);
-    const highs = priced.map((s) => (s.price_max ?? s.price_min) as number);
+    // The same range the Pricing section quotes when the turf lists none.
+    const priced = playerPriceRange(list);
     const hours = tally(list.map((s) => (s.opening_hours ? [s.opening_hours] : [])));
     return {
       phones: [...phones.values()],
       phonePending: list.some((s) => s.phone_pending),
-      price: priced.length
-        ? { text: priceText(Math.min(...lows), Math.max(...highs))!, count: priced.length }
-        : null,
+      price: priced ? { text: priceText(priced.min, priced.max)!, count: priced.count } : null,
       hours: hours[0] ?? null,
       sports: tally(list.map((s) => s.sports)),
       amenities: tally(list.map((s) => s.amenities)),

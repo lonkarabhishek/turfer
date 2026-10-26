@@ -7,6 +7,7 @@ import {
   getMinimumPrice,
   getNumericPriceMentions,
   hasRealPrices,
+  playerPriceRange,
   positivePrice,
   priceRangeText,
   showsPriceBands,
@@ -133,4 +134,14 @@ test("no summary label ever prints ₹0 or NaN", () => {
     noRupeeZero(summarisePrice(t).label);
     noRupeeZero(summarisePagePrice(t).label);
   }
+});
+
+test("player-shared rates: the range across suggestions, never ₹0", () => {
+  assert.equal(playerPriceRange([]), null);
+  assert.equal(playerPriceRange([{ price_min: null, price_max: null }, { price_min: 0, price_max: 0 }]), null);
+  assert.deepEqual(playerPriceRange([{ price_min: 800, price_max: null }]), { min: 800, max: 800, count: 1 });
+  assert.deepEqual(
+    playerPriceRange([{ price_min: 600, price_max: 900 }, { price_min: null, price_max: 1000 }, { price_min: 0, price_max: null }]),
+    { min: 600, max: 1000, count: 2 },
+  );
 });

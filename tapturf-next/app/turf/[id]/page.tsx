@@ -8,7 +8,7 @@ import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "l
 import { getTopTurfKeys } from "@/lib/queries/turfs";
 import { loadTurfPage } from "@/lib/queries/turfPage";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
-import { priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
+import { playerPriceRange, priceRangeText, priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { turfPhotos } from "@/lib/utils/images";
 import { stripBookingClaims } from "@/lib/utils/bookingClaims";
@@ -140,7 +140,12 @@ export async function generateMetadata({
   const locationClause = cityAndArea ? ` in ${cityAndArea}` : "";
   // Promise prices only when the page has some (1,608 turfs had none on 26 Oct).
   const seeClause = priceSummary.kind === "unknown" ? "See timings, photos and location" : "See prices, timings, photos and location";
-  const contactClause = getPhone(turf) ? ", then call or WhatsApp to book" : getWhatsAppPhone(turf) ? ", then WhatsApp to book" : "";
+  // Only the channels the page offers: a landline-only turf gets Call
+  // alone ("Landline, so no WhatsApp"), 5 active turfs on 26 Oct.
+  const canCall = !!getPhone(turf);
+  const canWhatsApp = !!getWhatsAppPhone(turf);
+  const contactClause =
+    canCall && canWhatsApp ? ", then call or WhatsApp to book" : canCall ? ", then call to book" : canWhatsApp ? ", then WhatsApp to book" : "";
 
   // Lead with the venue's name and place: most searches for these pages
   // are the venue's name, and Google bolds the words that match.
@@ -197,6 +202,9 @@ export default async function TurfDetailPage({
   const hasContact = !!(phone || whatsappPhone);
   const contact = { call: !!phone, whatsapp: !!whatsappPhone };
   const sidebarPrice = summarisePagePrice(turf);
+  // Rates players shared (From players): the Pricing section points to
+  // them when the turf lists none.
+  const playerPrice = sidebarPrice.kind === "unknown" ? playerPriceRange(page.suggestions) : null;
   // The research pass wrote "It is publicly bookable on Playo." into
   // 1,509 descriptions; the page links to no booking app.
   const description = stripBookingClaims(turf.description);
@@ -371,7 +379,7 @@ export default async function TurfDetailPage({
 
             <TurfAmenities turf={turf} />
             <TurfDetails turf={turf} />
-            <TurfPricing turf={turf} claimed={claimed} contact={contact} />
+            <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
             <TurfGames
@@ -488,7 +496,9 @@ export default async function TurfDetailPage({
                       Prices not listed yet
                     </span>
                     <p className="text-[13px] text-primary-500 mt-1">
-                      {slotRatesHint(contact) ?? "Contact details not listed yet"}
+                      {playerPrice
+                        ? `${playerPrice.count === 1 ? "A player reports" : "Players report"} ${priceRangeText(playerPrice.min, playerPrice.max)} an hour, see From players`
+                        : (slotRatesHint(contact) ?? "Contact details not listed yet")}
                     </p>
                   </div>
                 )}

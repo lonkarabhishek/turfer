@@ -7,6 +7,7 @@ import { areaFor } from "@/lib/utils/area";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { haversineKm, type Coords } from "@/lib/utils/location";
+import { relaxSteps } from "./relax";
 import type { Turf } from "@/types/turf";
 
 /**
@@ -383,11 +384,18 @@ function hasNeed(t: Turf, need: Need): boolean {
   }
 }
 
+/** Narrow sports and the wider one Ask shows when a place has none, with the words for the reply. */
+export const SPORT_FALLBACK: Record<string, { slug: string; none: string; instead: string }> = {
+  "cricket-nets": { slug: "cricket", none: "cricket practice nets", instead: "cricket grounds" },
+};
+
 export type AskResult = {
   turfs: (Turf & { distanceKm?: number })[];
   total: number;
   /** Filters we had to drop to find anything, in the order dropped. */
   relaxed: string[];
+  /** The sport the cards are for: the wider one when a narrow sport had none ("cricket" for nets). */
+  sport: string | null;
 };
 
 /**
@@ -410,7 +418,16 @@ export function applyAskFilters(
 
   type Step = { key: string; keep: (t: Turf) => boolean };
   const steps: Step[] = [];
-  if (sport) steps.push({ key: "sport", keep: (t) => turfPlaysSport(t.sports, sport) });
+  // A narrow sport ("nets": Cricket Nets, Indoor Cricket Net, Bowling
+  // Machine) widens to its parent rather than to nothing: Nashik had 45
+  // cricket venues and no nets on 26 Oct, and the sport and an explicit
+  // city are never dropped.
+  const wider = sport ? SPORT_FALLBACK[sport.slug] : undefined;
+  const widerSport = wider ? sportBySlug(wider.slug) : undefined;
+  if (sport && widerSport) {
+    steps.push({ key: "sport", keep: (t) => turfPlaysSport(t.sports, widerSport) || turfPlaysSport(t.sports, sport) });
+    steps.push({ key: "narrow_sport", keep: (t) => turfPlaysSport(t.sports, sport) });
+  } else if (sport) steps.push({ key: "sport", keep: (t) => turfPlaysSport(t.sports, sport) });
   if (areas.length)
     steps.push({
       key: "area",
@@ -446,19 +463,15 @@ export function applyAskFilters(
       },
     });
 
-  // Drop order when nothing matches: softest first. Sport and an explicit city stay.
-  const dropOrder = ["text", "rating", ...f.needs.map((n) => `need:${n}`), "open_24x7", "price", "pref_city", "area"];
-  const active = new Set(steps.map((s) => s.key));
-  const relaxed: string[] = [];
-  let matched: Turf[] = [];
-  for (;;) {
-    matched = all.filter((t) => steps.every((s) => !active.has(s.key) || s.keep(t)));
-    if (matched.length > 0) break;
-    const next = dropOrder.find((k) => active.has(k));
-    if (!next) break;
-    active.delete(next);
-    relaxed.push(next);
-  }
+  // Drop order when nothing matches: softest first. Sport and an explicit
+  // city stay. A narrow sport widens after the area (nets elsewhere in
+  // Pune beat cricket grounds in Kothrud) but before the visitor's own
+  // city (cricket grounds in Nashik beat nets in Mumbai). Area and
+  // pref_city never both apply. relaxSteps puts back what the widening
+  // made possible again, so a budget dropped for an empty area still
+  // applies across the city.
+  const dropOrder = ["text", "rating", ...f.needs.map((n) => `need:${n}`), "open_24x7", "price", "area", "narrow_sport", "pref_city"];
+  const { matched, relaxed } = relaxSteps(all, steps, dropOrder);
 
   const withDist = matched.map((t) => {
     const km =
@@ -502,6 +515,7 @@ export function applyAskFilters(
     turfs: withDist.slice(0, limit).map(({ t, km }) => (km != null ? { ...t, distanceKm: km } : t)),
     total: withDist.length,
     relaxed,
+    sport: relaxed.includes("narrow_sport") && widerSport ? widerSport.slug : (f.sport ?? null),
   };
 }
 
@@ -516,6 +530,7 @@ export function relaxedLabel(key: string): string {
       price: "the budget",
       pref_city: "your city",
       area: "the area",
+      narrow_sport: "the sport",
       when: "the date",
       skill: "the skill level",
       sport: "the sport",

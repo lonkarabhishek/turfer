@@ -7,6 +7,7 @@ import {
   getTextPriceMentions,
   ownerSetPrices,
   positivePrice,
+  priceRangeText,
   priceUnitSuffix,
   showsPriceBands,
 } from "@/lib/utils/prices";
@@ -24,7 +25,20 @@ export function slotRatesHint({ call, whatsapp }: TurfContact): string | null {
   return null;
 }
 
-export function TurfPricing({ turf, claimed = false, contact }: { turf: Turf; claimed?: boolean; contact: TurfContact }) {
+/** What players shared on the page (playerPriceRange of its suggestions). */
+export type PlayerPrice = { min: number; max: number; count: number } | null;
+
+export function TurfPricing({
+  turf,
+  claimed = false,
+  contact,
+  playerPrice = null,
+}: {
+  turf: Turf;
+  claimed?: boolean;
+  contact: TurfContact;
+  playerPrice?: PlayerPrice;
+}) {
   // Listed prices by format and time band are the richest we have,
   // unless the owner set their own on myTapturf: theirs win.
   if (showsPriceBands(turf)) {
@@ -61,7 +75,7 @@ export function TurfPricing({ turf, claimed = false, contact }: { turf: Turf; cl
   const hasWeekend = rows.some((r) => r.weekend != null);
 
   if (rows.length === 0 && mentions.length === 0) {
-    return <NoPrices turfId={turf.id} claimed={claimed} contact={contact} />;
+    return <NoPrices turfId={turf.id} claimed={claimed} contact={contact} playerPrice={playerPrice} />;
   }
 
   if (rows.length === 0) {
@@ -171,10 +185,32 @@ export function TurfPricing({ turf, claimed = false, contact }: { turf: Turf; cl
  * No price, band or report at all (1,608 of 3,120 active turfs on 26
  * Oct). Says so plainly where a player looks for the rate, with the two
  * ways it gets filled: the owner adds it on myTapturf, or a player who
- * knows it shares it.
+ * knows it shares it. When players already shared one (From players,
+ * below), it points there instead of asking for the rate again.
  */
-function NoPrices({ turfId, claimed, contact }: { turfId: string; claimed: boolean; contact: TurfContact }) {
+function NoPrices({
+  turfId,
+  claimed,
+  contact,
+  playerPrice,
+}: {
+  turfId: string;
+  claimed: boolean;
+  contact: TurfContact;
+  playerPrice: PlayerPrice;
+}) {
   const hint = slotRatesHint(contact);
+  const reported = playerPrice ? priceRangeText(playerPrice.min, playerPrice.max) : null;
+  const confirm =
+    contact.call && contact.whatsapp ? " Call or WhatsApp the turf to confirm." : contact.call ? " Call the turf to confirm." : contact.whatsapp ? " WhatsApp the turf to confirm." : "";
+  // The headline already says the rates are missing: the line under it
+  // says what the page can offer next, or what else is missing.
+  const subline =
+    playerPrice && reported
+      ? `${playerPrice.count === 1 ? "A player reports" : "Players report"} ${reported} an hour, under From players below.${confirm}`
+      : hint
+        ? `${hint}.`
+        : "Contact details not listed yet either.";
   return (
     <div className="section-divider">
       <h2 className="text-[22px] font-bold text-primary-800 mb-4 font-serif">Pricing</h2>
@@ -184,10 +220,10 @@ function NoPrices({ turfId, claimed, contact }: { turfId: string; claimed: boole
             <IndianRupee className="w-4 h-4 text-primary-500" />
           </span>
           <div className="min-w-0">
-            <p className="text-[16px] font-semibold text-primary-800">Prices not listed yet</p>
-            <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">
-              {hint ? `${hint}.` : "TapTurf doesn't have this turf's rates yet."}
+            <p className="text-[16px] font-semibold text-primary-800">
+              {reported ? "Not listed by the turf yet" : "Prices not listed yet"}
             </p>
+            <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">{subline}</p>
           </div>
         </div>
         <div className="mt-4 flex flex-col sm:flex-row gap-2">
@@ -199,7 +235,7 @@ function NoPrices({ turfId, claimed, contact }: { turfId: string; claimed: boole
             {claimed ? "Manage this turf? Add your prices" : "Own this turf? Add your prices free"}
           </Link>
           <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-white border border-primary-200 hover:bg-primary-50 text-primary-900 text-[14px] font-semibold transition-colors cursor-pointer">
-            Played here? Share the rate
+            {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
           </SuggestInfoButton>
         </div>
       </div>

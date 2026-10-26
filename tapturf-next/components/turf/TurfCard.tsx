@@ -286,8 +286,13 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                 <span className="font-semibold tabular-nums">~{range}</span>
                 <span className="text-primary-500"> {priceSummary.unit}, reported</span>
               </>
+            ) : priceSummary.kind === "reported_text" ? (
+              <span className="text-primary-500">See reported prices</span>
             ) : (
-              <span className="text-primary-500">Check venue for pricing</span>
+              // Same words as the turf page and Ask's cards. List rows carry
+              // no pricing_bands, so the 18 band-only turfs (26 Oct) read this
+              // too until bands join CARD_COLUMNS.
+              <span className="text-primary-500">Prices not listed yet</span>
             )}
           </p>
         </div>
