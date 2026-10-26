@@ -1,4 +1,4 @@
-import { hasSignIn, signInToken, type TokenCheck } from "../account/client";
+import { hasSignIn, signInKnown, signInToken, type TokenCheck } from "../account/client";
 import { gaParams, makeDeviceTag, DEVICE_RE, toolUseOf, toolUseBody, signedInInit, type ToolUse } from "../tools/usage";
 
 /**
@@ -72,11 +72,28 @@ const tokenSoon = (): Promise<TokenCheck> =>
  * carries it, and no guest tag goes with it; no token in time, and it goes
  * as a guest's with no tag (and the server keeps no live link code for a
  * guest), so nothing ties it to the account or to this browser's tag.
+ * While AuthProvider is still reading this device's sign-in (a Google
+ * session refreshing on a cold load, a scorecard handed over from the live
+ * scorer right after mount), the use waits for that, as long as a token
+ * may take; still unknown then, and it goes as a guest's with no tag.
  */
 function logUse(use: ToolUse) {
   try {
-    if (!hasSignIn()) return beacon(toolUseBody(use, deviceTag()));
+    if (hasSignIn() !== null) return sendUse(use);
+    void signInKnown(TOKEN_WAIT_MS)
+      .then(() => sendUse(use))
+      .catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
+function sendUse(use: ToolUse) {
+  try {
+    const signedIn = hasSignIn();
+    if (signedIn === false) return beacon(toolUseBody(use, deviceTag()));
     const body = toolUseBody(use, null);
+    if (signedIn === null) return beacon(body);
     void tokenSoon()
       .then((t) => ("token" in t ? fetch(USE_URL, signedInInit(body, t.token)).then(() => {}) : beacon(body)))
       .catch(() => {});

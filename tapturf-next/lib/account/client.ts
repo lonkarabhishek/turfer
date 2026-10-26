@@ -88,19 +88,42 @@ export async function supabaseToken(): Promise<TokenCheck> {
   }
 }
 
-let signedInToken: (() => Promise<TokenCheck>) | null = null;
+/** undefined until AuthProvider has its first answer (a Google session can take a network refresh to read). */
+let signedInToken: (() => Promise<TokenCheck>) | null | undefined = undefined;
+let onKnown: (() => void)[] = [];
 
 /**
  * AuthProvider keeps this to the device's current sign-in (null when
- * signed out), for code outside React that sends the sign-in with a call:
- * the free tools' use log (lib/analytics/tools.ts).
+ * signed out, undefined while it is still finding out), for code outside
+ * React that sends the sign-in with a call: the free tools' use log
+ * (lib/analytics/tools.ts).
  */
-export function setSignInToken(get: (() => Promise<TokenCheck>) | null): void {
+export function setSignInToken(get: (() => Promise<TokenCheck>) | null | undefined): void {
   signedInToken = get;
+  if (get === undefined) return;
+  const waiting = onKnown;
+  onKnown = [];
+  for (const done of waiting) done();
 }
 
-/** Whether this device is signed in, as AuthProvider last said. */
-export const hasSignIn = (): boolean => signedInToken !== null;
+/** Whether this device is signed in, as AuthProvider last said; null while it doesn't know yet. */
+export const hasSignIn = (): boolean | null => (signedInToken === undefined ? null : signedInToken !== null);
+
+/** Resolves once AuthProvider knows whether this device is signed in, or after ms (hasSignIn() then still says null). */
+export function signInKnown(ms: number): Promise<void> {
+  if (signedInToken !== undefined) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      onKnown = onKnown.filter((f) => f !== done);
+      resolve();
+    }, ms);
+    onKnown.push(done);
+  });
+}
 
 /** This device's sign-in token, read quietly: never signs anyone out. 'none' when signed out. */
 export function signInToken(): Promise<TokenCheck> {

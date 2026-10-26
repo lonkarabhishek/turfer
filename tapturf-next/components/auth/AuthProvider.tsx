@@ -508,14 +508,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // The free tools send the sign-in with each use they log (lib/analytics/tools.ts). Read quietly:
   // a missing Firebase session there only makes the use a guest's, never a sign-out.
-  const toolSignIn = user ? signedInWith : null;
+  // undefined until the first answer is in (a Google session still being read): a use then waits
+  // for it rather than going out as a guest's with this browser's tag.
+  const toolSignIn = user ? signedInWith : settled ? null : undefined;
   const hadToolSignIn = useRef(false);
   useEffect(() => {
     // Signed in, or just signed out: the tools' random guest tag starts over, so no tag spans an account's session.
     if (toolSignIn || hadToolSignIn.current) forgetToolDevice();
-    hadToolSignIn.current = toolSignIn !== null;
+    hadToolSignIn.current = !!toolSignIn;
     if (!toolSignIn) {
-      setSignInToken(null);
+      setSignInToken(toolSignIn === undefined ? undefined : null);
       return;
     }
     setSignInToken(() => (sourceRef.current === "oauth" ? supabaseToken() : sourceRef.current === "phone" ? firebaseToken() : Promise.resolve<TokenCheck>({ none: true })));
