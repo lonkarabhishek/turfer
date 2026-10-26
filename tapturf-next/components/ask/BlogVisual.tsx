@@ -164,6 +164,24 @@ function Bars({ v }: { v: Of<"bars"> }) {
 function Steps({ v }: { v: Of<"steps"> }) {
   const steps = v.steps.filter((s) => s && typeof s.title === "string" && s.title.trim());
   if (steps.length === 0) return null;
+  // Rules or tips in no particular order: a plain list, so no number reads as the article's own.
+  if (v.ordered === false) {
+    return (
+      <Figure title={v.title}>
+        <ul role="list" className="rounded-2xl border border-primary-100 bg-white px-3.5 py-3 space-y-3">
+          {steps.map((s, i) => (
+            <li key={i} className="flex gap-3">
+              <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-900" />
+              <div className="min-w-0">
+                <p className="text-[14px] font-semibold text-primary-900 leading-snug">{s.title}</p>
+                {s.detail && <p className="mt-0.5 text-[13px] text-primary-500 leading-snug">{s.detail}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Figure>
+    );
+  }
   return (
     <Figure title={v.title}>
       <ol role="list" className="rounded-2xl border border-primary-100 bg-white px-3.5 py-3">

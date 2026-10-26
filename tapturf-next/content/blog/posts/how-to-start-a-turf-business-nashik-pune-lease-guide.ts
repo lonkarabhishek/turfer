@@ -14,6 +14,7 @@ export const post: Post = {
   city: null,
   readMinutes: 12,
   publishedAt: "2026-10-21",
+  updatedAt: "2026-10-26",
   coverEmoji: "🏗️",
   heroImage: {
     url: "/blog/art/turf-business/rent-vs-breakeven.png",
@@ -186,7 +187,7 @@ export const post: Post = {
     },
     {
       type: "p",
-      text: "What this means: at Nashik prices, a 3-year lease only works with low rent and a busy turf. At ₹60,000 rent, 50% occupancy takes about six and a half years to pay back, longer than most leases. At Pune prices there is more room, but at ₹1 lakh rent and above you need 60% or more booked to recover the build inside five years.",
+      text: "What this means: at Nashik prices, a 3-year lease only works with low rent and a busy turf. At ₹60,000 rent, 50% occupancy takes about six and a half years to pay back, longer than most leases. At Pune prices there is more room: at ₹1 lakh rent, 50% booked pays back in about three and a half years, but at ₹1.5 lakh you need 60% or more booked to recover the build inside five years, and at ₹2 lakh even 60% takes over ten.",
     },
 
     { type: "h2", text: "Deal checklist before you sign a lease", id: "lease-checklist" },

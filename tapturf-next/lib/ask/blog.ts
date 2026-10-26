@@ -56,22 +56,47 @@ export function isHinglish(q: string): boolean {
   return /[\u0900-\u097F]/.test(t) || HINGLISH.test(t);
 }
 
+// The city chips (lib/ask/chips.ts) in English and in Hinglish, the same search either way.
+const CHIP_PAIRS: [RegExp, (x: string) => string, RegExp, (x: string) => string][] = [
+  [/^Cheapest turf in (.+)$/i, (x) => `Cheapest turf in ${x}`, /^(.+?) me sasta turf$/i, (x) => `${x} me sasta turf`],
+  [/^Box cricket in (.+) tonight$/i, (x) => `Box cricket in ${x} tonight`, /^(.+?) mein aaj raat box cricket$/i, (x) => `${x} mein aaj raat box cricket`],
+  [/^Football turf in (.+) tonight$/i, (x) => `Football turf in ${x} tonight`, /^(.+?) mein aaj raat football turf$/i, (x) => `${x} mein aaj raat football turf`],
+  [/^Open games in (.+) this weekend$/i, (x) => `Open games in ${x} this weekend`, /^(.+?) mein is weekend open games$/i, (x) => `${x} mein is weekend open games`],
+  [/^Football turf in (.+) with floodlights$/i, (x) => `Football turf in ${x} with floodlights`, /^(.+?) mein floodlights wala football turf$/i, (x) => `${x} mein floodlights wala football turf`],
+  [/^Box cricket near me tonight$/i, () => "Box cricket near me tonight", /^Aaj raat paas mein box cricket$/i, () => "Aaj raat paas mein box cricket"],
+  [/^Cheapest football turf near me$/i, () => "Cheapest football turf near me", /^Paas mein sabse sasta football turf$/i, () => "Paas mein sabse sasta football turf"],
+];
+
 /** The chip as an English reader would type it: "Kothrud me sasta turf" is "Cheapest turf in Kothrud". */
 export function englishChip(chip: string): string {
-  const m = /^(.+?) me sasta turf$/i.exec(chip.trim());
-  return m ? `Cheapest turf in ${m[1]}` : chip;
+  const t = chip.trim();
+  for (const [, en, hi] of CHIP_PAIRS) {
+    const m = hi.exec(t);
+    if (m) return en(m[1] ?? "");
+  }
+  return chip;
+}
+
+/** The chip as a Hinglish reader would type it: "Box cricket in Hyderabad tonight" is "Hyderabad mein aaj raat box cricket". */
+export function hinglishChip(chip: string): string {
+  const t = chip.trim();
+  for (const [en, , , hi] of CHIP_PAIRS) {
+    const m = en.exec(t);
+    if (m) return hi(m[1] ?? "");
+  }
+  return chip;
 }
 
 /**
  * The city's search chips that fit an article, for the one search chip
  * under an answer: those for the sport it is about first, then ones for
  * no sport in particular, never one for another sport or a tool, and none
- * at all on an article for turf owners. Under an English question, a
- * Hinglish chip is put in English.
+ * at all on an article for turf owners. The chips are in the question's
+ * language: English under an English question, Hinglish under Hinglish.
  */
 export function articleSearchChips(post: Pick<Post, "slug" | "title">, chips: string[], question = ""): string[] {
   const english = !isHinglish(question);
-  return fittingChips(post, chips).map((c) => (english ? englishChip(c) : c));
+  return fittingChips(post, chips).map((c) => (english ? englishChip(c) : hinglishChip(c)));
 }
 
 function fittingChips(post: Pick<Post, "slug" | "title">, chips: string[]): string[] {

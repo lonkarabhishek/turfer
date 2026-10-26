@@ -45,6 +45,8 @@ export const BlogReply = z.object({
     /** bars without a dataset: every value must be a number the article states. */
     bars: z.array(z.object({ label: z.string(), value: z.number() })),
     steps: z.array(z.object({ title: z.string(), detail: z.string() })),
+    /** steps: true for a process (the order matters), false for rules or tips in any order. */
+    ordered: z.boolean().nullable(),
     /** compare: the two or three things compared, then a row per aspect with one value per column. */
     columns: z.array(z.string()),
     rows: z.array(z.object({ label: z.string(), values: z.array(z.string()) })),

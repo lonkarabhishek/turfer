@@ -844,7 +844,9 @@ export function livelierBars(a: Article, v: RawVisual): RawVisual {
 function stepsVisual(v: RawVisual): BlogVisual | null {
   const steps = v.steps.map((s) => ({ title: clip(s.title, 60), detail: clip(s.detail, 160) })).filter((s) => s.title);
   if (steps.length < 2) return null;
-  return { kind: "steps", title: clip(v.title, 70) || "Step by step", steps: steps.slice(0, 6) };
+  // Numbered unless the model said the order doesn't matter.
+  const ordered = v.ordered !== false;
+  return { kind: "steps", title: clip(v.title, 70) || (ordered ? "Step by step" : "In short"), steps: steps.slice(0, 6), ...(ordered ? {} : { ordered: false }) };
 }
 
 /** A number the article states somewhere as this amount: "₹" must be rupees, "%" a percentage, lakh/crore counted in full. */

@@ -25,7 +25,8 @@ export type BlogVisual =
   /** Horizontal bars, one series. note: where the numbers come from ("Listed rates, per hour"). */
   | { kind: "bars"; title: string; unit: string | null; note: string | null; bars: BlogBar[] }
   /** A process, in order. */
-  | { kind: "steps"; title: string; steps: { title: string; detail: string }[] }
+  /** ordered false: rules or tips whose order doesn't matter, shown as a plain list. */
+  | { kind: "steps"; title: string; steps: { title: string; detail: string }[]; ordered?: boolean }
   /** Two or three things side by side. */
   | { kind: "compare"; title: string; columns: string[]; rows: { label: string; values: string[] }[] }
   /** A few headline numbers. */

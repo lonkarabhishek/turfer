@@ -40,6 +40,7 @@ const V = (over: Partial<RawVisual>): RawVisual => ({
   unit: null,
   bars: [],
   steps: [],
+  ordered: null,
   columns: [],
   rows: [],
   stats: [],
@@ -1182,7 +1183,7 @@ test("a chart's title can't call its numbers something else (ratings titled as r
   const rating = venues.columns.findIndex((c) => /rating/i.test(c));
   const rates = a.datasets.find((d) => d.source === "table" && d.columns.some((c) => /eve/i.test(c)))!;
   const eve = rates.columns.findIndex((c) => /eve/i.test(c));
-  const base = { kind: "bars" as const, title: "", dataset: null, label_column: 0, value_column: 0, sort: "desc" as const, unit: null, bars: [], steps: [], columns: [], rows: [], stats: [], art_brief: null, alt: null };
+  const base = { kind: "bars" as const, title: "", dataset: null, label_column: 0, value_column: 0, sort: "desc" as const, unit: null, bars: [], steps: [], ordered: null, columns: [], rows: [], stats: [], art_brief: null, alt: null };
   // As seen in production: the right unit, a title that calls ratings "rates".
   const ratings = buildVisual(a, { ...base, title: "Published hourly rates for Hyderabad cages", unit: "rating out of 5", dataset: venues.n, value_column: rating }, () => null);
   assert.ok(ratings && ratings.kind === "bars");
@@ -1277,4 +1278,16 @@ test("livelierBars: the short version swaps ratings that barely differ for the c
   assert.equal(livelierBars(a, text), text);
   const steps = V({ kind: "steps", steps: [{ title: "a", detail: "b" }] });
   assert.equal(livelierBars(a, steps), steps);
+});
+
+test("steps: numbered for a process, a plain list for rules in any order", () => {
+  const a = HYD();
+  const steps = [{ title: "Book early", detail: "Weekends fill first." }, { title: "Bring water", detail: "None is sold." }];
+  const numbered = kind(buildVisual(a, V({ kind: "steps", steps }), noArt), "steps");
+  assert.equal(numbered.ordered, undefined);
+  assert.equal(numbered.title, "Step by step");
+  const list = kind(buildVisual(a, V({ kind: "steps", steps, ordered: false, title: "Rules with money at stake" }), noArt), "steps");
+  assert.equal(list.ordered, false);
+  assert.equal(list.title, "Rules with money at stake");
+  assert.equal(kind(buildVisual(a, V({ kind: "steps", steps, ordered: false }), noArt), "steps").title, "In short");
 });
