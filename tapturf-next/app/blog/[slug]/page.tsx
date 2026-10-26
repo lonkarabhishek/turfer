@@ -33,13 +33,13 @@ export async function generateMetadata({
   const { slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) {
-    return { title: "Post not found | TapTurf Blog" };
+    return { title: "Post not found" };
   }
 
   const url = `https://www.tapturf.in/blog/${post.slug}`;
   const ogImage = post.heroImage?.og ?? post.heroImage?.url;
   return {
-    title: `${post.title} | TapTurf Blog`,
+    title: post.title,
     description: post.description,
     keywords: post.keywords.join(", "),
     openGraph: {
