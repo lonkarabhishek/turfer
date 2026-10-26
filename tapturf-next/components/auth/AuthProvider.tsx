@@ -8,6 +8,7 @@ import { saveSignupContext } from "@/lib/analytics/visitor";
 import type { AccountProfile } from "@/lib/account/types";
 import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, supabaseToken, type TokenCheck } from "@/lib/account/client";
 import { loginErrorText } from "@/lib/auth/callback";
+import { clearAllDrafts } from "@/lib/reviews/draft";
 
 /** What a write says when the server couldn't confirm a Google sign-in's account (confirmedUser gave null). */
 export const ACCOUNT_NOT_CONFIRMED = "Couldn't load your TapTurf account. Check your connection and try again.";
@@ -767,6 +768,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Intentional logout, clear BOTH sources, and any Google account being added (its cookie).
     void cancelGoogleLink();
     for (const k of ["auth_token", "user", GOOGLE_PROFILE_KEY, FB_MISSING_KEY, PROFILE_CHECKED_KEY]) store(k, null);
+    // Report drafts on this phone go too: whoever signs in next never picks one up (lib/reviews/draft.ts).
+    clearAllDrafts();
     writeUidCookie(null);
     clearFidCookie();
     try {

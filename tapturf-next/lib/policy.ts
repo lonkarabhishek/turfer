@@ -3,11 +3,11 @@
  * sitemap). A change to what we collect or share also bumps
  * PRIVACY_NOTICE, which signed-in people see once (PolicyNotice).
  */
-export const PRIVACY_UPDATED = "2026-10-26";
+export const PRIVACY_UPDATED = "2026-10-27";
 
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {
-  id: "2026-10-26-google",
-  text: "You can now add your Google account to a phone login, or a phone number to a Google login, so either one opens the same TapTurf account.",
-  anchor: "email",
+  id: "2026-10-27-reports",
+  text: "Rating a turf is now a quick game report. Your stars, the parts you tap and your tip are public; a private note to the owner never is.",
+  anchor: "reports",
 } as const;

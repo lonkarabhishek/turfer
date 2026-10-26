@@ -8,7 +8,7 @@ import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "l
 import { getTopTurfKeys } from "@/lib/queries/turfs";
 import { loadTurfPage } from "@/lib/queries/turfPage";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
-import { playerPriceRange, priceRangeText, priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
+import { playerPriceRange, positivePrice, priceRangeText, priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
 import { turfPhotos } from "@/lib/utils/images";
 import { stripBookingClaims } from "@/lib/utils/bookingClaims";
@@ -205,6 +205,12 @@ export default async function TurfDetailPage({
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
   const playerPrice = sidebarPrice.kind === "unknown" ? playerPriceRange(page.suggestions) : null;
+  // The rates a game report offers first ("What did you pay for an hour?"): the
+  // listed ones, when they are per hour; else the sheet offers players' own range.
+  const reportPrices =
+    sidebarPrice.kind === "real" && (!turf.price_unit || turf.price_unit === "per_hour")
+      ? { morning: positivePrice(turf.morning_price), afternoon: positivePrice(turf.afternoon_price), evening: positivePrice(turf.evening_price), min: sidebarPrice.min }
+      : null;
   // The research pass wrote "It is publicly bookable on Playo." into
   // 1,509 descriptions; the page links to no booking app.
   const description = stripBookingClaims(turf.description);
@@ -449,8 +455,16 @@ export default async function TurfDetailPage({
                 into TurfReviews so there's a single reviews section. */}
             <TurfReviews
               turfId={turf.id}
+              turfName={turf.name}
+              slug={turf.slug || turf.id}
+              sports={turf.sports ?? []}
+              claimed={claimed}
               initialReviews={page.reviews}
               initialSummary={page.reviewStats}
+              reviewAspects={page.reviewAspects}
+              playAgain={page.playAgain}
+              listedPrices={reportPrices}
+              playerPrice={playerPriceRange(page.suggestions)}
               googleRating={turf.rating}
               googleReviewCount={turf.total_reviews}
               googleReviewUrl={turf.external_review_url}

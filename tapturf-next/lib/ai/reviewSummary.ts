@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ROUTER_MODEL, structured } from "./ask";
+import { summaryLine, writtenEnough, type SummaryReview } from "@/lib/reviews/summaryLine";
 
 /**
  * "What players say": two sentences and a few likes and gripes, made
@@ -20,7 +21,7 @@ export const ReviewSummary = z.object({
 export type ReviewSummary = z.infer<typeof ReviewSummary>;
 export type StoredReviewSummary = ReviewSummary & { based_on: number; sources: string[] };
 
-type ReviewRow = { rating: number; comment: string | null; source: string | null; created_at: string };
+type ReviewRow = SummaryReview & { created_at: string };
 
 const SYSTEM = `You summarise written reviews of one sports venue for TapTurf, an Indian turf directory. Reply only with the JSON object.
 
@@ -30,22 +31,28 @@ Rules:
 - When the reviews disagree, say so plainly. When they are thin, keep the summary to one sentence.
 - Never mention prices unless more than one review gives the same figure, and then say reviewers reported it.`;
 
+/**
+ * The reviews to summarise: written ones, and TapTurf reports with two or
+ * more rated parts (their taps read as words, lib/reviews/summaryLine.ts).
+ * The anon read sees live rows only, so a removed or hidden report drops
+ * out; an edit or a removal makes the stored summary stale
+ * (get_review_summary_batch). Private notes are never read here.
+ */
 export async function loadReviewsFor(turfId: string): Promise<ReviewRow[]> {
   const supabase = createReadOnlyClient();
   const { data } = await supabase
     .from("reviews")
-    .select("rating, comment, source, created_at")
+    .select("rating, comment, source, created_at, sport, played_when, aspects, play_again")
     .eq("turf_id", turfId)
-    .not("comment", "is", null)
     .order("created_at", { ascending: false })
-    .limit(40);
-  return ((data ?? []) as ReviewRow[]).filter((r) => r.comment && r.comment.trim().length > 10);
+    .limit(60);
+  return ((data ?? []) as ReviewRow[]).filter(writtenEnough);
 }
 
 export async function summariseReviews(reviews: ReviewRow[]): Promise<StoredReviewSummary | null> {
   const use = reviews.slice(0, 30);
   if (use.length < 2) return null;
-  const lines = use.map((r) => `- ${r.rating} stars (${r.source === "google" ? "Google" : "TapTurf"}): ${r.comment!.trim().slice(0, 400)}`).join("\n");
+  const lines = use.map(summaryLine).join("\n");
   const out = await structured(
     ReviewSummary,
     {

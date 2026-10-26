@@ -41,8 +41,8 @@ export interface AdminHeadline {
   paidBookings: number;
   pendingBookings: number;
   bookingRevenue: number;   // sum of total_amount across paid bookings
-  totalReviews: number;
-  avgRating: number;         // over all `reviews` rows, 0..5
+  totalReviews: number;      // live TapTurf reports (not the imported Google rows)
+  avgRating: number;         // over those, 0..5
 }
 
 export interface DailyPoint {
@@ -173,7 +173,8 @@ export async function getHeadline(): Promise<AdminHeadline> {
     // tiny. Fetching amounts inline lets us compute revenue without a
     // second round-trip. Cheap for now, revisit at >5k rows.
     s.from("bookings").select("total_amount, status, payment_status, created_at"),
-    s.from("reviews").select("rating"),
+    // TapTurf's own reports only: the 80 imported Google reviews are counted on the turfs.
+    s.from("reviews").select("rating").is("source", null),
   ]);
 
   const accounts = allUsers.data || [];

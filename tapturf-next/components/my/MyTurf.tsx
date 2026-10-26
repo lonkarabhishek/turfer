@@ -9,6 +9,7 @@ import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { EditListing } from "./EditListing";
 import { OwnerPhotos } from "./OwnerPhotos";
+import { PlayerReports } from "./PlayerReports";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
@@ -128,6 +129,8 @@ export function MyTurf({ id }: { id: string }) {
         </div>
       </section>
 
+      <PlayerReports reviews={data.reviews} turfSports={t.sports ?? []} />
+
       <Health turf={t} photos={visiblePhotos ?? t.photos} />
 
       <section id="photos" className="mt-10 scroll-mt-20">
@@ -135,22 +138,6 @@ export function MyTurf({ id }: { id: string }) {
       </section>
 
       <EditListing turf={t} onSaved={load} />
-
-      {data.reviews.recent.length > 0 && (
-        <section className="mt-10">
-          <h2 className="font-display text-[22px] text-primary-900">Latest reviews</h2>
-          <ul className="mt-3 space-y-2">
-            {data.reviews.recent.map((r, i) => (
-              <li key={i} className="rounded-2xl border border-primary-200 bg-white p-4">
-                <p className="text-[13px] text-primary-500">
-                  <span className="font-semibold text-primary-900">{r.author}</span> · {"★".repeat(Math.max(0, Math.min(5, r.rating)))} · {r.source === "google" ? "Google" : "TapTurf"}
-                </p>
-                <p className="mt-1 text-[14px] text-primary-800 leading-snug">{r.comment}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       {data.edits.length > 0 && (
         <section className="mt-10">
