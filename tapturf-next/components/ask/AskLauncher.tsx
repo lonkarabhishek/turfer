@@ -16,8 +16,8 @@ import { SUMMARY_CHIP } from "@/lib/ask/blog";
 export function AskLauncher() {
   const { open, openPanel, turns, pageContext } = useAsk();
   const pathname = usePathname();
-  // Not on owner (myTapturf), admin or login pages.
-  if (open || pathname.startsWith("/admin") || pathname.startsWith("/login") || pathname === "/my" || pathname.startsWith("/my/")) return null;
+  // Not on owner (myTapturf), admin or login pages, nor while adding Google to an account (its buttons fill the bottom).
+  if (open || pathname.startsWith("/admin") || pathname.startsWith("/login") || pathname.startsWith("/account/") || pathname === "/my" || pathname.startsWith("/my/")) return null;
   // Turf and game pages own the bottom edge on phones (Call / WhatsApp
   // bar, Join bar, create-game footer), so the pill is desktop-only there
   // and those pages offer an in-page button instead.

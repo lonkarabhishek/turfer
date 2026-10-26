@@ -45,7 +45,8 @@ export function linkErrorText(e: AccountError | null, until?: string | null): st
   }
 }
 
-type SheetFor = { why: "add" | "change" | "remove"; note?: string; then: string };
+/** n: bumped each time a code didn't count, so the sheet starts afresh. */
+type SheetFor = { why: "add" | "change" | "remove"; note?: string; then: string; n?: number };
 
 /**
  * Start adding (or changing) Google: start(then, why). The proof sheet,
@@ -57,10 +58,14 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
   const [error, setError] = useState("");
   const [sheet, setSheet] = useState<SheetFor | null>(null);
 
-  /** Proof needed: a fresh code to the account's own number, with a note when the last one didn't count. */
-  const askProof = (s: SheetFor, e: AccountError | null) => {
-    if (e === "used") return setSheet({ ...s, note: "That code was already used. We'll send a new one." });
-    if (e === "proof") return setSheet({ ...s, note: "That OTP has expired. Send a new one." });
+  /**
+   * Proof needed: a fresh code to the account's own number, with a note when the last one didn't
+   * count (a proof that came back reauth was too old by the time it arrived).
+   */
+  const askProof = (s: SheetFor, e: AccountError | null, hadProof: boolean) => {
+    const n = Date.now();
+    if (e === "used") return setSheet({ ...s, n, note: "That code was already used. We'll send a new one." });
+    if (e === "proof" || (hadProof && e === "reauth")) return setSheet({ ...s, n, note: "That OTP has expired. Send a new one." });
     setSheet(s);
   };
 
@@ -87,7 +92,7 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
         return;
       }
       const e = errorOf(a);
-      if (e === "reauth" || e === "used" || e === "proof") return askProof({ why, then }, e);
+      if (e === "reauth" || e === "used" || e === "proof") return askProof({ why, then }, e, !!proof);
       setSheet(null);
       setError(linkErrorText(e, b.until));
     } finally {
@@ -116,7 +121,7 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
       }
       const e = errorOf(a);
       if (e === "reauth" || e === "used" || e === "proof") {
-        askProof({ why: "remove", then: "" }, e);
+        askProof({ why: "remove", then: "" }, e, !!proof);
         return false;
       }
       setSheet(null);
@@ -130,6 +135,8 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
   const sheetNode: ReactNode =
     sheet && user?.phone ? (
       <PhoneProofSheet
+        // A note means the last code didn't count: start the sheet afresh, ready to send another.
+        key={sheet.n ?? 0}
         phone={user.phone}
         why={sheet.why}
         note={sheet.note}
