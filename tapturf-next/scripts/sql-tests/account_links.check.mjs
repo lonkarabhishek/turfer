@@ -710,6 +710,9 @@ eq((await start(PH7, "t2")).r, "ok");
 eq((await attach("t2", U(110))).r, "ok");
 eq((await complete("t2", PH7)).google_email, "swap.g@gmail.com", "swapped to G110");
 eq(await can("e:typed.g@gmail.com", T1), false, "swapped out: G7 no longer manages T1");
+await as(g7);
+eq(await rpc("owner_update_turf", [null, T1, { whatsapp_phone: "9888888888" }]), { error: "forbidden" }, "nor changes it");
+await as(null);
 eq(await can("e:swap.g@gmail.com", T1), true, "the new Google account does");
 // (c) G7 asks for an account of its own: T1's claim under its key stays P7's.
 eq((await rpc("account_google_fresh", [KEY, U(7), "typed.g@gmail.com", "Gee Seven", null])).created, true, "G7 gets its own account");
