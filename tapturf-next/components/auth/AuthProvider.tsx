@@ -6,7 +6,13 @@ import type { AppUser } from "@/types/user";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { saveSignupContext } from "@/lib/analytics/visitor";
 import type { AccountProfile } from "@/lib/account/types";
-import { errorOf, firebaseToken, getMe, postMe, profileOf, supabaseToken, type TokenCheck } from "@/lib/account/client";
+import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, supabaseToken, type TokenCheck } from "@/lib/account/client";
+import { loginErrorText } from "@/lib/auth/callback";
+
+/** How this device is signed in: the phone (Firebase OTP) or Google (a Supabase session). */
+export type SignedInWith = "phone" | "google";
+/** Why a Google sign-in opens no account right now (the same answers /login explains). */
+export type AccountProblem = "linking" | "replaced";
 
 interface AuthContextType {
   user: AppUser | null;
@@ -21,6 +27,14 @@ interface AuthContextType {
   settled: boolean;
   /** The user came from the server in this tab (not only from this device's storage). */
   profileFresh: boolean;
+  /** How this device is signed in; null when it is not. The account can be the same either way. */
+  signedInWith: SignedInWith | null;
+  /**
+   * A Google sign-in that opens no TapTurf account: being added to a phone
+   * account on another device (linking), or taken off one (replaced). Its
+   * session was ended here; /login/complete sends the person to /login.
+   */
+  accountProblem: AccountProblem | null;
   login: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -55,6 +69,8 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   settled: false,
   profileFresh: false,
+  signedInWith: null,
+  accountProblem: null,
   login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
@@ -117,21 +133,24 @@ function userFromProfile(p: AccountProfile): AppUser {
     username: p.username ?? undefined,
     taggable: p.taggable,
     contactEmail: p.contact_email ?? undefined,
-    askEmail: p.ask_email === true,
-    emailEditable: p.email_editable === true,
+    googleEmail: p.google_email ?? undefined,
+    // Only a database that has the account links sends these true.
+    googleLinkable: p.google_linkable === true,
+    phoneConfirmed: p.phone_confirmed === true,
+    phoneSettable: p.phone_settable === true,
+    askGoogle: p.ask_google === true,
   };
 }
 
-// Build AppUser fields from a Supabase auth user's metadata
-function buildUserFromSupabase(supaUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }): AppUser {
-  return {
-    id: supaUser.id,
-    name: (supaUser.user_metadata?.name || supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User") as string,
-    email: supaUser.email,
-    role: "user" as AppUser["role"],
-    profile_image_url: (supaUser.user_metadata?.avatar_url || supaUser.user_metadata?.picture) as string | undefined,
-  };
+/** The name Google gave a sign-in, for a notice only: the account itself always comes from the server. */
+function googleName(supaUser: { email?: string; user_metadata?: Record<string, unknown> }): string {
+  return (supaUser.user_metadata?.name || supaUser.user_metadata?.full_name || supaUser.email?.split("@")[0] || "User") as string;
 }
+
+const firstName = (name: string | undefined) => name?.split(" ")[0] || "";
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** How long a Google sign-in with no profile on this device waits for the server before the page goes on. */
+const GOOGLE_FIRST_WAIT_MS = 8_000;
 
 /** The Google user this device last had from the server, if it is this sign-in's. */
 function readGoogleUser(uid: string): AppUser | null {
@@ -168,8 +187,11 @@ function readPhoneUser(): AppUser | null {
       taggable: typeof p.taggable === "boolean" ? p.taggable : undefined,
       // As storePhoneUser writes them (userFromProfile's names).
       contactEmail: typeof p.contactEmail === "string" ? p.contactEmail : undefined,
-      askEmail: p.askEmail === true,
-      emailEditable: p.emailEditable === true,
+      googleEmail: typeof p.googleEmail === "string" ? p.googleEmail : undefined,
+      googleLinkable: p.googleLinkable === true,
+      phoneConfirmed: p.phoneConfirmed === true,
+      phoneSettable: p.phoneSettable === true,
+      askGoogle: p.askGoogle === true,
     };
   } catch {
     return null;
@@ -214,10 +236,14 @@ function clearFidCookie() {
   }
 }
 
-/** Pages where a background check never runs: live scoring and following must not be interrupted. */
+/**
+ * Pages where a background check never runs and a missing Firebase
+ * session never signs out: live scoring and following must not be
+ * interrupted, and /account/link says itself when the phone login ended.
+ */
 function quietPath(): boolean {
   const p = window.location.pathname;
-  return p.startsWith("/live") || p.startsWith("/tools");
+  return p.startsWith("/live") || p.startsWith("/tools") || p === "/account/link" || p.startsWith("/account/link/");
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -230,9 +256,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [signedInWith, setSignedInWith] = useState<SignedInWith | null>(initial ? "phone" : null);
+  const [accountProblem, setAccountProblem] = useState<AccountProblem | null>(null);
 
   const supabaseRef = useRef(createClient());
   const sourceRef = useRef<AuthSource>(initial ? "phone" : null);
+  /** The one place the sign-in source changes, so the context's signedInWith always agrees with it. */
+  const setSource = useCallback((src: AuthSource) => {
+    sourceRef.current = src;
+    setSignedInWith(src === "oauth" ? "google" : src);
+  }, []);
   /** The Google sign-in's own id (a legacy account's users.id can differ). */
   const authUidRef = useRef<string | null>(null);
   // Bumped by every profile applied after an edit: a read that started before it is stale.
@@ -272,48 +305,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileFresh(true);
   }, []);
 
+  /** Back to the phone sign-in kept on this device, if there is one. */
+  const rehydratePhone = useCallback((): boolean => {
+    const p = readPhoneUser();
+    if (!p) return false;
+    setUser(p);
+    setSource("phone");
+    setLoading(false);
+    setSettled(true);
+    return true;
+  }, [setSource]);
+
   /**
-   * Google: publish the sign-in at once (this device's last server copy,
-   * or Google's own profile), then the account from the server, made if
-   * there is none. Never throws, and a failed server call keeps the user.
+   * This Google sign-in opens no account right now (linking, replaced): end
+   * its session on this device, never touching a phone sign-in kept here,
+   * and say why. /login/complete sends the person on to /login, which says
+   * it there.
+   */
+  const refuseGoogle = useCallback(async (why: AccountProblem) => {
+    setSource(null);
+    authUidRef.current = null;
+    store(GOOGLE_PROFILE_KEY, null);
+    setUser(null);
+    setProfileFresh(false);
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch {
+      /* ignore: the session is unusable for accounts anyway */
+    }
+    rehydratePhone();
+    setAccountProblem(why);
+    if (window.location.pathname !== "/login/complete" && window.location.pathname !== "/login") {
+      const text = loginErrorText("account", why);
+      if (text) showNotice(text);
+    }
+  }, [supabase, setSource, rehydratePhone, showNotice]);
+
+  /**
+   * Google: the account from the server, made if there is none. A user is
+   * published at once only from this device's last server copy for this
+   * sign-in; without one, nothing is shown until the server answers (at
+   * most 8 s here, then the page goes on and the answer lands when it
+   * comes), so no page ever acts on a Google sign-in that has no account.
+   * Never throws; a failed call keeps any user already shown.
    */
   const resolveSupabaseUser = useCallback(async (
     supaUser: { id: string; email?: string; user_metadata?: Record<string, unknown> },
     shouldWelcome: boolean,
     accessToken: string | null,
   ) => {
-    const quick = readGoogleUser(supaUser.id) ?? buildUserFromSupabase(supaUser);
-    setUser(quick);
-    sourceRef.current = "oauth";
+    const cached = readGoogleUser(supaUser.id);
+    setSource("oauth");
     authUidRef.current = supaUser.id;
-    if (shouldWelcome) showWelcome(quick.name?.split(" ")[0] || "");
+    if (cached) {
+      setUser(cached);
+      if (shouldWelcome) showWelcome(firstName(cached.name));
+    }
+    const mine = () => sourceRef.current === "oauth" && authUidRef.current === supaUser.id;
+    let published = !!cached;
 
-    const load = async (token: string | null, tries: number): Promise<void> => {
-      if (!token || sourceRef.current !== "oauth") return;
+    /** One POST: ok, a refusal handled, try again later, or stop (401: Supabase's own events handle it). */
+    const attempt = async (token: string | null): Promise<"ok" | "refused" | "retry" | "stop"> => {
+      if (!token || !mine()) return "stop";
       const a = await postMe(token);
-      if (sourceRef.current !== "oauth") return;
+      if (!mine()) return "stop";
       const p = profileOf(a);
       if (p) {
         const next = userFromProfile(p);
         store(GOOGLE_PROFILE_KEY, JSON.stringify({ uid: supaUser.id, user: next }));
         setUser(next);
         setProfileFresh(true);
-        // A new account: save how they found us, in the background. The database trigger makes
-        // a Google account before this call, so created is never true for Google: the server says
-        // fresh for a row made in the last 15 minutes (its clock, not the phone's).
+        setAccountProblem(null);
+        if (!published && shouldWelcome) showWelcome(firstName(next.name));
+        published = true;
+        // A new account: save how they found us, in the background. The sign-in callback makes a
+        // Google account a moment before this call, so the server says fresh for a row made in the
+        // last 15 minutes (its clock, not the phone's).
         const b = a.body as { created?: boolean; fresh?: boolean };
         if (b.created || b.fresh) saveSignupContext(p.id, "google");
-        return;
+        return "ok";
       }
-      // 401: the session is being refreshed or ended; Supabase's own events handle that.
-      if (a.status !== 401 && tries > 0) {
-        await new Promise((r) => setTimeout(r, 15_000));
+      const e = errorOf(a);
+      if (e === "linking" || e === "replaced") {
+        await refuseGoogle(e);
+        return "refused";
+      }
+      return a.status === 401 ? "stop" : "retry";
+    };
+
+    const stillLoading = "Couldn't load your TapTurf account. Check your connection; we'll keep trying.";
+    const run = async () => {
+      let r = await attempt(accessToken);
+      for (let tries = 2; r === "retry" && tries > 0; tries--) {
+        if (!published && mine()) showNotice(stillLoading);
+        await sleep(15_000);
+        if (!mine()) return;
         const again = await supabaseToken();
-        await load("token" in again ? again.token : null, tries - 1);
+        r = await attempt("token" in again ? again.token : null);
       }
     };
-    void load(accessToken, 2);
-  }, [showWelcome]);
+    const running = run();
+    if (published) return;
+    await Promise.race([running, sleep(GOOGLE_FIRST_WAIT_MS)]);
+    if (!published && mine()) showNotice(stillLoading);
+  }, [showWelcome, showNotice, setSource, refuseGoogle]);
 
   /**
    * End this device's phone sign-in: its Firebase session is gone, or the
@@ -332,11 +427,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setProfileFresh(false);
-    sourceRef.current = null;
+    setSource(null);
     try {
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
-        const name = readGoogleUser(data.session.user.id)?.name ?? buildUserFromSupabase(data.session.user).name;
+        const name = readGoogleUser(data.session.user.id)?.name ?? googleName(data.session.user);
         await resolveSupabaseUser(data.session.user, false, data.session.access_token);
         showNotice(`Your phone login ended. You are signed in with Google as ${name}.`);
         return;
@@ -345,7 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     showNotice(message);
-  }, [supabase, resolveSupabaseUser, showNotice]);
+  }, [supabase, resolveSupabaseUser, showNotice, setSource]);
 
   const getToken = useCallback(async (): Promise<TokenCheck> => {
     if (sourceRef.current === "oauth") return supabaseToken();
@@ -395,6 +490,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const e = errorOf(a);
     // The page may have changed while the check ran: never sign out on live or tools pages; a later visit tries again.
     if (e === "new" && !quietPath()) {
+      // The account this number opened changed its number (it logs in with Google).
+      if ((a.body as { wasUsed?: boolean }).wasUsed === true) {
+        await forcePhoneSignOut("This number no longer opens your TapTurf account. Log in with Google.");
+        return;
+      }
       const tail = (local.phone ?? "").slice(-2);
       await forcePhoneSignOut(
         `This phone number has no TapTurf account. Log in with the number on your profile${/^\d{2}$/.test(tail) ? `, ending in ${tail}` : ""}.`,
@@ -413,25 +513,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cancelled) setLoading(false);
     }, 3000);
 
-    // Called any time we might have lost/regained phone-auth localStorage
-    // (visibility change, storage event, or a Supabase SIGNED_OUT while
-    // there's still a phone token sitting there).
-    const rehydratePhone = () => {
-      const p = readPhoneUser();
-      if (p) {
-        setUser(p);
-        sourceRef.current = "phone";
-        setLoading(false);
-        setSettled(true);
-        return true;
-      }
-      return false;
-    };
-
     // ── 1. Phone auth: instant from localStorage ──
     let idle: number | null = null;
     if (initial) {
-      sourceRef.current = "phone";
+      setSource("phone");
       setLoading(false);
       clearTimeout(emergencyTimeout);
       // Check with the server in the background, when the page is idle,
@@ -495,8 +580,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (shouldWelcomeFromCallback) {
               store("auth_token", null);
               store("user", null);
-              sourceRef.current = null;
+              setSource(null);
             }
+            // The session is known: this resolve settles the page itself (waiting for the server
+            // when this device has no profile for it), so the 3 s fallback must not cut in.
+            clearTimeout(emergencyTimeout);
             await resolveSupabaseUser(session.user, shouldWelcomeFromCallback, token);
           }
         }
@@ -507,6 +595,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === "SIGNED_IN" && session?.user) {
+        // A phone sign-in on this device wins, as at INITIAL_SESSION: supabase-js re-emits SIGNED_IN
+        // from storage whenever the tab comes back, and that must not switch the account. Only the
+        // page a Google sign-in returns to takes it.
+        if (sourceRef.current === "phone" && window.location.pathname !== "/login/complete") return;
         const isNewSignIn = sourceRef.current === null;
         // The same sign-in again (a tab back in the foreground): nothing to fetch.
         if (sourceRef.current === "oauth" && authUidRef.current === session.user.id) {
@@ -545,7 +637,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authUidRef.current = null;
         if (rehydratePhone()) return;
         setUser(null);
-        sourceRef.current = null;
+        setSource(null);
         setLoading(false);
         setSettled(true);
       }
@@ -564,13 +656,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const p = readPhoneUser();
       if (p) {
         setUser(p);
-        sourceRef.current = "phone";
+        setSource("phone");
       } else if (sourceRef.current === "phone") {
         // Phone auth cleared in another tab. Only wipe user if we were
         // phone — an oauth session might still be valid.
         setUser(null);
         setProfileFresh(false);
-        sourceRef.current = null;
+        setSource(null);
       }
     };
 
@@ -584,7 +676,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (p) {
         if (sourceRef.current !== "phone" || user?.id !== p.id) {
           setUser(p);
-          sourceRef.current = "phone";
+          setSource("phone");
         }
       }
       // If phone user is missing but we thought we had one, don't
@@ -630,7 +722,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // Intentional logout, clear BOTH sources.
+    // Intentional logout, clear BOTH sources, and any Google account being added (its cookie).
+    void cancelGoogleLink();
     for (const k of ["auth_token", "user", GOOGLE_PROFILE_KEY, FB_MISSING_KEY, PROFILE_CHECKED_KEY]) store(k, null);
     writeUidCookie(null);
     clearFidCookie();
@@ -642,9 +735,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setUser(null);
     setProfileFresh(false);
-    sourceRef.current = null;
+    setSource(null);
     authUidRef.current = null;
-  }, [supabase]);
+    setAccountProblem(null);
+  }, [supabase, setSource]);
 
   // Fast, synchronous path: read localStorage and push into context.
   // Called right after PhoneOTP writes the user so the modal/page can
@@ -653,19 +747,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const p = readPhoneUser();
     if (p) {
       setUser(p);
-      sourceRef.current = "phone";
+      setSource("phone");
       setLoading(false);
       setSettled(true);
+      setAccountProblem(null);
       if (fresh) {
         setProfileFresh(true);
         store(PROFILE_CHECKED_KEY, String(Date.now()));
         store(FB_MISSING_KEY, null);
       }
-      showWelcome(p.name?.split(" ")[0] || "");
+      showWelcome(firstName(p.name));
       return p;
     }
     return null;
-  }, [showWelcome]);
+  }, [showWelcome, setSource]);
 
   /** The account from the server again, for this sign-in. */
   const refreshUser = useCallback(async () => {
@@ -679,7 +774,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, settled, profileFresh, login, logout, refreshUser, hydrateFromStorage,
+      user, loading, settled, profileFresh, signedInWith, accountProblem, login, logout, refreshUser, hydrateFromStorage,
       getToken, applyProfile,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,

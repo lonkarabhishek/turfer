@@ -19,6 +19,7 @@
   "files": [
     "lib/admin/trend.test.ts",
     "lib/admin/people.test.ts",
-    "lib/admin/claims.test.ts"
+    "lib/admin/claims.test.ts",
+    "lib/admin/links.test.ts"
   ]
 }

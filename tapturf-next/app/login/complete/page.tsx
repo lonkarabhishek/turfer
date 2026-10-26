@@ -24,16 +24,22 @@ const PROJECT_REF = "hwfsbpzercuoshodmnuf";
 function CompleteInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const { user, loading } = useAuth();
+  const { user, loading, accountProblem } = useAuth();
   const nextParam = params?.get("next") || "/";
   const [failed, setFailed] = useState(false);
   const [slow, setSlow] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !accountProblem) {
       router.replace(safeNext(nextParam));
     }
-  }, [user, loading, nextParam, router]);
+  }, [user, loading, accountProblem, nextParam, router]);
+
+  // This Google account opens no TapTurf account right now (being added to a phone account, or
+  // taken off one): its session is already ended; /login says why and what to do.
+  useEffect(() => {
+    if (accountProblem) router.replace(`/login?error=account&why=${accountProblem}&next=${encodeURIComponent(safeNext(nextParam))}`);
+  }, [accountProblem, nextParam, router]);
 
   // Safety bailout: still not signed in after 6s means the callback
   // probably failed silently (cookies blocked, provider error post-code).
@@ -57,11 +63,11 @@ function CompleteInner() {
   }, [user]);
 
   useEffect(() => {
-    if (failed && !user) {
+    if (failed && !user && !accountProblem) {
       const url = `/login?error=callback&why=slow&next=${encodeURIComponent(safeNext(nextParam))}`;
       router.replace(url);
     }
-  }, [failed, user, nextParam, router]);
+  }, [failed, user, accountProblem, nextParam, router]);
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4">

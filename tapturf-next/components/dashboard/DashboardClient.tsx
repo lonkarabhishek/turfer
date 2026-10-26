@@ -23,8 +23,14 @@ export function DashboardClient() {
   const { user, loading, login, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as TabKey) || "games";
+  // The tab is in the address, so a reload, a Back from Google and every return to the profile land on it.
+  const asked = searchParams.get("tab");
+  const initialTab: TabKey = TABS.find((t) => t.key === asked)?.key ?? "games";
   const [tab, setTab] = useState<TabKey>(initialTab);
+  const pick = (key: TabKey) => {
+    setTab(key);
+    router.replace(`/dashboard?tab=${key}`, { scroll: false });
+  };
   const redirectedRef = useRef(false);
 
   useEffect(() => {
@@ -87,7 +93,7 @@ export function DashboardClient() {
               key={key}
               role="tab"
               aria-selected={active}
-              onClick={() => setTab(key)}
+              onClick={() => pick(key)}
               className={`flex items-center gap-2 px-4 py-2.5 min-h-[40px] rounded-full text-[13px] font-bold whitespace-nowrap border-2 transition-all focus-neon ${
                 active
                   ? "bg-accent-500 text-white border-accent-500 shadow-neon"

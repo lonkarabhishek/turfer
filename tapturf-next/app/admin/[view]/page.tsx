@@ -30,6 +30,8 @@ import {
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 import { signupPeople } from "@/lib/queries/adminUsers";
+import { googleUnfinishedRows } from "@/lib/queries/adminLinks";
+import { UNFINISHED_LABEL, unfinishedList } from "@/lib/admin/links";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { ASK_FILTERS, askStats, askVia, filterAsks, getAskDigest, getAskTranscripts, threadAsks, type AskFilter } from "@/lib/queries/adminAsks";
 import { AskDigestCard } from "@/components/admin/AskDigest";
@@ -579,32 +581,39 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
   }
 }
 
-/** Google sign-ups that never came back: no sign-in to list, but real accounts (Google confirmed the email). */
+/**
+ * Google sign-ins that opened no TapTurf account: the ones that never came back (the old trigger made
+ * an empty account for those), and the ones being added to, refused by or taken off a phone account.
+ */
 async function UnfinishedGoogle() {
-  const { people } = await signupPeople();
-  const list = (people ?? []).filter((p) => p.signInUnfinished);
+  const [{ people }, rows] = await Promise.all([signupPeople(), googleUnfinishedRows()]);
+  const list = unfinishedList(people ?? [], rows);
   if (list.length === 0) return null;
   return (
     <section className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4">
-      <h2 className="font-semibold text-amber-900">
-        {list.length} Google sign-up{list.length === 1 ? "" : "s"} didn&rsquo;t finish
-      </h2>
-      <p className="text-[13px] text-amber-900/80">They picked their Google account but never came back to TapTurf. Their email is real: Google confirmed it.</p>
+      <h2 className="font-semibold text-amber-900">Google sign-ins that didn&rsquo;t finish ({list.length})</h2>
+      <p className="text-[13px] text-amber-900/80">Each picked a Google account but has no TapTurf sign-in to show for it. Their email is real: Google confirmed it.</p>
       <ul className="mt-2 space-y-1 text-[13px] text-primary-800">
-        {list.map((p) => (
-          <li key={p.id}>
-            {fmtDateTime(new Date(p.joinedAt).toISOString())} · {p.name ?? "No name"} ·{" "}
-            {p.email ? (
-              <a href={`mailto:${p.email}`} className="underline underline-offset-2">
-                {p.email}
+        {list.map((u) => (
+          <li key={u.id} className="break-words">
+            {fmtDateTime(new Date(u.at).toISOString())} · {u.name ?? "No name"} ·{" "}
+            {u.email ? (
+              <a href={`mailto:${u.email}`} className="underline underline-offset-2">
+                {u.email}
               </a>
             ) : (
               "no email"
             )}{" "}
-            ·{" "}
-            <a href={`/admin?person=${p.id}#people`} className="font-semibold text-accent-700 hover:underline">
-              Open in people list
-            </a>
+            · <Badge className="bg-white text-amber-900 border border-amber-300">{UNFINISHED_LABEL[u.state]}</Badge>
+            {u.inPeople && (
+              <>
+                {" "}
+                ·{" "}
+                <a href={`/admin?person=${u.id}#people`} className="font-semibold text-accent-700 hover:underline">
+                  Open in people list
+                </a>
+              </>
+            )}
           </li>
         ))}
       </ul>

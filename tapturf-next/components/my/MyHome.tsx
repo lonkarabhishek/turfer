@@ -9,7 +9,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
-import { sendClaimCode, type ClaimCode } from "@/lib/my/claimVerify";
+import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
 import { imageUrlForCard, normalizeImageUrl } from "@/lib/utils/images";
 
 const place = (t: { area: string | null; city: string | null }) =>
@@ -65,7 +65,7 @@ export function MyHome() {
           {!me && !home.admin && (
             <p className="mt-6 rounded-2xl bg-amber-50 px-4 py-3 text-[14px] text-amber-900">
               {home.account_state === "conflict"
-                ? "This number is on a TapTurf account that signed up with Google. Sign in with Google to claim your turf, or email info@tapturf.in."
+                ? "This number is on an account that logs in with Google. Log in with Google, open Profile and tap Confirm with OTP. Then this number works here too."
                 : "Your sign-in isn't linked to a TapTurf account yet, so you can't claim a turf. Sign out, sign in again, then try once more."}
             </p>
           )}

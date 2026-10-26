@@ -1,6 +1,18 @@
 import { CITY_SRC_KEY } from "../city";
 import { CITY_SRC_HEADER } from "./city";
-import type { AccountError, AccountProfile, MeResponse, PlayersSearchResponse, UsernameCheckResponse, UsernameSuggestResponse } from "./types";
+import type {
+  AccountError,
+  AccountProfile,
+  LinkCompleteResponse,
+  LinkStartResponse,
+  LinkStatusResponse,
+  MeResponse,
+  PhoneSetResponse,
+  PlayersSearchResponse,
+  ProfileResponse,
+  UsernameCheckResponse,
+  UsernameSuggestResponse,
+} from "./types";
 
 /**
  * Browser side of accounts: the sign-in token the account routes need,
@@ -110,19 +122,17 @@ async function call<T>(token: string, path: string, init: RequestInit = {}): Pro
 
 export const getMe = (token: string) => call<MeResponse>(token, "/api/account/me");
 
-/** Sign in, making the account if needed. A phone sign-up sends its name, and the optional email with it. */
-export const postMe = (token: string, name?: string, email?: string) =>
-  call<MeResponse>(token, "/api/account/me", { method: "POST", body: JSON.stringify(name ? (email ? { name, email } : { name }) : {}) });
+/** Sign in, making the account if needed. A phone sign-up sends its name. */
+export const postMe = (token: string, name?: string) =>
+  call<MeResponse>(token, "/api/account/me", { method: "POST", body: JSON.stringify(name ? { name } : {}) });
 
 export type MePatch = {
   name?: string;
   username?: string;
   taggable?: boolean;
-  /** The optional email: a string saves it, null removes it. */
-  email?: string | null;
-  /** Where an email save came from: the one-time ask, or the profile (the default). */
-  emailSource?: "prompt";
-  /** "No thanks" on the ask. */
+  /** Removes an email typed into an earlier TapTurf. Emails are added only through Google. */
+  email?: null;
+  /** "No thanks" on the ask to add Google. */
   skipEmail?: true;
 };
 
@@ -146,4 +156,56 @@ export function profileOf(a: Answer<MeResponse>): AccountProfile | null {
 export function errorOf(a: Answer<unknown>): AccountError | null {
   const e = (a.body as { error?: unknown } | null)?.error;
   return typeof e === "string" ? (e as AccountError) : null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Two ways into one account                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Adding Google to a phone account (Bearer: the phone sign-in's Firebase
+ * token). The server makes each Google round trip and keeps its secret in
+ * an httpOnly cookie, so these only carry the answer; the browser then
+ * goes to `url` itself, with no Supabase call (lib/account/types.ts).
+ * then: where /account/link sends the person when it is done.
+ */
+export const startGoogleLink = (phoneToken: string, then: string, proof?: string) =>
+  call<LinkStartResponse>(phoneToken, "/api/account/link/google", { method: "POST", body: JSON.stringify(proof ? { then, proof } : { then }) });
+
+/** Another Google round trip on the same attempt ("Try again", "Try a different Google account"). */
+export const newGoogleLeg = (phoneToken: string) => call<LinkStartResponse>(phoneToken, "/api/account/link/google/leg", { method: "POST", body: "{}" });
+
+/** Where the attempt stands (for /account/link). */
+export const googleLinkStatus = (phoneToken: string) => call<LinkStatusResponse>(phoneToken, "/api/account/link/google");
+
+/** The person confirmed: add the Google account. */
+export const completeGoogleLink = (phoneToken: string) =>
+  call<LinkCompleteResponse>(phoneToken, "/api/account/link/google/complete", { method: "POST", body: "{}" });
+
+/** Give up on an attempt (Cancel, log out). Same-origin, no token; never throws. */
+export async function cancelGoogleLink(): Promise<void> {
+  try {
+    await fetch("/api/account/link/google", { method: "DELETE", keepalive: true, cache: "no-store" });
+  } catch {
+    /* offline: the attempt runs out in 10 minutes anyway */
+  }
+}
+
+/** Take the Google account off (a fresh OTP, or a proof of one). */
+export const removeGoogle = (phoneToken: string, proof?: string) =>
+  call<ProfileResponse>(phoneToken, "/api/account/link/google/remove", { method: "POST", body: JSON.stringify(proof ? { proof } : {}) });
+
+/** Add, confirm or change the number of a Google account (Bearer: a Google sign-in in the last 10 minutes). */
+export const addPhone = (googleToken: string, proof: string) =>
+  call<PhoneSetResponse>(googleToken, "/api/account/phone", { method: "POST", body: JSON.stringify({ proof }) });
+
+/** Take the number off a Google account. */
+export const removePhone = (googleToken: string) => call<ProfileResponse>(googleToken, "/api/account/phone", { method: "DELETE" });
+
+export { oauthAgeS } from "./oauthAge";
+
+/** A profile in any answer that carries one. */
+export function profileIn(a: Answer<unknown>): AccountProfile | null {
+  const b = a.body as { profile?: AccountProfile } | null;
+  return b && b.profile && typeof b.profile.id === "string" ? b.profile : null;
 }

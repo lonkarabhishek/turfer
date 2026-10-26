@@ -231,7 +231,7 @@ function highlights(p: Person): string[] {
 }
 
 function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open: boolean; onToggle: () => void; panelId: string }) {
-  const contact = p.phone ?? p.email ?? p.contact?.email;
+  const contact = p.phone ?? p.email ?? p.links?.googleEmail ?? p.contact?.email;
   const extra = highlights(p);
   const c = cityOf(p);
   return (
@@ -290,15 +290,29 @@ function Avatar({ p }: { p: Person }) {
   );
 }
 
-/** users.email (Google's, or an old account's), else the email a phone account typed, or what they answered. */
+/** users.email (Google's, or an old account's), else the Google account added from the profile, else the email a phone account typed, or what they answered. */
 function EmailItem({ p }: { p: Person }) {
+  const added = p.links?.googleEmail ?? null;
+  if (!p.email && added) {
+    // Added over the Google account's own empty account: that one keeps the address, so this account's email field stays empty.
+    return (
+      <>
+        <a href={`mailto:${added}`} className={link}>
+          {added}
+        </a>
+        <span className="text-primary-500"> · Google, added from their profile</span>
+      </>
+    );
+  }
   if (p.email) {
     return (
       <>
         <a href={`mailto:${p.email}`} className={link}>
           {p.email}
         </a>
-        {(p.confirmed ? p.confirmed.email === "google" : p.emailFromGoogle) && <span className="text-primary-500"> · confirmed by Google</span>}
+        {(p.confirmed ? p.confirmed.email === "google" : p.emailFromGoogle) && (
+          <span className="text-primary-500"> · confirmed by Google{added && added.toLowerCase() === p.email.toLowerCase() ? ", added from their profile" : ""}</span>
+        )}
         {p.confirmed?.email === "link" && <span className="text-primary-500"> · confirmed by a link</span>}
       </>
     );
@@ -324,13 +338,41 @@ function EmailItem({ p }: { p: Person }) {
 function VerifiedItem({ p }: { p: Person }) {
   const c = p.confirmed;
   if (!c) return <>{p.verified ? "Yes (old app's flag)" : "No (old app's flag)"}</>;
-  const parts = [c.email === "google" ? "Email, by Google" : c.email === "link" ? "Email, by a confirm link" : null, c.phone ? "Phone, by a code at sign-in" : null].filter(Boolean);
+  const l = p.links;
+  const parts = [
+    c.email === "google" ? (l?.googleEmail ? "Email, by Google (added from their profile)" : "Email, by Google") : c.email === "link" ? "Email, by a confirm link" : null,
+    c.phone ? (l?.phoneAddedAt !== null && l?.phoneAddedAt !== undefined ? "Phone, by an OTP from their profile" : "Phone, by a code at sign-in") : null,
+  ].filter(Boolean);
   if (parts.length) return <>{parts.join(" · ")}</>;
   return (
     <span className="text-primary-500">
       Not yet
       {p.method === "phone" && <span className="block text-[12px]">Not seen here with a code-checked number since TapTurf started recording it. Their next visit or sign-in confirms the number.</span>}
+      {p.noAccount && <span className="block text-[12px]">No TapTurf account was made for this sign-in.</span>}
     </span>
+  );
+}
+
+/** The second ways in they added from their profile. */
+function AddedItems({ p }: { p: Person }) {
+  const l = p.links;
+  if (!l) return null;
+  const lines: string[] = [];
+  if (l.googleEmail) {
+    const changed = l.googleLinks > 1 ? ` (changed ${l.googleLinks - 1} ${l.googleLinks - 1 === 1 ? "time" : "times"})` : "";
+    lines.push(`Google added from profile: ${l.googleEmail}${l.googleLinkedAt !== null ? ` on ${istDateTime(l.googleLinkedAt)}` : ""}${changed}`);
+  }
+  if (l.googleRemovedAt !== null) lines.push(`Google removed on ${istDateTime(l.googleRemovedAt)}`);
+  if (l.phoneAddedAt !== null) lines.push(`Phone added with OTP on ${istDateTime(l.phoneAddedAt)}${l.phoneOpens ? "" : " (it doesn't open the account now)"}`);
+  if (!lines.length) return null;
+  return (
+    <Item label="Added later">
+      {lines.map((t) => (
+        <span key={t} className="block">
+          {t}
+        </span>
+      ))}
+    </Item>
   );
 }
 
@@ -466,14 +508,22 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
         <Item label="Verified">
           <VerifiedItem p={p} />
         </Item>
+        <AddedItems p={p} />
         {p.updatedAt !== null && p.updatedAt - p.joinedAt > 60_000 && (
           <Item label="Profile changed">
             <When t={p.updatedAt} now={now} />
           </Item>
         )}
-        <Item label="Account ID">
-          <span className="font-mono text-[11px] text-primary-600 select-all">{p.id}</span>
-        </Item>
+        {p.noAccount ? (
+          <Item label="Account">
+            <span className="text-primary-500">None. They picked a Google account but never came back to TapTurf, so no account was made.</span>
+            <span className="block font-mono text-[11px] text-primary-400 select-all">Google sign-in {p.id}</span>
+          </Item>
+        ) : (
+          <Item label="Account ID">
+            <span className="font-mono text-[11px] text-primary-600 select-all">{p.id}</span>
+          </Item>
+        )}
       </Group>
 
       <Group title="Sign-ins">
@@ -482,7 +532,7 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
             <span className="text-primary-400">None yet</span>
             <span className="block text-[12px] text-amber-800">
               Started with Google on {istDateTime(p.joinedAt)}. Google confirmed their email, but they never came back to TapTurf to finish (closed the
-              tab or lost signal). The account and the email are real.
+              tab or lost signal). {p.noAccount ? "No account was made; the email is real." : "The account and the email are real."}
             </span>
           </Item>
         ) : preLog && p.logins === 0 ? (

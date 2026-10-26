@@ -28,7 +28,7 @@ async function getAuthLazy(): Promise<Auth> {
       import("firebase/app"),
       import("firebase/auth"),
     ]);
-    // The default app by name: the claim check (lib/my/claimVerify.ts) runs a second, named one.
+    // The default app by name: the proofs (lib/firebase/proof.ts) run named ones of their own.
     const app = getApps().find((a) => a.name === "[DEFAULT]") ?? initializeApp(firebaseConfig);
     const a = getAuth(app);
     a.languageCode = "en";

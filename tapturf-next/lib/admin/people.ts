@@ -1,4 +1,5 @@
 import { cityInfo } from "../city";
+import { linksById, type SignInLinkRow, type SignInLinks } from "./links";
 
 /**
  * The people behind the sign-ups chart: one row from admin_people
@@ -82,6 +83,10 @@ export type Person = {
   signInUnfinished: boolean;
   /** The email came from their Google account, which Google confirmed. */
   emailFromGoogle: boolean;
+  /** What they added from their profile: a Google account (phone accounts), a number proved with an OTP (Google accounts). */
+  links: SignInLinks | null;
+  /** A Google sign-in that never came back, so no TapTurf account was made (id is the sign-in's own id). */
+  noAccount: boolean;
 };
 
 /** What a sign-in confirmed: their email (by Google, or the old app's confirm link) and their phone (by a code TapTurf checked). */
@@ -291,8 +296,14 @@ function contactOf(r: ContactEmailRow | undefined): ContactEmail | null {
   return { email: str(r.email), answer, source, shared: r.same_as_other_account === true, at: time(r.answered_at) };
 }
 
-export function toPeople(rows: readonly DetailsRow[], contacts: readonly ContactEmailRow[] = [], verified: readonly VerifiedRow[] | null = null): Person[] {
+export function toPeople(
+  rows: readonly DetailsRow[],
+  contacts: readonly ContactEmailRow[] = [],
+  verified: readonly VerifiedRow[] | null = null,
+  links: readonly SignInLinkRow[] = [],
+): Person[] {
   const byUser = new Map(contacts.filter((c) => typeof c?.user_id === "string").map((c) => [c.user_id, c]));
+  const linkOf = linksById(links);
   const confirmedOf = confirmedById(verified);
   const joined = (r: DetailsRow) => time(r.signed_up_at) ?? time(r.created_at);
   const seen = new Map<number, number>();
@@ -348,6 +359,8 @@ export function toPeople(rows: readonly DetailsRow[], contacts: readonly Contact
         // admin_people counts every finished Google sign-in (the log, or auth's last sign-in), so none means none.
         signInUnfinished: method === "google" && num(r.logins) === 0 && time(r.last_login) === null,
         emailFromGoogle: method === "google" && !!str(r.email),
+        links: linkOf.get(r.id.toLowerCase()) ?? null,
+        noAccount: false,
       },
     ];
   });
@@ -377,7 +390,7 @@ export function matches(p: Person, query: string): boolean {
     if (national.length >= 3 && (p.phone ?? "").replace(/\D/g, "").includes(national)) return true;
   }
   const where = cityOf(p);
-  return [p.name, p.email, p.contact?.email ?? null, p.username, where ? cityLabel(where.id) : null].some((s) => s?.toLowerCase().includes(q));
+  return [p.name, p.email, p.links?.googleEmail ?? null, p.contact?.email ?? null, p.username, where ? cityLabel(where.id) : null].some((s) => s?.toLowerCase().includes(q));
 }
 
 /* ------------------------------------------------------------------ */

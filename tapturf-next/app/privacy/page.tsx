@@ -61,10 +61,13 @@ const SECTIONS: LegalSection[] = [
           outcome, the error reason and the last two digits of the number only.
         </p>
         <p id="email" className="scroll-mt-24">
-          <strong>An email, if you add one.</strong> If you signed in with your phone, you can add an email
-          when you sign up or later in your profile. We use it only to send you turf deals and game invites.
-          Only TapTurf&rsquo;s team sees it: we never show it on your profile or share it with turfs or other
-          players. It is not used to sign you in, and you can change or remove it in your profile at any time.
+          <strong>Your email and phone, if you add them.</strong> If you log in with your phone, you can add
+          your Google account from your profile after confirming your number with a one-time code. We then
+          keep the email, name and photo Google shares, and Google or your phone number both open the same
+          account; you can remove it any time. If you log in with Google, you can add your phone number after
+          confirming it with a one-time code; you can then log in with that number too, and remove it any
+          time. Emails typed into earlier versions of TapTurf are never used to sign you in; you can remove
+          them in your profile.
         </p>
         <p>
           <strong>When you sign in with Google.</strong> Google shares your name, email address and profile

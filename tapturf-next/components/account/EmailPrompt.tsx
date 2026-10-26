@@ -3,19 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Mail } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { errorOf, patchMe, profileOf } from "@/lib/account/client";
-import { cleanEmail, emailProblem, emailTypo } from "@/lib/account/emails";
+import { patchMe, profileOf } from "@/lib/account/client";
 import { FOCUSABLE, askHere, busy, claimPrompt } from "@/lib/account/prompts";
+import { useInApp } from "@/lib/auth/useInApp";
+import { GoogleMark, useGoogleLink } from "./GoogleLinkActions";
 import { usernameAskedBefore } from "./UsernamePrompt";
 
 /**
- * What this device did with the ask, per account: "done" (saved or No thanks: never again here,
- * whatever the server says), or a time when it was put off (a tap outside, Escape). Put off
- * once, it comes back once, a week later.
+ * What this device did with the ask, per account: "done" (Continue with
+ * Google or No thanks: never again here, whatever the server says), or a
+ * time when it was put off (a tap outside, Escape). Put off once, it
+ * comes back once, a week later. v3: the ask is now to add Google; the
+ * old typed-email answers (v2) don't count for it.
  */
-const ASKED_KEY = "tapturf_email_asked_v2";
+const ASKED_KEY = "tapturf_email_asked_v3";
 const ASKED_KEPT = 20;
 const LATER_MS = 7 * 86_400_000;
 const askedHere = new Set<string>();
@@ -51,42 +54,45 @@ function markAsked(id: string, how: "done" | "later") {
   }
 }
 
-const SAVE_ERROR: Record<string, string> = {
-  email: "That email doesn't look right.",
-  limit: "You've changed your email a few times today. Try again tomorrow.",
-  unavailable: "Couldn't reach TapTurf. Check your connection and try again.",
-};
-
 /**
- * Asks a phone account with no email for one, once: turf deals and game
- * invites. Only after the server said they have not answered (ask_email,
- * profileFresh), after the username ask, never in the same visit as
- * another ask and never over a dialog. Save or No thanks ends it on every
- * device; the profile keeps the field.
+ * Asks a phone account with no email, once, to add its Google account:
+ * then Google or the phone number both open it. Only after the server
+ * said they have not answered (ask_google, profileFresh), after the
+ * username ask, never in the same visit as another ask, never over a
+ * dialog and never inside an app's own browser (Google sign-in fails
+ * there). No thanks ends it on every device; so does any try to add
+ * Google (the server stops asking once one started). The profile keeps
+ * the button.
  */
 export function EmailPrompt() {
-  const { user, profileFresh, getToken, applyProfile, notice } = useAuth();
+  const { user, profileFresh, signedInWith, applyProfile, getToken, notice } = useAuth();
   const path = usePathname() ?? "";
+  const inApp = useInApp();
+  const link = useGoogleLink();
   const [open, setOpen] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const userId = user?.id ?? null;
   const eligible =
-    !!user && profileFresh && user.askEmail === true && !user.email && !user.contactEmail && askHere(path) && !notice && (!!user.username || usernameAskedBefore(user.id));
+    !!user &&
+    signedInWith === "phone" &&
+    profileFresh &&
+    user.askGoogle === true &&
+    user.googleLinkable === true &&
+    !user.googleEmail &&
+    !user.email &&
+    !inApp &&
+    askHere(path) &&
+    !notice &&
+    (!!user.username || usernameAskedBefore(user.id));
 
   useEffect(() => {
     if (!eligible || !userId || open) return;
     const t = setTimeout(() => {
       if (askedBefore(userId, Date.now()) || busy() || !claimPrompt("email")) return;
       lastFocus.current = document.activeElement as HTMLElement | null;
-      setEmail("");
-      setError("");
       setOpen(userId);
     }, 3000);
     return () => clearTimeout(t);
@@ -94,31 +100,38 @@ export function EmailPrompt() {
 
   const shown = open !== null && open === userId && eligible;
 
-  // On a phone, focus the heading, not the field: the keyboard should open only when they tap it.
   useEffect(() => {
-    if (!shown) return;
-    if (window.matchMedia?.("(pointer: coarse)").matches) titleRef.current?.focus();
-    else inputRef.current?.focus();
+    if (shown) titleRef.current?.focus();
   }, [shown]);
+
+  const close = () => {
+    setOpen(null);
+    lastFocus.current?.focus?.();
+  };
 
   // A tap outside or Escape: later, on this device only (one more ask, a week on).
   const later = () => {
     if (userId) markAsked(userId, "later");
-    setOpen(null);
-    lastFocus.current?.focus?.();
+    close();
   };
 
   // No thanks: answered, on every device.
   const noThanks = () => {
     if (userId) markAsked(userId, "done");
-    setOpen(null);
-    lastFocus.current?.focus?.();
+    close();
     void (async () => {
       const tok = await getToken();
       if (!("token" in tok)) return;
       const p = profileOf(await patchMe(tok.token, { skipEmail: true }));
       if (p) applyProfile(p);
     })();
+  };
+
+  // Continue with Google: off to Google (or first a code to their number); back on this page after.
+  const continueWithGoogle = () => {
+    if (userId) markAsked(userId, "done");
+    close();
+    void link.start(window.location.pathname + window.location.search);
   };
 
   useEffect(() => {
@@ -143,114 +156,70 @@ export function EmailPrompt() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (!shown) return null;
+  // The code sheet (and a refusal) outlive the ask itself.
+  const after = (
+    <>
+      {link.sheet}
+      {link.error && !link.sheet && (
+        <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[66] mx-auto max-w-md rounded-2xl bg-primary-900 px-4 py-3 text-[14px] text-white shadow-elevated flex items-start gap-3" role="alert">
+          <p className="flex-1 leading-snug">{link.error}</p>
+          <button type="button" onClick={link.clearError} className="shrink-0 h-8 px-3 rounded-full bg-white/15 text-[13px] font-semibold cursor-pointer">
+            OK
+          </button>
+        </div>
+      )}
+      {link.busy && !link.sheet && (
+        <div className="fixed inset-0 z-[66] flex items-center justify-center bg-white/70" aria-live="polite">
+          <p className="inline-flex items-center gap-2 font-semibold text-primary-800">
+            <Loader2 className="w-5 h-5 animate-spin" /> Opening Google…
+          </p>
+        </div>
+      )}
+    </>
+  );
 
-  const save = async () => {
-    const problem = emailProblem(email);
-    const clean = cleanEmail(email);
-    if (problem || !clean) return setError(problem ?? SAVE_ERROR.email);
-    setError("");
-    setSaving(true);
-    try {
-      const tok = await getToken();
-      if (!("token" in tok)) {
-        if ("unknown" in tok) setError(SAVE_ERROR.unavailable);
-        else noThanks();
-        return;
-      }
-      const a = await patchMe(tok.token, { email: clean, emailSource: "prompt" });
-      const p = profileOf(a);
-      const e = errorOf(a);
-      if (e) {
-        if (p) applyProfile(p);
-        setError(SAVE_ERROR[e] ?? "Couldn't save. Please try again.");
-        return;
-      }
-      if (userId) markAsked(userId, "done");
-      setOpen(null);
-      lastFocus.current?.focus?.();
-      if (p) applyProfile(p);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const typo = !error ? emailTypo(email) : null;
+  if (!shown) return after;
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-primary-900/40" onClick={later} aria-hidden />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="email-prompt-title"
-        aria-describedby="email-prompt-body"
-        className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-      >
-        <span className="w-11 h-11 rounded-full bg-accent-50 text-accent-700 inline-flex items-center justify-center" aria-hidden>
-          <Mail className="w-5 h-5" />
-        </span>
-        <h2 id="email-prompt-title" ref={titleRef} tabIndex={-1} className="mt-3 font-display text-2xl text-primary-900 leading-tight outline-none">
-          Want turf deals and game invites?
-        </h2>
-        <p id="email-prompt-body" className="mt-2 text-[14px] text-primary-600 leading-snug">
-          Add your email and we&rsquo;ll send you turf deals and invites to games near you. No spam. We won&rsquo;t show it to other players or turfs.
-        </p>
-
-        <form
-          className="mt-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!saving) void save();
-          }}
+    <>
+      <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
+        <div className="absolute inset-0 bg-primary-900/40" onClick={later} aria-hidden />
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="email-prompt-title"
+          aria-describedby="email-prompt-body"
+          className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         >
-          <label htmlFor="email-prompt-input" className="sr-only">Email</label>
-          <input
-            ref={inputRef}
-            id="email-prompt-input"
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            maxLength={254}
-            value={email}
-            placeholder="you@gmail.com"
-            aria-describedby="email-prompt-status"
-            onChange={(e) => {
-              setError("");
-              setEmail(e.target.value);
-            }}
-            className="w-full px-4 py-3 min-h-[48px] border-2 border-primary-200 rounded-xl text-base text-primary-800 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20"
-          />
-          <p id="email-prompt-status" aria-live="polite" className="mt-1.5 text-[12px] min-h-4 text-hot-600">
-            {error}
+          <span className="w-11 h-11 rounded-full bg-primary-50 inline-flex items-center justify-center" aria-hidden>
+            <GoogleMark />
+          </span>
+          <h2 id="email-prompt-title" ref={titleRef} tabIndex={-1} className="mt-3 font-display text-2xl text-primary-900 leading-tight outline-none">
+            Add your email with Google?
+          </h2>
+          <p id="email-prompt-body" className="mt-2 text-[14px] text-primary-600 leading-snug">
+            Then you can log in with Google or this phone number. Both open this same account. No spam, and we never show your email to other players or turfs.
           </p>
-          {typo && (
-            <button type="button" onClick={() => setEmail(typo)} className="text-[12px] font-semibold text-accent-700 underline underline-offset-2">
-              Did you mean {typo}?
-            </button>
-          )}
 
-          <div className="mt-4 flex gap-3">
+          <div className="mt-5 flex gap-3">
             <button type="button" onClick={noThanks} className="flex-1 h-12 rounded-full border-2 border-primary-200 text-primary-700 font-semibold text-[15px] cursor-pointer">
               No thanks
             </button>
-            <button type="submit" disabled={saving || !email.trim()} className="flex-1 h-12 rounded-full bg-primary-800 text-white font-bold text-[15px] disabled:opacity-40 cursor-pointer">
-              {saving ? "Saving…" : "Save"}
+            <button type="button" onClick={continueWithGoogle} className="flex-[1.4] h-12 rounded-full bg-primary-900 text-white font-bold text-[15px] cursor-pointer">
+              Continue with Google
             </button>
           </div>
-        </form>
 
-        <p className="mt-4 text-[12px] text-primary-500 text-center">
-          Change or remove it any time in your profile.{" "}
-          <Link href="/privacy#email" className="underline underline-offset-2" onClick={() => userId && markAsked(userId, "later")}>
-            Privacy
-          </Link>
-        </p>
+          <p className="mt-4 text-[12px] text-primary-500 text-center">
+            Add or remove it any time in your profile.{" "}
+            <Link href="/privacy#email" className="underline underline-offset-2" onClick={() => userId && markAsked(userId, "later")}>
+              Privacy
+            </Link>
+          </p>
+        </div>
       </div>
-    </div>
+      {after}
+    </>
   );
 }

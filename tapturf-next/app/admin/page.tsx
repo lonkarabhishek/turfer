@@ -24,6 +24,7 @@ import { signupPeople } from "@/lib/queries/adminUsers";
 import { personId } from "@/lib/admin/people";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { SignupsTrend } from "@/components/admin/SignupsTrend";
+import { LinkRefusals } from "@/components/admin/LinkRefusals";
 import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
@@ -303,6 +304,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         {/* A new read (Refresh) starts the chart afresh at its "now". A failed read shows a message there, never a broken page. */}
         <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} focus={personId((await searchParams).person)} />
       </div>
+      {/* What couldn't be added to an account, for the owner to follow up by hand. */}
+      <LinkRefusals />
       <section className="mb-8">
         <div className="rounded-2xl bg-white border border-primary-200 p-5">
           <DailyChart

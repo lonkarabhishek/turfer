@@ -38,6 +38,10 @@ function LoginInner() {
   const { user, loading: authLoading } = useAuth();
   const nextParam = params?.get("next") || "/";
   const errParam = params?.get("error");
+  // A Google sign-in that opens no TapTurf account right now (the callback ended its session).
+  const accountWhy = errParam === "account" ? params?.get("why") : null;
+  const replaced = accountWhy === "replaced";
+  const [askFresh, setAskFresh] = useState(false);
   // From a live score the heading and the line under it change. live: turning on a link; follow: keeping up with one.
   const via = params?.get("via");
   const live = via === "live" || via === "follow";
@@ -55,12 +59,20 @@ function LoginInner() {
     import("@/lib/firebase/client").catch(() => {});
   }, []);
 
-  // Already signed in? Bounce back to `next` immediately.
+  // Already signed in? Bounce back to `next` immediately. Not with an account message: it is
+  // about the Google account just tried, and a phone login kept on this device must not hide it.
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && !accountWhy) {
       router.replace(safeNext(nextParam));
     }
-  }, [authLoading, user, nextParam, router]);
+  }, [authLoading, user, accountWhy, nextParam, router]);
+
+  /** "Log in with your phone number": to the phone form, keyboard up. */
+  const focusPhone = () => {
+    const el = document.querySelector<HTMLInputElement>("#login-phone input[type=tel]");
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    el?.focus();
+  };
 
   const handleGoogle = async () => {
     if (starting.current) return;
@@ -111,8 +123,48 @@ function LoginInner() {
     </div>
   );
 
+  // A Google account taken off a phone account: only a choice made here, on this site, makes it a new
+  // account (the callback reads this cookie; a link from another site can't set it).
+  const makeNewWithGoogle = () => {
+    try {
+      document.cookie = `tt_g_new=1; Max-Age=600; Path=/api/auth; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
+    } catch {
+      /* cookies blocked: the sign-in then gives the same message again */
+    }
+    setAskFresh(false);
+    void handleGoogle();
+  };
+  const replacedChoices = replaced && (
+    <div className="mb-5 space-y-3">
+      <button
+        type="button"
+        onClick={focusPhone}
+        className="press-tight w-full h-12 rounded-full border-2 border-primary-200 text-primary-900 text-[15px] font-semibold hover:border-primary-400 cursor-pointer"
+      >
+        Log in with your phone number
+      </button>
+      {askFresh ? (
+        <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4" role="group" aria-label="Make a new account">
+          <p className="text-[14px] text-primary-800 leading-snug">This starts a new, empty account. Your old account stays as it is and opens with your phone number.</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={makeNewWithGoogle} disabled={googleBusy} className="h-11 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer">
+              Make a new account
+            </button>
+            <button type="button" onClick={() => setAskFresh(false)} className="h-11 px-4 rounded-full border-2 border-primary-200 text-primary-800 text-[14px] font-semibold cursor-pointer">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setAskFresh(true)} className="block mx-auto text-[13px] font-semibold text-primary-500 underline underline-offset-2 hover:text-primary-800 cursor-pointer">
+          Make a new TapTurf account with Google
+        </button>
+      )}
+    </div>
+  );
+
   const phoneSection = (
-    <section className="rounded-3xl border border-primary-200 bg-white p-5 mb-5">
+    <section id="login-phone" className="rounded-3xl border border-primary-200 bg-white p-5 mb-5">
       <p className="text-[11px] font-bold text-primary-500 mb-3">
         Sign in with phone
       </p>
@@ -188,6 +240,16 @@ function LoginInner() {
             <AlertCircle className="w-5 h-5 text-hot-600 shrink-0 mt-0.5" />
             <p className="text-[14px] text-hot-700">{errMsg}</p>
           </div>
+        )}
+
+        {replacedChoices}
+        {accountWhy && user && (
+          <p className="mb-5 text-[14px] text-primary-600">
+            You&rsquo;re still logged in with your phone number.{" "}
+            <Link href={safeNext(nextParam)} className="font-semibold text-accent-700 underline underline-offset-2">
+              Carry on
+            </Link>
+          </p>
         )}
 
         {/* Google first everywhere, phone right under it. The phone form is
