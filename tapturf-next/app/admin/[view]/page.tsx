@@ -37,6 +37,7 @@ import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 import { turfPath } from "@/lib/utils/turfPath";
+import { LIVE_FILTERS, getAdminLiveLinks, type LiveFilter } from "@/lib/queries/adminTools";
 
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
@@ -53,6 +54,7 @@ const VIEWS = {
   suggestions: { title: "Player suggestions", filters: { all: "Pending" } },
   listing: { title: "Listing checks", filters: { all: "Flagged" } },
   asks: { title: "Ask TapTurf chats", filters: ASK_FILTERS },
+  live: { title: "Live scoreboard links", filters: LIVE_FILTERS },
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -164,8 +166,46 @@ export default async function AdminDetailPage({
   );
 }
 
+const LIVE_STYLE: Record<string, string> = {
+  live: "bg-amber-100 text-amber-800",
+  done: "bg-accent-50 text-accent-700",
+  stopped: "bg-primary-100 text-primary-500",
+  expired: "bg-primary-100 text-primary-500",
+};
+const sportName = (s: string | null) => (s ? s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
+
 async function renderView(v: View, filter: string): Promise<{ count: number; node: React.ReactNode }> {
   switch (v) {
+    case "live": {
+      const links = await getAdminLiveLinks(filter as LiveFilter);
+      if (!links) return { count: 0, node: <p className="text-sm text-primary-500">Couldn&apos;t load the links. Refresh to try again.</p> };
+      return {
+        count: links.length,
+        node: (
+          <Table head={["Link", "Sport", "Match", "Title and venue", "Status", "Updates", "Started", "Last update"]} empty={links.length === 0}>
+            {links.map((l) => (
+              <tr key={l.code}>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <a href={`/live/${l.code}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-mono text-[12px] text-accent-700 hover:underline">
+                    /live/{l.code} <ExternalLink className="w-3 h-3" />
+                  </a>
+                </td>
+                <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{sportName(l.sport) ?? <span className="text-primary-400">-</span>}</td>
+                <td className="px-4 py-3 text-primary-900">
+                  {l.team_a || l.team_b ? `${l.team_a || "?"} vs ${l.team_b || "?"}` : <span className="text-primary-400">{l.status === "stopped" || l.status === "expired" ? "Cleared when it ended" : "-"}</span>}
+                </td>
+                <td className="px-4 py-3 text-primary-600">{[l.title, l.venue].filter(Boolean).join(" · ") || <span className="text-primary-400">-</span>}</td>
+                <td className="px-4 py-3"><Badge className={LIVE_STYLE[l.status] ?? "bg-primary-100 text-primary-500"}>{l.status}</Badge></td>
+                <td className="px-4 py-3 tabular-nums" title={l.events ? `${l.events} events in the match` : undefined}>{l.writes}</td>
+                <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(l.created_at)}</td>
+                <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(l.updated_at)}</td>
+              </tr>
+            ))}
+          </Table>
+        ),
+      };
+    }
+
     case "games": {
       const games = await getAdminGames(filter as GameFilter);
       const counts = games.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});

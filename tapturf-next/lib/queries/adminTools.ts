@@ -33,3 +33,40 @@ export async function getToolUsage(): Promise<ToolUsage> {
   const [liveRows, useRows] = await Promise.all([read<LiveRow>("admin_live_matches"), read<UseRow>("admin_tool_uses")]);
   return summarizeToolUsage(liveRows, useRows);
 }
+
+/** One live scoreboard link, as admin_live_links returns it. */
+export type AdminLiveLink = {
+  code: string;
+  status: string;
+  sport: string | null;
+  team_a: string | null;
+  team_b: string | null;
+  title: string | null;
+  venue: string | null;
+  events: number;
+  writes: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export const LIVE_FILTERS = {
+  all: "All links",
+  live: "Live now",
+  done: "Finished",
+  stopped: "Stopped or expired",
+} as const;
+export type LiveFilter = keyof typeof LIVE_FILTERS;
+
+/** Every live scoreboard link, newest first (admin_live_links, owner only); null when it can't be read. */
+export async function getAdminLiveLinks(filter: LiveFilter = "all"): Promise<AdminLiveLink[] | null> {
+  try {
+    const supabase = await createServerClient();
+    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+    const rows = await fetchAllRows<AdminLiveLink>((from, to) => supabase.rpc("admin_live_links", { p_firebase_token: token }).range(from, to));
+    if (filter === "all") return rows;
+    return rows.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : r.status === filter));
+  } catch (e) {
+    console.warn("admin_live_links failed", e);
+    return null;
+  }
+}
