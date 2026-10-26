@@ -1,14 +1,20 @@
 -- Reviews lockdown, step 2 of 2 (step 1 is 20261027_game_reports.sql).
--- Apply only when all of these hold:
+-- Apply when all of these hold:
 --   * the app that posts reports through /api/reviews has been live at
 --     least 48 hours;
---   * API logs show, for the last 24 hours, no POST, PATCH or DELETE to
---     /rest/v1/reviews or /rest/v1/review_votes;
+--   * API logs show the app's own POST, PATCH and DELETE calls to
+--     /rest/v1/reviews and /rest/v1/review_votes have stopped. Stray ones
+--     may go on: a tab still open on the old app, or someone posting as
+--     another player through the open insert policy this file closes. They
+--     are no reason to wait; the check below lists them;
 --   * smoke checks pass for a phone sign-in and a Google sign-in: post a
 --     report, edit it, remove it, post it again, Helpful on and off.
 -- The check below refuses to run (and changes nothing) unless the review
--- functions exist and every TapTurf review written in the last 48 hours
--- came through them (has a private.review_saves row).
+-- functions exist. It never waits on rows anyone can write: TapTurf
+-- reviews from the last 48 hours that didn't come through review_save (no
+-- private.review_saves row) are listed in a NOTICE, by id, for the site
+-- owner to look at and hide if forged
+-- (update public.reviews set status = 'hidden' where id = '...').
 --
 -- After it, reviews and Helpful votes are written only by review_save,
 -- review_remove and review_vote (security definer, server key), for the
@@ -21,16 +27,27 @@
 -- Revert: supabase/revert/20261029_reviews_lockdown_revert.sql.
 
 do $$
+declare
+  v_n integer;
+  v_ids text;
 begin
   if to_regprocedure('public.review_save(text,uuid,uuid,jsonb)') is null
      or to_regprocedure('public.review_vote(text,uuid,uuid,boolean)') is null
      or to_regclass('private.review_saves') is null then
     raise exception 'reviews lockdown: apply 20261027_game_reports.sql and deploy the app that uses it first';
   end if;
-  if exists (select 1 from public.reviews r
-              where r.source is null and r.created_at > now() - interval '48 hours'
-                and not exists (select 1 from private.review_saves s where s.review_id = r.id)) then
-    raise exception 'reviews lockdown: a TapTurf review from the last 48 hours was written past /api/reviews; an old app is still posting';
+  select count(*) into v_n
+    from public.reviews r
+   where r.source is null and r.created_at > now() - interval '48 hours'
+     and not exists (select 1 from private.review_saves s where s.review_id = r.id);
+  if v_n > 0 then
+    select string_agg(x.id::text, ', ') into v_ids
+      from (select r.id from public.reviews r
+             where r.source is null and r.created_at > now() - interval '48 hours'
+               and not exists (select 1 from private.review_saves s where s.review_id = r.id)
+             order by r.created_at desc
+             limit 50) x;
+    raise notice 'reviews lockdown: % TapTurf review(s) from the last 48 hours came straight from the API, not through /api/reviews (a stale tab, or a post as someone else). Check them and hide any that are forged: %', v_n, v_ids;
   end if;
 end;
 $$;

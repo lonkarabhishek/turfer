@@ -64,6 +64,8 @@ await q(`insert into public.users (id, name, email, phone) values
   ('${U(9)}', 'Rejected Claim', null, '+919000000009'), ('${U(10)}', 'Spammer', null, '+919000000010'),
   ('${U(11)}', 'Voter One', null, '+919000000011'), ('${GOOGLE_USER}', 'Google reviewer', null, null)`);
 await q(`insert into auth.users (id, email) values ('${U(2)}', 'ravi@example.com')`);
+// Accounts from before the file are a year old (a new report from an account under 3 days old can be held).
+await q(`update public.users set created_at = now() - interval '1 year'`);
 await q(`insert into public.turfs (id, name, slug, city, sports, owner_id) values
   ('${T(1)}', 'Kings Turf', 'kings-turf', 'nashik', '["Box Cricket", "Football"]', '${U(7)}'),
   ('${T(2)}', 'Court Club', 'court-club', 'pune', '["Badminton"]', null),
@@ -86,7 +88,15 @@ await db.exec(sql); // safe to run again
 passed++;
 
 const rpc = async (fn, args) => (await one(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(", ")}) r`, args)).r;
-const save = (user, turf, report, key = KEY) => rpc("review_save", [key, user, turf, JSON.stringify(report)]);
+// As the sheet sends it: an edit names the report it replaces (base); pass base: null to post as new.
+const save = async (user, turf, report, key = KEY) => {
+  const r = { ...report };
+  if (!("base" in r)) {
+    const cur = await one(`select id from public.reviews where user_id = $1 and turf_id = $2 and source is null`, [user, turf]);
+    if (cur) r.base = cur.id;
+  }
+  return rpc("review_save", [key, user, turf, JSON.stringify(r)]);
+};
 const mine = (user, turf, key = KEY) => rpc("review_mine", [key, user, turf]);
 const remove = (user, turf, key = KEY) => rpc("review_remove", [key, user, turf]);
 const vote = (user, review, on, key = KEY) => rpc("review_vote", [key, user, review, on]);
@@ -138,6 +148,15 @@ passed++;
 const before3 = (await one(`select edited_at from public.reviews where id = $1`, [id1])).edited_at;
 await save(U(1), T(1), { rating: 3, sport: "Box Cricket", played_when: "evening", aspects: { pitch: { score: 1, tags: ["bounce"] } }, comment: "Okay overall" });
 eq((await one(`select edited_at from public.reviews where id = $1`, [id1])).edited_at, before3, "only the sport or time changed: no Updated label");
+// Never a silent overwrite: a save that doesn't name the report it replaces gets that report back.
+const savesBefore = (await one(`select count(*)::int n from private.review_saves where user_id = $1`, [U(1)])).n;
+const ex = await save(U(1), T(1), { rating: 1, comment: "From a fresh sheet", base: null });
+eq([ex.r, ex.review?.id, ex.review?.rating, ex.review?.status, ex.review?.comment], ["exists", id1, 3, "live", "Okay overall"], "a new-report save over a live report: exists, with that report");
+ok("note" in ex.review, "with the author's note (none here)");
+eq((await save(U(1), T(1), { rating: 1, base: "cccccccc-cccc-4ccc-8ccc-0000000000ff" })).r, "exists", "a base that names another report: exists");
+eq((await save(U(1), T(1), { rating: 1, base: 7 })).r, "bad", "a base that isn't text: bad");
+eq([(await one(`select rating from public.reviews where id = $1`, [id1])).rating,
+    (await one(`select count(*)::int n from private.review_saves where user_id = $1`, [U(1)])).n], [3, savesBefore], "and nothing was written");
 
 /* ---------------- what is refused ---------------- */
 const bad = async (report, what, turf = T(1)) => eq((await save(U(2), turf, report)).r, "bad", what);
@@ -169,15 +188,18 @@ const contact = async (text, field = "comment") => {
   const r = await save(U(2), T(2), field === "comment" ? { rating: 4, comment: text } : { rating: 4, note: { body: text, show_name: false } });
   return r.r === "contact_info" ? r.field : r.r;
 };
-for (const t of ["Call 9876543210 to book", "Call +91 98765 43210", "WhatsApp 98765-43210", "ring 09876543210", "919876543210 is the owner"]) {
+for (const t of ["Call 9876543210 to book", "Call +91 98765 43210", "WhatsApp 98765-43210", "ring 09876543210", "919876543210 is the owner",
+  "call 98765 - 43210", "98765.43210", "98765/43210", "(98765) 43210", "+91-98765-43210", "(+91) 98765 43210", "९८७६५४३२१०", "०९८७६५४३२१०", "９８７６５４３２１０"]) {
   eq(await contact(t), "comment", `a phone number: ${t}`);
 }
-for (const t of ["mail me at abc.def@gmail.com", "book on https://example.com/x", "see www.kingsturf.in", "wa.me/919876543210", "kingsturf.com has slots", "tapturf.in/turf/kings"]) {
+for (const t of ["mail me at abc.def@gmail.com", "book on https://example.com/x", "see www.kingsturf.in", "wa.me/919876543210", "kingsturf.com has slots", "tapturf.in/turf/kings",
+  "book at cheapturf.in", "boxcricketnashik.in", "cheapturf.net is cheaper", "slots on turfbook.co", "BoxCricketNashik.in"]) {
   eq(await contact(t), "comment", `a link or email: ${t}`);
 }
 eq(await contact("Owner's number 9876543210", "note"), "note", "the note too, and the field is named");
 eq((await one(`select count(*)::int n from public.reviews where user_id = '${U(2)}'`)).n, 0, "refused texts wrote nothing");
-for (const t of ["₹1,200 for an hour", "Best slot 7-9pm", "We made 120/3 in 12 overs", "Court 2 is better. Nets torn", "Slots 6-7, 7-8 and 8-9 are free", "Played here.In the evening it is nice"]) {
+for (const t of ["₹1,200 for an hour", "Best slot 7-9pm", "We made 120/3 in 12 overs", "Court 2 is better. Nets torn", "Slots 6-7, 7-8 and 8-9 are free", "Played here.In the evening it is nice",
+  "Rs 800 - 1200 - 1500 by slot", "26/10/2026 at 7.30-9.30 pm", "Paid ₹९०० for an hour", "We were 10 9 of us came", "Go.In the evening"]) {
   const r = await save(U(2), T(2), { rating: 4, comment: t });
   eq(r.r, "ok", `fine: ${t}`);
 }
@@ -187,12 +209,18 @@ await q(`insert into public.turf_owners (turf_id, user_key, status, via, user_id
   ('${T(1)}', 'p:9000000006', 'pending', 'admin', '${U(6)}'),
   ('${T(1)}', 'p:9000000009', 'rejected', 'admin', '${U(9)}'),
   ('${T(1)}', 'e:owner.mail@example.com', 'active', 'admin', null)`);
-await q(`insert into public.turf_suggestions (turf_id, user_id, relationship, notes) values ('${T(1)}', '${U(8)}', 'staff', 'I work here')`);
 for (const [u, why] of [[U(4), "an active claim for the account"], [U(5), "a claim under its email from before claims named the account"],
-  [U(6), "a pending claim"], [U(7), "turfs.owner_id"], [U(8), "its own suggestion says it works there"]]) {
+  [U(6), "a pending claim"], [U(7), "turfs.owner_id"]]) {
   eq((await save(u, T(1), { rating: 5 })).r, "own_turf", `refused: ${why}`);
   eq((await mine(u, T(1))).blocked, "own_turf", `and review_mine says so (${why})`);
 }
+// A suggestion saying a player owns or works at the turf is no proof: anyone can write one for
+// any player (save_turf_suggestion takes the user id from the browser), so it never blocks a report.
+await q(`insert into public.turf_suggestions (turf_id, user_id, relationship, notes, status) values
+  ('${T(1)}', '${U(8)}', 'staff', 'Planted by someone else', 'pending'), ('${T(2)}', '${U(8)}', 'owner', 'Approved, still self-declared', 'approved')`);
+eq((await mine(U(8), T(1))).blocked, null, "a planted staff suggestion: review_mine doesn't block");
+eq((await save(U(8), T(1), { rating: 1, comment: "Honest report" })).r, "ok", "and the player can still rate the turf");
+eq((await save(U(8), T(2), { rating: 4 })).r, "ok", "an approved owner suggestion doesn't block either");
 eq((await save(U(9), T(1), { rating: 2 })).r, "ok", "a rejected claim is not a manager");
 await q(`insert into public.turf_owners (turf_id, user_key, status, via, user_id) values ('${T(2)}', 'p:9000000003', 'active', 'phone_match', null)`);
 eq((await save(U(3), T(2), { rating: 5 })).r, "own_turf", "an old claim under the account's phone key");
@@ -229,7 +257,7 @@ eq((await remove(U(9), T(1))).r, "ok", "removing again is fine");
 eq((await remove(U(10), T(1))).r, "gone", "removing a report that doesn't exist");
 let p = await page();
 ok(!p.reviews.some((r) => r.user_id === U(9)), "a removed report is not on the turf page");
-eq(p.review_stats.count, 2, "nor in the count");
+eq(p.review_stats.count, 3, "nor in the count (U3's old one, U1's and U8's)");
 const anonSees = await asRole("anon", () => q(`select user_id from public.reviews where turf_id = '${T(1)}'`));
 ok(!anonSees.some((r) => r.user_id === U(9)), "nor in an anon read");
 const repost = await save(U(9), T(1), { rating: 3, comment: "Changed my mind" });
@@ -328,10 +356,12 @@ eq(await q(`select private.review_verified_via('${U(2)}', '${T(2)}') a, private.
 const ravi = await save(U(2), T(2), { rating: 4, sport: "Badminton", played_when: "night" });
 eq(ravi.review.verified_via, "game", "the badge is worked out at the save");
 await q(`update public.games set status = 'cancelled' where id = 'dddddddd-dddd-4ddd-8ddd-000000000001'`);
-eq((await save(U(2), T(2), { rating: 5 })).review.verified_via, "game", "and only ever upgrades");
+eq((await save(U(2), T(2), { rating: 5 })).review.verified_via, null, "worked out again at every save: a cancelled (or forged and removed) game takes the badge away");
+await q(`update public.games set status = 'completed' where id = 'dddddddd-dddd-4ddd-8ddd-000000000001'`);
+eq((await save(U(2), T(2), { rating: 5 })).review.verified_via, "game", "and it comes back with the game");
 
 /* ---------------- the hint for the rate card ---------------- */
-await q(`insert into public.users (id, name) values ('${U(50)}', 'Hint Person')`);
+await q(`insert into public.users (id, name, created_at) values ('${U(50)}', 'Hint Person', now() - interval '1 year')`);
 await q(`insert into public.turf_contact_clicks (turf_id, kind, signed_in, user_id, created_at) values
   ('${T(1)}', 'call', true, '${U(50)}', now() - interval '2 days'), ('${T(1)}', 'whatsapp', true, '${U(50)}', now() - interval '1 hour'),
   ('${T(1)}', 'call', false, '${U(50)}', now() - interval '1 day')`);
@@ -344,45 +374,107 @@ await save(U(50), T(1), { rating: 5 });
 eq((await mine(U(50), T(1))).hint, null, "no hint once they reported");
 eq((await mine(U(4), T(1))).hint, null, "nor for a manager");
 
+/* ---------------- held for a check ---------------- */
+await q(`insert into public.turfs (id, name, slug, city, sports) values
+  ('${T(5)}', 'Nashik Arena', 'nashik-arena', 'Nashik', '["Football"]'), ('${T(6)}', 'Rush Turf', 'rush-turf', 'pune', '["Football"]')`);
+// A rival: the account manages another turf in the same city (U4 holds the claim on Kings Turf, Nashik).
+const rival = await save(U(4), T(5), { rating: 1, comment: "Terrible", price_paid: 300 });
+eq([rival.r, rival.review.status, rival.price_saved], ["ok", "held", false], "a report from an account that manages a turf in the same city is held, and its price isn't saved");
+eq((await one(`select count(*)::int n from public.turf_suggestions where user_id = '${U(4)}'`)).n, 0, "no From players price from it");
+let rp = await page("nashik-arena");
+eq([rp.reviews.length, rp.review_stats.count], [0, 0], "a held report is not on the turf page, nor in its numbers");
+eq((await asRole("anon", () => q(`select id from public.reviews where turf_id = '${T(5)}'`))).length, 0, "nor in an anon read (the AI summary and Ask read that way)");
+eq((await mine(U(4), T(5))).mine.status, "held", "its author sees it, held");
+eq((await save(U(4), T(5), { rating: 2 })).review.status, "held", "an edit keeps it held");
+eq((await save(U(4), T(2), { rating: 4 })).review.status, "live", "the same account in another city: live");
+// A rush on one turf.
+for (let i = 0; i < 9; i++) {
+  await q(`insert into public.users (id, name, created_at) values ('${U(70 + i)}', 'Rush ${i}', now() - interval '${[0, 1, 2, 8].includes(i) ? "1 hour" : "1 year"}')`);
+}
+const rush = [];
+for (const i of [0, 1, 2]) rush.push((await save(U(70 + i), T(6), { rating: 1, price_paid: 200 })).review.status);
+eq(rush, ["live", "live", "held"], "the first two new reports go live; the 3rd in 48 hours from an account under 3 days old waits");
+eq((await one(`select count(*)::int n from public.turf_suggestions where turf_id = '${T(6)}'`)).n, 2, "the held one's price is not saved");
+for (const i of [3, 4]) rush.push((await save(U(70 + i), T(6), { rating: 1 })).review.status);
+eq(rush.slice(3), ["live", "live"], "year-old accounts go live while fewer than 5 others posted");
+eq((await save(U(75), T(6), { rating: 1 })).review.status, "held", "the 6th new report in 48 hours, from a year-old account with no TapTurf game here, waits");
+await q(`insert into public.games (creator_id, turf_id, sport, date, start_time, end_time, status) values
+  ('${U(77)}', '${T(6)}', 'Football', date '${today}' - 1, '07:00', '08:00', 'completed'),
+  ('${U(78)}', '${T(6)}', 'Football', date '${today}' - 1, '07:00', '08:00', 'completed')`);
+eq((await save(U(77), T(6), { rating: 5 })).review.status, "live", "one who played a TapTurf game here goes live");
+eq((await save(U(78), T(6), { rating: 5 })).review.status, "held", "a game never lets an account under 3 days old through (anyone can add a game today)");
+const heldId = (await one(`select id from public.reviews where user_id = '${U(72)}' and turf_id = '${T(6)}'`)).id;
+eq((await vote(U(73), heldId, true)).r, "gone", "no Helpful on a held report");
+eq((await vote(U(72), heldId, true)).r, "own", "its author hears own, as on a live one");
+ok(!(await page("rush-turf")).reviews.some((r) => r.id === heldId), "not on the page");
+await q(`update public.reviews set status = 'live' where id = $1`, [heldId]); // the site owner lets it through
+ok((await page("rush-turf")).reviews.some((r) => r.id === heldId), "let through by the site owner, it shows");
+
 /* ---------------- the private note ---------------- */
 await clearDirty();
 const noted = await save(U(11), T(1), { rating: 2, sport: "Box Cricket", played_when: "evening", note: { body: "The light near the gate is off.", show_name: false } });
-eq(noted.note.delivers, "tomorrow", "a note on a claimed turf reaches the owner at the next 09:00 IST");
-const deliver = (await one(`select deliver_after, private.next_note_delivery(created_at) = deliver_after as rule, deliver_after >= created_at + interval '8 hours' as later from private.review_notes where user_id = '${U(11)}'`));
+eq(noted.note, { delivers: "batch", at: null }, "a note without a name waits for its batch");
+const named = await save(U(2), T(2), { rating: 5, note: { body: "Fix the net", show_name: true } });
+eq(named.note.delivers, "tomorrow", "a named note on a claimed turf (old key) reaches the owner at the next 09:00 IST");
+const deliver = await one(`select private.next_note_delivery(created_at) = deliver_after as rule, deliver_after >= created_at + interval '8 hours' as later
+                             from private.review_notes where user_id = '${U(2)}' and turf_id = '${T(2)}'`);
 eq([deliver.rule, deliver.later], [true, true], "at least 8 hours later");
 eq(await q(`select to_char(private.next_note_delivery(t) at time zone 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') d from (values
   (timestamptz '2026-10-26 00:30+05:30'), (timestamptz '2026-10-26 01:30+05:30'), (timestamptz '2026-10-26 20:00+05:30')) v(t)`),
   [{ d: "2026-10-26 09:00" }, { d: "2026-10-27 09:00" }, { d: "2026-10-27 09:00" }], "next_note_delivery: the next 09:00 IST at least 8 hours on");
-eq((await save(U(2), T(2), { rating: 5, note: { body: "Fix the net", show_name: true } })).note.delivers, "tomorrow", "court-club has an active claim (old key)");
 await q(`insert into public.turfs (id, name, slug, sports) values ('${T(41)}', 'Unclaimed', 'unclaimed', '["Football"]')`);
 eq((await save(U(2), T(41), { rating: 4, note: { body: "Hello owner", show_name: false } })).note.delivers, "on_claim", "an unclaimed turf keeps the note for the owner");
 eq((await mine(U(11), T(1))).mine.note, { body: "The light near the gate is off.", show_name: false }, "the author sees their note");
 ok(!JSON.stringify(await page()).includes("light near the gate"), "the note is never in turf_page");
-let d = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(1)])).d;
-eq(d.reviews.notes, [], "not shown to the owner before deliver_after");
-await q(`update private.review_notes set deliver_after = now() - interval '1 minute'`);
-d = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(1)])).d;
-eq(d.reviews.notes.length, 1, "shown once due");
+const ownerT1 = async () => (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(1)])).d;
+let d = await ownerT1();
+eq(d.reviews.notes, [], "one unnamed note waiting: the owner sees nothing yet");
+// Two more players leave unnamed notes: the three go out together.
+const n2 = await save(U(1), T(1), { rating: 4, sport: "Box Cricket", played_when: "evening", note: { body: "The water cooler was empty.", show_name: false } });
+eq(n2.note.delivers, "batch", "two waiting: still waiting");
+const n3 = await save(U(3), T(1), { rating: 5, sport: "Box Cricket", played_when: "evening", note: { body: "Please fix the gate latch.", show_name: false } });
+eq(n3.note.delivers, "tomorrow", "the third makes a batch");
+const batch = await q(`select distinct deliver_after from private.review_notes where turf_id = '${T(1)}' and body is not null`);
+eq([batch.length, batch[0].deliver_after?.toISOString?.() === new Date(n3.note.at).toISOString()], [1, true], "all three arrive at the same moment");
+d = await ownerT1();
+eq(d.reviews.notes, [], "not before that moment");
+await q(`update private.review_notes set deliver_after = now() - interval '1 minute' where deliver_after is not null`);
+d = await ownerT1();
 const month = (await one(`select to_char(now() at time zone 'Asia/Kolkata', 'Mon YYYY') m`)).m;
-const liveThisMonth = (await one(`select count(*)::int n from public.reviews where turf_id = '${T(1)}' and source is null and status = 'live'
-  and date_trunc('month', created_at at time zone 'Asia/Kolkata') = date_trunc('month', now() at time zone 'Asia/Kolkata')`)).n;
-ok(liveThisMonth >= 3, "three or more live reports here this month");
-eq(d.reviews.notes[0], { context: "An evening box cricket player", month, name: null, rating_word: null, body: "The light near the gate is off." },
-  "an anonymous note: rough context and month only");
+eq(d.reviews.notes.length, 3, "then all three show");
+eq(d.reviews.notes.map((x) => [x.context, x.month, x.name, x.rating_word]), Array(3).fill(["An evening box cricket player", month, null, null]),
+  "three unnamed notes in the batch say the same: the rough context and the month they arrived, nothing else");
 ok(!JSON.stringify(d.reviews.notes).includes(noted.review.id), "and no review id");
 const d2 = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000003"), T(2)])).d;
-eq(d2.reviews.notes.map((n) => [n.context, n.name, n.rating_word]), [[null, "Ravi Kumar", "Loved it"]], "a named note: name, month and the stars in words");
-// Fewer than 3 live reports that month: "A player".
-await q(`insert into public.turf_owners (turf_id, user_key, status, via, user_id) values ('${T(41)}', 'p:9000000004', 'active', 'phone_match', '${U(4)}')`);
-await q(`update public.reviews set sport = 'Football', played_when = 'morning' where user_id = '${U(2)}' and turf_id = '${T(41)}'`);
-const d3 = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(41)])).d;
-eq(d3.reviews.notes.map((n) => n.context), ["A player"], "the context collapses under 3 reports a month");
+eq(d2.reviews.notes.map((x) => [x.context, x.name, x.rating_word]), [[null, "Ravi Kumar", "Loved it"]], "a named note: name, month and the stars in words");
+// A batch whose notes don't share a context: "A player" for each.
+await q(`insert into public.turfs (id, name, slug, sports) values ('${T(42)}', 'Batch Turf', 'batch-turf', '["Football", "Box Cricket"]')`);
+await q(`insert into public.turf_owners (turf_id, user_key, status, via, user_id) values ('${T(42)}', 'p:9000000004', 'active', 'phone_match', '${U(4)}')`);
+await save(U(1), T(42), { rating: 3, sport: "Football", played_when: "morning", note: { body: "Morning note", show_name: false } });
+await save(U(2), T(42), { rating: 3, sport: "Football", played_when: "morning", note: { body: "Second morning note", show_name: false } });
+await save(U(11), T(42), { rating: 3, sport: "Box Cricket", played_when: "night", note: { body: "Night note", show_name: false } });
+await q(`update private.review_notes set deliver_after = now() - interval '1 minute' where deliver_after is not null`);
+const d3 = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(42)])).d;
+eq(d3.reviews.notes.map((x) => x.context), ["A player", "A player", "A player"], "two morning football players and one at night: no context for anyone");
 eq((await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000011"), T(1)])).d, { error: "forbidden" }, "owner_dashboard: forbidden without manage");
+// Editing a note that has arrived: the owner keeps the old text until the new one arrives with a batch.
+const edited = await save(U(11), T(1), { rating: 2, sport: "Box Cricket", played_when: "evening", note: { body: "The gate light is fixed now, thanks.", show_name: false } });
+eq(edited.note.delivers, "batch", "an edit to an arrived note waits for a batch");
+d = await ownerT1();
+ok(d.reviews.notes.some((x) => x.body === "The light near the gate is off.") && !d.reviews.notes.some((x) => x.body.includes("fixed now")), "the owner still sees the old text, not the new one");
+eq((await mine(U(11), T(1))).mine.note.body, "The gate light is fixed now, thanks.", "the author sees what they wrote");
 await save(U(11), T(1), { rating: 2, note: { body: null, show_name: false } });
 eq((await mine(U(11), T(1))).mine.note, null, "note.body null clears the note");
+d = await ownerT1();
+ok(!d.reviews.notes.some((x) => /light/.test(x.body)), "and it goes from the owner's view, old text too");
 await save(U(11), T(1), { rating: 2, note: { body: "Back again", show_name: false } });
 await remove(U(11), T(1));
-eq((await one(`select body, cleared_at is not null c from private.review_notes where user_id = '${U(11)}' and turf_id = '${T(1)}'`)), { body: null, c: true }, "removing a report clears its note");
+eq((await one(`select body, shown_body, cleared_at is not null c from private.review_notes where user_id = '${U(11)}' and turf_id = '${T(1)}'`)), { body: null, shown_body: null, c: true }, "removing a report clears its note");
+// Named and back: a named note arrives on its own; turning the name off before it arrives puts it in the batch queue.
+const nm = await save(U(9), T(1), { rating: 5, note: { body: "Named first", show_name: true } });
+eq(nm.note.delivers, "tomorrow", "named: tomorrow");
+const un = await save(U(9), T(1), { rating: 5, note: { body: "Named first", show_name: false } });
+eq(un.note.delivers, "batch", "name turned off before it arrived: it waits for a batch");
 
 /* ---------------- owner_dashboard keeps every key ---------------- */
 d = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(1)])).d;
@@ -399,9 +491,15 @@ d = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000
 eq(d.reviews.fix_first[0], { aspect: "lights", tag: "dim", n: (await one(`select count(*)::int n from public.reviews where turf_id = '${T(1)}' and status = 'live' and aspects -> 'lights' -> 'tags' ? 'dim'`)).n, last_at: d.reviews.fix_first[0].last_at },
   "Fix these first: the most named Needs work chip first");
 ok(d.reviews.love.some((l) => l.tag === "quick"), "What players love: Great chips");
+await save(U(8), T(1), { rating: 2, aspects: { washroom: { score: -1 } } });
+d = (await one(`select public.owner_dashboard($1, $2, 30) d`, [ownerTok("9000000004"), T(1)])).d;
+const untagged = d.reviews.fix_first.find((f) => f.aspect === "washroom");
+eq([untagged?.tag, untagged?.n, typeof untagged?.last_at], [null, 1, "string"], "Fix these first: a part rated Needs work with no reason picked is listed too (tag null)");
 
 /* ---------------- prices into From players ---------------- */
-await q(`insert into public.users (id, name) values ('${U(60)}', 'Price Person'), ('${U(61)}', 'Busy Suggester')`);
+// Two days on: no rush at Kings Turf any more, and the day's limits are fresh.
+await q(`update private.review_saves set saved_at = saved_at - interval '3 days'`);
+await q(`insert into public.users (id, name, created_at) values ('${U(60)}', 'Price Person', now() - interval '1 year'), ('${U(61)}', 'Busy Suggester', now() - interval '1 year')`);
 const pr = await save(U(60), T(1), { rating: 4, price_paid: 1000 });
 eq(pr.price_saved, true, "a rate paid is saved");
 eq(await q(`select relationship, price_min, price_max, submitter_name, status from public.turf_suggestions where user_id = '${U(60)}'`),
@@ -418,6 +516,12 @@ for (let i = 0; i < 20; i++) {
 const capped = await save(U(61), T(1), { rating: 5, price_paid: 900 });
 eq([capped.r, capped.price_saved], ["ok", false], "when the price can't be written (20 suggestions today), the report still posts");
 eq((await one(`select count(*)::int n from public.reviews where user_id = '${U(61)}'`)).n, 1, "and is kept");
+// The sheet asks only while a turf has fewer than 3 other players' prices; the database holds to that.
+await q(`insert into public.turf_suggestions (turf_id, user_id, relationship, price_min, price_max) values
+  ('${T(2)}', '${U(200)}', 'player', 600, 600), ('${T(2)}', '${U(201)}', 'player', 700, 700), ('${T(2)}', '${U(202)}', 'player', 650, 650)`);
+const late = await save(U(2), T(2), { rating: 5, price_paid: 200 });
+eq([late.r, late.price_saved], ["ok", false], "3 other players' prices already: the price is not taken (the report is)");
+eq((await one(`select count(*)::int n from public.turf_suggestions where turf_id = '${T(2)}' and user_id = '${U(2)}'`)).n, 0, "and nothing is written to From players");
 
 /* ---------------- the AI summary goes stale on edits ---------------- */
 await db.exec(`set test.owner = 'yes'`);
@@ -437,8 +541,8 @@ for (const fn of ["review_save", "review_mine", "review_remove", "review_vote"])
                          from pg_proc p where proname = $1`, [fn]);
   eq([r.a, r.p, r.prosecdef, String(r.proconfig).includes("search_path=")], [true, false, true, true], `${fn}: anon may call it, PUBLIC not; definer, fixed search_path`);
 }
-for (const fn of ["review_catalog", "review_aspects_ok", "review_text_problem", "account_manages_turf", "review_verified_via", "next_note_delivery",
-  "review_row_json", "review_aspect_counts", "review_share_price", "owner_review_block", "review_clean_text", "reviews_guard"]) {
+for (const fn of ["review_catalog", "review_aspects_ok", "review_text_problem", "account_manages_turf", "account_manages_in_city", "review_verified_via", "next_note_delivery",
+  "review_hold", "review_row_json", "review_mine_json", "review_aspect_counts", "review_share_price", "owner_review_block", "review_clean_text", "reviews_guard"]) {
   const r = await one(`select bool_or(has_function_privilege('anon', p.oid, 'execute')) a from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and proname = $1`, [fn]);
   eq(r.a, false, `private.${fn}: closed to the API roles`);
 }
@@ -448,12 +552,21 @@ for (const t of ["review_notes", "review_saves"]) {
 }
 await assert.rejects(asRole("anon", () => q(`select * from private.review_notes`)), /permission denied/, "anon can't read notes");
 passed++;
+// Saves run one at a time per account (and per turf), votes per account: the limits count committed rows.
+for (const [fn, keys] of [["review_save", ["review_save:", "review_turf:"]], ["review_remove", ["review_save:", "review_turf:"]], ["review_vote", ["review_vote:"]]]) {
+  const src = (await one(`select prosrc from pg_proc where proname = $1`, [fn])).prosrc;
+  ok(keys.every((k) => src.includes(`pg_advisory_xact_lock(hashtextextended('${k}'`)), `${fn} takes its advisory locks`);
+  if (fn !== "review_vote") ok(src.indexOf("review_save:") < src.indexOf("review_turf:"), `${fn}: account lock first, then the turf`);
+}
 
 /* ---------------- the lockdown, later ---------------- */
-// A review written straight from the API in the last 48 hours (no review_saves row): refused.
-await assert.rejects(db.exec(lock), /old app is still posting/, "the lockdown refuses while direct posts are recent");
+// Reviews written straight from the API in the last 48 hours (no review_saves row) don't stop it: anyone
+// can write one until it runs, so it lists them in a notice and closes the door.
+ok((await one(`select count(*)::int n from public.reviews r where r.source is null and r.created_at > now() - interval '48 hours'
+                 and not exists (select 1 from private.review_saves s where s.review_id = r.id)`)).n > 0, "direct posts from the last 48 hours are there");
+await assert.rejects(db.exec(lock.replace("to_regprocedure('public.review_save(text,uuid,uuid,jsonb)') is null", "true")), /apply 20261027_game_reports\.sql/,
+  "without the review functions it refuses");
 passed++;
-await q(`update public.reviews set created_at = now() - interval '3 days' where id not in (select review_id from private.review_saves) and source is null`);
 await db.exec(lock);
 await db.exec(lock); // safe to run again
 passed++;

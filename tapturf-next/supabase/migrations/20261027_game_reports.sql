@@ -31,11 +31,26 @@
 --    current_user is the owner, which would switch it off. The functions
 --    below are definers owned by postgres, so their own writes pass.
 -- 4. review_votes.withdrawn_at: taking a Helpful vote back keeps the row.
--- 5. private.review_notes (private notes to the owner, shown from the next
---    09:00 IST at least 8 hours later) and private.review_saves (every
---    save: version history, rate limits, channel and time taken).
+-- 5. private.review_notes (private notes to the owner) and
+--    private.review_saves (every save: version history, rate limits,
+--    channel and time taken). A note with the player's name reaches the
+--    owner at the next 09:00 IST at least 8 hours on. One without waits
+--    until 3 or more players' unnamed notes are waiting at that turf, then
+--    they all arrive together, so neither the timing nor a rough "evening
+--    box cricket player" points at one person. An edit to a note that has
+--    arrived waits the same way; the owner keeps seeing the old text.
 -- 6. public.review_save, review_mine, review_remove, review_vote: server
---    key only.
+--    key only. One save at a time per account and per turf (advisory
+--    locks), so the daily limits and the checks below count every save.
+--    A save that doesn't name the report it replaces (p_report.base) gets
+--    r: exists and that report back: nothing is ever overwritten silently.
+--    A new report waits for a check (status held, shown to its author as
+--    Under review) when its account manages another turf in the same city,
+--    or it lands in a rush on one turf (private.review_hold). Phase 1 has
+--    no moderation screen: list them with
+--      select id, turf_id, rating, created_at from public.reviews where status = 'held';
+--    and let one through with
+--      update public.reviews set status = 'live' where id = '...';
 -- 7. Replaced bodies, same signatures, every existing key kept:
 --    turf_page (20261026_turf_page_found.sql: live reviews only, the new
 --    fields, Helpful counts without self-votes or withdrawn ones, and two
@@ -76,9 +91,9 @@ alter table public.reviews add column if not exists status text not null default
 comment on column public.reviews.aspects is
   'Game report scorecard: {"pitch":{"score":1,"tags":["bounce"]},...}. score -1 Needs work, 0 Okay, 1 Great; tags from private.review_catalog(). Written by review_save only.';
 comment on column public.reviews.verified_via is
-  'game: the account hosted or joined a TapTurf game here before the report (private.review_verified_via). booking is kept for owner-confirmed play later.';
+  'game: the account hosted or joined a TapTurf game here before the report (private.review_verified_via, worked out again at every save). booking is kept for owner-confirmed play later. The app shows no badge for it while anyone can add a game.';
 comment on column public.reviews.status is
-  'live; removed by its author (review_remove); hidden by the site owner for abuse; held (phase 2). Only live rows are public.';
+  'live; removed by its author (review_remove); hidden by the site owner for abuse; held: a new report waiting for a check (private.review_hold), let through by the site owner. Only live rows are public.';
 comment on column public.reviews.edited_at is
   'Set when the author changes the stars, tip, scorecard or play-again answer. The page shows Updated {month}.';
 
@@ -162,7 +177,12 @@ create table if not exists private.review_notes (
   user_id uuid not null,
   body text check (body is null or char_length(body) between 1 and 400),
   show_name boolean not null default false,
-  deliver_after timestamptz not null,
+  -- When body reaches the owner; null while a note without a name waits for its batch.
+  deliver_after timestamptz,
+  -- The version the owner sees while a newer one waits (its text, whether it was named, when it arrived).
+  shown_body text check (shown_body is null or char_length(shown_body) between 1 and 400),
+  shown_named boolean,
+  shown_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
   cleared_at timestamptz
@@ -170,7 +190,7 @@ create table if not exists private.review_notes (
 create index if not exists review_notes_turf_idx on private.review_notes (turf_id, deliver_after);
 revoke all on private.review_notes from public, anon, authenticated;
 comment on table private.review_notes is
-  'Private notes to a turf''s owner, one per report. Read only through owner_dashboard (managers), from deliver_after.';
+  'Private notes to a turf''s owner, one per report. Read only through owner_dashboard (managers): body from deliver_after, else the shown_* version. Unnamed notes get a deliver_after only in batches of 3 or more players (review_save).';
 
 create table if not exists private.review_saves (
   id bigint generated always as identity primary key,
@@ -281,9 +301,13 @@ as $$
 $$;
 revoke all on function private.review_clean_text(text) from public, anon, authenticated;
 
--- 'contact_info' when the text has an Indian mobile number (10 digits from 6 to 9,
--- with or without +91 or 0, spaces or dashes), an email, a link or a bare domain;
--- else null. Prices (Rs 1,200), times (7-9pm) and scores (120/3) pass.
+-- 'contact_info' when the text has an Indian mobile number, an email, a link or a
+-- bare domain; else null. A number is read the way it would be dialled: digits in
+-- any of the Indian scripts, Arabic-Indic or full-width read as 0-9, and spaces,
+-- dots, dashes, slashes and brackets between digits taken out; then 10 digits from
+-- 6 to 9, with or without 91 or 0 in front. The short endings .in, .co, .me and
+-- .net count only in lower case after a 3-letter name, so "here.In the evening"
+-- passes. Prices (Rs 1,200), times (7-9pm) and scores (120/3) pass.
 -- lib/reviews/screen.ts contactProblem is the same, for instant feedback.
 create or replace function private.review_text_problem(p text)
 returns text
@@ -293,19 +317,32 @@ set search_path = ''
 as $$
   select case
     when p is null then null
-    when p ~ '(^|[^0-9])(\+?91[ -]?|0)?[6-9]([ -]?[0-9]){9}([^0-9]|$)' then 'contact_info'
+    when x.d ~ '(^|[^0-9])(\+?91|0)?[6-9][0-9]{9}([^0-9]|$)' then 'contact_info'
     when p ~* '[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}' then 'contact_info'
     when p ~* '(https?://|www\.)' then 'contact_info'
     when p ~* '(^|[^a-z0-9@.])(wa\.me|t\.me|bit\.ly)([^a-z0-9]|$)' then 'contact_info'
     when p ~* '(^|[^a-z0-9@.])[a-z0-9][a-z0-9-]*\.(com|org|io|app|xyz|ly|gl|site|online|shop|store|info|biz|co\.in|net\.in|org\.in)([^a-z0-9]|$)' then 'contact_info'
+    when p ~ '(^|[^A-Za-z0-9@.])[A-Za-z0-9][A-Za-z0-9-]{2,}\.(in|co|me|net)([^A-Za-z0-9]|$)' then 'contact_info'
     when p ~* '(^|[^a-z0-9@.])[a-z0-9][a-z0-9-]*\.[a-z]{2,}/[^ ]' then 'contact_info'
-  end;
+  end
+  from (
+    select regexp_replace(
+             translate(coalesce(p, ''),
+                       (select string_agg(chr(z + i), '' order by z, i)
+                          from unnest(array[1632, 1776, 2406, 2534, 2662, 2790, 2918, 3046, 3174, 3302, 3430, 65296]) z,
+                               generate_series(0, 9) i),
+                       repeat('0123456789', 12)),
+             '([0-9])[[:space:].()/-]+(?=[0-9])', '\1', 'g') as d
+  ) x;
 $$;
 revoke all on function private.review_text_problem(text) from public, anon, authenticated;
 
 -- An account that manages or claims this turf can't rate it (app/terms): an active
 -- or pending claim for the account, or under one of its sign-ins from before claims
--- named the account; turfs.owner_id; or its own suggestion saying it owns or works there.
+-- named the account; or turfs.owner_id. Never a turf_suggestions row: anyone can
+-- write one saying another player owns or works at a turf (save_turf_suggestion
+-- takes the user id from the browser), which would let an owner stop players
+-- rating their turf.
 create or replace function private.account_manages_turf(p_user uuid, p_turf uuid)
 returns boolean
 language sql
@@ -325,11 +362,28 @@ as $$
                                       select 'e:' || lower(u.email::text) from public.users u where u.id = p_user and u.email is not null)
                     or private.account_for_key(o.user_key) = p_user))))
     or exists (select 1 from public.turfs t where t.id = p_turf and t.owner_id = p_user)
-    or exists (select 1 from public.turf_suggestions s
-                where s.turf_id = p_turf and s.user_id = p_user and s.relationship in ('owner', 'staff'))
   );
 $$;
 revoke all on function private.account_manages_turf(uuid, uuid) from public, anon, authenticated;
+
+-- The account manages (as above) another turf in this turf's city: a rival's report.
+create or replace function private.account_manages_in_city(p_user uuid, p_turf uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p_user is not null and exists (
+    select 1
+      from public.turfs here
+      join public.turfs t on lower(t.city) = lower(here.city) and t.id <> here.id
+     where here.id = p_turf and here.city is not null
+       and (t.owner_id = p_user
+            or exists (select 1 from public.turf_owners o where o.turf_id = t.id and o.status in ('active', 'pending')))
+       and private.account_manages_turf(p_user, t.id));
+$$;
+revoke all on function private.account_manages_in_city(uuid, uuid) from public, anon, authenticated;
 
 -- 'game' when the account hosted or joined a TapTurf game at this turf that was
 -- not cancelled and started in the last 365 days; else null. A label, never a gate.
@@ -364,6 +418,31 @@ as $$
     from (select (((p_at at time zone 'Asia/Kolkata')::date + time '09:00') at time zone 'Asia/Kolkata') as d) x;
 $$;
 revoke all on function private.next_note_delivery(timestamptz) from public, anon, authenticated;
+
+-- Whether a new report (a first one, or one posted again) waits for a check: the
+-- account manages another turf in the same city, or the report lands in a rush on
+-- this turf: 2 or more other players posted here in the last 48 hours and the
+-- account is under 3 days old, or 5 or more did and it played no TapTurf game here.
+-- A game is easy to add today, so it never lets a young account through.
+create or replace function private.review_hold(p_user uuid, p_turf uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with rush as (
+    select count(distinct s.user_id) as n
+      from private.review_saves s
+     where s.turf_id = p_turf and s.user_id <> p_user and s.action in ('create', 'repost')
+       and s.saved_at > now() - interval '48 hours'
+  )
+  select private.account_manages_in_city(p_user, p_turf)
+      or ((select n from rush) >= 2
+          and coalesce((select u.created_at from public.users u where u.id = p_user), now()) > now() - interval '3 days')
+      or ((select n from rush) >= 5 and private.review_verified_via(p_user, p_turf) is null);
+$$;
+revoke all on function private.review_hold(uuid, uuid) from public, anon, authenticated;
 
 -- The one public shape of a review: turf_page, review_save and review_mine all use it.
 -- Helpful counts live votes from anyone but the author.
@@ -400,6 +479,21 @@ as $$
     left join public.users u on u.id = r.user_id;
 $$;
 revoke all on function private.review_row_json(public.reviews) from public, anon, authenticated;
+
+-- A report as its author sees it: the public shape, its status, and their note as they wrote it.
+create or replace function private.review_mine_json(r public.reviews)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.review_row_json(r) || jsonb_build_object(
+    'status', r.status,
+    'note', (select jsonb_build_object('body', n.body, 'show_name', n.show_name)
+               from private.review_notes n where n.review_id = r.id and n.body is not null and n.cleared_at is null));
+$$;
+revoke all on function private.review_mine_json(public.reviews) from public, anon, authenticated;
 
 -- Per part of the turf: how many live TapTurf reports since p_since rated it, how
 -- (Great, Okay, Needs work), and each reason chip's count and latest use.
@@ -495,9 +589,12 @@ $$;
 revoke all on function private.review_share_price(uuid, uuid, integer) from public, anon, authenticated;
 
 -- What /my shows about a turf's TapTurf reports, last 90 days, for owner_dashboard
--- (which checks _can_manage first). Notes only once due, never with a review id;
--- an anonymous one says only roughly who, and only "A player" when the turf had
--- fewer than 3 live reports that month.
+-- (which checks _can_manage first). Fix these first: the most named Needs work
+-- chips, and a part rated Needs work with no chip picked (tag null). Notes only
+-- once they have arrived (the version the owner last got while an edit waits),
+-- never with a review id, with the month they arrived. An unnamed one says
+-- "A player", or a rough "An evening box cricket player" only when at least 3
+-- unnamed notes that arrived together say the same.
 create or replace function private.owner_review_block(p_turf_id uuid)
 returns jsonb
 language plpgsql
@@ -523,11 +620,21 @@ begin
         select jsonb_agg(a - 'tags') from jsonb_array_elements(v_aspects) a), '[]'::jsonb),
       'fix_first', coalesce((
         select jsonb_agg(jsonb_build_object('aspect', f.aspect, 'tag', f.tag, 'n', f.n, 'last_at', f.last_at)
-                         order by f.n desc, f.last_at desc, f.aspect, f.tag)
-          from (select a ->> 'aspect' as aspect, t ->> 'tag' as tag, (t ->> 'n')::int as n, (t ->> 'last_at')::timestamptz as last_at
-                  from jsonb_array_elements(v_aspects) a, jsonb_array_elements(a -> 'tags') t
-                 where (t ->> 'sign') = '-1'
-                 order by 3 desc, 4 desc, 1, 2
+                         order by f.n desc, f.last_at desc, f.aspect, f.tag nulls last)
+          from (select x.aspect, x.tag, x.n, x.last_at
+                  from (select a ->> 'aspect' as aspect, t ->> 'tag' as tag, (t ->> 'n')::int as n, (t ->> 'last_at')::timestamptz as last_at
+                          from jsonb_array_elements(v_aspects) a, jsonb_array_elements(a -> 'tags') t
+                         where (t ->> 'sign') = '-1'
+                        union all
+                        select e.key, null, count(*)::int, max(coalesce(m.edited_at, m.created_at))
+                          from public.reviews m
+                          cross join lateral jsonb_each(case when jsonb_typeof(m.aspects) = 'object' then m.aspects else '{}'::jsonb end) e
+                         where m.turf_id = p_turf_id and m.source is null and m.status = 'live'
+                           and coalesce(m.edited_at, m.created_at) >= v_since
+                           and (e.value ->> 'score') = '-1'
+                           and coalesce(jsonb_array_length(case when jsonb_typeof(e.value -> 'tags') = 'array' then e.value -> 'tags' end), 0) = 0
+                         group by e.key) x
+                 order by x.n desc, x.last_at desc, x.aspect, x.tag nulls last
                  limit 5) f), '[]'::jsonb),
       'love', coalesce((
         select jsonb_agg(jsonb_build_object('aspect', f.aspect, 'tag', f.tag, 'n', f.n) order by f.n desc, f.last_at desc, f.aspect, f.tag)
@@ -538,33 +645,32 @@ begin
                  limit 3) f), '[]'::jsonb),
       'notes', coalesce((
         select jsonb_agg(jsonb_build_object(
-                 'context', case when nt.show_name then null
-                                 when nt.few or (nt.sport is null and nt.played_when is null) then 'A player'
-                                 else nt.who end,
-                 'month', nt.month,
-                 'name', case when nt.show_name then nt.name end,
-                 'rating_word', case when nt.show_name then (array['Bad', 'Not great', 'Okay', 'Good', 'Loved it'])[nt.rating] end,
-                 'body', nt.body)
-                 order by nt.month_start desc, nt.shuffle)
+                 'context', case when v.named then null
+                                 when v.phrase <> 'player' and v.same >= 3 then v.who
+                                 else 'A player' end,
+                 'month', to_char(v.at at time zone 'Asia/Kolkata', 'Mon YYYY'),
+                 'name', case when v.named then v.name end,
+                 'rating_word', case when v.named then (array['Bad', 'Not great', 'Okay', 'Good', 'Loved it'])[v.rating] end,
+                 'body', v.body)
+                 order by v.at desc, v.shuffle)
           from (
-            select n.show_name, n.body, rv.sport, rv.played_when, rv.rating, u.name,
-                   to_char(n.created_at at time zone 'Asia/Kolkata', 'Mon YYYY') as month,
-                   date_trunc('month', n.created_at at time zone 'Asia/Kolkata') as month_start,
-                   md5(n.review_id::text) as shuffle,
-                   (case when left(w.phrase, 1) in ('a', 'e', 'i', 'o', 'u') then 'An ' else 'A ' end) || w.phrase as who,
-                   (select count(*) from public.reviews m
-                     where m.turf_id = p_turf_id and m.source is null and m.status = 'live'
-                       and date_trunc('month', m.created_at at time zone 'Asia/Kolkata')
-                           = date_trunc('month', n.created_at at time zone 'Asia/Kolkata')) < 3 as few
-              from private.review_notes n
-              join public.reviews rv on rv.id = n.review_id
-              left join public.users u on u.id = n.user_id
-              cross join lateral (select concat_ws(' ', rv.played_when, lower(rv.sport), 'player') as phrase) w
-             where n.turf_id = p_turf_id and n.body is not null and n.cleared_at is null
-               and n.deliver_after <= now() and rv.status = 'live'
-             order by n.deliver_after desc
+            select s.*, count(*) filter (where not s.named) over (partition by s.at, s.phrase) as same
+              from (
+                select case when n.deliver_after <= now() then n.body else n.shown_body end as body,
+                       case when n.deliver_after <= now() then n.show_name else coalesce(n.shown_named, false) end as named,
+                       case when n.deliver_after <= now() then n.deliver_after else n.shown_at end as at,
+                       rv.rating, u.name, md5(n.review_id::text) as shuffle, w.phrase,
+                       (case when left(w.phrase, 1) in ('a', 'e', 'i', 'o', 'u') then 'An ' else 'A ' end) || w.phrase as who
+                  from private.review_notes n
+                  join public.reviews rv on rv.id = n.review_id
+                  left join public.users u on u.id = n.user_id
+                  cross join lateral (select concat_ws(' ', rv.played_when, lower(rv.sport), 'player') as phrase) w
+                 where n.turf_id = p_turf_id and n.cleared_at is null and rv.status = 'live'
+                   and ((n.body is not null and n.deliver_after <= now()) or n.shown_body is not null)
+              ) s
+             order by s.at desc, s.shuffle
              limit 30
-          ) nt), '[]'::jsonb))
+          ) v), '[]'::jsonb))
       from public.reviews r
      where r.turf_id = p_turf_id and r.source is null and r.status = 'live'
        and coalesce(r.edited_at, r.created_at) >= v_since
@@ -577,10 +683,13 @@ revoke all on function private.owner_review_block(uuid) from public, anon, authe
 
 -- Save a report: the first one, an edit, or one posted again after removal.
 -- p_report: {rating 1-5, sport?, played_when?, aspects?, play_again?, comment?,
--- note?: {body|null, show_name}, price_paid?, channel?, ms?}. Leaving note out keeps
--- the note as it is; note.body null clears it. Answers {r: ok, created, review,
--- note, after, price_saved}, or r: unavailable, bad, gone, own_turf, limit,
--- contact_info (with field).
+-- note?: {body|null, show_name}, price_paid?, channel?, ms?, base?}. base is the id
+-- of the report this save replaces (the one being edited); when the account has a
+-- report here that isn't removed and base doesn't name it, nothing is written and
+-- the answer is r: exists with that report. Leaving note out keeps the note as it
+-- is; note.body null clears it. Answers {r: ok, created, review, note, after,
+-- price_saved}, or r: unavailable, bad, gone, own_turf, limit, exists, contact_info
+-- (with field). A new report may come back with status held (private.review_hold).
 create or replace function public.review_save(p_key text, p_user_id uuid, p_turf_id uuid, p_report jsonb)
 returns jsonb
 language plpgsql
@@ -603,12 +712,16 @@ declare
   v_price int;
   v_channel text;
   v_ms int;
+  v_base text;
   v_created boolean := false;
   v_id uuid;
+  v_new boolean;
+  v_held boolean := false;
+  v_verified text;
   v_price_saved boolean := false;
   v_note jsonb := null;
+  v_n private.review_notes;
   v_claimed boolean;
-  v_deliver timestamptz;
 begin
   if not private.account_key_ok(p_key) then
     return jsonb_build_object('r', 'unavailable');
@@ -616,6 +729,8 @@ begin
   if p_user_id is null or p_turf_id is null or p_report is null or jsonb_typeof(p_report) <> 'object' then
     return jsonb_build_object('r', 'bad');
   end if;
+  -- One save at a time per account: the limits below then count every save before this one.
+  perform pg_advisory_xact_lock(hashtextextended('review_save:' || p_user_id::text, 0));
   if not exists (select 1 from public.users u where u.id = p_user_id) then
     return jsonb_build_object('r', 'bad');
   end if;
@@ -698,6 +813,11 @@ begin
     return jsonb_build_object('r', 'bad');
   end if;
 
+  if coalesce(jsonb_typeof(p_report -> 'base'), 'null') not in ('null', 'string') then
+    return jsonb_build_object('r', 'bad');
+  end if;
+  v_base := p_report ->> 'base';
+
   -- Where the report came from and how long it took: kept only when well formed.
   v_channel := case when (p_report ->> 'channel') in ('turf_page', 'link', 'owner_link', 'game', 'ask', 'edit') then p_report ->> 'channel' end;
   if jsonb_typeof(p_report -> 'ms') = 'number' and (p_report ->> 'ms') ~ '^[0-9]{1,6}$' then
@@ -714,17 +834,29 @@ begin
     return jsonb_build_object('r', 'contact_info', 'field', 'note');
   end if;
 
+  -- One save at a time per turf too: the rush check and the note batches count the turf's other saves.
+  perform pg_advisory_xact_lock(hashtextextended('review_turf:' || p_turf_id::text, 0));
   select * into v_old from public.reviews r
    where r.user_id = p_user_id and r.turf_id = p_turf_id and r.source is null
    for update;
 
+  -- Never a silent overwrite: a save must name the report it replaces.
+  if v_old.id is not null and v_old.status <> 'removed' and v_base is distinct from v_old.id::text then
+    return jsonb_build_object('r', 'exists', 'review', private.review_mine_json(v_old));
+  end if;
+
   -- Per account: 5 new reports and 20 saves a day.
+  v_new := v_old.id is null or v_old.status = 'removed';
   if (select count(*) from private.review_saves s where s.user_id = p_user_id and s.saved_at > now() - interval '24 hours') >= 20
-     or ((v_old.id is null or v_old.status = 'removed')
+     or (v_new
          and (select count(*) from private.review_saves s
                where s.user_id = p_user_id and s.saved_at > now() - interval '24 hours' and s.action in ('create', 'repost')) >= 5) then
     return jsonb_build_object('r', 'limit');
   end if;
+
+  v_held := v_new and private.review_hold(p_user_id, p_turf_id);
+  -- Worked out again at every save, so a game that is cancelled or taken away takes the badge with it.
+  v_verified := private.review_verified_via(p_user_id, p_turf_id);
 
   -- The page refreshes within a minute, not at the next sweep.
   perform set_config('tapturf.cache_urgent', 'on', true);
@@ -740,53 +872,84 @@ begin
            played_when = v_when,
            aspects = v_aspects,
            play_again = v_again,
-           verified_via = coalesce(private.review_verified_via(p_user_id, p_turf_id), v_old.verified_via),
+           verified_via = v_verified,
            edited_at = case when (v_rating, v_comment, v_aspects, v_again) is distinct from (v_old.rating, v_old.comment, v_old.aspects, v_old.play_again)
                             then now() else v_old.edited_at end,
-           status = case when v_old.status in ('hidden', 'held') then v_old.status else 'live' end
+           status = case when v_old.status in ('hidden', 'held') then v_old.status when v_held then 'held' else 'live' end
      where r.id = v_old.id
     returning * into v_row;
   else
     insert into public.reviews as r (user_id, turf_id, rating, comment, sport, played_when, aspects, play_again, verified_via, status)
-    values (p_user_id, p_turf_id, v_rating, v_comment, v_sport, v_when, v_aspects, v_again,
-            private.review_verified_via(p_user_id, p_turf_id), 'live')
+    values (p_user_id, p_turf_id, v_rating, v_comment, v_sport, v_when, v_aspects, v_again, v_verified,
+            case when v_held then 'held' else 'live' end)
     on conflict (user_id, turf_id) where source is null do update
        set rating = excluded.rating, comment = excluded.comment, sport = excluded.sport,
            played_when = excluded.played_when, aspects = excluded.aspects, play_again = excluded.play_again,
-           verified_via = coalesce(excluded.verified_via, r.verified_via), edited_at = now(),
-           status = case when r.status in ('hidden', 'held') then r.status else 'live' end
+           verified_via = excluded.verified_via, edited_at = now(),
+           status = case when r.status in ('hidden', 'held') then r.status else excluded.status end
     returning r.id, (r.xmax = 0) into v_id, v_created;
     select * into v_row from public.reviews r where r.id = v_id;
     insert into private.review_saves (review_id, user_id, turf_id, action, channel, ms, price_sent, before)
     values (v_row.id, p_user_id, p_turf_id, case when v_created then 'create' else 'edit' end, v_channel, v_ms, v_price is not null, null);
   end if;
 
-  -- The private note.
+  -- The private note. A named one arrives at the next 09:00 IST at least 8 hours on; an
+  -- unnamed one waits for its batch (below). What the owner already has stays on show
+  -- until the new version arrives.
   if v_has_note then
+    select * into v_n from private.review_notes n where n.review_id = v_row.id for update;
     if v_note_body is null then
       update private.review_notes n
-         set body = null, cleared_at = now(), updated_at = now()
-       where n.review_id = v_row.id and n.body is not null;
-    else
-      insert into private.review_notes as n (review_id, turf_id, user_id, body, show_name, deliver_after)
-      values (v_row.id, p_turf_id, p_user_id, v_note_body, v_show_name, private.next_note_delivery(now()))
-      on conflict (review_id) do update
-         set body = excluded.body,
-             show_name = excluded.show_name,
-             updated_at = now(),
+         set body = null, shown_body = null, shown_named = null, shown_at = null, deliver_after = null,
+             cleared_at = now(), updated_at = now()
+       where n.review_id = v_row.id and (n.body is not null or n.shown_body is not null);
+    elsif v_n.review_id is null then
+      insert into private.review_notes (review_id, turf_id, user_id, body, show_name, deliver_after)
+      values (v_row.id, p_turf_id, p_user_id, v_note_body, v_show_name,
+              case when v_show_name then private.next_note_delivery(now()) end);
+    elsif v_n.body is distinct from v_note_body or v_n.show_name is distinct from v_show_name or v_n.cleared_at is not null then
+      update private.review_notes n
+         set shown_body = case when n.body is not null and n.cleared_at is null and n.deliver_after <= now() then n.body else n.shown_body end,
+             shown_named = case when n.body is not null and n.cleared_at is null and n.deliver_after <= now() then n.show_name else n.shown_named end,
+             shown_at = case when n.body is not null and n.cleared_at is null and n.deliver_after <= now() then n.deliver_after else n.shown_at end,
+             body = v_note_body,
+             show_name = v_show_name,
+             deliver_after = case when v_show_name then private.next_note_delivery(now()) end,
              cleared_at = null,
-             deliver_after = case when n.body is null then excluded.deliver_after else n.deliver_after end;
+             updated_at = now()
+       where n.review_id = v_row.id;
     end if;
   end if;
-  select n.deliver_after into v_deliver from private.review_notes n
-   where n.review_id = v_row.id and n.body is not null and n.cleared_at is null;
-  if v_deliver is not null then
-    v_claimed := exists (select 1 from public.turf_owners o where o.turf_id = p_turf_id and o.status = 'active');
-    v_note := jsonb_build_object('delivers', case when v_claimed then 'tomorrow' else 'on_claim' end, 'at', v_deliver);
+
+  -- Unnamed notes go to the owner only in batches of 3 or more players, all at once,
+  -- so the time a note arrives points at no one.
+  if (select count(distinct n.user_id)
+        from private.review_notes n join public.reviews r on r.id = n.review_id
+       where n.turf_id = p_turf_id and n.body is not null and n.cleared_at is null and not n.show_name
+         and n.deliver_after is null and r.status = 'live') >= 3 then
+    update private.review_notes n
+       set deliver_after = private.next_note_delivery(now())
+      from public.reviews r
+     where r.id = n.review_id and n.turf_id = p_turf_id and n.body is not null and n.cleared_at is null
+       and not n.show_name and n.deliver_after is null and r.status = 'live';
   end if;
 
-  -- The rate they paid, as their From players price. Never loses the report.
-  if v_price is not null then
+  select * into v_n from private.review_notes n
+   where n.review_id = v_row.id and n.body is not null and n.cleared_at is null;
+  if v_n.review_id is not null then
+    v_claimed := exists (select 1 from public.turf_owners o where o.turf_id = p_turf_id and o.status = 'active');
+    v_note := jsonb_build_object(
+      'delivers', case when not v_claimed then 'on_claim' when v_n.deliver_after is null then 'batch' else 'tomorrow' end,
+      'at', v_n.deliver_after);
+  end if;
+
+  -- The rate they paid, as their From players price: only while the turf has fewer than
+  -- 3 other players' prices (the sheet asks only then), and not from a held report.
+  -- Never loses the report.
+  if v_price is not null and v_row.status = 'live'
+     and (select count(*) from public.turf_suggestions s
+           where s.turf_id = p_turf_id and s.user_id is distinct from p_user_id and s.status <> 'rejected'
+             and (s.price_min is not null or s.price_max is not null)) < 3 then
     begin
       v_price_saved := private.review_share_price(p_user_id, p_turf_id, v_price);
     exception when others then
@@ -849,10 +1012,7 @@ begin
 
   select * into v_row from public.reviews r where r.user_id = p_user_id and r.turf_id = p_turf_id and r.source is null;
   if found then
-    v_mine := private.review_row_json(v_row) || jsonb_build_object(
-      'status', v_row.status,
-      'note', (select jsonb_build_object('body', n.body, 'show_name', n.show_name)
-                 from private.review_notes n where n.review_id = v_row.id and n.body is not null and n.cleared_at is null));
+    v_mine := private.review_mine_json(v_row);
   elsif not v_blocked then
     select jsonb_build_object(
              'kind', 'game',
@@ -920,6 +1080,9 @@ begin
   if p_user_id is null or p_turf_id is null then
     return jsonb_build_object('r', 'bad');
   end if;
+  -- The same locks as review_save, in the same order.
+  perform pg_advisory_xact_lock(hashtextextended('review_save:' || p_user_id::text, 0));
+  perform pg_advisory_xact_lock(hashtextextended('review_turf:' || p_turf_id::text, 0));
   select * into v_old from public.reviews r
    where r.user_id = p_user_id and r.turf_id = p_turf_id and r.source is null
    for update;
@@ -936,8 +1099,9 @@ begin
      set status = case when v_old.status in ('hidden', 'held') then v_old.status else 'removed' end
    where r.id = v_old.id;
   update private.review_notes n
-     set body = null, cleared_at = now(), updated_at = now()
-   where n.review_id = v_old.id and n.body is not null;
+     set body = null, shown_body = null, shown_named = null, shown_at = null, deliver_after = null,
+         cleared_at = now(), updated_at = now()
+   where n.review_id = v_old.id and (n.body is not null or n.shown_body is not null);
   return jsonb_build_object('r', 'ok');
 end;
 $$;
@@ -962,8 +1126,10 @@ begin
      or not exists (select 1 from public.users u where u.id = p_user_id) then
     return jsonb_build_object('r', 'bad');
   end if;
+  -- One vote at a time per account, so the hourly limit counts every vote before this one.
+  perform pg_advisory_xact_lock(hashtextextended('review_vote:' || p_user_id::text, 0));
   select * into v_review from public.reviews r where r.id = p_review_id;
-  if not found or v_review.status <> 'live' then
+  if not found then
     return jsonb_build_object('r', 'gone');
   end if;
   if coalesce(v_review.source, '') <> '' then
@@ -971,6 +1137,9 @@ begin
   end if;
   if v_review.user_id = p_user_id then
     return jsonb_build_object('r', 'own');
+  end if;
+  if v_review.status <> 'live' then
+    return jsonb_build_object('r', 'gone');
   end if;
 
   if p_on then
