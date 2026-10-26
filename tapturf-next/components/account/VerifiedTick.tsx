@@ -13,9 +13,19 @@ export const TICK_LABEL = "Phone and email verified";
  * on turfs. It says only that this person confirmed both a phone number
  * and an email, never either one, or which one is missing.
  */
-export function VerifiedTick({ size = "sm", className = "" }: { size?: "sm" | "lg"; className?: string }) {
+export function VerifiedTick({
+  size = "sm",
+  className = "",
+  decorative = false,
+}: {
+  size?: "sm" | "lg";
+  className?: string;
+  /** Inside a control whose own words say it (the admin's "Verified only"): hidden from screen readers. */
+  decorative?: boolean;
+}) {
+  const named = decorative ? { "aria-hidden": true } : { role: "img", "aria-label": TICK_LABEL, title: TICK_LABEL };
   return (
-    <span role="img" aria-label={TICK_LABEL} title={TICK_LABEL} className={`inline-flex shrink-0 items-center ${className}`}>
+    <span {...named} className={`inline-flex shrink-0 items-center ${className}`}>
       <BadgeCheck className={`${size === "lg" ? "w-6 h-6" : "w-4 h-4"} fill-sky-600 text-white`} strokeWidth={2.25} aria-hidden />
     </span>
   );

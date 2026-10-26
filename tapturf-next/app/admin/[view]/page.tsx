@@ -340,7 +340,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
                 <td className="px-4 py-3">
                   {u.verified && (
                     <span title={u.verifiedHow ?? undefined}>
-                      <Badge className="bg-accent-50 text-accent-700">verified</Badge>
+                      <Badge className="bg-accent-50 text-accent-700">confirmed</Badge>
                     </span>
                   )}
                 </td>

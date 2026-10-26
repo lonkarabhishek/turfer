@@ -20,8 +20,8 @@ import { ListingCheckTool, ReviewSummaryTool } from "@/components/admin/AiTools"
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
-import { signupPeople } from "@/lib/queries/adminUsers";
-import { personId } from "@/lib/admin/people";
+import { adminTickRows, signupPeople } from "@/lib/queries/adminUsers";
+import { personId, tickTotals, tickedOnly } from "@/lib/admin/people";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { SignupsTrend } from "@/components/admin/SignupsTrend";
 import { LinkRefusals } from "@/components/admin/LinkRefusals";
@@ -98,7 +98,7 @@ function ToolTiles({ tools }: { tools: Awaited<ReturnType<typeof getToolUsage>> 
   );
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ person?: string | string[] }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ person?: string | string[]; people?: string | string[] }> }) {
   // Owner-only guard. Non-admins end on a "Page not found" screen;
   // AdminGate first lets a phone-OTP owner hand over their Firebase token.
   const allowed = await isAdmin();
@@ -126,6 +126,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     adminGames,
     logins,
     tools,
+    tickRows,
   ] = await Promise.all([
     getHeadline(),
     getDailyGames(30),
@@ -142,7 +143,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     getAdminGames("all", 200),
     getRecentLogins(300),
     getToolUsage(),
+    // The verified tick for every account (the people list reads the same, once per render).
+    adminTickRows(),
   ]);
+  const ticks = tickTotals(tickRows);
+  const sp = await searchParams;
   const loginNums = logins.ok ? loginStats(logins.rows) : null;
   const lastLogin = loginNums?.latest;
   // Games snapshot: everything upcoming / live, then the latest past ones.
@@ -350,6 +355,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           value={headline.duplicateUsers}
           sub={headline.duplicateUsers === 0 ? "Clean" : "Same person, 2+ rows"}
         />
+        {/* The tick players see: a phone proved by an OTP and an email by Google (admin_ticks). Opens the people list on them. */}
+        <StatTile
+          label="Verified tick"
+          href="/admin?people=verified#people"
+          value={ticks ? ticks.verified : "-"}
+          sub={ticks ? `of ${ticks.accounts} accounts · ${ticks.phone} phone proved · ${ticks.email} email by Google` : "Couldn't load"}
+        />
         <StatTile
           label="Ask TapTurf (7d)"
           href="/admin/asks"
@@ -389,7 +401,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {/* Charts */}
       <div className="mb-4">
         {/* A new read (Refresh) starts the chart afresh at its "now". A failed read shows a message there, never a broken page. */}
-        <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} focus={personId((await searchParams).person)} />
+        <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} focus={personId(sp.person)} verifiedOnly={tickedOnly(sp.people)} />
       </div>
       {/* What couldn't be added to an account, for the owner to follow up by hand. */}
       <LinkRefusals />
@@ -460,7 +472,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             tone={headline.pendingBookings > 0 ? "hot" : "default"}
           />
           <StatTile
-            label="Verified users"
+            label="Confirmed at sign-in"
           href="/admin/users?f=verified"
             value={headline.verifiedUsers}
             sub={`of ${headline.totalUsers - headline.unfinishedSignups} accounts`}

@@ -1,6 +1,34 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_CITY, ago, byCity, cityOf, confirmedById, duration, inCity, initial, isVerified, istDateTime, joinedBetween, matches, personId, sitePath, sourceOf, tickText, ticksById, toPeople, whatsappLink, type DetailsRow } from "./people";
+import {
+  HALF_TEXT,
+  NO_CITY,
+  ago,
+  byCity,
+  cityOf,
+  confirmedById,
+  duration,
+  hasTick,
+  inCity,
+  initial,
+  isVerified,
+  istDateTime,
+  joinedBetween,
+  matches,
+  personId,
+  sitePath,
+  sourceOf,
+  tickHalves,
+  tickText,
+  tickTotals,
+  tickedIds,
+  tickedOnly,
+  ticksById,
+  toPeople,
+  whatsappLink,
+  type DetailsRow,
+} from "./people";
+import { googleOnlyPeople } from "./links";
 
 const row = (o: Partial<DetailsRow>): DetailsRow => ({
   id: "u1",
@@ -274,4 +302,77 @@ test("the verified tick: shown only with both halves; the old flag never gives i
   assert.equal(failed.t.tick, null);
   assert.equal(tickText(null), "Couldn't read");
   assert.equal(ticksById(null), null);
+});
+
+test("the tick's two halves as chips: proved, typed or none, never the number or the address", () => {
+  const L = "11111111-2222-4333-8444-555555555555";
+  const rows = [
+    row({ id: "t", method: "google", email: "t@gmail.com", phone: "+919876543210", created_at: "2026-10-22T06:00:00+00:00" }),
+    row({ id: "p", method: "phone", phone: "+919876543211", created_at: "2026-10-22T05:00:00+00:00" }),
+    row({ id: "e", method: "google", email: "e@gmail.com", created_at: "2026-10-22T04:00:00+00:00" }),
+    row({ id: "c", method: "phone", phone: "+919876543212", created_at: "2026-10-22T03:00:00+00:00" }),
+    row({ id: L, method: "phone", phone: "+919876543213", created_at: "2026-10-22T02:00:00+00:00" }),
+    row({ id: "n", method: "email", email: null, phone: null, created_at: "2026-10-22T01:00:00+00:00" }),
+  ];
+  const contacts = [{ user_id: "c", email: "typed@x.in", answer: "saved", source: "prompt", answered_at: null, same_as_other_account: false }];
+  const links = [{ user_id: L, google_email: "linked@gmail.com", google_linked_at: null, google_links: 1, google_removed_at: null, phone_added_at: null, phone_opens: null }];
+  const ticks = [
+    { user_id: "t", verified: true, phone_proven: true, email_proven: true },
+    { user_id: "p", verified: false, phone_proven: true, email_proven: false },
+    { user_id: "e", verified: false, phone_proven: false, email_proven: true },
+  ];
+  const people = toPeople(rows, contacts, null, links, ticks);
+  const by = Object.fromEntries(people.map((x) => [x.id, x]));
+  assert.deepEqual(tickHalves(by.t), { phone: "proved", email: "proved" });
+  assert.deepEqual(tickHalves(by.p), { phone: "proved", email: "none" });
+  assert.deepEqual(tickHalves(by.e), { phone: "none", email: "proved" });
+  assert.deepEqual(tickHalves(by.c), { phone: "typed", email: "typed" }, "an address a phone account typed is typed, not proved");
+  assert.deepEqual(tickHalves(by[L]), { phone: "typed", email: "typed" }, "a Google account added but not proved (yet) is typed");
+  assert.deepEqual(tickHalves(by.n), { phone: "none", email: "none" });
+  assert.deepEqual(
+    people.map((p) => tickHalves(p)).map((h) => h && [HALF_TEXT.phone[h.phone].text, HALF_TEXT.email[h.email].text]),
+    [
+      ["Phone ✓ proved", "Email ✓ Google"],
+      ["Phone ✓ proved", "No email"],
+      ["No phone", "Email ✓ Google"],
+      ["Phone typed", "Email typed"],
+      ["Phone typed", "Email typed"],
+      ["No phone", "No email"],
+    ],
+  );
+  // The chips and their tooltips say what, never which number or address.
+  const words = Object.values(HALF_TEXT).flatMap((k) => Object.values(k).flatMap((v) => [v.text, v.title]));
+  for (const w of words) assert.doesNotMatch(w, /@|\d/);
+  // No chips when the ticks couldn't be read, or for a Google sign-in that made no account.
+  assert.equal(tickHalves(toPeople(rows, contacts, null, links)[0]), null);
+  const [ghost] = googleOnlyPeople([{ auth_uid: L, email: "ravi@example.com", name: "Ravi", created_at: "2026-10-26T04:00:00Z", last_sign_in_at: null, state: "not_finished" }]);
+  assert.equal(tickHalves(ghost), null);
+  assert.equal(tickHalves({ ...ghost, tick: { verified: false, phone: false, email: true } }), null);
+});
+
+test("Verified only, the admin home's tick count and the tool users' ticks", () => {
+  const ticks = [
+    { user_id: "a", verified: true, phone_proven: true, email_proven: true },
+    { user_id: "B", verified: true, phone_proven: true, email_proven: true },
+    { user_id: "c", verified: false, phone_proven: true, email_proven: false },
+    { user_id: "d", verified: false, phone_proven: false, email_proven: true },
+    { user_id: "e", verified: null, phone_proven: null, email_proven: null },
+    // A tick without both halves is never counted, and a row read twice counts once.
+    { user_id: "f", verified: true, phone_proven: true, email_proven: false },
+    { user_id: "a", verified: true, phone_proven: true, email_proven: true },
+    { user_id: 7 } as never,
+  ];
+  assert.deepEqual(tickTotals(ticks), { accounts: 6, verified: 2, phone: 4, email: 3 });
+  assert.equal(tickTotals(null), null, "a failed read says so, not zero");
+  assert.deepEqual(tickTotals([]), { accounts: 0, verified: 0, phone: 0, email: 0 });
+  assert.deepEqual([...tickedIds(ticks)].sort(), ["a", "b"]);
+  assert.equal(tickedIds(null).size, 0, "no ticks when the read failed");
+
+  const people = toPeople([row({ id: "a" }), row({ id: "c" }), row({ id: "z" })], [], null, [], ticks);
+  assert.deepEqual(people.filter(hasTick).map((p) => p.id), ["a"]);
+  assert.equal(hasTick({ tick: null }), false);
+
+  assert.equal(tickedOnly("verified"), true);
+  assert.equal(tickedOnly(["verified", "x"]), true);
+  for (const x of [undefined, null, "", "Verified", "1", ["x", "verified"], 1]) assert.equal(tickedOnly(x), false);
 });

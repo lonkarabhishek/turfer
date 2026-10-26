@@ -3,8 +3,10 @@ import Link from "next/link";
 import { ChevronLeft, ExternalLink, MapPin } from "lucide-react";
 import { isAdmin } from "@/lib/admin/auth";
 import { AdminGate } from "@/components/admin/AdminGate";
-import { ago, istDateTime } from "@/lib/admin/people";
+import { ago, istDateTime, tickedIds } from "@/lib/admin/people";
 import { getToolUsers } from "@/lib/queries/adminTools";
+import { adminTickRows } from "@/lib/queries/adminUsers";
+import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { COUNTED_TOOLS, type CountedTool } from "@/lib/tools/usage";
 import {
   TOOL_LABELS,
@@ -75,13 +77,17 @@ function LiveLink({ code }: { code: string }) {
   );
 }
 
-function Who({ p }: { p: Pick<ToolPerson, "userId" | "name" | "username" | "device"> }) {
+/** The signed-in accounts with the verified tick (admin_ticks); none when that couldn't be read. */
+type Ticked = ReadonlySet<string>;
+
+function Who({ p, ticked }: { p: Pick<ToolPerson, "userId" | "name" | "username" | "device">; ticked: Ticked }) {
   if (p.userId) {
     return (
       <span className="inline-flex flex-wrap items-baseline gap-x-1.5 min-w-0">
         <Link href={personHref(p.userId)} className={`font-semibold hover:text-accent-600 break-words ${p.name?.trim() ? "text-primary-900" : "text-primary-400"}`}>
           {whoName(p)}
         </Link>
+        {ticked.has(p.userId.toLowerCase()) && <VerifiedTick className="-ml-1 self-center" />}
         {p.username && <span className="text-[13px] text-primary-500 truncate">@{p.username}</span>}
       </span>
     );
@@ -100,7 +106,7 @@ function Who({ p }: { p: Pick<ToolPerson, "userId" | "name" | "username" | "devi
   );
 }
 
-function PersonRow({ p, now }: { p: ToolPerson; now: number }) {
+function PersonRow({ p, now, ticked }: { p: ToolPerson; now: number; ticked: Ticked }) {
   return (
     <li className="border-t border-primary-100 first:border-t-0 px-4 py-3.5">
       <div className="flex items-start gap-3">
@@ -114,7 +120,7 @@ function PersonRow({ p, now }: { p: ToolPerson; now: number }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-            <Who p={p} />
+            <Who p={p} ticked={ticked} />
             <span className="text-[13px] font-semibold text-primary-800 whitespace-nowrap">{ago(p.last, now)}</span>
           </div>
           <p className="text-[13px] text-primary-600">
@@ -151,13 +157,13 @@ function PersonRow({ p, now }: { p: ToolPerson; now: number }) {
   );
 }
 
-function ActivityRow({ r }: { r: ToolActivityRow }) {
+function ActivityRow({ r, ticked }: { r: ToolActivityRow; ticked: Ticked }) {
   const who = { userId: r.user_id, name: r.name, username: r.username, device: r.user_id ? null : r.device };
   return (
     <li className="border-t border-primary-100 first:border-t-0 px-4 py-3 flex flex-col sm:flex-row sm:items-baseline gap-x-4 gap-y-1">
       <span className="shrink-0 sm:w-40 font-mono text-[12px] text-primary-500">{istDateTime(Date.parse(r.used_at))}</span>
       <span className="min-w-0 sm:w-56 text-[14px]">
-        <Who p={who} />
+        <Who p={who} ticked={ticked} />
       </span>
       <span className="min-w-0 flex-1 text-[14px] text-primary-800">
         <span className="font-medium">{toolLabel(r.tool)}</span>
@@ -178,7 +184,9 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const tool = toolFilter(sp.tool);
   const who = whoFilter(sp.who);
-  const res = await getToolUsers(tool, who, MAX_PEOPLE);
+  // The tick next to signed-in people: the same owner-only read as the people list; without it, no ticks.
+  const [res, tickRows] = await Promise.all([getToolUsers(tool, who, MAX_PEOPLE), adminTickRows()]);
+  const ticked = tickedIds(tickRows);
   const now = readTime();
 
   // The database read only the newest people for this tool and who; this keeps that and puts the tool's chip first.
@@ -254,7 +262,7 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
               ) : (
                 <ul>
                   {people.map((p) => (
-                    <PersonRow key={p.key} p={p} now={now} />
+                    <PersonRow key={p.key} p={p} now={now} ticked={ticked} />
                   ))}
                 </ul>
               )}
@@ -278,7 +286,7 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
               ) : (
                 <ul>
                   {res.activity.map((r, i) => (
-                    <ActivityRow key={`${r.used_at}-${i}`} r={r} />
+                    <ActivityRow key={`${r.used_at}-${i}`} r={r} ticked={ticked} />
                   ))}
                 </ul>
               )}

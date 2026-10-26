@@ -70,7 +70,18 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en
 /** Where focus goes once the next view has drawn: the bar holding a time, or the current crumb. */
 type FocusAfter = { bar: number | null } | "crumb" | null;
 
-export function SignupsTrend({ people, now, focus = null }: { people: Person[] | null; now: number; focus?: string | null }) {
+export function SignupsTrend({
+  people,
+  now,
+  focus = null,
+  verifiedOnly = false,
+}: {
+  people: Person[] | null;
+  now: number;
+  focus?: string | null;
+  /** Open the people list on those with the verified tick (?people=verified). */
+  verifiedOnly?: boolean;
+}) {
   // The city picked in By city (NO_CITY: no known city), or everyone. Kept while zooming and moving.
   const [city, setCity] = useState<string | null>(null);
   // Windows start from the first sign-up of anyone, so picking a city never moves the view.
@@ -441,6 +452,7 @@ export function SignupsTrend({ people, now, focus = null }: { people: Person[] |
         city={city}
         onShowAll={stack.length === 1 && w.level === "quarter" ? undefined : () => pickLevel("quarter")}
         focus={focus}
+        verifiedOnly={verifiedOnly}
       />
     </Shell>
   );

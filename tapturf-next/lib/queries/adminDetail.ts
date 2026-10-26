@@ -147,7 +147,8 @@ export const USER_FILTERS = {
   new30: "Signed up in 30 days",
   active7: "Active in 7 days",
   active30: "Active in 30 days",
-  verified: "Verified",
+  // A sign-in confirmed their email or phone; not the verified tick (both proved), which the admin home's people list filters.
+  verified: "Confirmed at sign-in",
   duplicates: "Duplicate accounts",
 } as const;
 export type UserFilter = keyof typeof USER_FILTERS;

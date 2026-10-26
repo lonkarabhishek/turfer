@@ -3,20 +3,24 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import {
+  HALF_TEXT,
   METHOD_NAMES,
   NO_CITY,
   ago,
   cityLabel,
   cityOf,
   duration,
+  hasTick,
   inCity,
   initial,
   istDateTime,
   joinedBetween,
   matches,
   sitePath,
+  tickHalves,
   tickText,
   whatsappLink,
+  type Half,
   type Method,
   type Person,
   type RecordedCity,
@@ -58,6 +62,7 @@ export function SignupPeople({
   city = null,
   onShowAll,
   focus = null,
+  verifiedOnly = false,
 }: {
   people: Person[] | null;
   start: number;
@@ -70,12 +75,18 @@ export function SignupPeople({
   onShowAll?: () => void;
   /** An account to start on, searched and open (admin's "Open in people list"). */
   focus?: string | null;
+  /** Start on the people with the verified tick (the admin home's Verified tick tile, ?people=verified). */
+  verifiedOnly?: boolean;
 }) {
   const id = useId();
   const [query, setQuery] = useState(focus ?? "");
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(focus ? [focus] : []));
-  // How many to show, for this window, city and search; a new one starts again at one page.
-  const key = `${start}:${end}:${city}:${query}`;
+  // "Verified only" needs the ticks (admin_ticks); when they couldn't be read the list is everyone, without ticks or the filter.
+  const ticksRead = useMemo(() => !!people?.some((p) => p.tick !== null), [people]);
+  const [ticked, setTicked] = useState(verifiedOnly);
+  const onlyTicked = ticked && ticksRead;
+  // How many to show, for this window, city, filter and search; a new one starts again at one page.
+  const key = `${start}:${end}:${city}:${onlyTicked}:${query}`;
   const [shown, setShown] = useState({ key, n: PAGE });
   const limit = shown.key === key ? shown.n : PAGE;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -89,7 +100,10 @@ export function SignupPeople({
     listRef.current?.querySelectorAll<HTMLButtonElement>(":scope > li > button")[i]?.focus();
   });
 
-  const scoped = useMemo(() => (people ? people.filter((p) => inCity(p, city)) : []), [people, city]);
+  const inCityList = useMemo(() => (people ? people.filter((p) => inCity(p, city)) : []), [people, city]);
+  const scoped = useMemo(() => (onlyTicked ? inCityList.filter(hasTick) : inCityList), [inCityList, onlyTicked]);
+  // The toggle's count: those with the tick in this stretch and city, whether or not it is on.
+  const tickedHere = useMemo(() => joinedBetween(inCityList, start, end).filter(hasTick).length, [inCityList, start, end]);
   const inView = useMemo(() => joinedBetween(scoped, start, end), [scoped, start, end]);
   const found = useMemo(() => inView.filter((p) => matches(p, query)), [inView, query]);
   const elsewhere = useMemo(() => (query.trim() ? scoped.filter((p) => matches(p, query)).length - found.length : 0), [scoped, query, found]);
@@ -132,35 +146,54 @@ export function SignupPeople({
           </h3>
           <p className="text-[13px] text-primary-500">
             {query.trim() ? `${count(found.length, "match", "matches")} of ${count(inView.length, "person", "people")}` : count(inView.length, "person", "people")}
+            {onlyTicked ? " with the tick" : ""}
             {where ? ` · ${where}` : ""} · {label}
           </p>
+          {ticked && !ticksRead && <p className="text-[12px] text-hot-600">Couldn&apos;t read the verified ticks, so this is everyone.</p>}
         </div>
-        <div className="relative w-full sm:w-80">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden />
-          <input
-            ref={inputRef}
-            id={`${id}-q`}
-            type="text"
-            inputMode="search"
-            autoComplete="off"
-            spellCheck={false}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Name, phone, city or @username"
-            aria-label="Search the people who signed up"
-            className="w-full h-10 rounded-full border border-primary-200 bg-white pl-9 pr-9 text-[14px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500"
-          />
-          {query && (
+        <div className="flex w-full sm:w-auto flex-wrap items-center gap-2">
+          {ticksRead && (
             <button
               type="button"
-              onClick={() => {
-                setQuery("");
-                inputRef.current?.focus();
-              }}
-              aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-primary-100">
-              <X className="w-4 h-4" />
+              aria-pressed={onlyTicked}
+              onClick={() => setTicked((v) => !v)}
+              title="Only the people with the verified tick: a phone proved by an OTP and an email confirmed by Google"
+              className={`shrink-0 h-10 px-4 inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold ${
+                onlyTicked ? "bg-primary-900 text-white" : "border border-primary-200 text-primary-700 hover:bg-primary-50"
+              }`}
+            >
+              <VerifiedTick decorative />
+              Verified only
+              <span className={`tabular-nums ${onlyTicked ? "text-white/70" : "text-primary-500"}`}>{tickedHere.toLocaleString("en-IN")}</span>
             </button>
           )}
+          <div className="relative w-full sm:w-80">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden />
+            <input
+              ref={inputRef}
+              id={`${id}-q`}
+              type="text"
+              inputMode="search"
+              autoComplete="off"
+              spellCheck={false}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Name, phone, city or @username"
+              aria-label="Search the people who signed up"
+              className="w-full h-10 rounded-full border border-primary-200 bg-white pl-9 pr-9 text-[14px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  inputRef.current?.focus();
+                }}
+                aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-primary-100">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -183,7 +216,10 @@ export function SignupPeople({
               )}
             </>
           ) : (
-            <p>{where ? `No one from ${where === "no known city" ? "an unknown city" : where} signed up in this stretch.` : "No one signed up in this stretch."}</p>
+            <p>
+              No one{onlyTicked ? " with the tick" : ""}
+              {where ? ` from ${where === "no known city" ? "an unknown city" : where}` : ""} signed up in this stretch.
+            </p>
           )}
         </div>
       ) : (
@@ -236,6 +272,8 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
   const contact = p.phone ?? p.email ?? p.links?.googleEmail ?? p.contact?.email;
   const extra = highlights(p);
   const c = cityOf(p);
+  // The tick's two halves as chips; none when the ticks couldn't be read.
+  const halves = tickHalves(p);
   return (
     <li className="border-t border-primary-100 first:border-t-0">
       <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={panelId} className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${open ? "bg-primary-50" : "hover:bg-primary-50"}`}>
@@ -258,6 +296,12 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
             {c && <span className={c.guessed ? "text-primary-500" : "text-primary-800"}> · {c.guessed ? `Probably ${cityLabel(c.id)}` : cityLabel(c.id)}</span>}
             {extra.length > 0 && <span className="hidden md:inline text-primary-400"> · {extra.join(" · ")}</span>}
           </p>
+          {halves && (
+            <span className="mt-1 flex flex-wrap gap-1">
+              <HalfChip kind="phone" half={halves.phone} />
+              <HalfChip kind="email" half={halves.email} />
+            </span>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <p className="text-[13px] font-semibold text-primary-800">
@@ -376,6 +420,22 @@ function AddedItems({ p }: { p: Person }) {
         </span>
       ))}
     </Item>
+  );
+}
+
+const HALF_STYLE: Record<Half, string> = {
+  proved: "bg-sky-50 border-sky-200 text-sky-800",
+  typed: "bg-primary-50 border-primary-200 text-primary-600",
+  none: "border-dashed border-primary-200 text-primary-400",
+};
+
+/** One half of the tick: "Phone ✓ proved", "Phone typed" or "No phone" (the same for the email). Never the number or the address. */
+function HalfChip({ kind, half }: { kind: "phone" | "email"; half: Half }) {
+  const { text, title } = HALF_TEXT[kind][half];
+  return (
+    <span title={title} className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${HALF_STYLE[half]}`}>
+      {text}
+    </span>
   );
 }
 

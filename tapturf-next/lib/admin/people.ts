@@ -122,6 +122,67 @@ export function tickText(t: Tick | null): string {
   return "Not yet: neither proven";
 }
 
+/** Whether someone has the tick (the people list's "Verified only"). */
+export const hasTick = (p: Pick<Person, "tick">): boolean => p.tick?.verified === true;
+
+/** ?people=verified: the admin's people list opens on the people with the tick. */
+export const tickedOnly = (x: unknown): boolean => (Array.isArray(x) ? x[0] : x) === "verified";
+
+/** One half of the tick in the people list: proved, on the account but never proved, or not there. */
+export type Half = "proved" | "typed" | "none";
+
+/** Each chip's words and tooltip. Never the number or the address itself. */
+export const HALF_TEXT: Record<"phone" | "email", Record<Half, { text: string; title: string }>> = {
+  phone: {
+    proved: { text: "Phone ✓ proved", title: "The number on the account was proved with an OTP" },
+    typed: { text: "Phone typed", title: "A number is on the account, but no OTP proved it" },
+    none: { text: "No phone", title: "No number on the account" },
+  },
+  email: {
+    proved: { text: "Email ✓ Google", title: "Google confirmed the account's email" },
+    typed: { text: "Email typed", title: "An email is on the account, but Google didn't confirm it" },
+    none: { text: "No email", title: "No email on the account" },
+  },
+};
+
+/**
+ * The tick's two halves for the people list's chips: proved (admin_ticks),
+ * else typed when the account has one (a number; its email, the Google
+ * account added from the profile, or the address a phone account typed),
+ * else none. Null when the ticks couldn't be read, and for a Google
+ * sign-in that made no account: then the list shows no chips.
+ */
+export function tickHalves(p: Pick<Person, "tick" | "phone" | "email" | "links" | "contact" | "noAccount">): { phone: Half; email: Half } | null {
+  if (!p.tick || p.noAccount) return null;
+  const email = !!(p.email || p.links?.googleEmail || p.contact?.email);
+  return {
+    phone: p.tick.phone ? "proved" : p.phone ? "typed" : "none",
+    email: p.tick.email ? "proved" : email ? "typed" : "none",
+  };
+}
+
+export type TickTotals = { accounts: number; verified: number; phone: number; email: number };
+
+/** admin_ticks counted for the admin home: the accounts, those with the tick and each half proved; null when the read failed. */
+export function tickTotals(rows: readonly TickRow[] | null): TickTotals | null {
+  const by = ticksById(rows);
+  if (!by) return null;
+  const out: TickTotals = { accounts: by.size, verified: 0, phone: 0, email: 0 };
+  for (const t of by.values()) {
+    if (t.verified) out.verified++;
+    if (t.phone) out.phone++;
+    if (t.email) out.email++;
+  }
+  return out;
+}
+
+/** The accounts with the tick (admin_ticks); none when the read failed, so pages show no ticks. */
+export function tickedIds(rows: readonly TickRow[] | null): Set<string> {
+  const out = new Set<string>();
+  for (const [id, t] of ticksById(rows) ?? []) if (t.verified) out.add(id.toLowerCase());
+  return out;
+}
+
 /** One row as admin_verified returns it. */
 export type VerifiedRow = {
   user_id: string;
