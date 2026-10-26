@@ -145,7 +145,7 @@ function LoginInner() {
       </button>
       {askFresh ? (
         <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4" role="group" aria-label="Make a new account">
-          <p className="text-[14px] text-primary-800 leading-snug">This starts a new, empty account. Your old account stays as it is and opens with your phone number.</p>
+          <p className="text-[14px] text-primary-800 leading-snug">This gives this Google login a TapTurf account of its own, separate from your old one. Your old account stays as it is and opens with your phone number.</p>
           <div className="mt-3 flex gap-2">
             <button type="button" onClick={makeNewWithGoogle} disabled={googleBusy} className="h-11 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer">
               Make a new account

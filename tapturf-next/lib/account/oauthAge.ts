@@ -25,3 +25,19 @@ export function oauthAgeS(googleToken: string, nowMs = Date.now()): number | nul
     return null;
   }
 }
+
+/** The client's own check before an SMS goes out: the server allows 10 minutes. */
+export const GOOGLE_FRESH_HERE_S = 300;
+
+/**
+ * Should the number form send the person to Google first? Only to save an
+ * SMS the server would refuse, judged by this device's clock (ageS, from
+ * oauthAgeS). Never for a removal (no SMS), and never right after the
+ * Google round trip the form itself asked for (returning): a phone whose
+ * clock runs fast would otherwise be sent back to Google forever. Then the
+ * server decides, and its 403 reauth still opens the Google step.
+ */
+export function googleFirst(intent: "add" | "confirm" | "change" | "remove", ageS: number | null, returning: boolean): boolean {
+  if (intent === "remove" || returning) return false;
+  return ageS === null || ageS > GOOGLE_FRESH_HERE_S;
+}

@@ -168,6 +168,10 @@ test("linkCallbackPlan: every return from Google", () => {
   // No link cookie: the code is never used.
   assert.equal(plan(false, true, null, true), "page", "a Back after a finished link");
   assert.equal(plan(false, false, null, true), "lost", "another browser");
+  // This browser started an attempt lately (tt_link_seen), but its 10-minute cookie ran out: that took too long here.
+  assert.equal(linkCallbackPlan({ hasCookie: false, hasDone: false, hasSeen: true, providerWhy: null, hasCode: true }), "expired", "the same browser, after 10 minutes");
+  assert.equal(linkCallbackPlan({ hasCookie: false, hasDone: true, hasSeen: true, providerWhy: null, hasCode: true }), "page", "a Back after a finished link still");
+  assert.equal(linkCallbackPlan({ hasCookie: true, hasDone: false, hasSeen: true, providerWhy: null, hasCode: true }), "exchange", "with the cookie, as before");
   assert.equal(plan(false, true, "denied", false), "page");
   assert.equal(plan(false, false, "denied", false), "lost");
   // Google or GoTrue said no.

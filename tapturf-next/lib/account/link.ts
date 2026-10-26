@@ -24,12 +24,18 @@ export { oauthAmrAt } from "./fresh";
 export const LINK_TTL_S = 600;
 /** After a final answer, a Back into Google's leg carries on for 5 minutes. */
 export const LINK_DONE_S = 300;
+/**
+ * This browser started an attempt in the last day: a return from Google with no link cookie is
+ * then that attempt run out here (or cancelled), not Google opening in another browser or app.
+ */
+export const LINK_SEEN_S = 86_400;
 /** Where the profile's actions come back to. */
 export const PROFILE_THEN = "/dashboard?tab=profile";
 
 /** `__Host-`: Secure, Path=/ and no Domain, so a sibling domain can't plant one. Plain http (local runs) can't use the prefix. */
 export const linkCookie = (secure: boolean) => (secure ? "__Host-tt_link" : "tt_link");
 export const linkDoneCookie = (secure: boolean) => (secure ? "__Host-tt_link_done" : "tt_link_done");
+export const linkSeenCookie = (secure: boolean) => (secure ? "__Host-tt_link_seen" : "tt_link_seen");
 export const linkCookieOptions = (secure: boolean, maxAge: number = LINK_TTL_S) => ({
   httpOnly: true,
   secure,
@@ -178,17 +184,19 @@ export async function revokeSession(
   }
 }
 
-export type LinkCallbackPlan = "page" | "lost" | "err_denied" | "err_google" | "exchange";
+export type LinkCallbackPlan = "page" | "lost" | "expired" | "err_denied" | "err_google" | "exchange";
 
 /**
  * What /api/account/link/google/callback does with a return from Google,
  * before anything is exchanged.
- *   no link cookie   "page" after a finished link (a Back), else "lost"; the code is never used
+ *   no link cookie   "page" after a finished link (a Back); "expired" when this browser started
+ *                    an attempt lately (its 10 minutes ran out here); else "lost" (Google opened
+ *                    in another browser or app); the code is never used
  *   provider error   used or again: "page"; denied: "err_denied"; anything else: "err_google"
  *   no code          "err_google"
  */
-export function linkCallbackPlan(o: { hasCookie: boolean; hasDone: boolean; providerWhy: Why | null; hasCode: boolean }): LinkCallbackPlan {
-  if (!o.hasCookie) return o.hasDone ? "page" : "lost";
+export function linkCallbackPlan(o: { hasCookie: boolean; hasDone: boolean; hasSeen?: boolean; providerWhy: Why | null; hasCode: boolean }): LinkCallbackPlan {
+  if (!o.hasCookie) return o.hasDone ? "page" : o.hasSeen ? "expired" : "lost";
   if (o.providerWhy === "used" || o.providerWhy === "again") return "page";
   if (o.providerWhy === "denied") return "err_denied";
   if (o.providerWhy !== null || !o.hasCode) return "err_google";

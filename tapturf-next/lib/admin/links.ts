@@ -161,6 +161,18 @@ export function googleOnlyPeople(rows: readonly UnfinishedRow[]): Person[] {
 }
 
 /**
+ * The same not_finished Google sign-ins as rows for the admin headline's
+ * people and sign-up counts (lib/queries/admin.ts getHeadline), so its
+ * tiles and the sign-ups chart count the same sign-ups: each used to be a
+ * users row the auth trigger made. id is the auth uid; created_at its ISO time.
+ */
+export function notFinishedSignupRows(rows: readonly UnfinishedRow[]): { id: string; email: string | null; phone: null; created_at: string }[] {
+  return unfinishedRows(rows)
+    .filter((r) => r.st === "not_finished")
+    .map((r) => ({ id: r.uid, email: str(r.email)?.toLowerCase() ?? null, phone: null, created_at: new Date(r.at).toISOString() }));
+}
+
+/**
  * One list for "Google sign-ins that didn't finish": the people the old
  * trigger made an account for (and the not_finished sign-ins counted as
  * people), plus the Google sign-ins being added to, refused by or taken
@@ -170,11 +182,18 @@ export function unfinishedList(people: readonly Person[], rows: readonly Unfinis
   const out: Unfinished[] = people
     .filter((p) => p.signInUnfinished)
     .map((p) => ({ id: p.id, inPeople: true, name: p.name, email: p.email, at: p.joinedAt, state: "not_finished" as const }));
-  const seen = new Set(out.map((u) => u.id));
+  const byId = new Map(out.map((u) => [u.id, u]));
   for (const r of unfinishedRows(rows)) {
-    if (seen.has(r.uid)) continue;
-    seen.add(r.uid);
-    out.push({ id: r.uid, inPeople: false, name: str(r.name), email: str(r.email), at: r.at, state: r.st });
+    const known = byId.get(r.uid);
+    if (known) {
+      // An account the old trigger made that a link was made over and that was taken off since:
+      // listed once, as what it is now (taken off a phone account), still in the people list.
+      if (r.st !== "not_finished") known.state = r.st;
+      continue;
+    }
+    const u: Unfinished = { id: r.uid, inPeople: false, name: str(r.name), email: str(r.email), at: r.at, state: r.st };
+    byId.set(r.uid, u);
+    out.push(u);
   }
   return out.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1));
 }

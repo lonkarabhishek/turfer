@@ -168,6 +168,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
         type="button"
         onClick={() => void removeTyped()}
         disabled={removingTyped}
+        aria-label="Remove typed email"
         className="mt-1.5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-hot-600 underline underline-offset-2 disabled:opacity-50 cursor-pointer"
       >
         {removingTyped && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

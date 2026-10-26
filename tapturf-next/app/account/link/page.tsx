@@ -8,7 +8,7 @@ import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { GoogleMark, useGoogleLink } from "@/components/account/GoogleLinkActions";
 import { cancelGoogleLink, completeGoogleLink, errorOf, getMe, googleLinkStatus, newGoogleLeg, profileIn, profileOf } from "@/lib/account/client";
-import { istDate, PROFILE_PATH, spacedPhone } from "@/lib/account/display";
+import { istDate, istWhen, PROFILE_PATH, spacedPhone } from "@/lib/account/display";
 import { safeNext } from "@/lib/auth/next";
 import type { AccountError } from "@/lib/account/types";
 
@@ -39,7 +39,7 @@ type View =
   | { kind: "phone_gone" }
   | { kind: "lost" }
   | { kind: "not_allowed" }
-  | { kind: "limit" }
+  | { kind: "limit"; until?: string | null }
   | { kind: "unavailable"; retry: "status" | "complete" | "leg" };
 
 type Status = {
@@ -82,9 +82,30 @@ function LinkInner() {
   const toProfile = then === PROFILE_PATH;
   const { user, loading, signedInWith, getToken, applyProfile } = useAuth();
   const [view, setView] = useState<View>({ kind: "checking" });
-  // Starting again from here when the attempt is gone (after a refused confirm): the same as the profile's button.
-  const restart = useGoogleLink();
+  // Starting again from here when the attempt is gone (after a refused confirm): the same as the
+  // profile's button. A refused start is a screen of its own here, never a line under another.
+  const restart = useGoogleLink({
+    onRefused: (e, until) => {
+      if (e === "limit" || e === "slow") setView({ kind: "limit", until: until ?? null });
+      else if (e === "sign_in" || e === "new") setView({ kind: "phone_gone" });
+      else if (e === "not_allowed") setView({ kind: "not_allowed" });
+      else if (e === "conflict") return false;
+      else setView({ kind: "unavailable", retry: "leg" });
+      return true;
+    },
+  });
   const ran = useRef(false);
+  // One live region that stays put (a screen that replaces another isn't announced reliably), and
+  // focus on each new screen's heading, so the result is read and focus never drops to the page.
+  const screenRef = useRef<HTMLDivElement>(null);
+  const liveRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    const heading = screenRef.current?.querySelector<HTMLElement>("[data-heading]");
+    if (!heading) return;
+    if (liveRef.current) liveRef.current.textContent = heading.textContent ?? "";
+    // Not under the code sheet, which keeps focus while it is open.
+    if (!document.querySelector('[role="dialog"]')) heading.focus({ preventScroll: true });
+  }, [view]);
 
   const exit = useCallback(() => window.location.replace(then), [then]);
 
@@ -157,6 +178,7 @@ function LinkInner() {
 
   /** Another Google round trip on this attempt; when the attempt is gone, a new one (which may ask for a code first). */
   const again = async () => {
+    const before = view;
     setView({ kind: "opening" });
     const tok = await phoneToken("leg");
     if (!tok) return;
@@ -166,9 +188,13 @@ function LinkInner() {
     const e: AccountError | null = errorOf(a);
     if (a.status === 401) return setView({ kind: "phone_gone" });
     if (e === "expired") {
-      await restart.start(then, "add");
-      // Still here: the code sheet is open, or the start was refused (its line says why).
-      return setView({ kind: "google" });
+      // The attempt is closed (a refused confirm closes it): a new one. Off to Google, or the code
+      // sheet opens over the screen that was here (and it is still here when the sheet is
+      // cancelled), or a refusal shows its own screen (onRefused). An error line goes under the
+      // screen that was here.
+      const r = await restart.start(then, "add");
+      if (r === "sheet" || r === "error") setView(before.kind === "opening" ? { kind: "google" } : before);
+      return;
     }
     if (e === "mismatch") return setView({ kind: "mismatch" });
     if (e === "limit" || e === "slow") return setView({ kind: "limit" });
@@ -364,14 +390,16 @@ function LinkInner() {
         </Screen>
       );
       break;
-    case "limit":
+    case "limit": {
+      const when = istWhen(view.until ?? null);
       screen = (
         <Screen title="Too many tries">
-          <p>Start again from your profile in a few minutes.</p>
+          <p>{when ? `Start again from your profile after ${when}.` : "Start again from your profile in a few minutes."}</p>
           <Actions>{exitButton}</Actions>
         </Screen>
       );
       break;
+    }
     case "unavailable": {
       const retry = view.retry;
       screen = (
@@ -393,11 +421,19 @@ function LinkInner() {
         <Link href="/" className="press-tight inline-flex items-center gap-2 mb-8">
           <Logo height={56} priority />
         </Link>
-        {screen}
+        <p ref={liveRef} className="sr-only" role="status" aria-live="polite" />
+        <div ref={screenRef}>{screen}</div>
         {restart.error && (
-          <p className="mt-4 text-[14px] font-medium text-hot-600" role="alert">
-            {restart.error}
-          </p>
+          <div className="mt-4" role="alert">
+            <p className="text-[14px] font-medium text-hot-600">{restart.error}</p>
+            {restart.canRetry && (
+              <div className="mt-2">
+                <Btn onClick={() => void restart.retry()} quiet>
+                  Try again
+                </Btn>
+              </div>
+            )}
+          </div>
         )}
         {restart.sheet}
       </div>
@@ -424,14 +460,16 @@ function Actions({ children }: { children: ReactNode }) {
 
 function Screen({ title, icon = "alert", children }: { title: string; icon?: "alert" | "ok" | "google"; children: ReactNode }) {
   return (
-    <section aria-live="polite">
+    <section>
       <span
         className={`w-12 h-12 rounded-full inline-flex items-center justify-center mb-4 ${icon === "ok" ? "bg-accent-50 text-accent-700" : icon === "google" ? "bg-primary-50" : "bg-amber-50 text-amber-700"}`}
         aria-hidden
       >
         {icon === "ok" ? <CheckCircle2 className="w-6 h-6" /> : icon === "google" ? <GoogleMark /> : <AlertCircle className="w-6 h-6" />}
       </span>
-      <h1 className="font-display tracking-tight text-primary-900 text-3xl leading-[1.05] mb-3">{title}</h1>
+      <h1 data-heading tabIndex={-1} className="font-display tracking-tight text-primary-900 text-3xl leading-[1.05] mb-3 outline-none">
+        {title}
+      </h1>
       <div className="space-y-3 text-[15px] text-primary-600 leading-snug">{children}</div>
     </section>
   );
@@ -439,9 +477,11 @@ function Screen({ title, icon = "alert", children }: { title: string; icon?: "al
 
 function Busy({ title }: { title: string }) {
   return (
-    <section className="py-6 text-center" aria-live="polite">
+    <section className="py-6 text-center">
       <Loader2 className="w-8 h-8 text-accent-500 animate-spin mx-auto mb-4" />
-      <p className="font-display text-primary-900 text-xl">{title}</p>
+      <p data-heading tabIndex={-1} className="font-display text-primary-900 text-xl outline-none">
+        {title}
+      </p>
     </section>
   );
 }

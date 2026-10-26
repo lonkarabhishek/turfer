@@ -9,7 +9,7 @@ import {
   submitReview,
   toggleReviewUpvote,
 } from "@/lib/queries/reviews";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { ACCOUNT_NOT_CONFIRMED, useAuth } from "@/components/auth/AuthProvider";
 import type { ReviewWithUser, ReviewSummary } from "@/types/review";
 
 const noop = () => () => {};
@@ -47,7 +47,7 @@ export function TurfReviews({
   googleReviewCount?: number | null;
   googleReviewUrl?: string | null;
 }) {
-  const { user, login } = useAuth();
+  const { user, login, confirmedUser } = useAuth();
   const userId = user?.id ?? null;
   const [reviews, setReviews] = useState<ReviewWithUser[]>(initialReviews);
   const [summary, setSummary] = useState<ReviewSummary | null>(initialSummary);
@@ -119,7 +119,9 @@ export function TurfReviews({
       }),
     );
 
-    const { ok, upvoted } = await toggleReviewUpvote(reviewId, user.id);
+    // The account the server confirms for this sign-in, never only what this device kept.
+    const me = await confirmedUser();
+    const { ok, upvoted } = me ? await toggleReviewUpvote(reviewId, me.id) : { ok: false, upvoted: false };
     if (!ok) {
       // Roll back to pre-click state
       setReviews((prev) =>
@@ -165,9 +167,15 @@ export function TurfReviews({
       return;
     }
     setPosting(true);
+    const me = await confirmedUser();
+    if (!me) {
+      setPosting(false);
+      setError(ACCOUNT_NOT_CONFIRMED);
+      return;
+    }
     const { ok, error: err } = await submitReview({
       turfId,
-      userId: user.id,
+      userId: me.id,
       rating,
       comment,
     });

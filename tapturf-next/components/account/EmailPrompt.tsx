@@ -163,6 +163,11 @@ export function EmailPrompt() {
       {link.error && !link.sheet && (
         <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[66] mx-auto max-w-md rounded-2xl bg-primary-900 px-4 py-3 text-[14px] text-white shadow-elevated flex items-start gap-3" role="alert">
           <p className="flex-1 leading-snug">{link.error}</p>
+          {link.canRetry && (
+            <button type="button" onClick={() => void link.retry()} disabled={link.busy} className="shrink-0 h-8 px-3 rounded-full bg-white text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-60">
+              Try again
+            </button>
+          )}
           <button type="button" onClick={link.clearError} className="shrink-0 h-8 px-3 rounded-full bg-white/15 text-[13px] font-semibold cursor-pointer">
             OK
           </button>

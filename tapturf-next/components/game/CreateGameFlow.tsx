@@ -7,7 +7,7 @@ import {
   Trophy, CircleDot, Target, Circle, Feather,
   Grip, Dumbbell, Loader2, Users, Zap, ChevronRight,
 } from "lucide-react";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { ACCOUNT_NOT_CONFIRMED, useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
 import { searchTurfs } from "@/lib/queries/users";
 import { TimeSlotSheet } from "./TimeSlotSheet";
@@ -146,7 +146,7 @@ function defaultHostPhone(profilePhone: string | undefined): string {
 }
 
 export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = {}) {
-  const { user, login, loading: authLoading } = useAuth();
+  const { user, login, loading: authLoading, confirmedUser } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   // Prefill turf when the visitor arrived via "Create a game here" on
@@ -288,10 +288,17 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     if (hostPhone) {
       try { localStorage.setItem(HOST_PHONE_KEY, hostPhone); } catch { /* ignore */ }
     }
+    // The account the server confirms for this sign-in, never only what this device kept.
+    const me = await confirmedUser();
+    if (!me) {
+      setSubmitting(false);
+      setSubmitError(ACCOUNT_NOT_CONFIRMED);
+      return;
+    }
 
     const { data, error } = await createGame(
       { turfId, date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked },
-      { id: user.id, name: user.name, phone: hostPhone ? `+91${hostPhone}` : "", profile_image_url: user.profile_image_url }
+      { id: me.id, name: me.name, phone: hostPhone ? `+91${hostPhone}` : "", profile_image_url: me.profile_image_url }
     );
 
     setSubmitting(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, profileIn, removeGoogle, startGoogleLink } from "@/lib/account/client";
@@ -21,6 +21,8 @@ import { PhoneProofSheet } from "./PhoneProofSheet";
 
 const LOGIN_ENDED = "Your login ended. Please log in again.";
 const UNREACHABLE = "Couldn't reach TapTurf. Check your connection and try again.";
+/** A proof counts on the server for 5 minutes: after a lost reply, the same one is sent again, no new SMS. */
+const PROOF_KEEP_MS = 4 * 60_000;
 
 /** What to say for a refused start, change or remove. */
 export function linkErrorText(e: AccountError | null, until?: string | null): string {
@@ -47,16 +49,27 @@ export function linkErrorText(e: AccountError | null, until?: string | null): st
 
 /** n: bumped each time a code didn't count, so the sheet starts afresh. */
 type SheetFor = { why: "add" | "change" | "remove"; note?: string; then: string; n?: number };
+/** A proof whose answer never came (no connection, a server error): sent again by retry(). */
+type Kept = { proof: string; at: number; why: "add" | "change" | "remove"; then: string };
+
+/** What a start came to: off to Google, the code sheet open, a refusal the caller showed (onRefused), or an error line. */
+export type StartOutcome = "leaving" | "sheet" | "refused" | "error";
+
+/** No answer worth acting on: the request or its reply was lost, or the server failed. The proof may still count. */
+const lostReply = (a: { status: number }, e: AccountError | null) => a.status === 0 || a.status >= 500 || e === "unavailable" || e === null;
 
 /**
  * Start adding (or changing) Google: start(then, why). The proof sheet,
  * when one is needed, is in `sheet`: render it wherever the caller is.
+ * onRefused: a refused start, for a caller that shows it as a screen of
+ * its own (true: handled, no error line).
  */
-export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
+export function useGoogleLink(opts: { onRemoved?: () => void; onRefused?: (e: AccountError | null, until?: string) => boolean } = {}) {
   const { user, getToken, applyProfile } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sheet, setSheet] = useState<SheetFor | null>(null);
+  const [kept, setKept] = useState<Kept | null>(null);
 
   /**
    * Proof needed: a fresh code to the account's own number, with a note when the last one didn't
@@ -64,9 +77,9 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
    */
   const askProof = (s: SheetFor, e: AccountError | null, hadProof: boolean) => {
     const n = Date.now();
-    if (e === "used") return setSheet({ ...s, n, note: "That code was already used. We'll send a new one." });
-    if (e === "proof" || (hadProof && e === "reauth")) return setSheet({ ...s, n, note: "That OTP has expired. Send a new one." });
-    setSheet(s);
+    if (e === "used") setSheet({ ...s, n, note: "That code was already used. We'll send a new one." });
+    else if (e === "proof" || (hadProof && e === "reauth")) setSheet({ ...s, n, note: "That OTP has expired. Send a new one." });
+    else setSheet(s);
   };
 
   const token = async (): Promise<string | null> => {
@@ -76,25 +89,46 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
     return null;
   };
 
-  const start = async (then: string, why: "add" | "change" = "add", proof?: string) => {
+  /** A lost reply after a code: keep the proof (the server takes the same one again), say so, offer Try again. */
+  const keep = (k: Kept) => {
+    setSheet(null);
+    setKept(k);
+    setError(UNREACHABLE);
+  };
+
+  const start = async (then: string, why: "add" | "change" = "add", proof?: string): Promise<StartOutcome> => {
     setError("");
     setBusy(true);
     let leaving = false;
     try {
       const tok = await token();
-      if (!tok) return setSheet(null);
+      if (!tok) {
+        setSheet(null);
+        return "error";
+      }
       const a = await startGoogleLink(tok, then, proof);
       const b = a.body as { url?: unknown; until?: string };
       if (typeof b.url === "string" && b.url) {
         leaving = true;
         setSheet(null);
+        setKept(null);
         window.location.assign(b.url);
-        return;
+        return "leaving";
       }
       const e = errorOf(a);
-      if (e === "reauth" || e === "used" || e === "proof") return askProof({ why, then }, e, !!proof);
+      if (proof && lostReply(a, e)) {
+        keep({ proof, at: Date.now(), why, then });
+        return "error";
+      }
+      setKept(null);
+      if (e === "reauth" || e === "used" || e === "proof") {
+        askProof({ why, then }, e, !!proof);
+        return "sheet";
+      }
       setSheet(null);
+      if (opts.onRefused?.(e, b.until)) return "refused";
       setError(linkErrorText(e, b.until));
+      return "error";
     } finally {
       // Leaving for Google: stay busy, so a second tap can't start another try.
       if (!leaving) setBusy(false);
@@ -115,11 +149,17 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
       const p = profileIn(a);
       if (p) {
         setSheet(null);
+        setKept(null);
         applyProfile(p);
         opts.onRemoved?.();
         return true;
       }
       const e = errorOf(a);
+      if (proof && lostReply(a, e)) {
+        keep({ proof, at: Date.now(), why: "remove", then: "" });
+        return false;
+      }
+      setKept(null);
       if (e === "reauth" || e === "used" || e === "proof") {
         askProof({ why: "remove", then: "" }, e, !!proof);
         return false;
@@ -148,13 +188,37 @@ export function useGoogleLink(opts: { onRemoved?: () => void } = {}) {
       />
     ) : null;
 
-  return { start, remove, busy, error, clearError: () => setError(""), sheet: sheetNode };
+  /** Try again after a lost reply: the same proof while it still counts, else from the start (a new code if needed). */
+  const retry = async () => {
+    const k = kept;
+    setKept(null);
+    if (!k) return;
+    const proof = Date.now() - k.at < PROOF_KEEP_MS ? k.proof : undefined;
+    if (k.why === "remove") await remove(proof);
+    else await start(k.then, k.why, proof);
+  };
+
+  return {
+    start,
+    remove,
+    retry,
+    canRetry: !!kept,
+    busy,
+    error,
+    clearError: () => {
+      setError("");
+      setKept(null);
+    },
+    sheet: sheetNode,
+  };
 }
 
 const btnPrimary =
   "press-tight inline-flex w-full sm:w-auto items-center justify-center gap-2 h-12 px-5 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-[15px] font-semibold disabled:opacity-50 cursor-pointer";
-const btnQuiet =
-  "inline-flex items-center justify-center h-11 px-4 rounded-full border-2 border-primary-200 text-primary-800 text-[14px] font-semibold hover:border-primary-400 disabled:opacity-50 cursor-pointer";
+const btnQuietBase = "inline-flex items-center justify-center h-11 px-4 rounded-full border-2 text-[14px] font-semibold disabled:opacity-50 cursor-pointer";
+const btnQuiet = `${btnQuietBase} border-primary-200 text-primary-800 hover:border-primary-400`;
+/** A quiet button that takes something away: red text (never the quiet button's dark text over it). */
+export const btnDanger = `${btnQuietBase} border-primary-200 text-hot-600 hover:border-hot-400`;
 
 export function GoogleMark() {
   return (
@@ -176,6 +240,24 @@ export function InAppGoogleNote({ app, os }: { app: string | null; os: "android"
       <p className="text-[14px] text-amber-900 leading-snug">
         Google sign-in doesn&rsquo;t work inside {app ?? "this app"}. Open TapTurf in {os === "android" ? "Chrome" : "Safari"}, log in with your phone number
         there, then add Google from your profile.
+      </p>
+      {os === "android" ? (
+        <a href={chromeIntent("/login?next=%2Fdashboard%3Ftab%3Dprofile")} className="press-tight mt-3 inline-flex h-11 items-center rounded-full bg-primary-900 px-5 text-[14px] font-semibold text-white">
+          Open in Chrome
+        </a>
+      ) : (
+        <p className="mt-2 text-[13px] text-amber-900/80">Tap the ··· menu and choose Open in Safari.</p>
+      )}
+    </div>
+  );
+}
+
+/** In an app's own browser, switching Google accounts needs a real one; removing doesn't (it is an OTP). */
+function InAppSwitchNote({ app, os }: { app: string | null; os: "android" | "ios" }) {
+  return (
+    <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4" role="note">
+      <p className="text-[14px] text-amber-900 leading-snug">
+        To switch to another Google account, open TapTurf in {os === "android" ? "Chrome" : "Safari"}: Google sign-in doesn&rsquo;t work inside {app ?? "this app"}.
       </p>
       {os === "android" ? (
         <a href={chromeIntent("/login?next=%2Fdashboard%3Ftab%3Dprofile")} className="press-tight mt-3 inline-flex h-11 items-center rounded-full bg-primary-900 px-5 text-[14px] font-semibold text-white">
@@ -217,11 +299,27 @@ export function GoogleLinkActions({
     },
   });
   const inApp = useInApp();
+  const swapRef = useRef<HTMLButtonElement>(null);
+  const removeRef = useRef<HTMLButtonElement>(null);
+  // A confirm closed without going ahead: focus back on the button that opened it.
+  const lastConfirm = useRef<"swap" | "remove" | null>(null);
+  const sheetOpen = !!link.sheet;
+  useEffect(() => {
+    const was = lastConfirm.current;
+    lastConfirm.current = confirm;
+    if (was && !confirm && !sheetOpen) (was === "swap" ? swapRef : removeRef).current?.focus();
+  }, [confirm, sheetOpen]);
 
   const errorLine = link.error && (
-    <p className="mt-2 text-[13px] font-medium text-hot-600" role="alert">
-      {link.error}
-    </p>
+    <div className="mt-2" role="alert">
+      <p className="text-[13px] font-medium text-hot-600">{link.error}</p>
+      {link.canRetry && (
+        <button type="button" onClick={() => void link.retry()} disabled={link.busy} className={`mt-2 ${btnQuiet}`}>
+          {link.busy && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+          Try again
+        </button>
+      )}
+    </div>
   );
   const saveFirst = disabled && <p className="mt-2 text-[13px] text-primary-500">Save your changes first.</p>;
 
@@ -264,16 +362,20 @@ export function GoogleLinkActions({
           onYes={() => void link.remove()}
           onNo={() => setConfirm(null)}
         />
-      ) : inApp ? (
-        <InAppGoogleNote app={inApp.app} os={inApp.os} />
       ) : (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setConfirm("swap")} disabled={disabled || link.busy} className={btnQuiet}>
-            Use a different Google account
-          </button>
-          <button type="button" onClick={() => setConfirm("remove")} disabled={disabled || link.busy} className={`${btnQuiet} text-hot-600`}>
-            Remove
-          </button>
+        <div className="space-y-2">
+          {/* Removing is a phone OTP, which works in an app's own browser too; only switching needs Google. */}
+          {inApp && <InAppSwitchNote app={inApp.app} os={inApp.os} />}
+          <div className="flex flex-wrap gap-2">
+            {!inApp && (
+              <button ref={swapRef} type="button" onClick={() => setConfirm("swap")} disabled={disabled || link.busy} className={btnQuiet}>
+                Use a different Google account
+              </button>
+            )}
+            <button ref={removeRef} type="button" onClick={() => setConfirm("remove")} disabled={disabled || link.busy} className={btnDanger} aria-label="Remove Google account">
+              Remove
+            </button>
+          </div>
         </div>
       )}
       {saveFirst}
@@ -283,10 +385,17 @@ export function GoogleLinkActions({
   );
 }
 
-function ConfirmBox({ text, yes, danger = false, busy, onYes, onNo }: { text: string; yes: string; danger?: boolean; busy: boolean; onYes: () => void; onNo: () => void }) {
+/** A confirm in place of the buttons: focus moves to its text (read first; Tab reaches the buttons), never onto the button that acts. */
+export function ConfirmBox({ text, yes, danger = false, busy, onYes, onNo }: { text: string; yes: string; danger?: boolean; busy: boolean; onYes: () => void; onNo: () => void }) {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    textRef.current?.focus({ preventScroll: false });
+  }, []);
   return (
     <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4" role="group" aria-label="Confirm">
-      <p className="text-[14px] text-primary-800 leading-snug break-words">{text}</p>
+      <p ref={textRef} tabIndex={-1} className="text-[14px] text-primary-800 leading-snug break-words outline-none">
+        {text}
+      </p>
       <div className="mt-3 flex gap-2">
         <button
           type="button"

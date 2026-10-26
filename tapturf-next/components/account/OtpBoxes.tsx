@@ -30,6 +30,15 @@ export function OtpBoxes({
     if (autoFocus) refs.current[0]?.focus();
   }, [autoFocus]);
 
+  // Back from a check or a send (the boxes were disabled, so focus left them) with the boxes
+  // empty, after a wrong code say: the cursor is in the first box again. It also keeps a focused
+  // field on the page, so PWALifecycle doesn't reload it while the person reads the SMS.
+  const wasDisabled = useRef(disabled);
+  useEffect(() => {
+    if (wasDisabled.current && !disabled && autoFocus && !/\d/.test(value)) refs.current[0]?.focus();
+    wasDisabled.current = disabled;
+  }, [disabled, autoFocus, value]);
+
   const emit = (next: string[]) => {
     onChange(next.map((c) => c || " ").join("").replace(/\s+$/, ""));
     if (next.every((c) => /^\d$/.test(c))) onComplete(next.join(""));

@@ -9,6 +9,9 @@ import type { AccountProfile } from "@/lib/account/types";
 import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, supabaseToken, type TokenCheck } from "@/lib/account/client";
 import { loginErrorText } from "@/lib/auth/callback";
 
+/** What a write says when the server couldn't confirm a Google sign-in's account (confirmedUser gave null). */
+export const ACCOUNT_NOT_CONFIRMED = "Couldn't load your TapTurf account. Check your connection and try again.";
+
 /** How this device is signed in: the phone (Firebase OTP) or Google (a Supabase session). */
 export type SignedInWith = "phone" | "google";
 /** Why a Google sign-in opens no account right now (the same answers /login explains). */
@@ -54,6 +57,15 @@ interface AuthContextType {
   getToken: () => Promise<TokenCheck>;
   /** Publish a profile the server just sent (after an edit). */
   applyProfile: (p: AccountProfile) => void;
+  /**
+   * The account a write (a game, a join request, a review) is for. A phone
+   * sign-in's account at once; a Google sign-in's only once the server has
+   * sent it in this tab: the profile this device kept for it can be stale
+   * (the Google account was added to a phone account, or taken off one,
+   * on another device). Asks the server again and waits up to 12 s; null
+   * when it can't say, and the caller says so instead of writing.
+   */
+  confirmedUser: () => Promise<AppUser | null>;
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
   welcomeMessage: string | null;
@@ -77,6 +89,7 @@ const AuthContext = createContext<AuthContextType>({
   hydrateFromStorage: () => null,
   getToken: async () => ({ none: true }),
   applyProfile: () => {},
+  confirmedUser: async () => null,
   showLoginModal: false,
   setShowLoginModal: () => {},
   welcomeMessage: null,
@@ -149,6 +162,8 @@ function googleName(supaUser: { email?: string; user_metadata?: Record<string, u
 
 const firstName = (name: string | undefined) => name?.split(" ")[0] || "";
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** How long a write waits for the server to confirm a Google sign-in's account. */
+const CONFIRM_WAIT_MS = 12_000;
 /** How long a Google sign-in with no profile on this device waits for the server before the page goes on. */
 const GOOGLE_FIRST_WAIT_MS = 8_000;
 
@@ -252,7 +267,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(initial);
   const [loading, setLoading] = useState(initial === null);
   const [settled, setSettled] = useState(initial !== null);
-  const [profileFresh, setProfileFresh] = useState(false);
+  const [profileFresh, setFreshState] = useState(false);
+  // The same, for code that runs outside a render (confirmedUser).
+  const freshRef = useRef(false);
+  const setProfileFresh = useCallback((v: boolean) => {
+    freshRef.current = v;
+    setFreshState(v);
+  }, []);
+  const userRef = useRef<AppUser | null>(initial);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  /** One more server read for this device's Google sign-in (set by resolveSupabaseUser). */
+  const googleRecheckRef = useRef<(() => Promise<void>) | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -301,9 +328,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* ignore */
       }
     }
+    userRef.current = next;
     setUser(next);
     setProfileFresh(true);
-  }, []);
+  }, [setProfileFresh]);
 
   /** Back to the phone sign-in kept on this device, if there is one. */
   const rehydratePhone = useCallback((): boolean => {
@@ -339,7 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const text = loginErrorText("account", why);
       if (text) showNotice(text);
     }
-  }, [supabase, setSource, rehydratePhone, showNotice]);
+  }, [supabase, setSource, setProfileFresh, rehydratePhone, showNotice]);
 
   /**
    * Google: the account from the server, made if there is none. A user is
@@ -357,7 +385,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cached = readGoogleUser(supaUser.id);
     setSource("oauth");
     authUidRef.current = supaUser.id;
+    // Not confirmed in this tab until the server answers (confirmedUser waits for it).
+    setProfileFresh(false);
     if (cached) {
+      userRef.current = cached;
       setUser(cached);
       if (shouldWelcome) showWelcome(firstName(cached.name));
     }
@@ -373,6 +404,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (p) {
         const next = userFromProfile(p);
         store(GOOGLE_PROFILE_KEY, JSON.stringify({ uid: supaUser.id, user: next }));
+        // What this device kept was another account (this Google account was added to a phone
+        // account on another device, say): say which one it opens now.
+        if (cached && cached.id !== next.id) {
+          showNotice(`This Google login now opens your TapTurf account${next.name ? `, ${next.name}` : ""}.`);
+        }
+        userRef.current = next;
         setUser(next);
         setProfileFresh(true);
         setAccountProblem(null);
@@ -405,10 +442,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     const running = run();
+    googleRecheckRef.current = async () => {
+      if (!mine()) return;
+      const t = await supabaseToken();
+      await attempt("token" in t ? t.token : null);
+    };
     if (published) return;
     await Promise.race([running, sleep(GOOGLE_FIRST_WAIT_MS)]);
     if (!published && mine()) showNotice(stillLoading);
-  }, [showWelcome, showNotice, setSource, refuseGoogle]);
+  }, [showWelcome, showNotice, setSource, setProfileFresh, refuseGoogle]);
 
   /**
    * End this device's phone sign-in: its Firebase session is gone, or the
@@ -440,7 +482,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     showNotice(message);
-  }, [supabase, resolveSupabaseUser, showNotice, setSource]);
+  }, [supabase, resolveSupabaseUser, showNotice, setSource, setProfileFresh]);
 
   const getToken = useCallback(async (): Promise<TokenCheck> => {
     if (sourceRef.current === "oauth") return supabaseToken();
@@ -503,7 +545,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       store(PROFILE_CHECKED_KEY, String(Date.now()));
     }
     // sign_in, unavailable: try again on a later visit. Never sign out from a server error.
-  }, [forcePhoneSignOut, showNotice]);
+  }, [forcePhoneSignOut, showNotice, setProfileFresh]);
 
   // ── Init auth on mount ──
 
@@ -738,7 +780,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSource(null);
     authUidRef.current = null;
     setAccountProblem(null);
-  }, [supabase, setSource]);
+  }, [supabase, setSource, setProfileFresh]);
+
+  const confirmedUser = useCallback(async (): Promise<AppUser | null> => {
+    if (sourceRef.current === "oauth" && !freshRef.current) void googleRecheckRef.current?.();
+    const deadline = Date.now() + CONFIRM_WAIT_MS;
+    for (;;) {
+      // A phone sign-in's account comes from the server at sign-in and keeps its id.
+      if (sourceRef.current !== "oauth") return userRef.current;
+      if (freshRef.current && userRef.current) return userRef.current;
+      if (Date.now() >= deadline) return null;
+      await sleep(200);
+    }
+  }, []);
 
   // Fast, synchronous path: read localStorage and push into context.
   // Called right after PhoneOTP writes the user so the modal/page can
@@ -760,7 +814,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return p;
     }
     return null;
-  }, [showWelcome, setSource]);
+  }, [showWelcome, setSource, setProfileFresh]);
 
   /** The account from the server again, for this sign-in. */
   const refreshUser = useCallback(async () => {
@@ -775,7 +829,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, loading, settled, profileFresh, signedInWith, accountProblem, login, logout, refreshUser, hydrateFromStorage,
-      getToken, applyProfile,
+      getToken, applyProfile, confirmedUser,
       showLoginModal, setShowLoginModal,
       welcomeMessage, dismissWelcome,
       notice, dismissNotice, showNotice,

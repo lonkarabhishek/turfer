@@ -8,11 +8,13 @@ import {
   challengeOf,
   exchangePkce,
   LINK_DONE_S,
+  LINK_SEEN_S,
   legHash,
   linkCallbackPlan,
   linkCookie,
   linkCookieOptions,
   linkDoneCookie,
+  linkSeenCookie,
   newVerifier,
   oauthAmrAt,
   packLinkCookie,
@@ -86,6 +88,8 @@ function linkOf(req: Request): { verifier: string; then: string; hash: string } 
 function setLink(res: NextResponse, req: Request, verifier: string, then: string): NextResponse {
   const secure = isSecure(req);
   res.cookies.set(linkCookie(secure), packLinkCookie(verifier, then), linkCookieOptions(secure));
+  // Outlives the attempt: a late return here is "that took too long", not "another browser".
+  res.cookies.set(linkSeenCookie(secure), "1", linkCookieOptions(secure, LINK_SEEN_S));
   return res;
 }
 
@@ -266,6 +270,7 @@ export async function linkCallback(req: Request): Promise<NextResponse> {
   const plan = linkCallbackPlan({
     hasCookie: !!link,
     hasDone: readCookie(req, linkDoneCookie(secure)) === "1",
+    hasSeen: readCookie(req, linkSeenCookie(secure)) === "1",
     providerWhy: error ? providerWhy(error, url.searchParams.get("error_code"), url.searchParams.get("error_description")) : null,
     hasCode: !!code,
   });
@@ -280,6 +285,7 @@ export async function linkCallback(req: Request): Promise<NextResponse> {
   };
   if (plan === "page") return page();
   if (plan === "lost") return page("lost");
+  if (plan === "expired") return page("expired");
   if (plan === "err_denied") return page("denied");
   if (plan === "err_google" || !link || !code) return page("google");
 

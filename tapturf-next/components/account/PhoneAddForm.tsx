@@ -6,9 +6,11 @@ import type { RecaptchaVerifier } from "firebase/auth";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { addPhone, errorOf, oauthAgeS, profileIn, removePhone } from "@/lib/account/client";
+import { googleFirst } from "@/lib/account/oauthAge";
 import { istDate, PROFILE_PATH, phone10, spacedPhone } from "@/lib/account/display";
 import { sendPhoneAddCode, type ProofCode } from "@/lib/firebase/proof";
 import type { AccountError } from "@/lib/account/types";
+import { ConfirmBox } from "./GoogleLinkActions";
 import { OtpBoxes } from "./OtpBoxes";
 import { Sheet } from "./Sheet";
 
@@ -25,8 +27,6 @@ import { Sheet } from "./Sheet";
 type State = "idle" | "google_first" | "number" | "sending" | "code" | "checking" | "done" | "remove_confirm";
 type Intent = "add" | "confirm" | "change" | "remove";
 
-/** The client's own check before sending an SMS: the server allows 10 minutes. */
-const GOOGLE_FRESH_HERE_S = 300;
 const RESEND_S = 120;
 /** A proof counts on the server for 5 minutes: a retry after a network blip needs no new SMS. */
 const PROOF_KEEP_MS = 4 * 60_000;
@@ -96,6 +96,17 @@ export function PhoneAddForm({
   const sender = useRef<{ code: ProofCode; verifier: RecaptchaVerifier | null } | null>(null);
   const kept = useRef<{ proof: string; at: number; to: string } | null>(null);
   const [retryable, setRetryable] = useState(false);
+  const introRef = useRef<HTMLParagraphElement>(null);
+  const doneRef = useRef<HTMLParagraphElement>(null);
+  const prevState = useRef<State>(state);
+  // Focus follows the step: into the number form when it opens (its line is read first), and onto
+  // the result when it is done, so the buttons that went away never leave focus on the page itself.
+  useEffect(() => {
+    const was = prevState.current;
+    prevState.current = state;
+    if (state === "number" && was !== "sending" && was !== "number") introRef.current?.focus();
+    if (state === "done" && was !== "done") doneRef.current?.focus();
+  }, [state]);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -124,8 +135,12 @@ export function PhoneAddForm({
     return null;
   };
 
-  /** Open the form for this intent: first a Google sign-in, if the last one is over 5 minutes old. */
-  const open = async (i: Intent) => {
+  /**
+   * Open the form for this intent: first a Google sign-in, if the last one is over 5 minutes old by
+   * this device's clock (googleFirst). returning: back from the Google round trip this form asked
+   * for, so the server decides.
+   */
+  const open = async (i: Intent, returning = false) => {
     setError("");
     setDoneText("");
     setIntent(i);
@@ -133,8 +148,7 @@ export function PhoneAddForm({
     try {
       const tok = await googleToken();
       if (!tok) return;
-      const age = oauthAgeS(tok);
-      if (i !== "remove" && (age === null || age > GOOGLE_FRESH_HERE_S)) return setState("google_first");
+      if (googleFirst(i, oauthAgeS(tok), returning)) return setState("google_first");
       if (i === "remove") return setState("remove_confirm");
       setNumber(i === "confirm" ? phone10(current) : "");
       setCode("");
@@ -156,7 +170,7 @@ export function PhoneAddForm({
     if (!autoOpen || opened.current || disabled) return;
     const t = setTimeout(() => {
       opened.current = true;
-      void openRef.current(intentRef.current());
+      void openRef.current(intentRef.current(), true);
     }, 0);
     return () => clearTimeout(t);
   }, [autoOpen, disabled]);
@@ -297,6 +311,8 @@ export function PhoneAddForm({
     </div>
   );
   const quiet = "inline-flex items-center justify-center h-11 px-4 rounded-full border-2 border-primary-200 text-primary-800 text-[14px] font-semibold hover:border-primary-400 disabled:opacity-50 cursor-pointer";
+  // Red text for taking the number off, never the quiet button's dark text over it.
+  const danger = "inline-flex items-center justify-center h-11 px-4 rounded-full border-2 border-primary-200 text-hot-600 text-[14px] font-semibold hover:border-hot-400 disabled:opacity-50 cursor-pointer";
   const primary = "inline-flex items-center justify-center gap-2 h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer";
   const off = disabled || busy;
   const saveFirst = disabled && state === "idle" && <p className="mt-2 text-[13px] text-primary-500">Save your changes first.</p>;
@@ -307,11 +323,15 @@ export function PhoneAddForm({
     <div>
       {current && field(spacedPhone(current))}
 
-      {state === "done" && (
-        <p className="mt-2 rounded-xl bg-accent-50 px-3 py-2 text-[13px] text-accent-800" role="status">
-          {doneText}
-        </p>
-      )}
+      {/* Always there, so a screen reader hears the result when it arrives. */}
+      <p
+        ref={doneRef}
+        tabIndex={-1}
+        className={state === "done" ? "mt-2 rounded-xl bg-accent-50 px-3 py-2 text-[13px] text-accent-800 outline-none" : "sr-only"}
+        role="status"
+      >
+        {state === "done" ? doneText : ""}
+      </p>
 
       {(state === "idle" || state === "done" || state === "google_first") && (
         <div className="mt-2">
@@ -338,7 +358,7 @@ export function PhoneAddForm({
                 <button type="button" onClick={() => void open("change")} disabled={off} className={quiet}>
                   Change number
                 </button>
-                <button type="button" onClick={() => void open("remove")} disabled={off} className={`${quiet} text-hot-600`}>
+                <button type="button" onClick={() => void open("remove")} disabled={off} className={danger} aria-label="Remove phone number">
                   Remove
                 </button>
               </div>
@@ -349,25 +369,24 @@ export function PhoneAddForm({
       )}
 
       {state === "remove_confirm" && current && (
-        <div className="mt-2 rounded-2xl border border-primary-200 bg-primary-50 p-4" role="group" aria-label="Confirm">
-          <p className="text-[14px] text-primary-800 leading-snug">Remove {spacedPhone(current)}? You won&rsquo;t be able to log in with it any more.</p>
-          <div className="mt-3 flex gap-2">
-            <button type="button" onClick={() => void remove()} disabled={busy} className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-full bg-hot-600 hover:bg-hot-700 text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer">
-              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-              Remove
-            </button>
-            <button type="button" onClick={cancel} disabled={busy} className={quiet}>
-              Cancel
-            </button>
-          </div>
+        <div className="mt-2">
+          <ConfirmBox
+            text={`Remove ${spacedPhone(current)}? You won\u2019t be able to log in with it any more.`}
+            yes="Remove"
+            danger
+            busy={busy}
+            onYes={() => void remove()}
+            onNo={cancel}
+          />
         </div>
       )}
 
       {formOpen && (
-        <div className="mt-2 rounded-2xl border border-primary-200 bg-white p-4 space-y-3">
+        // data-modal-open: PWALifecycle never reloads the page while a number or a code is half typed.
+        <div className="mt-2 rounded-2xl border border-primary-200 bg-white p-4 space-y-3" data-modal-open="true">
           {state === "number" || state === "sending" ? (
             <>
-              <p className="text-[13px] text-primary-600 leading-snug">
+              <p ref={introRef} tabIndex={-1} className="text-[13px] text-primary-600 leading-snug outline-none">
                 {intent === "change"
                   ? "Your new mobile number. We'll send it a code."
                   : intent === "confirm"

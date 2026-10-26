@@ -202,7 +202,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           label="Total users"
           href="/admin/users"
           value={headline.totalUsers}
-          sub="Raw row count"
+          sub={
+            headline.unfinishedSignups > 0
+              ? `Raw row count, with ${headline.unfinishedSignups} Google sign-up${headline.unfinishedSignups === 1 ? "" : "s"} that didn't finish`
+              : "Raw row count"
+          }
         />
         <StatTile
           label="Total games"
@@ -376,7 +380,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             label="Verified users"
           href="/admin/users?f=verified"
             value={headline.verifiedUsers}
-            sub={`of ${headline.totalUsers} total`}
+            sub={`of ${headline.totalUsers - headline.unfinishedSignups} accounts`}
           />
         </div>
       </section>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { googleOnlyPeople, linksById, refusalText, refusalsOf, unfinishedList, UNFINISHED_LABEL, type UnfinishedRow } from "./links";
+import { googleOnlyPeople, linksById, notFinishedSignupRows, refusalText, refusalsOf, unfinishedList, UNFINISHED_LABEL, type UnfinishedRow } from "./links";
 import { istDateTime, matches, toPeople, type DetailsRow } from "./people";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -86,6 +86,22 @@ test("Google sign-ins that never came back count as sign-ups, with no account", 
   assert.equal(p.noAccount, true);
   assert.equal(p.joinedAt, Date.parse("2026-10-26T04:00:00Z"));
   assert.deepEqual(p.confirmed, { email: null, phone: false });
+});
+
+test("the headline counts the same not_finished sign-ups as the chart, as rows", () => {
+  const rows = notFinishedSignupRows([
+    unfinished({ email: "Ravi@Example.com" }),
+    unfinished({ auth_uid: B, state: "replaced" }),
+    unfinished({ auth_uid: A, created_at: "nope" }),
+  ]);
+  assert.deepEqual(rows, [{ id: G, email: "ravi@example.com", phone: null, created_at: "2026-10-26T04:00:00.000Z" }]);
+  assert.equal(rows.length, googleOnlyPeople([unfinished({}), unfinished({ auth_uid: B, state: "replaced" })]).length, "the chart's count");
+});
+
+test("an old trigger-made row taken off a phone account is listed once, as taken off", () => {
+  const trigger = toPeople([row({ id: B, method: "google", email: "old@example.com", logins: 0, last_login: null, created_at: "2026-10-20T00:00:00Z" })]);
+  const list = unfinishedList(trigger, [unfinished({ auth_uid: B, state: "replaced", created_at: "2026-10-20T00:00:00Z" })]);
+  assert.deepEqual(list.map((u) => [u.id, u.state, u.inPeople]), [[B, "replaced", true]]);
 });
 
 test("one unfinished list: trigger-made rows and the Google sign-ins with no account, newest first, once each", () => {

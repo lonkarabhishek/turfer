@@ -57,6 +57,11 @@ test("start: a fresh OTP sign-in gets Google's URL and the link cookie (http: tt
   const c = readLinkCookie(cookieValue(line));
   assert.ok(c);
   assert.equal(c.then, "/game/abc");
+  // And a day-long marker that this browser started an attempt (a late return here is 'expired', not 'lost').
+  const seen = setCookies(res).get("tt_link_seen") ?? "";
+  assert.match(seen, /^tt_link_seen=1;/);
+  assert.match(seen, /HttpOnly/);
+  assert.match(seen, /Max-Age=86400/);
   // The URL: GoTrue's Google sign-in, back to the link callback, with the challenge of the cookie's verifier.
   const url = new URL(String(body.url));
   assert.equal(`${url.origin}${url.pathname}`, `${SUPABASE}/auth/v1/authorize`);
@@ -89,6 +94,7 @@ test("start: on https the cookie is __Host-tt_link, Secure; then defaults to the
   assert.match(line, /; Path=\/(;|$)/);
   assert.doesNotMatch(line, /Domain=/i);
   assert.equal(readLinkCookie(cookieValue(line))?.then, "/dashboard?tab=profile");
+  assert.match(cookies.get("__Host-tt_link_seen") ?? "", /Secure/);
   assert.equal(new URL(String((await json(res)).url)).searchParams.get("redirect_to"), "https://www.tapturf.test/api/account/link/google/callback");
 });
 
@@ -285,6 +291,10 @@ test("link callback: no cookie never uses the code; provider errors go to the pa
   assert.equal(location(lost).searchParams.get("then"), "/dashboard?tab=profile");
   const back = await linkCallback(req(callbackUrl("code=c1"), { cookie: "tt_link_done=1" }));
   assert.equal(location(back).searchParams.get("err"), null, "a Back after Done");
+  // The same browser, back after the attempt's 10 minutes: that took too long, not another browser.
+  const late = await linkCallback(req(callbackUrl("code=c1"), { cookie: "tt_link_seen=1" }));
+  assert.equal(location(late).searchParams.get("err"), "expired");
+  assert.equal(location(late).searchParams.get("then"), "/dashboard?tab=profile", "with the way back to the profile");
   assert.equal(net.pkceCalls.length, 0);
 
   const denied = await linkCallback(req(callbackUrl("error=access_denied"), { cookie: linkCookieHeader("/game/abc") }));
@@ -296,7 +306,7 @@ test("link callback: no cookie never uses the code; provider errors go to the pa
   assert.equal(location(google).searchParams.get("err"), "google");
   const noCode = await linkCallback(req(callbackUrl(""), { cookie: linkCookieHeader() }));
   assert.equal(location(noCode).searchParams.get("err"), "google");
-  for (const r of [lost, back, denied, used, google, noCode]) assert.equal(setCookies(r).size, 0, "the cookie is kept, nothing is set");
+  for (const r of [lost, back, late, denied, used, google, noCode]) assert.equal(setCookies(r).size, 0, "the cookie is kept, nothing is set");
   assert.equal(net.pkceCalls.length, 0);
 });
 
