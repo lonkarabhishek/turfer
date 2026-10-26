@@ -393,7 +393,7 @@ export const BLOG_TURFS: Record<string, BlogTurf> = {
     city: "hyderabad",
     rating: 4.8,
     reviews: 292,
-    coverImage: "https://playo.gumlet.io/OFFSIDE20220118061504299878/offside1642486494630.jpg",
+    coverImage: "https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/turf-photos/0db1419d-69aa-4085-b28a-513121746c7b/a33b4d20fe4f27e1f7f88eb7.webp",
   },
   "9db16006-8301-45cf-a285-348d11c056bf": {
     id: "9db16006-8301-45cf-a285-348d11c056bf",
@@ -438,7 +438,7 @@ export const BLOG_TURFS: Record<string, BlogTurf> = {
     city: "hyderabad",
     rating: 4.8,
     reviews: 182,
-    coverImage: "https://playo.gumlet.io/NIGHTRIDERS20251112181745448264/NightRiders1762971866550.jpeg",
+    coverImage: "https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/turf-photos/92795e26-a834-4b86-8e80-63a43807fc00/f15cd5607d99d66b58ad9e17.webp",
   },
   "7fd40a88-1697-431b-90e8-cece9527ce40": {
     id: "7fd40a88-1697-431b-90e8-cece9527ce40",

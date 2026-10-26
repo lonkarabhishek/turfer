@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { createRowStore, type ListMeta, type ListPart, type RowStore } from "@/lib/cache/rowStore";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
+import { cleanPriceMentions } from "@/lib/utils/bookingApps";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
@@ -59,8 +60,10 @@ export function transformTurf(raw: any): Turf {
 
   // Parse images
   const rawImages = Array.isArray(raw.images) ? raw.images : [];
-  // convertImageUrls splits comma-joined entries, drops placeholders
-  // and duplicates, and normalizes Google / Drive links.
+  // convertImageUrls splits comma-joined entries, drops placeholders,
+  // booking apps' photos (playo.gumlet.io, cdn.district.in…) and
+  // duplicates, and normalizes Google / Drive links. firstImageUrl does
+  // the same for the cover, so an app's cover is no cover.
   let images = convertImageUrls(rawImages);
   // Photos the cover pass flagged (logos, screenshots, blur) stay in the
   // row but never reach a card or gallery.
@@ -142,7 +145,9 @@ export function transformTurf(raw: any): Turf {
     has_cafeteria: raw.has_cafeteria ?? null,
     coaching_available: raw.coaching_available ?? null,
     opening_hours: raw.opening_hours ?? null,
-    price_mentions: Array.isArray(raw.price_mentions) ? raw.price_mentions : null,
+    // Without booking apps' names, grids and links (bookingApps.ts), so the
+    // card, the page's header and its Pricing section agree on what is reported.
+    price_mentions: cleanPriceMentions(raw.price_mentions),
     data_sources: raw.data_sources ?? null,
     field_confidence: raw.field_confidence ?? null,
     data_verified_at: raw.data_verified_at ?? null,

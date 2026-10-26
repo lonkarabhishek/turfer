@@ -1,42 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import type { PriceBand } from "@/types/turf";
-import { formatPrice } from "@/lib/utils/prices";
+import { formatPrice, type BandRow } from "@/lib/utils/prices";
 import { formatLabel } from "@/lib/utils/formats";
 
 const BAND_ORDER = ["morning", "day", "evening", "night"] as const;
-const BAND_LABEL: Record<PriceBand["band"], { name: string; time: string }> = {
+const BAND_LABEL: Record<BandRow["band"], { name: string; time: string }> = {
   morning: { name: "Morning", time: "5 am to 12 pm" },
   day: { name: "Afternoon", time: "12 to 5 pm" },
   evening: { name: "Evening", time: "5 to 9 pm" },
   night: { name: "Night", time: "after 9 pm" },
 };
 
-/** Latest YYYY-MM-DD named in the band sources, as "Oct 2026". */
-function checkedOn(bands: PriceBand[]): string | null {
-  let best = "";
-  for (const b of bands) for (const d of b.source?.match(/\d{4}-\d{2}-\d{2}/g) ?? []) if (d > best) best = d;
-  if (!best) return null;
-  const [y, m] = best.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-}
-
 /**
  * Listed per-hour prices by format and time of day. Formats become
  * pills when there are several (a venue can list 5-a-side, 7-a-side and
  * three box cricket sizes); weekday and weekend columns collapse into
- * one when every band is listed for all days.
+ * one when every band is listed for all days. The server sends the bands
+ * without their source notes (bandRows) and the month they were checked
+ * (bandsCheckedOn), so nothing about where they came from reaches the page.
  */
-export function PriceBands({ bands }: { bands: PriceBand[] }) {
+export function PriceBands({ bands, checked }: { bands: BandRow[]; checked: string | null }) {
   const formats = [...new Set(bands.map((b) => b.format ?? ""))];
   const [active, setActive] = useState(formats[0]);
   const rows = bands.filter((b) => (b.format ?? "") === active);
   const split = rows.some((b) => b.days !== "all");
-  const price = (band: PriceBand["band"], days: "weekday" | "weekend") =>
+  const price = (band: BandRow["band"], days: "weekday" | "weekend") =>
     rows.find((b) => b.band === band && (b.days === days || b.days === "all"))?.price_per_hour ?? null;
   const present = BAND_ORDER.filter((band) => rows.some((b) => b.band === band));
-  const checked = checkedOn(bands);
 
   return (
     <div>
@@ -94,7 +85,7 @@ export function PriceBands({ bands }: { bands: PriceBand[] }) {
         </table>
       </div>
       <p className="mt-2 text-[12px] text-primary-400">
-        Listed online prices{checked ? `, checked ${checked}` : ""}. Times are approximate; confirm the rate with the turf.
+        {checked ? `Rates as of ${checked}. ` : ""}Times are approximate; confirm the rate with the turf.
       </p>
     </div>
   );

@@ -167,6 +167,39 @@ test("non-http URLs are dropped, and an answer left with no page is no answer", 
   assert.equal(readWebAnswer([search("s1"), results("s1", bad), say("No LBW.", bad)], "end_turn"), null);
 });
 
+test("booking apps' pages are never linked, their names never shown", () => {
+  const playo = { url: "https://playo.co/venues/hyderabad/box-cricket", title: "Box cricket turfs in Hyderabad | Playo" };
+  const district = { url: "https://www.district.in/play/hyderabad", title: "Play in Hyderabad" };
+  const named = { url: "https://news.example.org/best-turfs", title: "Best turfs to book on Playo" };
+  // Cited: the app's pages go, and a page whose title names one shows as its host.
+  const got = readWebAnswer(
+    [search("s1"), results("s1", [playo, district, named, PAGES[1]]), say("Most box cricket turfs drop LBW.", [playo, district, named, PAGES[1]])],
+    "end_turn",
+  );
+  assert.deepEqual(got?.links, [
+    { label: "news.example.org", url: named.url, host: "news.example.org" },
+    { label: "Indoor cricket laws", url: PAGES[1].url, host: "indoorcricket.example.com" },
+  ]);
+  // Not cited: the first results, without the apps'.
+  assert.deepEqual(
+    webLinks([search("s1"), results("s1", [playo, district, PAGES[0]]), say("x")]).map((l) => l.url),
+    [PAGES[0].url],
+  );
+  // Only apps' pages: no page to stand on, so no answer.
+  assert.equal(readWebAnswer([search("s1"), results("s1", [playo, district]), say("LBW is off.", [playo])], "end_turn"), null);
+  // The apps' pages are not even fetched to check them.
+  assert.deepEqual(candidatePages([search("s1"), results("s1", [playo, PAGES[0]]), say("x", [district])]), [PAGES[0].url]);
+});
+
+test("the text names no booking app", () => {
+  assert.equal(
+    cleanWebText("Most turfs in Baner charge ₹1,000 an hour. You can book slots on Playo or Hudle. Weekends fill up fast."),
+    "Most turfs in Baner charge ₹1,000 an hour. Weekends fill up fast.",
+  );
+  assert.equal(cleanWebText("Box cricket rules vary by venue, and booking apps list them per turf."), "Box cricket rules vary by venue.");
+  assert.equal(cleanWebText("It is publicly bookable on the Turf Town app."), "");
+});
+
 test("at most four cited pages", () => {
   const got = readWebAnswer([search("s1"), results("s1", PAGES), say("A lot of pages agree.", PAGES)], "end_turn");
   assert.deepEqual(

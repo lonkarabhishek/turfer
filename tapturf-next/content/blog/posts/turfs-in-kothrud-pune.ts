@@ -4,7 +4,7 @@ import type { Post } from "../types";
 // Source: TapTurf database (public.turfs), queried read-only on 24 Oct 2026.
 // Scope: active Pune listings whose area or address says Kothrud or Karve Nagar.
 // 18 venues (one in Erandwane gives its address as Kothrud Industrial Area).
-// Prices and hours are as listed (mostly from Google Maps and booking-app
+// Prices and hours are as listed (mostly from Google Maps and other public
 // listings), not owner-verified.
 
 export const post: Post = {
@@ -42,7 +42,7 @@ export const post: Post = {
     {
       type: "callout",
       title: "Read this first",
-      text: "These figures describe turfs listed on TapTurf, not every turf in Kothrud. Listings are compiled mainly from Google Maps and booking-app pages. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
+      text: "These figures describe turfs listed on TapTurf, not every turf in Kothrud. Listings are compiled from Google Maps and other public sources. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
     },
     {
       type: "stat-grid",
@@ -253,7 +253,7 @@ export const post: Post = {
       items: [
         "Source: TapTurf database, 24 October 2026 (queried the same day, read-only).",
         "Scope: 18 active Pune listings whose area or address says Kothrud or Karve Nagar. Turf 11 is listed under Erandwane but its address says Kothrud Industrial Area.",
-        "Prices: 12 venues have a listed hourly price. Each can list up to six rates (morning, afternoon and evening, weekday and weekend). Prices are compiled from public listings and booking-app pages and are not owner-confirmed.",
+        "Prices: 12 venues have a listed hourly price. Each can list up to six rates (morning, afternoon and evening, weekday and weekend). Prices are compiled from public sources and are not owner-confirmed.",
         "The all-rates median of ₹1,000 uses all 69 listed rates across the 12 venues, the same method as our India turf price map, whose Pune-wide median is ₹1,000 (172 priced Pune venues, 23 October 2026).",
         "Hours: listed for all 18 venues, mainly from Google Maps. Not confirmed by owners.",
         "Ratings and review counts are as shown on TapTurf on 24 October 2026.",

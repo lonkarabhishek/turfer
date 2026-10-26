@@ -1,7 +1,7 @@
 import type { Turf } from "@/types/turf";
 import { summarisePagePrice } from "./prices";
 import { isOwnPhoto, normalizeImageUrl, orderPhotos } from "./images";
-import { stripBookingClaims } from "./bookingClaims";
+import { googleMapsUrl, publicLink, scrubBookingApps } from "./bookingApps";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
@@ -16,6 +16,7 @@ export function generateTurfJsonLd(turf: Turf) {
   const phone = getPhone(turf);
   // Our own copies first; when we have any, the Google links (which
   // expire, see orderPhotos) are left out. No photos, no image field.
+  // orderPhotos leaves out booking apps' photos.
   const photos = orderPhotos(turf.images ?? []);
   const own = photos.filter(isOwnPhoto);
   const image = (own.length ? own : photos).slice(0, 5).map((img) => normalizeImageUrl(img));
@@ -42,7 +43,7 @@ export function generateTurfJsonLd(turf: Turf) {
     "@id": turfUrl(turf),
     name: turf.name,
     description:
-      stripBookingClaims(turf.description) || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
+      scrubBookingApps(turf.description) || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
     address: {
       "@type": "PostalAddress",
       streetAddress: turf.address,
@@ -73,10 +74,12 @@ export function generateTurfJsonLd(turf: Turf) {
     ...(normalizedPhone && { telephone: normalizedPhone.e164 }),
     ...(() => {
       // A WhatsApp link or group invite stored as the website is not the
-      // venue's own page.
-      const sameAs = [turf.external_review_url, turf.website_url, turf.instagram_url].filter(
-        (u): u is string =>
-          typeof u === "string" && /^https?:\/\//.test(u) && !/^https?:\/\/(?:[\w-]+\.)?(?:wa\.me|whatsapp\.com)\b/i.test(u),
+      // venue's own page, and neither is a booking app's page for it
+      // (playspots.in, link.district.in): sameAs is the venue elsewhere,
+      // and TapTurf links to no booking app. The review link is Google
+      // Maps only.
+      const sameAs = [googleMapsUrl(turf.external_review_url), publicLink(turf.website_url), publicLink(turf.instagram_url)].filter(
+        (u): u is string => u != null && !/^https?:\/\/(?:[\w-]+\.)?(?:wa\.me|whatsapp\.com)\b/i.test(u),
       );
       return sameAs.length ? { sameAs } : {};
     })(),

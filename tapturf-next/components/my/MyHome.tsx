@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type OwnerHome, type OwnerTurfRef } from "@/lib/my/client";
 import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
-import { imageUrlForCard, normalizeImageUrl } from "@/lib/utils/images";
+import { firstImageUrl, imageUrlForCard } from "@/lib/utils/images";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
@@ -134,7 +134,9 @@ function Shell({ children }: { children: React.ReactNode }) {
 function Thumb({ src }: { src: string | null }) {
   const [broken, setBroken] = useState(false);
   // The card-sized copy, with Drive and Google links made displayable, as cards do.
-  const url = src ? imageUrlForCard(normalizeImageUrl(src)) : null;
+  // firstImageUrl normalises it and leaves out a booking app's photo (playo.gumlet.io, cdn.district.in).
+  const cover = firstImageUrl(src);
+  const url = cover ? imageUrlForCard(cover) : null;
   return (
     <span className="w-14 h-14 shrink-0 rounded-xl bg-primary-100 overflow-hidden">
       {url && !broken ? (
@@ -158,7 +160,7 @@ function usePublicTurf(id: string | null) {
       .eq("is_active", true)
       .maybeSingle()
       .then(({ data }) => {
-        if (live && data) setTurf({ id: data.id, name: data.name, city: data.city, area: data.area, cover: data.cover_image });
+        if (live && data) setTurf({ id: data.id, name: data.name, city: data.city, area: data.area, cover: firstImageUrl(data.cover_image) });
       });
     return () => {
       live = false;
@@ -216,7 +218,7 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
       .ilike("name", `%${s.replace(/[%_,()]/g, " ")}%`)
       .order("total_reviews", { ascending: false })
       .limit(8);
-    setHits((data ?? []).map((t) => ({ id: t.id, name: t.name, city: t.city, area: t.area, cover: t.cover_image })));
+    setHits((data ?? []).map((t) => ({ id: t.id, name: t.name, city: t.city, area: t.area, cover: firstImageUrl(t.cover_image) })));
     setBusy(false);
   };
 

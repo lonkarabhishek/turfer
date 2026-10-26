@@ -1,3 +1,5 @@
+import { isBookingAppUrl } from "./bookingApps";
+
 /**
  * Ask Google user-content (lh3/lh4/... .googleusercontent.com) for a
  * real display size.
@@ -42,14 +44,15 @@ export function isOwnPhoto(url: string): boolean {
  * covers imported in Aug and Sep answered 403 on 26 Oct), so a turf that
  * has copies in our storage shows those first instead of a dead cover.
  * Stable within each group, so the stored order still decides ties.
- * Drops empty entries and duplicates.
+ * Drops empty entries, duplicates and booking apps' photos (playo.gumlet.io,
+ * cdn.district.in: TapTurf shows none, see bookingApps.ts).
  */
 export function orderPhotos(urls: readonly (string | null | undefined)[]): string[] {
   const rank = (u: string) => (isOwnPhoto(u) ? 0 : GOOGLE_USER_CONTENT.test(u) ? 2 : 1);
   const seen = new Set<string>();
   const list: string[] = [];
   for (const u of urls) {
-    if (typeof u !== "string" || !u.trim() || seen.has(u)) continue;
+    if (typeof u !== "string" || !u.trim() || seen.has(u) || isBookingAppUrl(u)) continue;
     seen.add(u);
     list.push(u);
   }
@@ -158,7 +161,9 @@ function isPlaceholderImage(url: string): boolean {
 
 /**
  * Cleans an image list for display: splits comma-joined entries, drops
- * placeholders and duplicates, and normalizes each URL.
+ * placeholders, booking apps' photos and duplicates, and normalizes each
+ * URL. transformTurf runs every turf's photos through this, so no card,
+ * tile, gallery, share image, JSON-LD or Ask card gets an app's photo.
  */
 export function convertImageUrls(urls: string[]): string[] {
   if (!Array.isArray(urls)) {
@@ -169,7 +174,7 @@ export function convertImageUrls(urls: string[]): string[] {
   for (const raw of urls) {
     if (!raw || typeof raw !== "string") continue;
     for (const u of splitImageUrls(raw)) {
-      if (isPlaceholderImage(u)) continue;
+      if (isPlaceholderImage(u) || isBookingAppUrl(u)) continue;
       const n = normalizeImageUrl(u);
       if (n && !out.includes(n)) out.push(n);
     }

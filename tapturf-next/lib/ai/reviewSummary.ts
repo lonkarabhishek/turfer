@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ROUTER_MODEL, structured } from "./ask";
 import { summaryLine, writtenEnough, type SummaryReview } from "@/lib/reviews/summaryLine";
+import { mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
 
 /**
  * "What players say": two sentences and a few likes and gripes, made
@@ -29,7 +30,8 @@ Rules:
 - summary: two short sentences, at most 45 words, reporting what reviewers say, with attribution ("Reviewers praise...", "A few mention..."). Only what the reviews contain. No ratings, no numbers, no venue name, no marketing words, no advice, no emoji. Indian English.
 - likes: up to three things praised, 2 to 5 words each, lower case ("well kept grass", "good lights"). gripes: up to two complaints, same style, empty when there are none.
 - When the reviews disagree, say so plainly. When they are thin, keep the summary to one sentence.
-- Never mention prices unless more than one review gives the same figure, and then say reviewers reported it.`;
+- Never mention prices unless more than one review gives the same figure, and then say reviewers reported it.
+- Never name a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow and the like), even when a review does, and never say how or where the venue is booked online.`;
 
 /**
  * The reviews to summarise: written ones, and TapTurf reports with two or
@@ -52,7 +54,8 @@ export async function loadReviewsFor(turfId: string): Promise<ReviewRow[]> {
 export async function summariseReviews(reviews: ReviewRow[]): Promise<StoredReviewSummary | null> {
   const use = reviews.slice(0, 30);
   if (use.length < 2) return null;
-  const lines = use.map(summaryLine).join("\n");
+  // The model reads no booking app's name (a review saying "booked on Playo"), so it can't repeat one.
+  const lines = use.map((r) => summaryLine({ ...r, comment: scrubBookingApps(r.comment) })).join("\n");
   const out = await structured(
     ReviewSummary,
     {
@@ -65,5 +68,11 @@ export async function summariseReviews(reviews: ReviewRow[]): Promise<StoredRevi
   );
   if (!out) return null;
   const sources = [...new Set(use.map((r) => (r.source === "google" ? "Google" : "TapTurf")))];
-  return { ...out, likes: out.likes.slice(0, 3), gripes: out.gripes.slice(0, 2), based_on: use.length, sources };
+  return {
+    summary: scrubBookingApps(out.summary) ?? "",
+    likes: out.likes.filter((l) => !mentionsBookingApp(l)).slice(0, 3),
+    gripes: out.gripes.filter((g) => !mentionsBookingApp(g)).slice(0, 2),
+    based_on: use.length,
+    sources,
+  };
 }

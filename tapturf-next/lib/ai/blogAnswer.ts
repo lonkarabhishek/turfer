@@ -15,6 +15,7 @@ import type { BlogAnswer, BlogVisual } from "@/lib/ask/blogTypes";
 import { signArt } from "@/lib/ask/artToken";
 import { candidatePages, deadPage, fetchableHost, pageKey, privateAddress, readWebAnswer, webDay, type WebAnswer } from "@/lib/ask/webLinks";
 import { createReadOnlyClient } from "@/lib/supabase/server";
+import { BOOKING_APP_DOMAINS } from "@/lib/utils/bookingApps";
 import { questionKey } from "./parseCache";
 import { ROUTER_MODEL, addUsage, getAnthropic, isAskConfigured, newUsage, structured, type AskUsage } from "./ask";
 
@@ -125,7 +126,7 @@ const WEB_SYSTEM = `You answer a player's question for TapTurf, an Indian direct
 - Every fact from the pages you found, and only from pages about the same thing that was asked: a box cricket turf is not a practice net, a futsal court is not a football pitch, a club's own rules are not the laws of the game. Use only pages whose content you actually got: never one that showed "Page not found", an error or nothing. If the pages don't answer it, say so in one sentence rather than guess.
 - Sport, fitness, kit, rules, venues and games only. For anything else, say in one line that you can only help with sport.
 - Plain Indian English: no lists, headings, markdown, links, emoji, phone numbers or emails. Don't mention searching or the results; just answer.
-- Don't send the player to other booking apps or websites: TapTurf lists venues itself.`;
+- Never name, quote or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow, Turfwala, TIDA Sports, Sporloc and the like), even when a page you found is one or mentions one, and don't send the player to other websites: TapTurf lists venues itself.`;
 
 const SUMMARY_REPLY = "Here's the short version of this article.";
 
@@ -309,6 +310,9 @@ async function webAnswer(post: Post, question: string, before: string, usage: As
             type: "web_search_20250305",
             name: "web_search",
             max_uses: 2,
+            // Booking apps' pages never come back (a domain covers its subdomains);
+            // lib/ask/webLinks.ts drops any that would, and their names.
+            blocked_domains: [...BOOKING_APP_DOMAINS],
             user_location: { type: "approximate", country: "IN", timezone: "Asia/Kolkata", ...(city ? { city: city.label } : {}) },
           },
         ],

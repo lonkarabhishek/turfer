@@ -231,7 +231,7 @@ const SECTIONS: LegalSection[] = [
           you can ask us to delete it at any time.
         </p>
         <p>
-          Turf pages embed Google Maps, and photos load from Google&rsquo;s servers. Loading these shares your
+          Turf pages embed Google Maps, and photos load from Google&rsquo;s and other public servers. Loading these shares your
           IP address with Google under{" "}
           <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
             Google&rsquo;s privacy policy

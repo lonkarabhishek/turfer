@@ -89,7 +89,7 @@ test("photoTiles: the grid as players see it", () => {
   const lh3n = "https://lh3.googleusercontent.com/p/AF1Qip=w1600-h1200";
   const g = photoTiles(
     list({
-      images: [`${BASE}${TURF}/aaaaaaaaaaaaaaaaaaaaaaaa.webp`, own, lh3, "https://playo.gumlet.io/x.jpg", lh3n, "https://lh3.googleusercontent.com/ogw/default-user=s96"],
+      images: [`${BASE}${TURF}/aaaaaaaaaaaaaaaaaaaaaaaa.webp`, own, lh3, "https://files.yappe.in/place/full/x.webp", lh3n, "https://lh3.googleusercontent.com/ogw/default-user=s96", "https://playo.gumlet.io/x.jpg"],
       cover: own,
       flagged: [{ url: lh3n, note: "A logo" }],
       mine: [
@@ -99,7 +99,7 @@ test("photoTiles: the grid as players see it", () => {
       ],
     }),
   );
-  assert.deepEqual(g.tiles.map((t) => t.src), [`${BASE}${TURF}/aaaaaaaaaaaaaaaaaaaaaaaa.webp`, own, lh3n, "https://playo.gumlet.io/x.jpg"], "normalised, duplicates and placeholders dropped");
+  assert.deepEqual(g.tiles.map((t) => t.src), [`${BASE}${TURF}/aaaaaaaaaaaaaaaaaaaaaaaa.webp`, own, lh3n, "https://files.yappe.in/place/full/x.webp"], "normalised; duplicates, placeholders and booking apps' photos dropped, as on the page");
   assert.equal(g.tiles[2].raw, lh3, "Make cover sends the stored URL");
   assert.equal(g.tiles[2].hidden, true, "flagged by its normalised URL");
   assert.equal(g.tiles[2].note, "A logo");

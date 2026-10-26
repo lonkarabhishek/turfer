@@ -5,7 +5,7 @@ import type { Post } from "../types";
 // Scope: active Pune listings whose area is Undri (10 venues). No listing in
 // another area mentions Undri in its name or address, so none were added.
 // Mohammed Wadi and Kondhwa listings are not counted.
-// Prices and hours are as listed (mostly from Google Maps and booking-app
+// Prices and hours are as listed (mostly from Google Maps and other public
 // listings), not owner-verified.
 
 export const post: Post = {
@@ -43,7 +43,7 @@ export const post: Post = {
     {
       type: "callout",
       title: "Read this first",
-      text: "These figures describe turfs listed on TapTurf, not every turf in Undri. Listings are compiled mainly from Google Maps and booking-app pages. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
+      text: "These figures describe turfs listed on TapTurf, not every turf in Undri. Listings are compiled from Google Maps and other public sources. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
     },
     {
       type: "stat-grid",
@@ -104,7 +104,7 @@ export const post: Post = {
     },
     {
       type: "p",
-      text: "Two notes on the table. Kanade Sports Club's rates are for its smaller 6-a-side ground. Its booking-app listing shows ₹300 an hour from 6 am to 7 pm on weekdays, ₹600 from 7 pm and ₹700 from 9 pm, while the 9-a-side and 11-a-side grounds list ₹500 by day and ₹1,200 at night. Yadnya Sports & Wellness Club is the clear outlier at ₹2,000 on evenings, and its listing shows weekend daytime (₹1,200) cheaper than weekday daytime (₹1,400). That is what the listing says, so confirm it with the venue.",
+      text: "Two notes on the table. Kanade Sports Club's rates are for its smaller 6-a-side ground. Its listed rates are ₹300 an hour from 6 am to 7 pm on weekdays, ₹600 from 7 pm and ₹700 from 9 pm, while the 9-a-side and 11-a-side grounds are listed at ₹500 by day and ₹1,200 at night. Yadnya Sports & Wellness Club is the clear outlier at ₹2,000 on evenings, and its listing shows weekend daytime (₹1,200) cheaper than weekday daytime (₹1,400). That is what the listing says, so confirm it with the venue.",
     },
     {
       type: "cta",
@@ -152,7 +152,7 @@ export const post: Post = {
       area: "Behind Hill Green High School, Undri, Pune",
       rating: 4.4,
       reviews: 341,
-      note: "Football and box cricket, listed as open 24 hours. No hourly price in our main fields; its booking-app listing shows 7-a-side at ₹1,000 by day and ₹1,600 from 6 pm. Lists no washroom or changing room.",
+      note: "Football and box cricket, listed as open 24 hours. No hourly price in our main fields; its listed 7-a-side rates are ₹1,000 by day and ₹1,600 from 6 pm. Lists no washroom or changing room.",
     },
     {
       type: "turf",
@@ -266,9 +266,9 @@ export const post: Post = {
       items: [
         "Source: TapTurf database, 26 October 2026 (queried the same day, read-only).",
         "Scope: the 10 active Pune listings with Undri as the area. No listing in another area mentions Undri in its name or address. Mohammed Wadi and Kondhwa listings are not counted.",
-        "Prices: 8 venues have a listed hourly price. Each can list up to six rates (morning, afternoon and evening, weekday and weekend). Prices are compiled from public listings and booking-app pages and are not owner-confirmed.",
+        "Prices: 8 venues have a listed hourly price. Each can list up to six rates (morning, afternoon and evening, weekday and weekend). Prices are compiled from public sources and are not owner-confirmed.",
         "The all-rates median of ₹800 uses all 48 listed rates across the 8 venues, the same method as our India turf price map, whose Pune-wide median is ₹1,000 (172 priced Pune venues, 23 October 2026).",
-        "Kanade Sports Club's per-ground rates and Nature Sports and Fitness Centre's 7-a-side rates come from booking-app price bands in our database (recorded 16 October 2026). Nature Sports is not in the price medians.",
+        "Kanade Sports Club's per-ground rates and Nature Sports and Fitness Centre's 7-a-side rates come from the per-format price bands in our database (recorded 16 October 2026). Nature Sports is not in the price medians.",
         "Hours: listed for all 10 venues, mainly from Google Maps. Not confirmed by owners.",
         "Ratings and review counts are as shown on TapTurf on 26 October 2026. Adrenaline Arena's 4.5 rating comes from only 3 reviews.",
         "Facilities count only venues where the field is filled in. Blank fields are unknown, not 'no'.",

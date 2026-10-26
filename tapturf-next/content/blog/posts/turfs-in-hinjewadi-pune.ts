@@ -4,7 +4,7 @@ import type { Post } from "../types";
 // Source: TapTurf database (public.turfs), queried read-only on 23 Oct 2026.
 // Scope: active Pune listings whose area or address places them in Hinjewadi
 // (Phases 1 to 3), Maan or Marunji. 15 venues. Prices and hours are as listed
-// (mostly from Google Maps and booking-app listings), not owner-verified.
+// (mostly from Google Maps and other public sources), not owner-verified.
 
 export const post: Post = {
   slug: "turfs-in-hinjewadi-pune",
@@ -41,7 +41,7 @@ export const post: Post = {
     {
       type: "callout",
       title: "Read this first",
-      text: "These figures describe turfs listed on TapTurf, not every turf in Hinjewadi. Listings are compiled mainly from Google Maps and booking-app pages. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
+      text: "These figures describe turfs listed on TapTurf, not every turf in Hinjewadi. Listings are compiled from Google Maps and other public sources. Prices and hours are as listed and have not been confirmed by owners, so check the rate and the slot with the venue before you book.",
     },
     {
       type: "stat-grid",
@@ -218,7 +218,7 @@ export const post: Post = {
       items: [
         "Source: TapTurf database, 23 October 2026 (queried the same day, read-only).",
         "Scope: 15 active Pune listings whose area or address places them in Hinjewadi (either spelling), Maan or Marunji. One Rahatani listing that names Hinjewadi only among nearby roads is excluded.",
-        "Prices: 6 venues have a listed hourly price. 'Weekday day' is the listed morning or afternoon rate. Prices are compiled from public listings and booking-app pages and are not owner-confirmed.",
+        "Prices: 6 venues have a listed hourly price. 'Weekday day' is the listed morning or afternoon rate. Prices are compiled from public sources and are not owner-confirmed.",
         "Hours: listed for 14 venues, mainly from Google Maps. Not confirmed by owners.",
         "Ratings and review counts are as shown on TapTurf on 23 October 2026.",
         "Facilities count only venues where the field is filled in. Blank fields are unknown, not 'no'.",
