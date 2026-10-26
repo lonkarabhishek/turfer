@@ -195,7 +195,7 @@ export function EmailPrompt() {
           <span className="w-11 h-11 rounded-full bg-primary-50 inline-flex items-center justify-center" aria-hidden>
             <GoogleMark />
           </span>
-          <h2 id="email-prompt-title" ref={titleRef} tabIndex={-1} className="mt-3 font-display text-2xl text-primary-900 leading-tight outline-none">
+          <h2 id="email-prompt-title" ref={titleRef} tabIndex={-1} style={{ outline: "none" }} className="mt-3 font-display text-2xl text-primary-900 leading-tight">
             Add your email with Google?
           </h2>
           <p id="email-prompt-body" className="mt-2 text-[14px] text-primary-600 leading-snug">

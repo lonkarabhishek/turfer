@@ -36,6 +36,8 @@ export function Sheet({
     const heading = ref.current ? document.getElementById(labelledBy) : null;
     if (heading) {
       if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+      // A heading is focused only to start reading there: no keyboard ring on it.
+      heading.style.outline = "none";
       heading.focus();
     }
     const onKey = (e: KeyboardEvent) => {
