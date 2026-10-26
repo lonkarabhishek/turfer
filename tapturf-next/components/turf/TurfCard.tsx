@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BadgeCheck, Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
-import { summarisePrice } from "@/lib/utils/prices";
+import { priceRangeText, summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
-import { imageUrlForCard } from "@/lib/utils/images";
+import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
 import { turfPath } from "@/lib/utils/turfPath";
+import { PhotoImg } from "@/components/ui/PhotoImg";
 
 interface TurfCardProps {
   turf: Turf;
@@ -24,20 +25,10 @@ interface TurfCardProps {
 const FADE_MS = 500;
 
 export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel }: TurfCardProps) {
-  // Reject covers that are still tiny thumbs after normalization (e.g.
-  // a non-Google URL that ends "=w32-h32-..."). We'd rather show a real
-  // photo from images[] than a 32px placeholder.
-  const isTinyThumb = (u: string | null) =>
-    !!u && /=w(?:\d{1,2}|1\d{2})-h(?:\d{1,2}|1\d{2})\b/.test(u);
-  const usableCover =
-    turf.cover_image && !isTinyThumb(turf.cover_image) ? turf.cover_image : null;
-  const cover = usableCover || (turf.images.length > 0 ? turf.images[0] : null);
-  // Build the ordered photo list: cover first (dedup'd), then the rest of the images.
-  const photos = (() => {
-    if (turf.images.length === 0) return cover ? [cover] : [];
-    if (!usableCover) return turf.images;
-    return [usableCover, ...turf.images.filter((i) => i !== usableCover)];
-  })();
+  // Cover first (unless it is a tiny thumb), then the rest, with our own
+  // copies ahead of Google links: a turf whose Google cover has expired
+  // but has photos in our storage leads with one of those.
+  const photos = turfPhotos(turf);
 
   const priceSummary = summarisePrice(turf);
   const sports = turf.sports.slice(0, 2);
@@ -128,11 +119,9 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
     cityLabel && !(base ?? "").toLowerCase().includes(cityLabel.toLowerCase())
       ? [base, cityLabel].filter(Boolean).join(", ")
       : base;
-  const range = (min: number | null, max: number | null) => {
-    const lo = min ?? max ?? 0;
-    const hi = max ?? lo;
-    return `₹${lo.toLocaleString("en-IN")}${lo !== hi ? `–${hi.toLocaleString("en-IN")}` : ""}`;
-  };
+  // Null when neither end is known, so a card never prints "₹0".
+  const range = priceSummary.kind === "real" || priceSummary.kind === "reported" ? priceRangeText(priceSummary.min, priceSummary.max) : null;
+  const markBroken = (src: string) => setBroken((b) => (b.includes(src) ? b : [...b, src]));
 
   return (
     <Link
@@ -184,8 +173,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               }}
             >
               {rendered.map((src, i) => (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
+                <PhotoImg
                   key={src}
                   src={imageUrlForCard(src)}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
@@ -195,8 +183,9 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                   loading={(i === 0 && priority) || (i > 0 && i <= activeIdx + 1) ? "eager" : "lazy"}
                   fetchPriority={priority && i === 0 ? "high" : "auto"}
                   decoding="async"
-                  referrerPolicy="no-referrer"
-                  onError={() => setBroken((b) => (b.includes(src) ? b : [...b, src]))}
+                  // A dead first photo (even one that died before hydration)
+                  // drops out and the next one takes its place.
+                  onBroken={() => markBroken(src)}
                   draggable={false}
                   aria-hidden={i !== activeIdx}
                 />
@@ -287,14 +276,14 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               .join(" · ")}
           </p>
           <p className="mt-1 text-[14px] text-primary-900">
-            {priceSummary.kind === "real" ? (
+            {range && priceSummary.kind === "real" ? (
               <>
-                <span className="font-semibold tabular-nums">{range(priceSummary.min, priceSummary.max)}</span>
+                <span className="font-semibold tabular-nums">{range}</span>
                 <span className="text-primary-500"> {priceSummary.unit}</span>
               </>
-            ) : priceSummary.kind === "reported" ? (
+            ) : range && priceSummary.kind === "reported" ? (
               <>
-                <span className="font-semibold tabular-nums">~{range(priceSummary.min, priceSummary.max)}</span>
+                <span className="font-semibold tabular-nums">~{range}</span>
                 <span className="text-primary-500"> {priceSummary.unit}, reported</span>
               </>
             ) : (

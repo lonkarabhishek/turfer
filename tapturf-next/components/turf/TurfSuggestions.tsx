@@ -42,6 +42,15 @@ function openSuggestSheet() {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
 }
 
+/** A button anywhere on the page (the empty Pricing section) that opens the sheet. */
+export function SuggestInfoButton({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={openSuggestSheet} className={className}>
+      {children}
+    </button>
+  );
+}
+
 const noop = () => () => {};
 
 const SPORT_OPTIONS = [

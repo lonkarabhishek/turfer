@@ -4,6 +4,7 @@ import type { Turf } from "@/types/turf";
 import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
+import { turfPhotos } from "@/lib/utils/images";
 
 /** The live "Most Trending Turf" pick for a city (server-side). */
 export interface TrendingPick {
@@ -72,7 +73,8 @@ export function toSpotlights(
       place: areaFor(t) ?? t.address,
       rating: t.rating,
       reviews: t.total_reviews,
-      photo: t.cover_image ?? t.images[0] ?? null,
+      // Our own copy first: Google photo links expire.
+      photo: turfPhotos(t)[0] ?? null,
       sports: t.sports,
       priceLabel: price.kind === "unknown" || price.kind === "reported_text" ? null : price.label,
     });

@@ -1,68 +1,68 @@
-import { ExternalLink } from "lucide-react";
-import type { Turf } from "@/types/turf";
-import { formatPrice, getTextPriceMentions, priceUnitSuffix } from "@/lib/utils/prices";
+import Link from "next/link";
+import { ExternalLink, IndianRupee } from "lucide-react";
+import type { PriceMention, Turf } from "@/types/turf";
+import {
+  formatPrice,
+  getNumericPriceMentions,
+  getTextPriceMentions,
+  ownerSetPrices,
+  positivePrice,
+  priceUnitSuffix,
+  showsPriceBands,
+} from "@/lib/utils/prices";
 import { PriceBands } from "./PriceBands";
+import { SuggestInfoButton } from "./TurfSuggestions";
 
-export function TurfPricing({ turf }: { turf: Turf }) {
+/** What the page can offer a player who wants the rate: a call, WhatsApp, both or neither. */
+export type TurfContact = { call: boolean; whatsapp: boolean };
+
+/** "Call or WhatsApp for slot rates", or null when the page has no number. */
+export function slotRatesHint({ call, whatsapp }: TurfContact): string | null {
+  if (call && whatsapp) return "Call or WhatsApp for slot rates";
+  if (call) return "Call for slot rates";
+  if (whatsapp) return "WhatsApp the turf for slot rates";
+  return null;
+}
+
+export function TurfPricing({ turf, claimed = false, contact }: { turf: Turf; claimed?: boolean; contact: TurfContact }) {
   // Listed prices by format and time band are the richest we have,
   // unless the owner set their own on myTapturf: theirs win.
-  const ownerSet = turf.price_owner_confirmed === true && [turf.morning_price, turf.afternoon_price, turf.evening_price, turf.weekend_morning_price, turf.weekend_afternoon_price, turf.weekend_evening_price].some((p) => p != null && p > 0);
-  if (turf.pricing_bands?.length && !ownerSet) {
+  if (showsPriceBands(turf)) {
     return (
       <div className="section-divider">
         <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
-        <PriceBands bands={turf.pricing_bands} />
+        <PriceBands bands={turf.pricing_bands ?? []} />
       </div>
     );
   }
+  const ownerSet = ownerSetPrices(turf);
   const unit = priceUnitSuffix(turf);
   // Research notes ("Rs 500 per hour (Day), Rs 600 (Night)" with a
-  // source). Shown when we have no price table of our own.
-  const mentions = getTextPriceMentions(turf).slice(0, 3);
-  const hasWeekendPricing =
-    turf.weekend_morning_price ||
-    turf.weekend_afternoon_price ||
-    turf.weekend_evening_price;
+  // source), then bare numbers from reviews: the header shows those as a
+  // "reported" range, so this section says where it came from. Shown
+  // when we have no price table of our own.
+  const mentions: PriceMention[] = [
+    ...getTextPriceMentions(turf),
+    ...getNumericPriceMentions(turf).filter((m) => !m.text?.trim()),
+  ].slice(0, 3);
 
-  const rows: {
-    slot: string;
-    emoji: string;
-    time: string;
-    weekday: number | null;
-    weekend: number | null;
-  }[] = [];
+  // Only real, positive prices make a row or a cell; a missing slot is a
+  // dash with no unit, never "N/A/hr" or ₹0.
+  const rows = [
+    { slot: "Morning", emoji: "🌅", time: "6AM – 12PM", weekday: turf.morning_price, weekend: turf.weekend_morning_price },
+    { slot: "Afternoon", emoji: "☀️", time: "12PM – 5PM", weekday: turf.afternoon_price, weekend: turf.weekend_afternoon_price },
+    { slot: "Evening", emoji: "🌙", time: "5PM – Close", weekday: turf.evening_price, weekend: turf.weekend_evening_price },
+  ]
+    .map((r) => ({ ...r, weekday: positivePrice(r.weekday), weekend: positivePrice(r.weekend) }))
+    .filter((r) => r.weekday != null || r.weekend != null);
+  // Weekend-only turfs (20 on 26 Oct) get a Weekend column alone, not a
+  // Weekday column of dashes.
+  const hasWeekday = rows.some((r) => r.weekday != null);
+  const hasWeekend = rows.some((r) => r.weekend != null);
 
-  if (turf.morning_price || turf.weekend_morning_price) {
-    rows.push({
-      slot: "Morning",
-      emoji: "🌅",
-      time: "6AM – 12PM",
-      weekday: turf.morning_price,
-      weekend: turf.weekend_morning_price,
-    });
+  if (rows.length === 0 && mentions.length === 0) {
+    return <NoPrices turfId={turf.id} claimed={claimed} contact={contact} />;
   }
-
-  if (turf.afternoon_price || turf.weekend_afternoon_price) {
-    rows.push({
-      slot: "Afternoon",
-      emoji: "☀️",
-      time: "12PM – 5PM",
-      weekday: turf.afternoon_price,
-      weekend: turf.weekend_afternoon_price,
-    });
-  }
-
-  if (turf.evening_price || turf.weekend_evening_price) {
-    rows.push({
-      slot: "Evening",
-      emoji: "🌙",
-      time: "5PM – Close",
-      weekday: turf.evening_price,
-      weekend: turf.weekend_evening_price,
-    });
-  }
-
-  if (rows.length === 0 && mentions.length === 0) return null;
 
   if (rows.length === 0) {
     return (
@@ -76,27 +76,47 @@ export function TurfPricing({ turf }: { turf: Turf }) {
             <li key={i} className="rounded-2xl border border-cream-300 bg-cream-50 px-4 py-3">
               <p className="text-[15px] leading-snug text-primary-800">
                 <span className="font-semibold text-primary-500">Reported: </span>
-                {m.text}
-              </p>
-              <p className="mt-1.5 text-[12px] text-primary-400 flex flex-wrap items-center gap-x-3">
-                {m.date && <span>{formatMentionDate(m.date)}</span>}
-                {m.source_url && (
-                  <a
-                    href={m.source_url}
-                    target="_blank"
-                    rel="noopener nofollow"
-                    className="inline-flex items-center gap-1 text-accent-600 hover:text-accent-700"
-                  >
-                    Source <ExternalLink className="w-3 h-3" />
-                  </a>
+                {m.text?.trim() ? (
+                  m.text
+                ) : (
+                  <>
+                    {formatPrice(m.price_inr)}
+                    {unit}
+                    {m.context ? `, ${m.context}` : ""}
+                  </>
                 )}
               </p>
+              {(m.date || m.source_url) && (
+                <p className="mt-1.5 text-[12px] text-primary-400 flex flex-wrap items-center gap-x-3">
+                  {m.date && <span>{formatMentionDate(m.date)}</span>}
+                  {m.source_url && (
+                    <a
+                      href={m.source_url}
+                      target="_blank"
+                      rel="noopener nofollow"
+                      className="inline-flex items-center gap-1 text-accent-600 hover:text-accent-700"
+                    >
+                      Source <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </p>
+              )}
             </li>
           ))}
         </ul>
       </div>
     );
   }
+
+  const cell = (price: number | null, tone: string) =>
+    price != null ? (
+      <>
+        <span className={`text-base font-bold font-serif ${tone}`}>{formatPrice(price)}</span>
+        <span className="text-xs text-primary-400">{unit}</span>
+      </>
+    ) : (
+      <span className="text-base font-bold text-primary-300 font-serif">–</span>
+    );
 
   return (
     <div className="section-divider">
@@ -109,10 +129,12 @@ export function TurfPricing({ turf }: { turf: Turf }) {
               <th className="text-left py-3.5 px-5 text-xs font-semibold text-primary-500">
                 Time Slot
               </th>
-              <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500">
-                Weekday
-              </th>
-              {hasWeekendPricing && (
+              {hasWeekday && (
+                <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500">
+                  Weekday
+                </th>
+              )}
+              {hasWeekend && (
                 <th className="text-right py-3.5 px-5 text-xs font-semibold text-primary-500">
                   Weekend
                 </th>
@@ -133,24 +155,53 @@ export function TurfPricing({ turf }: { turf: Turf }) {
                   </span>
                   <span className="text-xs text-primary-400 ml-2">{row.time}</span>
                 </td>
-                <td className="py-4 px-5 text-right">
-                  <span className="text-base font-bold text-primary-800 font-serif">
-                    {formatPrice(row.weekday)}
-                  </span>
-                  <span className="text-xs text-primary-400">{unit}</span>
-                </td>
-                {hasWeekendPricing && (
-                  <td className="py-4 px-5 text-right">
-                    <span className="text-base font-bold text-accent-600 font-serif">
-                      {formatPrice(row.weekend)}
-                    </span>
-                    <span className="text-xs text-primary-400">{unit}</span>
-                  </td>
-                )}
+                {hasWeekday && <td className="py-4 px-5 text-right">{cell(row.weekday, "text-primary-800")}</td>}
+                {hasWeekend && <td className="py-4 px-5 text-right">{cell(row.weekend, "text-accent-600")}</td>}
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+      {!hasWeekday && <p className="mt-2 text-[12px] text-primary-400">Only weekend rates are listed. Ask the turf for weekdays.</p>}
+    </div>
+  );
+}
+
+/**
+ * No price, band or report at all (1,608 of 3,120 active turfs on 26
+ * Oct). Says so plainly where a player looks for the rate, with the two
+ * ways it gets filled: the owner adds it on myTapturf, or a player who
+ * knows it shares it.
+ */
+function NoPrices({ turfId, claimed, contact }: { turfId: string; claimed: boolean; contact: TurfContact }) {
+  const hint = slotRatesHint(contact);
+  return (
+    <div className="section-divider">
+      <h2 className="text-[22px] font-bold text-primary-800 mb-4 font-serif">Pricing</h2>
+      <div className="rounded-2xl border border-cream-300 bg-cream-50 p-4 md:p-5">
+        <div className="flex items-start gap-3">
+          <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-soft shrink-0">
+            <IndianRupee className="w-4 h-4 text-primary-500" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[16px] font-semibold text-primary-800">Prices not listed yet</p>
+            <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">
+              {hint ? `${hint}.` : "TapTurf doesn't have this turf's rates yet."}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col sm:flex-row gap-2">
+          <Link
+            href={`/my?claim=${turfId}`}
+            prefetch={false}
+            className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors"
+          >
+            {claimed ? "Manage this turf? Add your prices" : "Own this turf? Add your prices free"}
+          </Link>
+          <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-white border border-primary-200 hover:bg-primary-50 text-primary-900 text-[14px] font-semibold transition-colors cursor-pointer">
+            Played here? Share the rate
+          </SuggestInfoButton>
+        </div>
       </div>
     </div>
   );

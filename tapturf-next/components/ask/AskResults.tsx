@@ -5,7 +5,7 @@ import { useAsk } from "./AskProvider";
 import { BlogAnswerCard } from "./BlogAnswer";
 import { ArrowRight, BadgeCheck, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
-import { imageUrlForCard } from "@/lib/utils/images";
+import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { formatDistance } from "@/lib/utils/location";
@@ -20,7 +20,7 @@ import { turfPath } from "@/lib/utils/turfPath";
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
 export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distanceKm?: number }; priority?: boolean }) {
-  const img = turf.cover_image || turf.images?.[0] || null;
+  const img = turfPhotos(turf)[0] ?? null;
   const price = summarisePrice(turf);
   const area = areaFor(turf);
   return (
@@ -64,7 +64,8 @@ export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distan
           {price.kind === "real" ? (
             <span className="font-semibold text-primary-900">{price.label}</span>
           ) : price.kind === "unknown" ? (
-            <span className="text-primary-400">Call for rates</span>
+            // Chat cards carry no phone, so no "Call for rates": many of these turfs list none.
+            <span className="text-primary-400">Prices not listed yet</span>
           ) : (
             <span className="text-primary-600">{price.label}</span>
           )}

@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, X, Camera, Maximize2 } from "lucide-react";
-import { imageUrlForCard } from "@/lib/utils/images";
+import { imageUrlForCard, orderPhotos } from "@/lib/utils/images";
+import { PhotoImg } from "@/components/ui/PhotoImg";
 
 function GalleryImage({
   src,
@@ -17,54 +18,39 @@ function GalleryImage({
   className?: string;
   priority?: boolean;
   onClick?: () => void;
-  /** Called when the photo fails to load; the gallery then drops it. */
-  onBroken?: (src: string) => void;
+  /** Called when the photo fails to load; the gallery then drops it and the next photo takes its place. */
+  onBroken: (src: string) => void;
 }) {
-  const [error, setError] = useState(false);
-
-  if (error) {
-    return (
-      <div
-        className={`bg-gray-200 flex items-center justify-center ${className}`}
-        onClick={onClick}
-      >
-        <Camera className="w-8 h-8 text-gray-400" />
-      </div>
-    );
-  }
-
   // Inline photos never render wider than ~900px, so ask for 800x600;
   // the lightbox shows the full-size original. `src` stays the stored
-  // URL so broken-photo tracking matches the images array.
+  // URL so broken-photo tracking matches the images array. No error
+  // state of its own: slots are keyed by URL, so the photo that moves
+  // into a dropped one's place mounts fresh instead of inheriting a grey
+  // "failed" box.
   return (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img
+    <PhotoImg
       src={imageUrlForCard(src)}
       alt={alt}
       className={className}
       loading={priority ? "eager" : "lazy"}
-      // @ts-expect-error fetchpriority is a valid attribute not yet in React's types
-      fetchpriority={priority ? "high" : "auto"}
+      fetchPriority={priority ? "high" : "auto"}
       decoding="async"
-      referrerPolicy="no-referrer"
       onClick={onClick}
-      onError={() => {
-        setError(true);
-        onBroken?.(src);
-      }}
+      onBroken={() => onBroken(src)}
     />
   );
 }
 
 export function TurfImageGallery({ images: allImages }: { images: string[] }) {
   // A photo that fails to load (expired / rate-limited Google link) is
-  // removed from the gallery instead of leaving a blank box.
+  // removed from the gallery instead of leaving a blank box. Our own
+  // copies come first, Google links last (see orderPhotos).
   const [broken, setBroken] = useState<string[]>([]);
   const markBroken = useCallback(
     (src: string) => setBroken((b) => (b.includes(src) ? b : [...b, src])),
     [],
   );
-  const images = useMemo(() => allImages.filter((u) => !broken.includes(u)), [allImages, broken]);
+  const images = useMemo(() => orderPhotos(allImages).filter((u) => !broken.includes(u)), [allImages, broken]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mobileIdx, setMobileIdx] = useState(0);
@@ -144,7 +130,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
         >
           {images.map((img, idx) => (
             <button
-              key={idx}
+              key={img}
               type="button"
               onClick={() => openLightbox(idx)}
               className="flex-none w-full snap-start snap-always aspect-[4/3] bg-gray-100 relative"
@@ -198,7 +184,8 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
           onClick={() => openLightbox(0)}
         >
           <GalleryImage
-                onBroken={markBroken}
+            key={images[0]}
+            onBroken={markBroken}
             src={images[0]}
             alt="Turf main photo"
             className="w-full h-full object-cover transition-transform duration-500 group-hover/gallery:scale-[1.02] min-h-[240px] md:min-h-full"
@@ -217,7 +204,8 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
             >
               {img ? (
                 <GalleryImage
-                onBroken={markBroken}
+                  key={img}
+                  onBroken={markBroken}
                   src={img}
                   alt={`Turf photo ${slot + 1}`}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover/gallery:scale-[1.02] cursor-pointer"
@@ -288,13 +276,12 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
               </button>
             )}
 
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <PhotoImg
+              key={images[safeIdx]}
               src={images[safeIdx]}
               alt={`Photo ${safeIdx + 1}`}
               className="max-w-full max-h-full object-contain select-none"
-              referrerPolicy="no-referrer"
-              onError={() => markBroken(images[safeIdx])}
+              onBroken={() => markBroken(images[safeIdx])}
               onClick={(e) => e.stopPropagation()}
               draggable={false}
             />
@@ -319,7 +306,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
             >
               {images.map((img, i) => (
                 <button
-                  key={i}
+                  key={img}
                   data-thumb-idx={i}
                   type="button"
                   onClick={() => setCurrentIndex(i)}
@@ -331,14 +318,12 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
                   aria-label={`Go to photo ${i + 1}`}
                   aria-current={i === currentIndex}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <PhotoImg
                     src={imageUrlForCard(img)}
                     alt=""
                     className="w-full h-full object-cover"
                     loading="lazy"
-                    referrerPolicy="no-referrer"
-                    onError={() => markBroken(img)}
+                    onBroken={() => markBroken(img)}
                   />
                 </button>
               ))}

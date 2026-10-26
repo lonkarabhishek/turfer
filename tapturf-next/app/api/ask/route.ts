@@ -347,6 +347,8 @@ export async function GET(req: Request) {
       case "find_game": {
         const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10 });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, games: r.games };
+        // The budget was dropped to find any game: no "Under ₹X" chip over games that cost more.
+        if (r.relaxed.includes("price")) body.filters = { ...base.filters, maxPrice: null };
         // No open game yet: show turfs for the same sport and place, so
         // the player can book one and host the game instead of hitting a wall.
         if (r.games.length === 0) {
@@ -406,6 +408,14 @@ export async function GET(req: Request) {
       default: {
         const r = applyAskFilters(turfs, filters, { prefCity, loc, limit: 12 });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, turfs: r.turfs.map(card) };
+        // Nothing listed a rate within the budget (most turfs list none:
+        // Gota had 3 box cricket turfs on 26 Oct, none priced), so the
+        // budget was dropped. Say so, instead of an "Under ₹1,000/hr" chip
+        // and a "cheapest first" reply over cards with no price.
+        if (r.relaxed.includes("price") && filters.max_price_per_hour != null) {
+          body.filters = { ...base.filters, maxPrice: null };
+          if (r.total > 0) body.reply = `None of the matching turfs list a rate under ₹${filters.max_price_per_hour.toLocaleString("en-IN")} an hour yet, so here are the closest. Check the rate with the turf.`;
+        }
       }
     }
   } catch (e) {

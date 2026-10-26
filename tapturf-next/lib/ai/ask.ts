@@ -69,7 +69,7 @@ export function isAskConfigured(): boolean {
 }
 
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
-export const ROUTER_VERSION = 3;
+export const ROUTER_VERSION = 4;
 
 /** Stable system prompt (cacheable): cities, sports, and the areas we know. */
 function systemPrompt(areasByCity: Record<string, string[]>): string {
@@ -106,7 +106,7 @@ Page context: the message may say what the player is looking at right now (a ven
 Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football"), keep the earlier intent and filters and change only what the player changed. A new topic resets them. Each earlier turn lists "top": the venues that were shown, in order. "The top two", "the first one", "the second", "compare those", "that one" refer to those names: copy the exact names into turf_names (two for compare, one for question).
 
 Cities: ${cities}. "Nasik" is nashik. "Bombay", Thane, Navi Mumbai, Panvel are mumbai. Secunderabad is hyderabad.
-Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice" mean cricket; "futsal", "5-a-side", "7-a-side" mean football.
+Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice nets", "net practice", "bowling machine" mean cricket-nets; "cricket ground" means cricket; "futsal", "5-a-side", "7-a-side" mean football.
 
 Known areas by city:
 ${areas}

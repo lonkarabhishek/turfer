@@ -79,12 +79,17 @@ export function sportCityFaq(sport: SportPage, city: CityId, s: SportCityStats) 
         : "."),
   });
 
+  // Too few priced for a range: "most share rates on request" holds only
+  // when most do (Vijayawada pickleball had 4 of 4 priced on 26 Oct).
+  const mostPriced = s.priced * 2 > s.count;
   faq.push({
     q: `How much does a ${lower} ${one} cost in ${cityLabel}?`,
     a:
       s.priceMin != null && s.priceMax != null
         ? `${s.priced} of these ${many} list hourly rates on TapTurf, from ${inr(s.priceMin)} to ${inr(s.priceMax)} per hour. Rates usually change by time slot and on weekends, so confirm the price when you call or WhatsApp the venue.`
-        : `Most ${cityLabel} ${many} share rates on request. Open one on TapTurf and call or WhatsApp the venue for current slot prices.`,
+        : mostPriced
+          ? `${s.priced === s.count ? "All" : s.priced} of these ${s.count} ${many} list hourly rates on TapTurf. Open one to see its rates by time slot, and confirm the price when you call or WhatsApp the venue.`
+          : `Most ${cityLabel} ${many} share rates on request. Open one on TapTurf and call or WhatsApp the venue for current slot prices.`,
   });
 
   if (s.topRated.length > 0) {

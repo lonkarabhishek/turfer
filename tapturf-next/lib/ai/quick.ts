@@ -58,8 +58,12 @@ const add = (e: Entry, ...phrases: string[]) => phrases.forEach((p) => VOCAB.set
 
 add({ k: "sport", slug: "box-cricket" }, "box cricket", "boxcricket", "turf cricket", "cricket turf", "cricket turfs", "cage cricket");
 add({ k: "sport", slug: "football" }, "football", "futsal", "soccer", "5 a side", "five a side", "7 a side", "seven a side");
-// "Nets" and "practice" mean cricket; plain "cricket" could be either, so it goes to Claude.
-add({ k: "sport", slug: "cricket" }, "cricket nets", "cricket net", "nets", "practice nets", "net practice", "cricket practice", "cricket ground", "cricket grounds");
+// "Nets" and "practice" mean the practice nets (Cricket Nets, Indoor
+// Cricket Net, Bowling Machine), not every cricket ground: the cricket
+// slug also matches full grounds with no nets (Mumbai: 30 vs 8). Plain
+// "cricket" could be either, so it goes to Claude.
+add({ k: "sport", slug: "cricket-nets" }, "cricket nets", "cricket net", "nets", "practice nets", "net practice", "cricket practice", "bowling machine");
+add({ k: "sport", slug: "cricket" }, "cricket ground", "cricket grounds");
 add({ k: "sport", slug: "badminton" }, "badminton");
 add({ k: "sport", slug: "pickleball" }, "pickleball", "pickle ball");
 add({ k: "sport", slug: "volleyball" }, "volleyball");

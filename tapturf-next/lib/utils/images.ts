@@ -31,6 +31,50 @@ export function upsizeGoogleUserContent(url: string, width = 1600, height = 1200
 /** Our copy of a turf photo (see supabase/functions/mirror-turf-photos): <hash>.webp plus a 640px <hash>-card.webp. */
 const MIRRORED = /\/storage\/v1\/object\/public\/turf-photos\/[^?#]+\/[0-9a-f]{24}\.(jpg|webp)$/i;
 
+/** A photo in our own turf-photos bucket (mirrored or uploaded by an owner). */
+export function isOwnPhoto(url: string): boolean {
+  return /\/storage\/v1\/object\/public\/turf-photos\//i.test(url);
+}
+
+/**
+ * Photos in display order: our own copies first, then other hosts, then
+ * Google user-content links last. Google photo links expire (33 Pune
+ * covers imported in Aug and Sep answered 403 on 26 Oct), so a turf that
+ * has copies in our storage shows those first instead of a dead cover.
+ * Stable within each group, so the stored order still decides ties.
+ * Drops empty entries and duplicates.
+ */
+export function orderPhotos(urls: readonly (string | null | undefined)[]): string[] {
+  const rank = (u: string) => (isOwnPhoto(u) ? 0 : GOOGLE_USER_CONTENT.test(u) ? 2 : 1);
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const u of urls) {
+    if (typeof u !== "string" || !u.trim() || seen.has(u)) continue;
+    seen.add(u);
+    list.push(u);
+  }
+  return list
+    .map((u, i) => ({ u, i, r: rank(u) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.u);
+}
+
+/** Still a tiny thumb after normalisation (a non-Google URL ending "=w32-h32-..."). */
+function isTinyThumb(u: string): boolean {
+  return /=w(?:\d{1,2}|1\d{2})-h(?:\d{1,2}|1\d{2})\b/.test(u);
+}
+
+/**
+ * A turf's photos for cards, tiles and share images: the cover (unless
+ * it is a tiny thumb), then the rest, in orderPhotos() order. The first
+ * entry is the best cover we have; callers that show one photo try the
+ * next when it fails to load.
+ */
+export function turfPhotos(turf: { cover_image?: string | null; images?: readonly string[] | null }): string[] {
+  const cover = turf.cover_image && !isTinyThumb(turf.cover_image) ? turf.cover_image : null;
+  return orderPhotos([cover, ...(turf.images ?? [])]);
+}
+
 /**
  * Smaller copy of a stored photo for cards and inline strips. Stored
  * URLs are normalised to 1600x1200 (Google) / w2000 (Drive), which is
