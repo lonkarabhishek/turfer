@@ -9,6 +9,7 @@ import { SPORT_PAGES, citySportHref, sportBySlug, sportVenues, venueWord, type S
 import { CITY_IDS, isCity, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
+import { plural } from "@/lib/home/format";
 
 export const revalidate = 3600;
 
@@ -34,8 +35,9 @@ function citiesFor(turfs: Turf[], sport: SportPage): { id: string; label: string
 }
 
 /**
- * Where the sport is played, for the title ("across 54 Cities"), the H1
- * ("in 54 cities across India") and the list heading ("in 54 cities").
+ * Where the sport is played, for the title ("across N Cities"), the H1
+ * ("in N cities across India") and the list heading ("in N cities"),
+ * N counted live from the turfs themselves.
  * Three cities or fewer are named instead of counted, so a sport in two
  * cities never claims a number it does not have.
  */
@@ -72,7 +74,7 @@ export async function generateMetadata({
   const place = placeFor(cities);
   return {
     // Layout's title template appends "| TapTurf".
-    // "Football Turfs across 54 Cities: Compare & Book" stays under 60 with the suffix.
+    // "Football Turfs across 88 Cities: Compare & Book" stays under 60 with the suffix.
     title: `${sportVenues(info, { title: true })} ${place.title}: Compare & Book`,
     description: `${info.blurb} Compare ${lower} ${venueWord(info)} ${place.prose} by price, rating and photos. Call or WhatsApp to book.`,
     keywords: [`${lower} ${word}`, `${lower} ${word} near me`, `book ${lower} ${word}`, ...cities.flatMap((c) => [
@@ -131,7 +133,7 @@ export default async function SportPage({
             <p className="text-[15px] text-primary-500 mt-1">
               {turfs.length} {info.name.toLowerCase()} {venueWord(info, turfs.length)}
               {perCity.length > 0 && (
-                <> · {perCity.slice(0, 8).map((c) => `${c.count} in ${c.label}`).join(", ")}{perCity.length > 8 ? ` and ${perCity.length - 8} more cities` : ""}</>
+                <> · {perCity.slice(0, 8).map((c) => `${c.count} in ${c.label}`).join(", ")}{perCity.length > 8 ? ` and ${plural(perCity.length - 8, "more city", "more cities")}` : ""}</>
               )}
             </p>
           </div>

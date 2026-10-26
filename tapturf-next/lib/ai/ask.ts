@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { CITIES, CITY_IDS, type CityId } from "@/lib/city";
+import { CITIES, CITY_ALIASES, CITY_IDS, cityInText, cityInfo, type CityId } from "@/lib/city";
 import { SPORT_PAGES, turfPlaysSport, sportBySlug } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
 import { getMinimumPrice } from "@/lib/utils/prices";
@@ -69,11 +69,20 @@ export function isAskConfigured(): boolean {
 }
 
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
-export const ROUTER_VERSION = 3;
+export const ROUTER_VERSION = 4;
 
-/** Stable system prompt (cacheable): cities, sports, and the areas we know. */
+/**
+ * Stable system prompt (cacheable): cities, sports, and the areas we
+ * know. Cities and their other names come from the curated lib/city.ts
+ * (every live city since 26 Oct), never the live list: it changes only
+ * on a deploy, with no counts and no order that moves, so the cached
+ * prefix holds. The city enum in AskFilters is built the same way.
+ */
 function systemPrompt(areasByCity: Record<string, string[]>): string {
   const cities = CITIES.map((c) => `${c.id} (${c.label})`).join(", ");
+  const otherNames = Object.entries(CITY_ALIASES)
+    .map(([alias, id]) => `"${alias}" is ${id}`)
+    .join(", ");
   const sports = SPORT_PAGES.map((s) => `${s.slug} = ${s.labels.join("/")}`).join("; ");
   const areas = Object.entries(areasByCity)
     .map(([city, list]) => `${city}: ${list.join(", ")}`)
@@ -105,7 +114,7 @@ Page context: the message may say what the player is looking at right now (a ven
 
 Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football"), keep the earlier intent and filters and change only what the player changed. A new topic resets them. Each earlier turn lists "top": the venues that were shown, in order. "The top two", "the first one", "the second", "compare those", "that one" refer to those names: copy the exact names into turf_names (two for compare, one for question).
 
-Cities: ${cities}. "Nasik" is nashik. "Bombay", Thane, Navi Mumbai, Panvel are mumbai. Secunderabad is hyderabad.
+Cities: ${cities}. Other names: ${otherNames}. Panvel is mumbai.
 Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice" mean cricket; "futsal", "5-a-side", "7-a-side" mean football.
 
 Known areas by city:
@@ -298,7 +307,9 @@ export async function parseAsk(
 /** Plain keyword fallback when the API is unavailable. */
 export function keywordFilters(query: string): AskFilters {
   const q = query.toLowerCase();
-  const city = CITIES.find((c) => q.includes(c.id)) ?? null;
+  // Labels, ids and other names on word boundaries ("goal" is not Goa).
+  const cityId = cityInText(query);
+  const city = cityId ? cityInfo(cityId) : null;
   const sportPage = SPORT_PAGES.find((s) => s.labels.some((l) => q.includes(l.toLowerCase()))) ?? null;
   const sport = sportPage?.slug ?? null;
   const game = /\b(game|games|match|matches|squad|anyone playing)\b/.test(q);

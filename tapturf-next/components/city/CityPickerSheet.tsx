@@ -3,14 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, LocateFixed, Navigation, Search, X, Loader2 } from "lucide-react";
-import { CITIES, isKnownCity, labelFor, locateCity, matchCities, setCityPref, type CitySource } from "@/lib/city";
+import {
+  CITIES,
+  isCitySlug,
+  labelFor,
+  locateCity,
+  matchCities,
+  setCityPref,
+  type CityCount,
+  type CitySource,
+} from "@/lib/city";
+import { plural } from "@/lib/home/format";
 import { useCityChoice } from "./useCityChoice";
+import { cachedLiveCities, loadLiveCities, toRows, type LiveRow as Row } from "./liveCityList";
 
-type Row = { id: string; label: string; state?: string; n: number };
-
-// Live cities from /api/cities, kept for the life of the tab.
-let cache: Row[] | null = null;
-
+/** No live list at all (both reads failed): the curated cities, with no counts and no total. */
 function fallbackRows(): Row[] {
   return CITIES.map((c) => ({ id: c.id, label: c.label, state: c.state, n: 0 }));
 }
@@ -25,12 +32,24 @@ const PILL =
  * again". Every answer is one city: there is no "all of India" choice.
  * A modal sheet: focus is trapped, Esc closes without choosing, focus
  * goes back to whatever opened it.
+ *
+ * Every city with active turfs, with its count. The numbers (the total
+ * in the search box, "TapTurf is in N cities", each city's count) come
+ * only from the hourly list (/api/cities, the same read as the pick
+ * screen, /turfs and the home hero; liveCityList.ts), so they never
+ * disagree with the page underneath. `initial` is the footer's daily
+ * copy (CityPicker): it gives the first open every city's row, uncurated
+ * ones too, while the hourly list loads (the openers prefetch it), but
+ * none of its counts. Without either, the curated cities. No list, no
+ * numbers.
  */
-export function CityPickerSheet() {
+export function CityPickerSheet({ initial }: { initial: CityCount[] | null }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"list" | "search">("list");
   const [q, setQ] = useState("");
-  const [rows, setRows] = useState<Row[]>(() => cache ?? fallbackRows());
+  const [rows, setRows] = useState<Row[] | null>(() => cachedLiveCities() ?? (initial?.length ? toRows(initial) : null));
+  // True once rows are the hourly list: only then are counts and the total shown.
+  const [fresh, setFresh] = useState(() => cachedLiveCities() !== null);
   const [locating, setLocating] = useState(false);
   const [status, setStatus] = useState("");
   const [far, setFar] = useState<{ id: string; km: number } | null>(null);
@@ -61,24 +80,19 @@ export function CityPickerSheet() {
     if (el && document.contains(el)) el.focus();
   }, []);
 
-  // Live list once per tab.
+  // The hourly list once per tab (usually prefetched by the opener).
   useEffect(() => {
-    if (!open || cache) return;
+    if (!open || fresh) return;
     let alive = true;
-    fetch("/api/cities")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: Row[] | null) => {
-        if (!Array.isArray(d)) return;
-        const live = d.filter((c) => isKnownCity(c.id));
-        if (!live.length) return;
-        cache = live;
-        if (alive) setRows(live);
-      })
-      .catch(() => {});
+    void loadLiveCities().then((live) => {
+      if (!alive || !live) return;
+      setRows(live);
+      setFresh(true);
+    });
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, fresh]);
 
   // Scroll lock, focus, Esc and a Tab trap while open.
   useEffect(() => {
@@ -115,6 +129,11 @@ export function CityPickerSheet() {
   }, [open, mode, close]);
 
   const pick = (id: string, source: CitySource) => {
+    // Every row is a city slug already; this only guards a bad answer.
+    if (!isCitySlug(id)) {
+      setStatus("Couldn't pick that city. Pick another below.");
+      return;
+    }
     setCityPref(id, { source });
     close();
   };
@@ -141,7 +160,7 @@ export function CityPickerSheet() {
     try {
       const r = await fetch("/api/geo", { cache: "no-store" });
       const { city } = (await r.json()) as { city?: string | null };
-      if (isKnownCity(city)) pick(city, "reset");
+      if (isCitySlug(city)) pick(city, "reset");
       else setStatus("We couldn't tell your city from your connection. Pick one above.");
     } catch {
       setStatus("Couldn't check right now. Pick your city above.");
@@ -152,11 +171,17 @@ export function CityPickerSheet() {
 
   if (!open || typeof document === "undefined") return null;
 
+  const list = rows ?? fallbackRows();
+  // A total only from the hourly list: the footer's daily copy can be a day behind
+  // the page underneath, and the curated fallback is not "the cities TapTurf is in".
+  const total = fresh && rows ? rows.length : null;
+  const shown = (n: number) => (fresh && n > 0 ? n : 0);
   const searching = q.trim().length > 0;
-  const results = searching ? matchCities(q, rows) : [];
-  const popular = [...rows].sort((a, b) => b.n - a.n).slice(0, 8);
-  const az = [...rows].sort((a, b) => a.label.localeCompare(b.label));
-  const count = (n: number) => (n > 0 ? <span className="font-normal text-primary-500 tabular-nums">{n.toLocaleString("en-IN")}</span> : null);
+  const results = searching ? matchCities(q, list) : [];
+  const popular = [...list].sort((a, b) => b.n - a.n).slice(0, 8);
+  const az = [...list].sort((a, b) => a.label.localeCompare(b.label));
+  const count = (n: number) =>
+    shown(n) > 0 ? <span className="font-normal text-primary-500 tabular-nums">{n.toLocaleString("en-IN")}</span> : null;
 
   const cityRow = (c: Row) => (
     <li key={c.id}>
@@ -168,7 +193,7 @@ export function CityPickerSheet() {
       >
         <span className="text-[15px] font-semibold text-primary-900">{c.label}</span>
         <span className="flex items-center gap-2 text-[13px] text-primary-500 tabular-nums">
-          {c.n > 0 && c.n.toLocaleString("en-IN")}
+          {shown(c.n) > 0 && c.n.toLocaleString("en-IN")}
           {current === c.id && <Check className="w-4 h-4 text-accent-600" strokeWidth={2.5} />}
         </span>
       </button>
@@ -202,7 +227,7 @@ export function CityPickerSheet() {
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={`Search ${rows.length} cities`}
+              placeholder={total ? `Search ${plural(total, "city", "cities")}` : "Search cities"}
               autoComplete="off"
               className="w-full h-11 pl-10 pr-4 rounded-full bg-primary-50 border border-primary-200 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
             />
@@ -234,7 +259,7 @@ export function CityPickerSheet() {
               </ul>
             ) : (
               <p className="px-2 py-4 text-[14px] text-primary-600">
-                No city called &quot;{q.trim()}&quot; yet. TapTurf is in {rows.length} cities.
+                No city called &quot;{q.trim()}&quot; yet.{total ? ` TapTurf is in ${plural(total, "city", "cities")}.` : ""}
               </p>
             )
           ) : (

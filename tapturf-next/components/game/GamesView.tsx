@@ -1,7 +1,7 @@
 import { getOpenGamesCached } from "@/lib/queries/games.server";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { getLiveCities } from "@/lib/queries/cities";
-import { guessCityFromAddress, isKnownCity, resolveCityScope } from "@/lib/city";
+import { guessCityFromAddress, resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
 import { gamesJsonLd } from "@/lib/seo/pageMetadata";
 import { GamesListingClient } from "./GamesListingClient";
@@ -20,8 +20,7 @@ function cityOf(g: Game): string | null {
  * Never reads cookies, headers or the query string.
  */
 export async function GamesView({ requested }: { requested: string | null }) {
-  const [{ games, at }, liveAll] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
-  const live = liveAll.filter((c) => isKnownCity(c.id));
+  const [{ games, at }, live] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
   const scope = resolveCityScope(requested, live);
   const id = scope.kind === "city" ? scope.id : null;
   const mine = id ? games.filter((g) => cityOf(g) === id) : games;

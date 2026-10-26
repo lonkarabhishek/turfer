@@ -6,7 +6,6 @@ import { getLiveCities } from "@/lib/queries/cities";
 
 // The home for one city (proxy rewrite of /). Same window as app/page.tsx.
 export const revalidate = 600;
-export const dynamicParams = false;
 
 export async function generateMetadata(): Promise<Metadata> {
   const [home, live] = await Promise.all([getHomeData(), getLiveCities()]);

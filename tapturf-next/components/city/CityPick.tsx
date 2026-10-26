@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowRight, ChevronDown, Loader2, MapPin, Navigation } from "lucide-react";
-import { CITIES, labelFor, locateCity, setCityPref, type CitySource } from "@/lib/city";
+import { isCitySlug, labelFor, locateCity, setCityPref, type CityCount, type CitySource } from "@/lib/city";
 import { trackCity } from "@/lib/analytics/city";
 
 export type PickPage = "/" | "/turfs" | "/games";
@@ -16,16 +16,21 @@ const SUB: Record<PickPage, string> = {
 const CHIP =
   "h-11 px-4 inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white text-[15px] font-semibold text-primary-900 hover:border-primary-900 focus-neon disabled:opacity-60";
 
+/** Chips shown before "More cities". */
+const TOP = 12;
+
 /**
  * The city-first screen: what every human whose city is not confirmed
  * gets on /, /turfs and /games (proxy.ts rewrites them to app/c/pick).
  * The IP-detected city, if any, is the one big answer; "Use my location"
  * and the city chips are the others. There is no "all of India" choice.
  *
- * Tiny on purpose: no turf data, no fetch. `top` is the chips shown
- * first, biggest first (pickTop in app/c/pick/meta.ts: the live order the
- * footer and the picker use, so all three agree); every other city of
- * the static CITIES sits A to Z under "More cities". Every city is a submit button of a native form
+ * Tiny on purpose: no turf data, no fetch. `cities` is every city with
+ * active turfs and its count, biggest first (pickCities in
+ * app/c/pick/meta.ts: the hourly live list /api/cities serves the picker);
+ * the biggest twelve are the first chips, the rest sit A to Z under
+ * "More cities", so a city added to the database shows up here without a
+ * code change. Every city is a submit button of a native form
  * post to /api/city, so a tap before hydration still works (303 back to
  * this URL with the cookie set). After hydration a tap stores the pick
  * with setCityPref, the same as the picker, and CitySync answers the
@@ -33,7 +38,7 @@ const CHIP =
  * as the city's page (no stale pick screen left in the client router).
  * The section's id is how CitySync knows this screen is on show.
  */
-export function CityPick({ detected, page, top: topIds }: { detected: string | null; page: PickPage; top: string[] }) {
+export function CityPick({ detected, page, cities }: { detected: string | null; page: PickPage; cities: CityCount[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [status, setStatus] = useState("");
@@ -44,6 +49,12 @@ export function CityPick({ detected, page, top: topIds }: { detected: string | n
   }, [page, detected]);
 
   const choose = (id: string, source: CitySource) => {
+    // Every chip is a city slug already; this only guards a bad answer,
+    // which would otherwise leave the spinner up with nothing to open.
+    if (!isCitySlug(id)) {
+      setStatus("Couldn't open that city. Pick another below.");
+      return;
+    }
     setBusy(id);
     setStatus(`Opening ${labelFor(id)}…`);
     setCityPref(id, { source });
@@ -72,14 +83,17 @@ export function CityPick({ detected, page, top: topIds }: { detected: string | n
     else setStatus("Couldn't get your location. Pick your city below.");
   };
 
-  const top = topIds.flatMap((id) => CITIES.filter((c) => c.id === id && c.id !== detected));
-  const rest = CITIES.filter((c) => c.id !== detected && !topIds.includes(c.id)).sort((a, b) => a.label.localeCompare(b.label));
+  // Never the detected city: it is the big button.
+  const others = cities.filter((c) => c.id !== detected).map((c) => ({ ...c, label: labelFor(c.id) }));
+  const top = others.slice(0, TOP);
+  const rest = others.slice(TOP).sort((a, b) => a.label.localeCompare(b.label));
   const spin = (id: string) => (busy === id ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : null);
-  const chip = (c: { id: string; label: string }) => (
+  const chip = (c: { id: string; label: string; n: number }) => (
     <li key={c.id}>
       <button name="choice" value={c.id} disabled={busy !== null} className={CHIP}>
         {spin(c.id)}
         {c.label}
+        {c.n > 0 && <span className="font-normal text-primary-500 tabular-nums">{c.n.toLocaleString("en-IN")}</span>}
       </button>
     </li>
   );

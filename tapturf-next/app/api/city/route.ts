@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { CITY_COOKIE, CITY_COOKIE_MAX_AGE, isKnownCity, serializeCityChoice } from "@/lib/city";
+import { CITY_COOKIE, CITY_COOKIE_MAX_AGE, isCitySlug, isKnownCity, serializeCityChoice } from "@/lib/city";
 import { detectCityFromHeaders } from "@/lib/cityRouting";
+import { isLiveCity } from "@/lib/queries/cities";
 
 /**
  * POST /api/city: store the visitor's city choice in the tt_city cookie.
@@ -14,11 +15,16 @@ import { detectCityFromHeaders } from "@/lib/cityRouting";
  *   re-issues the cookie so Safari's 7-day cap on script-written
  *   cookies does not drop it. Answered with { value }.
  *
- * choice is a curated city id (a confirmed pick), or "reset" (detect
+ * choice is a confirmed pick: a curated city id, or any other city slug
+ * with active turfs (the hourly cached live list, so a city the data
+ * team added since the last deploy can be chosen), or "reset" (detect
  * again from the IP headers, giving geo.<id> or unknown; only tabs on an
- * old bundle still send it). "all" is retired and never written: a form
- * post with it goes back to next unchanged (the pick screen asks again),
- * JSON gets a 400. Same-origin only.
+ * old bundle still send it). Anything else, and the retired "all", is
+ * never written: a form post goes back to next unchanged (the page asks
+ * again), JSON gets a 400, which CitySync answers by forgetting a cookie
+ * that holds it. If the live list cannot be read, an uncurated city gets
+ * a 503 (JSON) or goes back unchanged (form): never a 400 for a city that
+ * may well be live. Same-origin only.
  */
 export const dynamic = "force-dynamic";
 
@@ -68,16 +74,29 @@ export async function POST(req: Request) {
     choice = null;
   }
 
+  // Nothing stored: a form goes back where it came from (a cached page
+  // from before 20 Oct may still post "Show all of India"), JSON gets status.
+  const unchanged = (status: number) =>
+    isForm
+      ? new NextResponse(null, { status: 303, headers: { Location: safeNext(next), ...NO_STORE } })
+      : NextResponse.json({ ok: false }, { status, headers: NO_STORE });
+
   let value: string;
   if (isKnownCity(choice)) value = choice;
-  else if (choice === "all" && isForm) {
-    // A cached page from before 20 Oct may still post "Show all of India".
-    return new NextResponse(null, { status: 303, headers: { Location: safeNext(next), ...NO_STORE } });
-  } else if (choice === "reset") {
+  else if (choice === "reset") {
     const city = detectCityFromHeaders((n) => req.headers.get(n));
     value = serializeCityChoice(city ? { kind: "city", city, src: "geo" } : { kind: "unknown" });
+  } else if (isCitySlug(choice)) {
+    let live: boolean;
+    try {
+      live = await isLiveCity(choice);
+    } catch {
+      return unchanged(503);
+    }
+    if (!live) return unchanged(400);
+    value = choice;
   } else {
-    return NextResponse.json({ ok: false }, { status: 400, headers: NO_STORE });
+    return unchanged(400);
   }
 
   const res = isForm

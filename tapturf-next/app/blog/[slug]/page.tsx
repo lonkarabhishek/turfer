@@ -16,6 +16,7 @@ import { TableOfContents } from "@/components/blog/TableOfContents";
 import { ShareBar } from "@/components/blog/ShareBar";
 import { StickyMobileCTA } from "@/components/blog/StickyMobileCTA";
 import { AskPageContext } from "@/components/ask/AskPageContext";
+import { labelFor } from "@/lib/city";
 
 export const revalidate = 3600;
 export const dynamicParams = false;
@@ -23,12 +24,6 @@ export const dynamicParams = false;
 export function generateStaticParams() {
   return getAllSlugs().map((slug) => ({ slug }));
 }
-
-const CITY_LABEL: Record<string, string> = {
-  nashik: "Nashik",
-  pune: "Pune",
-  mumbai: "Mumbai",
-};
 
 export async function generateMetadata({
   params,
@@ -191,7 +186,7 @@ export default async function BlogPostPage({
           {post.city && (
             <>
               <span className="text-primary-300">·</span>
-              <span className="text-primary-500">{CITY_LABEL[post.city] || post.city}</span>
+              <span className="text-primary-500">{labelFor(post.city)}</span>
             </>
           )}
           <span className="text-primary-300">·</span>

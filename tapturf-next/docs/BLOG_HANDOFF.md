@@ -117,7 +117,7 @@ All block types (`p`, `h2`, `h3`, `ul`, `ol`, `quote`, `callout`, `cta`, `stat-g
 3. **Health content is YMYL (Your Money or Your Life).** Google holds it to a higher bar.
    - No medical, injury-treatment or supplement-dosage advice beyond plain, widely accepted guidance. Prefer guidance from WHO, ICMR, NHS or a sports body.
    - End every training post with a line like: "This is general information, not medical advice. Check with a doctor or a qualified coach before starting a new programme, especially after an injury."
-4. **TapTurf does not list gyms.** It lists turfs, courts and pickup games in 54 Indian cities. Do not say or imply that people can find, book or compare gyms on TapTurf. Do not link to `/sport/gym`, because that page does not exist.
+4. **TapTurf does not list gyms.** It lists turfs, courts and pickup games in every Indian city it covers (88 on 26 Oct 2026; check the live count on the site rather than quoting a fixed number). Do not say or imply that people can find, book or compare gyms on TapTurf. Do not link to `/sport/gym`, because that page does not exist.
 5. **No em dashes (—) anywhere** in titles, copy or alt text. Use commas, colons or full stops. Write in Indian English (programme, metre, ₹, lakh).
 6. **No hype or filler.** Avoid "ultimate", "game-changer", "unlock" and emoji in the body. Write plainly, the way a good coach talks.
 

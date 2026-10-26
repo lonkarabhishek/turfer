@@ -4,10 +4,11 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { getLiveCities } from "@/lib/queries/cities";
 import { forCard } from "@/lib/utils/cardTurf";
-import { byDistanceFrom, isKnownCity, resolveCityScope } from "@/lib/city";
+import { byDistanceFrom, resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
 import { CityLine } from "@/components/city/CityLine";
 import { TurfListingClient } from "./TurfListingClient";
+import { plural } from "@/lib/home/format";
 
 const PILL =
   "h-11 px-4 inline-flex items-center gap-1.5 rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] font-medium text-primary-900 press-tight focus-neon";
@@ -17,10 +18,11 @@ const PILL =
  * URL the proxy rewrote to (app/c/[city]/turfs), or null for the public
  * all-India page (crawlers and ?q= searches). A city page ships only that city's cards (one small
  * per-city query) and lists the other cities, nearest first, at the
- * bottom. Never reads cookies, headers or the query string.
+ * bottom. Every live city counts and gets a link, curated or not.
+ * Never reads cookies, headers or the query string.
  */
 export async function TurfsView({ requested }: { requested: string | null }) {
-  const live = (await getLiveCities()).filter((c) => isKnownCity(c.id));
+  const live = await getLiveCities();
   const scope = resolveCityScope(requested, live);
   const cityId = scope.kind === "city" ? scope.id : null;
   const [turfs, picks] = await Promise.all([getAllActiveTurfs(cityId), getTrendingPicks()]);
@@ -28,7 +30,7 @@ export async function TurfsView({ requested }: { requested: string | null }) {
   const pick = cityId ? picks[cityId] : undefined;
   const spotlight = cityId ? (toSpotlights(pick ? { [cityId]: pick } : {}, turfs)[0] ?? null) : null;
   const trendingIds = cityId ? (pick ? [pick.turfId] : []) : Object.values(picks).map((p) => p!.turfId);
-  const n = turfs.length.toLocaleString("en-IN");
+  const n = turfs.length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
@@ -43,12 +45,13 @@ export async function TurfsView({ requested }: { requested: string | null }) {
       <p className="mt-1 mb-6 text-[15px] text-primary-600">
         {scope.kind === "city" ? (
           <>
-            <span className="tabular-nums">{n}</span> sports turfs in {scope.label} with prices, ratings and directions.
+            <span className="tabular-nums">{n.toLocaleString("en-IN")}</span> {n === 1 ? "sports turf" : "sports turfs"} in {scope.label} with prices, ratings and
+            directions.
           </>
         ) : (
           <>
-            <span className="tabular-nums">{n}</span> sports turfs across {live.length.toLocaleString("en-IN")} cities with prices, ratings and
-            directions.
+            <span className="tabular-nums">{n.toLocaleString("en-IN")}</span> {n === 1 ? "sports turf" : "sports turfs"} across{" "}
+            {plural(live.length, "city", "cities")} with prices, ratings and directions.
           </>
         )}
       </p>

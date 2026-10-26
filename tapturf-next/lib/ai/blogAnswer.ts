@@ -7,7 +7,7 @@ import type { LookupFunction } from "node:net";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Post } from "@/content/blog";
 import { accountKey } from "@/lib/account/server";
-import { CITIES } from "@/lib/city";
+import { cityInfo, isCity } from "@/lib/city";
 import { isHinglish, outlineOf } from "@/lib/ask/blog";
 import { backingSections, buildVisual, cleanFollowups, flatBars, livelierBars, pickSections, pickSources, pickTurfs, readArticle, turfsNamed, type Article } from "@/lib/ask/blogArticle";
 import { BlogReply } from "@/lib/ask/blogReply";
@@ -286,7 +286,8 @@ const historyKey = (history: BlogAsk["history"]) => (history.length ? digest(JSO
  * to stand on.
  */
 async function webAnswer(post: Post, question: string, before: string, usage: AskUsage, timeout: number): Promise<WebAnswer | null> {
-  const city = CITIES.find((c) => c.id === post.city);
+  // Any city slug, curated or not (cityInfo title-cases a new one).
+  const city = isCity(post.city) ? cityInfo(post.city) : null;
   try {
     const res = await getAnthropic().messages.create(
       {

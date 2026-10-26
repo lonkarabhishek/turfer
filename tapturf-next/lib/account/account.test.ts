@@ -6,7 +6,7 @@ import { createIdentityChecker, googleIdentity, peekToken, phoneIdentity, type I
 import { usernameCandidates, usernameProblem } from "./usernames";
 import { createAccountLimiter, toProfile } from "./server";
 import { isTag, readTag, sameTag } from "./tag";
-import { CITY_SRC_HEADER, cityNote } from "./city";
+import { CITY_SRC_HEADER, cityNote, uncuratedPick } from "./city";
 import { cleanEmail, emailProblem, emailTypo } from "./emails";
 
 /* ------------------------------------------------------------------ */
@@ -316,6 +316,14 @@ test("the city recorded for a sign-in: a pick, then the internet, then nothing",
   assert.deepEqual(cityNote(req({ cookie: "tt_city=geo.nashik" })), { city: "nashik", source: "ip", ipCity: null });
   assert.deepEqual(cityNote(req({ cookie: "tt_city=unknown" })), { city: null, source: "unknown", ipCity: null });
   assert.deepEqual(cityNote(req({ cookie: "tt_city=atlantis" })), { city: null, source: "unknown", ipCity: null }, "not a curated city");
+  // An uncurated pick counts only when the route found it in the live list.
+  assert.equal(uncuratedPick(req({ cookie: "tt_city=atlantis" })), "atlantis");
+  assert.equal(uncuratedPick(req({ cookie: "tt_city=pune" })), null, "curated: no live check needed");
+  assert.equal(uncuratedPick(req({ cookie: "tt_city=geo.nashik" })), null, "a guess is not a pick");
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=testpur" }), (c) => c === "testpur"), { city: "testpur", source: "picked", ipCity: null });
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=atlantis" }), () => false), { city: null, source: "unknown", ipCity: null });
+  // A refused pick falls through to the internet connection, never to "ip" for the forged slug.
+  assert.deepEqual(cityNote(req({ cookie: "tt_city=atlantis", "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "19.03", "x-vercel-ip-longitude": "73.03" })), { city: "mumbai", source: "ip", ipCity: null });
   // Abroad: no Indian city, but the place is kept with its country; odd characters are dropped.
   assert.deepEqual(cityNote(req({ "x-vercel-ip-country": "AE", "x-vercel-ip-city": "Dubai%3Cscript%3E" })), { city: null, source: "unknown", ipCity: "Dubaiscript (AE)" });
   assert.equal(cityNote(req({ "x-vercel-ip-city": "%E0%A4" })).ipCity, null, "bad percent-encoding");

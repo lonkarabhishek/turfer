@@ -1,7 +1,7 @@
 # TapTurf - Next.js App
 
 ## What is this?
-TapTurf (tapturf.in) is a turf directory + sports games platform for 54 cities across India (started in Nashik; biggest markets Hyderabad, Bangalore, Mumbai, Pune, Delhi). Copy and lists order cities by size; `lib/city.ts` CITIES is biggest-first and `lib/queries/cities.ts` has the live list. This is the Next.js 16 App Router migration of the original Vite React SPA at `../src/`.
+TapTurf (tapturf.in) is a turf directory + sports games platform for every city across India that has active turfs (88 on 26 Oct 2026; started in Nashik; biggest markets Hyderabad, Bangalore, Pune, Mumbai, Delhi). Never hardcode a city count or a city list: the live list and every count come from the `city_turf_counts` view via `lib/queries/cities.ts` (getLiveCities, getFooterCities, getCityCopy), and a city the data team adds shows up without a code change. `lib/city.ts` CITIES is the curated, biggest-first list of labels, states, centroids (CITY_COORDS) and other names (CITY_ALIASES); curate a new city there so IP/GPS detection and Ask know it. Copy and lists order cities by size. This is the Next.js 16 App Router migration of the original Vite React SPA at `../src/`.
 
 ## Tech Stack
 - **Framework**: Next.js 16 App Router with Turbopack

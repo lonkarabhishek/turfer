@@ -15,18 +15,22 @@ import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
+import { fitFontSize } from "@/lib/utils/fitText";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
 export const revalidate = 600;
 
-// Production builds render every city up front; previews and local
-// builds render none (each page renders on its first visit instead), so a
-// preview of a branch no longer renders pages against the production
-// database (about 1,300 per preview before 20 Oct).
-export function generateStaticParams() {
+// Production builds render every live city up front (and the curated
+// ones, should the read fail); previews and local builds render none
+// (each page renders on its first visit instead), so a preview of a
+// branch no longer renders pages against the production database (about
+// 1,300 per preview before 20 Oct). A city added after the deploy renders
+// on its first visit.
+export async function generateStaticParams() {
   if (process.env.VERCEL_ENV !== "production") return [];
-  return CITIES.map((c) => ({ city: c.id }));
+  const live = await getLiveCities().catch(() => []);
+  return [...new Set([...live.map((c) => c.id), ...CITIES.map((c) => c.id)])].map((city) => ({ city }));
 }
 
 export async function generateMetadata(
@@ -129,9 +133,17 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <p className="text-[11px] font-mono text-accent-600 mb-2">
             {turfs.length} {turfs.length === 1 ? "ground" : "grounds"}
           </p>
-          <h1 className="font-display text-primary-800 leading-[0.88] tracking-tight text-[48px] sm:text-[80px] md:text-[120px]">
+          {/* The city word is one unbreakable line at 48 to 120px: a long name
+              (Thiruvananthapuram, Visakhapatnam) shrinks to the H1's width
+              (container units), and may break as a last resort. */}
+          <h1
+            className="font-display text-primary-800 leading-[0.88] tracking-tight text-[48px] sm:text-[80px] md:text-[120px] [overflow-wrap:anywhere]"
+            style={{ containerType: "inline-size" }}
+          >
             Turfs in<br />
-            <span className="text-accent-500">{label}.</span>
+            <span className="text-accent-500" style={{ fontSize: fitFontSize(`${label}.`) }}>
+              {label}.
+            </span>
           </h1>
           <div className="mt-4">
             <MakeMyCity city={cityId} label={label} />

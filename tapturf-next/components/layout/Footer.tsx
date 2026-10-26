@@ -11,15 +11,19 @@ const LINKED_CITIES = 12;
  * Server component (rendered inside the client providers, which is
  * allowed). Reads the live city list, cached for a day (getFooterCities:
  * an hourly copy here made every page, turf pages included, refresh
- * hourly), so the city count and the biggest-first order stay honest
- * without a code change.
+ * hourly), so the linked cities and their biggest-first order follow the
+ * database without a code change. It states no count: a day-old figure
+ * would disagree with the hourly ones on the same screen (the pick
+ * screen's title, /turfs, the city picker) after the data team adds a
+ * city. "all cities" links to /turfs, which lists every city live.
  */
 export async function Footer() {
   // The footer is on every page, including ones that read nothing else
   // from the database: if the live list cannot be read and nothing is
   // cached, link the curated cities for this render rather than fail the
   // page (getFooterCities caches nothing when it throws).
-  const cities = await getFooterCities().catch(() => CITIES.map((c) => ({ ...c, n: 0 })));
+  const live = await getFooterCities().catch(() => null);
+  const cities = live ?? CITIES.map((c) => ({ ...c, n: 0 }));
   // Biggest cities first, plus the home cities (where TapTurf started
   // and launched next) when they fall outside the cut, so no city page
   // that had a sitewide link loses it.
@@ -36,14 +40,21 @@ export async function Footer() {
               Tap<span className="text-accent-400">Turf</span>
             </h3>
             <p className="mt-3 text-sm text-primary-200 leading-relaxed">
-              Find, compare and book sports turfs {cities.length > 0 ? `in ${cities.length} cities ` : ""}across India.
+              Find, compare and book sports turfs in cities across India.
             </p>
             {top.length > 0 && (
               <div className="mt-4 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />
                 <span className="text-xs text-primary-300">
                   {top.map((c) => c.label).join(" · ")}
-                  {cities.length > top.length ? ` · ${cities.length - top.length} more` : ""}
+                  {cities.length > top.length && (
+                    <>
+                      {" · "}
+                      <Link href="/turfs#turfs-by-city" className="underline underline-offset-2 hover:text-white transition-colors">
+                        all cities
+                      </Link>
+                    </>
+                  )}
                 </span>
               </div>
             )}

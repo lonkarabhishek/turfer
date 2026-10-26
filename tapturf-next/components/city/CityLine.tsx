@@ -4,6 +4,7 @@ import { Loader2, MapPin } from "lucide-react";
 import { openCityPicker } from "@/lib/city";
 import type { CityLineProps } from "@/lib/cityLine";
 import { usePendingCity } from "./cityPending";
+import { prefetchLiveCities } from "./liveCityList";
 
 const ACTION = "inline-flex items-center h-11 font-semibold text-accent-700 hover:text-accent-800 focus-neon";
 
@@ -11,6 +12,10 @@ function Change({ href, children }: { href: string; children: React.ReactNode })
   return (
     <a
       href={href}
+      // The picker's counts come from /api/cities: start it before the tap lands.
+      onPointerDown={prefetchLiveCities}
+      onPointerEnter={prefetchLiveCities}
+      onFocus={prefetchLiveCities}
       onClick={(e) => {
         e.preventDefault();
         openCityPicker("list");

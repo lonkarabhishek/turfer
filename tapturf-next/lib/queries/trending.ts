@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { CITY_IDS, type CityId } from "@/lib/city";
 import type { Turf } from "@/types/turf";
@@ -37,9 +38,27 @@ export async function readTrendingPicks(): Promise<Partial<Record<CityId, Trendi
   return out;
 }
 
-/** The same, but never throws: a failed lookup just means no spotlight. */
+/**
+ * One shared copy for the pages that show a single city's pick: every
+ * /<city> page and every /turfs variant (600 s windows both). Each used to
+ * read trending_turfs on every render, one read per city page per window,
+ * which grew with every city added (88 city pages and 89 /turfs variants
+ * on 26 Oct); now it is one read per window. Same window as those pages,
+ * and tagged "turf-data" like the home's copy (getHomeExtras in
+ * lib/home/data.ts), so a pick change or a window opening or closing
+ * purges it through the cache queue. Throws, so a failure is never
+ * stored. Never from turf pages (a day long: this would lower their
+ * revalidate) or from inside another unstable_cache (getHomeExtras reads
+ * readTrendingPicks directly).
+ */
+const getTrendingPicksCached = unstable_cache(readTrendingPicks, ["trending-picks-v1"], {
+  revalidate: 600,
+  tags: ["turf-data"],
+});
+
+/** The shared copy, but never throws: a failed lookup just means no spotlight. */
 export async function getTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
-  return readTrendingPicks().catch(() => ({}));
+  return getTrendingPicksCached().catch(() => ({}));
 }
 
 /** The pick for one city, or null. */

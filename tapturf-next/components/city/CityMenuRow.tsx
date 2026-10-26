@@ -3,6 +3,7 @@
 import { MapPin } from "lucide-react";
 import { labelFor, openCityPicker } from "@/lib/city";
 import { useCityChoice } from "./useCityChoice";
+import { prefetchLiveCities } from "./liveCityList";
 
 /**
  * The city row in the header menu. Rendered only while the menu is
@@ -18,6 +19,10 @@ export function CityMenuRow({ onChange }: { onChange: () => void }) {
   return (
     <button
       type="button"
+      // The picker's counts come from /api/cities: start it before the tap lands.
+      onPointerDown={prefetchLiveCities}
+      onPointerEnter={prefetchLiveCities}
+      onFocus={prefetchLiveCities}
       onClick={() => {
         onChange();
         // After the menu's own close, so focus and scroll lock hand over cleanly.

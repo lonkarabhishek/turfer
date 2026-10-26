@@ -1,11 +1,12 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { cityNote } from "@/lib/account/city";
+import { cityNote, uncuratedPick } from "@/lib/account/city";
 import { accountError, accountReply, caller } from "@/lib/account/route";
 import { cleanEmail } from "@/lib/account/emails";
 import { createAccountLimiter, noteCity, notePhoneChecked, readSmallJson, resolveAccount, setContactEmail, setUsername, updateName } from "@/lib/account/server";
 import type { Identity } from "@/lib/account/identity";
 import type { AccountError, AccountProfile } from "@/lib/account/types";
+import { isLiveCity } from "@/lib/queries/cities";
 
 // The signed-in person's own account (lib/account/types.ts has the API).
 // Phone and email are read, and users rows written, only here and only
@@ -14,11 +15,26 @@ import type { AccountError, AccountProfile } from "@/lib/account/types";
 const allowRead = createAccountLimiter(60);
 const allowWrite = createAccountLimiter(20);
 
-/** After the reply: record the person's city for the admin view (lib/account/city.ts). Never touches the sign-in. */
+/**
+ * After the reply: record the person's city for the admin view
+ * (lib/account/city.ts). Never touches the sign-in. A pick outside the
+ * curated cities counts only while that city has active turfs (the
+ * hourly live list): a forged or stale tt_city must not become their
+ * picked city, which is never replaced later.
+ */
 function noteCityLater(req: Request, userId: string) {
   try {
-    const note = cityNote((n) => req.headers.get(n));
-    after(() => noteCity(userId, note));
+    const headers = new Headers(req.headers);
+    const get = (n: string) => headers.get(n);
+    const unchecked = uncuratedPick(get);
+    after(async () => {
+      try {
+        const live = unchecked ? await isLiveCity(unchecked).catch(() => false) : false;
+        await noteCity(userId, cityNote(get, (c) => live && c === unchecked));
+      } catch (e) {
+        console.warn("account: city note skipped", e);
+      }
+    });
   } catch (e) {
     console.warn("account: city note skipped", e);
   }

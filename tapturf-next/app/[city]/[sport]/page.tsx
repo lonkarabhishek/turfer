@@ -13,6 +13,7 @@ import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfUrl } from "@/lib/utils/turfPath";
+import { fitFontSize } from "@/lib/utils/fitText";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -176,10 +177,16 @@ export default async function CitySportPage({
       {/* Header */}
       <header className="mb-8">
         <div className="flex items-center gap-4">
-          <span className="text-5xl" aria-hidden>{s.icon}</span>
-          <div>
-            <h1 className="text-[28px] md:text-[40px] text-primary-900 leading-tight font-display">
-              {venues} in {cityLabel}
+          <span className="text-5xl shrink-0" aria-hidden>{s.icon}</span>
+          {/* The column takes the rest of the row (flex-1 min-w-0), and a long
+              city name (Thiruvananthapuram) shrinks to its width rather than
+              breaking mid-word or pushing the page sideways. */}
+          <div className="min-w-0 flex-1">
+            <h1
+              className="text-[28px] md:text-[40px] text-primary-900 leading-tight font-display [overflow-wrap:anywhere]"
+              style={{ containerType: "inline-size" }}
+            >
+              {venues} in <span style={{ fontSize: fitFontSize(cityLabel) }}>{cityLabel}</span>
             </h1>
             <p className="text-[15px] text-primary-500 mt-1">
               {stats.count} {venueWord(s, stats.count)}

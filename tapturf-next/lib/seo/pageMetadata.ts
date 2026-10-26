@@ -3,6 +3,7 @@ import { CONTACT_EMAIL } from "@/lib/contact";
 import { getCityCopy } from "@/lib/queries/cities";
 import type { HomeData } from "@/lib/home/types";
 import type { Game } from "@/types/game";
+import { plural } from "@/lib/home/format";
 
 /**
  * Metadata and JSON-LD for the pages that have per-city twins (/, and
@@ -11,12 +12,12 @@ import type { Game } from "@/types/game";
  * and structured data are identical whichever city the visitor sees.
  */
 
-/** "Hyderabad, Bangalore, Mumbai, Pune, Delhi and 49 more cities", biggest first. */
+/** "Hyderabad, Bangalore, Pune, Mumbai, Delhi and 83 more cities", biggest first, with the live count. */
 function whereLine(labels: string[], cityCount: number): string {
   const top5 = labels.slice(0, 5);
   if (top5.length === 0) return "India";
   const more = cityCount - top5.length;
-  return `${top5.join(", ")}${more > 0 ? ` and ${more} more cities` : ""}`;
+  return `${top5.join(", ")}${more > 0 ? ` and ${plural(more, "more city", "more cities")}` : ""}`;
 }
 
 // generateMetadata so the count and the city names in title/description
@@ -34,9 +35,9 @@ export function homeMetadata(d: HomeData, liveCityCount?: number): Metadata {
 
   // Title under 60 characters, description about 150: Google shows the
   // whole of both, including the no-fee line that sets TapTurf apart.
-  const titleWhere = cityCount > 0 ? `${cityCount} Indian Cities` : "India";
+  const titleWhere = cityCount > 0 ? plural(cityCount, "Indian City", "Indian Cities") : "India";
   const more = cityCount - top3.length;
-  const descWhere = top3.length ? `in ${top3.join(", ")}${more > 0 ? ` and ${more} more cities` : ""}` : "across India";
+  const descWhere = top3.length ? `in ${top3.join(", ")}${more > 0 ? ` and ${plural(more, "more city", "more cities")}` : ""}` : "across India";
   const description =
     rounded >= 50
       ? `${rounded.toLocaleString("en-IN")}+ football, box cricket and sports turfs ${descWhere}. Photos, ratings and prices. No booking fee.`

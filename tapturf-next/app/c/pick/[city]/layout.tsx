@@ -9,10 +9,15 @@ import { PICK_GUARD_JS, PICK_NONE } from "@/lib/cityRouting";
 // city>, or /c/pick/none when the IP gave nothing away. The browser URL,
 // title and canonical stay the public ones; direct hits on /c 308.
 // Static, one page per variant, served from the CDN: no turf data. The
-// only read in the tree is the cached live city list (unstable_cache,
-// 1 h), which the root layout's footer and the chip order (pickTop in
-// ../meta.ts) share, so Next refreshes these pages hourly from that
-// cache, never per request.
+// only read in the tree is the cached live city list (getLiveCities,
+// unstable_cache 1 h) for the chips, their counts and the title
+// (../meta.ts), so Next refreshes these pages hourly from that cache,
+// never per request.
+//
+// One variant per curated city plus none, in every build: IP detection
+// can only name a curated city (it needs the centroid in lib/city.ts),
+// so this bounded set covers every rewrite the proxy makes, and any
+// other segment 404s without rendering.
 export const dynamicParams = false;
 
 export function generateStaticParams() {

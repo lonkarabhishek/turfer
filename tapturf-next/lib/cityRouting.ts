@@ -7,6 +7,7 @@ import {
   CITIES,
   CITY_ALIASES,
   CITY_COOKIE,
+  CITY_RESERVED_RE,
   PICK_LEFT_KEY,
   confirmedCity,
   nearestCity,
@@ -44,12 +45,14 @@ export const PICK_NONE = "none";
  * the pick screen painting and leaving after hydration. Skipped when the
  * pre-paint script is already reloading (it hides <html> first). Once
  * per value and URL per session, under the same key CitySync uses, so a
- * cookie the server cannot see never loops. ES5, no other side effects.
+ * cookie the server cannot see never loops. A pick is what
+ * parseCityCookie calls one: slug-shaped and not reserved (unknown, all,
+ * pick, none...). ES5, no other side effects.
  */
 export const PICK_GUARD_JS = `(function(){try{
 var d=document.documentElement;if(d.style.visibility==="hidden")return;
 var m=document.cookie.match(/(?:^|;\\s*)${CITY_COOKIE}=([^;]*)/),v=m?m[1]:"";
-if(!/^[a-z][a-z-]{1,30}$/.test(v)||v==="unknown"||v==="all")return;
+if(!/^[a-z][a-z-]{1,30}$/.test(v)||/${CITY_RESERVED_RE}/.test(v))return;
 var k=v+"|"+location.pathname+location.search,S=window.sessionStorage;
 if(S.getItem("${PICK_LEFT_KEY}")===k)return;S.setItem("${PICK_LEFT_KEY}",k);
 d.style.visibility="hidden";location.reload()}catch(e){}})();`;

@@ -126,7 +126,7 @@ const CITY_WORDS = new Map<string, Slot>();
 for (const c of CITIES) CITY_WORDS.set(norm(c.label), { k: "city", id: c.id, label: c.label });
 // Aliases keep the name as typed: "Bengaluru" stays "Bengaluru" in the reply.
 // One that names only part of a city ("Navi Mumbai" is not all of Mumbai) is left to Claude.
-const PART_OF_CITY = new Set(["navi mumbai", "thane", "new delhi", "secunderabad"]);
+const PART_OF_CITY = new Set(["navi mumbai", "thane", "new delhi", "secunderabad", "hanamkonda", "hanumakonda"]);
 for (const [alias, id] of Object.entries(CITY_ALIASES)) {
   CITY_WORDS.set(norm(alias), PART_OF_CITY.has(alias) ? { k: "clash" } : { k: "city", id, label: titleCase(alias), alias: true });
 }

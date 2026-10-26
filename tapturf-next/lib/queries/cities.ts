@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { CITIES, cityCopyFrom, cityInfo, type CityInfo } from "@/lib/city";
+import { CITIES, cityCopyFrom, cityInfo, isCitySlug, type CityInfo } from "@/lib/city";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 
@@ -14,11 +14,15 @@ async function readLiveCities(): Promise<LiveCity[]> {
     console.error("getLiveCities failed", error);
     throw new Error("Live cities read failed");
   }
-  const rows = (data as { city: string; n: number }[]).filter((r) => /^[a-z][a-z-]{1,30}$/.test(r.city));
+  // Slug-shaped and not reserved: a turfs.city of "blog" must never
+  // become a city whose /blog link is another page.
+  const rows = (data as { city: string; n: number }[]).filter((r) => isCitySlug(r.city));
   const order = new Map(CITIES.map((c, i) => [c.id, i]));
+  // The view has no ORDER BY: the id breaks the last ties, so two
+  // uncurated cities with the same count never swap between reads.
   return rows
     .map((r) => ({ ...cityInfo(r.city), n: r.n }))
-    .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+    .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
 }
 
 /**
@@ -81,11 +85,11 @@ export type CityCopy = ReturnType<typeof cityCopyFrom>;
 
 /**
  * Prose from the live city list, biggest first, with the real count:
- * list "Hyderabad, Bangalore, Mumbai, Pune, Delhi & 49 more", listAnd
- * "... and 49 more cities", short "Hyderabad, Bangalore & more" for
+ * list "Hyderabad, Bangalore, Pune, Mumbai, Delhi & 83 more", listAnd
+ * "... and 83 more cities", short "Hyderabad, Bangalore & more" for
  * <title> tags. Same shapes as CITY_LIST, CITY_LIST_AND and
- * CITY_LIST_SHORT, which are the static fallback. Cached with
- * getLiveCities (1h).
+ * CITY_LIST_SHORT, the static fallback, which name no count. Cached
+ * with getLiveCities (1h).
  */
 export async function getCityCopy(): Promise<CityCopy> {
   return cityCopyFrom((await getLiveCities()).map((c) => c.label));
@@ -127,14 +131,14 @@ const getSportCityCounts = unstable_cache(
     for (const sp of SPORT_PAGES) {
       const counts = new Map<string, number>();
       for (const r of rows) {
-        if (!r.city || !/^[a-z][a-z-]{1,30}$/.test(r.city)) continue;
+        if (!isCitySlug(r.city)) continue;
         if (!turfPlaysSport(split(r.sports), sp)) continue;
         counts.set(r.city, (counts.get(r.city) ?? 0) + 1);
       }
       out[sp.slug] = [...counts.entries()]
         .filter(([, n]) => n >= MIN_TURFS_TO_INDEX)
         .map(([city, n]) => ({ ...cityInfo(city), n }))
-        .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+        .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
     }
     return out;
   },

@@ -14,14 +14,17 @@ export type CityState = string;
 
 /**
  * One list, biggest city first by active turf count (city_turf_counts,
- * 18 Oct 2026). Ties keep the earlier curated order (Noida before
- * Ahmedabad, Gurgaon before Kolkata, Coimbatore before Lucknow, Nashik
- * before Nagpur); getLiveCities() in lib/queries/cities.ts breaks its
- * ties by this index too, so the live and static orders agree until
- * the counts move. Prose lists name the first five (CITY_LIST,
- * CITY_LIST_AND) and count the rest. The id must match turfs.city in
- * the database. Adding a city here gives it a label, state and
- * centroid; routes, sitemap and pickers follow the database.
+ * 26 Oct 2026: every live city, 88). Ties keep the earlier curated
+ * order (Coimbatore before Lucknow, Jodhpur before Goa, Faridabad
+ * before Solapur), then a newly added city goes alphabetically;
+ * getLiveCities() in lib/queries/cities.ts breaks its ties by this
+ * index too, so the live and static orders agree until the counts move.
+ * Prose lists name the first five (CITY_LIST, CITY_LIST_AND). The id
+ * must match turfs.city in the database. Adding a city here gives it a
+ * label, state, centroid (CITY_COORDS, so IP and GPS detection can find
+ * it) and any other names (CITY_ALIASES); routes, sitemap, pickers and
+ * every city count follow the database, so a city the data team adds
+ * before it is curated still shows up, with a title-cased label.
  */
 export const CITIES: {
   id: CityId;
@@ -29,63 +32,100 @@ export const CITIES: {
   labelUpper: string;
   state: CityState;
 }[] = [
-  { id: "hyderabad",     label: "Hyderabad",     labelUpper: "HYDERABAD",     state: "Telangana" },
-  { id: "bangalore",     label: "Bangalore",     labelUpper: "BANGALORE",     state: "Karnataka" },
-  { id: "mumbai",        label: "Mumbai",        labelUpper: "MUMBAI",        state: "Maharashtra" },
-  { id: "pune",          label: "Pune",          labelUpper: "PUNE",          state: "Maharashtra" },
-  { id: "delhi",         label: "Delhi",         labelUpper: "DELHI",         state: "Delhi" },
-  { id: "chennai",       label: "Chennai",       labelUpper: "CHENNAI",       state: "Tamil Nadu" },
-  { id: "noida",         label: "Noida",         labelUpper: "NOIDA",         state: "Uttar Pradesh" },
-  { id: "ahmedabad",     label: "Ahmedabad",     labelUpper: "AHMEDABAD",     state: "Gujarat" },
-  { id: "gurgaon",       label: "Gurgaon",       labelUpper: "GURGAON",       state: "Haryana" },
-  { id: "kolkata",       label: "Kolkata",       labelUpper: "KOLKATA",       state: "West Bengal" },
-  { id: "jaipur",        label: "Jaipur",        labelUpper: "JAIPUR",        state: "Rajasthan" },
-  { id: "coimbatore",    label: "Coimbatore",    labelUpper: "COIMBATORE",    state: "Tamil Nadu" },
-  { id: "lucknow",       label: "Lucknow",       labelUpper: "LUCKNOW",       state: "Uttar Pradesh" },
-  { id: "sambhajinagar", label: "Sambhajinagar", labelUpper: "SAMBHAJINAGAR", state: "Maharashtra" },
-  { id: "nashik",        label: "Nashik",        labelUpper: "NASHIK",        state: "Maharashtra" },
-  { id: "nagpur",        label: "Nagpur",        labelUpper: "NAGPUR",        state: "Maharashtra" },
-  { id: "indore",        label: "Indore",        labelUpper: "INDORE",        state: "Madhya Pradesh" },
-  { id: "kochi",         label: "Kochi",         labelUpper: "KOCHI",         state: "Kerala" },
-  { id: "surat",         label: "Surat",         labelUpper: "SURAT",         state: "Gujarat" },
-  { id: "gandhinagar",   label: "Gandhinagar",   labelUpper: "GANDHINAGAR",   state: "Gujarat" },
-  { id: "vadodara",      label: "Vadodara",      labelUpper: "VADODARA",      state: "Gujarat" },
-  { id: "bhopal",        label: "Bhopal",        labelUpper: "BHOPAL",        state: "Madhya Pradesh" },
-  { id: "ghaziabad",     label: "Ghaziabad",     labelUpper: "GHAZIABAD",     state: "Uttar Pradesh" },
-  { id: "chandigarh",    label: "Chandigarh",    labelUpper: "CHANDIGARH",    state: "Chandigarh" },
-  { id: "rajkot",        label: "Rajkot",        labelUpper: "RAJKOT",        state: "Gujarat" },
-  { id: "kolhapur",      label: "Kolhapur",      labelUpper: "KOLHAPUR",      state: "Maharashtra" },
-  { id: "jodhpur",       label: "Jodhpur",       labelUpper: "JODHPUR",       state: "Rajasthan" },
-  { id: "goa",           label: "Goa",           labelUpper: "GOA",           state: "Goa" },
-  { id: "sangli",        label: "Sangli",        labelUpper: "SANGLI",        state: "Maharashtra" },
-  { id: "faridabad",     label: "Faridabad",     labelUpper: "FARIDABAD",     state: "Haryana" },
-  { id: "solapur",       label: "Solapur",       labelUpper: "SOLAPUR",       state: "Maharashtra" },
-  { id: "amravati",      label: "Amravati",      labelUpper: "AMRAVATI",      state: "Maharashtra" },
-  { id: "nanded",        label: "Nanded",        labelUpper: "NANDED",        state: "Maharashtra" },
-  { id: "latur",         label: "Latur",         labelUpper: "LATUR",         state: "Maharashtra" },
-  { id: "mangaluru",     label: "Mangaluru",     labelUpper: "MANGALURU",     state: "Karnataka" },
-  { id: "jalgaon",       label: "Jalgaon",       labelUpper: "JALGAON",       state: "Maharashtra" },
-  { id: "akola",         label: "Akola",         labelUpper: "AKOLA",         state: "Maharashtra" },
-  { id: "malegaon",      label: "Malegaon",      labelUpper: "MALEGAON",      state: "Maharashtra" },
-  { id: "mysuru",        label: "Mysuru",        labelUpper: "MYSURU",        state: "Karnataka" },
-  { id: "dhule",         label: "Dhule",         labelUpper: "DHULE",         state: "Maharashtra" },
-  { id: "ahilyanagar",   label: "Ahilyanagar",   labelUpper: "AHILYANAGAR",   state: "Maharashtra" },
-  { id: "udaipur",       label: "Udaipur",       labelUpper: "UDAIPUR",       state: "Rajasthan" },
-  { id: "raipur",        label: "Raipur",        labelUpper: "RAIPUR",        state: "Chhattisgarh" },
-  { id: "satara",        label: "Satara",        labelUpper: "SATARA",        state: "Maharashtra" },
-  { id: "jabalpur",      label: "Jabalpur",      labelUpper: "JABALPUR",      state: "Madhya Pradesh" },
-  { id: "jalna",         label: "Jalna",         labelUpper: "JALNA",         state: "Maharashtra" },
-  { id: "belagavi",      label: "Belagavi",      labelUpper: "BELAGAVI",      state: "Karnataka" },
-  { id: "chandrapur",    label: "Chandrapur",    labelUpper: "CHANDRAPUR",    state: "Maharashtra" },
-  { id: "kota",          label: "Kota",          labelUpper: "KOTA",          state: "Rajasthan" },
-  { id: "hubballi",      label: "Hubballi",      labelUpper: "HUBBALLI",      state: "Karnataka" },
-  { id: "yavatmal",      label: "Yavatmal",      labelUpper: "YAVATMAL",      state: "Maharashtra" },
-  { id: "gwalior",       label: "Gwalior",       labelUpper: "GWALIOR",       state: "Madhya Pradesh" },
-  { id: "ratnagiri",     label: "Ratnagiri",     labelUpper: "RATNAGIRI",     state: "Maharashtra" },
-  { id: "beed",          label: "Beed",          labelUpper: "BEED",          state: "Maharashtra" },
+  { id: "hyderabad",          label: "Hyderabad",          labelUpper: "HYDERABAD",          state: "Telangana" },
+  { id: "bangalore",          label: "Bangalore",          labelUpper: "BANGALORE",          state: "Karnataka" },
+  { id: "pune",               label: "Pune",               labelUpper: "PUNE",               state: "Maharashtra" },
+  { id: "mumbai",             label: "Mumbai",             labelUpper: "MUMBAI",             state: "Maharashtra" },
+  { id: "delhi",              label: "Delhi",              labelUpper: "DELHI",              state: "Delhi" },
+  { id: "thiruvananthapuram", label: "Thiruvananthapuram", labelUpper: "THIRUVANANTHAPURAM", state: "Kerala" },
+  { id: "chennai",            label: "Chennai",            labelUpper: "CHENNAI",            state: "Tamil Nadu" },
+  { id: "nashik",             label: "Nashik",             labelUpper: "NASHIK",             state: "Maharashtra" },
+  { id: "ahmedabad",          label: "Ahmedabad",          labelUpper: "AHMEDABAD",          state: "Gujarat" },
+  { id: "kolkata",            label: "Kolkata",            labelUpper: "KOLKATA",            state: "West Bengal" },
+  { id: "noida",              label: "Noida",              labelUpper: "NOIDA",              state: "Uttar Pradesh" },
+  { id: "gurgaon",            label: "Gurgaon",            labelUpper: "GURGAON",            state: "Haryana" },
+  { id: "jaipur",             label: "Jaipur",             labelUpper: "JAIPUR",             state: "Rajasthan" },
+  { id: "coimbatore",         label: "Coimbatore",         labelUpper: "COIMBATORE",         state: "Tamil Nadu" },
+  { id: "lucknow",            label: "Lucknow",            labelUpper: "LUCKNOW",            state: "Uttar Pradesh" },
+  { id: "sambhajinagar",      label: "Sambhajinagar",      labelUpper: "SAMBHAJINAGAR",      state: "Maharashtra" },
+  { id: "nagpur",             label: "Nagpur",             labelUpper: "NAGPUR",             state: "Maharashtra" },
+  { id: "indore",             label: "Indore",             labelUpper: "INDORE",             state: "Madhya Pradesh" },
+  { id: "kochi",              label: "Kochi",              labelUpper: "KOCHI",              state: "Kerala" },
+  { id: "surat",              label: "Surat",              labelUpper: "SURAT",              state: "Gujarat" },
+  { id: "gandhinagar",        label: "Gandhinagar",        labelUpper: "GANDHINAGAR",        state: "Gujarat" },
+  { id: "salem",              label: "Salem",              labelUpper: "SALEM",              state: "Tamil Nadu" },
+  { id: "kozhikode",          label: "Kozhikode",          labelUpper: "KOZHIKODE",          state: "Kerala" },
+  { id: "dehradun",           label: "Dehradun",           labelUpper: "DEHRADUN",           state: "Uttarakhand" },
+  { id: "tiruchirappalli",    label: "Tiruchirappalli",    labelUpper: "TIRUCHIRAPPALLI",    state: "Tamil Nadu" },
+  { id: "vadodara",           label: "Vadodara",           labelUpper: "VADODARA",           state: "Gujarat" },
+  { id: "bhopal",             label: "Bhopal",             labelUpper: "BHOPAL",             state: "Madhya Pradesh" },
+  { id: "vijayawada",         label: "Vijayawada",         labelUpper: "VIJAYAWADA",         state: "Andhra Pradesh" },
+  { id: "madurai",            label: "Madurai",            labelUpper: "MADURAI",            state: "Tamil Nadu" },
+  { id: "ghaziabad",          label: "Ghaziabad",          labelUpper: "GHAZIABAD",          state: "Uttar Pradesh" },
+  { id: "visakhapatnam",      label: "Visakhapatnam",      labelUpper: "VISAKHAPATNAM",      state: "Andhra Pradesh" },
+  { id: "chandigarh",         label: "Chandigarh",         labelUpper: "CHANDIGARH",         state: "Chandigarh" },
+  { id: "rajkot",             label: "Rajkot",             labelUpper: "RAJKOT",             state: "Gujarat" },
+  { id: "erode",              label: "Erode",              labelUpper: "ERODE",              state: "Tamil Nadu" },
+  { id: "kolhapur",           label: "Kolhapur",           labelUpper: "KOLHAPUR",           state: "Maharashtra" },
+  { id: "jodhpur",            label: "Jodhpur",            labelUpper: "JODHPUR",            state: "Rajasthan" },
+  { id: "goa",                label: "Goa",                labelUpper: "GOA",                state: "Goa" },
+  { id: "kanpur",             label: "Kanpur",             labelUpper: "KANPUR",             state: "Uttar Pradesh" },
+  { id: "patna",              label: "Patna",              labelUpper: "PATNA",              state: "Bihar" },
+  { id: "sangli",             label: "Sangli",             labelUpper: "SANGLI",             state: "Maharashtra" },
+  { id: "thrissur",           label: "Thrissur",           labelUpper: "THRISSUR",           state: "Kerala" },
+  { id: "faridabad",          label: "Faridabad",          labelUpper: "FARIDABAD",          state: "Haryana" },
+  { id: "solapur",            label: "Solapur",            labelUpper: "SOLAPUR",            state: "Maharashtra" },
+  { id: "amravati",           label: "Amravati",           labelUpper: "AMRAVATI",           state: "Maharashtra" },
+  { id: "nanded",             label: "Nanded",             labelUpper: "NANDED",             state: "Maharashtra" },
+  { id: "tirupati",           label: "Tirupati",           labelUpper: "TIRUPATI",           state: "Andhra Pradesh" },
+  { id: "guwahati",           label: "Guwahati",           labelUpper: "GUWAHATI",           state: "Assam" },
+  { id: "latur",              label: "Latur",              labelUpper: "LATUR",              state: "Maharashtra" },
+  { id: "mangaluru",          label: "Mangaluru",          labelUpper: "MANGALURU",          state: "Karnataka" },
+  { id: "bhubaneswar",        label: "Bhubaneswar",        labelUpper: "BHUBANESWAR",        state: "Odisha" },
+  { id: "guntur",             label: "Guntur",             labelUpper: "GUNTUR",             state: "Andhra Pradesh" },
+  { id: "jalgaon",            label: "Jalgaon",            labelUpper: "JALGAON",            state: "Maharashtra" },
+  { id: "akola",              label: "Akola",              labelUpper: "AKOLA",              state: "Maharashtra" },
+  { id: "malegaon",           label: "Malegaon",           labelUpper: "MALEGAON",           state: "Maharashtra" },
+  { id: "mysuru",             label: "Mysuru",             labelUpper: "MYSURU",             state: "Karnataka" },
+  { id: "agra",               label: "Agra",               labelUpper: "AGRA",               state: "Uttar Pradesh" },
+  { id: "dhule",              label: "Dhule",              labelUpper: "DHULE",              state: "Maharashtra" },
+  { id: "ahilyanagar",        label: "Ahilyanagar",        labelUpper: "AHILYANAGAR",        state: "Maharashtra" },
+  { id: "udaipur",            label: "Udaipur",            labelUpper: "UDAIPUR",            state: "Rajasthan" },
+  { id: "raipur",             label: "Raipur",             labelUpper: "RAIPUR",             state: "Chhattisgarh" },
+  { id: "ranchi",             label: "Ranchi",             labelUpper: "RANCHI",             state: "Jharkhand" },
+  { id: "satara",             label: "Satara",             labelUpper: "SATARA",             state: "Maharashtra" },
+  { id: "kalaburagi",         label: "Kalaburagi",         labelUpper: "KALABURAGI",         state: "Karnataka" },
+  { id: "jabalpur",           label: "Jabalpur",           labelUpper: "JABALPUR",           state: "Madhya Pradesh" },
+  { id: "kurnool",            label: "Kurnool",            labelUpper: "KURNOOL",            state: "Andhra Pradesh" },
+  { id: "amritsar",           label: "Amritsar",           labelUpper: "AMRITSAR",           state: "Punjab" },
+  { id: "prayagraj",          label: "Prayagraj",          labelUpper: "PRAYAGRAJ",          state: "Uttar Pradesh" },
+  { id: "jalna",              label: "Jalna",              labelUpper: "JALNA",              state: "Maharashtra" },
+  { id: "belagavi",           label: "Belagavi",           labelUpper: "BELAGAVI",           state: "Karnataka" },
+  { id: "ajmer",              label: "Ajmer",              labelUpper: "AJMER",              state: "Rajasthan" },
+  { id: "ludhiana",           label: "Ludhiana",           labelUpper: "LUDHIANA",           state: "Punjab" },
+  { id: "meerut",             label: "Meerut",             labelUpper: "MEERUT",             state: "Uttar Pradesh" },
+  { id: "warangal",           label: "Warangal",           labelUpper: "WARANGAL",           state: "Telangana" },
+  { id: "chandrapur",         label: "Chandrapur",         labelUpper: "CHANDRAPUR",         state: "Maharashtra" },
+  { id: "varanasi",           label: "Varanasi",           labelUpper: "VARANASI",           state: "Uttar Pradesh" },
+  { id: "kota",               label: "Kota",               labelUpper: "KOTA",               state: "Rajasthan" },
+  { id: "hubballi",           label: "Hubballi",           labelUpper: "HUBBALLI",           state: "Karnataka" },
+  { id: "davanagere",         label: "Davanagere",         labelUpper: "DAVANAGERE",         state: "Karnataka" },
+  { id: "kannur",             label: "Kannur",             labelUpper: "KANNUR",             state: "Kerala" },
+  { id: "nellore",            label: "Nellore",            labelUpper: "NELLORE",            state: "Andhra Pradesh" },
+  { id: "yavatmal",           label: "Yavatmal",           labelUpper: "YAVATMAL",           state: "Maharashtra" },
+  { id: "shivamogga",         label: "Shivamogga",         labelUpper: "SHIVAMOGGA",         state: "Karnataka" },
+  { id: "siliguri",           label: "Siliguri",           labelUpper: "SILIGURI",           state: "West Bengal" },
+  { id: "gwalior",            label: "Gwalior",            labelUpper: "GWALIOR",            state: "Madhya Pradesh" },
+  { id: "ujjain",             label: "Ujjain",             labelUpper: "UJJAIN",             state: "Madhya Pradesh" },
+  { id: "ratnagiri",          label: "Ratnagiri",          labelUpper: "RATNAGIRI",          state: "Maharashtra" },
+  { id: "beed",               label: "Beed",               labelUpper: "BEED",               state: "Maharashtra" },
+  { id: "dhanbad",            label: "Dhanbad",            labelUpper: "DHANBAD",            state: "Jharkhand" },
 ];
 
 export type CityInfo = { id: CityId; label: string; labelUpper: string; state: CityState };
+
+/** A live city and its active turf count, as server pages hand it to the pickers (labels come from cityInfo). */
+export type CityCount = { id: CityId; n: number };
 
 /** Curated entry, or a derived one for a city the database has that this file does not. */
 export function cityInfo(id: string): CityInfo {
@@ -100,9 +140,9 @@ export function cityInfo(id: string): CityInfo {
 }
 
 /**
- * Prose from a list of city labels, biggest first. Static constants
- * below use CITIES; lib/queries/cities.ts getCityCopy() feeds it the
- * live list so server pages can say the real city count.
+ * Prose from a list of city labels, biggest first. lib/queries/cities.ts
+ * getCityCopy() feeds it the live list so server pages can say the real
+ * city count; the static constants below never count.
  */
 export function cityCopyFrom(labels: readonly string[]): { count: number; list: string; listAnd: string; short: string } {
   const named = labels.slice(0, 5);
@@ -125,22 +165,26 @@ export function cityCopyFrom(labels: readonly string[]): { count: number; list: 
   return {
     count: labels.length,
     list: rest > 0 ? `${named.join(", ")} & ${rest} more` : joinAnd(named, "&"),
-    listAnd: rest > 0 ? `${named.join(", ")} and ${rest} more cities` : joinAnd(named, "and"),
+    listAnd: rest > 0 ? `${named.join(", ")} and ${rest} more ${rest === 1 ? "city" : "cities"}` : joinAnd(named, "and"),
     short,
   };
 }
 
-const STATIC_COPY = cityCopyFrom(CITIES.map((c) => c.label));
-/** Prose lists name the first five and count the rest: "Hyderabad, Bangalore, Mumbai, Pune, Delhi & 49 more". Static fallback; server code should prefer getCityCopy() in lib/queries/cities.ts for a live count. */
-export const CITY_LIST = STATIC_COPY.list;
-/** "Hyderabad, Bangalore, Mumbai, Pune, Delhi and 49 more cities". */
-export const CITY_LIST_AND = STATIC_COPY.listAnd;
+// The static lists name the five biggest curated cities and never state a
+// count: the database adds cities without a deploy, so a number baked in
+// here went stale ("& 49 more" while 87 cities were live, 26 Oct). Server
+// code that can afford the cached read uses getCityCopy() for the count.
+const FIRST_FIVE = CITIES.slice(0, 5).map((c) => c.label).join(", ");
+/** "Hyderabad, Bangalore, Pune, Mumbai, Delhi & more". Count-free; getCityCopy() in lib/queries/cities.ts has the live count. */
+export const CITY_LIST = `${FIRST_FIVE} & more`;
+/** "Hyderabad, Bangalore, Pune, Mumbai, Delhi and more cities". */
+export const CITY_LIST_AND = `${FIRST_FIVE} and more cities`;
 /** For <title> tags: "Hyderabad, Bangalore & more". */
-export const CITY_LIST_SHORT = STATIC_COPY.short;
+export const CITY_LIST_SHORT = cityCopyFrom(CITIES.map((c) => c.label)).short;
 
-/** State for structured data. */
-export function stateFor(id: CityId | string | null | undefined): CityState {
-  return CITIES.find((c) => c.id === id)?.state ?? "India";
+/** State for structured data, or undefined for a city not curated yet (JSON.stringify drops it: no region beats "India"). */
+export function stateFor(id: CityId | string | null | undefined): CityState | undefined {
+  return CITIES.find((c) => c.id === id)?.state;
 }
 
 export const CITY_IDS: readonly CityId[] = CITIES.map((c) => c.id);
@@ -148,6 +192,31 @@ export const CITY_IDS: readonly CityId[] = CITIES.map((c) => c.id);
 /** A plausible city slug: lower-case letters and hyphens. The database decides if it exists. */
 export function isCity(value: string | null | undefined): value is CityId {
   return typeof value === "string" && /^[a-z][a-z-]{1,30}$/.test(value);
+}
+
+/**
+ * Slug-shaped values that are never a city: the cookie's other states,
+ * the pick screen's segments, /api/city's "reset", and every top-level
+ * route a /<city> URL would collide with. The pre-paint script and the
+ * pick guard embed the same list (CITY_RESERVED_RE).
+ */
+export const RESERVED_CITY_SLUGS: readonly string[] = [
+  "all", "unknown", "none", "pick", "geo", "reset",
+  "admin", "api", "blog", "dashboard", "game", "games", "images", "live", "login", "my",
+  "privacy", "sport", "terms", "tools", "turf", "turf-near-me", "turfs",
+];
+/** Source of a regex for RESERVED_CITY_SLUGS, for the inline ES5 scripts. Only [a-z-] inside. */
+export const CITY_RESERVED_RE = `^(?:${RESERVED_CITY_SLUGS.join("|")})$`;
+
+/**
+ * A city a visitor may choose: slug-shaped and not reserved. Curated or
+ * not, so a city the data team added after the last deploy can be
+ * picked; the server decides whether it has turfs (isLiveCity in
+ * lib/queries/cities.ts, /api/city, the app/c/[city] guard). The strict
+ * pattern is what keeps it safe in a URL path, a cookie or a CSS selector.
+ */
+export function isCitySlug(value: string | null | undefined): value is CityId {
+  return isCity(value) && !RESERVED_CITY_SLUGS.includes(value);
 }
 
 export function labelFor(id: CityId): string {
@@ -165,12 +234,14 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   if (a.includes("pune")) return "pune";
   if (a.includes("mumbai") || a.includes("bombay") || a.includes("thane") || a.includes("navi mumbai")) return "mumbai";
   if (a.includes("nagpur") || a.includes("kamptee") || a.includes("hingna")) return "nagpur";
-  if (a.includes("hyderabad") || a.includes("secunderabad") || a.includes("telangana")) return "hyderabad";
+  if (a.includes("hyderabad") || a.includes("secunderabad")) return "hyderabad";
   if (a.includes("bangalore") || a.includes("bengaluru")) return "bangalore";
   if (a.includes("gurgaon") || a.includes("gurugram")) return "gurgaon";
   if (a.includes("noida")) return "noida";
   if (a.includes("ghaziabad")) return "ghaziabad";
   if (a.includes("faridabad")) return "faridabad";
+  // Before Delhi: "Delhi Road, Meerut" is Meerut.
+  if (a.includes("meerut")) return "meerut";
   if (a.includes("delhi")) return "delhi";
   if (a.includes("sambhajinagar") || a.includes("aurangabad")) return "sambhajinagar";
   if (a.includes("jalgaon")) return "jalgaon";
@@ -192,13 +263,24 @@ export function guessCityFromAddress(address: string | null | undefined): CityId
   for (const c of CITIES) {
     if (new RegExp(`\\b${c.label.toLowerCase()}\\b`).test(a)) return c.id;
   }
+  // Then the other names ("Davangere", "Hanamkonda", "Calicut"), after
+  // every label so "Trichy Road, Coimbatore" stays Coimbatore.
+  for (const [alias, id] of Object.entries(CITY_ALIASES)) {
+    if (new RegExp(`\\b${alias}\\b`).test(a)) return id;
+  }
+  // Last: a Telangana address that named no city (Warangal ones say
+  // Hanamkonda, caught above) is most likely Hyderabad.
+  if (a.includes("telangana")) return "hyderabad";
   return null;
 }
 
 // ── City cookie: one value that the proxy, the server pages and the client share ──
 //
 // tt_city holds the visitor's city choice, first-party, readable by JS:
-//   "pune"       confirmed pick (pick screen, picker, GPS, "Make this my city")
+//   "pune"       confirmed pick (pick screen, picker, GPS, "Make this my city"):
+//                any city slug (isCitySlug), curated or not, so a city the
+//                data team added since the last deploy can be chosen; the
+//                server pages 404 one with no turfs and CitySync forgets it
 //   "geo.pune"   detected from the IP by proxy.ts, detected again on every
 //                request (a new IP city replaces it); not confirmed, so /,
 //                /turfs and /games show the pick screen with Pune as the
@@ -225,11 +307,21 @@ export type CityChoice =
   | { kind: "all" }
   | { kind: "unknown" };
 
-/** True only for a curated city id. */
+/**
+ * True only for a curated city id: one with a label, state and centroid
+ * here. Not a gate for a city choice (isCitySlug is); IP detection only
+ * ever yields one of these, which is what the geo.<id> cookie and the
+ * pick screen's static variants (app/c/pick/[city]) rely on.
+ */
 export function isKnownCity(id: string | null | undefined): id is CityId {
   return typeof id === "string" && CITY_IDS.includes(id);
 }
 
+/**
+ * A pick is any city slug, so an uncurated city survives a reload; an IP
+ * guess only a curated id, since detection produces nothing else and a
+ * forged geo.<x> must not send the proxy to a pick screen never built.
+ */
 export function parseCityCookie(raw: string | null | undefined): CityChoice | null {
   if (!raw) return null;
   const v = raw.trim();
@@ -239,7 +331,7 @@ export function parseCityCookie(raw: string | null | undefined): CityChoice | nu
     const id = v.slice(4);
     return isKnownCity(id) ? { kind: "city", city: id, src: "geo" } : null;
   }
-  return isKnownCity(v) ? { kind: "city", city: v, src: "pick" } : null;
+  return isCitySlug(v) ? { kind: "city", city: v, src: "pick" } : null;
 }
 
 export function serializeCityChoice(c: CityChoice): string {
@@ -279,12 +371,91 @@ export const CITY_ALIASES: Record<string, CityId> = {
   hubli: "hubballi",
   baroda: "vadodara",
   cochin: "kochi",
+  trivandrum: "thiruvananthapuram",
+  calicut: "kozhikode",
+  trichur: "thrissur",
+  cannanore: "kannur",
+  trichy: "tiruchirappalli",
+  tiruchi: "tiruchirappalli",
+  vizag: "visakhapatnam",
+  vishakhapatnam: "visakhapatnam",
+  bezawada: "vijayawada",
+  tirupathi: "tirupati",
+  allahabad: "prayagraj",
+  banaras: "varanasi",
+  benares: "varanasi",
+  gulbarga: "kalaburagi",
+  kalburgi: "kalaburagi",
+  shimoga: "shivamogga",
+  davangere: "davanagere",
+  gauhati: "guwahati",
+  bhubaneshwar: "bhubaneswar",
+  "dehra dun": "dehradun",
+  // Part of Greater Warangal; most Warangal turf addresses say Hanamkonda.
+  hanamkonda: "warangal",
+  hanumakonda: "warangal",
 };
+
+/**
+ * Every phrase that names a curated city (label, id or alias), longest
+ * first, so "navi mumbai" is tried before "mumbai".
+ */
+const CITY_PHRASES: [string, CityId][] = [
+  ...CITIES.flatMap((c): [string, CityId][] => [[c.label.toLowerCase(), c.id], [c.id, c.id]]),
+  ...Object.entries(CITY_ALIASES),
+].sort((a, b) => b[0].length - a[0].length);
+
+const CITY_RANK = new Map(CITIES.map((c, i) => [c.id, i]));
+
+/** A road word right after a city name (spaces, hyphens or dashes between): "Mysore Road" and "Old Madras Road" are in Bangalore, "Beed Bypass" in Sambhajinagar. */
+const ROAD_AFTER = /^[\s\u2013\u2014-]+(?:road|rd|bypass|highway|hwy|expressway|marg|naka|phata)(?![a-z])/;
+
+/**
+ * The curated city free text names, on word boundaries: "goal" is not
+ * Goa, "Kotak" is not Kota, "Agrasen" is not Agra. When it names more
+ * than one, a name that is part of a road's name loses ("box cricket on
+ * Ajmer Road Jaipur" is Jaipur, "Agra Bombay Road Indore" is Indore),
+ * then the biggest city wins, as the old includes() fallback did: a
+ * locality named after a smaller town sits in the bigger city ("Nanded
+ * City Pune" is Pune, "Satara Parisar Sambhajinagar" is Sambhajinagar).
+ * A road name alone still counts: "Nashik Road" is in Nashik.
+ */
+export function cityInText(text: string): CityId | null {
+  const t = text.toLowerCase();
+  type Hit = { at: number; end: number; id: CityId; road: boolean };
+  const found: Hit[] = [];
+  for (const [phrase, id] of CITY_PHRASES) {
+    const re = new RegExp(`(?:^|[^a-z])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`, "g");
+    for (let m = re.exec(t); m; m = re.exec(t)) {
+      const at = m.index + (m[0].length - phrase.length);
+      found.push({ at, end: at + phrase.length, id, road: false });
+    }
+  }
+  // Leftmost first, the longest at a place: "navi mumbai" keeps its "mumbai".
+  found.sort((a, b) => a.at - b.at || b.end - a.end);
+  const hits: Hit[] = [];
+  for (const h of found) if (!hits.length || h.at >= hits[hits.length - 1].end) hits.push(h);
+  // Right to left, so a chain of names before a road word ("agra bombay road") is all road.
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const h = hits[i];
+    const next = hits[i + 1];
+    h.road = ROAD_AFTER.test(t.slice(h.end)) || (!!next && next.road && /^[\s\u2013\u2014-]+$/.test(t.slice(h.end, next.at)));
+  }
+  const places = hits.filter((h) => !h.road);
+  const pool = places.length ? places : hits;
+  // CITIES is biggest first.
+  return pool.reduce<Hit | null>((best, h) => (!best || CITY_RANK.get(h.id)! < CITY_RANK.get(best.id)! ? h : best), null)?.id ?? null;
+}
 
 // ── Distances ──────────────────────────────────────────────
 
-// Rough centroid of each city. We only need to pick the closer one,
-// exact position doesn't matter.
+// Rough centroid of each curated city (every CITIES id has one, which
+// test:city checks, and nothing else should). We only need to pick the
+// closer one, exact position doesn't matter. IP detection (proxy.ts)
+// and GPS can only answer with a city listed here, which keeps their
+// answers inside the pick screen's static variants (app/c/pick/[city]).
+// A new city's centroid: the median of its active turfs' lat/lng is
+// within about 12 km of the city centre for every city added 26 Oct.
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   nashik: { lat: 19.9975, lng: 73.7898 },
   pune:   { lat: 18.5204, lng: 73.8567 },
@@ -340,6 +511,40 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   belagavi: { lat: 15.8497, lng: 74.4977 },
   hubballi: { lat: 15.3647, lng: 75.1240 },
   raipur: { lat: 21.2514, lng: 81.6296 },
+  thiruvananthapuram: { lat: 8.5241, lng: 76.9366 },
+  salem: { lat: 11.6643, lng: 78.1460 },
+  kozhikode: { lat: 11.2588, lng: 75.7804 },
+  dehradun: { lat: 30.3165, lng: 78.0322 },
+  tiruchirappalli: { lat: 10.7905, lng: 78.7047 },
+  vijayawada: { lat: 16.5062, lng: 80.6480 },
+  madurai: { lat: 9.9252, lng: 78.1198 },
+  visakhapatnam: { lat: 17.6868, lng: 83.2185 },
+  erode: { lat: 11.3410, lng: 77.7172 },
+  kanpur: { lat: 26.4499, lng: 80.3319 },
+  patna: { lat: 25.5941, lng: 85.1376 },
+  thrissur: { lat: 10.5276, lng: 76.2144 },
+  tirupati: { lat: 13.6288, lng: 79.4192 },
+  guwahati: { lat: 26.1445, lng: 91.7362 },
+  bhubaneswar: { lat: 20.2961, lng: 85.8245 },
+  guntur: { lat: 16.3067, lng: 80.4365 },
+  agra: { lat: 27.1767, lng: 78.0081 },
+  ranchi: { lat: 23.3441, lng: 85.3096 },
+  kalaburagi: { lat: 17.3297, lng: 76.8343 },
+  kurnool: { lat: 15.8281, lng: 78.0373 },
+  amritsar: { lat: 31.6340, lng: 74.8723 },
+  prayagraj: { lat: 25.4358, lng: 81.8463 },
+  ajmer: { lat: 26.4499, lng: 74.6399 },
+  ludhiana: { lat: 30.9010, lng: 75.8573 },
+  meerut: { lat: 28.9845, lng: 77.7064 },
+  warangal: { lat: 17.9689, lng: 79.5941 },
+  varanasi: { lat: 25.3176, lng: 82.9739 },
+  davanagere: { lat: 14.4644, lng: 75.9218 },
+  kannur: { lat: 11.8745, lng: 75.3704 },
+  nellore: { lat: 14.4426, lng: 79.9865 },
+  shivamogga: { lat: 13.9299, lng: 75.5681 },
+  siliguri: { lat: 26.7271, lng: 88.3953 },
+  ujjain: { lat: 23.1765, lng: 75.7885 },
+  dhanbad: { lat: 23.7957, lng: 86.4304 },
 };
 
 export function cityCoords(id: string): { lat: number; lng: number } | null {
@@ -371,7 +576,6 @@ export function nearestCityAny(lat: number, lng: number): { id: CityId; km: numb
   const pt = { lat, lng };
   let best: { id: CityId; km: number } = { id: CITY_IDS[0], km: Infinity };
   for (const id of Object.keys(CITY_COORDS)) {
-    if (!isKnownCity(id)) continue;
     const km = distanceKm(pt, CITY_COORDS[id]);
     if (km < best.km) best = { id, km };
   }
@@ -381,17 +585,11 @@ export function nearestCityAny(lat: number, lng: number): { id: CityId; km: numb
 /**
  * Guess the closest city from a lat/lng. If the point is > 200km from
  * all of them (user isn't near any city we list), return null so we don't force
- * them into a city that isn't theirs.
+ * them into a city that isn't theirs. Same candidates as nearestCityAny.
  */
 export function nearestCity(lat: number, lng: number): CityId | null {
-  const pt = { lat, lng };
-  let best: { id: CityId; km: number } | null = null;
-  for (const id of Object.keys(CITY_COORDS)) {
-    const km = distanceKm(pt, CITY_COORDS[id]);
-    if (!best || km < best.km) best = { id, km };
-  }
-  if (!best || best.km > 200) return null;
-  return best.id;
+  const best = nearestCityAny(lat, lng);
+  return best.km > 200 ? null : best.id;
 }
 
 /**
@@ -442,8 +640,10 @@ export function resolveCityScope(requested: string | null, live: { id: string; l
 
 /**
  * Cities matching a typed query: label, any word of the label, id,
- * state or a known alias ("bom" finds Mumbai). Label prefix first,
- * then the bigger city.
+ * state or a known alias ("bom" finds Mumbai, "triv" Thiruvananthapuram).
+ * Label prefix first, then the bigger city. The placeholder state
+ * "India" (cityInfo, for an uncurated city) never matches: "ind" is
+ * Indore, not every new city.
  */
 export function matchCities<T extends { id: string; label: string; state?: string; n?: number }>(q: string, list: T[]): T[] {
   const s = q.trim().toLowerCase();
@@ -461,7 +661,7 @@ export function matchCities<T extends { id: string; label: string; state?: strin
         labelHit ||
         label.split(/[\s-]+/).some((w) => w.startsWith(s)) ||
         c.id.startsWith(s) ||
-        (c.state ?? "").toLowerCase().startsWith(s) ||
+        (c.state !== "India" && (c.state ?? "").toLowerCase().startsWith(s)) ||
         aliasIds.has(c.id);
       return { c, i, hit, labelHit };
     })
@@ -507,7 +707,7 @@ export function getCityPref(): CityId | null {
   if (c) return scopeOf(c);
   try {
     const v = localStorage.getItem(KEY);
-    return isKnownCity(v) ? v : null;
+    return isCitySlug(v) ? v : null;
   } catch {
     return null;
   }
@@ -546,13 +746,17 @@ export function applyCityToDocument(c: CityChoice | null): void {
  * Store a confirmed city pick. Writes the cookie and the localStorage
  * mirror, updates <html>, tells the page (tapturf:city-changed) and asks
  * the server to re-issue the cookie. Returns true when the cookie stuck
- * (false when cookies are blocked). There is no "all of India" choice any
- * more, so only a curated city id is accepted.
+ * (false when cookies are blocked, or for a value that is not a city
+ * slug, which changes nothing: callers check isCitySlug first). There is
+ * no "all of India" choice any more. Any city slug is accepted, curated
+ * or not; the strict pattern matters, since the value goes raw into
+ * document.cookie and into a /<city> URL. /api/city re-issues it only
+ * for a curated or live city.
  */
 export function setCityPref(next: CityId, opts: { source?: CitySource } = {}): boolean {
   if (typeof window === "undefined") return false;
   const value = next;
-  if (!isKnownCity(value)) return false;
+  if (!isCitySlug(value)) return false;
   const prior = readCityChoice();
   const previous = prior ? serializeCityChoice(prior) : "none";
   writeCookie(value);
@@ -579,9 +783,12 @@ export function setCityPref(next: CityId, opts: { source?: CitySource } = {}): b
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ choice: value }),
   }).catch(() => {});
-  // Re-issued just now: CitySync's once-per-session re-issue skips it.
+  // Re-issued just now: CitySync's once-per-session re-issue skips it. Not
+  // for a city that is not curated: the page may unload before this
+  // answer, and CitySync's own check on the next load is what forgets a
+  // city the server no longer lists (its /, /turfs and /games would 404).
   try {
-    sessionStorage.setItem(CITY_REISSUED_KEY, value);
+    if (isKnownCity(value)) sessionStorage.setItem(CITY_REISSUED_KEY, value);
   } catch { /* ignore */ }
   track("city_chosen", { city: value, source: opts.source ?? "unknown", previous });
   return stuck;

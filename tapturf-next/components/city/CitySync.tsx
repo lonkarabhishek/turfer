@@ -5,8 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   applyCityToDocument,
   CITY_REISSUED_KEY,
+  clearCityPref,
   confirmedCity,
-  isKnownCity,
   labelFor,
   parseCityCookie,
   PICK_LEFT_KEY,
@@ -59,7 +59,9 @@ type ChangeDetail = { value: string | null; source?: CitySource; stuck?: boolean
  * Keeps every surface in step with the city cookie. Renders nothing.
  * - On mount: mirrors the cookie into localStorage, logs a detection
  *   once, and has the server re-issue a confirmed pick once per session
- *   (Safari caps script-written cookies at 7 days).
+ *   (Safari caps script-written cookies at 7 days). A pick the server
+ *   refuses (400: not curated and no active turfs, so /, /turfs and
+ *   /games 404 for it) is forgotten, and the proxy asks again.
  * - On tapturf:city-changed: on the pick screen, a full load of the same
  *   URL (the proxy now serves the city's page). Elsewhere one
  *   router.refresh(), so the proxy serves the new city's page and the
@@ -129,7 +131,19 @@ export function CitySync() {
               keepalive: true,
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ choice: raw }),
-            }).catch(() => {});
+            })
+              .then((r) => {
+                // Only a 400 means "no such city" (a 503 is a failed read),
+                // and only while the cookie still holds it (no newer pick).
+                const now = readCityChoice();
+                if (r.status !== 400 || !now || serializeCityChoice(now) !== raw) return;
+                clearCityPref();
+                // /, /turfs and /games answered 404 for it. A refresh keeps
+                // Next's not-found screen (it resets only on a new path), so
+                // load the URL again: the proxy now serves the pick screen.
+                if (["/", "/turfs", "/games"].includes(location.pathname)) reloadHere();
+              })
+              .catch(() => {});
           }
         } catch { /* ignore */ }
       }
@@ -194,8 +208,11 @@ export function CitySync() {
       const m = location.pathname.match(/^\/([a-z][a-z-]{1,30})(?:\/[a-z-]+)?\/?$/);
       // From the picker (a list pick or its precise location) on a city
       // page: go to the new city's page. Its sport pages can be empty for
-      // another city, so this always lands on /<city>.
-      if ((d.source === "picker" || d.source === "gps") && m && isKnownCity(m[1]) && newScope && newScope !== m[1]) {
+      // another city, so this always lands on /<city>. A city page is one
+      // with that city's "Make X my city" (data-mine), curated or not; the
+      // path alone also matches /blog/x, /sport/football or /tools/x.
+      const onCityPage = m !== null && document.querySelector(`[data-mine="${m[1]}"]`) !== null;
+      if ((d.source === "picker" || d.source === "gps") && m && onCityPage && newScope && newScope !== m[1]) {
         lastScope.current = newScope;
         router.push(`/${newScope}`);
         return;

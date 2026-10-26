@@ -14,6 +14,7 @@ const areas: Record<string, string[]> = {
   nashik: ["College Road", "Gangapur Road", "Nashik Road", "Pathardi Phata"],
   pune: ["Baner", "Hinjewadi", "Kothrud", "Nanded", "Viman Nagar", "Wakad"],
   surat: ["Gandhi Nagar", "Vesu"],
+  thiruvananthapuram: ["Kazhakkoottam", "Nemom"],
 };
 const rows: [string, string, number][] = [
   ["Hindu Gymkhana Ground", "nashik", 500],
@@ -57,6 +58,8 @@ test("every chip we generate has a ready answer, for several cities", () => {
     { label: "Hyderabad", area: "Gachibowli", boxCricket: true, pair: null },
     { label: "Nashik", area: null, boxCricket: false, pair: ["Hindu Gymkhana", "Vedant Sports Academy"] as [string, string] },
     { label: "Bengaluru", area: null, boxCricket: true, pair: null },
+    // Curated on 26 Oct: its chips used to cost a Claude call each.
+    { label: "Thiruvananthapuram", area: "Kazhakkoottam", boxCricket: true, pair: null },
   ];
   for (const c of cities) {
     for (const games of [0, 4]) {
@@ -100,6 +103,29 @@ test("city chips read as Claude read them", () => {
   f = hit("Host a game Saturday 7pm");
   assert.equal(f.intent, "create_game");
   assert.equal(f.summary, "Host a game Saturday 7pm");
+});
+
+test("cities curated on 26 Oct get a ready answer, by their old names too", () => {
+  for (const [q, city] of [
+    ["Box cricket in Trivandrum", "thiruvananthapuram"],
+    ["box cricket in Thiruvananthapuram", "thiruvananthapuram"],
+    ["Turfs in Vizag", "visakhapatnam"],
+    ["turfs in Visakhapatnam", "visakhapatnam"],
+    ["Football Calicut", "kozhikode"],
+    ["Trichy turf", "tiruchirappalli"],
+    ["Allahabad", "prayagraj"],
+    ["turfs in Prayagraj", "prayagraj"],
+    ["Gulbarga", "kalaburagi"],
+    ["Shimoga", "shivamogga"],
+    ["Banaras", "varanasi"],
+    ["Box cricket in Kazhakkoottam", "thiruvananthapuram"],
+  ]) {
+    assert.equal(hit(q).city, city, q);
+  }
+  // The name as typed stays in the reply.
+  assert.equal(hit("Box cricket in Trivandrum").summary, "Box cricket turfs in Trivandrum.");
+  // Hanamkonda is part of Warangal, not all of it: Claude decides.
+  assert.equal(ask("Turf in Hanamkonda"), null);
 });
 
 test("generic chips and the most asked questions", () => {

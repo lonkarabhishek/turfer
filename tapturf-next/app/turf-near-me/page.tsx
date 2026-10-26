@@ -13,6 +13,7 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { NearMeFinder } from "@/components/near/NearMeFinder";
 import type { Turf } from "@/types/turf";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
+import { plural } from "@/lib/home/format";
 
 // "Turf near me": the page for people who don't know a turf's name yet.
 // Everything a crawler needs is in the HTML (every turf linked, grouped
@@ -27,7 +28,7 @@ const LIST =
 /** Photo cards per city; every other turf is still linked by area. */
 const CARDS_PER_CITY = 8;
 // Photo cards (each a client slider) only for the biggest cities; the
-// rest list their top turfs as plain links. All 54 cities as cards made
+// rest list their top turfs as plain links. Every city as cards (54 then) made
 // this page 4.2 MB with 392 sliders, and on a phone the photos could not
 // be swiped until all of it had loaded (20 Oct).
 const CARD_CITIES = 6;
@@ -97,11 +98,11 @@ const load = cache(async () => {
   };
 });
 
-/** Five biggest cities by name, the rest counted: "Hyderabad, Bangalore, Mumbai, Pune, Delhi and 49 more cities". */
+/** Five biggest cities by name, the rest counted live: "Hyderabad, Bangalore, Pune, Mumbai, Delhi and 83 more cities". */
 function cityLine(blocks: { label: string }[]) {
   const named = blocks.slice(0, 5).map((b) => b.label);
   const rest = blocks.length - named.length;
-  if (rest > 0) return `${named.join(", ")} and ${rest} more cities`;
+  if (rest > 0) return `${named.join(", ")} and ${plural(rest, "more city", "more cities")}`;
   return named.length <= 1 ? named[0] ?? "" : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
 }
 
@@ -150,8 +151,8 @@ export default async function TurfNearMePage() {
     },
     {
       q: "How many turfs are there near me?",
-      a: `TapTurf lists ${blocks.slice(0, 8).map((b) => `${b.turfs.length} turfs in ${b.label}`).join(", ")}${
-        blocks.length > 8 ? ` and turfs in ${blocks.length - 8} more cities` : ""
+      a: `TapTurf lists ${blocks.slice(0, 8).map((b) => `${plural(b.turfs.length, "turf", "turfs")} in ${b.label}`).join(", ")}${
+        blocks.length > 8 ? ` and turfs in ${plural(blocks.length - 8, "more city", "more cities")}` : ""
       }${topAreas.length ? `. Areas with the most turfs include ${topAreas.join(", ")}.` : "."}`,
     },
     {
@@ -284,7 +285,7 @@ export default async function TurfNearMePage() {
                 Turfs near you in {b.label}
               </h2>
               <p className="text-[15px] text-primary-500 mt-1">
-                Top rated first · {b.turfs.length} turfs
+                Top rated first · {plural(b.turfs.length, "turf", "turfs")}
               </p>
             </div>
             <Link
@@ -331,7 +332,7 @@ export default async function TurfNearMePage() {
                 </>
               )}
               <Link href={`/${b.id}`} className="font-semibold text-accent-600 hover:text-accent-700">
-                See all {b.turfs.length} turfs in {b.label}
+                {b.turfs.length === 1 ? `See the turf in ${b.label}` : `See all ${b.turfs.length} turfs in ${b.label}`}
               </Link>
             </p>
           ) : (

@@ -12,7 +12,20 @@ import {
   matchCities,
   byDistanceFrom,
   kmBetween,
+  nearestCity,
+  nearestCityAny,
+  cityCoords,
+  cityInfo,
+  cityInText,
+  guessCityFromAddress,
+  isCitySlug,
+  isKnownCity,
+  stateFor,
   CITIES,
+  CITY_ALIASES,
+  CITY_LIST,
+  CITY_LIST_AND,
+  RESERVED_CITY_SLUGS,
   type CityChoice,
 } from "./city";
 import { CITY_PREPAINT_JS } from "./cityPrePaint";
@@ -199,14 +212,36 @@ test("a malformed city header with no coords does not throw", () => {
   assert.deepEqual(d, { action: "rewrite", pathname: "/c/pick/none", setCookie: "unknown", debug: "pick.none" });
 });
 
-test("Aurangabad, Bihar coordinates never map to Sambhajinagar", () => {
+test("Aurangabad, Bihar coordinates never map to Sambhajinagar (Patna is the nearest city now)", () => {
   const get = (h: Record<string, string>) => (n: string) => h[n] ?? null;
   assert.equal(
     detectCityFromHeaders(get({ "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "24.75", "x-vercel-ip-longitude": "84.37", "x-vercel-ip-city": "Aurangabad" })),
-    null,
+    "patna",
   );
   const d = decide(req({ headers: { "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "24.75", "x-vercel-ip-longitude": "84.37", "x-vercel-ip-city": "Aurangabad" } }));
-  assert.equal(d.action === "rewrite" && d.setCookie, "unknown");
+  assert.equal(d.action === "rewrite" && d.setCookie, "geo.patna");
+  // Far from every city (Imphal): still nothing.
+  assert.equal(detectCityFromHeaders(get({ "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "24.82", "x-vercel-ip-longitude": "93.94" })), null);
+});
+
+test("cities curated on 26 Oct are detected from IP coordinates and names", () => {
+  const get = (h: Record<string, string>) => (n: string) => h[n] ?? null;
+  // Thiruvananthapuram used to come out as Kochi, 170 km away.
+  const tvm = { "x-vercel-ip-country": "IN", "x-vercel-ip-latitude": "8.5241", "x-vercel-ip-longitude": "76.9366" };
+  assert.equal(detectCityFromHeaders(get(tvm)), "thiruvananthapuram");
+  assert.deepEqual(decide(req({ headers: tvm })), {
+    action: "rewrite",
+    pathname: "/c/pick/thiruvananthapuram",
+    setCookie: "geo.thiruvananthapuram",
+    debug: "pick.thiruvananthapuram",
+  });
+  // Visakhapatnam and Guwahati used to get no city at all (none within 200 km).
+  assert.equal(detectCityFromHeaders(get({ "x-vercel-ip-latitude": "17.72", "x-vercel-ip-longitude": "83.30" })), "visakhapatnam");
+  assert.equal(detectCityFromHeaders(get({ "x-vercel-ip-latitude": "26.18", "x-vercel-ip-longitude": "91.75" })), "guwahati");
+  // The name header, by old names too.
+  for (const [name, id] of [["Trivandrum", "thiruvananthapuram"], ["Calicut", "kozhikode"], ["Allahabad", "prayagraj"], ["Vizag", "visakhapatnam"], ["Patna", "patna"]]) {
+    assert.equal(detectCityFromHeaders(get({ "x-vercel-ip-country": "IN", "x-vercel-ip-city": name })), id, name);
+  }
 });
 
 test("the city name header is a fallback when coordinates are absent", () => {
@@ -228,13 +263,31 @@ test("cookie unknown upgrades on a document with geo", () => {
 });
 
 test("a bogus cookie is treated as missing", () => {
-  assert.deepEqual(decide(req({ cookie: "bogus" })), { action: "rewrite", pathname: "/c/pick/none", setCookie: "unknown", debug: "pick.none" });
-  assert.deepEqual(decide(req({ cookie: "geo.atlantis", headers: PUNE })), {
-    action: "rewrite",
-    pathname: "/c/pick/pune",
-    setCookie: "geo.pune",
-    debug: "pick.pune",
-  });
+  // Reserved words and anything not slug-shaped are never a pick.
+  for (const cookie of ["Pune", "pick", "none", "geo", "turfs", "blog", "pune;x", "x", "../pune", "a".repeat(40)]) {
+    assert.deepEqual(decide(req({ cookie })), { action: "rewrite", pathname: "/c/pick/none", setCookie: "unknown", debug: "pick.none" }, cookie);
+  }
+  // An IP guess is only ever a curated city: detection yields nothing else,
+  // so a forged one never reaches a pick screen that was not built.
+  for (const cookie of ["geo.atlantis", "geo.testpur", "geo.pick"]) {
+    assert.deepEqual(decide(req({ cookie, headers: PUNE })), {
+      action: "rewrite",
+      pathname: "/c/pick/pune",
+      setCookie: "geo.pune",
+      debug: "pick.pune",
+    }, cookie);
+  }
+});
+
+test("a pick of a city not curated yet is confirmed and goes to its twin", () => {
+  // A city the data team added after the deploy: app/c/[city] renders it
+  // on demand when it has turfs, and 404s it otherwise.
+  for (const [path, target] of [["/", "/c/testpur"], ["/turfs", "/c/testpur/turfs"], ["/games", "/c/testpur/games"]]) {
+    assert.deepEqual(decide(req({ path, cookie: "testpur", headers: PUNE })), { action: "rewrite", pathname: target, setCookie: undefined, debug: "testpur" }, path);
+  }
+  assert.deepEqual(parseCityCookie("testpur"), { kind: "city", city: "testpur", src: "pick" });
+  assert.equal(parseCityCookie("geo.testpur"), null);
+  assert.equal(confirmedCity(parseCityCookie("thiruvananthapuram")), "thiruvananthapuram");
 });
 
 test("/turfs?q= is never rewritten or gated", () => {
@@ -338,6 +391,130 @@ test("matchCities finds by label, alias and word", () => {
   assert.equal(matchCities("bom", list)[0].id, "mumbai");
   assert.equal(matchCities("  ", list).length, list.length);
   assert.equal(matchCities("zzz", list).length, 0);
+  // Old and other names of the cities curated on 26 Oct.
+  for (const [q, id] of [
+    ["Trivandrum", "thiruvananthapuram"],
+    ["triv", "thiruvananthapuram"],
+    ["vizag", "visakhapatnam"],
+    ["calicut", "kozhikode"],
+    ["trichy", "tiruchirappalli"],
+    ["allahabad", "prayagraj"],
+    ["gulbarga", "kalaburagi"],
+    ["shimoga", "shivamogga"],
+    ["banaras", "varanasi"],
+  ]) {
+    assert.equal(matchCities(q, list)[0]?.id, id, q);
+  }
+  assert.ok(matchCities("kerala", list).some((c) => c.id === "thiruvananthapuram"));
+});
+
+test("matchCities lists a city not curated yet, but never by the placeholder state", () => {
+  const live = [...CITIES.slice(0, 3), cityInfo("testpur")].map((c, i) => ({ ...c, n: 10 - i }));
+  assert.equal(cityInfo("testpur").label, "Testpur");
+  assert.deepEqual(matchCities("test", live).map((c) => c.id), ["testpur"]);
+  // "India" is cityInfo's placeholder state: "ind" must not find it.
+  assert.equal(matchCities("ind", live).some((c) => c.id === "testpur"), false);
+});
+
+test("resolveCityScope accepts a live city that is not curated", () => {
+  const live = [{ id: "pune", label: "Pune" }, { id: "testpur", label: "Testpur" }];
+  assert.deepEqual(resolveCityScope("testpur", live), { kind: "city", id: "testpur", label: "Testpur", requested: null });
+  // Not live and no centroid: all of India.
+  assert.deepEqual(resolveCityScope("atlantis", live), { kind: "india", requested: { id: "atlantis", label: "Atlantis" } });
+});
+
+test("isCitySlug: any slug-shaped city, never a reserved word or garbage", () => {
+  for (const ok of ["pune", "thiruvananthapuram", "testpur", "new-town"]) assert.equal(isCitySlug(ok), true, ok);
+  for (const bad of ["", "x", "Pune", "pune;", "pune x", "../x", "-pune", "a".repeat(32), "geo.pune", null, undefined, ...RESERVED_CITY_SLUGS]) {
+    assert.equal(isCitySlug(bad), false, String(bad));
+  }
+  // No curated city collides with a reserved word or a route.
+  for (const c of CITIES) assert.equal(isCitySlug(c.id), true, c.id);
+  assert.equal(isKnownCity("testpur"), false);
+});
+
+test("the curated list: every live city on 26 Oct, each with a centroid and nothing else", () => {
+  assert.equal(CITIES.length, 88);
+  assert.equal(new Set(CITIES.map((c) => c.id)).size, CITIES.length);
+  for (const c of CITIES) {
+    assert.ok(cityCoords(c.id), `${c.id} has no centroid`);
+    assert.notEqual(c.state, "India", c.id);
+    assert.equal(c.labelUpper, c.label.toUpperCase(), c.id);
+  }
+  // IP detection only answers with a curated city (CITY_COORDS, aliases,
+  // labels), which is what keeps every proxy rewrite inside the pick
+  // screen's static variants (app/c/pick/[city]: curated ids plus none).
+  for (const id of Object.values(CITY_ALIASES)) assert.ok(isKnownCity(id), `alias to ${id}`);
+  for (let lat = 8; lat <= 32; lat += 0.5) {
+    for (let lng = 70; lng <= 92; lng += 0.5) {
+      const id = nearestCity(lat, lng);
+      if (id) assert.ok(isKnownCity(id), `${lat},${lng} -> ${id}`);
+      assert.ok(isKnownCity(nearestCityAny(lat, lng).id));
+    }
+  }
+});
+
+test("nearest city: the south of Kerala is Thiruvananthapuram, not Kochi", () => {
+  assert.equal(nearestCity(8.556, 76.88), "thiruvananthapuram"); // Technopark
+  assert.equal(nearestCity(8.4, 77.1), "thiruvananthapuram"); // Neyyattinkara side
+  assert.equal(nearestCity(9.97, 76.29), "kochi");
+  assert.equal(nearestCity(31.62, 74.88), "amritsar");
+  // Far from everything (Imphal): null, and the closest is still named.
+  assert.equal(nearestCity(24.82, 93.94), null);
+  assert.equal(nearestCityAny(24.82, 93.94).id, "guwahati");
+});
+
+test("cityInText: whole words only, old names too", () => {
+  assert.equal(cityInText("football goal post"), null);
+  assert.equal(cityInText("kotak bank turf"), null);
+  assert.equal(cityInText("agrasen ground"), null);
+  assert.equal(cityInText("box cricket in Trivandrum tonight"), "thiruvananthapuram");
+  assert.equal(cityInText("turfs in vizag"), "visakhapatnam");
+  assert.equal(cityInText("Box cricket Goa"), "goa");
+  assert.equal(cityInText("navi mumbai turf"), "mumbai");
+  // Two places named: the biggest city.
+  assert.equal(cityInText("pune or mumbai"), "pune");
+  assert.equal(cityInText("box cricket nanded city pune"), "pune", "a locality named after a smaller town");
+});
+
+test("cityInText: a city in a road's name loses to the city named with it", () => {
+  // Areas in the turfs table, each with its own city named too.
+  assert.equal(cityInText("box cricket on ajmer road jaipur"), "jaipur");
+  assert.equal(cityInText("turf near mysore road bangalore"), "bangalore");
+  assert.equal(cityInText("Kengeri (Mysore Road), Bangalore"), "bangalore");
+  assert.equal(cityInText("football old madras road bangalore"), "bangalore");
+  assert.equal(cityInText("box cricket jalna road sambhajinagar"), "sambhajinagar");
+  assert.equal(cityInText("box cricket beed bypass sambhajinagar"), "sambhajinagar");
+  assert.equal(cityInText("turf agra bombay road indore"), "indore", "a chain of names before the road word");
+  assert.equal(cityInText("Daregaon / Agra–Mumbai Road, Malegaon"), "malegaon", "an en dash between the names");
+  assert.equal(cityInText("box cricket kanpur road lucknow"), "lucknow");
+  assert.equal(cityInText("trichy road coimbatore turf"), "coimbatore");
+  assert.equal(cityInText("Mumbai Naka nashik"), "nashik");
+  assert.equal(cityInText("mumbai-pune expressway turf in pune"), "pune");
+  // A road name alone still names its city.
+  assert.equal(cityInText("turf in nashik road"), "nashik");
+  assert.equal(cityInText("box cricket on mysore rd"), "mysuru");
+  // A road word further on is not "directly after".
+  assert.equal(cityInText("agra turf near station road"), "agra");
+});
+
+test("guessCityFromAddress: aliases, and Telangana is a last resort", () => {
+  assert.equal(guessCityFromAddress("Mulugu Rd, Hanamkonda, Telangana 506001"), "warangal");
+  assert.equal(guessCityFromAddress("DC Office Road, Davangere, Karnataka"), "davanagere");
+  assert.equal(guessCityFromAddress("Beach Road, Calicut, Kerala"), "kozhikode");
+  assert.equal(guessCityFromAddress("Delhi Road, Meerut, Uttar Pradesh"), "meerut");
+  assert.equal(guessCityFromAddress("Gachibowli, Telangana 500032"), "hyderabad");
+  assert.equal(guessCityFromAddress("Trichy Road, Coimbatore"), "coimbatore");
+  assert.equal(guessCityFromAddress("Kazhakkoottam, Thiruvananthapuram, Kerala"), "thiruvananthapuram");
+  assert.equal(guessCityFromAddress("Somewhere"), null);
+});
+
+test("static city copy never states a count; structured data has no fake region", () => {
+  assert.equal(/\d/.test(CITY_LIST), false, CITY_LIST);
+  assert.equal(/\d/.test(CITY_LIST_AND), false, CITY_LIST_AND);
+  assert.equal(CITY_LIST_AND, "Hyderabad, Bangalore, Pune, Mumbai, Delhi and more cities");
+  assert.equal(stateFor("thiruvananthapuram"), "Kerala");
+  assert.equal(stateFor("testpur"), undefined);
 });
 
 test("byDistanceFrom orders by km and keeps unknowns last", () => {
@@ -408,6 +585,10 @@ test("pre-paint mirrors the cookie onto <html>", () => {
   assert.equal(runPrePaint({ cookie: "all" }).attrs["data-city-state"], "all");
   assert.deepEqual(runPrePaint({}).attrs, { "data-city-state": "none" });
   assert.equal(runPrePaint({ cookie: "mumbai" }).attrs["data-city-src"], "pick");
+  // Any city slug, curated or not; a reserved word is no city.
+  assert.equal(runPrePaint({ cookie: "testpur" }).attrs["data-city"], "testpur");
+  assert.deepEqual(runPrePaint({ cookie: "pick" }).attrs, { "data-city-state": "none" });
+  assert.deepEqual(runPrePaint({ cookie: "turfs" }).attrs, { "data-city-state": "none" });
 });
 
 test("pre-paint migrates a legacy pick and reloads once on a personalised page", () => {
@@ -505,7 +686,9 @@ test("pick guard: a confirmed pick in the cookie hides the pick screen and reloa
 });
 
 test("pick guard: an IP guess, unknown, the old all, no cookie or no storage stay on the pick screen", () => {
-  for (const cookie of ["geo.pune", "unknown", "all", undefined]) {
+  // A pick of a city not curated yet is a pick, like parseCityCookie says.
+  assert.equal(runPickGuard({ cookie: "testpur", path: "/" }).reloads, 1);
+  for (const cookie of ["geo.pune", "unknown", "all", "pick", "none", "Pune", undefined]) {
     const r = runPickGuard({ cookie });
     assert.equal(r.reloads, 0, String(cookie));
     assert.equal(r.style.visibility, undefined, String(cookie));

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CITY_IDS, CITY_LIST, labelFor } from "@/lib/city";
+import { getCityCopy } from "@/lib/queries/cities";
 import Link from "next/link";
 import { getSortedPosts } from "@/content/blog";
 import { PostCard } from "@/components/blog/PostCard";
@@ -34,7 +35,10 @@ function postCitiesLine(posts: { city: string | null }[]): string {
   return labels.length <= 1 ? labels[0] ?? "" : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
 }
 
-export default function BlogIndexPage() {
+export default async function BlogIndexPage() {
+  // The live city count, from the hourly cached list (the same window as
+  // this page, so no extra read); the count-free static line on a failure.
+  const { list: cityList } = await getCityCopy().catch(() => ({ list: CITY_LIST }));
   const posts = getSortedPosts();
   const [featured, ...rest] = posts;
   const postCities = postCitiesLine(posts);
@@ -115,7 +119,7 @@ export default function BlogIndexPage() {
             Ready to play?
           </p>
           <h2 className="font-display text-3xl md:text-4xl leading-tight mb-3">
-            Every turf in {CITY_LIST},
+            Every turf in {cityList},
             <br />
             one search.
           </h2>

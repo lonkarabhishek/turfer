@@ -106,7 +106,7 @@ function modeOf(values: (string | null)[]): string | null {
  * The home's small non-turf reads (live trending picks, open games),
  * one shared copy for the home window. Kept apart from the turf rows so
  * this entry never wraps another unstable_cache (see getHomeData), and
- * so each home render (54 city variants plus all-India) does not query
+ * so each home render (one variant per city plus all-India) does not query
  * them again. Tagged "turf-data": a trending change or a pick's window
  * opening or closing purges it through the cache queue.
  *

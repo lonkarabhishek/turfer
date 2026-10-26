@@ -1,13 +1,6 @@
 import Link from "next/link";
 import type { Post } from "@/content/blog/types";
-
-const CITY_LABEL: Record<string, string> = {
-  nashik: "Nashik",
-  pune: "Pune",
-  mumbai: "Mumbai",
-  nagpur: "Nagpur",
-  hyderabad: "Hyderabad",
-};
+import { labelFor } from "@/lib/city";
 
 export function PostCard({ post, featured = false }: { post: Post; featured?: boolean }) {
   const hasImage = !!post.heroImage;
@@ -57,7 +50,7 @@ export function PostCard({ post, featured = false }: { post: Post; featured?: bo
           {post.city && (
             <>
               <span className="text-primary-300">·</span>
-              <span className="text-primary-500">{CITY_LABEL[post.city] || post.city}</span>
+              <span className="text-primary-500">{labelFor(post.city)}</span>
             </>
           )}
           <span className="text-primary-300">·</span>

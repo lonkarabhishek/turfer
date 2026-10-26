@@ -5,8 +5,9 @@ import Link from "next/link";
 import { Check, Loader2, LocateFixed, MapPin, Navigation, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { getUserLocation } from "@/lib/utils/location";
-import { guessCityFromAddress, isCity, labelFor, nearestCity as cityNear, readCityChoice, setCityPref } from "@/lib/city";
+import { guessCityFromAddress, isCity, isCitySlug, labelFor, nearestCity as cityNear, readCityChoice, setCityPref } from "@/lib/city";
 import type { Turf } from "@/types/turf";
+import { plural } from "@/lib/home/format";
 
 type NearTurf = Turf & { distanceKm: number };
 type Result = { turfs: NearTurf[]; within5: number; within10: number };
@@ -41,7 +42,15 @@ export function NearMeFinder({
     setState("locating");
     try {
       const me = await getUserLocation();
-      const c = cityNear(me.lat, me.lng);
+      setState("loading");
+      const res = await fetch(`/api/turfs/near?lat=${me.lat.toFixed(4)}&lng=${me.lng.toFixed(4)}&limit=12`);
+      if (!res.ok) throw new Error(String(res.status));
+      const r = (await res.json()) as Result;
+      // The nearest turf's city when it is close: the database decides,
+      // so a city added since the last deploy counts too (and this read
+      // is made anyway). Otherwise the nearest curated centroid.
+      const t = r.turfs[0];
+      const c = t && t.distanceKm <= FAR_KM && isCitySlug(t.city) ? t.city : cityNear(me.lat, me.lng);
       if (c) {
         const cur = readCityChoice();
         const already = cur?.kind === "city" && cur.city === c;
@@ -53,10 +62,7 @@ export function NearMeFinder({
           setGpsCity({ id: c, saved: true });
         }
       }
-      setState("loading");
-      const res = await fetch(`/api/turfs/near?lat=${me.lat.toFixed(4)}&lng=${me.lng.toFixed(4)}&limit=12`);
-      if (!res.ok) throw new Error(String(res.status));
-      setResult((await res.json()) as Result);
+      setResult(r);
       setState("done");
     } catch (e) {
       setState((e as GeolocationPositionError)?.code === 1 ? "denied" : "error");
@@ -125,7 +131,7 @@ export function NearMeFinder({
                   href="#cities"
                   className="h-9 px-4 inline-flex items-center rounded-full ring-1 ring-primary-200 hover:bg-primary-50 text-[14px] font-medium text-primary-700"
                 >
-                  {cities.length - CHIP_LIMIT} more cities
+                  {plural(cities.length - CHIP_LIMIT, "more city", "more cities")}
                 </a>
               )}
             </div>
@@ -163,7 +169,7 @@ export function NearMeFinder({
               </h2>
               {far && (
                 <p className="text-[15px] text-primary-500 mt-1">
-                  We list turfs in {cities.length} cities across India. Here are the closest ones.
+                  We list turfs in {plural(cities.length, "city", "cities")} across India. Here are the closest ones.
                 </p>
               )}
             </div>
