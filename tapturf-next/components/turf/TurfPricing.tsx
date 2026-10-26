@@ -221,23 +221,42 @@ function NoPrices({
           </span>
           <div className="min-w-0">
             <p className="text-[16px] font-semibold text-primary-800">
-              {reported ? "Not listed by the turf yet" : "Prices not listed yet"}
+              {reported ? "Not listed by the turf yet" : claimed ? "The owner hasn't added prices yet" : "Prices not listed yet"}
             </p>
             <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">{subline}</p>
           </div>
         </div>
-        <div className="mt-4 flex flex-col sm:flex-row gap-2">
-          <Link
-            href={`/my?claim=${turfId}`}
-            prefetch={false}
-            className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors"
-          >
-            {claimed ? "Manage this turf? Add your prices" : "Own this turf? Add your prices free"}
-          </Link>
-          <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-white border border-primary-200 hover:bg-primary-50 text-primary-900 text-[14px] font-semibold transition-colors cursor-pointer">
-            {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
-          </SuggestInfoButton>
-        </div>
+        {claimed ? (
+          // A verified turf already has its owner on myTapturf: players get the
+          // button, the owner a quiet link (a big "Manage this turf?" read as if
+          // the listing still needed claiming, 26 Oct).
+          <>
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors cursor-pointer">
+                {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
+              </SuggestInfoButton>
+            </div>
+            <p className="mt-3 text-[13px] text-primary-500">
+              Manage this turf?{" "}
+              <Link href="/my" prefetch={false} className="font-semibold text-accent-700 hover:text-accent-800">
+                Add prices on myTapturf
+              </Link>
+            </p>
+          </>
+        ) : (
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <Link
+              href={`/my?claim=${turfId}`}
+              prefetch={false}
+              className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors"
+            >
+              Own this turf? Add your prices free
+            </Link>
+            <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-white border border-primary-200 hover:bg-primary-50 text-primary-900 text-[14px] font-semibold transition-colors cursor-pointer">
+              {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
+            </SuggestInfoButton>
+          </div>
+        )}
       </div>
     </div>
   );
