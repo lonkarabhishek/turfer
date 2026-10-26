@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Summary card for turfs in Undri, Pune: 10 listed, a ₹950 typical weekday evening rate, ₹300 lowest listed hour, 8 open to midnight or later, and a bar chart of weekday evening prices by venue</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="105" font-size="46" font-weight="700">Turfs in Undri, Pune</text>
+<text x="80" y="145" font-size="24" fill-opacity="0.7">Undri, listed on TapTurf, 26 Oct 2026</text>
+<g>
+<rect x="80" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="104" y="258" font-size="56" font-weight="700" fill="#4ADE80">10</text>
+<text x="104" y="294" font-size="20" fill-opacity="0.8">turfs listed</text>
+<rect x="340" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="364" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹950</text>
+<text x="364" y="294" font-size="20" fill-opacity="0.8">typical evening hour</text>
+<rect x="600" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="624" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹300</text>
+<text x="624" y="294" font-size="20" fill-opacity="0.8">lowest listed hour</text>
+<rect x="860" y="190" width="260" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="884" y="258" font-size="56" font-weight="700" fill="#4ADE80">8</text>
+<text x="884" y="294" font-size="20" fill-opacity="0.8">open to midnight or later</text>
+</g>
+<text x="80" y="362" font-size="22" font-weight="700" fill-opacity="0.9">Weekday evening rate per hour, priced venues</text>
+<g font-size="18">
+<text x="80" y="392">Kanade Sports Club</text><rect x="330" y="375" width="168" height="22" rx="5" fill="#16A34A"/><text x="510" y="392" font-weight="700">₹700</text>
+<text x="80" y="422">Brio Turf</text><rect x="330" y="405" width="168" height="22" rx="5" fill="#16A34A"/><text x="510" y="422" font-weight="700">₹700</text>
+<text x="80" y="452">Arena Xtreme</text><rect x="330" y="435" width="180" height="22" rx="5" fill="#16A34A"/><text x="522" y="452" font-weight="700">₹750</text>
+<text x="80" y="482">Adrenaline Arena</text><rect x="330" y="465" width="216" height="22" rx="5" fill="#16A34A"/><text x="558" y="482" font-weight="700">₹900</text>
+<text x="80" y="512">Full On Sportz</text><rect x="330" y="495" width="240" height="22" rx="5" fill="#16A34A"/><text x="582" y="512" font-weight="700">₹1,000</text>
+<text x="80" y="542">Kick and Pitch</text><rect x="330" y="525" width="264" height="22" rx="5" fill="#16A34A"/><text x="606" y="542" font-weight="700">₹1,100</text>
+<text x="80" y="572">Hotfut Undri</text><rect x="330" y="555" width="288" height="22" rx="5" fill="#16A34A"/><text x="630" y="572" font-weight="700">₹1,200</text>
+<text x="80" y="602">Yadnya Sports</text><rect x="330" y="585" width="480" height="22" rx="5" fill="#16A34A"/><text x="822" y="602" font-weight="700">₹2,000</text>
+</g>
+<text x="80" y="640" font-size="18" fill-opacity="0.6">Prices and hours as listed, not owner-verified. Confirm with the venue before you book.</text>
+<text x="1120" y="640" font-size="22" font-weight="700" text-anchor="end" fill="#4ADE80">tapturf.in</text>
+</g>
+</svg>
