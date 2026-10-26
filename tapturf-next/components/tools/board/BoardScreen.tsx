@@ -220,7 +220,9 @@ export function BoardScreen({
     const sets = v.sets.filter((x) => x.winner).length;
     if (sets) fire(`set:${sets}`, "tool_action", { action: "game_end", sport: v.sport, game: sets });
     if (v.period && v.period.index > 0) fire(`period:${v.period.index}`, "tool_action", { action: "period_end", sport: v.sport, period: v.period.index });
-    if (v.status === "done") fire("end", "tool_result_generated", { action: "match_end", sport: v.sport, result: v.result?.kind ?? "none" });
+    // The live link's code goes to the admin's list of tool users only (lib/analytics/tools.ts leaves it out of GA).
+    const code: Record<string, string> = live?.info.on && live.info.link ? { code: live.info.link.code } : {};
+    if (v.status === "done") fire("end", "tool_result_generated", { action: "match_end", sport: v.sport, result: v.result?.kind ?? "none", ...code });
   };
 
   /** Apply one tap's events together, all stamped with the tap's time. */

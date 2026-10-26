@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ImageIcon, Link2, Play, Plus, Trash2 } from "lucide-react";
 import { derive, toScorecard, type Match, type MatchView } from "@/lib/cricket/scoring";
 import { trackTool } from "@/lib/analytics/tools";
+import { START_CODE_WAIT_MS, within } from "@/lib/tools/usage";
 import { ToolCta } from "./ToolCta";
 import { SecondaryButton } from "./inputs";
 import { Setup, type SetupLive } from "./scorer/Setup";
@@ -197,11 +198,20 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
     setMatch(m);
     persist(m);
     setNewOpen(false);
-    trackTool("tool_used", TOOL, { action: "match_started", overs: m.setup.overs, players: m.setup.playersPerSide, named: m.setup.players.a.length + m.setup.players.b.length > 0, live: liveLinks && opts.on });
+    // The start carries the match's live link code for the admin's list of tool users (never sent to GA),
+    // so with a new link it waits for the link a moment (START_CODE_WAIT_MS), never longer: past that it
+    // goes without the code, which the match's end then carries.
+    const used = { action: "match_started", overs: m.setup.overs, players: m.setup.playersPerSide, named: m.setup.players.a.length + m.setup.players.b.length > 0, live: liveLinks && opts.on };
+    const trackStart = () => {
+      const code = live.codeNow(m.id);
+      trackTool("tool_used", TOOL, code ? { ...used, code } : used);
+    };
     if (liveLinks && opts.on) {
-      if (opts.keep && prev && live.move(prev.id, m.id)) trackTool("tool_action", TOOL, { action: "live_link_kept" });
-      else void startLink(m.id);
-    }
+      if (opts.keep && prev && live.move(prev.id, m.id)) {
+        trackStart();
+        trackTool("tool_action", TOOL, { action: "live_link_kept" });
+      } else void within(startLink(m.id), START_CODE_WAIT_MS).then(trackStart);
+    } else trackStart();
     openScorer();
   };
 

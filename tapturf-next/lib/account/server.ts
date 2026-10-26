@@ -482,7 +482,44 @@ export async function notePhoneChecked(userId: string, phone: string): Promise<v
   }
 }
 
-/** Count one use of a free tool for the admin (tool_use_count). Run it after the reply: it never throws. */
+/** Who used a tool: the account the route verified, else (only then) the browser's device tag. */
+export type ToolUser = { userId: string | null; device: string | null };
+
+/** PostgREST's "no such function" (and Postgres's): the database doesn't have tool_use_record yet. */
+const missingFunction = (code: string | undefined) => code === "PGRST202" || code === "42883";
+
+/**
+ * Record one use of a free tool for the admin (tool_use_record, one round
+ * trip): counted for the tiles as before, and kept with who used it and
+ * the visitor's city. Until the database has tool_use_record (the
+ * 20261027 file), only counted. Run it after the reply: it never throws.
+ */
+export async function recordToolUse(use: ToolUse, who: ToolUser, city: string | null): Promise<void> {
+  const key = accountKey();
+  if (!key) return;
+  try {
+    cityClient ??= makeClient(cityFetch);
+    const { data, error } = await cityClient.rpc("tool_use_record", {
+      p_key: key,
+      p_tool: use.tool,
+      p_event: use.event,
+      p_detail: use.detail,
+      p_tags: use.tags,
+      p_code: use.code,
+      p_user_id: who.userId,
+      // Never both: a verified account's use carries no device tag.
+      p_device: who.userId ? null : who.device,
+      p_city: city,
+    });
+    if (!error && data === true) return;
+    if (error && missingFunction(error.code)) return countToolUse(use);
+    console.warn("tools: tool_use_record failed", error?.message ?? data);
+  } catch (e) {
+    console.warn("tools: tool_use_record threw", e);
+  }
+}
+
+/** Count one use of a free tool for the admin (tool_use_count), without who. Run it after the reply: it never throws. */
 export async function countToolUse(use: ToolUse): Promise<void> {
   const key = accountKey();
   if (!key) return;

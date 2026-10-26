@@ -1,16 +1,8 @@
-import { after } from "next/server";
-import { countToolUse, createAccountLimiter, readSmallJson } from "@/lib/account/server";
-import { readUse } from "@/lib/tools/usage";
+import { postToolUse } from "@/lib/account/toolRoutes";
 
-// One use of a free tool, for the admin's counts (lib/tools/usage.ts).
-// The browser sends it as a beacon; the count is written after the reply.
+// One use of a free tool, for the admin's counts and its list of who used
+// what (lib/tools/usage.ts). A guest's browser sends it as a beacon, a
+// signed-in one as a keepalive fetch with the sign-in, which the server
+// verifies (lib/account/toolRoutes.ts). Recorded after the reply.
 
-const allow = createAccountLimiter(30);
-
-export async function POST(req: Request) {
-  if (!allow(req)) return new Response(null, { status: 429 });
-  const use = readUse(await readSmallJson(req, 300));
-  if (!use) return new Response(null, { status: 400 });
-  after(() => countToolUse(use));
-  return new Response(null, { status: 204 });
-}
+export const POST = postToolUse;

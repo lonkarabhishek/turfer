@@ -634,5 +634,10 @@ export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unkn
     move: (from: string, to: string): boolean => ref.current?.move(from, to) ?? false,
     flush: (id: string) => ref.current?.flush(id),
     remove: (id: string) => ref.current?.remove(id),
+    /** The code of the match's link while it is on, as stored now (not this render's snapshot), for the tools' use log. */
+    codeNow: (id: string): string | null => {
+      const link = ref.current?.snapshot().links[id];
+      return link?.on ? link.code : null;
+    },
   };
 }

@@ -75,14 +75,22 @@ function ToolTiles({ tools }: { tools: Awaited<ReturnType<typeof getToolUsage>> 
         value={live ? live.total : "-"}
         sub={live ? `+${live.last7} this week · ${live.liveNow} live now` : "Couldn't load"}
       />
+      {/* The other three open Tool users: who used each tool and what (from 27 Oct 2026). */}
       <StatTile
         label="Scorecards started"
+        href="/admin/tools"
         value={uses ? scorecards : "-"}
         sub={uses ? `${n(uses.finished, "live_scorer", "live_scoreboard")} finished${sports ? ` · ${sports}` : ""} · ${since}` : "Couldn't load"}
       />
-      <StatTile label="Coin tosses" value={uses ? n(uses.started, "toss") : "-"} sub={uses ? `${n(uses.started7, "toss")} this week · ${since}` : "Couldn't load"} />
+      <StatTile
+        label="Coin tosses"
+        href="/admin/tools?tool=toss"
+        value={uses ? n(uses.started, "toss") : "-"}
+        sub={uses ? `${n(uses.started7, "toss")} this week · ${since}` : "Couldn't load"}
+      />
       <StatTile
         label="Other tools"
+        href="/admin/tools"
         value={uses ? otherTotal : "-"}
         sub={uses ? others.map(([k, name]) => `${name} ${n(uses.started, k)}`).join(" · ") : "Couldn't load"}
       />
@@ -315,6 +323,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {/* The free tools: live scoreboard links, and uses counted since 26 Oct 2026 (lib/tools/usage.ts). */}
       <ToolTiles tools={tools} />
+      <p className="-mt-1 mb-4 text-right">
+        <Link href="/admin/tools" className="text-xs font-semibold text-accent-600 hover:text-accent-700">
+          Who used the tools, and what
+        </Link>
+      </p>
 
       {/* Signup windows (requests + notifications are further down in
           the reviews snapshot to keep the layout de-duped). */}

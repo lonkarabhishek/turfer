@@ -11,5 +11,5 @@
     "lib": ["es2023", "dom"],
     "types": ["node"]
   },
-  "files": ["lib/tools/tossSim.test.ts", "lib/tools/usage.test.ts"]
+  "files": ["lib/tools/tossSim.test.ts", "lib/tools/usage.test.ts", "lib/tools/users.test.ts"]
 }

@@ -7,7 +7,7 @@ export const PRIVACY_UPDATED = "2026-10-27";
 
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {
-  id: "2026-10-27-reports",
-  text: "Rating a turf is now a quick game report. Your stars, the parts you tap and your tip are public; a private note to the owner never is.",
-  anchor: "reports",
+  id: "2026-10-27-tools",
+  text: "When you use our free tools signed in, we now note which tool you used, and what for, with your account. Only TapTurf's team sees it.",
+  anchor: "tools",
 } as const;

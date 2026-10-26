@@ -17,11 +17,11 @@
     "test:turf": "tsc -p tsconfig.test-turf.json && node --test .test-out/turf/lib/turfPage/turfPage.test.js .test-out/turf/lib/utils/prices.test.js .test-out/turf/lib/utils/images.test.js .test-out/turf/lib/utils/bookingClaims.test.js",
     "test:live": "tsc -p tsconfig.test-live.json && node --test .test-out/live/lib/live/codes.test.js .test-out/live/lib/live/server.test.js .test-out/live/lib/live/tags.test.js .test-out/live/components/live/follow.test.js",
     "test:board": "tsc lib/board/*.ts components/tools/board/logic.ts components/tools/board/storage.ts components/tools/board/logic.test.ts --rootDir . --strict --module commonjs --target es2022 --moduleResolution node --outDir .test-out/board --skipLibCheck --esModuleInterop && node --test .test-out/board/lib/board/*.test.js .test-out/board/components/tools/board/logic.test.js",
-    "test:account": "tsc -p tsconfig.test-account.json && node --test .test-out/account/lib/account/account.test.js .test-out/account/lib/account/fresh.test.js .test-out/account/lib/account/link.test.js .test-out/account/lib/account/routes.test.js .test-out/account/lib/account/display.test.js .test-out/account/lib/auth/auth.test.js",
+    "test:account": "tsc -p tsconfig.test-account.json && node --test .test-out/account/lib/account/account.test.js .test-out/account/lib/account/fresh.test.js .test-out/account/lib/account/link.test.js .test-out/account/lib/account/routes.test.js .test-out/account/lib/account/display.test.js .test-out/account/lib/auth/auth.test.js .test-out/account/lib/account/toolRoutes.test.js",
     "test:trend": "tsc -p tsconfig.test-trend.json && node --test .test-out/trend/lib/admin/trend.test.js .test-out/trend/lib/admin/people.test.js .test-out/trend/lib/admin/claims.test.js .test-out/trend/lib/admin/links.test.js",
     "test:photos": "tsc -p tsconfig.test-photos.json && node --test .test-out/photos/lib/my/photoMath.test.js .test-out/photos/lib/my/photoCheck.test.js",
     "test:reviews": "tsc -p tsconfig.test-reviews.json && node --test .test-out/reviews/lib/reviews/reviews.test.js .test-out/reviews/lib/reviews/routes.test.js",
-    "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js"
+    "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

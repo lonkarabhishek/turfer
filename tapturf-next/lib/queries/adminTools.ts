@@ -2,9 +2,56 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
 import { fetchAllRows } from "@/lib/queries/turfs";
-import { summarizeToolUsage, type LiveRow, type ToolUsage, type UseRow } from "@/lib/tools/usage";
+import { summarizeToolUsage, type CountedTool, type LiveRow, type ToolUsage, type UseRow } from "@/lib/tools/usage";
+import type { ToolActivityRow, ToolCountRow, ToolUserRow, WhoFilter } from "@/lib/tools/users";
 
 export type { ToolUsage };
+
+export type ToolUsersResult =
+  | { ok: true; rows: ToolUserRow[]; counts: ToolCountRow[]; activity: ToolActivityRow[] }
+  | { ok: false; reason: "not_set_up" | "not_allowed" | "error" };
+
+type RpcError = { code?: string; message?: string } | null;
+const reasonOf = (error: RpcError): "not_set_up" | "not_allowed" | "error" =>
+  error?.code === "42501" ? "not_allowed" : error?.code === "PGRST202" || error?.code === "42883" ? "not_set_up" : "error";
+
+/**
+ * Who used the free tools and what they used (logged from 27 Oct 2026,
+ * supabase/migrations/20261027_tool_users.sql), for /admin/tools, in three
+ * bounded reads at once: the newest people (at most `people`, one row
+ * each with their tools; for one tool and signed in or guests when asked,
+ * admin_tool_users), how many people and uses each tool has
+ * (admin_tool_counts, for the filters and totals), and the latest uses
+ * (admin_tool_activity). Site owner only, with the visitor's own session
+ * and Firebase token. Says why when it can't read; never throws.
+ */
+export async function getToolUsers(tool: CountedTool | null, who: WhoFilter, people = 300, recent = 100): Promise<ToolUsersResult> {
+  try {
+    const supabase = await createServerClient();
+    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+    const p_who = who === "all" ? null : who;
+    const [users, counts, activity] = await Promise.all([
+      supabase.rpc("admin_tool_users", { p_firebase_token: token, p_tool: tool, p_who, p_limit: people }),
+      supabase.rpc("admin_tool_counts", { p_firebase_token: token, p_who }),
+      supabase.rpc("admin_tool_activity", { p_firebase_token: token, p_tool: tool, p_who, p_limit: recent }),
+    ]);
+    for (const [fn, r] of [["admin_tool_users", users], ["admin_tool_counts", counts], ["admin_tool_activity", activity]] as const) {
+      if (r.error) {
+        console.warn(`${fn} failed`, r.error.code, r.error.message);
+        return { ok: false, reason: reasonOf(r.error) };
+      }
+    }
+    return {
+      ok: true,
+      rows: (users.data ?? []) as ToolUserRow[],
+      counts: (counts.data ?? []) as ToolCountRow[],
+      activity: (activity.data ?? []) as ToolActivityRow[],
+    };
+  } catch (e) {
+    console.warn("admin tool users threw", e);
+    return { ok: false, reason: "error" };
+  }
+}
 
 /**
  * How much the free tools are used, for the admin: live scoreboard links
