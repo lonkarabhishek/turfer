@@ -123,6 +123,31 @@ export const post: Post = {
       label: "Flip the coin now",
     },
     {
+      type: "faq",
+      items: [
+        {
+          q: "Is an online cricket toss fair?",
+          a: "Yes, if the result is random and both captains watch it. The TapTurf toss picks heads or tails with the browser's cryptographic random number generator where available, decides the result before the coin animation starts, and each flip is independent of the last.",
+        },
+        {
+          q: "When should the toss happen?",
+          a: "Under MCC Law 13.4, between 30 and 15 minutes before the scheduled start. On a turf, toss just before your slot so you do not lose paid time.",
+        },
+        {
+          q: "Who chooses to bat or bowl, and is it better to bat first?",
+          a: "The captain who wins the toss chooses, and under MCC Law 13.5 the decision cannot be changed once announced. There is no single right answer: batting second gives you a known target, and batting first under lights can be easier before evening dew.",
+        },
+        {
+          q: "Do I need an account or an app?",
+          a: "No. The toss works in your phone's browser with no sign-up and no install. Nothing is saved.",
+        },
+        {
+          q: "Can I share the toss result?",
+          a: "The toss has no share button. Show the screen to the other captain, or take a screenshot and post it in your group chat.",
+        },
+      ],
+    },
+    {
       type: "sources",
       items: [
         { label: "MCC, Laws of Cricket 2017 Code, 4th Edition (2026), Law 13: Innings", url: "https://www.lords.org/mcc/the-laws/innings" },
