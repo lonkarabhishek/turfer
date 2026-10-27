@@ -69,9 +69,10 @@
 -- read-only query that compares both on production (counts only: run it
 -- right before applying, expect only_old = only_new = 0 for each read).
 --
--- Expected (production on 2026-10-27, idle, 149 accounts, 54 Google sign-ins):
--- admin_ticks 428 ms to about 15 ms, admin_verified 77 ms (plus 149 ms
--- planning) to about 2 ms, admin_people 374 ms to under 150 ms,
+-- Expected (production on 2026-10-27, idle, 149 accounts, 54 Google sign-ins,
+-- the new queries run inline, read only, EXPLAIN ANALYZE): admin_ticks 428 ms
+-- to 9.5 ms (1,074 buffers), admin_people 99 ms to 28 ms (same moment, timing
+-- off), admin_verified 77 ms plus 149 ms planning to about 2 ms plus 5 ms,
 -- admin_google_unfinished 11 ms to about 2 ms. All grow with the number of
 -- accounts, not with nested calls per account.
 --
