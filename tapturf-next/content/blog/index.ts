@@ -55,9 +55,12 @@ import { post as turfsInKothrudPune } from "./posts/turfs-in-kothrud-pune";
 import { post as turfsInWakadPune } from "./posts/turfs-in-wakad-pune";
 // 2026-10-26: data post, turfs in Undri, Pune.
 import { post as turfsInUndriPune } from "./posts/turfs-in-undri-pune";
+// 2026-10-27: tool post, how to do a cricket toss online.
+import { post as howToDoACricketTossOnline } from "./posts/how-to-do-a-cricket-toss-online";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  howToDoACricketTossOnline,
   turfsInUndriPune,
   turfsInWakadPune,
   turfsInKothrudPune,

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Card showing a coin with heads and tails and three steps for an online cricket toss: call it, flip it, pick bat or bowl</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="110" font-size="50" font-weight="700">Cricket toss online</text>
+<text x="80" y="155" font-size="26" fill-opacity="0.7">A fair toss in 3 taps, no coin needed</text>
+<circle cx="930" cy="360" r="170" fill="#E0A92E"/>
+<circle cx="930" cy="360" r="140" fill="none" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="6"/>
+<text x="930" y="345" font-size="44" font-weight="700" fill="#0B1F14" text-anchor="middle">HEADS</text>
+<text x="930" y="400" font-size="28" fill="#0B1F14" text-anchor="middle">or tails</text>
+<g font-size="34" font-weight="700">
+<rect x="80" y="220" width="560" height="100" rx="16" fill="#FFFFFF" fill-opacity="0.08"/><text x="110" y="283"><tspan fill="#4ADE80">1</tspan>  Call heads or tails</text>
+<rect x="80" y="340" width="560" height="100" rx="16" fill="#FFFFFF" fill-opacity="0.08"/><text x="110" y="403"><tspan fill="#4ADE80">2</tspan>  Tap Flip coin</text>
+<rect x="80" y="460" width="560" height="100" rx="16" fill="#FFFFFF" fill-opacity="0.08"/><text x="110" y="523"><tspan fill="#4ADE80">3</tspan>  Winner picks bat or bowl</text>
+</g>
+<text x="80" y="625" font-size="24" fill-opacity="0.7">tapturf.in/tools/cricket-toss</text>
+</g>
+</svg>
