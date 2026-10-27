@@ -22,7 +22,8 @@
     "test:trend": "tsc -p tsconfig.test-trend.json && node --test .test-out/trend/lib/admin/trend.test.js .test-out/trend/lib/admin/people.test.js .test-out/trend/lib/admin/claims.test.js .test-out/trend/lib/admin/links.test.js",
     "test:photos": "tsc -p tsconfig.test-photos.json && node --test .test-out/photos/lib/my/photoMath.test.js .test-out/photos/lib/my/photoCheck.test.js",
     "test:reviews": "tsc -p tsconfig.test-reviews.json && node --test .test-out/reviews/lib/reviews/reviews.test.js .test-out/reviews/lib/reviews/routes.test.js",
-    "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js"
+    "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js",
+    "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
