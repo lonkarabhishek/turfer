@@ -46,11 +46,15 @@ async function readLiveCities(): Promise<LiveCity[]> {
  * times per page (3,524 calls by 27 Oct, 200 ms on average, up to 2.9 s).
  * When the read fails, a warm instance serves the last list it read
  * (logged at most every 30 s) and the page is kept a minute only
- * (markStaleRender), as with the turf rows.
+ * (markStaleRender), as with the turf rows. That list can be an hour old
+ * or more (the hourly entry, or an instance idle since), so isLiveCity
+ * never reads "not live" from it (see there).
  */
 const getLiveCitiesCached = unstable_cache(readLiveCities, ["live-cities"], { revalidate: 3600 });
 let liveKept: LiveCity[] | null = null;
 let liveFailLoggedAt = -Infinity;
+// The answers that were liveKept served after a failed read (each its own array).
+const keptAnswers = new WeakSet<LiveCity[]>();
 
 export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
   try {
@@ -64,7 +68,9 @@ export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
       console.warn("getLiveCities: read failed, serving this instance's last list", e instanceof Error ? e.message : e);
     }
     await markStaleRender();
-    return liveKept;
+    const kept = liveKept.slice();
+    keptAnswers.add(kept);
+    return kept;
   }
 });
 
@@ -104,9 +110,17 @@ export function getFooterCities(): Promise<LiveCity[]> {
   return footerPending;
 }
 
-/** True when the slug has active turfs. */
+/**
+ * True when the slug has active turfs. A failed read throws, and so does a
+ * city missing from the instance's last list served after one: that list
+ * may predate the city, and "not live" 404s the page (cached in place of a
+ * good one). Throwing fails the render and the last good page stays.
+ */
 export async function isLiveCity(slug: string): Promise<boolean> {
-  return (await getLiveCities()).some((c) => c.id === slug);
+  const cities = await getLiveCities();
+  if (cities.some((c) => c.id === slug)) return true;
+  if (keptAnswers.has(cities)) throw new Error(`Live cities read failed; ${slug} is not in this instance's last list`);
+  return false;
 }
 
 export type CityCopy = ReturnType<typeof cityCopyFrom>;

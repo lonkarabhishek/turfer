@@ -3,7 +3,7 @@ import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getAllActiveTurfs, turfRowsStale } from "@/lib/queries/turfs";
 import { isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
@@ -39,6 +39,9 @@ const load = cache(async (cityParam: string, sportParam: string) => {
   // cache a 404. /bangalore/swimming, 17 pools, was a 404 to Google on 18 Oct.
   if (cityTurfs.length === 0) throw new Error(`No turfs read for live city ${city}`);
   const turfs = cityTurfs.filter((t) => turfPlaysSport(t.sports, sport));
+  // Rows older than the current version (its read failed) may predate this
+  // sport's first turfs here: fail the render rather than cache a 404.
+  if (turfs.length === 0 && (await turfRowsStale())) throw new Error(`No ${sport.slug} turfs in ${city} in an older copy of the rows`);
   return { city, sport, turfs, cityTurfs };
 });
 

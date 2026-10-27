@@ -41,8 +41,13 @@
 //   stale (the caller then shortens the page's life, so it is read again
 //   within a minute or two). With no copy at all it looks in the shared
 //   cache (readCachedPart, never the database) for the wanted version, whole,
-//   then for the few before it, and only then throws. One log line per
-//   failed load, never one per caller.
+//   then for the few before it, and only then throws. "Wanted" is the
+//   newest build the load was asked for or found (part 0 can name a newer
+//   one than the meta), so a caller for that build never gets an older copy
+//   unmarked. One log line per failed load, never one per caller: a warning
+//   while the failures are new, an error once loads have kept failing for
+//   escalateAfterMs with no load succeeding in between (a broken RPC or a
+//   part that always times out must not go unnoticed behind stale pages).
 // - After a failed read (a part or table read that threw), callers wait
 //   retryAfterMs (to 1.5 times that, so processes do not retry in step)
 //   before this process reads again: meanwhile they get the stale copy (or
@@ -125,6 +130,8 @@ export type RowStoreOptions<R> = {
   maxPartReads?: number;
   /** Versions below the wanted one also tried in the shared cache when this process has no copy. */
   olderVersions?: number;
+  /** Loads failing for this long with none succeeding: the failed-load line is logged as an error, not a warning. */
+  escalateAfterMs?: number;
   random?: () => number;
   now?: () => number;
   log?: (msg: string, extra: Record<string, unknown>, level?: LogLevel) => void;
@@ -168,6 +175,7 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   const retryAfterMs = Math.max(0, opts.retryAfterMs ?? 20_000);
   const maxPartReads = Math.max(1, Math.floor(opts.maxPartReads ?? 1));
   const olderVersions = Math.max(0, Math.floor(opts.olderVersions ?? 3));
+  const escalateAfterMs = Math.max(0, opts.escalateAfterMs ?? 600_000);
   const random = opts.random ?? Math.random;
   const now = opts.now ?? Date.now;
   const log = opts.log ?? ((msg, extra, level = "info") => console[level](msg, extra));
@@ -188,6 +196,8 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   let cool: { until: number; err: unknown } | null = null;
   let cachePending: { want: number; p: Promise<Copy | null> } | null = null;
   let metaLoggedAt = -Infinity;
+  // The first failed load since the last load that succeeded.
+  let failingSince: number | null = null;
   // The load in flight, per kind: callers for that version (or an older
   // one) join it; a newer version starts its own.
   const pending: { snapshot: Slot | null; live: Slot | null } = { snapshot: null, live: null };
@@ -348,7 +358,7 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     v: number,
     built: number,
     load: (slot: Slot) => Promise<RowsRead<R> | HandOver>,
-    fallback: (err: unknown) => Promise<RowsRead<R>>,
+    fallback: (err: unknown, slot: Slot) => Promise<RowsRead<R>>,
     what: Record<string, unknown>,
   ): Promise<RowsRead<R>> {
     const t0 = now();
@@ -362,20 +372,28 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
         retryInMs = Math.round(retryAfterMs * (1 + Math.min(1, Math.max(0, random())) / 2));
         cool = { until: now() + retryInMs, err };
       }
-      const line = { ...what, error: message(err), ms: now() - t0, retryInMs };
+      failingSince ??= now();
+      const failingForMs = now() - failingSince;
+      const line = { ...what, error: message(err), ms: now() - t0, retryInMs, failingForMs };
       let got: RowsRead<R>;
       try {
-        got = await fallback(err);
+        got = await fallback(err, slot);
       } catch {
         log("turf rows: read failed, no copy to serve", line, "error");
         throw err;
       }
-      log("turf rows: read failed, serving an older copy", { ...line, have: got.v }, "warn");
+      // A warning for a burst that clears in a retry or two; an error (a
+      // runtime-error group) once it has lasted, so a fault that only ever
+      // serves stale rows is still seen.
+      log("turf rows: read failed, serving an older copy", { ...line, have: got.v }, failingForMs >= escalateAfterMs ? "error" : "warn");
       return got;
     };
     slot.p = load(slot)
       .then(
-        (r) => r,
+        (r) => {
+          if (!("handOver" in r)) failingSince = null;
+          return r;
+        },
         (err) => failed(err),
       )
       .then((r) => ("handOver" in r ? r.handOver.p : r))
@@ -393,7 +411,8 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
       if (pending.snapshot && pending.snapshot.v >= meta.v) return pending.snapshot.p;
       // Waiting after a failed read: the last copy, no database call.
       if (cooling()) return snapshotFallback(meta.v, cool!.err);
-      return start("snapshot", meta.v, 0, (slot) => loadSnapshot(meta, slot), (err) => snapshotFallback(meta.v, err), { want: meta.v });
+      // The fallback judges against slot.v: part 0 may have named a newer build, whose callers joined this load.
+      return start("snapshot", meta.v, 0, (slot) => loadSnapshot(meta, slot), (err, slot) => snapshotFallback(slot.v, err), { want: meta.v });
     }
     // Without a usable snapshot the version may not move when the rows do
     // (a column the snapshot lacks), but every list post builds, so the

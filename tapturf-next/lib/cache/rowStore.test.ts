@@ -329,6 +329,65 @@ test("while this process waits, a render that can read the shared cache still ge
   assert.equal(failures(logs).length, 1);
 });
 
+test("a load that part 0 moved to a newer build judges its fallback by that build: no older copy goes out unmarked", async () => {
+  // The shared cache holds v1 whole; this process has no copy.
+  const cachedV1 = fakeDb();
+  const cached = new Map<string, ListPart<Row>>();
+  for (let i = 0; i < 3; i++) cached.set(`1/${i}`, (await cachedV1.readPart(i, 1))!);
+  const cacheAsks: [number, number][] = [];
+  const { db, store } = setup({
+    readCachedPart: async (i, v) => {
+      cacheAsks.push([i, v]);
+      return cached.get(`${v}/${i}`) ?? null;
+    },
+  });
+  const old = db.meta(); // v1
+  db.v = 2; // part 0 will say v2
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  db.onPart = async (i) => {
+    if (i === 1) {
+      await gate;
+      throw new Error("TimeoutError");
+    }
+  };
+  const a = store.read(old);
+  await new Promise((r) => setTimeout(r, 20));
+  const b = store.read(db.meta()); // a v2 render joins the load part 0 moved to v2
+  release();
+  const [ra, rb] = await Promise.all([a, b]);
+  assert.equal(db.partReads, 2, "one load for both");
+  assert.deepEqual([rb.v, rb.stale], [1, true], "the v2 caller gets v1 marked stale");
+  assert.deepEqual([ra.v, ra.stale], [1, true], "the v1 caller too (harmless)");
+  assert.deepEqual(cacheAsks[0], [0, 2], "the shared cache is asked for v2 first");
+});
+
+test("loads that keep failing are logged as errors once they have lasted escalateAfterMs; a load that succeeds starts over", async () => {
+  const { db, store, logs, clock } = setup();
+  await store.rowsFor(db.meta());
+  db.v = 2;
+  let fail = true;
+  db.onPart = () => {
+    if (fail) throw new Error("Turf list part 0 read failed: permission denied for function turf_list_part (42501)");
+  };
+  const levels = () => failures(logs).map((l) => l.level);
+  // One failed load a minute for ten minutes, each serving v1 stale.
+  for (let k = 0; k <= 10; k++) {
+    const r = await store.read(db.meta());
+    assert.deepEqual([r.v, r.stale], [1, true]);
+    clock.t += 60_000;
+  }
+  assert.deepEqual(levels(), [...Array(10).fill("warn"), "error"], "warnings for ten minutes, then an error");
+  assert.equal(failures(logs).at(-1)?.extra.failingForMs, 600_000);
+  fail = false;
+  assert.equal((await store.read(db.meta())).v, 2);
+  db.v = 3;
+  fail = true;
+  await store.read(db.meta());
+  assert.equal(levels().at(-1), "warn", "a new failure after a success is a warning again");
+  assert.equal(failures(logs).at(-1)?.extra.failingForMs, 0);
+});
+
 test("no copy anywhere: the error, then the same error at once while waiting (no database call)", async () => {
   const { db, store, logs, clock } = setup({ readCachedPart: async () => null });
   db.onPart = () => {

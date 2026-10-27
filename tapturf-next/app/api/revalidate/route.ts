@@ -38,9 +38,16 @@ import { warmTurfList } from "@/lib/queries/turfs";
  *   (/api/turf-list/..., which can), so the burst of rebuilds after a
  *   purge reads cached parts instead of each process pulling all of them
  *   from the database (27 Oct: 7 to 30 processes at once, reads past the
- *   5 s guard). The warm-up starts no read after WARM_MS from the request's
- *   start, so pg_net (15 s) gets its answer; if it fails the purge still
- *   goes out and the pages read the parts as before.
+ *   5 s guard). The reads finish before the purge is queued, but Next
+ *   sends a route handler's data cache writes and its tag purge together,
+ *   after the response (revalidation-utils executeRevalidates), so the
+ *   last part's write can land a moment after the purge. That part is the
+ *   one a regeneration asks for last (after its version read and every
+ *   part before it, each a route request), so the write is in by then;
+ *   a process that still misses reads that one part from the database.
+ *   The warm-up starts no read after WARM_MS from the request's start, so
+ *   pg_net (15 s) gets its answer; if it fails the purge still goes out
+ *   and the pages read the parts as before.
  * - turf:<key> purges that one turf page, /turf/<key>. revalidatePath
  *   with no profile is a hard expiry, not 'max': the next visitor waits
  *   for one render (a single turf_page call) and that render skips the

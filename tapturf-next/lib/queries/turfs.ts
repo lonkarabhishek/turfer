@@ -366,9 +366,10 @@ async function dbPartOf(v: number, i: number): Promise<ListPart<Row>> {
  * cache read by a route handler, which is no regeneration), and only on a
  * miss the database, once per process per version. Either way the part is
  * stored here again. On 27 Oct, 7 to 30 processes read all 9 parts from
- * the database at once after a purge; the list post now puts the new
- * version in this cache before it marks the pages stale (warmTurfList), so
- * those reads are cache hits.
+ * the database at once after a purge; the list post now reads the new
+ * version into this cache before it marks the pages stale (warmTurfList;
+ * Next sends the writes with the purge, in part order), so those reads are
+ * cache hits.
  *
  * Only a part of version v is stored. When the database answers with
  * another build (it built again since the meta was read) or no part, the
@@ -468,7 +469,8 @@ async function readSnapshotPart(i: number, v: number): Promise<ListPart<Row> | n
  * Right after a list post built a new version, before its purge marks the
  * pages stale (app/api/revalidate): every part of the current version into
  * Next's data cache, read from the database once, here, instead of by each
- * process that regenerates a page. Parts already cached cost no database
+ * process that regenerates a page. The writes go out with the purge, after
+ * the response (see the route). Parts already cached cost no database
  * read. Stops starting new reads at `deadline` (epoch ms), so the post is
  * answered within pg_net's 15 s. Throws when a read fails; the pages then
  * read the parts themselves, as before.
@@ -606,7 +608,7 @@ const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shar
  * gives the page the "turf-data" tag, so the next purge still reaches a
  * page rendered from an older copy. Such a page is kept a minute only.
  */
-const activeRows = cache(async (): Promise<readonly Row[]> => {
+const activeRead = cache(async (): Promise<{ rows: readonly Row[]; stale: boolean }> => {
   let meta: ListMeta | null;
   try {
     meta = await listMeta();
@@ -614,12 +616,23 @@ const activeRows = cache(async (): Promise<readonly Row[]> => {
     // The version read failed (a regeneration reads it from the database): this process's copy, or the error.
     const kept = rowStore.orKept(e);
     await markStaleRender();
-    return kept.rows;
+    return kept;
   }
   const got = await rowStore.read(meta);
   if (got.stale) await markStaleRender();
-  return got.rows;
+  return got;
 });
+const activeRows = cache(async (): Promise<readonly Row[]> => (await activeRead()).rows);
+
+/**
+ * True when this render's rows are an older copy than the current version
+ * (the new one could not be read). Such rows can lack turfs added since,
+ * so a page must not conclude "nothing here" (a 404) from them: it throws
+ * instead, and the last good page keeps serving.
+ */
+export async function turfRowsStale(): Promise<boolean> {
+  return (await activeRead()).stale;
+}
 
 /** The raw active rows (card columns), for lib/queries/cities.ts. Read-only. */
 export const activeTurfRows = activeRows;
