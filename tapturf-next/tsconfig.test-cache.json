@@ -11,5 +11,5 @@
     "lib": ["es2023", "dom"],
     "types": ["node"]
   },
-  "files": ["lib/cache/keys.test.ts", "lib/cache/rowStore.test.ts", "lib/supabase/guard.test.ts"]
+  "files": ["lib/cache/keys.test.ts", "lib/cache/rowStore.test.ts", "lib/cache/partRoute.test.ts", "lib/supabase/guard.test.ts"]
 }

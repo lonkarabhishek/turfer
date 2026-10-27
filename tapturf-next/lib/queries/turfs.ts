@@ -1,7 +1,8 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
-import { createRowStore, type ListMeta, type ListPart, type RowStore } from "@/lib/cache/rowStore";
+import { createRowStore, type ListMeta, type ListPart, type LogLevel, type RowStore } from "@/lib/cache/rowStore";
+import { createPartReader, dbTag } from "@/lib/cache/partRoute";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { cleanPriceMentions, cleanVenueName } from "@/lib/utils/bookingApps";
 import { compareTopRated } from "@/lib/utils/ranking";
@@ -305,13 +306,50 @@ async function readListMeta(): Promise<ListMeta | null> {
   return (data ?? null) as ListMeta | null;
 }
 
+// One line per failed load comes from the row store (with this message in
+// it), not one per part: a burst of failed part reads wrote 5 to 7 error
+// lines per failed render on 27 Oct.
 async function readListPart(i: number): Promise<ListPart<Row> | null> {
   const { data, error } = await buildRetry(() => createServerClient().rpc("turf_list_part", { p_part: i }));
   if (error) {
-    console.error("turf_list_part failed:", { part: i, error });
-    throw new Error(`Turf list part ${i} read failed`);
+    const e = error as { message?: unknown; code?: unknown };
+    throw new Error(`Turf list part ${i} read failed: ${String(e.message ?? error)}${e.code ? ` (${String(e.code)})` : ""}`);
   }
   return (data ?? null) as ListPart<Row> | null;
+}
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+/** The Supabase database in the part route's URL (lib/cache/partRoute.ts). */
+export const TURF_LIST_DB = dbTag(SUPABASE_URL);
+// Every reader of the parts' data cache entries uses this name and these
+// key parts, so all of them read and fill the same entries.
+const PART_ENTRY = "turf-list-part";
+const PART_KEY = ["turf-list-part-v1", SUPABASE_URL];
+
+/**
+ * Where a regeneration asks for parts other processes already cached: the
+ * production site (its own route), never while `next build` runs (the
+ * route is not deployed yet) and never on a preview (deployment URLs sit
+ * behind Vercel's login). TURF_LIST_ORIGIN overrides it (a URL, or "off").
+ */
+function partOrigin(): string | null {
+  if (process.env.NEXT_PHASE === "phase-production-build") return null;
+  const set = process.env.TURF_LIST_ORIGIN?.trim();
+  if (set) return set === "off" ? null : set.replace(/\/+$/, "");
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return process.env.VERCEL_ENV === "production" && host ? `https://${host}` : null;
+}
+const readPartViaRoute = createPartReader<Row>({ origin: partOrigin(), db: TURF_LIST_DB });
+
+/** Where the last part came from, for the load's log line (reads are one at a time per process). */
+let partSrc = "cache";
+
+/** Part i from the database, only if it is of version v (else it throws with the other build's part, storing nothing). */
+async function dbPartOf(v: number, i: number): Promise<ListPart<Row>> {
+  partSrc = "db";
+  const part = await readListPart(i);
+  if (part && part.v === v) return part;
+  throw Object.assign(new Error(`turf list part ${i}: not from v${v}`), { otherBuild: part });
 }
 
 /**
@@ -321,35 +359,146 @@ async function readListPart(i: number): Promise<ListPart<Row> | null> {
  * lowers a page's revalidate, and it adds no tag. This is the copy that a
  * process without the rows in memory starts from (route handlers, a
  * page's first render, a new instance), and it still answers while the
- * database is failing, as the 32 row pieces did before 26 Oct. A
- * regeneration skips the read and fetches the part from the database
- * (once per process per version), then stores it here.
+ * database is failing, as the 32 row pieces did before 26 Oct.
+ *
+ * A regeneration skips the read and runs the callback. That asks the part
+ * route first (GET /api/turf-list/<db>/<v>/<i>: Vercel's CDN, or the data
+ * cache read by a route handler, which is no regeneration), and only on a
+ * miss the database, once per process per version. Either way the part is
+ * stored here again. On 27 Oct, 7 to 30 processes read all 9 parts from
+ * the database at once after a purge; the list post now puts the new
+ * version in this cache before it marks the pages stale (warmTurfList), so
+ * those reads are cache hits.
  *
  * Only a part of version v is stored. When the database answers with
  * another build (it built again since the meta was read) or no part, the
  * callback throws, which stores nothing, and the answer is handed back to
- * the store, which checks it. The fetch inside never lands in Next's fetch
- * cache (Next treats fetches inside unstable_cache as no-store), so a
- * build cannot pick up parts another build stored. Each part stays under
+ * the store, which checks it. The fetches inside never land in Next's
+ * fetch cache (Next treats fetches inside unstable_cache as no-store), so
+ * a build cannot pick up parts another build stored. Each part stays under
  * 1.5 MB (private.turf_list_state.part_bytes), below the data cache's 2 MB
  * per entry.
  */
 const listPartCached = unstable_cache(
-  cacheKeyed("turf-list-part", async (v: number, i: number): Promise<ListPart<Row>> => {
-    const part = await readListPart(i);
-    if (part && part.v === v) return part;
-    throw Object.assign(new Error(`turf list part ${i}: not from v${v}`), { otherBuild: part });
+  cacheKeyed(PART_ENTRY, async (v: number, i: number): Promise<ListPart<Row>> => {
+    const shared = await readPartViaRoute(v, i);
+    if (shared) {
+      partSrc = "route";
+      return shared;
+    }
+    return dbPartOf(v, i);
   }),
-  ["turf-list-part-v1", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""],
+  PART_KEY,
   { revalidate: false },
 );
 
-async function readSnapshotPart(i: number, v: number): Promise<ListPart<Row> | null> {
+/** The same entries, filled from the database without the route: the warm-up after a list post. */
+const listPartFromDb = unstable_cache(cacheKeyed(PART_ENTRY, dbPartOf), PART_KEY, { revalidate: false });
+
+const NOT_CACHED = "turf list part: not in the data cache";
+/** The same entries, read only: a miss throws and stores nothing, and never reaches the database. */
+const listPartCacheOnly = unstable_cache(
+  cacheKeyed(PART_ENTRY, async (v: number, i: number): Promise<ListPart<Row>> => {
+    throw new Error(`${NOT_CACHED} (v${v}, part ${i})`);
+  }),
+  PART_KEY,
+  { revalidate: false },
+);
+
+/**
+ * Part i of version v when Next's data cache holds it, else null; never
+ * the database. In a regeneration (which skips data cache reads) always
+ * null. Only for the part route: it must never ask itself.
+ */
+export async function cachedListPart(v: number, i: number): Promise<ListPart<Row> | null> {
   try {
-    return await listPartCached(v, i);
+    const part = await listPartCacheOnly(v, i);
+    return part && part.v === v && Array.isArray(part.rows) ? part : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The same entries, read only, through the part route when this render
+ * cannot read them itself (a regeneration): never the database. A miss
+ * throws and stores nothing. The route is asked inside unstable_cache on
+ * purpose: there Next treats the fetch as no-store, where in the page
+ * itself a no-store fetch would make the page dynamic (revalidate 0).
+ */
+const listPartShared = unstable_cache(
+  cacheKeyed(PART_ENTRY, async (v: number, i: number): Promise<ListPart<Row>> => {
+    const shared = await readPartViaRoute(v, i);
+    if (shared) return shared;
+    throw new Error(`${NOT_CACHED} (v${v}, part ${i})`);
+  }),
+  PART_KEY,
+  { revalidate: false },
+);
+
+/**
+ * For a process with no copy whose load failed: part i of version v if a
+ * cache already holds it, else null. The store then serves the wanted or a
+ * recent version that is cached whole, instead of failing the render.
+ */
+async function sharedListPart(v: number, i: number): Promise<ListPart<Row> | null> {
+  try {
+    const part = await listPartShared(v, i);
+    return part && part.v === v && Array.isArray(part.rows) ? part : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readSnapshotPart(i: number, v: number): Promise<ListPart<Row> | null> {
+  partSrc = "cache";
+  try {
+    const part = await listPartCached(v, i);
+    return part && { ...part, src: partSrc };
   } catch (e) {
-    if (e && typeof e === "object" && "otherBuild" in e) return (e as { otherBuild: ListPart<Row> | null }).otherBuild;
+    if (e && typeof e === "object" && "otherBuild" in e) {
+      const other = (e as { otherBuild: ListPart<Row> | null }).otherBuild;
+      return other && { ...other, src: "db" };
+    }
     throw e;
+  }
+}
+
+/**
+ * Right after a list post built a new version, before its purge marks the
+ * pages stale (app/api/revalidate): every part of the current version into
+ * Next's data cache, read from the database once, here, instead of by each
+ * process that regenerates a page. Parts already cached cost no database
+ * read. Stops starting new reads at `deadline` (epoch ms), so the post is
+ * answered within pg_net's 15 s. Throws when a read fails; the pages then
+ * read the parts themselves, as before.
+ */
+export async function warmTurfList(deadline: number): Promise<{ v: number | null; parts: number; warmed: number; ms: number }> {
+  const t0 = Date.now();
+  const meta = await readListMeta(); // fresh: the build that was just posted
+  const parts = meta && meta.v > 0 && Number.isInteger(meta.parts) && meta.parts > 0 && meta.parts <= 200 ? meta.parts : 0;
+  let warmed = 0;
+  for (let i = 0; i < parts && Date.now() < deadline; i++) {
+    await listPartFromDb(meta!.v, i);
+    warmed++;
+  }
+  return { v: meta?.v ?? null, parts, warmed, ms: Date.now() - t0 };
+}
+
+/**
+ * A page rendered with an older copy of the rows than the current version
+ * (its read failed) must not be kept for its usual 10 minutes or hour: an
+ * unstable_cache entry with revalidate 60 lowers the page's revalidate to
+ * a minute, so it is rendered again, with the new rows, soon after the
+ * database recovers. Untagged, tiny, and harmless outside a page render.
+ */
+const staleRenderMark = unstable_cache(cacheKeyed("turf-list-stale", async () => true), ["turf-list-stale-v1"], { revalidate: 60 });
+
+export async function markStaleRender(): Promise<void> {
+  try {
+    await staleRenderMark();
+  } catch {
+    // Only shortens the page's life; never fails it.
   }
 }
 
@@ -412,27 +561,39 @@ const listMeta = unstable_cache(cacheKeyed("turf-list-meta", readListMeta), ["tu
  * (private.build_turf_list, which the cache queue's flush runs just
  * before it posts the purge), a regeneration reads only the version, and a
  * process fetches the prebuilt parts once per version (from the data cache
- * when it can, see listPartCached). A regeneration with an unchanged
- * version makes no other read; the first one after a purge waits for the
- * new rows (a version this process cannot load throws, so the last good
- * page keeps serving instead of old rows being stored as fresh). On
- * globalThis, so the page runtime and the route-handler runtime (which
- * bundles its own copy of this module) share one copy and one load.
+ * or the part route when it can, see listPartCached), one part at a time.
+ * A regeneration with an unchanged version makes no other read; the first
+ * one after a purge waits for the new rows.
+ *
+ * When the new version cannot be read (27 Oct: part reads past the 5 s
+ * guard right after a purge), the page renders with the copy this process
+ * has, or a recent version still whole in the data cache, and is kept for
+ * a minute only (markStaleRender), instead of failing: a foreground render
+ * no longer shows a 500. The store then waits 20 to 30 s before it reads
+ * again and resumes at the part that failed. Only a process with no copy
+ * at all still throws (the last good page keeps serving). On globalThis,
+ * so the page runtime and the route-handler runtime (which bundles its own
+ * copy of this module) share one copy and one load.
  */
 const makeRowStore = () =>
   createRowStore<Row>({
     cols: CARD_COLUMNS,
     readPart: readSnapshotPart,
+    // Only what is cached already, never the database (sharedListPart). The
+    // store asks (part, version); the cache readers take (version, part).
+    readCachedPart: (i, v) => sharedListPart(v, i),
     readLive: readLiveRows,
     order: byRatingThenId,
+    // A failed read during `next build` is retried with the page (staticGenerationRetryCount): no wait there.
+    retryAfterMs: process.env.NEXT_PHASE === "phase-production-build" ? 0 : undefined,
     // inst tells instances apart in the logs (the region field there is the edge PoP, not where this ran).
-    log: (msg, extra) => console.info(msg, { ...extra, inst: INSTANCE, region: process.env.VERCEL_REGION ?? null }),
+    log: (msg, extra, level: LogLevel = "info") => console[level](msg, { ...extra, inst: INSTANCE, region: process.env.VERCEL_REGION ?? null }),
   });
-const shared = globalThis as typeof globalThis & { __tapturfTurfRowsV1?: RowStore<Row> };
+const shared = globalThis as typeof globalThis & { __tapturfTurfRowsV2?: RowStore<Row> };
 // next dev evaluates this module again after every edit, while globalThis
 // stays: a kept store would keep the old columns, readers and sort. So dev
 // makes a new store per evaluation (no sharing with route handlers there).
-const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shared.__tapturfTurfRowsV1 ??= makeRowStore());
+const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shared.__tapturfTurfRowsV2 ??= makeRowStore());
 
 /**
  * The rows, once per render: React cache() shares them between
@@ -440,8 +601,25 @@ const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shar
  * (/turf-near-me asks once per city). The array is frozen and sorted
  * (rating, then id); callers copy before they sort. Outside a render
  * (route handlers) this is a plain call.
+ *
+ * listMeta is always called, even when its read fails: that call is what
+ * gives the page the "turf-data" tag, so the next purge still reaches a
+ * page rendered from an older copy. Such a page is kept a minute only.
  */
-const activeRows = cache(async (): Promise<readonly Row[]> => rowStore.rowsFor(await listMeta()));
+const activeRows = cache(async (): Promise<readonly Row[]> => {
+  let meta: ListMeta | null;
+  try {
+    meta = await listMeta();
+  } catch (e) {
+    // The version read failed (a regeneration reads it from the database): this process's copy, or the error.
+    const kept = rowStore.orKept(e);
+    await markStaleRender();
+    return kept.rows;
+  }
+  const got = await rowStore.read(meta);
+  if (got.stale) await markStaleRender();
+  return got.rows;
+});
 
 /** The raw active rows (card columns), for lib/queries/cities.ts. Read-only. */
 export const activeTurfRows = activeRows;

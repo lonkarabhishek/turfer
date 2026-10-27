@@ -2,6 +2,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { revalidateSecretOk } from "@/lib/cache/secret";
 import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
+import { warmTurfList } from "@/lib/queries/turfs";
 
 /**
  * On-demand cache invalidation for turf writes.
@@ -31,6 +32,15 @@ import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
  *   default), right after it rebuilt the list snapshot, so the rebuilds
  *   read the new version. No per-city path purges: those were hard
  *   expiries.
+ * - before that tag is marked, the new version's parts go into Next's data
+ *   cache (warmTurfList: about 9 part reads, once). A regenerating page
+ *   cannot read that cache itself, but it asks the part route
+ *   (/api/turf-list/..., which can), so the burst of rebuilds after a
+ *   purge reads cached parts instead of each process pulling all of them
+ *   from the database (27 Oct: 7 to 30 processes at once, reads past the
+ *   5 s guard). The warm-up starts no read after WARM_MS from the request's
+ *   start, so pg_net (15 s) gets its answer; if it fails the purge still
+ *   goes out and the pages read the parts as before.
  * - turf:<key> purges that one turf page, /turf/<key>. revalidatePath
  *   with no profile is a hard expiry, not 'max': the next visitor waits
  *   for one render (a single turf_page call) and that render skips the
@@ -49,6 +59,9 @@ import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
  */
 const isAuthorized = revalidateSecretOk;
 
+/** No new warm-up read after this long from the request's start (one more can take the guard's 5 s). */
+const WARM_MS = 7_000;
+
 type Body = {
   keys?: unknown;
   type?: string;
@@ -58,6 +71,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const started = Date.now();
   if (!(await isAuthorized(req.headers.get("x-revalidate-secret")))) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -92,6 +106,12 @@ export async function POST(req: Request) {
   // Legacy per-row posts never purge the lists (see above): the queue's batch does.
   const listPurge = plan.cities.length > 0 && !legacy;
   if (listPurge) {
+    // The rows first, the purge second (see above).
+    try {
+      console.info("turf list warmed", await warmTurfList(started + WARM_MS));
+    } catch (e) {
+      console.warn("turf list warm-up failed; the pages read the parts themselves", e instanceof Error ? e.message : e);
+    }
     try {
       revalidateTag("turf-data", "max");
     } catch (e) {

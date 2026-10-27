@@ -45,18 +45,36 @@ function fakeDb(opts: { rows?: number; size?: number } = {}) {
   return { db, readPart, readLive };
 }
 
-function setup(o: { rows?: number; size?: number; clock?: { t: number } } = {}) {
+type Log = { msg: string; extra: Record<string, unknown>; level: string };
+
+/** A store on the fake database, with a fake clock and a fixed random (so waits are exact). */
+function setup(
+  o: {
+    rows?: number;
+    size?: number;
+    clock?: { t: number };
+    random?: number;
+    maxPartReads?: number;
+    readCachedPart?: (i: number, v: number) => Promise<ListPart<Row> | null>;
+  } = {},
+) {
   const f = fakeDb(o);
-  const logs: { msg: string; extra: Record<string, unknown> }[] = [];
+  const logs: Log[] = [];
+  const clock = o.clock ?? { t: 1_000_000 };
   const store = createRowStore<Row>({
     cols: COLS,
     readPart: f.readPart,
     readLive: f.readLive,
-    now: o.clock ? () => o.clock!.t : undefined,
-    log: (msg, extra) => logs.push({ msg, extra }),
+    readCachedPart: o.readCachedPart,
+    maxPartReads: o.maxPartReads,
+    now: () => clock.t,
+    random: () => o.random ?? 0,
+    log: (msg, extra, level = "info") => logs.push({ msg, extra, level }),
   });
-  return { ...f, store, logs };
+  return { ...f, store, logs, clock };
 }
+
+const failures = (logs: Log[]) => logs.filter((l) => l.msg.startsWith("turf rows: read failed"));
 
 test("concurrent callers make one load per version", async () => {
   const { db, store, logs } = setup();
@@ -101,18 +119,21 @@ test("an older meta reads part 0's build, newer than it, and follows part 0's pa
   assert.equal(db.partReads, 4);
 });
 
-test("parts from two builds throw and keep the previous copy", async () => {
-  const { db, store } = setup();
+test("parts from two builds are never mixed: the previous copy serves, and the next caller loads the current build at once", async () => {
+  const { db, store, logs } = setup();
   const v1 = await store.rowsFor(db.meta());
   db.v = 2;
   db.onPart = (i) => {
     if (i === 1) db.v = 3; // rebuilt between part 0 and part 1
   };
-  await assert.rejects(store.rowsFor(db.meta({ v: 2 })), /part 1 is not from v2/);
+  const got = await store.read(db.meta({ v: 2 }));
+  assert.deepEqual([got.rows === v1, got.v, got.stale], [true, 1, true], "v1, marked stale");
+  assert.match(String(failures(logs)[0]?.extra.error), /part 1 is not from v2/);
+  assert.equal(failures(logs)[0]?.extra.retryInMs, 0, "no wait: a rebuild is no sign of a slow database");
   db.onPart = null;
   assert.equal(await store.rowsFor(db.meta({ v: 1 })), v1, "the old copy still serves an old meta");
-  const v3 = await store.rowsFor(db.meta());
-  assert.equal(v3.length, 1200, "the next caller loads the current build");
+  const v3 = await store.read(db.meta());
+  assert.deepEqual([v3.rows.length, v3.v, v3.stale], [1200, 3, false], "the next caller loads the current build");
 });
 
 test("a missing or short part throws; nothing partial is kept", async () => {
@@ -146,24 +167,247 @@ test("part 0 older than the meta, or an empty build, throws", async () => {
   await assert.rejects(empty.store.rowsFor(empty.db.meta({ parts: 1 })), /part 0 missing/);
 });
 
-test("a failure keeps serving the old copy and the next caller tries again", async () => {
-  const { db, store } = setup();
+test("a failed read serves the old copy, logs once, and this process waits before reading again", async () => {
+  const { db, store, logs, clock } = setup();
   const v1 = await store.rowsFor(db.meta());
   db.v = 2;
   let fail = true;
   db.onPart = () => {
     if (fail) throw new Error("TimeoutError: The operation was aborted due to timeout");
   };
-  await assert.rejects(store.rowsFor(db.meta()), /TimeoutError/);
+  // A burst: every caller gets v1, from one failed load.
+  const burst = await Promise.all(Array.from({ length: 10 }, () => store.read(db.meta())));
+  assert.ok(burst.every((r) => r.rows === v1 && r.v === 1 && r.stale), "v1, stale, for everyone");
   assert.equal(db.partReads, 4, "the failed load stopped at its first part (one failure on the breaker)");
-  assert.equal(await store.rowsFor(db.meta({ v: 1 })), v1);
+  assert.equal(failures(logs).length, 1, "one log line for the burst");
+  const line = failures(logs)[0];
+  assert.deepEqual([line.level, line.extra.want, line.extra.have, line.extra.retryInMs], ["warn", 2, 1, 20_000]);
+  // Within the wait: the old copy at once, no read, no new log line.
+  clock.t += 19_000;
   fail = false;
-  const v2 = await store.rowsFor(db.meta());
-  assert.notEqual(v2, v1);
+  assert.equal((await store.read(db.meta())).rows, v1);
+  assert.equal(db.partReads, 4, "no read while waiting");
+  assert.equal(failures(logs).length, 1);
+  assert.equal(await store.rowsFor(db.meta({ v: 1 })), v1, "v1 is still fresh for a v1 meta");
+  clock.t += 1_000;
+  const v2 = await store.read(db.meta());
+  assert.deepEqual([v2.v, v2.stale], [2, false], "after the wait: the new version");
+  assert.notEqual(v2.rows, v1);
+});
+
+test("the wait is 1 to 1.5 times retryAfterMs, so processes do not retry in step", async () => {
+  const { db, store, logs, clock } = setup({ random: 1 });
+  await store.rowsFor(db.meta());
+  db.v = 2;
+  db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  await store.read(db.meta());
+  assert.equal(failures(logs)[0].extra.retryInMs, 30_000);
+  db.onPart = null;
+  clock.t += 29_999;
+  assert.equal((await store.read(db.meta())).v, 1, "still waiting");
+  clock.t += 1;
+  assert.equal((await store.read(db.meta())).v, 2);
+});
+
+test("a retry starts at the part that failed: parts already read are not read again", async () => {
+  const { db, store, clock, logs } = setup();
+  await store.rowsFor(db.meta());
+  db.v = 2;
+  db.asked = [];
+  let fail = true;
+  db.onPart = (i) => {
+    if (fail && i === 2) throw new Error("TimeoutError");
+  };
+  assert.equal((await store.read(db.meta())).stale, true);
+  assert.deepEqual(db.asked, [[0, 2], [1, 2], [2, 2]]);
+  fail = false;
+  clock.t += 20_000;
+  const v2 = await store.read(db.meta());
+  assert.deepEqual([v2.v, v2.stale, v2.rows.length], [2, false, 1200]);
+  assert.deepEqual(db.asked.slice(3), [[2, 2]], "only part 2 again");
+  const read = logs.find((l) => l.msg === "turf snapshot read" && l.extra.v === 2);
+  assert.equal(read?.extra.reused, 2, "the log says two parts were reused");
+});
+
+test("a resumed load never mixes builds", async () => {
+  const { db, store, clock } = setup();
+  const v1 = await store.rowsFor(db.meta());
+  db.v = 2;
+  let fail = true;
+  db.onPart = (i) => {
+    if (fail && i === 2) throw new Error("TimeoutError");
+  };
+  await store.read(db.meta()); // parts 0 and 1 of v2 kept
+  fail = false;
+  // Rebuilt to v3 with other rows; a caller still holding the v2 meta resumes v2.
+  db.v = 3;
+  db.rows = db.rows.map((r) => ({ ...r, rating: 1 }));
+  clock.t += 20_000;
+  db.asked = [];
+  const r = await store.read(db.meta({ v: 2 }));
+  assert.deepEqual([r.rows === v1, r.stale], [true, true], "part 2 came from v3: the v2 parts are dropped, v1 serves");
+  assert.deepEqual(db.asked, [[2, 2]]);
+  // The next caller starts over at part 0 (no wait after a mismatch) and gets v3 whole.
+  const v3 = await store.read(db.meta());
+  assert.deepEqual([v3.v, v3.stale], [3, false]);
+  assert.ok(v3.rows.every((x) => x.rating === 1), "every row from v3");
+  assert.deepEqual(db.asked.slice(1), [[0, 3], [1, 3], [2, 3]]);
+});
+
+test("a newer meta does not resume an older build's parts", async () => {
+  const { db, store, clock } = setup();
+  await store.rowsFor(db.meta());
+  db.v = 2;
+  let fail = true;
+  db.onPart = (i) => {
+    if (fail && i === 2) throw new Error("TimeoutError");
+  };
+  await store.read(db.meta());
+  fail = false;
+  db.v = 3;
+  clock.t += 20_000;
+  db.asked = [];
+  const v3 = await store.read(db.meta());
+  assert.equal(v3.v, 3);
+  assert.deepEqual(db.asked, [[0, 3], [1, 3], [2, 3]]);
+});
+
+test("no copy in this process: an older version from the shared cache, never the database", async () => {
+  // The shared cache holds v1 whole; the database is at v3 and failing.
+  const cachedV1 = fakeDb();
+  const cached = new Map<string, ListPart<Row>>();
+  for (let i = 0; i < 3; i++) cached.set(`1/${i}`, (await cachedV1.readPart(i, 1))!);
+  const cacheAsks: [number, number][] = [];
+  const { db, store, logs, clock } = setup({
+    readCachedPart: async (i, v) => {
+      cacheAsks.push([i, v]);
+      return cached.get(`${v}/${i}`) ?? null;
+    },
+  });
+  db.v = 3;
+  db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.v, r.stale, r.rows.length], [1, true, 1200], "v1 from the cache, stale");
+  assert.deepEqual(cacheAsks, [[0, 3], [0, 2], [0, 1], [1, 1], [2, 1]], "v3 and v2 missing, then v1 whole");
+  assert.equal(failures(logs)[0].extra.have, 1);
+  // While waiting, the kept v1 serves with no read at all.
+  const reads = db.partReads;
+  assert.equal((await store.read(db.meta())).rows, r.rows);
+  assert.equal(db.partReads, reads);
+  assert.equal(cacheAsks.length, 5, "kept: the cache is not read again");
+  clock.t += 20_000;
+  db.onPart = null;
+  assert.equal((await store.read(db.meta())).v, 3);
+});
+
+test("while this process waits, a render that can read the shared cache still gets the wanted version (fresh)", async () => {
+  // A regeneration's read failed (it cannot read the shared cache); the
+  // list post's warm-up has since put v2 there; a page's first render can.
+  const cached = new Map<string, ListPart<Row>>();
+  let cacheReadable = false;
+  const { db, store, logs } = setup({
+    readCachedPart: async (i, v) => (cacheReadable ? (cached.get(`${v}/${i}`) ?? null) : null),
+  });
+  db.v = 2;
+  db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  const reads = db.partReads;
+  const whole = fakeDb();
+  whole.db.v = 2;
+  for (let i = 0; i < 3; i++) cached.set(`2/${i}`, (await whole.readPart(i, 2))!);
+  cacheReadable = true;
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.v, r.stale, r.rows.length], [2, false, 1200], "v2 from the cache, fresh");
+  assert.equal(db.partReads, reads, "still no database read while waiting");
+  assert.equal((await store.read(db.meta())).rows, r.rows, "kept");
+  assert.equal(failures(logs).length, 1);
+});
+
+test("no copy anywhere: the error, then the same error at once while waiting (no database call)", async () => {
+  const { db, store, logs, clock } = setup({ readCachedPart: async () => null });
+  db.onPart = () => {
+    throw new Error("TimeoutError: The operation was aborted due to timeout");
+  };
+  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  assert.equal(failures(logs)[0].level, "error");
+  const reads = db.partReads;
+  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  assert.equal(db.partReads, reads, "no read while waiting");
+  assert.equal(failures(logs).length, 1);
+  clock.t += 20_000;
+  db.onPart = null;
+  assert.equal((await store.read(db.meta())).rows.length, 1200);
+});
+
+test("at most one part read in flight, and a load a newer version overtakes hands its callers over", async () => {
+  const { db, store } = setup();
+  let inFlight = 0;
+  let most = 0;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  db.onPart = () => {
+    inFlight++;
+    most = Math.max(most, inFlight);
+  };
+  db.hold = async (i, v) => {
+    if (i === 1 && v === 1) await gate; // v1's part 1, answered late
+    inFlight--;
+  };
+  const old = store.read(db.meta()); // v1: part 0, then part 1 held
+  await new Promise((r) => setTimeout(r, 20));
+  db.v = 2;
+  const newer = store.read(db.meta()); // v2 waits for the one read slot
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(inFlight, 1, "v2's part 0 waits while v1's part 1 is out");
+  release();
+  const [a, b] = await Promise.all([old, newer]);
+  assert.equal(most, 1, "never two part reads at once");
+  assert.equal(a.rows, b.rows, "the v1 callers get v2");
+  assert.equal(b.v, 2);
+  assert.ok(!db.asked.some(([i, v]) => i === 2 && v === 1), "v1's part 2 was never read");
+});
+
+test("callers for the build part 0 named join the load in flight", async () => {
+  const { db, store } = setup();
+  const old = db.meta();
+  db.v = 2; // part 0 will say v2
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  db.onPart = async (i) => {
+    if (i === 1) await gate;
+  };
+  const a = store.read(old);
+  await new Promise((r) => setTimeout(r, 20));
+  const b = store.read(db.meta());
+  release();
+  const [ra, rb] = await Promise.all([a, b]);
+  assert.equal(ra.rows, rb.rows);
+  assert.equal(db.partReads, 3, "one load for both");
+});
+
+test("orKept: a failed version read serves this process's copy (logged once per wait), or rethrows", async () => {
+  const { db, store, logs, clock } = setup();
+  const err = new Error("Turf list version read failed");
+  assert.throws(() => store.orKept(err), /version read failed/, "nothing kept yet");
+  const v1 = await store.rowsFor(db.meta());
+  const k = store.orKept(err);
+  assert.deepEqual([k.rows === v1, k.v, k.stale], [true, 1, true]);
+  store.orKept(err);
+  const lines = () => logs.filter((l) => l.msg.includes("version read failed")).length;
+  assert.equal(lines(), 1);
+  clock.t += 20_000;
+  store.orKept(err);
+  assert.equal(lines(), 2);
 });
 
 test("an older load that ends after a newer one does not replace it", async () => {
-  const { db, store } = setup({ rows: 300 }); // one part
+  const { db, store } = setup({ rows: 300, maxPartReads: 2 }); // one part; the held read and v2's both out
   let release: () => void = () => {};
   const gate = new Promise<void>((r) => (release = r));
   db.hold = async (_i, v) => {
@@ -281,13 +525,27 @@ test("a usable snapshot after table reads: the snapshot", async () => {
 });
 
 test("an empty or failed table read throws and stores nothing", async () => {
-  const { db, store } = setup({ rows: 0 });
+  const { db, store, clock } = setup({ rows: 0 });
   await assert.rejects(store.rowsFor(null), /no active turfs/);
   db.rows = [{ id: "a", rating: 1 }];
+  await assert.rejects(store.rowsFor(null), /no active turfs/, "while waiting: the same error, no read");
+  assert.equal(db.liveReads, 1);
+  clock.t += 20_000;
   db.failLive = true;
   await assert.rejects(store.rowsFor(null), /Paged fetch failed/);
   db.failLive = false;
-  assert.equal((await store.rowsFor(null)).length, 1, "the next caller reads again");
+  clock.t += 20_000;
+  assert.equal((await store.rowsFor(null)).length, 1, "after the wait the next caller reads again");
+});
+
+test("a failed table read serves the last table copy, stale", async () => {
+  const { db, store } = setup();
+  const cols = "id, rating";
+  const a = await store.rowsFor(db.meta({ cols }));
+  db.built += 60_000;
+  db.failLive = true;
+  const r = await store.read(db.meta({ cols }));
+  assert.deepEqual([r.rows === a, r.stale], [true, true]);
 });
 
 test("kept rows are sorted once and frozen", async () => {

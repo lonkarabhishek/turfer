@@ -1,6 +1,7 @@
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { activeTurfRows } from "@/lib/queries/turfs";
+import { activeTurfRows, markStaleRender } from "@/lib/queries/turfs";
 import { CITIES, cityCopyFrom, cityInfo, isCitySlug, type CityInfo } from "@/lib/city";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
@@ -38,8 +39,34 @@ async function readLiveCities(): Promise<LiveCity[]> {
  * and counts read 0 until the next refresh. A throw caches nothing; a
  * stale copy keeps serving, and a page with none fails its rebuild and
  * keeps its last good version.
+ *
+ * Once per render (React cache()): a regenerating page skips the data
+ * cache, and /<city> and /c/<city> asked 3 times each (metadata, layout or
+ * page, the list), so a purge's burst of rebuilds ran city_turf_counts 3
+ * times per page (3,524 calls by 27 Oct, 200 ms on average, up to 2.9 s).
+ * When the read fails, a warm instance serves the last list it read
+ * (logged at most every 30 s) and the page is kept a minute only
+ * (markStaleRender), as with the turf rows.
  */
-export const getLiveCities = unstable_cache(readLiveCities, ["live-cities"], { revalidate: 3600 });
+const getLiveCitiesCached = unstable_cache(readLiveCities, ["live-cities"], { revalidate: 3600 });
+let liveKept: LiveCity[] | null = null;
+let liveFailLoggedAt = -Infinity;
+
+export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
+  try {
+    const cities = await getLiveCitiesCached();
+    liveKept = cities;
+    return cities;
+  } catch (e) {
+    if (!liveKept) throw e;
+    if (Date.now() - liveFailLoggedAt >= 30_000) {
+      liveFailLoggedAt = Date.now();
+      console.warn("getLiveCities: read failed, serving this instance's last list", e instanceof Error ? e.message : e);
+    }
+    await markStaleRender();
+    return liveKept;
+  }
+});
 
 /**
  * The same list for the footer, which is on every page: its own copy,
