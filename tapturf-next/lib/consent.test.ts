@@ -219,6 +219,110 @@ test("a Reject made in another tab applies here when this tab comes back", () =>
   }
 });
 
+/** BroadcastChannel between tabs: every channel of a name hears what another posts. */
+function fakeChannels() {
+  const open: FakeChannel[] = [];
+  class FakeChannel {
+    onmessage: ((e: { data: unknown }) => void) | null = null;
+    constructor(public name: string) {
+      open.push(this);
+    }
+    postMessage(data: unknown) {
+      for (const ch of open) if (ch !== this && ch.name === this.name) ch.onmessage?.({ data });
+    }
+    close() {}
+  }
+  return { FakeChannel, open };
+}
+
+test("a choice made in another tab reaches this one at once, while both are on screen", () => {
+  const { b, c } = boot();
+  const { FakeChannel, open } = fakeChannels();
+  b.win.BroadcastChannel = FakeChannel;
+  try {
+    c.setConsent("accepted");
+    assert.equal(open.length, 1, "this tab listens on tt_consent");
+    const other = new FakeChannel("tt_consent");
+    let told: unknown = null;
+    other.onmessage = (e) => (told = e.data);
+    c.setConsent("accepted");
+    assert.equal(told, "accepted", "this tab tells the others");
+    b.win.gtag = () => {};
+    b.local.setItem("tt_tools_device", "abcdefabcdef");
+    let heard = 0;
+    c.subscribeConsent(() => heard++);
+    // The other tab rejects: it stores the cookie and posts; no visibilitychange here.
+    b.jar.put("tt_consent", "rejected.v1");
+    other.postMessage("rejected");
+    assert.equal(c.getConsent(), "denied");
+    assert.equal(heard, 1);
+    assert.equal(b.win["ga-disable-G-KRDVP16TSM"], true, "GA stops in this tab too");
+    assert.equal("gtag" in b.win, false);
+    assert.equal(b.local.getItem("tt_tools_device"), null);
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("a gate reads the cookie before saying yes: another tab's Reject wins with no event at all", () => {
+  const { b, c } = boot();
+  try {
+    c.setConsent("accepted");
+    assert.equal(c.analyticsAllowed(), true);
+    b.win.gtag = () => {};
+    b.jar.put("tt_consent", "rejected.v1"); // stored by another tab; nothing fired here
+    assert.equal(c.analyticsAllowed(), false);
+    assert.equal(c.getConsent(), "denied");
+    assert.equal("gtag" in b.win, false);
+    // And an Accept made elsewhere is picked up the same way.
+    b.jar.put("tt_consent", "accepted.v1");
+    assert.equal(c.analyticsAllowed(), false, "a no is not re-read: nothing starts on a stale check");
+    b.fire("visibilitychange");
+    assert.equal(c.analyticsAllowed(), true);
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("before Accept, what a visit before the banner (or a lapsed Accept) left here is deleted", () => {
+  const seed = (b: FakeBrowser, c: ConsentModule) => {
+    b.jar.put("_ga", "GA1.1.123.456", "tapturf.in");
+    b.jar.put("_ga_KRDVP16TSM", "GS1.1.1", "tapturf.in");
+    b.jar.put("tt_city", "pune");
+    for (const k of c.CONSENTED_LOCAL_KEYS) b.local.setItem(k, "x");
+    b.local.setItem("tapturf_city", "pune");
+    b.session.setItem("tt_viewed_abc", "1");
+  };
+  for (const [label, cookie, gpc] of [
+    ["no choice yet", null, false],
+    ["an Accept for an older version", "accepted.v0", false],
+    ["a Reject", "rejected.v1", false],
+    ["Global Privacy Control", null, true],
+  ] as const) {
+    const { b, c } = boot({ gpc });
+    try {
+      seed(b, c);
+      if (cookie) b.jar.put("tt_consent", cookie);
+      c.forgetUnconsented();
+      assert.deepEqual(b.jar.names().filter((n) => n.startsWith("_ga")), [], `${label}: GA cookies`);
+      assert.deepEqual(b.local.keys(), ["tapturf_city"], `${label}: only what needs no consent stays`);
+      assert.deepEqual(b.session.keys(), [], label);
+    } finally {
+      b.uninstall();
+    }
+  }
+  const { b, c } = boot();
+  try {
+    seed(b, c);
+    b.jar.put("tt_consent", "accepted.v1");
+    c.forgetUnconsented();
+    assert.equal(b.jar.names().includes("_ga"), true, "a valid Accept keeps them");
+    assert.equal(b.local.getItem("tt_first_v1"), "x");
+  } finally {
+    b.uninstall();
+  }
+});
+
 test("Cookie settings opens and closes the banner over a stored choice", () => {
   const { b, c } = boot();
   try {
@@ -252,6 +356,7 @@ test("cookies blocked: the choice still holds for this page", () => {
     assert.equal(c.getConsent(), "unset");
     c.setConsent("accepted");
     assert.equal(c.getConsent(), "granted");
+    assert.equal(c.analyticsAllowed(), true, "re-reading the (unreadable) cookie does not undo it");
   } finally {
     b.uninstall();
   }

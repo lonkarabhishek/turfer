@@ -285,6 +285,22 @@ test("tool uses: after Accept the guest tag is made and sent; Reject deletes it 
   }
 });
 
+test("tool uses: a Reject stored by another tab stops the tag here before the next use", async () => {
+  const { b, m } = boot();
+  try {
+    m.account.setSignInToken(null);
+    m.consent.setConsent("accepted");
+    b.jar.put("tt_consent", "rejected.v1"); // the other tab; this one is still on screen
+    m.tools.trackTool("tool_used", "toss");
+    assert.equal("device" in (await beaconBody(b.beacons[0])), false);
+    assert.equal(b.local.getItem("tt_tools_device"), null);
+    production(() => m.ga.gaEvent("tool_used", { tool: "toss" }));
+    assert.equal(b.scripts.length, 0, "GA does not start either");
+  } finally {
+    b.uninstall();
+  }
+});
+
 test("tool uses: GPC on is a Reject for the tag", async () => {
   const { b, m } = boot({ gpc: true });
   try {

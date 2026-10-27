@@ -15,6 +15,7 @@ import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
+import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 
 /** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */
 function waNumber(phone: string): string {
@@ -652,6 +653,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       {/* MOBILE FIXED BOTTOM CTA — positioned above MobileNav */}
       {/* ═══════════════════════════════════════════════════════ */}
       <div
+        ref={liftCookieBanner}
         className="fixed left-0 right-0 bg-white border-t border-primary-200 p-3 lg:hidden z-30"
         style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
       >

@@ -5,8 +5,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import {
   closeCookieSettings,
-  forgetTracking,
-  getConsent,
+  forgetUnconsented,
   setConsent,
   storedChoice,
   useConsent,
@@ -23,7 +22,9 @@ const CHOICE =
  * the page has hydrated and only when no choice is stored, so a visitor
  * who chose never sees it flash. A fixed card above the phone's bottom
  * nav and a turf page's Call/WhatsApp bar (z-50), below sheets and
- * modals (z-60); bottom left on desktop. Not a dialog: nothing is blocked and
+ * modals (z-60); bottom left on desktop. A bar that sits over the nav (a
+ * game's Join bar, the blog's sticky link, create game's Next) lifts it
+ * clear with liftCookieBanner, so it never covers that bar's buttons. Not a dialog: nothing is blocked and
  * focus is never trapped. First in the page, so the keyboard reaches it
  * first. Cookie settings (the menu, the footer, the privacy page) opens
  * it again, moves focus to it and says what the choice is now; Esc or ×
@@ -35,10 +36,10 @@ export function CookieBanner() {
   const consent = useConsent();
   const box = useRef<HTMLElement>(null);
 
-  // A Reject that is already in place (stored, or Global Privacy Control) also
-  // clears what a visit before the banner existed may have left behind.
+  // Without a valid Accept, delete what a visit before the banner existed (or an
+  // Accept that has since lapsed) left on this device.
   useEffect(() => {
-    if (getConsent() === "denied") forgetTracking();
+    forgetUnconsented();
   }, []);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export function CookieBanner() {
       aria-labelledby="tt-cookie-title"
       aria-describedby="tt-cookie-text"
       data-cookie-banner=""
-      className="fixed z-[55] left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] md:left-6 md:right-auto md:bottom-6 md:w-[26rem] outline-none print:hidden animate-slide-up"
+      className="fixed z-[55] left-3 right-3 bottom-[max(calc(env(safe-area-inset-bottom)+4.75rem),calc(var(--consent-lift,0px)+0.5rem))] md:left-6 md:right-auto md:bottom-[max(1.5rem,calc(var(--consent-lift,0px)+0.5rem))] md:w-[26rem] outline-none print:hidden animate-slide-up"
     >
       <div className="rounded-2xl bg-white border border-primary-200 shadow-elevated p-4">
         <div className="flex items-start justify-between gap-3">

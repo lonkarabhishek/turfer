@@ -17,7 +17,10 @@ import { useSyncExternalStore } from "react";
  * Privacy Control (navigator.globalPrivacyControl) is treated as Reject
  * until the visitor accepts in Cookie settings. A Reject, now or later,
  * stops Google Analytics on the page and deletes its cookies and the
- * on-device notes (forgetTracking). Changes apply at once, no reload.
+ * on-device notes (forgetTracking). Changes apply at once, no reload, in
+ * every open tab: a choice made in one is posted to the others
+ * (BroadcastChannel), and every gate (analyticsAllowed) reads the cookie
+ * again before saying yes, so another tab's Reject wins at once.
  *
  * No imports but React's hook, so the pure parts run under node --test.
  */
@@ -122,8 +125,11 @@ type GaWindow = Window & { gtag?: (...args: unknown[]) => void } & Record<string
 const inBrowser = () => typeof window !== "undefined" && typeof document !== "undefined";
 
 let current: Exclude<Consent, "unknown"> | null = null;
+/** The stored choice as this tab last read or wrote it: only a change to the cookie since then moves current. */
+let seen: ConsentChoice | null = null;
 let settingsOpen = false;
 let watching = false;
+let channel: BroadcastChannel | null = null;
 const listeners = new Set<() => void>();
 
 function readCookie(): string {
@@ -158,10 +164,17 @@ function emit() {
   }
 }
 
-/** Another tab may have changed the choice: read it again when this one comes back. */
+/**
+ * Another tab may have changed the choice: read the cookie again. Only a
+ * change since this tab last read or wrote it counts, so a choice that
+ * could not be stored (cookies blocked) still holds for this page.
+ */
 function refresh() {
   if (current === null) return;
-  const next = consentOf(storedChoice(), gpcOn());
+  const stored = storedChoice();
+  if (stored === seen) return;
+  seen = stored;
+  const next = consentOf(stored, gpcOn());
   if (next === current) return;
   const was = current;
   current = next;
@@ -178,21 +191,36 @@ function watch() {
   } catch {
     /* ignore */
   }
+  try {
+    // A choice made in another tab of this site reaches this one at once, even while both are on screen.
+    const Channel = (window as unknown as { BroadcastChannel?: typeof BroadcastChannel }).BroadcastChannel;
+    channel = typeof Channel === "function" ? new Channel(CONSENT_COOKIE) : null;
+    if (channel) channel.onmessage = () => refresh();
+  } catch {
+    channel = null;
+  }
 }
 
 /** The consent now. "unknown" on the server. */
 export function getConsent(): Consent {
   if (!inBrowser()) return "unknown";
   if (current === null) {
-    current = consentOf(storedChoice(), gpcOn());
+    seen = storedChoice();
+    current = consentOf(seen, gpcOn());
     watch();
   }
   return current;
 }
 
-/** Whether Google Analytics, the visit note, the tool tag and map embeds may run. */
+/**
+ * Whether Google Analytics, the visit note, the tool tag and map embeds
+ * may run. A yes is checked against the cookie first (cheap), so a Reject
+ * stored by another tab wins before anything is sent or kept.
+ */
 export function analyticsAllowed(): boolean {
-  return getConsent() === "granted";
+  if (getConsent() !== "granted") return false;
+  refresh();
+  return current === "granted";
 }
 
 /** Store the visitor's choice and apply it at once. Reject also forgets what was kept. */
@@ -203,10 +231,16 @@ export function setConsent(choice: ConsentChoice): void {
   } catch {
     /* cookies blocked: the choice still holds for this page */
   }
+  seen = storedChoice();
   current = choice === "accepted" ? "granted" : "denied";
   watch();
   if (current === "denied") forgetTracking();
   settingsOpen = false;
+  try {
+    channel?.postMessage(choice);
+  } catch {
+    /* the other tabs catch up when they are next shown */
+  }
   emit();
 }
 
@@ -255,6 +289,17 @@ export function forgetTracking(): void {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * Once per page load (CookieBanner): without a valid Accept (no choice yet,
+ * an Accept that expired or covers less than now, a Reject, Global Privacy
+ * Control), whatever is kept here was kept without consent: a visit before
+ * the banner existed, or an earlier Accept. Delete it, so nothing is on the
+ * device before Accept and an Accept starts a fresh note and tool tag.
+ */
+export function forgetUnconsented(): void {
+  if (inBrowser() && getConsent() !== "granted") forgetTracking();
 }
 
 /** Called when the consent or the settings banner changes; returns the unsubscribe. */
