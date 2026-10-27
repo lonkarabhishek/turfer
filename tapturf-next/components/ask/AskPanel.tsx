@@ -11,6 +11,7 @@ import { articleWelcome } from "./blogUi";
 import { askChips } from "@/lib/ask/chips";
 import { SUMMARY_CHIP } from "@/lib/ask/blog";
 import { getCityPref } from "@/lib/city";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
 // Until /api/ask/chips answers: no place names, no games promise.
 const WELCOME_CHIPS = askChips(null, 0);
@@ -18,7 +19,10 @@ const WELCOME_CHIPS = askChips(null, 0);
 /**
  * The chat itself. A bottom sheet on phones, a side panel on desktop.
  * Thread on top, composer pinned to the bottom, Esc or the cross
- * closes. Only the latest reply shows follow-up chips.
+ * closes. Only the latest reply shows follow-up chips. It fills what
+ * the phone shows (ViewportOverlay): with the keys up on iOS or in an
+ * in-app browser, the composer sits right above them and the header
+ * stays at the top, as Android's resizes-content already does.
  */
 export function AskPanel() {
   const { open, closePanel, turns, busy, send, retry, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending, freeLeft, signIn } = useAsk();
@@ -101,7 +105,7 @@ export function AskPanel() {
   const gated = !signedIn && freeLeft === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex md:justify-end" role="presentation">
+    <ViewportOverlay className="z-50 flex md:justify-end" role="presentation">
       {/* Desktop: dim the page behind the side panel. Phones get a full screen. */}
       <button type="button" aria-label="Close" onClick={closePanel} className="hidden md:block absolute inset-0 bg-primary-900/30 cursor-pointer" />
 
@@ -109,7 +113,7 @@ export function AskPanel() {
         role="dialog"
         aria-modal="true"
         aria-label="Ask TapTurf"
-        className="relative flex flex-col w-full md:w-[480px] h-[100dvh] bg-white md:shadow-elevated ask-screen-in md:ask-panel-in overflow-hidden"
+        className="relative flex flex-col w-full md:w-[480px] h-[var(--vv-h,100dvh)] bg-white md:shadow-elevated ask-screen-in md:ask-panel-in overflow-hidden"
       >
         {/* Header: back on phones, close on desktop. */}
         <header className="shrink-0 flex items-center gap-1 h-14 px-1.5 border-b border-primary-100">
@@ -179,7 +183,7 @@ export function AskPanel() {
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 bg-white px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 bg-white px-3 pt-2 pb-[max(0.75rem,var(--safe-b,env(safe-area-inset-bottom)))]">
           {turns.length > 0 && chips.length > 0 && !busy && (
             <div className="-mx-3 px-3 mb-2 flex gap-2 overflow-x-auto scrollbar-hide">
               {chips.map((c) => (
@@ -235,7 +239,7 @@ export function AskPanel() {
           </form>
         </div>
       </section>
-    </div>
+    </ViewportOverlay>
   );
 }
 

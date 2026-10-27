@@ -13,6 +13,7 @@ import type { Aspects, MineResponse, RateHint, ReportBody, ReportChannel, SaveRe
 import { unlockLine } from "@/lib/reviews/unlock";
 import type { TokenCheck } from "@/lib/account/client";
 import type { ReviewWithUser } from "@/types/review";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { Overall, StarsBar } from "./steps/Overall";
 import { QuickScorecard } from "./steps/QuickScorecard";
 import { CONTACT_MESSAGE, otherPrice, WrapUp } from "./steps/WrapUp";
@@ -353,8 +354,11 @@ export function ReportSheet({
     );
   }
 
+  // In what the phone shows (ViewportOverlay): with the keys up for the tip or the note, the
+  // sheet sits above them, its screens scroll between the stars and the Post row, and the
+  // box being typed in scrolls into view.
   const sheet = (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
+    <ViewportOverlay className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
       <div className="absolute inset-0 bg-primary-900/40 animate-fade-in" onClick={close} />
       <div
         ref={panel}
@@ -362,7 +366,7 @@ export function ReportSheet({
         aria-modal="true"
         aria-label={`Rate your game at ${turf.name}`}
         tabIndex={-1}
-        className="relative w-full sm:max-w-lg max-h-[92vh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden outline-none"
+        className="relative w-full sm:max-w-lg max-h-[calc(var(--vv-h,100dvh)*0.92)] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden outline-none"
       >
         <div className="sm:hidden flex justify-center pt-2.5">
           <div className="w-10 h-1 bg-primary-300 rounded-full" />
@@ -382,7 +386,7 @@ export function ReportSheet({
         </div>
         {(step === 2 || step === 3) && <StarsBar stars={d.stars} onPick={(n) => patch({ stars: n })} />}
 
-        <div ref={scroller} className="overflow-y-auto overscroll-contain px-5" style={step === 4 ? { paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" } : undefined}>
+        <div ref={scroller} className="overflow-y-auto overscroll-contain px-5" style={step === 4 ? { paddingBottom: "max(1.5rem, var(--safe-b, env(safe-area-inset-bottom)))" } : undefined}>
           {step === 1 && <Overall turfName={turf.name} stars={d.stars} onPick={pickOverall} />}
           {step === 2 && (
             <QuickScorecard
@@ -422,7 +426,7 @@ export function ReportSheet({
         </div>
 
         {step !== 4 && (
-          <div className="border-t border-primary-100 bg-white px-5 pt-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+          <div className="border-t border-primary-100 bg-white px-5 pt-3" style={{ paddingBottom: "max(0.75rem, var(--safe-b, env(safe-area-inset-bottom)))" }}>
             {open.confirm && !error && step === 3 && (
               <p className="mb-3 rounded-xl bg-primary-50 px-4 py-3 text-[14px] text-primary-800">
                 {open.confirm === "replace"
@@ -519,7 +523,7 @@ export function ReportSheet({
           </div>
         )}
       </div>
-    </div>
+    </ViewportOverlay>
   );
 
   return createPortal(sheet, document.body);

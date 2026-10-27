@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { X, Loader2, AlertCircle, Phone } from "lucide-react";
 import { safeNext } from "@/lib/auth/next";
 import { createClient } from "@/lib/supabase/client";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { useAuth } from "./AuthProvider";
 import { PhoneOTPForm } from "./PhoneOTPForm";
 import { useSearchParams } from "next/navigation";
@@ -59,7 +60,10 @@ export function LoginModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    // Centred in what the phone shows (ViewportOverlay): with the keys up for the number or
+    // the code, the card sits above them, scrolling inside when it is taller than what is left.
+    <>
+    <ViewportOverlay className="z-[60] flex items-center justify-center p-4">
       {/* Backdrop — solid tint, no backdrop-filter (cheap on low-end GPUs) */}
       <div
         className="absolute inset-0 bg-primary-800/60 animate-fade-in"
@@ -67,7 +71,7 @@ export function LoginModal() {
       />
 
       {/* Centered card — same on mobile + desktop, feels like a proper welcome */}
-      <div className="relative w-full max-w-[380px] bg-white rounded-3xl animate-login-in overflow-hidden shadow-elevated">
+      <div className="relative w-full max-w-[380px] max-h-full bg-white rounded-3xl animate-login-in overflow-y-auto overscroll-contain shadow-elevated">
         {/* Close — top-right, subtle */}
         <button
           onClick={handleClose}
@@ -171,6 +175,7 @@ export function LoginModal() {
         </div>
 
       </div>
+    </ViewportOverlay>
 
       {/* Entrance animation — soft bounce, feels like an iOS alert */}
       <style jsx>{`
@@ -183,6 +188,6 @@ export function LoginModal() {
           animation: login-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
       `}</style>
-    </div>
+    </>
   );
 }

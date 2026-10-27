@@ -12,6 +12,7 @@ import { GameDistance } from "./GameDistance";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
 /** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */
 function waNumber(phone: string): string {
@@ -699,10 +700,11 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       {/* ═══════════════════════════════════════════════════════ */}
       {/* JOIN FORM MODAL */}
       {/* ═══════════════════════════════════════════════════════ */}
+      {/* Both sheets sit in what the phone shows (ViewportOverlay): above the keys while the note or a field is typed. */}
       {showJoinForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+        <ViewportOverlay className="z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowJoinForm(false)} />
-          <div role="dialog" aria-modal="true" aria-label="Request to join" className="relative w-full md:max-w-md bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
+          <div role="dialog" aria-modal="true" aria-label="Request to join" className="relative w-full md:max-w-md max-h-[calc(var(--vv-h,100dvh)*0.92)] overflow-y-auto overscroll-contain bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-primary-800">Request to Join</h3>
               <button onClick={() => setShowJoinForm(false)} className="p-1 rounded-full hover:bg-primary-100">
@@ -719,7 +721,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               onChange={(e) => setJoinNote(e.target.value)}
               placeholder="Add a note to the host (optional)"
               rows={3}
-              className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
+              className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
             />
 
             <button
@@ -746,16 +748,16 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               </p>
             )}
           </div>
-        </div>
+        </ViewportOverlay>
       )}
 
       {/* ═══════════════════════════════════════════════════════ */}
       {/* EDIT GAME MODAL */}
       {/* ═══════════════════════════════════════════════════════ */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+        <ViewportOverlay className="z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setShowEditModal(false)} />
-          <div role="dialog" aria-modal="true" aria-label="Edit game" className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[85vh] overflow-y-auto">
+          <div role="dialog" aria-modal="true" aria-label="Edit game" className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[calc(var(--vv-h,100dvh)*0.85)] overflow-y-auto overscroll-contain">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-primary-800 flex items-center gap-2">
                 <Pencil className="w-4.5 h-4.5 text-primary-500" />
@@ -774,7 +776,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                   type="date"
                   value={editData.date}
                   onChange={(e) => setEditData({ ...editData, date: e.target.value })}
-                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                 />
               </div>
 
@@ -786,7 +788,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                     type="time"
                     value={editData.start_time}
                     onChange={(e) => setEditData({ ...editData, start_time: e.target.value })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
                 <div>
@@ -795,7 +797,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                     type="time"
                     value={editData.end_time}
                     onChange={(e) => setEditData({ ...editData, end_time: e.target.value })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
               </div>
@@ -809,7 +811,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                     min={game?.current_players || 1}
                     value={editData.max_players}
                     onChange={(e) => setEditData({ ...editData, max_players: parseInt(e.target.value) || 0 })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
                 <div>
@@ -819,7 +821,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                     min={0}
                     value={editData.price_per_player}
                     onChange={(e) => setEditData({ ...editData, price_per_player: parseInt(e.target.value) || 0 })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                   />
                 </div>
               </div>
@@ -830,7 +832,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                 <select
                   value={editData.skill_level}
                   onChange={(e) => setEditData({ ...editData, skill_level: e.target.value })}
-                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
                 >
                   <option value="all">All Levels</option>
                   <option value="beginner">Beginner</option>
@@ -847,7 +849,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                   onChange={(e) => setEditData({ ...editData, description: e.target.value })}
                   placeholder="Describe the game..."
                   rows={3}
-                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
+                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
                 />
               </div>
 
@@ -885,7 +887,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               )}
             </button>
           </div>
-        </div>
+        </ViewportOverlay>
       )}
     </div>
   );

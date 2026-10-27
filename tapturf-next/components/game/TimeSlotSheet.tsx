@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { X, Clock } from "lucide-react";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
 /**
  * 30-minute-only start-time picker. Replaces <input type="time">
@@ -11,6 +12,11 @@ import { X, Clock } from "lucide-react";
  *
  * Slots run 06:00 → 23:30 (36 slots). Selected slot is centered in
  * view on open.
+ *
+ * It has no field of its own, but iOS keeps a field's keyboard up when
+ * a button is tapped (buttons don't take focus there), so it can open
+ * with the keys up after typing in the game form: it sits above them
+ * (ViewportOverlay).
  */
 
 const START_HOUR = 6;
@@ -81,12 +87,12 @@ export function TimeSlotSheet({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center"
+    <ViewportOverlay
+      className="z-[70] flex items-end sm:items-center justify-center"
       data-modal-open="true"
     >
       <div className="absolute inset-0 bg-primary-800/50 animate-fade-in" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-elevated animate-slide-up flex flex-col max-h-[85vh]">
+      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-elevated animate-slide-up flex flex-col max-h-[calc(var(--vv-h,100dvh)*0.85)]">
         {/* Grabber */}
         <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0">
           <div className="w-10 h-1 bg-primary-300 rounded-full" />
@@ -154,9 +160,9 @@ export function TimeSlotSheet({
           ))}
         </div>
 
-        {/* iOS safe area */}
-        <div className="sm:hidden h-[env(safe-area-inset-bottom)] bg-white shrink-0" />
+        {/* iOS safe area (none while the keys cover it) */}
+        <div className="sm:hidden h-[var(--safe-b,env(safe-area-inset-bottom))] bg-white shrink-0" />
       </div>
-    </div>
+    </ViewportOverlay>
   );
 }

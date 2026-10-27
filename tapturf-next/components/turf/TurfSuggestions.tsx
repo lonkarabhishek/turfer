@@ -20,6 +20,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
 import { playerPriceRange } from "@/lib/utils/prices";
 import { generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
@@ -783,14 +784,15 @@ function SuggestSheet({
     onSubmitted();
   };
 
+  // Above the keys while a number or a note is typed (ViewportOverlay), the field scrolled into view.
   const sheet = (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
+    <ViewportOverlay className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
       <div className="absolute inset-0 bg-primary-900/40 animate-fade-in" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Suggest info for ${turfName}`}
-        className="relative w-full sm:max-w-lg max-h-[92vh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden"
+        className="relative w-full sm:max-w-lg max-h-[calc(var(--vv-h,100dvh)*0.92)] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden"
       >
         <div className="sm:hidden flex justify-center pt-2.5">
           <div className="w-10 h-1 bg-primary-300 rounded-full" />
@@ -810,7 +812,7 @@ function SuggestSheet({
         </div>
 
         {done ? (
-          <div className="px-6 pt-8 pb-10 text-center" style={{ paddingBottom: "max(2.5rem, env(safe-area-inset-bottom))" }}>
+          <div className="px-6 pt-8 pb-10 text-center" style={{ paddingBottom: "max(2.5rem, var(--safe-b, env(safe-area-inset-bottom)))" }}>
             <div className="mx-auto w-14 h-14 rounded-full bg-accent-500 text-white flex items-center justify-center">
               <Check className="w-7 h-7" strokeWidth={2.5} />
             </div>
@@ -832,7 +834,7 @@ function SuggestSheet({
             </button>
           </div>
         ) : (
-          <div className="overflow-y-auto overscroll-contain px-5 pb-6" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
+          <div className="overflow-y-auto overscroll-contain px-5 pb-6" style={{ paddingBottom: "max(1.5rem, var(--safe-b, env(safe-area-inset-bottom)))" }}>
             <p className="text-[14px] text-primary-500 mb-5">
               {isEdit ? (
                 <>
@@ -957,7 +959,7 @@ function SuggestSheet({
           </div>
         )}
       </div>
-    </div>
+    </ViewportOverlay>
   );
 
   return createPortal(sheet, document.body);

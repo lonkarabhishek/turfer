@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import type { ChipTone } from "@/lib/cricket/scoring";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { chipText } from "./chip";
 
 /** Chip colours: strong fills for boundaries and wickets, readable in sunlight. */
@@ -29,7 +30,8 @@ export function BallChip({ chip, tone, size = "md", label }: { chip: string; ton
 /**
  * Bottom sheet on phones, centred card on desktop. Focus moves to the
  * sheet when it opens and back when it closes; Escape and the backdrop
- * close it when it can be closed.
+ * close it when it can be closed. While a name is typed it sits above
+ * the keyboard (ViewportOverlay) with the field scrolled into view.
  */
 export function Sheet({ title, subtitle, onClose, children, wide }: { title: string; subtitle?: ReactNode; onClose?: () => void; children: ReactNode; wide?: boolean }) {
   const id = useId();
@@ -57,7 +59,7 @@ export function Sheet({ title, subtitle, onClose, children, wide }: { title: str
     };
   }, []);
   return (
-    <div className="fixed inset-0 z-[80] flex items-end lg:items-center justify-center">
+    <ViewportOverlay className="z-[80] flex items-end lg:items-center justify-center">
       <div className={`absolute inset-0 bg-black/55 motion-safe:transition-opacity motion-safe:duration-200 ${shown ? "opacity-100" : "opacity-0"}`} onClick={() => onClose?.()} aria-hidden />
       <div
         ref={ref}
@@ -65,8 +67,8 @@ export function Sheet({ title, subtitle, onClose, children, wide }: { title: str
         aria-modal="true"
         aria-labelledby={id}
         tabIndex={-1}
-        className={`relative w-full ${wide ? "lg:max-w-2xl" : "lg:max-w-lg"} max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-3xl lg:rounded-3xl bg-white shadow-elevated outline-none motion-safe:transition-transform motion-safe:duration-200 ${shown ? "translate-y-0" : "translate-y-6"}`}
-        style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
+        className={`relative w-full ${wide ? "lg:max-w-2xl" : "lg:max-w-lg"} max-h-[calc(var(--vv-h,100dvh)*0.88)] overflow-y-auto overscroll-contain rounded-t-3xl lg:rounded-3xl bg-white shadow-elevated outline-none motion-safe:transition-transform motion-safe:duration-200 ${shown ? "translate-y-0" : "translate-y-6"}`}
+        style={{ paddingBottom: "max(16px, var(--safe-b, env(safe-area-inset-bottom)))" }}
       >
         <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm px-4 pt-3 pb-2 flex items-start gap-3 border-b border-primary-100">
           <div className="min-w-0 flex-1">
@@ -84,7 +86,7 @@ export function Sheet({ title, subtitle, onClose, children, wide }: { title: str
         </div>
         <div className="px-4 pt-3">{children}</div>
       </div>
-    </div>
+    </ViewportOverlay>
   );
 }
 

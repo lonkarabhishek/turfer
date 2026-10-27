@@ -9,6 +9,7 @@ import { errorOf, patchMe, profileOf, suggestUsername } from "@/lib/account/clie
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "./useUsernameCheck";
 import { TagSwitch } from "./TagSwitch";
 import { FOCUSABLE, askHere, busy, claimPrompt } from "@/lib/account/prompts";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
 /** User ids this device has asked already, newest last. Asked once, whatever the answer. */
 const ASKED_KEY = "tapturf_username_asked_v1";
@@ -162,7 +163,8 @@ export function UsernamePrompt() {
   const canSave = !saving && !!username.trim() && (availability === "idle" || usernameSavable(availability));
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
+    // Above the keys while the username is typed (ViewportOverlay); taller than what shows, it scrolls.
+    <ViewportOverlay className="z-[65] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-primary-900/40" onClick={close} aria-hidden />
       <div
         ref={dialogRef}
@@ -170,7 +172,7 @@ export function UsernamePrompt() {
         aria-modal="true"
         aria-labelledby="username-prompt-title"
         aria-describedby="username-prompt-body"
-        className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        className="relative w-full sm:max-w-md max-h-[calc(var(--vv-h,100dvh)*0.92)] overflow-y-auto overscroll-contain bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated px-5 pt-6 pb-[max(1.25rem,var(--safe-b,env(safe-area-inset-bottom)))]"
       >
         <h2 id="username-prompt-title" className="font-display text-2xl text-primary-900 leading-tight">
           Pick your TapTurf username
@@ -244,6 +246,6 @@ export function UsernamePrompt() {
           </Link>
         </p>
       </div>
-    </div>
+    </ViewportOverlay>
   );
 }

@@ -64,6 +64,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // Keyboard shrinks the layout viewport, so 100dvh sheets (Ask chat)
   // keep their composer above the keys instead of being pushed around.
+  // Android Chrome only: iOS Safari and in-app browsers (WhatsApp,
+  // Instagram) ignore it and lay the keys over the page, so every sheet
+  // with a field sits in components/ui/ViewportOverlay, which follows
+  // window.visualViewport there.
   interactiveWidget: "resizes-content",
   width: "device-width",
   initialScale: 1,

@@ -14,6 +14,8 @@ import {
   type CitySource,
 } from "@/lib/city";
 import { plural } from "@/lib/home/format";
+import { useVisualViewport } from "@/lib/ui/useVisualViewport";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { useCityChoice } from "./useCityChoice";
 import { cachedLiveCities, loadLiveCities, toRows, type LiveRow as Row } from "./liveCityList";
 
@@ -32,6 +34,12 @@ const PILL =
  * again". Every answer is one city: there is no "all of India" choice.
  * A modal sheet: focus is trapped, Esc closes without choosing, focus
  * goes back to whatever opened it.
+ *
+ * It sits in what the phone shows (ViewportOverlay): with the keyboard up
+ * on iOS or in WhatsApp's browser, right above the keys, not under them.
+ * While a name is typed (or the keys are up) it keeps its height instead
+ * of shrinking to the few matches, so the matches start right under the
+ * search box; "Detect my city again" steps aside while the keys are up.
  *
  * Every city with active turfs, with its count. The numbers (the total
  * in the search box, "TapTurf is in N cities", each city's count) come
@@ -58,6 +66,8 @@ export function CityPickerSheet({ initial }: { initial: CityCount[] | null }) {
   const opener = useRef<HTMLElement | null>(null);
   const choice = useCityChoice();
   const current = choice?.kind === "city" ? choice.city : null;
+  const view = useVisualViewport(open);
+  const keys = !!view?.keyboard;
 
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -201,14 +211,15 @@ export function CityPickerSheet({ initial }: { initial: CityCount[] | null }) {
   );
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
+    <ViewportOverlay box={view} className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
       <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={close} aria-hidden />
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="city-picker-h"
-        className="relative w-full sm:max-w-md max-h-[85dvh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden pb-[env(safe-area-inset-bottom)]"
+        // 85% of what shows. Typing keeps it that tall: the box stays put and the matches start under it.
+        className={`relative w-full sm:max-w-md ${searching || keys ? "h-[calc(var(--vv-h,100dvh)*0.85)]" : "max-h-[calc(var(--vv-h,100dvh)*0.85)]"} flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden pb-[var(--safe-b,env(safe-area-inset-bottom))]`}
       >
         <div className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
           <h2 id="city-picker-h" tabIndex={-1} className="font-display text-[22px] text-primary-900 leading-tight outline-none">
@@ -281,19 +292,22 @@ export function CityPickerSheet({ initial }: { initial: CityCount[] | null }) {
           )}
         </div>
 
-        <div className="border-t border-primary-200 px-3 py-2 flex flex-wrap items-center justify-end gap-1">
-          <button
-            type="button"
-            onClick={detectAgain}
-            disabled={resetting}
-            className="h-11 px-3 inline-flex items-center gap-2 rounded-full text-[14px] font-semibold text-primary-700 hover:bg-primary-50 focus-neon disabled:opacity-70"
-          >
-            {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
-            Detect my city again
-          </button>
-        </div>
+        {/* Not while the keys are up: the matches need the room, and it's back as soon as they go down. */}
+        {!keys && (
+          <div className="border-t border-primary-200 px-3 py-2 flex flex-wrap items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={detectAgain}
+              disabled={resetting}
+              className="h-11 px-3 inline-flex items-center gap-2 rounded-full text-[14px] font-semibold text-primary-700 hover:bg-primary-50 focus-neon disabled:opacity-70"
+            >
+              {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+              Detect my city again
+            </button>
+          </div>
+        )}
       </div>
-    </div>,
+    </ViewportOverlay>,
     document.body,
   );
 }

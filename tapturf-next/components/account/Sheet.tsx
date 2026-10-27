@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { FOCUSABLE } from "@/lib/account/prompts";
+import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
 /**
  * A sheet over the page: from the bottom on a phone, centred on a wide
  * screen. Escape and a tap outside call onClose (unless locked, while
  * something is being sent); Tab stays inside; focus goes back where it
  * was when it closes. The heading gets focus first, so a phone's keyboard
- * opens only when a field is tapped.
+ * opens only when a field is tapped. With the keyboard up it sits above
+ * the keys (ViewportOverlay), scrolling inside when it is taller.
  */
 export function Sheet({
   labelledBy,
@@ -68,7 +70,7 @@ export function Sheet({
 
   return (
     // data-modal-open: PWALifecycle never reloads the page under an open sheet (a code half typed).
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
+    <ViewportOverlay className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
       <div className="absolute inset-0 bg-primary-900/40" onClick={() => !locked && onClose()} aria-hidden />
       <div
         ref={ref}
@@ -76,10 +78,10 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
-        className="relative w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        className="relative w-full sm:max-w-md max-h-[calc(var(--vv-h,100dvh)*0.92)] overflow-y-auto overscroll-contain bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated px-5 pt-6 pb-[max(1.25rem,var(--safe-b,env(safe-area-inset-bottom)))]"
       >
         {children}
       </div>
-    </div>
+    </ViewportOverlay>
   );
 }
