@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { keyLabel, toClaims, typedNameDiffers, type AdminClaim, type ClaimStatus } from "@/lib/admin/claims";
 import { METHOD_NAMES, ago, istDateTime, whatsappLink } from "@/lib/admin/people";
+import { adminFetch } from "@/lib/admin/adminFetch";
 
 const spaced = (p10: string) => p10.replace(/^(\d{5})(\d{5})$/, "$1 $2");
 
@@ -15,13 +16,19 @@ export function OwnerClaims() {
   const [failed, setFailed] = useState<string | null>(null);
   const [now, setNow] = useState(0);
 
+  // Through the admin page's gate (lib/admin/fetchGate.ts): one session refresh, not one per call.
   const load = useCallback(async () => {
-    const r = await fetch("/api/admin/owner-claims", { cache: "no-store" });
-    const j = (await r.json().catch(() => ({}))) as { claims?: unknown; error?: string };
-    if (!r.ok) setError(j.error ?? "Couldn't load claims");
-    else {
-      setClaims(toClaims(j.claims));
-      setNow(Date.now());
+    try {
+      const r = await adminFetch("/api/admin/owner-claims", { cache: "no-store" });
+      const j = (await r.json().catch(() => ({}))) as { claims?: unknown; error?: string };
+      if (!r.ok) setError(j.error ?? "Couldn't load claims");
+      else {
+        setClaims(toClaims(j.claims));
+        setNow(Date.now());
+        setError("");
+      }
+    } catch {
+      setError("Couldn't load claims. Check your connection.");
     }
   }, []);
 
@@ -51,7 +58,15 @@ export function OwnerClaims() {
     void load();
   };
 
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error)
+    return (
+      <p className="text-sm text-red-600">
+        {error}{" "}
+        <button type="button" onClick={() => void load()} className="ml-1 font-semibold text-accent-700 hover:underline">
+          Retry
+        </button>
+      </p>
+    );
   if (!claims) return <p className="text-sm text-primary-500">Loading claims…</p>;
   if (claims.length === 0) return <p className="text-sm text-primary-500">No claims yet. Owners claim their turf at /my.</p>;
 

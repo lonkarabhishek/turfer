@@ -2,34 +2,27 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { isAdmin } from "@/lib/admin/auth";
 import { AdminGate } from "@/components/admin/AdminGate";
+import { AdminSection } from "@/components/admin/AdminSection";
 import {
-  getHeadline,
-  getDailyGames,
-  getGamesByCity,
-  getGamesBySport,
-  getGamesByStatus,
-  getTurfsByCity,
-  getTopHosts,
-  getActiveUsers,
-  getContactClickStats,
-} from "@/lib/queries/admin";
-import { getAdminGames } from "@/lib/queries/adminDetail";
-import { StatTile } from "@/components/admin/StatTile";
+  ActivitySection,
+  BookingsSection,
+  BreakdownsSection,
+  ContactsSection,
+  DailyGamesSection,
+  GamesListSection,
+  HeadlineSection,
+  LoginsSection,
+  ReviewsSection,
+  SignupWindowsSection,
+  SignupsSection,
+  ToolsSection,
+  TopHostsSection,
+} from "@/components/admin/HomeSections";
 import { CoverPhotoTool } from "@/components/admin/CoverPhotoTool";
 import { ListingCheckTool, ReviewSummaryTool } from "@/components/admin/AiTools";
-import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
-import { getAskTranscripts } from "@/lib/queries/adminAsks";
-import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
-import { adminTickRows, signupPeople } from "@/lib/queries/adminUsers";
-import { personId, tickTotals, tickedOnly } from "@/lib/admin/people";
-import { DailyChart } from "@/components/admin/DailyChart";
-import { SignupsTrend } from "@/components/admin/SignupsTrend";
 import { LinkRefusals } from "@/components/admin/LinkRefusals";
-import { BreakdownList } from "@/components/admin/BreakdownList";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
-import { turfPath } from "@/lib/utils/turfPath";
-import { getToolUsage } from "@/lib/queries/adminTools";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -40,344 +33,72 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-function loginsUnavailable(reason: "not_set_up" | "not_allowed" | "error"): string {
-  if (reason === "not_set_up") return "Login log not set up yet";
-  if (reason === "not_allowed") return "Sign in with Google to view";
-  return "Couldn't load";
-}
-
-function timeAgo(iso: string): string {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} hr ago`;
-  const days = Math.round(hrs / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
-}
-
-const dayLabel = (d: string | null) => (d ? new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
-
-/** Live scoreboard links and the tools' counted uses. */
-function ToolTiles({ tools }: { tools: Awaited<ReturnType<typeof getToolUsage>> }) {
-  const { live, uses } = tools;
-  const n = (r: Record<string, number> | undefined, ...keys: string[]) => keys.reduce((s, k) => s + (r?.[k] ?? 0), 0);
-  const since = uses?.since ? `Counted since ${dayLabel(uses.since)}` : "Counting from today";
-  const scorecards = n(uses?.started, "live_scorer", "live_scoreboard");
-  const sports = Object.entries(uses?.boardSports ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s, c]) => `${s} ${c}`).join(", ");
-  const others: [string, string][] = [["nrr_calculator", "NRR"], ["team_generator", "Teams"], ["tournament_scorer", "Tournaments"], ["scorecard_maker", "Scorecard images"]];
-  const otherTotal = n(uses?.started, ...others.map(([k]) => k));
-  return (
-    <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
-      <StatTile
-        label="Live scoreboards shared"
-        href="/admin/live"
-        value={live ? live.total : "-"}
-        sub={live ? `+${live.last7} this week · ${live.liveNow} live now` : "Couldn't load"}
-      />
-      {/* The other three open Tool users: who used each tool and what (from 27 Oct 2026). */}
-      <StatTile
-        label="Scorecards started"
-        href="/admin/tools"
-        value={uses ? scorecards : "-"}
-        sub={uses ? `${n(uses.finished, "live_scorer", "live_scoreboard")} finished${sports ? ` · ${sports}` : ""} · ${since}` : "Couldn't load"}
-      />
-      <StatTile
-        label="Coin tosses"
-        href="/admin/tools?tool=toss"
-        value={uses ? n(uses.started, "toss") : "-"}
-        sub={uses ? `${n(uses.started7, "toss")} this week · ${since}` : "Couldn't load"}
-      />
-      <StatTile
-        label="Other tools"
-        href="/admin/tools"
-        value={uses ? otherTotal : "-"}
-        sub={uses ? others.map(([k, name]) => `${name} ${n(uses.started, k)}`).join(" · ") : "Couldn't load"}
-      />
-    </section>
-  );
-}
-
+/**
+ * The owner's dashboard. The page itself only checks it's the owner; every
+ * section reads its own numbers and streams in when they arrive
+ * (components/admin/HomeSections.tsx). A read that fails or is slow shows
+ * "-" and a retry in its own section, and the rest of the page loads as
+ * usual: on 27 Oct one timed-out read threw the whole page away.
+ */
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ person?: string | string[]; people?: string | string[] }> }) {
   // Owner-only guard. Non-admins end on a "Page not found" screen;
   // AdminGate first lets a phone-OTP owner hand over their Firebase token.
+  // Also the render's one session refresh (lib/admin/auth.ts).
   const allowed = await isAdmin();
   if (!allowed) return <AdminGate />;
-
-  const suggestions = await getPendingSuggestions(500);
-  const pendingSuggestions = suggestions.ok ? suggestions.rows.length : 0;
-  const asks = await getAskTranscripts(7);
-  const asks7d = asks.ok ? asks.rows.length : 0;
-  const askVisitors = asks.ok ? new Set(asks.rows.map((r) => r.ip_hash)).size : 0;
-
-  const [
-    headline,
-    games,
-    people,
-    gamesByCity,
-    gamesBySport,
-    gamesByStatus,
-    turfsByCity,
-    topHosts,
-    active7,
-    active30,
-    contact7,
-    contact30,
-    adminGames,
-    logins,
-    tools,
-    tickRows,
-  ] = await Promise.all([
-    getHeadline(),
-    getDailyGames(30),
-    signupPeople(),
-    getGamesByCity(),
-    getGamesBySport(),
-    getGamesByStatus(),
-    getTurfsByCity(),
-    getTopHosts(10),
-    getActiveUsers(7),
-    getActiveUsers(30),
-    getContactClickStats(7),
-    getContactClickStats(30),
-    getAdminGames("all", 200),
-    getRecentLogins(300),
-    getToolUsage(),
-    // The verified tick for every account (the people list reads the same, once per render).
-    adminTickRows(),
-  ]);
-  const ticks = tickTotals(tickRows);
   const sp = await searchParams;
-  const loginNums = logins.ok ? loginStats(logins.rows) : null;
-  const lastLogin = loginNums?.latest;
-  // Games snapshot: everything upcoming / live, then the latest past ones.
-  const gameCounts = adminGames.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});
-  const gamesShown = [
-    ...adminGames.filter((g) => g.state === "live"),
-    ...adminGames.filter((g) => g.state === "upcoming").reverse(),
-    ...adminGames.filter((g) => g.state === "expired" || g.state === "cancelled"),
-  ].slice(0, 12);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 md:py-12">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>
-          <p className="text-xs font-bold text-accent-600 mb-2">
-            Owner only
-          </p>
-          <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-none">
-            TapTurf Admin
-          </h1>
+          <p className="text-xs font-bold text-accent-600 mb-2">Owner only</p>
+          <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-none">TapTurf Admin</h1>
           <p className="text-primary-500 text-sm mt-2">
-            Real numbers, refreshed on every load. For deeper session /
-            pageview analytics see{" "}
-            <a
-              href="https://analytics.google.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent-600 underline hover:text-accent-700"
-            >
+            Real numbers, refreshed on every load. For deeper session / pageview analytics see{" "}
+            <a href="https://analytics.google.com" target="_blank" rel="noopener noreferrer" className="text-accent-600 underline hover:text-accent-700">
               Google Analytics
             </a>
             .
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/admin"
-            className="rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800"
-          >
+          <Link href="/admin" className="rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800">
             Refresh
           </Link>
-          <Link
-            href="/"
-            className="rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50"
-          >
+          <Link href="/" className="rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50">
             Back to site
           </Link>
         </div>
       </div>
 
       {/* Turf contact taps, first: how many players reached out to turfs. */}
-      <section className="mb-8">
-        <p className="text-xs font-bold text-primary-500 mb-3">
-          Turf contacts (Call and WhatsApp taps)
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
-          <StatTile
-            label="Calls, 7 days"
-            value={contact7?.calls ?? 0}
-            sub={`${contact30?.calls ?? 0} in 30 days`}
-            tone="accent"
-          />
-          <StatTile
-            label="WhatsApps, 7 days"
-            value={contact7?.whatsapps ?? 0}
-            sub={`${contact30?.whatsapps ?? 0} in 30 days`}
-            tone="accent"
-          />
-          <StatTile
-            label="Players who reached out, 30d"
-            value={contact30?.unique_users ?? 0}
-            sub={`across ${contact30?.turfs ?? 0} turfs`}
-          />
-          <StatTile
-            label="Hit login first, 30d"
-            value={contact30?.login_prompts ?? 0}
-            sub="tapped while signed out"
-          />
-        </div>
-        <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-primary-100 flex items-baseline justify-between">
-            <p className="text-xs font-bold text-primary-500">Most contacted turfs, 30 days</p>
-            <p className="text-xs text-primary-400">Signed-in taps</p>
-          </div>
-          {!contact30 || contact30.top.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-primary-400">No taps recorded yet. Counting started with this release.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-primary-50 text-[11px] text-primary-500 font-semibold">
-                  <tr>
-                    <th className="text-left px-4 py-2.5">Turf</th>
-                    <th className="text-left px-4 py-2.5">City</th>
-                    <th className="text-right px-4 py-2.5">Calls</th>
-                    <th className="text-right px-4 py-2.5">WhatsApp</th>
-                    <th className="text-right px-4 py-2.5">Login prompts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contact30.top.map((t) => (
-                    <tr key={t.id} className="border-t border-primary-100">
-                      <td className="px-4 py-2.5">
-                        <Link href={turfPath(t)} className="font-medium text-primary-900 hover:text-accent-600">
-                          {t.name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2.5 text-primary-500 capitalize">{t.city ?? "-"}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{t.calls}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{t.whatsapps}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-primary-400">{t.login_prompts}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
+      <AdminSection title="Turf contacts" height={320}>
+        <ContactsSection />
+      </AdminSection>
 
       {/* Top-line tiles */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
-        <StatTile
-          label="Unique people"
-          href="/admin/users"
-          value={headline.uniquePeople}
-          sub={
-            headline.duplicateUsers > 0
-              ? `${headline.duplicateUsers} duplicate row${headline.duplicateUsers === 1 ? "" : "s"} merged`
-              : "No duplicates"
-          }
-          tone="accent"
-        />
-        <StatTile
-          label="Total users"
-          href="/admin/users"
-          value={headline.totalUsers}
-          sub={
-            headline.unfinishedSignups > 0
-              ? `Raw row count, with ${headline.unfinishedSignups} Google sign-up${headline.unfinishedSignups === 1 ? "" : "s"} that didn't finish`
-              : "Raw row count"
-          }
-        />
-        <StatTile
-          label="Total games"
-          href="/admin/games"
-          value={headline.totalGames}
-          sub={`+${headline.games7d} this week`}
-        />
-        <StatTile label="Active turfs"
-          href="/admin/turfs" value={headline.activeTurfs} />
-      </section>
+      <AdminSection title="People, games and turfs" height={140}>
+        <HeadlineSection />
+      </AdminSection>
 
       {/* Sign-ins */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
-        <StatTile
-          label="Logins (24h)"
-          href="/admin/logins?f=today"
-          value={loginNums ? loginNums.today : "-"}
-          sub={loginNums ? "Phone + Google sign-ins" : logins.ok ? "" : loginsUnavailable(logins.reason)}
-        />
-        <StatTile
-          label="Logins (7d)"
-          href="/admin/logins?f=week"
-          value={loginNums ? loginNums.week : "-"}
-          sub={loginNums ? `${loginNums.peopleWeek} ${loginNums.peopleWeek === 1 ? "person" : "people"}` : undefined}
-        />
-        <div className="col-span-2">
-          <StatTile
-            label="Latest login"
-            href="/admin/logins"
-            compact
-            value={lastLogin ? lastLogin.name || lastLogin.phone || lastLogin.email || "Unknown" : "-"}
-            sub={lastLogin ? `${timeAgo(lastLogin.logged_in_at)} · ${lastLogin.method === "google" ? "Google" : "Phone"}` : "Tap to see every sign-in"}
-          />
-        </div>
-      </section>
+      <AdminSection title="Sign-ins" height={140}>
+        <LoginsSection />
+      </AdminSection>
 
       {/* The free tools: live scoreboard links, and uses counted since 26 Oct 2026 (lib/tools/usage.ts). */}
-      <ToolTiles tools={tools} />
-      <p className="-mt-1 mb-4 text-right">
-        <Link href="/admin/tools" className="text-xs font-semibold text-accent-600 hover:text-accent-700">
-          Who used the tools, and what
-        </Link>
-      </p>
+      <AdminSection title="Tools" height={140}>
+        <ToolsSection />
+      </AdminSection>
 
-      {/* Signup windows (requests + notifications are further down in
-          the reviews snapshot to keep the layout de-duped). */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
-        <StatTile
-          label="Unique signups (7d)"
-          href="/admin/users?f=new7"
-          value={headline.uniqueSignups7d}
-          sub={`${headline.signups7d} rows`}
-        />
-        <StatTile
-          label="Unique signups (30d)"
-          href="/admin/users?f=new30"
-          value={headline.uniqueSignups30d}
-          sub={`${headline.signups30d} rows`}
-        />
-        <StatTile
-          label="Duplicate accounts"
-          href="/admin/users?f=duplicates"
-          value={headline.duplicateUsers}
-          sub={headline.duplicateUsers === 0 ? "Clean" : "Same person, 2+ rows"}
-        />
-        {/* The tick players see: a phone proved by an OTP and an email by Google (admin_ticks). Opens the people list on them. */}
-        <StatTile
-          label="Verified tick"
-          href="/admin?people=verified#people"
-          value={ticks ? ticks.verified : "-"}
-          sub={ticks ? `of ${ticks.accounts} accounts · ${ticks.phone} phone proved · ${ticks.email} email by Google` : "Couldn't load"}
-        />
-        <StatTile
-          label="Ask TapTurf (7d)"
-          href="/admin/asks"
-          value={asks7d}
-          sub={asks7d === 0 ? "No chats yet" : `${askVisitors} visitor${askVisitors === 1 ? "" : "s"}`}
-        />
-        <StatTile
-          label="Player suggestions"
-          href="/admin/suggestions"
-          value={pendingSuggestions}
-          sub={pendingSuggestions === 0 ? "Queue is clear" : "Pending your approval"}
-          tone={pendingSuggestions > 0 ? "accent" : "default"}
-        />
-      </section>
+      {/* Signup windows (requests + notifications are further down in the reviews snapshot to keep the layout de-duped). */}
+      <AdminSection title="Sign-ups, ticks, Ask and suggestions" height={280}>
+        <SignupWindowsSection />
+      </AdminSection>
 
-      {/* myTapturf claims */}
+      {/* myTapturf claims (read in the browser, after the page) */}
       <section className="mb-8 rounded-2xl bg-white border border-primary-200 p-5">
         <h2 className="font-semibold text-primary-900 mb-1">myTapturf owners</h2>
         <p className="text-[13px] text-primary-500 mb-4">Owners whose number is on the listing get in at once; approve the rest here.</p>
@@ -387,7 +108,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {/* myTapturf owner photos */}
       <section className="mb-8 rounded-2xl bg-white border border-primary-200 p-5">
         <h2 className="font-semibold text-primary-900 mb-1">Owner photos</h2>
-        <p className="text-[13px] text-primary-500 mb-4">Photos owners add go live at once and are checked automatically; anything that isn&rsquo;t the venue is kept off the page until you put it back.</p>
+        <p className="text-[13px] text-primary-500 mb-4">
+          Photos owners add go live at once and are checked automatically; anything that isn&rsquo;t the venue is kept off the page until you put it back.
+        </p>
         <OwnerPhotos />
       </section>
 
@@ -399,229 +122,45 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </section>
 
       {/* Charts */}
-      <div className="mb-4">
-        {/* A new read (Refresh) starts the chart afresh at its "now". A failed read shows a message there, never a broken page. */}
-        <SignupsTrend key={people.readAt} people={people.people} now={people.readAt} focus={personId(sp.person)} verifiedOnly={tickedOnly(sp.people)} />
-      </div>
+      <AdminSection title="Sign-ups" height={420}>
+        <SignupsSection person={sp.person} people={sp.people} />
+      </AdminSection>
       {/* What couldn't be added to an account, for the owner to follow up by hand. */}
-      <LinkRefusals />
-      <section className="mb-8">
-        <div className="rounded-2xl bg-white border border-primary-200 p-5">
-          <DailyChart
-            points={games}
-            label="Games created, last 30 days"
-            color="#FF385C"
-          />
-        </div>
-      </section>
+      <AdminSection title="What couldn't be added" height={0}>
+        <LinkRefusals />
+      </AdminSection>
+      <AdminSection title="Games created" height={220}>
+        <DailyGamesSection />
+      </AdminSection>
 
       {/* Activity tiles */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
-        <StatTile
-          label="Active users (7d)"
-          href="/admin/users?f=active7"
-          value={active7}
-          sub="Hosted or requested"
-        />
-        <StatTile
-          label="Active users (30d)"
-          href="/admin/users?f=active30"
-          value={active30}
-          sub="Hosted or requested"
-        />
-        <StatTile
-          label="Games this week"
-          href="/admin/games?f=week"
-          value={headline.games7d}
-          sub="New hosted matches"
-        />
-        <StatTile
-          label="Notifications unread"
-          href="/admin/notifications?f=unread"
-          value={headline.unreadNotifications}
-          sub={`${headline.totalNotifications} total`}
-          tone={headline.unreadNotifications > 5 ? "hot" : "default"}
-        />
-      </section>
+      <AdminSection title="Activity" height={140}>
+        <ActivitySection />
+      </AdminSection>
 
-      {/* Bookings + monetisation — new DB tables. Zeroes today, will
-          come alive as bookings and reviews start flowing. */}
-      <section className="mb-2">
-        <p className="text-[11px] font-bold text-primary-500 mb-3">
-          Bookings & revenue
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          <StatTile
-            label="Booking revenue"
-          href="/admin/bookings?f=paid"
-            value={`₹${headline.bookingRevenue.toLocaleString("en-IN")}`}
-            sub={`from ${headline.paidBookings} paid`}
-            tone="accent"
-          />
-          <StatTile
-            label="Total bookings"
-          href="/admin/bookings"
-            value={headline.totalBookings}
-            sub={`+${headline.bookings7d} this week`}
-          />
-          <StatTile
-            label="Pending bookings"
-          href="/admin/bookings?f=pending"
-            value={headline.pendingBookings}
-            sub="Awaiting confirmation"
-            tone={headline.pendingBookings > 0 ? "hot" : "default"}
-          />
-          <StatTile
-            label="Confirmed at sign-in"
-          href="/admin/users?f=verified"
-            value={headline.verifiedUsers}
-            sub={`of ${headline.totalUsers - headline.unfinishedSignups} accounts`}
-          />
-        </div>
-      </section>
+      {/* Bookings + monetisation: zeroes today, they come alive as bookings and reviews start flowing. */}
+      <AdminSection title="Bookings & revenue" height={160}>
+        <BookingsSection />
+      </AdminSection>
 
       {/* Reviews + notifications snapshot */}
-      <section className="mb-8 mt-4">
-        <p className="text-[11px] font-bold text-primary-500 mb-3">
-          Reviews & notifications
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          <StatTile
-            label="Total reviews"
-          href="/admin/reviews"
-            value={headline.totalReviews}
-            sub={headline.totalReviews === 0 ? "None yet" : "In-app reviews"}
-          />
-          <StatTile
-            label="Avg rating"
-          href="/admin/reviews"
-            value={headline.totalReviews === 0 ? "—" : `★ ${headline.avgRating.toFixed(1)}`}
-            sub={headline.totalReviews === 0 ? "No data" : `across ${headline.totalReviews}`}
-          />
-          <StatTile
-            label="Notifications"
-          href="/admin/notifications"
-            value={headline.totalNotifications}
-            sub={`${headline.unreadNotifications} unread`}
-          />
-          <StatTile
-            label="Games (all-time)"
-          href="/admin/games"
-            value={headline.totalGames}
-            sub={`${headline.games30d} in last 30d`}
-          />
-        </div>
-      </section>
+      <AdminSection title="Reviews & notifications" height={160}>
+        <ReviewsSection />
+      </AdminSection>
 
       {/* Games: upcoming / live first, then the latest past games. */}
-      <section className="mb-8">
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
-          <p className="text-xs font-bold text-primary-500">
-            Games · {(["upcoming", "live", "expired", "cancelled"] as const)
-              .filter((k) => gameCounts[k])
-              .map((k) => `${gameCounts[k]} ${k}`)
-              .join(" · ") || "none yet"}
-          </p>
-          <div className="flex gap-3 text-xs font-semibold">
-            <Link href="/admin/games?f=upcoming" className="text-accent-600 hover:text-accent-700">Upcoming</Link>
-            <Link href="/admin/games?f=expired" className="text-accent-600 hover:text-accent-700">Expired</Link>
-            <Link href="/admin/games" className="text-accent-600 hover:text-accent-700">All games</Link>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
-          {gamesShown.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-primary-400">No games hosted yet.</p>
-          ) : (
-            <ul className="divide-y divide-primary-100">
-              {gamesShown.map((g) => (
-                <li key={g.id}>
-                  <Link href={`/game/${g.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-50">
-                    <span
-                      className={`shrink-0 w-20 text-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        g.state === "upcoming"
-                          ? "bg-accent-50 text-accent-700"
-                          : g.state === "live"
-                            ? "bg-amber-100 text-amber-800"
-                            : g.state === "cancelled"
-                              ? "bg-hot-500/10 text-hot-600"
-                              : "bg-primary-100 text-primary-500"
-                      }`}
-                    >
-                      {g.state}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-primary-900 truncate">
-                        {g.sport}{g.turf ? ` at ${g.turf.name}` : ""}
-                      </span>
-                      <span className="block text-[12px] text-primary-500 truncate">
-                        {new Date(`${g.date}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" })}
-                        {" · "}{g.start_time?.slice(0, 5)} · host {g.host_name || "-"}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-sm tabular-nums text-primary-700">
-                      {g.current_players}/{g.max_players}
-                    </span>
-                    {g.requests.pending > 0 && (
-                      <span className="shrink-0 text-[11px] font-semibold text-amber-700">{g.requests.pending} pending</span>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+      <AdminSection title="Games" height={320}>
+        <GamesListSection />
+      </AdminSection>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <BreakdownList title="Games by city" items={gamesByCity} />
-        <BreakdownList title="Games by sport" items={gamesBySport} />
-        <BreakdownList title="Games by status" items={gamesByStatus} color="#FF385C" />
-        <BreakdownList title="Active turfs by city" items={turfsByCity} />
-      </section>
+      <AdminSection title="Breakdowns" height={240}>
+        <BreakdownsSection />
+      </AdminSection>
 
       {/* Top hosts (the people who signed up are in the Sign-ups section) */}
-      <section className="mb-8">
-        <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-primary-100">
-            <p className="text-xs font-bold text-primary-500">
-              Top hosts
-            </p>
-          </div>
-          <ul className="grid sm:grid-cols-2">
-            {topHosts.length === 0 && (
-              <li className="sm:col-span-2 px-5 py-8 text-center text-primary-400 text-sm">
-                No games hosted yet.
-              </li>
-            )}
-            {topHosts.map((h, i) => (
-              <li
-                key={h.id}
-                className="border-t border-primary-100 first:border-t-0 sm:[&:nth-child(2)]:border-t-0 px-5 py-3 flex items-center gap-3"
-              >
-                <div className="w-8 h-8 rounded-full bg-accent-500 text-white flex items-center justify-center font-display text-sm">
-                  {i + 1}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-primary-900 truncate">
-                    {h.name || h.email || h.id.slice(0, 8)}
-                  </p>
-                  <p className="text-xs text-primary-500 truncate">
-                    {h.email || h.id.slice(0, 8)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-display text-xl text-primary-900 leading-none">
-                    {h.games}
-                  </p>
-                  <p className="text-[10px] text-primary-400 mt-0.5">
-                    games
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      <AdminSection title="Top hosts" height={200}>
+        <TopHostsSection />
+      </AdminSection>
 
       <footer className="text-xs text-primary-400 text-center mt-10 pb-8 space-y-1">
         <p>Owner-only view. Not indexed. Not linked from anywhere.</p>

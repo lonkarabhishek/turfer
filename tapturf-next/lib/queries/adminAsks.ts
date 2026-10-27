@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
-import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
+import { cache } from "react";
 import type { DigestRecord } from "@/components/admin/AskDigest";
+import { ownerRead } from "@/lib/admin/db";
+import { dataOf, rowsOf, type Reason } from "@/lib/admin/section";
 
 export type AskRow = {
   id: number;
@@ -21,7 +21,7 @@ export type AskRow = {
 /** Rows from one visitor within 30 minutes of each other, oldest first. */
 export type AskThread = { key: string; ip_hash: string; started: string; ended: string; rows: AskRow[] };
 
-export type AsksResult = { ok: true; rows: AskRow[] } | { ok: false; reason: "not_allowed" | "not_set_up" | "error" };
+export type AsksResult = { ok: true; rows: AskRow[] } | { ok: false; reason: Reason };
 
 export const ASK_FILTERS = {
   all: "Last 7 days",
@@ -32,22 +32,16 @@ export const ASK_FILTERS = {
 } as const;
 export type AskFilter = keyof typeof ASK_FILTERS;
 
-/** Owner-only transcript of Ask TapTurf conversations. */
-export async function getAskTranscripts(days = 7): Promise<AsksResult> {
-  try {
-    const supabase = await createServerClient();
-    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-    const { data, error } = await supabase.rpc("get_ask_transcripts_v2", { p_days: days, p_limit: 1000, p_firebase_token: token });
-    if (error) {
-      if (error.code === "42501") return { ok: false, reason: "not_allowed" };
-      if (error.code === "PGRST202" || error.code === "42883") return { ok: false, reason: "not_set_up" };
-      return { ok: false, reason: "error" };
-    }
-    return { ok: true, rows: (data ?? []) as AskRow[] };
-  } catch {
-    return { ok: false, reason: "error" };
-  }
-}
+/** Owner-only transcript of Ask TapTurf conversations; says why when it can't read. Once per render for each window. */
+export const getAskTranscripts = cache(async (days: number = 7): Promise<AsksResult> => {
+  const s = await ownerRead("get_ask_transcripts_v2", async ({ supabase, token }, signal) =>
+    rowsOf<AskRow>(
+      await supabase.rpc("get_ask_transcripts_v2", { p_days: days, p_limit: 1000, p_firebase_token: token }).abortSignal(signal),
+      "get_ask_transcripts_v2",
+    ),
+  );
+  return s.ok ? { ok: true, rows: s.data } : s;
+});
 
 export function filterAsks(rows: AskRow[], f: AskFilter): AskRow[] {
   const now = Date.now();
@@ -112,16 +106,12 @@ export function askStats(rows: AskRow[]) {
   return { total: rows.length, claude, instant, empty, visitors, p50, byIntent };
 }
 
-/** Latest cached "where we fell short" digest for the window, if any. */
+/** Latest cached "where we fell short" digest for the window, if any (null too when it can't be read). */
 export async function getAskDigest(days: number): Promise<DigestRecord | null> {
-  try {
-    const supabase = await createServerClient();
-    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-    const { data, error } = await supabase.rpc("get_ask_digest", { p_days: days, p_firebase_token: token });
-    if (error) return null;
-    const row = (Array.isArray(data) ? data[0] : data) as DigestRecord | undefined;
-    return row?.digest ? row : null;
-  } catch {
-    return null;
-  }
+  const s = await ownerRead("get_ask_digest", async ({ supabase, token }, signal) =>
+    dataOf<unknown>(await supabase.rpc("get_ask_digest", { p_days: days, p_firebase_token: token }).abortSignal(signal), "get_ask_digest"),
+  );
+  if (!s.ok) return null;
+  const row = (Array.isArray(s.data) ? s.data[0] : s.data) as DigestRecord | undefined;
+  return row?.digest ? row : null;
 }

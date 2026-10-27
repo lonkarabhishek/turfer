@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
-import { ADMIN_TOKEN_COOKIE, isAdmin } from "@/lib/admin/auth";
+import { isAdmin } from "@/lib/admin/auth";
+import { ownerDb } from "@/lib/admin/db";
 import { turfPagePaths } from "@/lib/queries/turfs";
 
 // Admin only. GET: myTapturf claims, pending first. POST: approve, reject or revoke one.
 
-async function ownerClient() {
-  const supabase = await createServerClient();
-  const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-  return { supabase, token };
-}
+// The request's one client, the one isAdmin() used: one session refresh per request (lib/supabase/oneClient.ts).
+const ownerClient = ownerDb;
 
 export async function GET() {
   if (!(await isAdmin())) return NextResponse.json({ error: "not allowed" }, { status: 403 });

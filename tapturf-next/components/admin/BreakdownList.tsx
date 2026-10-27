@@ -1,19 +1,25 @@
 import type { CountByLabel } from "@/lib/queries/admin";
+import type { Reason } from "@/lib/admin/section";
+import { SectionError } from "./SectionStatus";
 
 /**
  * Horizontal bar breakdown for small categorical distributions.
- * Renders label + count + a proportional bar.
+ * Renders label + count + a proportional bar; or, when its numbers
+ * couldn't be read, says so with a retry (never "No data yet").
  */
 export function BreakdownList({
   title,
   items,
   color = "#16A34A",
   emptyMessage = "No data yet.",
+  failed,
 }: {
   title: string;
   items: CountByLabel[];
   color?: string;
   emptyMessage?: string;
+  /** Why the numbers couldn't be read. */
+  failed?: Reason;
 }) {
   const max = Math.max(1, ...items.map((i) => i.count));
   const total = items.reduce((s, i) => s + i.count, 0);
@@ -24,9 +30,11 @@ export function BreakdownList({
         <p className="text-xs font-bold text-primary-500">
           {title}
         </p>
-        <p className="text-xs text-primary-400">{total} total</p>
+        <p className="text-xs text-primary-400">{failed ? "-" : `${total} total`}</p>
       </div>
-      {items.length === 0 ? (
+      {failed ? (
+        <SectionError reason={failed} />
+      ) : items.length === 0 ? (
         <p className="text-sm text-primary-400 py-3">{emptyMessage}</p>
       ) : (
         <ul className="space-y-3">

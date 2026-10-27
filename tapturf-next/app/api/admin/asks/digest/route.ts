@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
-import { ADMIN_TOKEN_COOKIE, isAdmin } from "@/lib/admin/auth";
+import { isAdmin } from "@/lib/admin/auth";
+import { ownerDb } from "@/lib/admin/db";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { digestAsks, type DigestRow } from "@/lib/ai/digest";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
@@ -34,8 +33,8 @@ export async function POST(req: Request) {
   const digest = await digestAsks(rows, days);
   if (!digest) return NextResponse.json({ error: "Claude couldn't summarise this window. Try again." }, { status: 502 });
 
-  const supabase = await createServerClient();
-  const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+  // The request's one client, the one isAdmin() used: one session refresh per request.
+  const { supabase, token } = await ownerDb();
   const { error } = await supabase.rpc("save_ask_digest", { p_days: days, p_rows: rows.length, p_digest: digest, p_firebase_token: token });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ days, rows_seen: rows.length, digest, created_at: new Date().toISOString() });

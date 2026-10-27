@@ -40,6 +40,8 @@ import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 import { turfPath } from "@/lib/utils/turfPath";
 import { LIVE_FILTERS, getAdminLiveLinks, type LiveFilter } from "@/lib/queries/adminTools";
+import { SectionError } from "@/components/admin/SectionStatus";
+import type { Reason } from "@/lib/admin/section";
 
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
@@ -145,7 +147,7 @@ export default async function AdminDetailPage({
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <h1 className="font-display text-3xl md:text-4xl text-primary-900">
           {VIEWS[v].title}
-          <span className="ml-3 text-primary-400 text-2xl tabular-nums">{body.count}</span>
+          <span className="ml-3 text-primary-400 text-2xl tabular-nums">{body.count ?? ""}</span>
         </h1>
       </div>
       {Object.keys(filters).length > 1 && (
@@ -176,11 +178,15 @@ const LIVE_STYLE: Record<string, string> = {
 };
 const sportName = (s: string | null) => (s ? s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
 
-async function renderView(v: View, filter: string): Promise<{ count: number; node: React.ReactNode }> {
+/** A view whose rows couldn't be read: why, and a retry (never "Nothing here"). */
+const failedView = (reason: Reason, what: string) => ({ count: null, node: <SectionError reason={reason} what={what} /> });
+
+async function renderView(v: View, filter: string): Promise<{ count: number | null; node: React.ReactNode }> {
   switch (v) {
     case "live": {
-      const links = await getAdminLiveLinks(filter as LiveFilter);
-      if (!links) return { count: 0, node: <p className="text-sm text-primary-500">Couldn&apos;t load the links. Refresh to try again.</p> };
+      const res = await getAdminLiveLinks(filter as LiveFilter);
+      if (!res.ok) return failedView(res.reason, "the links");
+      const links = res.data;
       return {
         count: links.length,
         node: (
@@ -209,7 +215,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "games": {
-      const games = await getAdminGames(filter as GameFilter);
+      const res = await getAdminGames(filter as GameFilter);
+      if (!res.ok) return failedView(res.reason, "the games");
+      const games = res.data;
       const counts = games.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});
       return {
         count: games.length,
@@ -276,13 +284,8 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     case "logins": {
       const res = await getRecentLogins(1000);
       if (!res.ok) {
-        const msg =
-          res.reason === "not_set_up"
-            ? "The login log isn't set up in the database yet."
-            : res.reason === "not_allowed"
-              ? "Couldn't confirm it's you. Sign in with your Google account (the owner email), then reload."
-              : "Couldn't load logins. Try again in a minute.";
-        return { count: 0, node: <p className="text-primary-500 py-10 text-center">{msg}</p> };
+        if (res.reason === "not_set_up") return { count: null, node: <p className="text-primary-500 py-10 text-center">The login log isn&apos;t set up in the database yet.</p> };
+        return failedView(res.reason, "the logins");
       }
       const rows = filterLogins(res.rows, filter as LoginFilter);
       const people = new Set(rows.map((r) => r.user_id)).size;
@@ -320,7 +323,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "users": {
-      const users = await getAdminUsers(filter as UserFilter);
+      const res = await getAdminUsers(filter as UserFilter);
+      if (!res.ok) return failedView(res.reason, "the users");
+      const users = res.data;
       return {
         count: users.length,
         node: (
@@ -352,7 +357,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "requests": {
-      const reqs = await getAdminRequests(filter as RequestFilter);
+      const res = await getAdminRequests(filter as RequestFilter);
+      if (!res.ok) return failedView(res.reason, "the join requests");
+      const reqs = res.data;
       const style: Record<string, string> = {
         pending: "bg-amber-100 text-amber-800",
         accepted: "bg-accent-50 text-accent-700",
@@ -396,7 +403,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "turfs": {
-      const turfs = await getAdminTurfs(filter as TurfFilter);
+      const res = await getAdminTurfs(filter as TurfFilter);
+      if (!res.ok) return failedView(res.reason, "the turfs");
+      const turfs = res.data;
       return {
         count: turfs.length,
         node: (
@@ -423,7 +432,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "bookings": {
-      const bookings = await getAdminBookings(filter as BookingFilter);
+      const res = await getAdminBookings(filter as BookingFilter);
+      if (!res.ok) return failedView(res.reason, "the bookings");
+      const bookings = res.data;
       const names = await userNames(bookings.map((b) => b.user_id));
       return {
         count: bookings.length,
@@ -446,7 +457,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "reviews": {
-      const reviews = await getAdminReviews();
+      const res = await getAdminReviews();
+      if (!res.ok) return failedView(res.reason, "the reviews");
+      const reviews = res.data;
       const names = await userNames(reviews.map((r) => r.user_id));
       return {
         count: reviews.length,
@@ -473,10 +486,8 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
       const f = filter as AskFilter;
       const res = await getAskTranscripts(f === "month" ? 30 : 7);
       if (!res.ok) {
-        return {
-          count: 0,
-          node: <p className="text-primary-500 text-sm">{res.reason === "not_set_up" ? "The transcript function is not installed yet." : "Couldn't load chats."}</p>,
-        };
+        if (res.reason === "not_set_up") return { count: null, node: <p className="text-primary-500 text-sm">The transcript function is not installed yet.</p> };
+        return failedView(res.reason, "the chats");
       }
       const rows = filterAsks(res.rows, f);
       const threads = threadAsks(rows);
@@ -540,7 +551,9 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     }
 
     case "listing": {
-      const flagged = await getFlaggedListings();
+      const res = await getFlaggedListings();
+      if (!res.ok) return failedView(res.reason, "the listing checks");
+      const flagged = res.data;
       const sev: Record<string, string> = { fix: "bg-hot-100 text-hot-700", check: "bg-amber-100 text-amber-800", gap: "bg-primary-100 text-primary-700" };
       return {
         count: flagged.length,
@@ -585,20 +598,16 @@ async function renderView(v: View, filter: string): Promise<{ count: number; nod
     case "suggestions": {
       const res = await getPendingSuggestions(300);
       if (!res.ok) {
-        return {
-          count: 0,
-          node: (
-            <p className="text-primary-500 text-sm">
-              {res.reason === "not_set_up" ? "The suggestion review functions are not installed yet." : "Couldn't load suggestions."}
-            </p>
-          ),
-        };
+        if (res.reason === "not_set_up") return { count: null, node: <p className="text-primary-500 text-sm">The suggestion review functions are not installed yet.</p> };
+        return failedView(res.reason, "the suggestions");
       }
       return { count: res.rows.length, node: <SuggestionQueue initial={res.rows} /> };
     }
 
     case "notifications": {
-      const notes = await getAdminNotifications(filter as NotificationFilter);
+      const res = await getAdminNotifications(filter as NotificationFilter);
+      if (!res.ok) return failedView(res.reason, "the notifications");
+      const notes = res.data;
       const names = await userNames(notes.map((n) => n.user_id));
       return {
         count: notes.length,

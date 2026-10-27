@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Loader2, Play, Square } from "lucide-react";
+import { Loader2, Play, RotateCw, Square } from "lucide-react";
+import { adminFetch } from "@/lib/admin/adminFetch";
 
 export type BatchProgress = { total: number; reviewed: number; flagged: number; configured?: boolean };
 /** One processed row: what to show in the list under the bar. */
@@ -13,6 +14,11 @@ export type BatchRow = { id: string; name: string; line: string; image?: string 
  * summaries). One click processes rows in small batches until the
  * endpoint says it is done. Stop any time; the next run picks up where
  * it left off. GET on the endpoint returns progress, POST runs a batch.
+ * The progress is read once the page is idle, through the admin page's
+ * gate (lib/admin/fetchGate.ts): the progress reads are some of the
+ * heaviest (cover_review_progress unpacks every active turf's photos) and
+ * no longer race the page's own reads or each other. A failed read says so,
+ * with a retry.
  */
 export function BatchTool({
   title,
@@ -39,20 +45,29 @@ export function BatchTool({
   const [running, setRunning] = useState(false);
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [progressFailed, setProgressFailed] = useState(false);
   const stopRef = useRef(false);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
+    setProgressFailed(false);
     try {
-      const r = await fetch(endpoint);
-      if (r.ok) setProgress((await r.json()) as BatchProgress);
+      const r = await adminFetch(endpoint, { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setProgress((await r.json()) as BatchProgress);
     } catch {
-      /* ignore */
+      setProgressFailed(true);
     }
-  };
-  useEffect(() => {
-    void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
+  useEffect(() => {
+    // Once the page is idle: the progress bars are the least urgent thing on it.
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => void refresh(), { timeout: 4000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(() => void refresh(), 1500);
+    return () => clearTimeout(t);
+  }, [refresh]);
 
   const run = async () => {
     setRunning(true);
@@ -124,8 +139,13 @@ export function BatchTool({
       <div className="mt-4">
         <div className="flex items-center justify-between text-[12px] text-primary-500 mb-1.5">
           <span>
-            {progress ? `${progress.reviewed} of ${progress.total} ${unit} done` : "Loading"}
+            {progress ? `${progress.reviewed} of ${progress.total} ${unit} done` : progressFailed ? "Couldn't load the progress" : "Loading"}
             {flaggedLabel && progress && progress.flagged > 0 ? ` · ${progress.flagged} ${flaggedLabel}` : ""}
+            {progressFailed && (
+              <button type="button" onClick={() => void refresh()} className="ml-2 inline-flex items-center gap-1 font-semibold text-accent-700 hover:underline">
+                <RotateCw className="w-3 h-3" aria-hidden /> Retry
+              </button>
+            )}
           </span>
           <span className="tabular-nums">{pct}%</span>
         </div>

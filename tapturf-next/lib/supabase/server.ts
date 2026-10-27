@@ -1,35 +1,27 @@
-import { createServerClient as createSSRClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { createClient as createPlainClient } from "@supabase/supabase-js";
+import { createClient as createPlainClient, type SupabaseClient } from "@supabase/supabase-js";
 import { guardedFetch } from "./guard";
+import { cookieClient, perKey, type CookieStore } from "./oneClient";
 
 /**
  * Server-side Supabase client with cookie-based auth (for Route Handlers, Server Components).
  * This properly reads/writes auth cookies so sessions persist across requests.
+ * A new client each call: code that reads many times in one request (the
+ * admin pages and routes) uses requestServerClient instead.
  */
 export async function createServerClient() {
-  const cookieStore = await cookies();
+  return cookieClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, await cookies());
+}
 
-  return createSSRClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Called from Server Component — ignore (cookies are read-only there)
-          }
-        },
-      },
-    }
-  );
+const perRequest = perKey((store: CookieStore) => cookieClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, store));
+
+/**
+ * The one cookie-session client of this request (lib/supabase/oneClient.ts):
+ * every caller in the same Server Component render or Route Handler gets the
+ * same client, so an expiring session is refreshed once, not once per read.
+ */
+export async function requestServerClient(): Promise<SupabaseClient> {
+  return perRequest(await cookies());
 }
 
 /**

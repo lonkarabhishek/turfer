@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
-import { ADMIN_TOKEN_COOKIE, isAdmin } from "@/lib/admin/auth";
+import { isAdmin } from "@/lib/admin/auth";
+import { ownerDb } from "@/lib/admin/db";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { reviewSuggestion, type PendingSuggestion } from "@/lib/ai/suggestions";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
@@ -23,8 +22,8 @@ export async function POST(req: Request) {
     decision?: string;
     apply?: Record<string, unknown>;
   };
-  const supabase = await createServerClient();
-  const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
+  // The request's one client, the one isAdmin() used: one session refresh per request.
+  const { supabase, token } = await ownerDb();
 
   if (body.action === "review") {
     if (!isAskConfigured()) return NextResponse.json({ error: "ANTHROPIC_API_KEY is not set" }, { status: 503 });

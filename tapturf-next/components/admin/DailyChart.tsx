@@ -1,18 +1,31 @@
 import type { DailyPoint } from "@/lib/queries/admin";
+import type { Reason } from "@/lib/admin/section";
+import { SectionError } from "./SectionStatus";
 
 /**
  * Zero-dependency SVG bar chart. Renders one bar per day.
  * Designed to fit inside the dashboard grid and stay readable on mobile.
+ * When its numbers couldn't be read it says so (never an empty chart).
  */
 export function DailyChart({
   points,
   color = "#16A34A",
   label,
+  failed,
 }: {
   points: DailyPoint[];
   color?: string;
   label: string;
+  failed?: Reason;
 }) {
+  if (failed) {
+    return (
+      <div>
+        <p className="text-xs font-bold text-primary-500 mb-3">{label}</p>
+        <SectionError reason={failed} />
+      </div>
+    );
+  }
   if (points.length === 0) {
     return (
       <div className="h-40 flex items-center justify-center text-sm text-primary-400">

@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
-import { ADMIN_TOKEN_COOKIE } from "@/lib/admin/auth";
+import { cache } from "react";
+import { ownerRead } from "@/lib/admin/db";
+import { rowsOf, type Reason } from "@/lib/admin/section";
 
 export type LoginRow = {
   user_id: string;
@@ -11,9 +11,7 @@ export type LoginRow = {
   logged_in_at: string;
 };
 
-export type LoginsResult =
-  | { ok: true; rows: LoginRow[] }
-  | { ok: false; reason: "not_set_up" | "not_allowed" | "error" };
+export type LoginsResult = { ok: true; rows: LoginRow[] } | { ok: false; reason: Reason };
 
 export const LOGIN_FILTERS = {
   all: "All",
@@ -28,26 +26,15 @@ export type LoginFilter = keyof typeof LOGIN_FILTERS;
  * Latest sign-ins. The read goes through get_recent_logins(), which
  * answers only the site owner: the DB checks the Google session's email
  * or asks Google about the phone owner's Firebase token. So this runs
- * with the visitor's own session, not the anon read-only client.
+ * with the visitor's own session, not the anon read-only client. Says why
+ * when it can't read; never throws. Once per render for each limit.
  */
-export async function getRecentLogins(limit = 300): Promise<LoginsResult> {
-  try {
-    const supabase = await createServerClient();
-    const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-    const { data, error } = await supabase.rpc("get_recent_logins", {
-      p_limit: limit,
-      p_firebase_token: token,
-    });
-    if (error) {
-      if (error.code === "42501") return { ok: false, reason: "not_allowed" };
-      if (error.code === "PGRST202" || error.code === "42883") return { ok: false, reason: "not_set_up" };
-      return { ok: false, reason: "error" };
-    }
-    return { ok: true, rows: (data ?? []) as LoginRow[] };
-  } catch {
-    return { ok: false, reason: "error" };
-  }
-}
+export const getRecentLogins = cache(async (limit: number = 300): Promise<LoginsResult> => {
+  const s = await ownerRead("get_recent_logins", async ({ supabase, token }, signal) =>
+    rowsOf<LoginRow>(await supabase.rpc("get_recent_logins", { p_limit: limit, p_firebase_token: token }).abortSignal(signal), "get_recent_logins"),
+  );
+  return s.ok ? { ok: true, rows: s.data } : s;
+});
 
 export function filterLogins(rows: LoginRow[], f: LoginFilter): LoginRow[] {
   const now = Date.now();

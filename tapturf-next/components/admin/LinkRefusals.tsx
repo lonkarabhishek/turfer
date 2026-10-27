@@ -1,20 +1,26 @@
 import { istDateTime } from "@/lib/admin/people";
 import { refusalText, refusalsOf, type Refusal } from "@/lib/admin/links";
-import { linkRefusalRows } from "@/lib/queries/adminLinks";
+import { linkRefusals } from "@/lib/queries/adminLinks";
 import { signupPeople } from "@/lib/queries/adminUsers";
+import { SectionError } from "./SectionStatus";
 
 /**
  * What people couldn't add to their account in the last 90 days (a Google
  * account or a number another account holds), and Google accounts added
  * over their own empty account, with both accounts a tap away, so the
  * owner can follow up by hand. Nothing is ever joined or moved. Server
- * component; nothing shows before 20261026_account_links.sql.
+ * component; nothing shows before 20261026_account_links.sql, or when there
+ * is nothing to follow up; a note and a retry when it couldn't be read.
  */
 const day = (t: number) => istDateTime(t).split(",")[0];
 
 export async function LinkRefusals() {
-  const [rows, { people }] = await Promise.all([linkRefusalRows(), signupPeople()]);
-  const all = refusalsOf(rows);
+  const [res, { people }] = await Promise.all([linkRefusals(), signupPeople()]);
+  if (!res.ok) {
+    if (res.reason === "not_set_up") return null;
+    return <SectionError reason={res.reason} what="what people couldn't add to their accounts" className="mb-8" />;
+  }
+  const all = refusalsOf(res.data);
   if (!all.length) return null;
   const names = new Map((people ?? []).map((p) => [p.id, p.name ?? (p.username ? `@${p.username}` : null)]));
   const refused = all.filter((r) => r.kind !== "over_empty");

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
-import { ADMIN_TOKEN_COOKIE, isAdmin } from "@/lib/admin/auth";
+import { isAdmin } from "@/lib/admin/auth";
+import { ownerDb } from "@/lib/admin/db";
 import { turfPagePaths } from "@/lib/queries/turfs";
 import { checkOwnerPhotos } from "@/lib/my/photoJudge";
 
@@ -15,11 +14,8 @@ export const maxDuration = 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRIVATE = { "Cache-Control": "private, no-store" };
 
-async function ownerClient() {
-  const supabase = await createServerClient();
-  const token = (await cookies()).get(ADMIN_TOKEN_COOKIE)?.value ?? null;
-  return { supabase, token };
-}
+// The request's one client, the one isAdmin() used: one session refresh per request (lib/supabase/oneClient.ts).
+const ownerClient = ownerDb;
 
 async function refresh(turfId: string) {
   for (const p of await turfPagePaths(turfId)) revalidatePath(p);

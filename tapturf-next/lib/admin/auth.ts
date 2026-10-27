@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
+import { requestServerClient } from "@/lib/supabase/server";
+import { perKey } from "@/lib/supabase/oneClient";
 import { verifyFirebaseIdToken } from "@/lib/firebase/verifyIdToken";
 
 /** Cookie holding the phone user's Firebase ID token (about 1 hour). */
@@ -34,11 +35,22 @@ export function indianPhone10(raw: string | null | undefined): string {
  *    Firebase ID token and we verify Google's signature and the phone.
  *
  * Either path returning true unlocks /admin.
+ *
+ * Asked once per request (the page and every read in it, or a route
+ * handler, share the answer), with the request's one Supabase client: its
+ * getUser() is the request's single token refresh, and every admin read
+ * after it uses the refreshed session (lib/supabase/oneClient.ts).
  */
 export async function isAdmin(): Promise<boolean> {
+  return checkOnce(await cookies());
+}
+
+const checkOnce = perKey<object, Promise<boolean>>(() => checkAdmin());
+
+async function checkAdmin(): Promise<boolean> {
   // Path 1: Google OAuth via Supabase.
   try {
-    const supabase = await createServerClient();
+    const supabase = await requestServerClient();
     const { data } = await supabase.auth.getUser();
     const email = data?.user?.email?.toLowerCase().trim();
     // Only a Google sign-in counts: the app signs in by email through Google alone.

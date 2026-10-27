@@ -7,6 +7,7 @@ import { keyLabel } from "@/lib/admin/claims";
 import { istDateTime } from "@/lib/admin/people";
 import { toAdminPhotos, type AdminOwnerPhoto } from "@/lib/my/photoTypes";
 import { imageUrlForCard } from "@/lib/utils/images";
+import { adminFetch } from "@/lib/admin/adminFetch";
 
 type Action = "restore" | "remove" | "check";
 
@@ -29,9 +30,10 @@ export function OwnerPhotos() {
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ id: string; text: string } | null>(null);
 
+  // Through the admin page's gate (lib/admin/fetchGate.ts): one session refresh, not one per call.
   const load = useCallback(async () => {
     try {
-      const r = await fetch("/api/admin/owner-photos", { cache: "no-store" });
+      const r = await adminFetch("/api/admin/owner-photos", { cache: "no-store" });
       const j = (await r.json().catch(() => ({}))) as { photos?: unknown; error?: string };
       if (!r.ok) return setError(j.error === "not_set_up" ? "Owner photos aren't set up in the database yet (20261025_owner_photos.sql)." : (j.error ?? "Couldn't load owner photos"));
       setRows(toAdminPhotos(j.photos));
@@ -67,7 +69,17 @@ export function OwnerPhotos() {
     void load();
   };
 
-  if (!rows) return error ? <p className="text-sm text-red-600">{error}</p> : <p className="text-sm text-primary-500">Loading owner photos…</p>;
+  if (!rows)
+    return error ? (
+      <p className="text-sm text-red-600">
+        {error}{" "}
+        <button type="button" onClick={() => void load()} className="ml-1 font-semibold text-accent-700 hover:underline">
+          Retry
+        </button>
+      </p>
+    ) : (
+      <p className="text-sm text-primary-500">Loading owner photos…</p>
+    );
   if (rows.length === 0) return <p className="text-sm text-primary-500">No owner photos yet. Owners add them on their turf page in myTapturf.</p>;
 
   return (

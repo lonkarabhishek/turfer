@@ -7,6 +7,7 @@ import { ago, istDateTime, tickedIds } from "@/lib/admin/people";
 import { getToolUsers } from "@/lib/queries/adminTools";
 import { adminTickRows } from "@/lib/queries/adminUsers";
 import { NameWithTick } from "@/components/account/VerifiedTick";
+import { SectionError } from "@/components/admin/SectionStatus";
 import { COUNTED_TOOLS, type CountedTool } from "@/lib/tools/usage";
 import {
   TOOL_LABELS,
@@ -232,13 +233,11 @@ export default async function ToolUsersPage({ searchParams }: { searchParams: Pr
       </div>
 
       {!res.ok ? (
-        <p className="text-primary-500 py-10 text-center text-sm">
-          {res.reason === "not_set_up"
-            ? "The tool users log isn't set up in the database yet."
-            : res.reason === "not_allowed"
-              ? "Couldn't confirm it's you. Sign in with your Google account (the owner email), then reload."
-              : "Couldn't load who used the tools. Refresh to try again."}
-        </p>
+        res.reason === "not_set_up" ? (
+          <p className="text-primary-500 py-10 text-center text-sm">The tool users log isn&apos;t set up in the database yet.</p>
+        ) : (
+          <SectionError reason={res.reason} what="who used the tools" />
+        )
       ) : (
         <>
           <div className="flex flex-wrap gap-2 mb-3 text-[13px]">
