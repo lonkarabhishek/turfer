@@ -60,7 +60,7 @@ export function Sheet({ title, subtitle, onClose, children, wide }: { title: str
   }, []);
   return (
     <ViewportOverlay className="z-[80] flex items-end lg:items-center justify-center">
-      <div className={`absolute inset-0 bg-black/55 motion-safe:transition-opacity motion-safe:duration-200 ${shown ? "opacity-100" : "opacity-0"}`} onClick={() => onClose?.()} aria-hidden />
+      <div className={`fixed inset-0 bg-black/55 motion-safe:transition-opacity motion-safe:duration-200 ${shown ? "opacity-100" : "opacity-0"}`} onClick={() => onClose?.()} aria-hidden />
       <div
         ref={ref}
         role="dialog"

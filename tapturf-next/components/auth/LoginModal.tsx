@@ -66,7 +66,7 @@ export function LoginModal() {
     <ViewportOverlay className="z-[60] flex items-center justify-center p-4">
       {/* Backdrop — solid tint, no backdrop-filter (cheap on low-end GPUs) */}
       <div
-        className="absolute inset-0 bg-primary-800/60 animate-fade-in"
+        className="fixed inset-0 bg-primary-800/60 animate-fade-in"
         onClick={handleClose}
       />
 

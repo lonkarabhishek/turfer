@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type CSSProperties, type HTMLAttributes } from "react";
-import { useVisualViewport } from "@/lib/ui/useVisualViewport";
+import { isTextField, useVisualViewport } from "@/lib/ui/useVisualViewport";
 import { revealDelta, type ViewportBox } from "@/lib/ui/viewport";
 
 /**
@@ -16,7 +16,11 @@ import { revealDelta, type ViewportBox } from "@/lib/ui/viewport";
  * Children size themselves to the visible height with
  * `var(--vv-h, 100dvh)` (e.g. max-h-[calc(var(--vv-h,100dvh)*0.85)]),
  * and pad the bottom with `var(--safe-b, env(safe-area-inset-bottom))`:
- * no home-indicator gap while the keys cover it.
+ * no home-indicator gap while the keys cover it. A backdrop (the dim, or
+ * a full-screen sheet's own background) is `fixed inset-0`, not
+ * `absolute`: it then covers the whole page, not just this layer, so no
+ * undimmed page shows while iOS pans the view or the keys slide away
+ * before this layer catches up.
  *
  * A focused field stays in view: when the keyboard opens (or a field is
  * focused) the scrolling boxes between it and this layer scroll just
@@ -51,7 +55,15 @@ export function ViewportOverlay({
 
   const place = (
     box
-      ? { top: box.top, height: box.height, bottom: "auto", "--vv-h": `${box.height}px`, ...(box.keyboard ? { "--safe-b": "0px" } : null) }
+      ? {
+          top: box.top,
+          height: box.height,
+          bottom: "auto",
+          // Zoomed in: the visible area is narrower than the page too.
+          ...(box.width !== null ? { left: box.left, width: box.width, right: "auto" } : null),
+          "--vv-h": `${box.height}px`,
+          ...(box.keyboard ? { "--safe-b": "0px" } : null),
+        }
       : null
   ) as CSSProperties | null;
 
@@ -69,14 +81,6 @@ export function ViewportOverlay({
       {children}
     </div>
   );
-}
-
-const NOT_TEXT = new Set(["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"]);
-
-function isTextField(el: Element | null): el is HTMLElement {
-  if (el instanceof HTMLTextAreaElement) return true;
-  if (el instanceof HTMLInputElement) return !NOT_TEXT.has(el.type);
-  return el instanceof HTMLElement && el.isContentEditable;
 }
 
 /** Scroll each scrolling box from the focused field out to the layer just enough to show the field. Never the page itself. */

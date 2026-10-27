@@ -24,6 +24,9 @@ function fallbackRows(): Row[] {
   return CITIES.map((c) => ({ id: c.id, label: c.label, state: c.state, n: 0 }));
 }
 
+/** Below this visible height with the keys up, the title row makes way for the matches. */
+const TIGHT_H = 320;
+
 const PILL =
   "shrink-0 h-11 px-4 inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white text-[14px] font-semibold text-primary-900 press-tight focus-neon hover:border-primary-900";
 
@@ -39,7 +42,10 @@ const PILL =
  * on iOS or in WhatsApp's browser, right above the keys, not under them.
  * While a name is typed (or the keys are up) it keeps its height instead
  * of shrinking to the few matches, so the matches start right under the
- * search box; "Detect my city again" steps aside while the keys are up.
+ * search box. While the keys are up the precise-location row and "Detect
+ * my city again" step aside, and on a short view (a phone held sideways)
+ * the sheet takes all of it with Close beside the search box, so the
+ * matches keep the room.
  *
  * Every city with active turfs, with its count. The numbers (the total
  * in the search box, "TapTurf is in N cities", each city's count) come
@@ -68,6 +74,8 @@ export function CityPickerSheet({ initial }: { initial: CityCount[] | null }) {
   const current = choice?.kind === "city" ? choice.city : null;
   const view = useVisualViewport(open);
   const keys = !!view?.keyboard;
+  // The keys up and little left above them (a phone held sideways): no title row.
+  const tight = keys && view.height < TIGHT_H;
 
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -210,52 +218,63 @@ export function CityPickerSheet({ initial }: { initial: CityCount[] | null }) {
     </li>
   );
 
+  const closeButton = (
+    <button type="button" onClick={close} aria-label="Close" className={`w-11 h-11 shrink-0 inline-flex items-center justify-center rounded-full hover:bg-primary-100 focus-neon ${tight ? "-mr-1.5" : "-mr-2"}`}>
+      <X className="w-5 h-5 text-primary-500" />
+    </button>
+  );
+
   return createPortal(
     <ViewportOverlay box={view} className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
-      <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={close} aria-hidden />
+      <div className="fixed inset-0 bg-black/40 animate-fade-in" onClick={close} aria-hidden />
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="city-picker-h"
-        // 85% of what shows. Typing keeps it that tall: the box stays put and the matches start under it.
-        className={`relative w-full sm:max-w-md ${searching || keys ? "h-[calc(var(--vv-h,100dvh)*0.85)]" : "max-h-[calc(var(--vv-h,100dvh)*0.85)]"} flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden pb-[var(--safe-b,env(safe-area-inset-bottom))]`}
+        // 85% of what shows, at least 280px of it (all of it when less shows). Typing keeps it that
+        // tall: the box stays put and the matches start under it.
+        className={`relative w-full sm:max-w-md ${searching || keys ? "h-[min(var(--vv-h,100dvh),max(calc(var(--vv-h,100dvh)*0.85),280px))]" : "max-h-[min(var(--vv-h,100dvh),max(calc(var(--vv-h,100dvh)*0.85),280px))]"} flex flex-col bg-white rounded-t-3xl sm:rounded-3xl shadow-elevated animate-slide-up overflow-hidden pb-[var(--safe-b,env(safe-area-inset-bottom))]`}
       >
-        <div className="flex items-center justify-between gap-2 px-5 pt-4 pb-2">
-          <h2 id="city-picker-h" tabIndex={-1} className="font-display text-[22px] text-primary-900 leading-tight outline-none">
+        <div className={`flex items-center justify-between gap-2 px-5 ${tight ? "pt-2" : "pt-4 pb-2"}`}>
+          <h2 id="city-picker-h" tabIndex={-1} className={tight ? "sr-only" : "font-display text-[22px] text-primary-900 leading-tight outline-none"}>
             Pick your city
           </h2>
-          <button type="button" onClick={close} aria-label="Close" className="w-11 h-11 -mr-2 inline-flex items-center justify-center rounded-full hover:bg-primary-100 focus-neon">
-            <X className="w-5 h-5 text-primary-500" />
-          </button>
+          {!tight && closeButton}
         </div>
 
         <div className="px-5">
-          <label className="relative block">
-            <span className="sr-only">Search cities</span>
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden />
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={total ? `Search ${plural(total, "city", "cities")}` : "Search cities"}
-              autoComplete="off"
-              className="w-full h-11 pl-10 pr-4 rounded-full bg-primary-50 border border-primary-200 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={onGps}
-            disabled={locating}
-            className="mt-1 h-11 inline-flex items-center gap-2 text-[14px] font-semibold text-primary-900 focus-neon disabled:opacity-70"
-          >
-            {locating ? <Loader2 className="w-4 h-4 text-accent-600 animate-spin" /> : <Navigation className="w-4 h-4 text-accent-600" />}
-            {locating ? "Finding you…" : "Use my precise location"}
-          </button>
-          <p aria-live="polite" className="text-[13px] text-primary-600">
+          <div className="flex items-center gap-2">
+            <label className="relative block flex-1 min-w-0">
+              <span className="sr-only">Search cities</span>
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400" aria-hidden />
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={total ? `Search ${plural(total, "city", "cities")}` : "Search cities"}
+                autoComplete="off"
+                className="w-full h-11 pl-10 pr-4 rounded-full bg-primary-50 border border-primary-200 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+              />
+            </label>
+            {tight && closeButton}
+          </div>
+          {/* Not while the keys are up: the matches need the room, and it's all back as soon as they go down. */}
+          {!keys && (
+            <button
+              type="button"
+              onClick={onGps}
+              disabled={locating}
+              className="mt-1 h-11 inline-flex items-center gap-2 text-[14px] font-semibold text-primary-900 focus-neon disabled:opacity-70"
+            >
+              {locating ? <Loader2 className="w-4 h-4 text-accent-600 animate-spin" /> : <Navigation className="w-4 h-4 text-accent-600" />}
+              {locating ? "Finding you…" : "Use my precise location"}
+            </button>
+          )}
+          <p aria-live="polite" className={keys ? "sr-only" : "text-[13px] text-primary-600"}>
             {status}
           </p>
-          {far && (
+          {far && !keys && (
             <button type="button" onClick={() => pick(far.id, "gps")} className={`${PILL} mt-2`}>
               Show {labelFor(far.id)}
             </button>

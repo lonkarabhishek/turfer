@@ -165,7 +165,7 @@ export function UsernamePrompt() {
   return (
     // Above the keys while the username is typed (ViewportOverlay); taller than what shows, it scrolls.
     <ViewportOverlay className="z-[65] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-primary-900/40" onClick={close} aria-hidden />
+      <div className="fixed inset-0 bg-primary-900/40" onClick={close} aria-hidden />
       <div
         ref={dialogRef}
         role="dialog"

@@ -91,7 +91,7 @@ export function TimeSlotSheet({
       className="z-[70] flex items-end sm:items-center justify-center"
       data-modal-open="true"
     >
-      <div className="absolute inset-0 bg-primary-800/50 animate-fade-in" onClick={onClose} />
+      <div className="fixed inset-0 bg-primary-800/50 animate-fade-in" onClick={onClose} />
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-elevated animate-slide-up flex flex-col max-h-[calc(var(--vv-h,100dvh)*0.85)]">
         {/* Grabber */}
         <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0">

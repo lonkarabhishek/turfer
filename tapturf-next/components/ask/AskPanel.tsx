@@ -106,8 +106,9 @@ export function AskPanel() {
 
   return (
     <ViewportOverlay className="z-50 flex md:justify-end" role="presentation">
-      {/* Desktop: dim the page behind the side panel. Phones get a full screen. */}
-      <button type="button" aria-label="Close" onClick={closePanel} className="hidden md:block absolute inset-0 bg-primary-900/30 cursor-pointer" />
+      {/* Desktop: dim the page behind the side panel. Phones get a full screen, white to the edges while the panel follows the keys. */}
+      <button type="button" aria-label="Close" onClick={closePanel} className="hidden md:block fixed inset-0 bg-primary-900/30 cursor-pointer" />
+      <div className="md:hidden fixed inset-0 bg-white animate-lightbox" aria-hidden />
 
       <section
         role="dialog"

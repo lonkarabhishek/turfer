@@ -71,7 +71,7 @@ export function Sheet({
   return (
     // data-modal-open: PWALifecycle never reloads the page under an open sheet (a code half typed).
     <ViewportOverlay className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
-      <div className="absolute inset-0 bg-primary-900/40" onClick={() => !locked && onClose()} aria-hidden />
+      <div className="fixed inset-0 bg-primary-900/40" onClick={() => !locked && onClose()} aria-hidden />
       <div
         ref={ref}
         role="dialog"

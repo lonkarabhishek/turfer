@@ -787,7 +787,7 @@ function SuggestSheet({
   // Above the keys while a number or a note is typed (ViewportOverlay), the field scrolled into view.
   const sheet = (
     <ViewportOverlay className="z-[70] flex items-end sm:items-center justify-center" data-modal-open="true">
-      <div className="absolute inset-0 bg-primary-900/40 animate-fade-in" onClick={onClose} />
+      <div className="fixed inset-0 bg-primary-900/40 animate-fade-in" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
