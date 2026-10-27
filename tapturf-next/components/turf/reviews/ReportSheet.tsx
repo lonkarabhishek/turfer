@@ -19,6 +19,7 @@ import { QuickScorecard } from "./steps/QuickScorecard";
 import { CONTACT_MESSAGE, otherPrice, WrapUp } from "./steps/WrapUp";
 import { Thanks } from "./steps/Thanks";
 import { monthYear } from "./ui";
+import { gaEvent } from "@/lib/analytics/ga";
 
 export type Mine = NonNullable<Extract<MineResponse, { mine: unknown }>["mine"]>;
 export type SavedReport = Extract<SaveResponse, { r: "ok" }>;
@@ -51,12 +52,9 @@ const MESSAGES: Record<SaveProblem, string> = {
   exists: "You've already rated this turf. Posting this replaces that report.",
 };
 
+/** GA4, only with consent (lib/analytics/ga.ts). */
 function track(event: string, params: Record<string, unknown>) {
-  try {
-    (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag?.("event", event, params);
-  } catch {
-    /* analytics is never in the way */
-  }
+  gaEvent(event, params);
 }
 
 /** A report as the sheet edits it: its answers, on screen 2. */

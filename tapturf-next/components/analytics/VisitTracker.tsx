@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect } from "react";
+import { useConsent } from "@/lib/consent";
+import { gaEvent } from "@/lib/analytics/ga";
 import { logTurfView, noteInterest, step, trackVisit } from "@/lib/analytics/visitor";
 
 /**
- * Once per page load: first-visit source, session and day counts, and
- * the city the visitor picks (from the tapturf:city-changed event the
- * city setter fires). See lib/analytics/visitor.ts.
+ * Once per page load, after Accept on the cookie banner (lib/consent.ts):
+ * first-visit source, session and day counts, and the city the visitor
+ * picks (from the tapturf:city-changed event the city setter fires). See
+ * lib/analytics/visitor.ts. Accepting mid-visit counts this visit then.
  */
 export function VisitTracker() {
+  const allowed = useConsent() === "granted";
   useEffect(() => {
+    if (!allowed) return;
     trackVisit();
     const onCity = (e: Event) => {
       const value = (e as CustomEvent<{ value?: string } | string | null>).detail;
@@ -18,25 +23,30 @@ export function VisitTracker() {
     };
     window.addEventListener("tapturf:city-changed", onCity);
     return () => window.removeEventListener("tapturf:city-changed", onCity);
-  }, []);
+  }, [allowed]);
   return null;
 }
 
-/** Drop on a page to record what it is about: a turf, a city, a sport. */
+/**
+ * Drop on a page to record what it is about: a turf, a city, a sport. A
+ * turf page's view counts for the owner's numbers for everyone (anonymous,
+ * nothing kept on the device); the visit note and GA only with consent,
+ * from the moment the visitor accepts.
+ */
 export function NoteInterest({ city, sports, turfId }: { city?: string | null; sports?: string[] | null; turfId?: string }) {
+  const allowed = useConsent() === "granted";
   useEffect(() => {
+    if (turfId) logTurfView(turfId);
+  }, [turfId]);
+  useEffect(() => {
+    if (!allowed) return;
     noteInterest({ city, sports, turf: !!turfId });
     if (turfId) {
       step("turf_open");
-      logTurfView(turfId);
-      try {
-        (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag?.("event", "turf_view", { turf_id: turfId, city: city ?? "", sport: sports?.[0] ?? "" });
-      } catch {
-        /* ignore */
-      }
+      gaEvent("turf_view", { turf_id: turfId, city: city ?? "", sport: sports?.[0] ?? "" });
     }
     // One record per page, keyed by what the page is about.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, turfId]);
+  }, [allowed, city, turfId]);
   return null;
 }

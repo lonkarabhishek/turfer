@@ -16,6 +16,7 @@ import { CitySync } from "@/components/city/CitySync";
 import { CityPicker } from "@/components/city/CityPicker";
 import "./globals.css";
 import { VisitTracker } from "@/components/analytics/VisitTracker";
+import { CookieBanner } from "@/components/consent/CookieBanner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -94,6 +95,10 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://lh3.googleusercontent.com" />
       </head>
       <body className={`${inter.variable} antialiased`}>
+        {/* First in the page so the keyboard reaches it first; it shows itself only
+            after hydration, when no cookie choice is stored (lib/consent.ts). */}
+        <CookieBanner />
+        {/* Google Analytics and the visit note wait for Accept on that banner. */}
         <GoogleAnalytics />
         <VisitTracker />
         <PWALifecycle />

@@ -1,5 +1,7 @@
 import { hasSignIn, signInKnown, signInToken, type TokenCheck } from "../account/client";
 import { gaParams, makeDeviceTag, DEVICE_RE, toolUseOf, toolUseBody, signedInInit, type ToolUse } from "../tools/usage";
+import { analyticsAllowed } from "../consent";
+import { gaEvent } from "./ga";
 
 /**
  * GA4 events for the free cricket tools. Same gtag the rest of the
@@ -9,35 +11,34 @@ import { gaParams, makeDeviceTag, DEVICE_RE, toolUseOf, toolUseBody, signedInIni
  * link's code, and who: this device's sign-in, which the server verifies,
  * else a random device tag kept in this browser. The tag goes only with a
  * signed-out use and starts over on every sign-in and sign-out
- * (forgetToolDevice), so it is never tied to an account.
+ * (forgetToolDevice), so it is never tied to an account. The tag and the
+ * GA events need Accept on the cookie banner (lib/consent.ts); without it
+ * a guest's use is still counted, with no tag, and nothing is kept here.
  */
 /** tool_action: a milestone inside a longer tool session, like an over or a wicket in the live scorer. */
 export type ToolEvent = "tool_opened" | "tool_used" | "tool_result_generated" | "tool_cta_clicked" | "tool_action";
 
 export function trackTool(event: ToolEvent, tool: string, params: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
-  try {
-    const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
-    gtag?.("event", event, { tool, ...gaParams(params) });
-  } catch {
-    /* ignore */
-  }
+  gaEvent(event, { tool, ...gaParams(params) });
   const use = toolUseOf(event, tool, params);
   if (use) logUse(use);
 }
 
 const USE_URL = "/api/tools/use";
-const DEVICE_KEY = "tt_tools_device";
+/** The guest tag's key; lib/consent.ts deletes it on Reject. */
+export const TOOL_DEVICE_KEY = "tt_tools_device";
 /** A sign-in token that takes longer than this (a cold Firebase load) makes the use a guest's. */
 const TOKEN_WAIT_MS = 5_000;
 
-/** This browser's random tag for a guest's uses, made once per signed-out spell; null when storage is blocked. */
+/** This browser's random tag for a guest's uses, made once per signed-out spell; null without consent or when storage is blocked. */
 function deviceTag(): string | null {
+  if (!analyticsAllowed()) return null;
   try {
-    const kept = localStorage.getItem(DEVICE_KEY);
+    const kept = localStorage.getItem(TOOL_DEVICE_KEY);
     if (kept && DEVICE_RE.test(kept)) return kept;
     const tag = makeDeviceTag(crypto.getRandomValues(new Uint8Array(12)));
-    localStorage.setItem(DEVICE_KEY, tag);
+    localStorage.setItem(TOOL_DEVICE_KEY, tag);
     return tag;
   } catch {
     return null;
@@ -51,7 +52,7 @@ function deviceTag(): string | null {
  */
 export function forgetToolDevice(): void {
   try {
-    localStorage.removeItem(DEVICE_KEY);
+    localStorage.removeItem(TOOL_DEVICE_KEY);
   } catch {
     /* ignore */
   }

@@ -743,6 +743,8 @@ export function getCityPref(): CityId | null {
 }
 
 // GA4 event, inlined so this file stays import-free (lib/analytics/city.ts is the shared helper).
+// window.gtag exists only after Accept on the cookie banner (lib/analytics/ga.ts), so this is
+// a no-op without consent.
 function track(event: string, params: Record<string, string | number | boolean>) {
   try {
     const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;

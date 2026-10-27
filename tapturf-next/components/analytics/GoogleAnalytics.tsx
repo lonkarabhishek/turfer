@@ -1,68 +1,52 @@
 "use client";
 
-import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
-
-const GA_ID = "G-KRDVP16TSM";
+import { Suspense, useEffect, useRef } from "react";
+import { useConsent } from "@/lib/consent";
+import { gaEvent, startAnalytics } from "@/lib/analytics/ga";
 
 /**
- * Google Analytics 4 (gtag.js) wiring for the Next.js App Router.
+ * Google Analytics 4 for the App Router, only after Accept on the cookie
+ * banner (lib/consent.ts, lib/analytics/ga.ts). Until then nothing loads
+ * and nothing is sent. On Accept, gtag.js loads and the page the visitor
+ * is on counts as one page view; every client-side navigation after that
+ * is one more (App Router changes URLs without a reload, so GA would
+ * otherwise see only the first). A Reject stops it on the spot.
  *
- * Two pieces:
- *  1. <Script> tags that load gtag.js once, afterInteractive so they
- *     don't block first paint. This handles the initial page view.
- *  2. A tiny effect that re-fires config on every client-side route
- *     change — App Router does client-side navigation without a full
- *     reload, so GA would otherwise only see the first URL.
- *
- * Split into a Suspense boundary because useSearchParams() must be
- * wrapped in Suspense at the layout level.
+ * In a Suspense boundary because useSearchParams() must be at the layout
+ * level. Production only, so localhost traffic doesn't pollute GA.
  */
 export function GoogleAnalytics() {
-  // Only load in production so localhost dev traffic doesn't pollute GA.
   if (process.env.NODE_ENV !== "production") return null;
-
   return (
-    <>
-      <Script
-        src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
-        strategy="afterInteractive"
-      />
-      <Script id="ga-init" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', '${GA_ID}', { send_page_view: true, allow_google_signals: false, allow_ad_personalization_signals: false });
-        `}
-      </Script>
-      <Suspense fallback={null}>
-        <RouteTracker />
-      </Suspense>
-    </>
+    <Suspense fallback={null}>
+      <RouteTracker />
+    </Suspense>
   );
 }
 
 function RouteTracker() {
+  const consent = useConsent();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  /** The URL last counted while consent held; cleared by a Reject, so a new Accept counts the page again. */
+  const sent = useRef<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const w = window as unknown as { gtag?: (...args: unknown[]) => void };
-    if (typeof w.gtag !== "function") return;
-
+    if (consent !== "granted") {
+      sent.current = null;
+      return;
+    }
     const query = searchParams?.toString();
     const path = query ? `${pathname}?${query}` : pathname;
-
-    // Fire a page_view for every SPA navigation.
-    w.gtag("event", "page_view", {
+    if (sent.current === path || !startAnalytics()) return;
+    sent.current = path;
+    gaEvent("page_view", {
       page_path: path,
       page_location: window.location.href,
       page_title: document.title,
     });
-  }, [pathname, searchParams]);
+  }, [consent, pathname, searchParams]);
 
   return null;
 }

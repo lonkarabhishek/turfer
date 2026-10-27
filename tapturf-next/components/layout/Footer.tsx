@@ -3,6 +3,7 @@ import { getFooterCities, HOME_CITIES } from "@/lib/queries/cities";
 import { CITIES } from "@/lib/city";
 import { SPORT_PAGES } from "@/lib/sports";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
+import { CookieSettingsButton } from "@/components/consent/CookieSettingsButton";
 
 /** City links on every desktop page: the twelve biggest live cities. */
 const LINKED_CITIES = 12;
@@ -163,6 +164,7 @@ export async function Footer() {
           <div className="flex items-center gap-4 text-xs text-primary-400">
             <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
             <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+            <CookieSettingsButton className="hover:text-white transition-colors" />
             <span className="text-primary-500">Made with care in Nashik 🇮🇳</span>
           </div>
         </div>

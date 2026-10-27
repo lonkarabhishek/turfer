@@ -6,13 +6,16 @@ import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PRIVACY_NOTICE } from "@/lib/policy";
+import { useCookieBanner } from "@/lib/consent";
 
 /**
  * The privacy policy promises a notice on the site when what we collect
  * changes. Shown once per device to signed-in people (the ones the change
  * is about), on browsing pages only, never over a dialog or while they
- * type, and never before the page has settled. Dismissing it, or opening
- * the policy from it, remembers it on this device.
+ * type, and never before the page has settled. Never at the same time as
+ * the cookie banner either: that comes first, and this one waits until the
+ * visitor has made their choice. Dismissing it, or opening the policy from
+ * it, remembers it on this device.
  */
 
 const SEEN_KEY = "tapturf_policy_seen";
@@ -51,16 +54,17 @@ export function PolicyNotice() {
   const [show, setShow] = useState(false);
   const signedIn = !!user;
   const quiet = !notice && !welcomeMessage;
+  const cookieBanner = useCookieBanner();
 
   useEffect(() => {
-    if (!signedIn || !settled || !quiet || !browsing(path) || seen()) return;
+    if (!signedIn || !settled || !quiet || cookieBanner || !browsing(path) || seen()) return;
     const t = window.setTimeout(() => {
       if (!busy() && !seen()) setShow(true);
     }, 4000);
     return () => window.clearTimeout(t);
-  }, [signedIn, settled, quiet, path]);
+  }, [signedIn, settled, quiet, cookieBanner, path]);
 
-  if (!show || !signedIn) return null;
+  if (!show || !signedIn || cookieBanner) return null;
   const close = () => {
     markSeen();
     setShow(false);

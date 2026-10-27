@@ -4,6 +4,7 @@ import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { CITY_LIST_AND } from "@/lib/city";
 import { PRIVACY_UPDATED } from "@/lib/policy";
+import { CookieSettingsButton } from "@/components/consent/CookieSettingsButton";
 
 const UPDATED = PRIVACY_UPDATED;
 const PAGE_URL = "https://www.tapturf.in/privacy";
@@ -51,9 +52,10 @@ const SECTIONS: LegalSection[] = [
       <>
         <p>
           <strong>Browsing without an account.</strong> You can look at every turf, court and game without
-          signing in. We then collect only standard analytics (see section 5), the preferences stored on
-          your device (section 6), and a record of each use of our free tools under a random tag your browser
-          keeps (see &ldquo;When you use our free tools&rdquo; below).
+          signing in. We then collect only TapTurf&rsquo;s own anonymous counts (see section 5) and the
+          preferences stored on your device (section 6). Only if you accept cookies do we also use Google
+          Analytics, and keep each use of our free tools under a random tag your browser keeps (see
+          &ldquo;When you use our free tools&rdquo; below).
         </p>
         <p>
           <strong>When you sign in with your phone number.</strong> We store your mobile number and the
@@ -128,10 +130,12 @@ const SECTIONS: LegalSection[] = [
           names or anything you type), the code of the match&rsquo;s live link if it has one, and the place your
           internet connection points to, else the city you chose on TapTurf. The place is worked out from your
           IP address on that visit and is only approximate; the address itself is never stored. If you are
-          signed in, the record is kept with your TapTurf account. If you are not, it is kept with a random tag
-          your browser makes for this, which says nothing about you or your device. The tag is never sent while
-          you are signed in, and your browser makes a new one each time you sign in or out, so it is not tied to
-          your account. Only TapTurf&rsquo;s team sees these records, to learn who uses the tools and how.
+          signed in, the record is kept with your TapTurf account. If you are not, and you accepted cookies, it
+          is kept with a random tag your browser makes for this, which says nothing about you or your device;
+          if you did not accept, it is kept with no tag at all and your browser keeps nothing. The tag is never
+          sent while you are signed in, your browser makes a new one each time you sign in or out, so it is not
+          tied to your account, and choosing Reject deletes it. Only TapTurf&rsquo;s team sees these records,
+          to learn who uses the tools and how.
         </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
@@ -206,7 +210,8 @@ const SECTIONS: LegalSection[] = [
           <li>Supabase, which hosts our database, handles Google sign-in sessions and counts who is watching a live score.</li>
           <li>Google Firebase, which sends and verifies phone one-time codes.</li>
           <li>Vercel, which hosts the website.</li>
-          <li>Google Analytics, for anonymous usage statistics (section 5).</li>
+          <li>Google Analytics, for usage statistics, only if you accept cookies (section 5).</li>
+          <li>Google Maps, for the maps on turf and game pages, only if you accept cookies or tap &ldquo;Show map&rdquo; (section 5).</li>
           <li>Hostinger, which hosts our email.</li>
         </ul>
         <p>
@@ -219,26 +224,53 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: "analytics",
-    title: "Analytics and embedded content",
+    title: "Cookies, analytics and embedded content",
     body: (
       <>
+        <p id="cookies" className="scroll-mt-24">
+          <strong>The cookie banner.</strong> On your first visit a banner asks whether we may use the cookies
+          and tools below, which TapTurf does not need to work. Accept and Reject are side by side and equally
+          easy, and none of these load or are stored before you choose. Your choice is kept on your device in a
+          cookie called tt_consent for about six months, and then we ask again. If your browser sends Global
+          Privacy Control, we treat that as Reject unless you choose Accept yourself. You can change your choice
+          at any time with Cookie settings: in the menu on phones, at the bottom of every page on a computer,
+          or <CookieSettingsButton className="font-semibold underline underline-offset-2 hover:text-accent-600">right here</CookieSettingsButton>.
+          Choosing Reject, then or later, stops Google Analytics at once and deletes its cookies and the notes
+          described below from your device.
+        </p>
         <p>
-          We use Google Analytics to count visits and see which pages people use: page views, the turfs you
-          open, the city and sport filters you use, and taps on Call or WhatsApp. It sets cookies and records
-          an approximate location derived from your IP address (Google Analytics does not store the address
-          itself), your device type and the pages you view. We have turned off Google signals and ad
-          personalisation, so this is not used to follow you across other websites or for advertising. You
-          can block it with any standard cookie or tracker blocker, and the site works exactly the same.
+          <strong>Only if you accept.</strong>
+        </p>
+        <ul>
+          <li>
+            Google Analytics, to count visits and see which pages people use: page views, the turfs you open,
+            the city and sport filters you use, and taps on Call or WhatsApp. It sets cookies (named _ga) and
+            records an approximate location derived from your IP address (Google Analytics does not store the
+            address itself), your device type and the pages you view. We have turned off Google signals and ad
+            personalisation, so this is not used to follow you across other websites or for advertising.
+          </li>
+          <li>The short visit note your device keeps, described under &ldquo;When you sign up&rdquo; below.</li>
+          <li>The random tag for your free tool uses, described under &ldquo;When you use our free tools&rdquo;.</li>
+          <li>Maps from Google on turf and game pages (see below).</li>
+        </ul>
+        <p>
+          <strong>What runs either way.</strong> TapTurf&rsquo;s own anonymous counts: how many times each turf
+          page is viewed, taps on Call or WhatsApp, and each start or finish in a free tool. They keep nothing on
+          your device, carry no tag and do not say who you are; they give turf owners their numbers on
+          myTapturf and show us which tools are used. If you are signed in, a Call or WhatsApp tap and a free
+          tool use are also kept with your account, as described in section 2. The site works exactly the same
+          whichever you choose.
         </p>
         <p id="signup">
-          <strong>When you sign up.</strong> While you browse, your device keeps a short note of how you first
+          <strong>When you sign up.</strong> If you accepted cookies, while you browse your device keeps a short note of how you first
           arrived (the website or campaign link that sent you, not the full address), how many times and on how
           many days you have visited, which cities, sports and turfs you looked at, when you first opened a
           turf or tapped Call or WhatsApp, and your device type, operating system and browser family. Nothing
           is sent while you are signed out. When you create an account, one summary of this is saved with your
           account so we can see where members come from and what they want. We never store your IP address,
           your full browser details or anything you type into a form here. We use it only to improve TapTurf,
-          we do not sell it, and you can ask us to delete it at any time.
+          we do not sell it, and you can ask us to delete it at any time. If you did not accept, your device
+          keeps no note and nothing about your visits is saved when you sign up.
         </p>
         <p id="city">
           <strong>Your city.</strong> When you use TapTurf signed in, we note one city with your account so we
@@ -253,12 +285,14 @@ const SECTIONS: LegalSection[] = [
           you can ask us to delete it at any time.
         </p>
         <p>
-          Turf pages embed Google Maps, and photos load from Google&rsquo;s and other public servers. Loading these shares your
-          IP address with those servers (with Google under{" "}
+          Turf and game pages can show a map from Google Maps, and turf photos load from Google&rsquo;s and other
+          public servers. Loading these shares your IP address with those servers (with Google under{" "}
           <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">
             Google&rsquo;s privacy policy
           </a>
-          ). Maps load only when you tap &ldquo;Show map&rdquo;.
+          ). Photos are part of the page. A map loads only if you accepted cookies, or when you tap
+          &ldquo;Show map&rdquo; on it, which loads just that one; &ldquo;Open in Google Maps&rdquo; takes you to
+          Google instead. On turf pages a map waits for &ldquo;Show map&rdquo; either way.
         </p>
         <p>
           Some venue pages show reviews that were publicly posted on Google Maps, with the reviewer&rsquo;s
@@ -274,11 +308,12 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
-        banners you closed, whether you dismissed the &ldquo;install app&rdquo; prompt, whether we already
-        asked you to pick a username, the TapTurf profiles you tagged recently, the WhatsApp number you last
-        gave players for a game, the short visit note
-        described under &ldquo;When you sign up&rdquo;, and the matches and tournaments you score with our
-        free tools, and the random tag described under &ldquo;When you use our free tools&rdquo;. For a live link it also keeps the key that lets only this browser update that
+        your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
+        prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
+        WhatsApp number you last gave players for a game, and the matches and tournaments you score with our
+        free tools. Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
+        &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
         token, which identifies you to our server, the city you picked and whether you picked it or let your
         location find it (for the city note described under &ldquo;Your city&rdquo;), that one summary when

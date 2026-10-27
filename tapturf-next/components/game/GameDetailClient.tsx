@@ -9,6 +9,8 @@ import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from 
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { GameRequestCard } from "./GameRequestCard";
 import { GameDistance } from "./GameDistance";
+import { GameMap } from "./GameMap";
+import { mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
@@ -432,18 +434,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                   <ChevronRight className="w-5 h-5 text-primary-300 shrink-0" />
                 </Link>
                 {mapSrc && (
-                <div className="h-[220px]">
-                  <iframe
+                  <GameMap
                     src={mapSrc}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    title="Game location on Google Maps"
+                    openHref={mapsSearchUrl({ lat: game.turfs.lat, lng: game.turfs.lng, name: game.turfs.name, address: game.turfs.address })}
                   />
-                </div>
                 )}
               </div>
             );

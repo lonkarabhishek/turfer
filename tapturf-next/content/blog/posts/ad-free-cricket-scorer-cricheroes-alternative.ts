@@ -3,7 +3,8 @@ import type { Post } from "../types";
 // Comparison post: TapTurf's free scoring tools against CricHeroes for casual
 // turf and box cricket. Ad check done 22 Oct 2026: no ad scripts in the tool
 // source (app/tools/cricket-live-scorer, app/tools/live-scoreboard) or on the
-// live pages; the only third-party script is Google Analytics.
+// live pages; the only third-party script is Google Analytics (since 27 Oct
+// 2026 loaded only after Accept on the cookie banner, lib/consent.ts).
 // TapTurf features below match free-cricket-live-scorer-and-live-scoreboard.
 
 export const post: Post = {

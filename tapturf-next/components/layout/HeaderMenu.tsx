@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed, Store } from "lucide-react";
+import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed, Store, Cookie } from "lucide-react";
 import { CityMenuRow } from "@/components/city/CityMenuRow";
+import { openCookieSettings } from "@/lib/consent";
 
 const LINKS = [
   { href: "/turfs", label: "All turfs", icon: MapPin },
@@ -20,7 +21,9 @@ const LINKS = [
 /**
  * The three-line menu. Holds the city picker (with "Use my location")
  * and the main links, so the header stays clean. Bottom sheet on phones,
- * a dropdown card on desktop. Closes on navigation and Esc.
+ * a dropdown card on desktop. Closes on navigation and Esc. Also holds
+ * Cookie settings, since the footer that has it on desktop is hidden on
+ * phones.
  */
 export function HeaderMenu() {
   const [open, setOpen] = useState(false);
@@ -80,6 +83,18 @@ export function HeaderMenu() {
                   </Link>
                 ))}
               </nav>
+              <div className="h-px bg-primary-200 mx-2 my-2" />
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  openCookieSettings();
+                }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-primary-50 text-left text-[15px] font-medium text-primary-900 transition-colors"
+              >
+                <Cookie className="w-4 h-4 text-accent-600" />
+                Cookie settings
+              </button>
             </div>
             <div className="md:hidden h-[env(safe-area-inset-bottom)] bg-white" />
           </div>

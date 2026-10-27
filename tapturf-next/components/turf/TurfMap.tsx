@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { MapPin, Map as MapIcon } from "lucide-react";
+import { useConsent } from "@/lib/consent";
+import { mapsSearchUrl } from "@/lib/utils/maps";
+import { MapPlaceholder } from "@/components/consent/MapPlaceholder";
 
 interface TurfMapProps {
   /** DB "Gmap Embed link" — may be an iframe snippet or a plain URL. */
@@ -72,8 +75,11 @@ function buildDirectionsHref({
 
 export function TurfMap({ embedLink, lat, lng, address, name }: TurfMapProps) {
   // The Maps iframe pulls ~1.7 MB of JS, more than the rest of the page.
-  // Load it on tap; the directions link works without it.
+  // Load it on tap; the directions link works without it. Until the visitor
+  // accepts cookies (lib/consent.ts) the placeholder also says the map is
+  // Google's and offers it as a plain link; that tap loads only this map.
   const [showMap, setShowMap] = useState(false);
+  const consent = useConsent();
   // Priority: lat/lng > embeddable iframe/URL > address search embed.
   let src: string | null = null;
   if (lat != null && lng != null) {
@@ -99,6 +105,13 @@ export function TurfMap({ embedLink, lat, lng, address, name }: TurfMapProps) {
           allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
           title="Turf location on Google Maps"
+        />
+      ) : consent !== "granted" ? (
+        <MapPlaceholder
+          onShow={() => setShowMap(true)}
+          openHref={mapsSearchUrl({ lat, lng, name, address })}
+          address={address}
+          className="h-[240px] md:h-[300px]"
         />
       ) : (
         <button
