@@ -1,9 +1,12 @@
 /**
  * Quiet first-party context for new sign-ups, gathered from how someone
- * uses the site. Nothing is asked and nothing leaves the device until
- * they create an account; then one short summary is saved against the
- * new user (save_signup_context) so we can see where sign-ups come from
- * and what they came for. Disclosed in the privacy policy.
+ * uses the site, only after they tap Accept on the cookie banner
+ * (lib/consent.ts): before that nothing is written here and nothing is
+ * sent at sign-up, and a Reject deletes it (VISITOR_KEYS). Nothing leaves
+ * the device until they create an account; then one short summary is
+ * saved against the new user (save_signup_context) so we can see where
+ * sign-ups come from and what they came for. Disclosed in the privacy
+ * policy.
  *
  * Never stored: IP addresses, the raw user agent, full referrer URLs
  * with their query strings, or anything typed into a form.
@@ -11,12 +14,25 @@
  */
 
 import { isLikelyBot } from "./bot";
+import { analyticsAllowed } from "../consent";
+import { gaEvent } from "./ga";
 
 const FIRST = "tt_first_v1";
 const VISITS = "tt_visits_v1";
 const INTEREST = "tt_interest_v1";
 const FUNNEL = "tt_funnel_v1";
 const SESSION_GAP_MS = 30 * 60 * 1000;
+const SIGNUP_SENT = "tapturf_signup_sent_v1";
+const SIGNUP_GA = "tapturf_signup_ga_v1";
+/** Every key this file keeps, all of them only with consent (lib/consent.ts CONSENTED_LOCAL_KEYS deletes them on Reject). */
+export const VISITOR_KEYS = [FIRST, VISITS, INTEREST, FUNNEL, SIGNUP_GA, SIGNUP_SENT] as const;
+
+/**
+ * The address this page load started on, held in memory only: a visitor
+ * who accepts after a few taps around still has their first-touch source
+ * (the campaign tags, an ad click) read from where they landed.
+ */
+const LANDING = typeof window !== "undefined" ? window.location.href : null;
 
 type First = { at: string; ref: string | null; landing: string; utm: Record<string, string>; ad_click: boolean };
 type Visits = { sessions: number; days: string[]; first_at: string; last_ms: number };
@@ -40,23 +56,15 @@ function write(key: string, value: unknown) {
   }
 }
 
-function gtag(...args: unknown[]) {
-  try {
-    (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag?.(...args);
-  } catch {
-    /* ignore */
-  }
-}
-
 /** India date, so "days between visits" follows the visitor's calendar. */
 const istDay = (ms: number) => new Date(ms + 330 * 60 * 1000).toISOString().slice(0, 10);
 
-/** Once per page load: first-touch source on the very first visit, then session and day counts. */
+/** Once per page load, with consent: first-touch source on the very first visit, then session and day counts. */
 export function trackVisit() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !analyticsAllowed()) return;
   const now = Date.now();
   if (!read<First>(FIRST)) {
-    const url = new URL(window.location.href);
+    const url = new URL(LANDING ?? window.location.href);
     const utm: Record<string, string> = {};
     for (const k of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
       const v = url.searchParams.get(k);
@@ -87,9 +95,9 @@ export function trackVisit() {
   write(VISITS, v);
 }
 
-/** A city, sport or turf the visitor looked at or picked. */
+/** A city, sport or turf the visitor looked at or picked (with consent only). */
 export function noteInterest(i: { city?: string | null; sports?: string[] | null; turf?: boolean }) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !analyticsAllowed()) return;
   const cur = read<Interest>(INTEREST) ?? { city: {}, sport: {}, turfs: 0 };
   if (i.city && /^[a-z][a-z-]{1,30}$/.test(i.city)) cur.city[i.city] = (cur.city[i.city] ?? 0) + 1;
   for (const s of i.sports ?? []) {
@@ -107,7 +115,10 @@ const viewedHere = new Set<string>();
  * Count a turf page view for the owner's myTapturf numbers, once per turf
  * per session, and never for crawlers or headless browsers (see
  * lib/analytics/bot.ts). The only database call an anonymous turf view
- * makes since the 20 Oct outage.
+ * makes since the 20 Oct outage. Anonymous, so it runs with or without
+ * consent; it stores nothing on the device until the visitor accepts:
+ * before that a turf counts once per page lifetime (viewedHere), after it
+ * once per tab session (a tt_viewed_ mark that a Reject deletes).
  */
 export function logTurfView(turfId: string) {
   if (typeof window === "undefined") return;
@@ -117,7 +128,7 @@ export function logTurfView(turfId: string) {
   try {
     const k = `tt_viewed_${turfId}`;
     if (sessionStorage.getItem(k)) return;
-    sessionStorage.setItem(k, "1");
+    if (analyticsAllowed()) sessionStorage.setItem(k, "1");
   } catch {
     /* no sessionStorage: once per page lifetime (viewedHere) */
   }
@@ -132,9 +143,9 @@ export function logTurfView(turfId: string) {
   }).catch(() => {});
 }
 
-/** First time each funnel step happened. */
+/** First time each funnel step happened (with consent only). */
 export function step(name: keyof Funnel) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !analyticsAllowed()) return;
   const f = read<Funnel>(FUNNEL) ?? {};
   if (!f[name]) {
     f[name] = new Date().toISOString();
@@ -182,12 +193,10 @@ export function signupContext(method: "phone" | "google") {
 /**
  * Save the summary for a just-created account, once, in the background.
  * keepalive survives the redirect after sign-in; signup never waits on it.
+ * Without consent nothing is sent (and there is no note to send).
  */
-const SIGNUP_SENT = "tapturf_signup_sent_v1";
-const SIGNUP_GA = "tapturf_signup_ga_v1";
-
 export function saveSignupContext(userId: string, method: "phone" | "google") {
-  if (typeof window === "undefined" || !userId) return;
+  if (typeof window === "undefined" || !userId || !analyticsAllowed()) return;
   // Once per account on this device: a Google sign-up is recognised on every load for a while.
   try {
     if (localStorage.getItem(SIGNUP_SENT) === userId) return;
@@ -204,7 +213,7 @@ export function saveSignupContext(userId: string, method: "phone" | "google") {
   } catch {
     /* storage blocked: count it */
   }
-  if (!counted) gtag("event", "sign_up", { method, first_source: ctx.first?.utm.source ?? ctx.first?.ref?.split("/")[0] ?? "direct" });
+  if (!counted) gaEvent("sign_up", { method, first_source: ctx.first?.utm.source ?? ctx.first?.ref?.split("/")[0] ?? "direct" });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return;

@@ -1,4 +1,5 @@
 import { step } from "./visitor";
+import { gaEvent } from "./ga";
 
 /**
  * Record a Call / WhatsApp tap on a turf.
@@ -9,7 +10,9 @@ import { step } from "./visitor";
  * the supabase-js auth lock, so logging can never stall the tap.
  * Fire-and-forget: failures are swallowed.
  *
- * Also sends a GA4 event so the numbers show up in Google Analytics.
+ * The count is anonymous and stores nothing on the device, so it runs for
+ * everyone. The GA4 event and the visit note's funnel step need Accept on
+ * the cookie banner (lib/consent.ts; gaEvent and step check it).
  */
 export type ContactKind = "call" | "whatsapp";
 
@@ -47,16 +50,11 @@ export function logContactClick(opts: {
       /* ignore */
     }
   }
-  try {
-    const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
-    gtag?.("event", opts.kind === "call" ? "turf_call_click" : "turf_whatsapp_click", {
-      turf_id: opts.turfId,
-      source: opts.source,
-      signed_in: opts.signedIn,
-    });
-  } catch {
-    /* ignore */
-  }
+  gaEvent(opts.kind === "call" ? "turf_call_click" : "turf_whatsapp_click", {
+    turf_id: opts.turfId,
+    source: opts.source,
+    signed_in: opts.signedIn,
+  });
 }
 
 /**

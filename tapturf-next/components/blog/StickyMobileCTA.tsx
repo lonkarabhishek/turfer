@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 
 /**
  * Per-article sticky CTA above the mobile bottom nav. Appears once the
@@ -44,6 +45,7 @@ export function StickyMobileCTA({
 
   return (
     <div
+      ref={liftCookieBanner}
       className="md:hidden fixed left-0 right-0 z-40 px-4 pointer-events-none"
       style={{
         bottom: "calc(3.5rem + env(safe-area-inset-bottom) + 12px)",

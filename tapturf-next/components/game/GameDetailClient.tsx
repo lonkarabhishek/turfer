@@ -9,10 +9,13 @@ import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from 
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { GameRequestCard } from "./GameRequestCard";
 import { GameDistance } from "./GameDistance";
+import { GameMap } from "./GameMap";
+import { mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
+import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 
 /** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */
 function waNumber(phone: string): string {
@@ -432,18 +435,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                   <ChevronRight className="w-5 h-5 text-primary-300 shrink-0" />
                 </Link>
                 {mapSrc && (
-                <div className="h-[220px]">
-                  <iframe
+                  <GameMap
                     src={mapSrc}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    title="Game location on Google Maps"
+                    openHref={mapsSearchUrl({ lat: game.turfs.lat, lng: game.turfs.lng, name: game.turfs.name, address: game.turfs.address })}
                   />
-                </div>
                 )}
               </div>
             );
@@ -658,6 +653,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       {/* MOBILE FIXED BOTTOM CTA — positioned above MobileNav */}
       {/* ═══════════════════════════════════════════════════════ */}
       <div
+        ref={liftCookieBanner}
         className="fixed left-0 right-0 bg-white border-t border-primary-200 p-3 lg:hidden z-30"
         style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
       >

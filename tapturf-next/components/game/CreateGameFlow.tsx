@@ -13,6 +13,7 @@ import { searchTurfs } from "@/lib/queries/users";
 import { TimeSlotSheet } from "./TimeSlotSheet";
 import { GameDraftBox } from "./GameDraftBox";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
+import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 import type { GamePrefill } from "@/lib/ai/gameDraft";
 import type { CreateGameData } from "@/types/game";
 
@@ -864,6 +865,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
           {/* Sticky bottom CTA — floats above the floating pill mobile nav (~90px) */}
           {step === 2 && (
             <div
+              ref={liftCookieBanner}
               className="fixed left-0 right-0 z-40 bg-white border-t border-primary-200 px-4 py-3 md:bottom-0"
               style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
             >
@@ -878,6 +880,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
           )}
           {step === 3 && (
             <div
+              ref={liftCookieBanner}
               className="fixed left-0 right-0 z-40 bg-white border-t border-primary-200 px-4 py-3 md:bottom-0"
               style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
             >

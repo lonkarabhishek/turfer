@@ -16,6 +16,7 @@ import {
   type CitySource,
 } from "@/lib/city";
 import { trackCity } from "@/lib/analytics/city";
+import { analyticsAllowed } from "@/lib/consent";
 import { setPendingCity } from "./cityPending";
 
 const MIRROR = "tapturf_city_v1";
@@ -114,7 +115,8 @@ export function CitySync() {
       try {
         if (c.kind === "city" && localStorage.getItem(MIRROR) !== c.city) localStorage.setItem(MIRROR, c.city);
       } catch { /* ignore */ }
-      if ((c.kind === "city" && c.src === "geo") || c.kind === "unknown") {
+      // GA's city_detected, once per detected city: its mark is kept only with consent (lib/consent.ts).
+      if (analyticsAllowed() && ((c.kind === "city" && c.src === "geo") || c.kind === "unknown")) {
         try {
           if (localStorage.getItem("tapturf_city_detect_logged") !== raw) {
             trackCity("city_detected", { city: c.kind === "city" ? c.city : "unknown", method: "ip" });
