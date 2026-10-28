@@ -34,7 +34,7 @@ export function forCard(t: Turf): Turf {
     price_unit: t.price_unit,
     slot_minutes: t.slot_minutes,
     is_24x7: t.is_24x7,
-    // Only true is sent: the card shows "Managed by the owner".
+    // Only true is sent: the card shows the Owner-managed mark.
     claimed: t.claimed ? true : null,
   };
   for (const k of Object.keys(out)) if (out[k] == null) delete out[k];

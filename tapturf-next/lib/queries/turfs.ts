@@ -37,7 +37,7 @@ const CARD_COLUMNS = [
   "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria", "equipment_provided",
   // AI cover pass: photos judged unusable are dropped from images below.
   "image_review",
-  // An owner manages it on myTapturf: the card's Managed by the owner mark.
+  // An owner manages it on myTapturf: the card's Owner-managed mark.
   "claimed",
 ].join(", ");
 
@@ -176,6 +176,8 @@ export function transformTurf(raw: any): Turf {
     review_summary: toPlayersSay(raw.review_summary),
     pricing_bands: toBands(raw.pricing_bands),
     price_owner_confirmed: raw.price_owner_confirmed ?? null,
+    // Turf pages only (turf_page returns the whole row); list rows leave it out.
+    price_verified_at: typeof raw.price_verified_at === "string" ? raw.price_verified_at : null,
     formats: Array.isArray(raw.formats) ? raw.formats.filter((f: unknown): f is string => typeof f === "string" && !!f.trim()) : null,
     has_nets: raw.has_nets ?? null,
     good_to_know: typeof raw.good_to_know === "string" && raw.good_to_know.trim() ? raw.good_to_know.trim() : null,

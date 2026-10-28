@@ -79,7 +79,7 @@ export function MyTurf({ id }: { id: string }) {
           Public page <ExternalLink className="w-3.5 h-3.5" />
         </Link>
       </div>
-      {/* "Managed by @you" at the foot of the public page: whether it shows, or how to make it show. */}
+      {/* "Managed by @you" on the public page (under the name and in the Owner-managed panel): whether it shows, or how to make it show. */}
       <ManagerNameNote className="mt-3" turfName={t.name} turfId={t.id} pageHref={turfPath(t)} />
 
       {/* Period */}

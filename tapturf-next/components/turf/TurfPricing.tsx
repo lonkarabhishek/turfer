@@ -13,6 +13,8 @@ import {
   showsPriceBands,
 } from "@/lib/utils/prices";
 import { publicLink } from "@/lib/utils/bookingApps";
+import { ownerPriceText, type OwnerPriceNote } from "@/lib/turfPage/owner";
+import { OwnerMark } from "./OwnerMark";
 import { PriceBands } from "./PriceBands";
 import { SuggestInfoButton } from "./TurfSuggestions";
 
@@ -35,11 +37,14 @@ export function TurfPricing({
   claimed = false,
   contact,
   playerPrice = null,
+  priceNote = null,
 }: {
   turf: Turf;
   claimed?: boolean;
   contact: TurfContact;
   playerPrice?: PlayerPrice;
+  /** The owner's own prices on a claimed turf, and when they set them (lib/turfPage/owner.ts). */
+  priceNote?: OwnerPriceNote | null;
 }) {
   // Listed prices by format and time band are the richest we have,
   // unless the owner set their own on myTapturf: theirs win.
@@ -142,7 +147,16 @@ export function TurfPricing({
   return (
     <div className="section-divider">
       <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
-      {ownerSet && <p className="-mt-3 mb-4 text-[13px] text-accent-700 font-medium">Prices confirmed by the turf</p>}
+      {/* A claimed turf: the owner's mark and when they set them. Owner prices on
+          a turf whose claim ended: confirmed by the turf, with no mark. */}
+      {ownerSet && priceNote ? (
+        <p className="-mt-3 mb-4 flex items-center gap-1.5 text-[13px] font-semibold text-accent-800">
+          <OwnerMark size={16} />
+          {ownerPriceText(priceNote, "long")}
+        </p>
+      ) : (
+        ownerSet && <p className="-mt-3 mb-4 text-[13px] text-accent-700 font-medium">Prices confirmed by the turf</p>
+      )}
       <div className="overflow-x-auto rounded-2xl border border-cream-300">
         <table className="w-full">
           <thead>

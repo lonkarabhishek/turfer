@@ -4,11 +4,12 @@ import { AskAboutButton } from "@/components/ask/AskAboutButton";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
-import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
+import { ChevronRight, Flame, KeyRound, MapPin, Star } from "lucide-react";
 import { getTopTurfKeys } from "@/lib/queries/turfs";
 import { loadTurfPage } from "@/lib/queries/turfPage";
 import { getTurfManagers } from "@/lib/queries/turfManagers";
 import { NO_MANAGERS } from "@/lib/turfPage/managers";
+import { ownerPriceNote, ownerPriceText } from "@/lib/turfPage/owner";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { playerPriceRange, positivePrice, priceRangeText, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone, turfContact } from "@/lib/utils/seo";
@@ -27,7 +28,10 @@ import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { TurfReviews } from "@/components/turf/TurfReviews";
-import { TurfManagedBy } from "@/components/turf/TurfManagedBy";
+import { OwnerBadge } from "@/components/turf/OwnerBadge";
+import { OwnerInvite, OwnerPanel } from "@/components/turf/OwnerPanel";
+import { OwnerMark } from "@/components/turf/OwnerMark";
+import { ClaimHint, ClaimInvite } from "@/components/turf/ClaimInvite";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
@@ -115,10 +119,15 @@ export default async function TurfDetailPage({
   if (!page) notFound();
   const { turf, claimed } = page;
   if (turf.slug && key !== turf.slug) permanentRedirect(turfPath(turf));
-  // Who runs a claimed turf, by username, for the line at the foot of the
-  // page. Read only for claimed turfs; never fails the page (no line; a
-  // read that failed for now keeps this copy a minute, not a day).
+  // Who runs a claimed turf, by username, for "by @name" under the name
+  // and the Owner-managed panel. Read only for claimed turfs; never fails
+  // the page (no names; a read that failed for now keeps this copy a
+  // minute, not a day).
   const managers = claimed ? await getTurfManagers(turf.id) : NO_MANAGERS;
+  // The owner's own prices on a claimed turf, dated in India by when they
+  // last set them (null otherwise). Dated against this render: the page
+  // lives a day at most, so "last set" may turn a day late, never early.
+  const priceNote = ownerPriceNote(turf, claimed, page.renderedAt);
 
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);
@@ -211,11 +220,8 @@ export default async function TurfDetailPage({
           <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
             {meta.name}
           </h1>
-          {claimed && (
-            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-50 px-2.5 h-6 text-[12px] font-semibold text-accent-700">
-              <BadgeCheck className="w-3.5 h-3.5" /> Managed by the owner
-            </p>
-          )}
+          {/* Owner-managed, and by whom; it jumps to the panel that says what it means. */}
+          {claimed && <OwnerBadge managers={managers} />}
           <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
             {turf.rating > 0 ? (
               <>
@@ -254,7 +260,20 @@ export default async function TurfDetailPage({
                   ? "Reported prices below"
                   : "Prices not listed yet"}
             </span>
-            {hoursLine && <> · {hoursLine}</>}
+            {sidebarPrice.kind === "real" && priceNote && (
+              <span className="text-primary-500">
+                , from the owner
+                {/* Dated when old, as the sidebar and Pricing say it (the date kept whole). */}
+                {priceNote.stale && priceNote.date && (
+                  <>
+                    {" "}
+                    (last set <span className="whitespace-nowrap">{priceNote.date}</span>)
+                  </>
+                )}
+              </span>
+            )}
+            {/* No line break inside a time range ("5:00 AM – 12:00 AM"); the line may break between ranges. */}
+            {hoursLine && <> · {hoursLine.replace(/\d{1,2}:\d{2} [AP]M – \d{1,2}:\d{2} [AP]M/g, (r) => r.replace(/ /g, "\u00a0"))}</>}
           </p>
 
           <div className="mt-3 md:hidden">
@@ -294,6 +313,9 @@ export default async function TurfDetailPage({
               })}
             </div>
           )}
+
+          {/* An unclaimed turf: one quiet line for its owner, down to the invite. */}
+          {!claimed && <ClaimHint />}
         </div>
 
         {/* Image gallery */}
@@ -303,24 +325,11 @@ export default async function TurfDetailPage({
         <div className="mt-10 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-12">
           {/* Left content */}
           <div>
-            {/* Managed by section */}
-            {turf.owner_name && (
-              <div className="flex items-center gap-4 pb-6 border-b border-cream-300">
-                <div className="w-12 h-12 rounded-full bg-primary-600 flex items-center justify-center shrink-0">
-                  <User className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-primary-800 font-serif">
-                    Managed by {turf.owner_name}
-                  </h2>
-                  {turf.sports.length > 0 && (
-                    <p className="text-sm text-primary-400">
-                      {turf.sports.join(" · ")}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* What Owner-managed means, first on a claimed turf's page. The
+                old "Managed by <owner_name>" heading is gone: on an unclaimed
+                page it said someone managed a turf that asks "Is this your
+                turf?" further down. */}
+            {claimed && <OwnerPanel managers={managers} priceNote={priceNote} className="mb-7" />}
 
             {/* Description */}
             {description && (
@@ -333,7 +342,7 @@ export default async function TurfDetailPage({
 
             <TurfAmenities turf={turf} />
             <TurfDetails turf={turf} />
-            <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} />
+            <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
             <TurfGames
@@ -353,26 +362,6 @@ export default async function TurfDetailPage({
               turfUrl={turfUrl(turf)}
               initial={page.suggestions}
             />
-            {/* A claimed turf shows no "request access" link: its owner adds people. */}
-            {!claimed && (
-              <div className="mt-6 rounded-2xl border border-primary-200 bg-white p-4 md:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-primary-900">Is this your turf?</p>
-                  <p className="mt-0.5 text-[14px] text-primary-600 leading-snug">
-                    Claim this listing to see how many players view and call you, and keep your prices and hours right. Free.
-                    Have the phone with the number on this page? A code to it gets you in at once.
-                  </p>
-                </div>
-                <Link
-                  href={`/my?claim=${turf.id}`}
-                  prefetch={false}
-                  className="press-tight shrink-0 inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors"
-                >
-                  Claim this listing
-                </Link>
-              </div>
-            )}
-
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to
                 search on). TurfMap itself returns null when it can't
@@ -413,8 +402,13 @@ export default async function TurfDetailPage({
               playersSay={playersSay}
             />
 
-            {/* "Managed by @name": the people who run this claimed turf, last on the page. */}
-            <TurfManagedBy managers={managers} />
+            {/* The owner's lines come last, after the map and the reviews
+                players came for. An unclaimed turf: the invite for its owner
+                (ClaimHint under the sport chips jumps here). A claimed turf:
+                one line for the owner of another turf, and no "request
+                access" link (its owner adds people). */}
+            {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} />}
+            {claimed && <OwnerInvite />}
           </div>
 
           {/* Right sidebar — sticky booking card */}
@@ -428,6 +422,12 @@ export default async function TurfDetailPage({
                       {sidebarPrice.min !== sidebarPrice.max ? `–₹${sidebarPrice.max}` : ""}
                     </span>
                     <span className="text-base text-primary-400 font-normal"> {sidebarPrice.unit}</span>
+                    {priceNote && (
+                      <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-accent-800">
+                        <OwnerMark size={14} />
+                        {ownerPriceText(priceNote, "short")}
+                      </p>
+                    )}
                   </div>
                 ) : sidebarPrice.kind === "reported" ? (
                   <div>
@@ -505,13 +505,22 @@ export default async function TurfDetailPage({
               <CreateGameHereButton turfId={turf.id} turfName={turf.name} />
 
               {!membersOnly && (
-                <p className="text-xs text-center text-primary-300 mt-4">
+                <p className="text-xs text-center text-primary-500 mt-4">
                   No booking fee. Contact turf directly to reserve your slot.
                 </p>
               )}
-              <p className="text-xs text-center text-primary-300 mt-2">
-                Own this turf or spotted a mistake?{" "}
-                <a href={CONTACT_MAILTO} className="underline underline-offset-2 hover:text-primary-500">
+              <p className="text-xs text-center text-primary-500 mt-2 leading-relaxed">
+                {!claimed && (
+                  <>
+                    Own this turf?{" "}
+                    <a href="#claim" className="font-semibold text-accent-800 hover:underline underline-offset-2">
+                      Claim it free
+                    </a>
+                    {" · "}
+                  </>
+                )}
+                Spotted a mistake?{" "}
+                <a href={CONTACT_MAILTO} className="underline underline-offset-2 hover:text-primary-800">
                   {CONTACT_EMAIL}
                 </a>
               </p>

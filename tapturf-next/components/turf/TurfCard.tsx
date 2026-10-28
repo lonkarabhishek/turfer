@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { priceRangeText, summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
 import { turfPath } from "@/lib/utils/turfPath";
 import { PhotoImg } from "@/components/ui/PhotoImg";
+import { OwnerMark } from "./OwnerMark";
 
 interface TurfCardProps {
   turf: Turf;
@@ -135,7 +136,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
         {/* Photo. Only the pager dots sit on top; everything else lives
             below so the picture reads clean, App Store style. The
             trending pick gets a thin gold frame and one badge; a turf its
-            owner manages on myTapturf gets a small label under it. */}
+            owner manages on myTapturf gets the green Owner-managed label
+            under it (no frame and no motion: that stays the trending pick's). */}
         <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
         <div
           className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100"
@@ -157,9 +159,9 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               )}
               {turf.claimed && (
                 // The h3 says it once for screen readers, next to the name.
-                <span aria-hidden className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-accent-700 shadow-soft">
-                  <BadgeCheck className="w-3.5 h-3.5" />
-                  Managed by owner
+                <span aria-hidden className="inline-flex h-6 items-center gap-1 rounded-full bg-white/95 pl-1 pr-2.5 text-[11px] font-semibold text-accent-800 shadow-soft">
+                  <OwnerMark size={16} />
+                  Owner-managed
                 </span>
               )}
             </div>
@@ -253,8 +255,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               <span className="truncate">{turf.name}</span>
               {turf.claimed && (
                 <>
-                  <BadgeCheck className="w-4 h-4 shrink-0 text-accent-600" aria-hidden />
-                  <span className="sr-only">, managed by the owner</span>
+                  <OwnerMark size={16} />
+                  <span className="sr-only">, owner-managed</span>
                 </>
               )}
             </h3>
