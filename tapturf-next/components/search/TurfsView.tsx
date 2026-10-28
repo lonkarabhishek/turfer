@@ -9,6 +9,7 @@ import { cityLineFor } from "@/lib/cityLine";
 import { CityLine } from "@/components/city/CityLine";
 import { TurfListingClient } from "./TurfListingClient";
 import { TurfIndex, byName, type IndexGroup } from "./TurfIndex";
+import { Fold } from "@/components/ui/Fold";
 import { plural } from "@/lib/home/format";
 import { DEFAULT_FILTERS, FIRST_PAGE, availableSports, pageOf } from "@/lib/turfList/query";
 import { LIST_PREPAINT_JS } from "@/lib/turfList/client";
@@ -55,6 +56,7 @@ export async function TurfsView({ requested }: { requested: string | null }) {
     for (const t of sorted) ((t.city && byCity.get(t.city)) || rest).turfs.push(t);
     groups = [...byCity.values(), rest];
   }
+  const others = cityId ? byDistanceFrom(cityId, live.filter((c) => c.id !== cityId)) : live;
   const indexTitle = cityId
     ? `All ${n.toLocaleString("en-IN")} ${n === 1 ? "turf" : "turfs"} in ${scope.kind === "city" ? scope.label : ""}, A to Z`
     : `All ${n.toLocaleString("en-IN")} turfs, by city, A to Z`;
@@ -95,14 +97,18 @@ export async function TurfsView({ requested }: { requested: string | null }) {
       <TurfIndex title={indexTitle} groups={groups} withArea={!!cityId} />
 
       {/* Crawlable links to every city page. In a city view: the other
-          cities, nearest first; otherwise biggest first. */}
-      {live.length > 0 && (
-        <section id="turfs-by-city" className="mt-14" style={{ scrollMarginTop: "4.5rem" }}>
-          <h2 className="text-[20px] font-display text-primary-900 mb-4">
-            {cityId ? "Turfs in other cities" : "Turfs by city"}
-          </h2>
+          cities, nearest first; otherwise biggest first. Folded: about
+          180 links is a wall on a phone, but every one stays in the
+          server HTML for crawlers. */}
+      {others.length > 0 && (
+        <Fold
+          id="turfs-by-city"
+          className="mt-6"
+          title={cityId ? "Turfs in other cities" : "Turfs by city"}
+          sub={cityId ? `${plural(others.length, "city", "cities")}, nearest first` : `${plural(others.length, "city", "cities")}, biggest first`}
+        >
           <ul className="flex flex-wrap gap-2">
-            {(cityId ? byDistanceFrom(cityId, live.filter((c) => c.id !== cityId)) : live).map((c) => (
+            {others.map((c) => (
               <li key={c.id}>
                 <Link href={`/${c.id}`} className={PILL}>
                   Turfs in {c.label}
@@ -111,7 +117,7 @@ export async function TurfsView({ requested }: { requested: string | null }) {
               </li>
             ))}
           </ul>
-        </section>
+        </Fold>
       )}
     </div>
   );

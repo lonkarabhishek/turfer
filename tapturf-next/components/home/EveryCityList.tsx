@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { plural } from "@/lib/home/format";
 import type { HomeCityRow } from "@/lib/home/types";
+import { Fold } from "@/components/ui/Fold";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const SHOWN_FIRST = 6;
@@ -40,10 +41,12 @@ function CityRow({ c, showKm }: { c: Row; showKm: boolean }) {
 /**
  * Every city on TapTurf with its live count: the first six as rows with
  * their three top turf pills, the rest as a compact pill cloud behind a
- * toggle. In a city view it is "Other cities", nearest first, so a small
+ * toggle. In a city view it is "Turfs in other cities", nearest first, so a small
  * city's neighbours come first; in the all-India view, biggest first.
  * Pure server markup: the SEO backbone of the home, so every city link
- * is in the HTML.
+ * is in the HTML. `folded` (the city view) puts the whole list behind one
+ * closed bar, first six rows and the rest together inside: a visitor came
+ * for their own city, and the links are in the HTML all the same.
  */
 export function EveryCityList({
   title,
@@ -51,16 +54,32 @@ export function EveryCityList({
   rows,
   total,
   showKm = false,
+  folded = false,
 }: {
   title: string;
   caption: string;
   rows: Row[];
   total: number;
   showKm?: boolean;
+  folded?: boolean;
 }) {
   if (rows.length === 0) return null;
   const first = rows.slice(0, SHOWN_FIRST);
   const rest = rows.slice(SHOWN_FIRST);
+  if (folded) {
+    return (
+      <Fold id="all-cities" title={title} sub={caption}>
+        <nav aria-label={title}>
+          <ul className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 gap-x-6">
+            {first.map((c) => (
+              <CityRow key={c.id} c={c} showKm={showKm} />
+            ))}
+          </ul>
+          {rest.length > 0 && <RestPills rows={rest} className="mt-5" />}
+        </nav>
+      </Fold>
+    );
+  }
   return (
     <nav id="all-cities" aria-labelledby="all-cities-h" style={{ scrollMarginTop: "4.5rem" }}>
       <h2 id="all-cities-h" className="font-display text-2xl md:text-3xl text-primary-800 tracking-tight">
@@ -79,21 +98,28 @@ export function EveryCityList({
             <span className="hidden group-open:inline">Show fewer</span>
             <ChevronDown className="w-4 h-4 transition-transform duration-200 group-open:rotate-180" />
           </summary>
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {rest.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/${c.id}`}
-                  className="inline-flex items-center h-10 px-3.5 rounded-full bg-primary-50 hover:bg-primary-100 text-[14px] font-semibold text-primary-900 press-tight focus-neon transition-colors"
-                >
-                  {c.label}
-                  <span className="ml-1.5 text-primary-500 tabular-nums font-normal">{c.n.toLocaleString("en-IN")}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <RestPills rows={rest} className="mt-4" />
         </details>
       )}
     </nav>
+  );
+}
+
+/** The cities after the first six, as a compact pill cloud. */
+function RestPills({ rows, className }: { rows: Row[]; className: string }) {
+  return (
+    <ul className={`${className} flex flex-wrap gap-2`}>
+      {rows.map((c) => (
+        <li key={c.id}>
+          <Link
+            href={`/${c.id}`}
+            className="inline-flex items-center h-10 px-3.5 rounded-full bg-primary-50 hover:bg-primary-100 text-[14px] font-semibold text-primary-900 press-tight focus-neon transition-colors"
+          >
+            {c.label}
+            <span className="ml-1.5 text-primary-500 tabular-nums font-normal">{c.n.toLocaleString("en-IN")}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

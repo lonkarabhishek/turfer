@@ -23,7 +23,7 @@ import { jsonLdHtml } from "@/lib/seo/jsonLd";
  * cookies or headers, so every variant stays a static ISR page.
  *
  * City view: that city's hero, top turfs, games and sports, then every
- * other city nearest first under "Other cities". All-India view: the
+ * other city nearest first under "Turfs in other cities" (folded). All-India view: the
  * national picks with each city named, then every city biggest first.
  */
 export async function HomeView({ requested }: { requested: string | null }) {
@@ -63,11 +63,12 @@ export async function HomeView({ requested }: { requested: string | null }) {
             />
           ) : (
             <EveryCityList
-              title="Other cities"
-              caption={`${plural(s.cityList.total, "city", "cities")}, nearest first.`}
+              title="Turfs in other cities"
+              caption={`${plural(s.cityList.total, "city", "cities")}, nearest first`}
               rows={s.cityList.rows}
               total={s.cityList.total}
               showKm
+              folded
             />
           )}
         </section>
