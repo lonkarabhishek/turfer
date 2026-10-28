@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useAsk } from "./AskProvider";
 import { BlogAnswerCard } from "./BlogAnswer";
-import { ArrowRight, BadgeCheck, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
+import { ArrowRight, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
+import { OwnerMark } from "@/components/turf/OwnerMark";
 import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
@@ -54,8 +55,8 @@ export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distan
           <span className="truncate">{turf.name}</span>
           {turf.claimed && (
             <>
-              <BadgeCheck className="w-3.5 h-3.5 shrink-0 text-accent-600" aria-hidden />
-              <span className="sr-only">, managed by the owner</span>
+              <OwnerMark size={14} />
+              <span className="sr-only">, owner-managed</span>
             </>
           )}
         </p>

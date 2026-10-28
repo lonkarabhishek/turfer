@@ -169,6 +169,72 @@ button, a, [role="button"], summary, label[for] {
   color: transparent;
 }
 
+/* ─── Owner-managed (a claimed turf) ───────────────────
+   The green twin of the spotlight. Green = the owner keeps this page;
+   gold = trending; blue = a person's tick. Literal hex values that match
+   the accent tokens, as the spotlight classes do. The pill and the panel
+   get a fine green gradient rim; the medallion a ring round the mark. */
+.owner-pill {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, #ffffff, #F0FDF4) padding-box,
+    linear-gradient(135deg, #86EFAC 0%, #16A34A 38%, #BBF7D0 62%, #15803D 100%) border-box;
+}
+.owner-surface {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, #F0FDF4 0%, #ffffff 72%) padding-box,
+    linear-gradient(135deg, #86EFAC 0%, #16A34A 38%, #BBF7D0 62%, #15803D 100%) border-box;
+  box-shadow: 0 10px 30px rgba(21, 128, 61, 0.10), 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.owner-medallion {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 9999px;
+  background: conic-gradient(from 210deg, #BBF7D0, #16A34A 22%, #DCFCE7 42%, #15803D 64%, #86EFAC 84%, #BBF7D0);
+  box-shadow: 0 6px 18px rgba(21, 128, 61, 0.20), 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.owner-medallion > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 28%, #ffffff 0%, #F0FDF4 62%, #DCFCE7 100%);
+}
+/* One shine across the badge under a claimed turf's name, once, half a
+   second after load: transform only, never loops, off under reduced motion. */
+.owner-sheen {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.owner-sheen::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.6) 50%, transparent 70%);
+  transform: translateX(-130%);
+  animation: owner-sheen 1.1s 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) 1 both;
+}
+@keyframes owner-sheen {
+  to { transform: translateX(130%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .owner-sheen::after { animation: none; display: none; }
+}
+@media (prefers-contrast: more) {
+  .owner-pill,
+  .owner-surface { background: #ffffff; border-color: #166534; }
+}
+@media (forced-colors: active) {
+  .owner-pill,
+  .owner-surface { border-color: CanvasText; }
+}
+
 /* Section dividers — hairline on light */
 .section-divider {
   border-top: 1px solid rgba(15, 23, 42, 0.08);
