@@ -1,11 +1,12 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
-import { createRowStore, type ListMeta, type ListPart, type LogLevel, type RowStore } from "@/lib/cache/rowStore";
+import { createRowStore, type ListMeta, type ListPart, type LogLevel, type RowStore, type RowsRead } from "@/lib/cache/rowStore";
 import { createPartReader, dbTag } from "@/lib/cache/partRoute";
 import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
 import { cleanPriceMentions, cleanVenueName } from "@/lib/utils/bookingApps";
 import { compareTopRated } from "@/lib/utils/ranking";
+import { forCard } from "@/lib/utils/cardTurf";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { PriceBand, Turf } from "@/types/turf";
@@ -608,7 +609,7 @@ const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shar
  * gives the page the "turf-data" tag, so the next purge still reaches a
  * page rendered from an older copy. Such a page is kept a minute only.
  */
-const activeRead = cache(async (): Promise<{ rows: readonly Row[]; stale: boolean }> => {
+const activeRead = cache(async (): Promise<RowsRead<Row>> => {
   let meta: ListMeta | null;
   try {
     meta = await listMeta();
@@ -644,6 +645,43 @@ export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Tur
   // Default order is "top rated" with the minimum-review rule, so a
   // 5.0 from a handful of reviews doesn't lead city / listing pages.
   return data.map((r) => transformTurf(r as never)).sort(compareTopRated);
+}
+
+export type CardTurfs = {
+  /** The list snapshot's version of these rows (0: read from the table). */
+  v: number;
+  /** An older copy than the current version (its read failed); see turfRowsStale. */
+  stale: boolean;
+  /** forCard() of every active turf in scope, top rated first: exactly getAllActiveTurfs(city), cut down. Frozen. */
+  turfs: readonly Turf[];
+};
+
+// One projection per copy of the rows (the store hands out the same frozen
+// array until the version moves) and scope ("" for all of India), per
+// bundle: the page and the list route each keep their own. At most one
+// list per live city plus all of India, about two copies of the card rows.
+let cardMemo: { rows: readonly Row[]; byScope: Map<string, readonly Turf[]> } | null = null;
+
+/**
+ * The turfs in scope (a city, or null for all of India) as card rows
+ * (forCard), in getAllActiveTurfs(city) order and picked the same way (by
+ * the row's own city), with the version they came from: what the /turfs
+ * listing ranks, on the page (its first cards) and in GET /api/turfs/list
+ * (every later batch), so the two agree. Built once per version and scope
+ * per process, not per request.
+ */
+export async function getCardTurfs(city: CityId | null): Promise<CardTurfs> {
+  const got = await activeRead();
+  if (cardMemo?.rows !== got.rows) cardMemo = { rows: got.rows, byScope: new Map() };
+  const key = city && isCity(city) ? city : "";
+  let turfs = cardMemo.byScope.get(key);
+  if (!turfs) {
+    const rows = key ? got.rows.filter((r) => r.city === key) : got.rows;
+    turfs = Object.freeze(rows.map((r) => forCard(transformTurf(r as never))).sort(compareTopRated));
+    // A city with no turfs (any slug can be asked for) is not kept: the map stays one entry per real city.
+    if (turfs.length) cardMemo.byScope.set(key, turfs);
+  }
+  return { v: got.v, stale: got.stale, turfs };
 }
 
 /**
