@@ -171,11 +171,11 @@ test("a named venue is never swapped for local turfs: the cities and a guessed s
   assert.ok(!dropOrder([], false).includes("sport") && !dropOrder([], false).includes("city"));
 });
 
-test("venue reply says which city, plainly, when it isn't the player's", () => {
+test("venue reply says which city, plainly", () => {
   const dn = { name: "DN Parande Football And Cricket Turf", area: "Dhanori", city: "Pune" };
   assert.equal(venueReply({ label: "DN Parande", shown: [dn], home: "Hyderabad", asked: null }), "DN Parande Football And Cricket Turf is in Dhanori, Pune.");
-  // In the player's own city: the reading's reply stands.
-  assert.equal(venueReply({ label: "DN Parande", shown: [dn], home: "Pune", asked: null }), null);
+  // In the player's own city too, not the reading's "Let me find …".
+  assert.equal(venueReply({ label: "DN Parande", shown: [dn], home: "Pune", asked: null }), "DN Parande Football And Cricket Turf is in Dhanori, Pune.");
   const prime = ["Mumbai", "Ballari", "Malegaon", "Pune", "Salem"].map((city) => ({ name: "Prime Turf", area: null, city }));
   assert.equal(venueReply({ label: "Prime Turf", shown: prime, home: "Hyderabad", asked: null }), "5 venues match Prime Turf, in Mumbai, Ballari, Malegaon and 2 more cities.");
   const hot = ["Kharadi", "Undri"].map((area) => ({ name: `Hotfut ${area}`, area, city: "Pune" }));

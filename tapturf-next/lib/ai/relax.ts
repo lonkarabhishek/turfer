@@ -207,12 +207,12 @@ const namesOf = (shown: readonly VenuePlace[]) => shown.map((v) => v.name).filte
 
 /**
  * The reply over the venues a search named (applyAskFilters' named
- * path), when they are not where the player is: which city each is in,
- * plainly. Null when they are all in the player's city: the parsed
- * reply stands. "DN Parande Football And Cricket Turf is in Dhanori,
- * Pune." / "There's no Hotfut in Nashik on TapTurf yet. 4 venues match
- * Hotfut, all in Pune." / "11 venues match Prime Turf, in Mumbai,
- * Ballari, Malegaon and 6 more cities."
+ * path): which city each is in, plainly. "DN Parande Football And
+ * Cricket Turf is in Dhanori, Pune." / "There's no Hotfut in Nashik on
+ * TapTurf yet. 4 venues match Hotfut, all in Pune." / "11 venues match
+ * Prime Turf, in Mumbai, Ballari, Malegaon and 6 more cities." Also when
+ * they are all in the player's city, not the parsed reply: the model
+ * wrote "Let me find Hotfut in Gachibowli." over the card (28 Oct).
  *
  * With `closest` (none by that name in the player's city), in the order
  * the cards are: no turf by that name here, the closest names here,
@@ -243,7 +243,6 @@ export function venueReply(i: VenueReplyInput): string | null {
         : `Similar names are in ${cityList(cities)}.`;
     return `${noneIn(called, i.home)}${near} ${where}`;
   }
-  if (!i.asked && i.home && cities.length === 1 && cities[0] === i.home) return null;
   const label = cap(i.label);
   const lead = i.asked && !cities.includes(i.asked) ? `There's no ${label} in ${i.asked} on TapTurf yet. ` : "";
   if (i.shown.length === 1) return `${lead}${i.shown[0].name} is in ${placeOf(i.shown[0])}.`;
