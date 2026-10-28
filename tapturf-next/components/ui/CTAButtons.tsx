@@ -21,6 +21,12 @@ interface CTAButtonsProps {
   variant?: "inline" | "fixed-bottom";
   /** Sidebar call button text. "Call to ask" for members-only clubs. */
   callLabel?: string;
+  /**
+   * The turf's page as the WhatsApp message links it (turfUrl, by slug).
+   * From the server, so the link the page renders with is the one it
+   * hydrates with (turfPageUrl reads the address bar, which the server can't).
+   */
+  pageUrl?: string;
 }
 
 /**
@@ -38,6 +44,7 @@ export function CTAButtons({
   address,
   variant = "inline",
   callLabel = "Call to Book",
+  pageUrl,
 }: CTAButtonsProps) {
   const { user, login } = useAuth();
   const normalized = normalizeIndianPhone(phone);
@@ -50,7 +57,7 @@ export function CTAButtons({
   const whatsappUrl = wa
     ? buildWhatsAppLink({
         phone: wa.digits,
-        text: generateTurfInquiryMessage({ name: turfName, address, url: turfPageUrl(turfId) }),
+        text: generateTurfInquiryMessage({ name: turfName, address, url: pageUrl ?? turfPageUrl(turfId) }),
       })
     : null;
 

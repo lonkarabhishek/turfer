@@ -408,7 +408,7 @@ export default async function TurfDetailPage({
                 one line for the owner of another turf, and no "request
                 access" link (its owner adds people). */}
             {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} />}
-            {claimed && <OwnerInvite />}
+            {claimed && <OwnerInvite managers={managers} />}
           </div>
 
           {/* Right sidebar — sticky booking card */}
@@ -495,6 +495,7 @@ export default async function TurfDetailPage({
                   turfName={turf.name}
                   address={turf.address}
                   callLabel={membersOnly ? "Call to ask" : "Call to Book"}
+                  pageUrl={turfUrl(turf)}
                 />
               ) : (
                 <NoContactNotice />
@@ -543,6 +544,7 @@ export default async function TurfDetailPage({
           turfName={turf.name}
           address={turf.address}
           variant="fixed-bottom"
+          pageUrl={turfUrl(turf)}
         />
       ) : (
         <NoContactNotice variant="fixed-bottom" />
