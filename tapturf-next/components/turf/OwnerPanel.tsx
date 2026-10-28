@@ -7,9 +7,10 @@ import { OwnerMedallion } from "./OwnerMark";
 
 /**
  * What "Owner-managed" means, at the top of a claimed turf's page: who
- * runs it ("Managed by @a and @b", each with their tick; "Managed by the
- * owner" when nobody can be named), how TapTurf checked them, and, when
- * the prices are theirs, when they set them. #managed-by is where the
+ * runs it ("Managed by @a and @b", each with their tick; no such line
+ * when nobody can be named, so the heading stands alone), how TapTurf
+ * checked them, and, when the prices are theirs, when they set them.
+ * #managed-by is where the
  * badge under the name jumps to, and myTapturf's "See it" link too.
  * Says plainly that it is about who keeps the page, not a rating.
  */
@@ -24,27 +25,27 @@ export function OwnerPanel({ managers, priceNote, className = "" }: { managers: 
           <h2 id="owner-h" className="text-[20px] font-bold text-primary-900 font-serif leading-tight">
             Owner-managed
           </h2>
-          <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">
-            Managed by{" "}
-            {parts
-              ? parts.map((p, i) =>
-                  p.kind === "text" ? (
-                    <span key={i}>{p.text}</span>
-                  ) : (
-                    <span key={i} className="whitespace-nowrap">
-                      <Link
-                        href={`/u/${p.u}`}
-                        prefetch={false}
-                        className="font-semibold text-primary-800 hover:text-accent-700 hover:underline underline-offset-2"
-                      >
-                        @{p.u}
-                      </Link>
-                      {p.v && <VerifiedTick className="ml-0.5 align-[-0.15em]" />}
-                    </span>
-                  ),
-                )
-              : "the owner"}
-          </p>
+          {parts && (
+            <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">
+              Managed by{" "}
+              {parts.map((p, i) =>
+                p.kind === "text" ? (
+                  <span key={i}>{p.text}</span>
+                ) : (
+                  <span key={i} className="whitespace-nowrap">
+                    <Link
+                      href={`/u/${p.u}`}
+                      prefetch={false}
+                      className="font-semibold text-primary-800 hover:text-accent-700 hover:underline underline-offset-2"
+                    >
+                      @{p.u}
+                    </Link>
+                    {p.v && <VerifiedTick className="ml-0.5 align-[-0.15em]" />}
+                  </span>
+                ),
+              )}
+            </p>
+          )}
         </div>
       </div>
       <p className="mt-4 text-[15px] text-primary-800 leading-relaxed">
@@ -80,11 +81,12 @@ function Fact({ icon, title, children }: { icon: React.ReactNode; title: string;
 /**
  * The last line of a claimed turf's page, for the owner of another turf:
  * claiming theirs is free. Not a request to manage this one (its owner
- * adds people on myTapturf). Kept out of search snippets.
+ * adds people on myTapturf). Kept out of search snippets (a div: Google
+ * honours data-nosnippet on span, div and section only).
  */
 export function OwnerInvite() {
   return (
-    <p data-nosnippet className="section-divider text-[14px] text-primary-500">
+    <div data-nosnippet className="section-divider text-[14px] text-primary-500">
       Run a turf too?{" "}
       <Link
         href="/my"
@@ -94,6 +96,6 @@ export function OwnerInvite() {
         Claim yours, free
         <ArrowRight className="w-3.5 h-3.5" aria-hidden />
       </Link>
-    </p>
+    </div>
   );
 }

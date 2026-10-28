@@ -36,7 +36,7 @@ export function ClaimInvite({ turfId, turfName }: { turfId: string; turfName: st
       id="claim"
       data-nosnippet
       aria-labelledby="claim-h"
-      className="mt-6 scroll-mt-24 rounded-2xl border border-primary-200 bg-linear-to-b from-accent-50 via-white via-40% to-white p-5 md:p-7 md:grid md:grid-cols-[1fr_280px] md:grid-rows-[auto_1fr] md:gap-x-8 lg:block xl:grid"
+      className="mt-10 scroll-mt-24 rounded-2xl border border-primary-200 bg-linear-to-b from-accent-50 via-white via-40% to-white p-5 md:p-7 md:grid md:grid-cols-[1fr_280px] md:grid-rows-[auto_1fr] md:gap-x-8 lg:block xl:grid"
     >
       <div className="md:col-start-1 md:row-start-1">
         <p className="text-[13px] font-semibold text-accent-800">For the owner</p>

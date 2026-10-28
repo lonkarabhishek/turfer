@@ -260,8 +260,20 @@ export default async function TurfDetailPage({
                   ? "Reported prices below"
                   : "Prices not listed yet"}
             </span>
-            {sidebarPrice.kind === "real" && priceNote && <span className="text-primary-500">, from the owner</span>}
-            {hoursLine && <> · {hoursLine}</>}
+            {sidebarPrice.kind === "real" && priceNote && (
+              <span className="text-primary-500">
+                , from the owner
+                {/* Dated when old, as the sidebar and Pricing say it (the date kept whole). */}
+                {priceNote.stale && priceNote.date && (
+                  <>
+                    {" "}
+                    (last set <span className="whitespace-nowrap">{priceNote.date}</span>)
+                  </>
+                )}
+              </span>
+            )}
+            {/* No line break inside a time range ("5:00 AM – 12:00 AM"); the line may break between ranges. */}
+            {hoursLine && <> · {hoursLine.replace(/\d{1,2}:\d{2} [AP]M – \d{1,2}:\d{2} [AP]M/g, (r) => r.replace(/ /g, "\u00a0"))}</>}
           </p>
 
           <div className="mt-3 md:hidden">
@@ -350,10 +362,6 @@ export default async function TurfDetailPage({
               turfUrl={turfUrl(turf)}
               initial={page.suggestions}
             />
-            {/* An unclaimed turf: the invite for its owner. A claimed turf shows
-                no "request access" link: its owner adds people. */}
-            {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} />}
-
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to
                 search on). TurfMap itself returns null when it can't
@@ -394,7 +402,12 @@ export default async function TurfDetailPage({
               playersSay={playersSay}
             />
 
-            {/* A claimed turf's last line, for the owner of another turf. */}
+            {/* The owner's lines come last, after the map and the reviews
+                players came for. An unclaimed turf: the invite for its owner
+                (ClaimHint under the sport chips jumps here). A claimed turf:
+                one line for the owner of another turf, and no "request
+                access" link (its owner adds people). */}
+            {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} />}
             {claimed && <OwnerInvite />}
           </div>
 

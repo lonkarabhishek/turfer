@@ -16,8 +16,10 @@ export function OwnerBadge({ managers }: { managers: TurfManagers }) {
   const lead = managedByLead(managers);
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-2">
-      {/* 44px to tap, around a 28px pill; the ring is drawn on the pill. */}
-      <a href="#managed-by" className="group inline-flex min-h-11 -my-2 items-center rounded-full focus-visible:outline-none">
+      {/* 44px to tap, around a 28px pill; the ring is drawn on the pill only
+          (! beats the site-wide :focus-visible ring in globals.css, which is
+          unlayered and would draw a second, taller ring on the anchor). */}
+      <a href="#managed-by" className="group inline-flex min-h-11 -my-2 items-center rounded-full focus-visible:outline-none!">
         <span className="owner-pill owner-sheen inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-2.5 text-[13px] font-semibold text-accent-800 shadow-soft group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-600 group-focus-visible:outline-solid">
           <OwnerMark size={20} />
           <span className="whitespace-nowrap">Owner-managed</span>
