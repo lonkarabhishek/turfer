@@ -12,6 +12,7 @@ import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type Owner
 import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
 import { firstImageUrl, imageUrlForCard } from "@/lib/utils/images";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
+import { ManagerNameNote } from "./ManagerNameNote";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
@@ -100,13 +101,17 @@ export function MyHome() {
                   </li>
                 ))}
               </ul>
+              <RunsNote home={home} />
             </section>
           )}
 
           {me && home.matches.length > 0 && (
             <section className="mt-8">
               <h2 className="text-[13px] font-semibold text-primary-500 mb-1">Turfs that list your number</h2>
-              <p className="text-[13px] text-primary-500 mb-3">Your number {home.who.replace(/^(\d{5})(\d{5})$/, "$1 $2")} is on these listings, so you can open them straight away.</p>
+              <p className="text-[13px] text-primary-500 mb-3">
+                Your number {home.who.replace(/^(\d{5})(\d{5})$/, "$1 $2")} is on these listings, so you can open them straight away. A turf you open then
+                says &ldquo;Managed by @your-username&rdquo; on its page if you have a username.
+              </p>
               <ul className="space-y-2">
                 {home.matches.map((t) => (
                   me && <ClaimRow key={t.id} turf={t} me={me} onDone={load} instant />
@@ -130,6 +135,16 @@ export function MyHome() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 md:py-12">{children}</div>;
+}
+
+/** Under your turfs, once one is confirmed: a username puts "Managed by @you" on its page. */
+function RunsNote({ home }: { home: Extract<OwnerHome, { signed_in: true }> }) {
+  const active = home.turfs.filter((t) => t.status === "active");
+  // No account for this sign-in (an old claim made before claims named one): no username to pick yet.
+  if (active.length === 0 || ("account" in home && !home.account)) return null;
+  // owner_home's own read of the account (fresh); a database from before it sends none: the profile's.
+  const username = "account" in home ? (home.account?.username ?? null) : undefined;
+  return <ManagerNameNote className="mt-3" turfName={active.length === 1 ? cleanVenueName(active[0].name) : null} username={username} />;
 }
 
 function Thumb({ src }: { src: string | null }) {
@@ -503,6 +518,9 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
           <div className="rounded-xl bg-primary-50/60 px-3 py-2 text-[13px] text-primary-700">
             Claiming as <span className="font-semibold text-primary-900">{me.name || "your account"}</span>
             <span className="text-primary-500"> · {me.kind === "email" ? `Google, ${me.who}` : `phone, +91 ${spaced(me.who)}`}</span>
+            <span className="block mt-0.5 text-primary-500">
+              Once it&rsquo;s yours, the turf&rsquo;s page says &ldquo;Managed by @your-username&rdquo; if you have a username. Your number and email never show.
+            </span>
           </div>
 
           {!done && !pending && (

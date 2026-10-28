@@ -10,6 +10,7 @@ import { ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { EditListing } from "./EditListing";
 import { OwnerPhotos } from "./OwnerPhotos";
 import { PlayerReports } from "./PlayerReports";
+import { ManagerNameNote } from "./ManagerNameNote";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
@@ -78,6 +79,8 @@ export function MyTurf({ id }: { id: string }) {
           Public page <ExternalLink className="w-3.5 h-3.5" />
         </Link>
       </div>
+      {/* "Managed by @you" at the foot of the public page: whether it shows, or how to make it show. */}
+      <ManagerNameNote className="mt-3" turfName={t.name} turfId={t.id} pageHref={turfPath(t)} />
 
       {/* Period */}
       <div className="mt-6 inline-flex rounded-full bg-primary-100 p-1" role="tablist" aria-label="Period">
