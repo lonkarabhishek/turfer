@@ -76,6 +76,13 @@ function setup(
 
 const failures = (logs: Log[]) => logs.filter((l) => l.msg.startsWith("turf rows: read failed"));
 
+/** A point a load reaches: `hit()` marks it, `reached` resolves once it has (no fixed sleeps, so a busy machine can't reorder the steps). */
+function mark() {
+  let hit: () => void = () => {};
+  const reached = new Promise<void>((r) => (hit = r));
+  return { hit, reached };
+}
+
 test("concurrent callers make one load per version", async () => {
   const { db, store, logs } = setup();
   const got = await Promise.all(Array.from({ length: 20 }, () => store.rowsFor(db.meta())));
@@ -345,14 +352,16 @@ test("a load that part 0 moved to a newer build judges its fallback by that buil
   db.v = 2; // part 0 will say v2
   let release: () => void = () => {};
   const gate = new Promise<void>((r) => (release = r));
+  const atPart1 = mark();
   db.onPart = async (i) => {
     if (i === 1) {
+      atPart1.hit();
       await gate;
       throw new Error("TimeoutError");
     }
   };
   const a = store.read(old);
-  await new Promise((r) => setTimeout(r, 20));
+  await atPart1.reached;
   const b = store.read(db.meta()); // a v2 render joins the load part 0 moved to v2
   release();
   const [ra, rb] = await Promise.all([a, b]);
@@ -414,12 +423,16 @@ test("at most one part read in flight, and a load a newer version overtakes hand
     inFlight++;
     most = Math.max(most, inFlight);
   };
+  const held = mark();
   db.hold = async (i, v) => {
-    if (i === 1 && v === 1) await gate; // v1's part 1, answered late
+    if (i === 1 && v === 1) {
+      held.hit();
+      await gate; // v1's part 1, answered late
+    }
     inFlight--;
   };
   const old = store.read(db.meta()); // v1: part 0, then part 1 held
-  await new Promise((r) => setTimeout(r, 20));
+  await held.reached; // v1's part 1 is read before the rebuild
   db.v = 2;
   const newer = store.read(db.meta()); // v2 waits for the one read slot
   await new Promise((r) => setTimeout(r, 20));
@@ -438,11 +451,15 @@ test("callers for the build part 0 named join the load in flight", async () => {
   db.v = 2; // part 0 will say v2
   let release: () => void = () => {};
   const gate = new Promise<void>((r) => (release = r));
+  const atPart1 = mark();
   db.onPart = async (i) => {
-    if (i === 1) await gate;
+    if (i === 1) {
+      atPart1.hit();
+      await gate;
+    }
   };
   const a = store.read(old);
-  await new Promise((r) => setTimeout(r, 20));
+  await atPart1.reached;
   const b = store.read(db.meta());
   release();
   const [ra, rb] = await Promise.all([a, b]);
@@ -469,11 +486,15 @@ test("an older load that ends after a newer one does not replace it", async () =
   const { db, store } = setup({ rows: 300, maxPartReads: 2 }); // one part; the held read and v2's both out
   let release: () => void = () => {};
   const gate = new Promise<void>((r) => (release = r));
+  const held = mark();
   db.hold = async (_i, v) => {
-    if (v === 1) await gate;
+    if (v === 1) {
+      held.hit();
+      await gate;
+    }
   };
   const slow = store.rowsFor(db.meta()); // reads v1's part, answer held back
-  await new Promise((r) => setTimeout(r, 10));
+  await held.reached;
   db.v = 2;
   const v2 = await store.rowsFor(db.meta());
   release();
