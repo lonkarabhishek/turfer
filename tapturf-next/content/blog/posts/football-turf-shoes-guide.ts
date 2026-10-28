@@ -5,6 +5,9 @@ export const post: Post = {
   title: "Football Turf Shoes vs Regular Sports Shoes: What Should You Wear?",
   description:
     "TF studs, IN indoor, AG multi-stud, running shoes: what actually works on artificial-grass football turfs, what tears up the carpet, and what to pack in your kit bag.",
+  seoTitle: "Football Turf Shoes vs Regular Shoes: What to Wear on Turf",
+  seoDescription:
+    "TF studs, IN indoor, AG multi-stud or running shoes: what works on artificial-grass football turfs, what tears up the carpet, and what to pack.",
   hook: "Wear the wrong shoe and you'll either slip, wreck your ankles, or be politely asked to leave the turf.",
   category: "Guides",
   city: null,

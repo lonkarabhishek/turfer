@@ -9,6 +9,9 @@ export const post: Post = {
   title: "Best Box Cricket Turfs in Mumbai: 12 Grounds From Bandra to Thane to Panvel (2026)",
   description:
     "The 12 best box cricket turfs in Mumbai, ranked by Google rating and review count, covering Andheri, Chembur, Bandra, Thane, Mulund, Bhandup and Panvel. Rates where venues list them, 24-hour cages, and what to ask before you book.",
+  seoTitle: "12 Best Box Cricket Turfs in Mumbai, Bandra to Panvel",
+  seoDescription:
+    "12 Mumbai box cricket turfs ranked by Google rating and reviews, across Andheri, Chembur, Bandra, Thane, Mulund and Panvel. Listed rates, 24-hour cages.",
   hook: "41 cages across the city and its suburbs. These are the dozen Mumbai keeps going back to.",
   category: "Best Turfs",
   city: "mumbai",

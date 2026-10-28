@@ -4,25 +4,28 @@ import { getCityCopy } from "@/lib/queries/cities";
 import Link from "next/link";
 import { getSortedPosts } from "@/content/blog";
 import { PostCard } from "@/components/blog/PostCard";
+import { DEFAULT_OG_IMAGE, OG_BASE, TWITTER_CARD } from "@/lib/seo/defaults";
 
 export const revalidate = 3600;
 
+const TITLE = "TapTurf Blog: Turf Guides, Rules & City Playbooks";
+const DESCRIPTION =
+  "Guides, rules and city playbooks for cricket, football and box cricket turf players across India. Learn how to book smarter, host better, and play more.";
+
 export const metadata: Metadata = {
-  title: "TapTurf Blog: Turf Guides, Rules & City Playbooks",
-  description:
-    "Guides, rules and city playbooks for cricket, football and box cricket turf players across India. Learn how to book smarter, host better, and play more.",
+  // absolute: the brand is already the first word, so no " | TapTurf" from the template.
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
   keywords:
     "turf blog, cricket turf guide, football turf guide, box cricket rules, best turfs hyderabad, best turfs mumbai, best turfs pune, best turfs nashik, best turfs nagpur, turf booking guide, tapturf blog",
   openGraph: {
-    images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: "TapTurf Blog: Turf Guides & City Playbooks",
-    description:
-      "The playbook for booking, hosting and playing on sports turfs across India.",
+    ...OG_BASE,
+    images: [DEFAULT_OG_IMAGE],
+    title: TITLE,
+    description: DESCRIPTION,
     url: "https://www.tapturf.in/blog",
-    siteName: "TapTurf",
-    type: "website",
-    locale: "en_IN",
   },
+  twitter: TWITTER_CARD,
   alternates: { canonical: "https://www.tapturf.in/blog" },
 };
 

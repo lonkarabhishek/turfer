@@ -2,19 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Activity, Calculator, Coins, ImageIcon, ListOrdered, Tally5, Users } from "lucide-react";
 import { TOOLS, TOOLS_BASE, toolPath, type ToolSlug } from "@/lib/tools/registry";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
+
+// 59 characters, about 541px: the whole title shows on a phone and a desktop.
+const TITLE = "Free Cricket Tools: Live Scorer, NRR, Toss & More | TapTurf";
+const DESCRIPTION =
+  "Free tools for players and organisers: live cricket scorer, live scoreboard for football, badminton and more, NRR calculator, toss and scorecard maker.";
 
 export const metadata: Metadata = {
-  title: { absolute: "Free Sports Tools: Live Scorer, Scoreboard, NRR Calculator, Toss | TapTurf" },
-  description:
-    "Free tools for players and organisers: live cricket scorer, live scoreboard for football, badminton and more, NRR calculator, toss and scorecard maker.",
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
   alternates: { canonical: TOOLS_BASE },
-  robots: { index: true, follow: true },
+  robots: ROBOTS_INDEX,
+  twitter: TWITTER_CARD,
   openGraph: {
-    title: "Turf Tools in a Tap! Free sports tools | TapTurf",
-    description: "Live cricket scorer, live scoreboard for football, badminton and more, NRR calculator, toss, scorecard maker and team generator. Free, no sign-up.",
+    ...OG_BASE,
+    images: [DEFAULT_OG_IMAGE],
+    title: TITLE,
+    description: DESCRIPTION,
     url: TOOLS_BASE,
-    siteName: "TapTurf",
-    type: "website",
   },
 };
 

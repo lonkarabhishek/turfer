@@ -9,6 +9,7 @@ import { fetchAllRows } from "@/lib/queries/turfs";
 import { isGameExpired } from "@/lib/utils/game";
 import { turfPath } from "@/lib/utils/turfPath";
 import { PRIVACY_UPDATED } from "@/lib/policy";
+import { SEO_TEMPLATE_DATE } from "@/lib/seo/defaults";
 
 // Sitemap was being served with age ~8.8 days from the Vercel cache
 // even though DB rows changed within the hour. Cap it to an hour so
@@ -17,6 +18,21 @@ import { PRIVACY_UPDATED } from "@/lib/policy";
 export const revalidate = 3600;
 
 const BASE = "https://www.tapturf.in";
+
+/**
+ * The newest of the given timestamps and the day the search templates
+ * last changed (SEO_TEMPLATE_DATE): a page's title, description and
+ * markup changing is a real change, and the date tells Google to fetch
+ * it again. Unknown or unparsable dates are skipped.
+ */
+function latest(dates: (string | null | undefined)[]): Date {
+  let best = new Date(SEO_TEMPLATE_DATE).getTime();
+  for (const d of dates) {
+    const t = d ? new Date(d).getTime() : NaN;
+    if (Number.isFinite(t) && t > best) best = t;
+  }
+  return new Date(best);
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createReadOnlyClient();
@@ -60,9 +76,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     // City landing pages, one per live city (biggest first). Key for local SEO.
+    // As new as their newest turf, not the time of the fetch.
     ...liveCities.map((c) => ({
       url: `${BASE}/${c.id}`,
-      lastModified: new Date(),
+      lastModified: latest((turfs ?? []).filter((t) => t.city === c.id).map((t) => t.updated_at)),
       changeFrequency: "daily" as const,
       priority: 0.9,
     })),
@@ -102,7 +119,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Blog posts - static content, high SEO value for topical authority.
   const blogPages: MetadataRoute.Sitemap = ALL_POSTS.map((p) => ({
     url: `${BASE}/blog/${p.slug}`,
-    lastModified: new Date(p.updatedAt || p.publishedAt),
+    lastModified: latest([p.updatedAt || p.publishedAt]),
     changeFrequency: "monthly",
     priority: 0.7,
   }));
@@ -118,7 +135,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     (turfs ?? []).some((t) => turfPlaysSport(splitSports(t.sports), sp)),
   ).map((sp) => ({
     url: `${BASE}/sport/${sp.slug}`,
-    lastModified: new Date(),
+    lastModified: latest((turfs ?? []).filter((t) => turfPlaysSport(splitSports(t.sports), sp)).map((t) => t.updated_at)),
     changeFrequency: "daily",
     priority: 0.8,
   }));
@@ -126,13 +143,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // "<sport> turfs in <city>" pages, only where there are enough turfs
   // to be indexable (same threshold the page uses for noindex).
   const citySportPages: MetadataRoute.Sitemap = liveCities.flatMap((c) =>
-    SPORT_PAGES.filter(
-      (sp) =>
-        (turfs ?? []).filter((t) => t.city === c.id && turfPlaysSport(splitSports(t.sports), sp)).length >=
-        MIN_TURFS_TO_INDEX,
-    ).map((sp) => ({
+    SPORT_PAGES.flatMap((sp) => {
+      const here = (turfs ?? []).filter((t) => t.city === c.id && turfPlaysSport(splitSports(t.sports), sp));
+      return here.length >= MIN_TURFS_TO_INDEX ? [{ sp, here }] : [];
+    }).map(({ sp, here }) => ({
       url: `${BASE}/${c.id}/${sp.slug}`,
-      lastModified: new Date(),
+      lastModified: latest(here.map((t) => t.updated_at)),
       changeFrequency: "daily" as const,
       priority: sp.slug === "football" || sp.slug === "box-cricket" ? 0.9 : 0.8,
     })),
@@ -140,7 +156,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const turfPages: MetadataRoute.Sitemap = (turfs ?? []).map((turf) => ({
     url: `${BASE}${turfPath(turf)}`,
-    lastModified: turf.updated_at ? new Date(turf.updated_at) : new Date(),
+    // The row's last edit, or the day the turf templates changed if later.
+    lastModified: latest([turf.updated_at]),
     changeFrequency: "weekly",
     priority: 0.7,
   }));

@@ -7,6 +7,7 @@ export const post: Post = {
   title: "India's Turf Price Map: What an Hour of Turf Costs in Every City",
   description:
     "Median listed hourly turf price in 14 Indian cities, from ₹600 in Nashik to ₹1,500 in Delhi, plus per-head costs. TapTurf data, 23 October 2026.",
+  seoTitle: "India's Turf Price Map: What an Hour Costs in Every City",
   hook: "An hour of turf costs a median ₹600 in Nashik and ₹1,500 in Delhi. Here is where your city sits, and what each player pays.",
   category: "Guides",
   city: null,

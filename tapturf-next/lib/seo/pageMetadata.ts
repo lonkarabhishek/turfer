@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { CONTACT_EMAIL } from "@/lib/contact";
-import { getCityCopy } from "@/lib/queries/cities";
+import { getLiveCities } from "@/lib/queries/cities";
+import { CITIES, cityCopyFrom } from "@/lib/city";
+import { allTurfsDescription, homeDescription, homeTitle } from "@/lib/seo/listingMeta";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
+import { gameDates } from "@/lib/seo/gameDates";
 import type { HomeData } from "@/lib/home/types";
 import type { Game } from "@/types/game";
 import { plural } from "@/lib/home/format";
@@ -25,71 +29,70 @@ function whereLine(labels: string[], cityCount: number): string {
 export function homeMetadata(d: HomeData, liveCityCount?: number): Metadata {
   const cityCount = liveCityCount && liveCityCount > 0 ? liveCityCount : d.cityCount;
   const labels = d.hero.topCities.map((c) => c.label);
-  const top3 = labels.slice(0, 3);
   const top5 = labels.slice(0, 5);
-  // Floor to a multiple of 5 so "2,335+" reads honest even when the
-  // live count is 2,337 and changes between deploys.
-  const rounded = Math.floor(d.total / 5) * 5;
-  const where = whereLine(labels, cityCount);
-  const countLine = rounded >= 50 ? `${rounded.toLocaleString("en-IN")}+ grounds with photos, ratings and prices. ` : "";
-
-  // Title under 60 characters, description about 150: Google shows the
-  // whole of both, including the no-fee line that sets TapTurf apart.
-  const titleWhere = cityCount > 0 ? plural(cityCount, "Indian City", "Indian Cities") : "India";
-  const more = cityCount - top3.length;
-  const descWhere = top3.length ? `in ${top3.join(", ")}${more > 0 ? ` and ${plural(more, "more city", "more cities")}` : ""}` : "across India";
-  const description =
-    rounded >= 50
-      ? `${rounded.toLocaleString("en-IN")}+ football, box cricket and sports turfs ${descWhere}. Photos, ratings and prices. No booking fee.`
-      : `Football, box cricket and sports turfs ${descWhere}. Photos, ratings and prices. Call or WhatsApp the turf, no booking fee.`;
-  const titleCities = top3.length ? `${top3.join(", ")} & more` : "India";
+  // "Find a Turf Near You: 3,660+ Turfs in 174 Cities | TapTurf": the
+  // words of the "turf near me" searches Google already sends here, the
+  // count floored to 5 so it reads honest between deploys, and the brand
+  // last, only while the whole title fits (lib/seo/listingMeta.ts).
+  const title = homeTitle(d.total, cityCount);
+  const description = homeDescription(labels, cityCount);
 
   return {
-    // absolute so layout's template doesn't add another "| TapTurf":
-    // the wordmark is already the first word.
-    title: { absolute: `TapTurf: Football & Box Cricket Turfs in ${titleWhere}` },
+    title: { absolute: title },
     description,
     keywords: `football turf, football turf near me, box cricket, box cricket near me, turf near me, ${top5
       .map((l) => `turf ${l.toLowerCase()}`)
       .join(", ")}, tapturf`,
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `TapTurf: Sports Turfs in ${titleCities}`,
-      description: `${countLine}Find a turf across ${where}, call or WhatsApp to book, join an open game.`.trim(),
+      ...OG_BASE,
+      images: [DEFAULT_OG_IMAGE],
+      title,
+      description,
       url: "https://www.tapturf.in",
-      siteName: "TapTurf",
-      locale: "en_IN",
-      type: "website",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: "https://www.tapturf.in" },
   };
 }
 
-/** WebSite JSON-LD for the home, identical in every variant. */
+/**
+ * Home JSON-LD, identical in every variant: the WebSite (its name is the
+ * site name Google shows above each result) and the Organization behind
+ * it. No SearchAction: Google retired the sitelinks search box in
+ * November 2024.
+ */
 export function homeJsonLd(d: HomeData) {
   const where = whereLine(d.hero.topCities.map((c) => c.label), d.cityCount);
   return {
     "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "TapTurf",
-    url: "https://www.tapturf.in",
-    description:
-      d.total > 0
-        ? `Find sports turfs across ${where} (${d.total.toLocaleString("en-IN")} grounds). Call or WhatsApp the turf, no booking fee.`
-        : "Find sports turfs across India. Call or WhatsApp the turf, no booking fee.",
-    publisher: {
-      "@type": "Organization",
-      name: "TapTurf",
-      url: "https://www.tapturf.in",
-      email: CONTACT_EMAIL,
-      logo: "https://www.tapturf.in/icon-512.png",
-    },
-    // /turfs seeds its search box from ?q=, so this action is real.
-    potentialAction: {
-      "@type": "SearchAction",
-      target: "https://www.tapturf.in/turfs?q={search_term_string}",
-      "query-input": "required name=search_term_string",
-    },
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://www.tapturf.in/#website",
+        name: "TapTurf",
+        alternateName: ["Tap Turf", "tapturf.in"],
+        url: "https://www.tapturf.in/",
+        inLanguage: "en-IN",
+        description:
+          d.total > 0
+            ? `Find sports turfs across ${where} (${d.total.toLocaleString("en-IN")} grounds). Call or WhatsApp the turf, no booking fee.`
+            : "Find sports turfs across India. Call or WhatsApp the turf, no booking fee.",
+        publisher: { "@id": "https://www.tapturf.in/#org" },
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://www.tapturf.in/#org",
+        name: "TapTurf",
+        url: "https://www.tapturf.in/",
+        email: CONTACT_EMAIL,
+        logo: {
+          "@type": "ImageObject",
+          url: "https://www.tapturf.in/icon-512.png",
+          width: 512,
+          height: 512,
+        },
+      },
+    ],
   };
 }
 
@@ -98,19 +101,23 @@ export function homeJsonLd(d: HomeData) {
 // the city list: layout's title.template adds "| TapTurf", so baking it
 // in here produced "... | TapTurf | TapTurf" in SERPs.
 export async function turfsMetadata(): Promise<Metadata> {
-  const { short, listAnd } = await getCityCopy();
+  const live = await getLiveCities();
+  const labels = live.map((c) => c.label);
+  const { short } = cityCopyFrom(labels.length ? labels : CITIES.map((c) => c.label));
+  const description = allTurfsDescription(labels, live.length);
   return {
     title: `All Sports Turfs in ${short}`,
-    description: `Every sports turf in ${listAnd}. Compare prices, check ratings, view photos. Football, box cricket, cricket, badminton and more. Call or WhatsApp to book, no booking fee.`,
+    description,
     keywords:
       "turf in hyderabad, turf in bangalore, turf in mumbai, turf in pune, turf in delhi, turf in chennai, turf in nashik, turf in nagpur, box cricket hyderabad, box cricket bangalore, box cricket mumbai, football turf hyderabad, football turf bangalore, football turf mumbai, football turf pune, football turf delhi, football turf nashik, football turf nagpur, cricket turf hyderabad, cricket turf bangalore, cricket turf nashik, cricket turf pune, box cricket nagpur, turf booking india, turf booking telangana, turf booking karnataka, turf booking maharashtra, box cricket",
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
+      ...OG_BASE,
+      images: [DEFAULT_OG_IMAGE],
       title: `All Sports Turfs in ${short} | TapTurf`,
-      description: `Every sports turf across ${listAnd}. Compare prices, check ratings, call or WhatsApp to book.`,
+      description,
       url: "https://www.tapturf.in/turfs",
-      type: "website",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: "https://www.tapturf.in/turfs" },
   };
 }
@@ -118,22 +125,25 @@ export async function turfsMetadata(): Promise<Metadata> {
 // Games can be hosted at any turf TapTurf lists, but on a given day
 // most open games sit in a few cities. The metadata stays city-neutral
 // and the H1 names the cities that actually have games right now.
+const GAMES_TITLE = "Open Cricket, Football & Sports Games across India";
+const GAMES_DESCRIPTION =
+  "Find and join open sports games across India: cricket, football, box cricket and basketball. Filter by sport and skill level. No booking fee.";
+
 export const GAMES_METADATA: Metadata = {
-  title: "Open Cricket, Football & Sports Games across India",
-  description:
-    "Find and join live sports games near you. Open cricket, football, box cricket and basketball games across India. Filter by sport and skill level. No booking fee.",
+  title: GAMES_TITLE,
+  description: GAMES_DESCRIPTION,
   keywords:
     "open games india, sports games near me, cricket games nashik, cricket games pune, football games nashik, football games pune, box cricket, join a game, open games maharashtra, sports meetup",
+  robots: ROBOTS_INDEX,
   openGraph: {
-    images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-    title: "Open Games across India | TapTurf",
-    description:
-      "Live sports games looking for players across India. Cricket, football, and more. Join in one tap.",
+    ...OG_BASE,
+    images: [DEFAULT_OG_IMAGE],
+    // The title as the layout's template prints it.
+    title: `${GAMES_TITLE} | TapTurf`,
+    description: GAMES_DESCRIPTION,
     url: "https://www.tapturf.in/games",
-    siteName: "TapTurf",
-    locale: "en_IN",
-    type: "website",
   },
+  twitter: TWITTER_CARD,
   alternates: { canonical: "https://www.tapturf.in/games" },
 };
 
@@ -150,8 +160,8 @@ export function gamesJsonLd(active: Game[]) {
         "@type": "SportsEvent",
         "@id": `https://www.tapturf.in/game/${g.id}`,
         name: `${g.sport} at ${g.turfs?.name || "a local turf"}`,
-        startDate: `${g.date}T${g.start_time}`,
-        endDate: `${g.date}T${g.end_time}`,
+        // India time, so a 7 PM game is not read as 7 PM UTC.
+        ...gameDates(g),
         sport: g.sport,
         location: g.turfs
           ? {

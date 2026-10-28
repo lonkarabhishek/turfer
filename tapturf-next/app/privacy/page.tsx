@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { CITY_LIST_AND } from "@/lib/city";
 import { PRIVACY_UPDATED } from "@/lib/policy";
 import { CookieSettingsButton } from "@/components/consent/CookieSettingsButton";
@@ -10,17 +11,20 @@ const UPDATED = PRIVACY_UPDATED;
 const PAGE_URL = "https://www.tapturf.in/privacy";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | TapTurf",
+  // absolute: the layout template would add a second " | TapTurf".
+  title: { absolute: "Privacy Policy | TapTurf" },
   description:
     "What TapTurf collects when you browse turfs, sign in, host or join games, and how that information is used, shared and deleted.",
   alternates: { canonical: PAGE_URL },
-  robots: { index: true, follow: true },
+  robots: ROBOTS_INDEX,
+  twitter: TWITTER_CARD,
   openGraph: {
+    ...OG_BASE,
+    images: [DEFAULT_OG_IMAGE],
     title: "Privacy Policy | TapTurf",
-    description: "What TapTurf collects, why, and how to get it removed.",
+    description:
+      "What TapTurf collects when you browse turfs, sign in, host or join games, and how that information is used, shared and deleted.",
     url: PAGE_URL,
-    siteName: "TapTurf",
-    type: "website",
   },
 };
 

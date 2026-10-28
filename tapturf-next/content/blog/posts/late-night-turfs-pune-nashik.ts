@@ -9,6 +9,9 @@ export const post: Post = {
   title: "Late-Night Turfs in Pune and Nashik: Who Stays Open Past Midnight",
   description:
     "TapTurf data, 22 Oct 2026: how many Pune and Nashik turfs list 24-hour or past-midnight hours, which areas have the most, and what to check before a late booking.",
+  seoTitle: "Late-Night Turfs in Pune and Nashik: Open Past Midnight",
+  seoDescription:
+    "TapTurf data, 22 Oct 2026: how many Pune and Nashik turfs list 24-hour or past-midnight hours, which areas have the most, and what to check first.",
   hook: "Two in three Pune turfs with listed hours stay open until midnight or later. In Nashik it is about half. Here is the data, and its limits.",
   category: "Guides",
   city: null,

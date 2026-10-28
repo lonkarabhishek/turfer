@@ -5,6 +5,9 @@ export const post: Post = {
   title: "Pickleball for Beginners: Rules, Scoring and Courts in Pune",
   description:
     "What is pickleball and how do you play it? The basic rules, the kitchen, scoring to 11, paddle and ball tips, singles vs doubles, and where to play in Pune.",
+  seoTitle: "Pickleball Rules for Beginners: Serve, Kitchen & Scoring",
+  seoDescription:
+    "Pickleball rules in plain words: the serve, the 7-foot kitchen, scoring to 11 and the 44×20 ft court. Singles vs doubles, gear, and where to play in Pune.",
   hook: "A small-court paddle sport you can learn in an hour. Here are the rules that matter on day one, and where to play in Pune.",
   category: "Guides",
   city: "pune",

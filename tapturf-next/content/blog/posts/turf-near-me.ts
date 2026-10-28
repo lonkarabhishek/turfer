@@ -5,6 +5,8 @@ export const post: Post = {
   title: "Searching \"Turf Near Me\"? Here's a Better Way to Find One",
   description:
     "The Google → Maps → Instagram → phone-call loop is broken. Here's the fastest way to find a real sports turf near you — with real photos, real ratings and a direct WhatsApp button.",
+  seoDescription:
+    "Searching \"turf near me\"? Skip the Google, Maps, Instagram and phone-call loop: find a real sports turf with photos, ratings and a WhatsApp button.",
   hook: "Stop scrolling through screenshots of last year's turfs. Start with a real list, sorted by how close it actually is.",
   category: "Guides",
   city: null,

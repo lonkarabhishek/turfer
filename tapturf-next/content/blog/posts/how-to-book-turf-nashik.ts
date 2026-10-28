@@ -5,6 +5,8 @@ export const post: Post = {
   title: "How to Book a Turf in Nashik: A Practical Guide",
   description:
     "Step-by-step guide to booking a turf in Nashik, how far in advance to book, what to check, how much to pay, and how to avoid the most common booking mistakes.",
+  seoDescription:
+    "Step by step: booking a turf in Nashik, how far ahead to book, what to check, what to pay, and how to avoid the most common booking mistakes.",
   hook: "The step-by-step guide to booking a Nashik turf without losing your weekend.",
   category: "Guides",
   city: "nashik",

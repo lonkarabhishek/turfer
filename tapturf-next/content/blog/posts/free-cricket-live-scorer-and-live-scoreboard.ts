@@ -9,6 +9,8 @@ export const post: Post = {
   title: "Free Live Cricket Scorer and Scoreboard for Turf Games",
   description:
     "Score box cricket ball by ball, or football, badminton, basketball and more point by point, on your phone for free. Share a live link so friends can follow the match.",
+  seoDescription:
+    "Score box cricket ball by ball, or football, badminton, basketball and more point by point, free on your phone. Share a live link so friends can follow.",
   hook: "Score your turf match on your phone for free, and send a live link so everyone not on the ground can follow it.",
   category: "Guides",
   city: null,

@@ -5,6 +5,8 @@ export const post: Post = {
   title: "Nashik vs Pune Turfs: What's Listed and What an Hour Costs",
   description:
     "TapTurf data, updated 22 October 2026: how many turfs are listed in Nashik and Pune, which sports dominate, and what listed hourly prices look like, with caveats.",
+  seoDescription:
+    "TapTurf data, updated 22 Oct 2026: how many turfs Nashik and Pune list, which sports lead, and what listed hourly prices look like, with caveats.",
   hook: "63 turfs listed in Nashik, 291 in Pune. Football leads in both, box cricket only in Pune. Here is the data, and its limits.",
   category: "Guides",
   city: null,

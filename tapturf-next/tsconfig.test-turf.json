@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/turfPage/turfPage.test.ts", "lib/utils/prices.test.ts", "lib/utils/images.test.ts", "lib/utils/bookingApps.test.ts"]
+  "files": ["lib/turfPage/turfPage.test.ts", "lib/utils/prices.test.ts", "lib/utils/images.test.ts", "lib/utils/bookingApps.test.ts", "lib/utils/hours.test.ts"]
 }

@@ -105,9 +105,17 @@ export function normaliseOpeningHours(
   }
 
   if (oh && typeof oh === "object") {
-    const perDay = oh as Partial<Record<DayName, string>>;
+    // Day keys in any case: 3,289 of 3,662 active turfs store "monday"
+    // (26 Oct), 22 "Monday". Read case-sensitively, the lower-case ones
+    // lost their per-day hours, and 398 of them showed none at all.
+    const perDay = new Map<string, unknown>();
+    for (const [k, v] of Object.entries(oh)) {
+      const key = k.trim().toLowerCase();
+      // An exact "Monday" wins over a stray "monday" on the same row.
+      if (!perDay.has(key) || k.trim() === key.charAt(0).toUpperCase() + key.slice(1)) perDay.set(key, v);
+    }
     for (const day of DAYS) {
-      const raw = perDay[day];
+      const raw = perDay.get(day.toLowerCase());
       if (typeof raw !== "string") continue;
       const parsed = parseHoursString(raw);
       rows.push({ day, raw, closed: parsed.closed, spans: parsed.spans });

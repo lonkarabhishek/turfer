@@ -8,13 +8,14 @@ import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "l
 import { getTopTurfKeys } from "@/lib/queries/turfs";
 import { loadTurfPage } from "@/lib/queries/turfPage";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
-import { playerPriceRange, positivePrice, priceRangeText, priceUnitSuffix, showsPriceBands, summarisePagePrice } from "@/lib/utils/prices";
-import { getPhone, getWhatsAppPhone } from "@/lib/utils/seo";
-import { turfPhotos } from "@/lib/utils/images";
+import { playerPriceRange, positivePrice, priceRangeText, summarisePagePrice } from "@/lib/utils/prices";
+import { getPhone, getWhatsAppPhone, turfContact } from "@/lib/utils/seo";
+import { turfMeta } from "@/lib/seo/turfMeta";
+import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { googleMapsUrl, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
 import { areaFor } from "@/lib/utils/area";
 import { dailyHoursSummary } from "@/lib/utils/hours";
-import { guessCityFromAddress, labelFor, isCity } from "@/lib/city";
+import { labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing, slotRatesHint } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
@@ -25,7 +26,7 @@ import { TurfReviews } from "@/components/turf/TurfReviews";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
-import { courtType, sportPageForLabel } from "@/lib/sports";
+import { sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 
@@ -55,128 +56,38 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const turf = (await loadTurfPage(decodeURIComponent(id)))?.turf;
-  if (!turf) return { title: "Turf not found", robots: { index: false } };
+  const page = await loadTurfPage(decodeURIComponent(id));
+  const turf = page?.turf;
+  if (!page || !turf) return { title: "Turf not found", robots: ROBOTS_NOINDEX_FOLLOW };
 
-  // Same numbers as the page's Pricing table (bands when it lists them).
-  const priceSummary = summarisePagePrice(turf);
-  const sports = turf.sports.join(", ");
-  const primarySport = turf.sports[0]?.trim();
-  // Share preview: our own copy before a Google link, which can expire.
-  // Images are already normalised by transformTurf.
-  const firstImage = turfPhotos(turf)[0] ?? null;
-
-  // City-aware metadata: the turf's own city, then its address. A turf
-  // with neither is described by name and area only, never placed in a
-  // guessed city or state.
-  const cityId = isCity(turf.city) ? turf.city : guessCityFromAddress(turf.address);
-  const cityLabel = cityId ? labelFor(cityId) : null;
-  const cityHash = cityId ? `#${cityId}turf` : "";
+  // Title, description and share card from the turf's own facts
+  // (lib/seo/turfMeta.ts): the listed prices, hours, photos, Google
+  // rating and TapTurf player reports, and only the contact channels
+  // the page shows.
+  const meta = turfMeta({ turf, contact: turfContact(turf), reports: page.reviewStats });
+  const cityLabel = meta.cityLabel;
   const area = areaFor(turf);
-  const cityAndArea = [area, cityLabel].filter(Boolean).join(", ");
 
-  const hasRatings = turf.total_reviews > 0 && turf.rating > 0;
-  const ratingClause = hasRatings
-    ? ` Rated ${Number(turf.rating).toFixed(1)} (${turf.total_reviews} Google reviews).`
-    : "";
-  const hours = dailyHoursSummary(turf.opening_hours, {
-    start_time: turf.start_time,
-    end_time: turf.end_time,
-    is_24x7: turf.is_24x7,
-  });
-  const priceClause =
-    priceSummary.kind === "real" ? ` Starting ${priceSummary.label}.` : "";
-  // USP for the title, priority per brief:
-  //   real price → "₹X/hr"
-  //   covered {sport} → "Covered {Sport}"
-  //   ground_format {sport} → "{Format} {Sport}"
-  //   fallback → "Timings & Photos"
-  //
-  // The type follows the MAIN sport (sports[0]): a cricket-first turf
-  // that also hosts football is a "Cricket Turf", not a "Football
-  // Turf". A second turf sport is added when the title still fits.
-  const { turfType, turfTypeShort } = describeTurfType(turf.sports);
-  const displayName = cleanTurfName(turf.name);
-  const usp = (() => {
-    if (priceSummary.kind === "real" && priceSummary.min != null) {
-      // Listed bands are always per hour; the slot columns follow price_unit.
-      return `₹${priceSummary.min}${showsPriceBands(turf) ? priceSummary.unit : priceUnitSuffix(turf, { short: true })}`;
-    }
-    // No price: a well reviewed Google rating is the next thing a
-    // searcher checks before clicking.
-    if (hasRatings && turf.total_reviews >= 10 && Number(turf.rating) >= 3.5 && turfTypeShort)
-      return `${turfTypeShort}, ${Number(turf.rating).toFixed(1)}★`;
-    if (turf.is_covered && turfType) return `Covered ${turfType}`;
-    if (turf.is_covered && primarySport) return `Covered ${primarySport}`;
-    if (turfType) return turfType;
-    if (turf.ground_format && primarySport) return `${turf.ground_format} ${primarySport}`;
-    if (primarySport) return `${primarySport} Timings & Photos`;
-    return "Timings & Photos";
-  })();
-
-  // Layout's title.template adds " | TapTurf" for us — never bake it
-  // into the raw title or it appears twice. Target ≤55 chars here so
-  // the SERP-visible "title | TapTurf" stays under Google's ~65-char
-  // truncation ceiling.
-  // Layout adds " | TapTurf" (10 chars); Google shows about 60, so the
-  // raw title must fit in 50. Try the richest form first, then drop
-  // the area, then the second sport, then the USP; finally shorten
-  // the name itself at a word boundary.
-  const MAX = 50;
-  const place = cityLabel ?? area ?? "";
-  const candidates = [
-    cityAndArea ? `${displayName} ${cityAndArea} – ${usp}` : `${displayName} – ${usp}`,
-    place ? `${displayName} ${place} – ${usp}` : null,
-    turfTypeShort && turfTypeShort !== usp ? `${displayName}${place ? ` ${place}` : ""} – ${turfTypeShort}` : null,
-    cityAndArea ? `${displayName} ${cityAndArea}` : null,
-    place ? `${displayName}, ${place}` : displayName,
-  ];
-  const title =
-    candidates.find((t): t is string => !!t && t.length <= MAX) ??
-    (place ? `${truncateWords(displayName, MAX - place.length - 2)}, ${place}` : truncateWords(displayName, MAX));
-
-  const photoCount = turf.images?.length ?? 0;
-  const photoClause = photoCount > 0 ? ` ${photoCount} photo${photoCount === 1 ? "" : "s"}.` : "";
-  const locationClause = cityAndArea ? ` in ${cityAndArea}` : "";
-  // Promise prices only when the page has some (1,608 turfs had none on 26 Oct).
-  const seeClause = priceSummary.kind === "unknown" ? "See timings, photos and location" : "See prices, timings, photos and location";
-  // Only the channels the page offers: a landline-only turf gets Call
-  // alone ("Landline, so no WhatsApp"), 5 active turfs on 26 Oct.
-  const canCall = !!getPhone(turf);
-  const canWhatsApp = !!getWhatsAppPhone(turf);
-  const contactClause =
-    canCall && canWhatsApp ? ", then call or WhatsApp to book" : canCall ? ", then call to book" : canWhatsApp ? ", then WhatsApp to book" : "";
-
-  // Lead with the venue's name and place: most searches for these pages
-  // are the venue's name, and Google bolds the words that match.
   return {
-    title,
-    description:
-      `${displayName}${cityAndArea ? `, ${cityAndArea}` : ""}: ${(turfType ?? (sports || "sports turf")).toLowerCase()}.` +
-      (turfType && sports ? ` Sports: ${sports}.` : "") +
-      `${priceClause}${hours ? ` ${hours}.` : ""}${ratingClause}${photoClause}` +
-      ` ${seeClause}${contactClause}.`,
+    title: { absolute: meta.title },
+    description: meta.description,
     keywords: [
       turf.name,
       area ? `turf in ${area.toLowerCase()}` : null,
       cityLabel ? `turf in ${cityLabel.toLowerCase()}` : null,
-      cityLabel ? `${cityLabel.toLowerCase()} turf booking` : null,
       ...turf.sports.map((s) => `${s.toLowerCase()} ${sportPageForLabel(s)?.venue ?? "turf"}${cityLabel ? ` ${cityLabel.toLowerCase()}` : ""}`),
-      cityHash,
     ].filter(Boolean).join(", "),
     openGraph: {
-      title: cityAndArea ? `${turf.name}, ${cityAndArea}` : turf.name,
-      description: `${sports || "Multi-sport"}${locationClause}.${priceClause}${ratingClause}`,
+      ...OG_BASE,
+      title: meta.title,
+      description: meta.description,
       url: turfUrl(turf),
-      // No width/height: stored photos are 4:3 (1600x1200 and the like),
-      // and the old 1200x630 told crawlers the wrong shape.
-      ...(firstImage && {
-        images: [{ url: firstImage }],
-      }),
-      type: "website",
-      locale: "en_IN",
-      siteName: "TapTurf",
+      // No width/height on a turf photo: stored photos are 4:3
+      // (1600x1200 and the like). The site card when there is none, so
+      // a turf without photos still has a share image.
+      images: [meta.ogImage],
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: turfUrl(turf) },
   };
 }
@@ -240,10 +151,15 @@ export default async function TurfDetailPage({
   // Is this turf its city's Most Trending Turf this week?
   const trending = turf.city && isCity(turf.city) ? page.trending : null;
   const isTrending = !!trending;
+  // The H1 is the name people search (seoName): Google reuses it when it
+  // rewrites a title. The listed name stays on the address line.
+  const meta = turfMeta({ turf, contact, reports: page.reviewStats });
+  const listedName = turf.name.trim();
+  const cityId = isCity(turf.city) ? turf.city : null;
 
   return (
     <div className="has-bottom-cta">
-      <TurfJsonLd turf={turf} />
+      <TurfJsonLd turf={turf} reviewStats={page.reviewStats} reviews={page.reviews} />
       <NoteInterest city={turf.city} sports={turf.sports} turfId={turf.id} />
 
       {/* Breadcrumb */}
@@ -252,11 +168,12 @@ export default async function TurfDetailPage({
           Home
         </Link>
         <ChevronRight className="w-3.5 h-3.5 shrink-0 text-cream-400" />
-        <Link href="/turfs" className="hover:text-primary-600 transition-colors whitespace-nowrap">
-          Turfs
+        {/* Home › City › name, as the BreadcrumbList JSON-LD says. */}
+        <Link href={cityId ? `/${cityId}` : "/turfs"} className="hover:text-primary-600 transition-colors whitespace-nowrap">
+          {cityId ? labelFor(cityId) : "Turfs"}
         </Link>
         <ChevronRight className="w-3.5 h-3.5 shrink-0 text-cream-400" />
-        <span className="text-primary-700 font-medium truncate">{turf.name}</span>
+        <span className="text-primary-700 font-medium truncate">{meta.name}</span>
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -278,7 +195,7 @@ export default async function TurfDetailPage({
             </div>
           )}
           <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
-            {turf.name}
+            {meta.name}
           </h1>
           {claimed && (
             <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent-50 px-2.5 h-6 text-[12px] font-semibold text-accent-700">
@@ -308,7 +225,7 @@ export default async function TurfDetailPage({
             <span className="text-cream-400">·</span>
             <span className="text-primary-500 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" />
-              {turf.address}
+              {meta.name !== listedName ? `${listedName}, ${turf.address}` : turf.address}
             </span>
           </div>
 
@@ -611,63 +528,4 @@ export default async function TurfDetailPage({
       )}
     </div>
   );
-}
-
-// ── title helpers ──
-
-/**
- * "Football Turf", "Cricket & Football Turf", "Badminton Court" from the
- * sports list, main sport first. `turfTypeShort` is the one-sport form
- * used when the full one makes the title too long.
- */
-function describeTurfType(sports: string[]): { turfType: string | null; turfTypeShort: string | null } {
-  const norm = sports.map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const label = (s: string): string | null =>
-    s === "box cricket" ? "Box Cricket" : s === "cricket" || s === "cricket nets" ? "Cricket" : s === "football" ? "Football" : null;
-  const main = norm[0] ? label(norm[0]) : null;
-  if (!main) {
-    const court = courtType(sports);
-    return { turfType: court, turfTypeShort: court };
-  }
-  const second = norm.slice(1).map(label).find((l): l is string => !!l && l !== main);
-  return {
-    turfType: second ? `${main} & ${second} Turf` : `${main} Turf`,
-    turfTypeShort: `${main} Turf`,
-  };
-}
-
-/**
- * Display form of a stored name: drop bracketed asides, anything after
- * "/" or "|", and "Best Turf in …" style padding. The DB keeps the
- * original; the data team cleans names separately.
- */
-function cleanTurfName(name: string): string {
-  return unShout(name)
-    .replace(/\s*\([^)]*\)/g, "")
-    .split(/\s*[|/]\s*/)[0]
-    .replace(/\s*(?:-|–|,)?\s*best turf.*$/i, "")
-    // "… Turf Cricket, Football Etc": a bare sport list tacked on the end
-    .replace(/(\bturf)\s+(?:box cricket|cricket|football)(?:[,\s]+(?:box cricket|cricket|football|etc\.?))*$/i, "$1")
-    .replace(/\s{2,}/g, " ")
-    .trim() || name;
-}
-
-/**
- * "PLAYMAKERS SOCCER FIELD" reads as shouting in a search result. A name
- * that is all capitals is shown in title case; short words that look like
- * initials (FC, BCFC, KSR) stay as they are.
- */
-function unShout(name: string): string {
-  const letters = name.replace(/[^A-Za-z]/g, "");
-  if (letters.length < 8 || letters !== letters.toUpperCase()) return name;
-  return name.replace(/[A-Za-z]+/g, (w) => (w.length <= 4 ? w : w[0] + w.slice(1).toLowerCase()));
-}
-
-/** Cut at a word boundary to at most `max` chars, without a trailing ellipsis. */
-function truncateWords(s: string, max: number): string {
-  if (s.length <= max) return s;
-  const cut = s.slice(0, max + 1);
-  const at = cut.lastIndexOf(" ");
-  return (at > max * 0.5 ? cut.slice(0, at) : s.slice(0, max))
-    .replace(/(?:\s+(?:and|&|the|of|in|at))?[\s,–-]*$/i, "");
 }

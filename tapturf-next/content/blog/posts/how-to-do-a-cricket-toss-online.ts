@@ -10,6 +10,8 @@ export const post: Post = {
   title: "How to Do a Cricket Toss Online: 3 Steps for a Fair Toss",
   description:
     "No coin at the turf? Call heads or tails, flip and pick bat or bowl in three taps. How a fair cricket toss works, what the Laws say, and a free online toss tool.",
+  seoDescription:
+    "No coin at the turf? Call heads or tails, flip and pick bat or bowl in three taps. How a fair toss works, what the Laws say, and a free toss tool.",
   hook: "No coin, two captains, one argument. Here is how to settle the toss in three taps, and what the Laws of Cricket say about it.",
   category: "Guides",
   city: null,

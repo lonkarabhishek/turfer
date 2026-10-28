@@ -12,6 +12,8 @@ export const post: Post = {
   title: "Turfs in Kothrud, Pune: 18 Listed, Prices and Hours",
   description:
     "TapTurf data, 24 Oct 2026: 18 turfs in Kothrud and Karve Nagar, Pune. What an hour costs, the cheaper afternoon slots, late hours, pickleball and what to check.",
+  seoDescription:
+    "TapTurf data, 24 Oct 2026: 18 turfs in Kothrud and Karve Nagar, Pune. What an hour costs, the cheaper afternoon slots, late hours and pickleball.",
   hook: "18 turfs, a ₹1,175 typical weekday evening rate, and afternoon slots at about half price. Here is Kothrud by locality, with the data's limits.",
   category: "Pune",
   city: "pune",

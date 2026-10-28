@@ -5,6 +5,9 @@ export const post: Post = {
   title: "Nashik Approves National-Standard Football Ground, Floodlights",
   description:
     "Nashik's District Planning Committee has approved a new football ground in Panchavati and floodlights at Kanhere Maidan. What is confirmed, and what it means.",
+  seoTitle: "Nashik Approves a Football Ground and Kanhere Floodlights",
+  seoDescription:
+    "Nashik's District Planning Committee approved a new football ground in Panchavati and floodlights at Kanhere Maidan. What is confirmed and what it means.",
   hook: "A new football ground and night lighting have been approved in Nashik. Nothing is built yet, so here is what is on record and what is not.",
   category: "Nashik",
   city: "nashik",

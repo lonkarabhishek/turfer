@@ -5,6 +5,7 @@ export const post: Post = {
   title: "12 Turf Rules Every Player Should Know Before Their First Game",
   description:
     "The written and unwritten rules of playing on a sports turf, footwear, timing, damage, refunds, and the etiquette every squad captain should know.",
+  seoTitle: "12 Turf Rules Every Player Should Know",
   hook: "The written and unwritten rules that separate a good squad from a chaotic one.",
   category: "Rules",
   city: null,

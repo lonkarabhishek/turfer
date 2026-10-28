@@ -1,0 +1,50 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { dailyHoursSummary, normaliseOpeningHours, openingHoursJsonLd } from "./hours";
+import type { OpeningHours } from "../../types/turf";
+
+const week = (v: string, casing: (d: string) => string): OpeningHours =>
+  Object.fromEntries(
+    ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((d) => [casing(d), v]),
+  ) as OpeningHours;
+
+test("per-day hours read whatever the key casing (3,289 turfs store lower-case days)", () => {
+  // Playmakers Soccer Field: keys stored as "monday"... and no start/end fallback.
+  const lower = week("6 AM–11 PM", (d) => d.toLowerCase());
+  const rows = normaliseOpeningHours(lower, { start_time: null, end_time: null });
+  assert.equal(rows.length, 7);
+  assert.deepEqual(rows[0], { day: "Monday", raw: "6 AM–11 PM", closed: false, spans: [{ opens: "06:00", closes: "23:00" }] });
+  assert.equal(dailyHoursSummary(lower, { start_time: null, end_time: null }), "Open 6:00 AM – 11:00 PM daily");
+  assert.equal(openingHoursJsonLd(lower)?.length, 7);
+
+  assert.equal(normaliseOpeningHours(week("Open 24 hours", (d) => d.toUpperCase())).length, 7);
+  assert.equal(normaliseOpeningHours(week("Open 24 hours", (d) => d)).length, 7);
+});
+
+test("a per-day closure in lower-case keys is kept, not replaced by the start/end fallback", () => {
+  const oh = { ...week("6 AM–10 PM", (d) => d.toLowerCase()), sunday: "Closed" } as unknown as OpeningHours;
+  const rows = normaliseOpeningHours(oh, { start_time: "06:00:00", end_time: "22:00:00" });
+  assert.equal(rows.length, 7);
+  assert.equal(rows[6].day, "Sunday");
+  assert.equal(rows[6].closed, true);
+  // Not the same every day, so no one-line summary, and Sunday is left out of the JSON-LD.
+  assert.equal(dailyHoursSummary(oh), null);
+  assert.equal(openingHoursJsonLd(oh)?.some((s) => s.dayOfWeek === "Sunday"), false);
+});
+
+test("mixed-case keys: each day once, an exact 'Monday' beats a stray 'monday'", () => {
+  const oh = { Monday: "6 AM–11 PM", monday: "Closed", TUESDAY: "6 AM–11 PM", wednesday: "6 AM–11 PM" } as unknown as OpeningHours;
+  const rows = normaliseOpeningHours(oh);
+  assert.deepEqual(
+    rows.map((r) => [r.day, r.closed]),
+    [["Monday", false], ["Tuesday", false], ["Wednesday", false]],
+  );
+});
+
+test("{daily} and the start/end fallback still work", () => {
+  assert.equal(dailyHoursSummary({ daily: "6 AM–12 AM" }), "Open 6:00 AM – 12:00 AM daily");
+  assert.equal(normaliseOpeningHours(null, { start_time: "05:00:00", end_time: "23:00:00" }).length, 7);
+  // 00:00-23:59 with no flag is the column default, not a fact.
+  assert.equal(normaliseOpeningHours(null, { start_time: "00:00:00", end_time: "23:59:00" }).length, 0);
+  assert.equal(dailyHoursSummary(null, { start_time: null, end_time: null, is_24x7: true }), "Open 24 hours");
+});

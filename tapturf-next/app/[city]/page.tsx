@@ -16,6 +16,8 @@ import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
+import { cityDescription, cityFacts, cityTitle, listingOgImage } from "@/lib/seo/listingMeta";
+import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
@@ -37,13 +39,17 @@ export async function generateMetadata(
   { params }: { params: Promise<{ city: string }> }
 ): Promise<Metadata> {
   const { city } = await params;
-  if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: { index: false } };
+  if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: ROBOTS_NOINDEX_FOLLOW };
   const label = labelFor(city);
+  // The rows the page reads anyway (one read per render, React cache).
+  const turfs = await getAllActiveTurfs(city);
+  const facts = cityFacts(label, turfs, citySportLinks(city, turfs));
+  const title = cityTitle(facts);
+  const description = cityDescription(facts);
 
   return {
-    // Football and box cricket are what most turfs here are for.
-    title: `Football & Box Cricket Turfs in ${label}: Compare & Book`,
-    description: `Every football, box cricket and sports turf in ${label} in one place. Compare prices, ratings and photos, then call or WhatsApp to book. No booking fee.`,
+    title: { absolute: title },
+    description,
     keywords: [
       `turfs in ${label.toLowerCase()}`,
       `football turf in ${label.toLowerCase()}`,
@@ -55,14 +61,13 @@ export async function generateMetadata(
       `sports ${label.toLowerCase()}`,
     ].join(", "),
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `Sports Turfs in ${label} | TapTurf`,
-      description: `Every turf in ${label}, one tap away. Compare & book instantly.`,
+      ...OG_BASE,
+      images: [listingOgImage(turfs, `Turfs in ${label}`)],
+      title,
+      description,
       url: `https://www.tapturf.in/${city}`,
-      siteName: "TapTurf",
-      locale: "en_IN",
-      type: "website",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: `https://www.tapturf.in/${city}` },
   };
 }

@@ -11,6 +11,8 @@ export const post: Post = {
   title: "Turfs in Hinjewadi, Pune: 15 Listed, Prices and Late Hours",
   description:
     "TapTurf data, 23 Oct 2026: 15 turfs in and around Hinjewadi, Pune. Where they are by phase, what an hour costs, which open 24 hours, and what to check first.",
+  seoDescription:
+    "TapTurf data, 23 Oct 2026: 15 turfs in and around Hinjewadi, Pune. Where they are by phase, what an hour costs and which open 24 hours.",
   hook: "15 turfs, 9 listing 24-hour hours, and a ₹1,000 typical evening rate. Here is Hinjewadi by phase, with the data's limits.",
   category: "Pune",
   city: "pune",

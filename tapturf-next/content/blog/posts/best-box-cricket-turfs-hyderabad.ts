@@ -9,6 +9,9 @@ export const post: Post = {
   title: "Best Box Cricket Turfs in Hyderabad: 10 Grounds Players Rate Highest (2026)",
   description:
     "The 10 best box cricket turfs in Hyderabad ranked by Google rating and review count, with listed hourly rates, 24-hour venues, and an area guide from Madhapur to Bolarum. Every ground links to its live TapTurf page.",
+  seoTitle: "10 Best Box Cricket Turfs in Hyderabad, by Google Rating",
+  seoDescription:
+    "The 10 box cricket turfs in Hyderabad ranked by Google rating and reviews, with listed hourly rates, 24-hour venues and an area guide, Madhapur to Bolarum.",
   hook: "83 cages, 54 neighbourhoods, one shortlist. Ranked by the people who actually play there.",
   category: "Best Turfs",
   city: "hyderabad",

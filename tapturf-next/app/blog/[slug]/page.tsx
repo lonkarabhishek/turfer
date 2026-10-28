@@ -17,6 +17,8 @@ import { ShareBar } from "@/components/blog/ShareBar";
 import { StickyMobileCTA } from "@/components/blog/StickyMobileCTA";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { labelFor } from "@/lib/city";
+import { blogSeoDescription, blogSeoTitle, blogShareImage } from "@/lib/seo/blogMeta";
+import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 
 export const revalidate = 3600;
 export const dynamicParams = false;
@@ -33,34 +35,36 @@ export async function generateMetadata({
   const { slug } = await params;
   const post = getPostBySlug(slug);
   if (!post) {
-    return { title: "Post not found" };
+    return { title: "Post not found", robots: ROBOTS_NOINDEX_FOLLOW };
   }
 
   const url = `https://www.tapturf.in/blog/${post.slug}`;
-  const ogImage = post.heroImage?.og ?? post.heroImage?.url;
+  // seoTitle when the H1 is too long for a result, " | TapTurf" only if it
+  // fits; the share image is never missing (lib/seo/blogMeta.ts).
+  const title = blogSeoTitle(post);
+  const description = blogSeoDescription(post);
+  const image = blogShareImage(post);
+  const ogImage = { url: image.url, alt: image.alt, ...(image.width && image.height && { width: image.width, height: image.height }) };
   return {
-    title: post.title,
-    description: post.description,
+    title: { absolute: title },
+    description,
     keywords: post.keywords.join(", "),
     openGraph: {
-      title: post.title,
-      description: post.description,
+      ...OG_BASE,
+      title,
+      description,
       url,
-      siteName: "TapTurf",
       type: "article",
-      locale: "en_IN",
       publishedTime: post.publishedAt,
       modifiedTime: post.updatedAt || post.publishedAt,
       tags: post.keywords,
-      ...(ogImage && {
-        images: [{ url: ogImage, width: 1200, height: 630, alt: post.heroImage?.alt ?? post.title }],
-      }),
+      images: [ogImage],
     },
     twitter: {
-      card: "summary_large_image",
-      title: post.title,
-      description: post.description,
-      ...(ogImage && { images: [ogImage] }),
+      ...TWITTER_CARD,
+      title,
+      description,
+      images: [ogImage.url],
     },
     alternates: { canonical: url },
   };
@@ -87,7 +91,12 @@ export default async function BlogPostPage({
     url,
     datePublished: post.publishedAt,
     dateModified: post.updatedAt || post.publishedAt,
-    ...(post.heroImage && { image: post.heroImage.og ?? post.heroImage.url }),
+    // Always an image: the card made for sharing, a raster hero, or the
+    // generated 1200x630 card (never an expiring Google Maps photo).
+    image: (() => {
+      const img = blogShareImage(post);
+      return { "@type": "ImageObject", url: img.url, ...(img.width && img.height && { width: img.width, height: img.height }) };
+    })(),
     author: {
       "@type": "Organization",
       name: "TapTurf",
