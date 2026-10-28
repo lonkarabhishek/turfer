@@ -1,5 +1,5 @@
 import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
-import { byDistanceFrom, resolveCityScope, type CityScope } from "@/lib/city";
+import { byDistanceFrom, cityPointsOf, resolveCityScope, type CityScope } from "@/lib/city";
 import { askChips, chipName } from "@/lib/ask/chips";
 import type { HeroCity, HomeCityRow, HomeData, HomeGame, HomeHeroProps, HomeTile } from "./types";
 
@@ -74,7 +74,8 @@ export function scopeHome(d: HomeData, requested: string | null): ScopedHome {
               inCity: true,
             }
           : { primary: d.sports, more: [], inCity: false },
-      cityList: { rows: byDistanceFrom(id, d.cityRows.filter((r) => r.id !== id)), total: d.cityRows.length - 1 },
+      // Nearest first from this city, curated or not (lib/city.ts cityPoint).
+      cityList: { rows: byDistanceFrom(id, d.cityRows.filter((r) => r.id !== id), cityPointsOf(d.cityRows)), total: d.cityRows.length - 1 },
     };
   }
 

@@ -15,6 +15,11 @@ import {
   nearestCity,
   nearestCityAny,
   cityCoords,
+  cityPoint,
+  cityPointsOf,
+  distanceKm,
+  pickOtherCities,
+  HOME_CITIES,
   cityInfo,
   cityInText,
   guessCityFromAddress,
@@ -536,6 +541,141 @@ test("byDistanceFrom orders by km and keeps unknowns last", () => {
   assert.deepEqual(out.map((r) => r.id), ["mumbai", "nashik", "hyderabad", "mystery"]);
   assert.equal(out[3].km, null);
   assert.equal(kmBetween("pune", "mumbai"), out[0].km);
+});
+
+// ── Live centroids (city_turf_counts lat, lng) for cities not curated ──
+
+// Production medians on 28 Oct (none of these is in CITY_COORDS).
+const LIVE = [
+  { id: "malappuram", n: 44, lat: 11.0918, lng: 76.029 },
+  { id: "kottayam", n: 24, lat: 9.599, lng: 76.5592 },
+  { id: "jammu", n: 17, lat: 32.7098, lng: 74.8924 },
+  { id: "wayanad", n: 12, lat: 11.6594, lng: 76.1 },
+  { id: "sindhudurg", n: 3, lat: 16.0196, lng: 73.6728 },
+];
+const LIVE_POINTS = cityPointsOf(LIVE);
+
+test("cityPointsOf keeps real coordinates only", () => {
+  const pts = cityPointsOf([
+    ...LIVE,
+    { id: "nullish", lat: null, lng: null },
+    { id: "half", lat: 12, lng: null },
+    { id: "missing" },
+    { id: "nan", lat: Number.NaN, lng: 75 },
+    { id: "wild", lat: 120, lng: 75 },
+  ]);
+  assert.deepEqual([...pts.keys()], LIVE.map((c) => c.id));
+  assert.deepEqual(pts.get("jammu"), { lat: 32.7098, lng: 74.8924 });
+});
+
+test("cityPoint: curated centroid first, else the live one, else null", () => {
+  for (const c of CITIES) assert.deepEqual(cityPoint(c.id), cityCoords(c.id), c.id);
+  assert.deepEqual(cityPoint("malappuram", LIVE_POINTS), { lat: 11.0918, lng: 76.029 });
+  assert.equal(cityPoint("malappuram"), null, "no live points passed");
+  assert.equal(cityPoint("mystery", LIVE_POINTS), null);
+  // A live median never moves a curated city (Pune's turfs' median is 5 km off its centre).
+  const odd = cityPointsOf([{ id: "pune", lat: 18.554, lng: 73.819 }, { id: "mumbai", lat: 28.6, lng: 77.2 }]);
+  assert.deepEqual(cityPoint("pune", odd), cityCoords("pune"));
+  assert.equal(kmBetween("pune", "mumbai", odd), kmBetween("pune", "mumbai"));
+  // Not an inherited key either: "constructor" is slug-shaped.
+  assert.equal(cityPoint("constructor"), null);
+  assert.equal(kmBetween("malappuram", "kozhikode", LIVE_POINTS), 33);
+  assert.equal(kmBetween("malappuram", "kozhikode"), null);
+});
+
+test("byDistanceFrom: a chosen city that is not curated sorts by its turfs' median", () => {
+  const rows = [{ id: "mumbai" }, { id: "bangalore" }, { id: "delhi" }, { id: "kochi" }, { id: "kozhikode" }];
+  const out = byDistanceFrom("malappuram", rows, LIVE_POINTS);
+  assert.deepEqual(out.map((r) => r.id), ["kozhikode", "kochi", "bangalore", "mumbai", "delhi"]);
+  assert.deepEqual(out.map((r) => r.km), [33, 132, 270, 950, 1952]);
+  // Before the migration (no points): nothing to sort by, incoming order kept.
+  const before = byDistanceFrom("malappuram", rows);
+  assert.deepEqual(before.map((r) => r.id), rows.map((r) => r.id));
+  assert.ok(before.every((r) => r.km === null));
+});
+
+test("byDistanceFrom: rows that are not curated take their place by distance", () => {
+  const rows = [{ id: "delhi" }, { id: "jammu" }, { id: "sindhudurg" }, { id: "nashik" }, { id: "mumbai" }];
+  const out = byDistanceFrom("pune", rows, LIVE_POINTS);
+  assert.deepEqual(out.map((r) => r.id), ["mumbai", "nashik", "sindhudurg", "delhi", "jammu"]);
+  assert.equal(out[2].km, 279);
+  // Without the points they had no place and went last, as before 28 Oct.
+  assert.deepEqual(byDistanceFrom("pune", rows).map((r) => r.id), ["mumbai", "nashik", "delhi", "jammu", "sindhudurg"]);
+});
+
+test("byDistanceFrom: mixed rows, and rows with no point last in their incoming order", () => {
+  const rows = [{ id: "zeta" }, { id: "jammu" }, { id: "alpha" }, { id: "kochi" }, { id: "wayanad" }, { id: "mid" }, { id: "kottayam" }];
+  const out = byDistanceFrom("kozhikode", rows, LIVE_POINTS);
+  assert.deepEqual(out.map((r) => r.id), ["wayanad", "kochi", "kottayam", "jammu", "zeta", "alpha", "mid"]);
+  assert.deepEqual(out.slice(4).map((r) => r.km), [null, null, null]);
+  // Rows keep their own fields.
+  const withN = byDistanceFrom("kozhikode", LIVE, LIVE_POINTS);
+  assert.equal(withN[0].id, "malappuram");
+  assert.equal(withN[0].n, 44);
+  // Equal km keep the incoming order.
+  const twins = cityPointsOf([{ id: "a-town", lat: 12, lng: 76 }, { id: "b-town", lat: 12, lng: 76 }]);
+  assert.deepEqual(byDistanceFrom("kozhikode", [{ id: "b-town" }, { id: "a-town" }], twins).map((r) => r.id), ["b-town", "a-town"]);
+});
+
+test("pickOtherCities: the twelve nearest plus the home cities, nearest first", () => {
+  // Biggest first, as getLiveCities hands them over.
+  const live = [
+    ...CITIES.slice(0, 40).map((c, i) => ({ ...c, n: 400 - i, lat: null, lng: null })),
+    ...LIVE.map((c) => ({ ...cityInfo(c.id), ...c })),
+  ];
+  const pts = cityPointsOf(live);
+  for (const current of ["kochi", "malappuram", "delhi", "nashik", "pune", "jammu"]) {
+    const got = pickOtherCities(live, current, pts);
+    const all = byDistanceFrom(current, live.filter((c) => c.id !== current), pts);
+    const nearest = all.slice(0, 12).map((c) => c.id);
+    const homes = HOME_CITIES.filter((h) => h !== current && live.some((c) => c.id === h) && !nearest.includes(h));
+    assert.equal(got.length, 12 + homes.length, current);
+    assert.ok(!got.some((c) => c.id === current), `${current} links itself`);
+    for (const id of nearest) assert.ok(got.some((c) => c.id === id), `${current}: ${id} is among the nearest`);
+    for (const h of HOME_CITIES) if (h !== current) assert.ok(got.some((c) => c.id === h), `${current}: home city ${h}`);
+    const kms = got.map((c) => c.km);
+    assert.ok(kms.every((k) => k != null), current);
+    assert.deepEqual(kms, [...kms].sort((a, b) => a! - b!), `${current}: nearest first`);
+  }
+  // Kochi: its neighbours first (Kottayam and Malappuram are not curated),
+  // then Coimbatore; the home cities, far off, at the end.
+  const kochi = pickOtherCities(live, "kochi", pts).map((c) => c.id);
+  assert.deepEqual(kochi.slice(0, 3), ["kottayam", "malappuram", "coimbatore"]);
+  assert.deepEqual(kochi.slice(-2), ["nashik", "nagpur"]);
+  // No extra link, and no second one, for a home city already in the twelve.
+  const nashik = pickOtherCities(live, "nashik", pts, 30);
+  assert.equal(nashik.length, 30);
+  assert.equal(new Set(nashik.map((c) => c.id)).size, 30);
+  assert.ok(nashik.some((c) => c.id === "nagpur"));
+});
+
+test("pickOtherCities: no home city that does not qualify, and no point keeps the biggest", () => {
+  // A sport's list without the home cities (too few turfs): exactly twelve.
+  const sport = CITIES.filter((c) => !HOME_CITIES.includes(c.id)).slice(0, 30).map((c, i) => ({ ...c, n: 100 - i }));
+  assert.equal(pickOtherCities(sport, "pune").length, 12);
+  // The page's city need not be in the list (its own sport page is thin).
+  assert.ok(!sport.some((c) => c.id === "ratnagiri"));
+  const fromRatnagiri = pickOtherCities(sport, "ratnagiri");
+  assert.equal(fromRatnagiri.length, 12);
+  assert.equal(fromRatnagiri[0].km! <= fromRatnagiri[11].km!, true);
+  // A city with no point at all (not curated, no live centroid): the
+  // twelve biggest plus the home cities, in the incoming order, as before.
+  const live = CITIES.slice(0, 40).map((c, i) => ({ ...c, n: 400 - i }));
+  const got = pickOtherCities(live, "mystery");
+  assert.deepEqual(got.map((c) => c.id), [...CITIES.slice(0, 12).map((c) => c.id), ...HOME_CITIES.filter((h) => !CITIES.slice(0, 12).some((c) => c.id === h))]);
+  assert.ok(got.every((c) => c.km === null));
+});
+
+test("detection is unchanged: live centroids never make a city detectable", () => {
+  // At Malappuram's turfs' median, GPS and IP still answer with a curated city.
+  const at = LIVE_POINTS.get("malappuram")!;
+  assert.equal(nearestCity(at.lat, at.lng), "kozhikode");
+  assert.equal(nearestCityAny(at.lat, at.lng).id, "kozhikode");
+  const j = LIVE_POINTS.get("jammu")!;
+  assert.ok(isKnownCity(nearestCityAny(j.lat, j.lng).id));
+  for (const c of LIVE) assert.equal(isKnownCity(c.id), false, c.id);
+  // And the curated centroid is what a curated city is measured from.
+  assert.equal(Math.round(distanceKm(cityCoords("pune")!, cityCoords("mumbai")!)), kmBetween("pune", "mumbai", LIVE_POINTS));
 });
 
 // ── Pre-paint script in a sandbox ─────────────────────────────

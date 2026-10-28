@@ -4,7 +4,7 @@ import { getAllActiveTurfs, getCardTurfs } from "@/lib/queries/turfs";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { trendingFor } from "@/lib/queries/turfList";
 import { getLiveCities } from "@/lib/queries/cities";
-import { byDistanceFrom, resolveCityScope } from "@/lib/city";
+import { byDistanceFrom, cityPointsOf, resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
 import { CityLine } from "@/components/city/CityLine";
 import { TurfListingClient } from "./TurfListingClient";
@@ -56,7 +56,9 @@ export async function TurfsView({ requested }: { requested: string | null }) {
     for (const t of sorted) ((t.city && byCity.get(t.city)) || rest).turfs.push(t);
     groups = [...byCity.values(), rest];
   }
-  const others = cityId ? byDistanceFrom(cityId, live.filter((c) => c.id !== cityId)) : live;
+  // Nearest first, curated or not (each city placed by cityPoint: its
+  // curated centroid, else its turfs' median from the live rows).
+  const others = cityId ? byDistanceFrom(cityId, live.filter((c) => c.id !== cityId), cityPointsOf(live)) : live;
   const indexTitle = cityId
     ? `All ${n.toLocaleString("en-IN")} ${n === 1 ? "turf" : "turfs"} in ${scope.kind === "city" ? scope.label : ""}, A to Z`
     : `All ${n.toLocaleString("en-IN")} turfs, by city, A to Z`;

@@ -6,24 +6,52 @@ import { CITIES, cityCopyFrom, cityInfo, isCitySlug, type CityInfo } from "@/lib
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 
-export type LiveCity = CityInfo & { n: number };
+// Pure, in lib/city.ts so test:city covers them; still imported from here.
+export { HOME_CITIES, pickOtherCities } from "@/lib/city";
+
+/** A city and its active turf count. */
+export type CityCountRow = CityInfo & { n: number };
+
+/**
+ * A live city: its count and its centroid, the median of its active
+ * turfs (city_turf_counts lat, lng). Null when none of its turfs is inside
+ * India's box, or when the view predates 20261028_city_centroids.sql.
+ * lib/city.ts cityPoint prefers the curated centroid and uses this one
+ * for a city that is not curated.
+ */
+export type LiveCity = CityCountRow & { lat: number | null; lng: number | null };
+
+type CountsRow = { city: string; n: number; lat?: unknown; lng?: unknown };
+
+/** The error for a selected column the view does not have (Postgres 42703, passed on by PostgREST). */
+function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === "42703" || /column \S*\b(?:lat|lng)\b\S* does not exist/i.test(error.message ?? "");
+}
+
+const coord = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 // One read of the city_turf_counts view (see getLiveCities).
 async function readLiveCities(): Promise<LiveCity[]> {
   const supabase = createReadOnlyClient();
-  const { data, error } = await supabase.from("city_turf_counts").select("city, n");
+  let { data, error } = await supabase.from("city_turf_counts").select("city, n, lat, lng");
+  // Before 20261028_city_centroids.sql the view has no lat or lng, and
+  // naming them fails the whole read: read the counts alone, so a deploy
+  // ahead of the migration only loses the centroids (uncurated cities
+  // list last, as before), never the city list.
+  if (isMissingColumn(error)) ({ data, error } = await supabase.from("city_turf_counts").select("city, n"));
   if (error || !data) {
     console.error("getLiveCities failed", error);
     throw new Error("Live cities read failed");
   }
   // Slug-shaped and not reserved: a turfs.city of "blog" must never
   // become a city whose /blog link is another page.
-  const rows = (data as { city: string; n: number }[]).filter((r) => isCitySlug(r.city));
+  const rows = (data as CountsRow[]).filter((r) => isCitySlug(r.city));
   const order = new Map(CITIES.map((c, i) => [c.id, i]));
   // The view has no ORDER BY: the id breaks the last ties, so two
   // uncurated cities with the same count never swap between reads.
   return rows
-    .map((r) => ({ ...cityInfo(r.city), n: r.n }))
+    .map((r) => ({ ...cityInfo(r.city), n: r.n, lat: coord(r.lat), lng: coord(r.lng) }))
     .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
 }
 
@@ -152,13 +180,13 @@ export async function getCityCopy(): Promise<CityCopy> {
  * caller is /<city>/<sport>, which reads the rows anyway, so no page gains
  * a tag or a shorter revalidate. A failed read throws, as before.
  */
-const sportCityCounts = new WeakMap<object, Record<string, LiveCity[]>>();
+const sportCityCounts = new WeakMap<object, Record<string, CityCountRow[]>>();
 
-async function getSportCityCounts(): Promise<Record<string, LiveCity[]>> {
+async function getSportCityCounts(): Promise<Record<string, CityCountRow[]>> {
   const rows = await activeTurfRows();
   const known = sportCityCounts.get(rows);
   if (known) return known;
-  const out: Record<string, LiveCity[]> = {};
+  const out: Record<string, CityCountRow[]> = {};
   const split = (raw: unknown): string[] =>
     (Array.isArray(raw) ? raw : [])
       .flatMap((x) => (typeof x === "string" ? x.split(",") : []))
@@ -182,28 +210,10 @@ async function getSportCityCounts(): Promise<Record<string, LiveCity[]>> {
   return out;
 }
 
-/** Cities where a "<sport> in <city>" page is indexable, biggest first. */
-export async function getCitiesForSport(slug: string): Promise<LiveCity[]> {
-  return (await getSportCityCounts())[slug] ?? [];
-}
-
 /**
- * Cities to cross-link from a page about one city: up to four from the
- * same state first (local relevance), then the biggest, twelve in all,
- * plus the home cities when they qualify and did not make the cut, so
- * the pages TapTurf started with keep their inbound links.
+ * Cities where a "<sport> in <city>" page is indexable, biggest first.
+ * No centroids here: place them with cityPointsOf(await getLiveCities()).
  */
-export const HOME_CITIES: readonly string[] = ["nashik", "nagpur"];
-
-export function pickOtherCities<T extends CityInfo>(cities: T[], current: string, limit = 12): T[] {
-  const others = cities.filter((c) => c.id !== current);
-  const state = cities.find((c) => c.id === current)?.state ?? cityInfo(current).state;
-  const sameState = state === "India" ? [] : others.filter((c) => c.state === state).slice(0, 4);
-  const rest = others.filter((c) => !sameState.includes(c));
-  const picked = [...sameState, ...rest].slice(0, limit);
-  for (const home of HOME_CITIES) {
-    const c = others.find((x) => x.id === home);
-    if (c && !picked.includes(c)) picked.push(c);
-  }
-  return picked;
+export async function getCitiesForSport(slug: string): Promise<CityCountRow[]> {
+  return (await getSportCityCounts())[slug] ?? [];
 }
