@@ -39,6 +39,14 @@ export type HomeCityRow = {
   label: string;
   n: number;
   top: { id: string; slug?: string | null; name: string }[];
+  /**
+   * The city's live centroid (getLiveCities: its turfs' median), null when
+   * it has none. Only orders the city view's "nearest first" list, with
+   * the curated centroid first (lib/city.ts cityPoint); never sent to the
+   * browser (EveryCityList is server markup).
+   */
+  lat: number | null;
+  lng: number | null;
 };
 
 export type HomeGame = {

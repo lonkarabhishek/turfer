@@ -150,6 +150,8 @@ async function buildHomeData(): Promise<HomeData> {
   // When the live city view answered, only its cities get a link, so
   // every /{city} on the home is a page that exists.
   const liveIds = new Set(live.map((c) => c.id));
+  // Centroids for the city view's nearest-first list (lib/home/select.ts).
+  const liveById = new Map(live.map((c) => [c.id, c]));
   const ids = new Set<string>(liveIds.size > 0 ? [...byCity.keys()].filter((id) => liveIds.has(id)) : byCity.keys());
   const cities = [...ids]
     .map((id) => ({ id, label: cityInfo(id).label, list: byCity.get(id) ?? [] }))
@@ -205,7 +207,15 @@ async function buildHomeData(): Promise<HomeData> {
       tiles: pool.filter((t) => t.id !== trendingId).slice(0, tileCount).map((t) => toTile(t)),
     });
 
-    cityRows.push({ id, label, n, top: list.slice(0, 3).map((t) => ({ id: t.id, slug: t.slug, name: t.name })) });
+    const at = liveById.get(id);
+    cityRows.push({
+      id,
+      label,
+      n,
+      top: list.slice(0, 3).map((t) => ({ id: t.id, slug: t.slug, name: t.name })),
+      lat: at?.lat ?? null,
+      lng: at?.lng ?? null,
+    });
   });
 
   // "Top-rated across India": walk the national ranking, at most two

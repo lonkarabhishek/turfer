@@ -4,8 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getAllActiveTurfs, turfRowsStale } from "@/lib/queries/turfs";
-import { isCity, labelFor, type CityId } from "@/lib/city";
-import { getCitiesForSport, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
+import { cityPointsOf, isCity, labelFor, type CityId } from "@/lib/city";
+import { getCitiesForSport, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
@@ -128,10 +128,13 @@ export default async function CitySportPage({
 
   // Same sport in other cities, and other sports in this city, for
   // players and crawlers. Only cities where this sport's page is
-  // indexable (same threshold as the sitemap), same state first, then
-  // the biggest, plus the home cities so /nashik/<sport> keeps its
-  // sibling links.
-  const otherCities = pickOtherCities(await getCitiesForSport(s.slug), cityId).flatMap((c) => {
+  // indexable (same threshold as the sitemap): the twelve nearest, plus
+  // the home cities so /nashik/<sport> keeps its sibling links, nearest
+  // first. The points come from the live list (the page read it already,
+  // isLiveCity), so this city is placed even when its own sport page is
+  // too thin to be in the sport's list.
+  const [sportCities, live] = await Promise.all([getCitiesForSport(s.slug), getLiveCities()]);
+  const otherCities = pickOtherCities(sportCities, cityId, cityPointsOf(live)).flatMap((c) => {
     const href = citySportHref(c.id, s.slug, c.n);
     return href ? [{ ...c, href }] : [];
   });

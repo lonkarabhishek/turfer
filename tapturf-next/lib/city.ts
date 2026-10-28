@@ -476,6 +476,8 @@ export function cityInText(text: string): CityId | null {
 // answers inside the pick screen's static variants (app/c/pick/[city]).
 // A new city's centroid: the median of its active turfs' lat/lng is
 // within about 12 km of the city centre for every city added 26 Oct.
+// A city not listed here is still placed in "nearest first" lists, by
+// that median from the city_turf_counts view (cityPoint, cityPointsOf).
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   nashik: { lat: 19.9975, lng: 73.7898 },
   pune:   { lat: 18.5204, lng: 73.8567 },
@@ -580,6 +582,43 @@ export function cityCoords(id: string): { lat: number; lng: number } | null {
   return CITY_COORDS[id] ?? null;
 }
 
+export type CityPoint = { lat: number; lng: number };
+
+/**
+ * Live centroids by city id: the median of each city's active turfs, from
+ * the city_turf_counts view (lib/queries/cities.ts getLiveCities rows,
+ * the home's city rows). Built by cityPointsOf.
+ */
+export type CityPoints = ReadonlyMap<string, CityPoint>;
+
+/**
+ * The centroids that rows carry (lat, lng), keyed by id. A row with no
+ * point, or one that is not a real coordinate, is left out: the view says
+ * null for a city with no turf inside India's box, and a copy read before
+ * the 28 Oct migration (or cached from before it) has no lat or lng.
+ */
+export function cityPointsOf(rows: readonly { id: string; lat?: number | null; lng?: number | null }[]): CityPoints {
+  const out = new Map<string, CityPoint>();
+  for (const r of rows) {
+    const { lat, lng } = r;
+    if (typeof lat !== "number" || typeof lng !== "number") continue;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
+    out.set(r.id, { lat, lng });
+  }
+  return out;
+}
+
+/**
+ * Where a city is, for "nearest first" lists: its curated centroid
+ * (CITY_COORDS) when it has one, else its live centroid from `points`
+ * (cityPointsOf), else null. Detection (nearestCity, nearestCityAny,
+ * proxy.ts, GPS) reads CITY_COORDS only, so its answers stay curated.
+ */
+export function cityPoint(id: string, points?: CityPoints): CityPoint | null {
+  // Own keys only: "constructor" is slug-shaped too.
+  return (Object.prototype.hasOwnProperty.call(CITY_COORDS, id) ? CITY_COORDS[id] : null) ?? points?.get(id) ?? null;
+}
+
 /** Haversine: km between two lat/lng points. */
 export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
@@ -592,10 +631,13 @@ export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; ln
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
-/** Rounded km between two city centroids, or null when either has none. */
-export function kmBetween(a: string, b: string): number | null {
-  const pa = cityCoords(a);
-  const pb = cityCoords(b);
+/**
+ * Rounded km between two cities (cityPoint: curated centroid, else the
+ * live one in `points`), or null when either has no point.
+ */
+export function kmBetween(a: string, b: string, points?: CityPoints): number | null {
+  const pa = cityPoint(a, points);
+  const pb = cityPoint(b, points);
   if (!pa || !pb) return null;
   return Math.round(distanceKm(pa, pb));
 }
@@ -622,11 +664,15 @@ export function nearestCity(lat: number, lng: number): CityId | null {
 }
 
 /**
- * Rows ordered by distance from one city: rows with a centroid first,
- * nearest first; rows without one keep their incoming order at the end.
+ * Rows ordered by distance from one city: rows with a point first,
+ * nearest first (equal km keep their incoming order); rows without one
+ * keep their incoming order at the end. Both the city and the rows are
+ * placed by cityPoint, so pass `points` (cityPointsOf the live rows) and a
+ * city that is not curated sorts, and is sorted, by its turfs' median.
+ * With no point for `from`, every km is null and the order is unchanged.
  */
-export function byDistanceFrom<T extends { id: string }>(from: string, rows: T[]): (T & { km: number | null })[] {
-  const withKm = rows.map((r, i) => ({ r: { ...r, km: kmBetween(from, r.id) }, i }));
+export function byDistanceFrom<T extends { id: string }>(from: string, rows: T[], points?: CityPoints): (T & { km: number | null })[] {
+  const withKm = rows.map((r, i) => ({ r: { ...r, km: kmBetween(from, r.id, points) }, i }));
   return withKm
     .sort((a, b) => {
       if (a.r.km == null && b.r.km == null) return a.i - b.i;
@@ -635,6 +681,34 @@ export function byDistanceFrom<T extends { id: string }>(from: string, rows: T[]
       return a.r.km - b.r.km || a.i - b.i;
     })
     .map((x) => x.r);
+}
+
+/**
+ * Where TapTurf started and launched next. Cross-link lists and the
+ * footer always link them when they qualify, so the pages TapTurf
+ * started with keep their inbound links.
+ */
+export const HOME_CITIES: readonly string[] = ["nashik", "nagpur"];
+
+/**
+ * Cities to cross-link from a page about one city: the `limit` nearest
+ * (byDistanceFrom with `points`, so a city that is not curated is placed
+ * by its turfs' median), plus the home cities when they qualify and did
+ * not make the cut; all of them nearest first. Twelve plus at most two
+ * links, as before, so the link graph keeps its size. A city or row with
+ * no point falls back to the incoming order (biggest first), which is the
+ * old pick for a city not curated (its state is unknown). The biggest
+ * cities still have a link on every page from the footer.
+ */
+export function pickOtherCities<T extends { id: string }>(
+  cities: T[],
+  current: string,
+  points?: CityPoints,
+  limit = 12,
+): (T & { km: number | null })[] {
+  const near = byDistanceFrom(current, cities.filter((c) => c.id !== current), points);
+  const keep = new Set([...near.slice(0, limit).map((c) => c.id), ...HOME_CITIES]);
+  return near.filter((c) => keep.has(c.id));
 }
 
 export type CityScope =

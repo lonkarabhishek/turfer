@@ -11,7 +11,7 @@ import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { citySportLinks, venueWord } from "@/lib/sports";
-import { CITIES, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
+import { CITIES, cityPointsOf, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
 import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
@@ -87,8 +87,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
     getTrendingPick(cityId),
     getLiveCities(),
   ]);
-  // Cross-links to other city pages: same state first, then biggest.
-  const otherCities = pickOtherCities(liveCities, cityId);
+  // Cross-links to other city pages: the twelve nearest (curated or not:
+  // each placed by its curated centroid, else its turfs' median), plus the
+  // home cities, nearest first.
+  const otherCities = pickOtherCities(liveCities, cityId, cityPointsOf(liveCities));
   const spotlight = trendingPick ? toSpotlights({ [cityId]: trendingPick }, turfs) : [];
   const trendingId = spotlight[0]?.turfId ?? null;
   const sportCounts = citySportLinks(cityId, turfs);
