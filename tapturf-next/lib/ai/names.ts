@@ -1,5 +1,6 @@
 import { areaFor } from "../utils/area";
 import { CITIES, CITY_ALIASES, NOT_IN_TEXT, cityInText, labelFor, type CityId } from "../city";
+import { SPORT_PAGES } from "../sports";
 import type { Turf } from "../../types/turf";
 
 // Venue-name matching for Ask TapTurf (find a turf, compare, a question
@@ -39,11 +40,15 @@ const FILLER = new Set(
   (
     "in at on near nearby nearest me my mere paas bro broo bruh bhai yaar pls plz please show find get give want need " +
     "number num no not contact phone details location address is there any for to of with hai kya wala wale wali ka ki ke " +
-    "hi hii hello hey thanks thank ok okay it this that here how much what when time does do did can have has " +
+    "hi hii hello hey thanks thank ok okay it its this that here how much what when time does do did can have has " +
     "book booking available under below upto within rs inr rupees per make made more other another also only same cheaper better " +
     "now tell about timing timings"
   ).split(" "),
 );
+
+/** What a player asks after a venue's name ("dribble den price"): never the end of the name as said back. */
+const ASKED = new Set("price prices rate rates cost costs charge charges fee fees".split(" "));
+const PREP = new Set("in at on near to of for with".split(" "));
 
 // Spellings people type for the generic words, so "Royal multisports
 // truf" is read as "royal multisports turf".
@@ -65,6 +70,8 @@ const fullOf = (words: string[]) => words.map((w) => NUM[w] ?? w).join("");
  */
 const hitWord = (w: string, h: string) => h === w || (w.length >= 5 && h.startsWith(w)) || (h.length >= 4 && w.startsWith(h) && /^(?:s|es|z)$/.test(w.slice(h.length)));
 const hitIn = (w: string, hay: readonly string[]) => hay.some((h) => hitWord(w, h));
+/** The same word, or one as the other's plural ("champion" and Champions, "titans" and Titan): never the start of a longer one (Supernova is no "super"). */
+const sameWord = (w: string, n: string) => w === n || [[w, n], [n, w]].some(([a, b]) => a.length >= 4 && b.startsWith(a) && /^(?:s|es|z)$/.test(b.slice(a.length)));
 
 /** Optimal string alignment distance (a swap of two letters is one edit), or max + 1 once it is over max. */
 function editDistance(a: string, b: string, max: number): number {
@@ -201,16 +208,22 @@ function readName(text: string, cities: Map<string, CityId>, search: boolean): T
   if (!core.length && !(search ? short : compactOK || short)) return null;
   if (search && kept.length && kept.every((x) => /^\d+$/.test(x.w))) return null;
   const tidy = (s: string) => s.replace(/[?.!,]+$/, "").trim();
-  const label =
-    tidy(
-      text
-        .split(/\s+/)
-        .filter((w) => {
-          const n = norm(w);
-          return !n || (!FILLER.has(n) && !cities.has(n));
-        })
-        .join(" "),
-    ) || tidy(text);
+  // The name as typed, without the words around it: filler, a city, a
+  // price asked ("number of Kage", "Kage Turf broo", "Hotfut in Navi
+  // Mumbai", "dribble den price"). Only at the ends: "Balls Of Fury",
+  // "Kick it arena" and "Box22 Drive in" keep their small words.
+  const toks = text.trim().split(/\s+/);
+  const around = (w: string) => !norm(w) || FILLER.has(norm(w));
+  // A city of up to three words at the start or the end of toks[a, b).
+  const cityEdge = (a: number, b: number, end: boolean) =>
+    [3, 2, 1].find((n) => b - a >= n && cities.has(norm(toks.slice(end ? b - n : a, end ? b : a + n).join(" ")))) ?? 0;
+  let a = 0;
+  let b = toks.length;
+  for (let k = 1; k && a < b; a += k) k = around(toks[a]) ? 1 : cityEdge(a, b, false);
+  // A last word "in" or "on" with nothing after it is the name's ("Score On"), not "Hotfut in Hyderabad"'s.
+  const last = (w: string) => b === toks.length && PREP.has(norm(w));
+  for (let k = 1; k && b > a; b -= k) k = (around(toks[b - 1]) && !last(toks[b - 1])) || ASKED.has(norm(toks[b - 1])) ? 1 : cityEdge(a, b, true);
+  const label = tidy(toks.slice(a, b).join(" ")) || tidy(text);
   // With a number, the generic words run together too: "Club 19" is
   // Club19, "Turf 28" is Turf28 Bijapur (the run-together form above
   // leaves "club" and "turf" out, so it was only "19" and "28").
@@ -225,13 +238,15 @@ function readName(text: string, cities: Map<string, CityId>, search: boolean): T
  * word of the typed name is in the venue's own name, not only its area
  * or address ("Shivaji Nagar" is not Chatrapati Shivaji Maharaj Turf);
  * partName: at least one is.
- * whole: the venue's name, typed (exact, or all its distinctive words:
- * "Power play" for POWERPLAY ARENA TURF). cover: the share of the
+ * whole: the venue's name, typed: each of its words as itself, its
+ * plural or misspelt ("Dribbel Den" for Dribble Den), never only the
+ * start of one, or all its distinctive words ("Power play" for
+ * POWERPLAY ARENA TURF). cover: the share of the
  * venue's own words typed ("Kage Turf": 2 of Kage Multisport Turf's 3).
  */
 export type VenueMatch = { turf: Turf; tier: number; nameHits: number; exact: boolean; inName: boolean; partName: boolean; whole: boolean; cover: number };
 
-function matchOne(t: Turf, typed: Typed, fuzzy: boolean): VenueMatch | null {
+function matchOne(t: Turf, typed: Typed, fuzzy: boolean, cities: ReadonlyMap<string, CityId>): VenueMatch | null {
   const h = hayOf(t);
   let coreHits = 0;
   let coreInName = 0;
@@ -302,14 +317,24 @@ function matchOne(t: Turf, typed: Typed, fuzzy: boolean): VenueMatch | null {
   const exact =
     (own.some((n) => n.length >= 2) && own.every((n) => (n.length >= 2 ? typed.words.some((x) => hitWord(x.w, n)) : typed.letters.includes(n)))) ||
     (typed.full != null && typed.full === h.full);
-  const whole = exact || (typed.compact.length >= 4 && typed.compact === h.compact);
   const long = own.filter((n) => n.length >= 2);
+  // The whole name: each of its words typed (or its plural, or misspelt:
+  // "Dribbel Den"), never only the start of one ("Super Cricket Box" is
+  // not SuperOver Box Cricket), or its distinctive words run together.
+  // Its own city needn't be typed: "Sportify" is Sportify Hyderabad's
+  // name, as is "Sportify Hyderabad" read with the city apart.
+  const said = (n: string) => typed.words.some((x) => sameWord(x.w, n) || (misspelt && nearWord(x.w, n))) || (cities.get(n) === t.city && long.some((m) => cities.get(m) !== t.city));
+  const whole =
+    (long.length > 0 && own.every((n) => (n.length >= 2 ? said(n) : typed.letters.includes(n)))) ||
+    (typed.full != null && typed.full === h.full) ||
+    (typed.compact.length >= 4 && typed.compact === h.compact);
   const cover = long.length ? long.filter((n) => typed.words.some((x) => hitWord(x.w, n))).length / long.length : 0;
   return { turf: t, tier, nameHits, exact, inName: coreOwn >= typed.of, partName: coreOwn > 0, whole, cover };
 }
 
 function matchAll(all: readonly Turf[], typed: Typed): VenueMatch[] {
-  const pass = (fuzzy: boolean) => all.map((t) => matchOne(t, typed, fuzzy)).filter((m): m is VenueMatch => m !== null);
+  const cities = cityWordsFor(all);
+  const pass = (fuzzy: boolean) => all.map((t) => matchOne(t, typed, fuzzy, cities)).filter((m): m is VenueMatch => m !== null);
   const out = pass(false);
   // Misspellings only when nothing matches as typed.
   return out.some((m) => m.tier <= 1) ? out : pass(true);
@@ -320,11 +345,19 @@ const cityRank = (t: Turf, cities: readonly (CityId | null | undefined)[]) => {
   return i < 0 ? cities.length : i;
 };
 
-/** Best first: the closest match, then the preferred cities in order, then the exact name, then the most reviewed. */
-function byMatch(cities: readonly (CityId | null | undefined)[]) {
+/**
+ * Best first: the closest match, a city typed with the name, then the
+ * whole name over part of it ("Golden turf" from Mumbai is Lucknow's
+ * Golden turf, not Golden Boot Turf in Airoli), then the preferred
+ * cities in order, then the exact name, then the most reviewed.
+ */
+function byMatch(cities: readonly (CityId | null | undefined)[], typedCity: CityId | null = null) {
+  const whole = (m: VenueMatch) => Number(m.whole);
   return (a: VenueMatch, b: VenueMatch) =>
     a.tier - b.tier ||
     b.nameHits - a.nameHits ||
+    cityRank(a.turf, [typedCity]) - cityRank(b.turf, [typedCity]) ||
+    whole(b) - whole(a) ||
     cityRank(a.turf, cities) - cityRank(b.turf, cities) ||
     Number(b.exact) - Number(a.exact) ||
     (b.turf.total_reviews ?? 0) - (a.turf.total_reviews ?? 0);
@@ -335,6 +368,8 @@ export type Resolved = {
   turf: Turf | null;
   /** Other venues with exactly this name, in other cities ("Prime Turf" is in Mumbai, Ballari and Malegaon). */
   others: Turf[];
+  /** The name typed is the venue's whole name ("Kage Multisport Turf"), not part of it ("Kage"). */
+  whole: boolean;
 };
 
 /**
@@ -384,16 +419,16 @@ export function resolveTurfNames(
   return names.map((name) => {
     const typed = readName(name, cityWords, false);
     const read = typed ? matchAll(all, typed) : [];
-    const found = (read.length ? read : wholeName(all, name, true)).sort(byMatch([typed?.city, ...prefer]));
+    const found = (read.length ? read : wholeName(all, name, true)).sort(byMatch(prefer, typed?.city ?? null));
     const best = opts.distinct || taken.size ? found.find((m) => !taken.has(m.turf)) : found[0];
-    if (!best) return { name, turf: null, others: [] };
+    if (!best) return { name, turf: null, others: [], whole: false };
     if (opts.distinct) taken.add(best.turf);
     // Only venues by the very same name: "There's also a Prime Turf in Ballari", never another name.
     const same = norm(best.turf.name);
     const others = found
       .filter((m) => m.exact && m.tier === best.tier && m.turf.city !== best.turf.city && norm(m.turf.name) === same)
       .map((m) => m.turf);
-    return { name, turf: best.turf, others };
+    return { name, turf: best.turf, others, whole: best.whole };
   });
 }
 
@@ -414,7 +449,7 @@ export function resolveWithPage(
   const at = page.turf && page.name ? names.findIndex((n) => norm(n) === norm(page.name!)) : -1;
   const rest = resolveTurfNames(all, names.filter((_, i) => i !== at), cities, { distinct: opts.distinct, exclude: at >= 0 && page.turf ? [page.turf] : [] });
   if (at < 0 || !page.turf) return rest;
-  return [...rest.slice(0, at), { name: names[at], turf: page.turf, others: [] }, ...rest.slice(at)];
+  return [...rest.slice(0, at), { name: names[at], turf: page.turf, others: [], whole: true }, ...rest.slice(at)];
 }
 
 export type NamedVenues = {
@@ -443,7 +478,7 @@ export function findNamedVenues(all: readonly Turf[], text: string | null | unde
     return whole.length ? { matches: whole.sort(byMatch([])), city: null, label: text.replace(/[?.!,]+$/, "").trim(), placed: false } : null;
   }
   const tier = Math.min(...found.map((m) => m.tier));
-  return { matches: found.filter((m) => m.tier === tier).sort(byMatch([typed.city])), city: typed.city, label: typed.label, placed: typed.placed };
+  return { matches: found.filter((m) => m.tier === tier).sort(byMatch([], typed.city)), city: typed.city, label: typed.label, placed: typed.placed };
 }
 
 /** Words of a row a search could find: its name, area, address and sports. */
@@ -504,6 +539,169 @@ export function wholeVenueName(all: readonly Turf[], text: string): NamedVenues 
   const one = named?.matches.length === 1;
   const matches = named?.matches.filter((m) => m.tier === 0 && (m.whole || (one && m.cover >= 2 / 3))) ?? [];
   return named && matches.length ? { ...named, matches } : null;
+}
+
+/**
+ * Words that say what or where a venue is, not which one, for closest
+ * names only: the sports, and words many names carry ("zone" is in 71
+ * names on 28 Oct, "cafe" in 76, "nagar" in 20). A venue still matches
+ * by them (Champions Zone); they just never make a name close.
+ */
+const KIND = new Set([
+  ...SPORT_PAGES.flatMap((s) => s.labels.flatMap((l) => norm(l).split(" "))),
+  ...("zone cafe caf soccer futsal pickle pitch nets net pool park centre center stadium pavilion station spot point corner square yard garden house adda " +
+    "fitness gym khel khelo fc sc cc sportz sporting sporty international india indian sevens eleven by de nagar road rd sector sec colony layout phase town greater " +
+    // What a venue has, asked for ("rooftop turf", "astro turf", "real grass", "turf for kids").
+    "rooftop terrace snooker billiards astro astroturf grass natural artificial synthetic kids kid camp camps coaching").split(" "),
+]);
+
+/**
+ * Words many venues' names have that still name one: adjectives, game
+ * terms, team nouns and kinds of place ("hit" is in 31 names in 21 cities on 28 Oct,
+ * "champions" 28 in 21, "royal" 21 in 16). For closest names they count
+ * only between names with nothing else of their own: "Champions Arena"
+ * is close to Champion's Turf, but "Free Hit Turf" is not to Free Kick
+ * Sports Arena, nor "Pro Turf Arena" to Pro Legacy Sports Academy.
+ */
+const COMMON = new Set(
+  (
+    "free high super pro elite prime royal golden green urban united grand mega ultra max smart sky true real active fun young little premier premium classic ace first star stars power " +
+    "hit hits kick kicks kickoff off goal goals strike striker strikers score scorer scores six sixes sixer sixers boundary boundaries wicket wickets over overs innings " +
+    "bat bats bowl bowler bowlers bowling dugout powerplay hattrick header korner penalty shot shots run runs out stumps yorker catch drive cover sweep spin googly bouncer " +
+    "champion champions champs king kings warriors legend legends titan titans tiger tigers lion lions eagle eagles knight knights rider riders challenger challengers " +
+    "player players master masters hero heroes gladiators spartans panthers falcons hawks sharks bulls rangers world nation land kingdom palace " +
+    "village campus junction plaza tower towers valley hills estate society residency enclave lounge mall metro school college"
+  ).split(" "),
+);
+
+
+const nameWordMemo = new WeakMap<readonly Turf[], Set<string>>();
+/** Every word of every venue's name, to tell a misspelling from another name ("Pride" is no misspelt "Prime"). */
+function nameWordsFor(all: readonly Turf[]): Set<string> {
+  let m = nameWordMemo.get(all);
+  if (!m) {
+    m = new Set(all.flatMap((t) => hayOf(t).name));
+    nameWordMemo.set(all, m);
+  }
+  return m;
+}
+
+/**
+ * The venues in `city` whose names are closest to a typed name that
+ * isn't there ("Dribble Den" from Hyderabad: Cricket Den, Sports Den,
+ * Gamer's Den), best first, at most `limit`, often none. Close is by
+ * name only: a distinctive word shared (the same word or its plural,
+ * never the start of a longer one: Greenbox is no "Green"), the same
+ * word misspelt (nearWord; a five-letter word only when no venue's name
+ * has it as typed), or the whole name run together or as initials
+ * ("Dribbleden", "S K"). Generic words (turf, sports, arena, a sport, a
+ * city, "zone", "rooftop") never count, common ones (COMMON: "hit",
+ * "pro", "champions") only between names with no other word, nor the
+ * area of the venues it was found at (`found`): "Kharadi" of Hotfut
+ * Kharadi is where it is. At least half the typed name's distinctive
+ * words must be in the venue's, a word of three letters or more among
+ * them when it has one ("Level Up" is no Turf Up); every one with
+ * `every` (a name no venue has). More words shared first, then more of
+ * the venue's own name typed, then the most reviewed.
+ *
+ * `also`: venues there the matcher took for the name (Golden Boot Turf
+ * for "Golden turf", when Lucknow has the Golden turf), first, when a
+ * word of the name is a word of theirs. `keep`: the search's other
+ * filters (sport, budget, area) every venue must pass.
+ */
+export function closestNames(
+  all: readonly Turf[],
+  text: string | null | undefined,
+  city: CityId,
+  found: readonly Turf[] = [],
+  limit = 3,
+  opts: { also?: readonly Turf[]; every?: boolean; keep?: (t: Turf) => boolean } = {},
+): Turf[] {
+  const typed = text ? readName(text, cityWordsFor(all), false) : null;
+  if (!typed) return [];
+  const keep = (t: Turf) => t.city === city && (!opts.keep || opts.keep(t));
+  const core = typed.words.filter((x) => x.core && !x.city).map((x) => x.w);
+  const first = (opts.also ?? [])
+    .filter((t) => keep(t) && hayOf(t).name.some((n) => core.some((w) => sameWord(w, n))))
+    .sort((a, b) => (b.total_reviews ?? 0) - (a.total_reviews ?? 0));
+  const own = (w: string) => w.length >= 2 && !/^\d+$/.test(w) && !STOP.has(w) && !WEAK.has(w) && !FILLER.has(w) && !KIND.has(w);
+  const there = new Set(found.flatMap((t) => hayOf(t).place));
+  const typedOwn = [...new Set(typed.words.filter((x) => !x.city && own(x.w) && !there.has(x.w)).map((x) => x.w))];
+  // Only common words typed ("Champions Arena"): those, against names with no other word of their own.
+  const weak = typedOwn.every((w) => COMMON.has(w));
+  const ws = weak ? typedOwn : typedOwn.filter((w) => !COMMON.has(w));
+  // Run together, only for a name with a word of its own or initials ("Sports Zone" is no "Zone Turf").
+  const run = ws.length || typed.short ? typed.compact : "";
+  if (!ws.length && !run) return first.slice(0, limit);
+  const known = nameWordsFor(all);
+  // Not the "sport" coinages either, a letter or two apart by design (Sportivo, Sportingo, Sportygen).
+  const misspelt = ws.filter((w) => (w.length >= 6 || !known.has(w)) && !w.startsWith("sport"));
+  // Two letters ("SB" of Hotfut SB Road, "Up" of Level Up) never make a name close alone when it has a longer word.
+  const long = ws.some((w) => w.length >= 3);
+  const close = all.flatMap((t) => {
+    if (!keep(t) || first.includes(t)) return [];
+    const h = hayOf(t);
+    const mine = h.name.filter(own);
+    const joined = run.length >= 2 && h.compact === run;
+    // Common words alone: a venue with a word of its own is another name (Pro Legacy Sports Academy for "Pro Turf Arena").
+    if (weak && !joined && mine.some((n) => !COMMON.has(n))) return [];
+    const theirs = weak ? mine : mine.filter((n) => !COMMON.has(n));
+    const hit = (w: string) => theirs.some((n) => sameWord(w, n));
+    const near = (w: string) => misspelt.includes(w) && theirs.some((n) => nearWord(w, n));
+    const matched = ws.filter((w) => hit(w) || near(w));
+    // Half the name's words at least: one of three is another name ("Royal" of Royal Challengers Kings). Every one of common words only.
+    const enough = matched.length > 0 && (opts.every || weak ? matched.length === ws.length : matched.length * 2 >= ws.length) && (!long || matched.some((w) => w.length >= 3));
+    if (!joined && !enough) return [];
+    // A two-letter word counts for less than a word ("Hotfut").
+    const hits = matched.filter(hit).reduce((n, w) => n + (w.length >= 3 ? 2 : 1), 0);
+    const nears = matched.filter((w) => !hit(w)).length;
+    const cover = theirs.length ? theirs.filter((n) => ws.some((w) => sameWord(w, n) || (misspelt.includes(w) && nearWord(w, n)))).length / theirs.length : 0;
+    return [{ t, score: (joined ? 10 : 0) + hits + nears, cover }];
+  });
+  close.sort((a, b) => b.score - a.score || b.cover - a.cover || (b.t.total_reviews ?? 0) - (a.t.total_reviews ?? 0));
+  return [...first, ...close.map((c) => c.t)].slice(0, limit);
+}
+
+/**
+ * Whether typed words name a venue rather than say what one has: a word
+ * that is no generic word, sport, facility or kind of place (KIND), nor
+ * a city, or initials. "Kage", "Golden turf" and "Champions Arena" do;
+ * "rooftop turf", "astro turf", "turf with cafe" and "snooker" don't,
+ * though venues have them in their names (The Sky Arena - Rooftop Turf,
+ * Astro Turf).
+ */
+export function namesWhich(all: readonly Turf[], text: string | null | undefined): boolean {
+  const typed = text ? readName(text, cityWordsFor(all), true) : null;
+  return !!typed && (typed.short || typed.words.some((x) => x.core && !x.city && !KIND.has(x.w)));
+}
+
+/**
+ * Whether free text reads as a venue's name on its own, for "No turf
+ * called X on TapTurf yet": it names one (namesWhich), with no number,
+ * no place after "in" or "near", and three words at most that aren't
+ * generic ("Dribble Zone Sports Arena" is two). Not "turf for 14
+ * players", "turf near metro station" or "I know tapturf has a score
+ * tracker".
+ */
+export function readsAsName(all: readonly Turf[], text: string | null | undefined): boolean {
+  if (!text || /\d/.test(text)) return false;
+  const typed = readName(text, cityWordsFor(all), true);
+  if (!typed || typed.placed) return false;
+  return typed.words.filter((x) => !x.city && !STOP.has(x.w) && !WEAK.has(x.w)).length <= 3 && namesWhich(all, text);
+}
+
+/**
+ * Whether the player said where the venue is, as when they type its
+ * city: a word (three letters or more) of a found venue's area, in the
+ * name typed or the areas, that is no word of any found venue's name
+ * ("Dribble Den in Begur", "Prime Turf Marol"; not "Zeta" for Zeta
+ * Sports Arena, though Darbari Lal Sports Arena is in Zeta 1).
+ */
+export function placedAt(found: readonly Turf[], text: string | null | undefined, areas: readonly string[] = []): boolean {
+  const words = (s: string | null | undefined) => norm(s ?? "").split(" ").filter((w) => w.length >= 3);
+  const said = new Set(words([text ?? "", ...areas].join(" ")));
+  const names = new Set(found.flatMap((t) => words(t.name)));
+  return found.some((t) => words(areaFor(t)).some((w) => said.has(w) && !names.has(w)));
 }
 
 const nameCounts = new WeakMap<readonly Turf[], Map<string, number>>();

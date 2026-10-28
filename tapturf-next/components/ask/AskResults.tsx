@@ -114,6 +114,33 @@ function Row({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** A row per heading (the closest names in the player's city, then the venue named), sliced from the cards in order. */
+function HeadedRows({ turfs, rows }: { turfs: (Turf & { distanceKm?: number })[]; rows: NonNullable<AskResponse["rows"]> }) {
+  const starts = rows.map((_, k) => rows.slice(0, k).reduce((n, r) => n + r.count, 0));
+  return (
+    <>
+      {rows.map((row, k) => {
+        const part = turfs.slice(starts[k], starts[k] + row.count);
+        if (!part.length) return null;
+        return (
+          <div key={`${k}:${row.label}`} className={k ? "mt-3" : undefined}>
+            {/* A long name is cut short, never the place: "Champion’s Field Turf and Pickle… in Pune". */}
+            <p className="mb-1.5 flex min-w-0 text-[12px] font-semibold text-primary-500">
+              <span className="truncate">{row.label}</span>
+              {row.place && <span className="shrink-0 whitespace-pre"> in {row.place}</span>}
+            </p>
+            <Row>
+              {part.map((t, i) => (
+                <TurfMiniCard key={t.id} turf={t} priority={starts[k] + i < 2} />
+              ))}
+            </Row>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function MoreLink({ href, label }: { href: string; label: string }) {
   return (
     <Link href={href} className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-accent-700 hover:text-accent-800 cursor-pointer">
@@ -173,7 +200,8 @@ export function AskResultBody({
 
   return (
     <div className="mt-2.5">
-      {(res.intent === "find_turf" || res.intent === "find_game") && <FilterChips res={res} />}
+      {/* Headed rows say where each row is; a city chip over both would say one. */}
+      {(res.intent === "find_turf" || res.intent === "find_game") && !res.rows?.length && <FilterChips res={res} />}
 
       {res.needsLocation && (
         <button
@@ -192,11 +220,15 @@ export function AskResultBody({
 
       {res.intent === "find_turf" && turfs.length > 0 && (
         <>
-          <Row>
-            {turfs.map((t, i) => (
-              <TurfMiniCard key={t.id} turf={t} priority={i < 2} />
-            ))}
-          </Row>
+          {res.rows?.length ? (
+            <HeadedRows turfs={turfs} rows={res.rows} />
+          ) : (
+            <Row>
+              {turfs.map((t, i) => (
+                <TurfMiniCard key={t.id} turf={t} priority={i < 2} />
+              ))}
+            </Row>
+          )}
           {res.total > turfs.length && <MoreLink href={moreLink(res)} label={`See all ${res.total}`} />}
         </>
       )}

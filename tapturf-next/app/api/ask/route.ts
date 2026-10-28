@@ -21,8 +21,8 @@ import {
   type AskTurn,
 } from "@/lib/ai/ask";
 import { quickAnswer } from "@/lib/ai/quick";
-import { resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
-import { citiesLine, venueLine, venueReply, widenedReply } from "@/lib/ai/relax";
+import { placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
+import { cap, citiesLine, closestRow, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
@@ -440,17 +440,33 @@ export async function GET(req: Request) {
           body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
           break;
         }
+        // A venue typed that isn't in the player's city (the one asked
+        // about, the reading's, theirs): say so first, as a search does
+        // ("No turf called Kage in Mumbai."). Not for the page's venue, a
+        // card shown last turn or a venue named earlier in the conversation
+        // (free_text or turf_names), nor when the player said where it is
+        // ("does Prime Turf Marol have parking"), as a search reads it.
+        const home = label(askedCity ?? filters.city ?? prefCity);
+        const typed = filters.turf_names[0];
+        const earlier = [ctx.turf ?? "", ...lastTop, ...history.flatMap((h) => [h.filters.free_text ?? "", ...(h.filters.turf_names ?? [])])];
+        const carried = !!typed && earlier.some((n) => n.toLowerCase() === typed.toLowerCase());
+        const away = !!home && !!typed && !carried && place(hit.turf).city !== home && !placedAt([hit.turf], typed, filters.areas);
+        // The venue's own name when typed whole ("Kick it arena"), else the words typed ("Kage").
+        const lead = away && home ? noneIn(hit.whole ? place(hit.turf).name : cap(nameIn(turfs, typed) ?? typed), home) : null;
         // Which venue this is, when it isn't in the player's city or the name is shared.
-        const which = venueLine(place(hit.turf), label(prefCity), hit.others.map((t) => labelFor(t.city ?? "")));
+        const which = venueLine(place(hit.turf), lead ? home : label(prefCity), hit.others.map((t) => labelFor(t.city ?? "")));
         if (!canCallClaude) {
           // No answer without the model, but the venue's card has its hours, prices and facilities.
-          const reply = `Here is ${place(hit.turf).name}. Its page has the timings, prices and facilities.${which ? ` ${which}` : ""}`;
+          const reply = lead
+            ? `${lead} ${which} Its page has the timings, prices and facilities.`
+            : `Here is ${place(hit.turf).name}. Its page has the timings, prices and facilities.${which ? ` ${which}` : ""}`;
           body = { ...base, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: null };
           break;
         }
         const sheet = await loadFacts(hit.turf.id);
         const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts, usage) : null;
-        body = { ...base, reply: which ? `${filters.reply} ${which}` : filters.reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
+        const reply = lead ? `${lead} ${which}` : which ? `${filters.reply} ${which}` : filters.reply;
+        body = { ...base, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
         break;
       }
       case "tool": {
@@ -488,13 +504,35 @@ export async function GET(req: Request) {
           body.total = r.turfs.length;
           body.relaxed = r.relaxed.filter((k) => !["asked_city", "city", "pref_city"].includes(k)).map(relaxedLabel);
           body.memo = { ...(body.memo as Record<string, unknown>), free_text: r.venue.label };
+          // None by that name in the player's city: its closest names
+          // there first, in the reply and as their own row of cards.
+          const near = r.closest?.turfs ?? [];
           const said = venueReply({
             label: r.venue.label,
             shown: r.turfs.map(place),
             home: label(r.venue.askedCity ?? filters.city ?? prefCity),
             asked: label(r.venue.askedCity),
+            closest: r.closest ? near.map((t) => place(t).name) : null,
+            whole: r.venue.whole,
           });
           if (said) body.reply = said;
+          const rows = r.closest ? venueRows(labelFor(r.closest.city), near.length, r.turfs.map(place)) : null;
+          if (rows) {
+            body.turfs = [...near, ...r.turfs].map(card);
+            body.rows = rows;
+          }
+          break;
+        }
+        // A name no venue has, with close names in the player's city:
+        // those, said plainly, rather than other turfs there.
+        const typedName = nameIn(turfs, filters.turf_names[0]) ?? nameIn(turfs, filters.free_text);
+        if (r.closest?.turfs.length && typedName) {
+          const home = labelFor(r.closest.city);
+          body.turfs = r.closest.turfs.map(card);
+          body.total = 0;
+          body.relaxed = [];
+          body.rows = [closestRow(home, r.closest.turfs.length)];
+          body.reply = nowhereReply(typedName, home, r.closest.turfs.map((t) => place(t).name));
           break;
         }
         // The budget survives a widened area (relaxSteps), so a dropped
@@ -516,7 +554,7 @@ export async function GET(req: Request) {
                 city: stayedIn && isCity(stayedIn) ? labelFor(stayedIn) : null,
                 prefCity: prefScoped ? labelFor(prefScoped) : null,
                 narrowed: filters.sport ? (SPORT_FALLBACK[filters.sport] ?? null) : null,
-                name: nameIn(turfs, filters.turf_names[0]) ?? nameIn(turfs, filters.free_text),
+                name: typedName,
               })
             : null;
         if (widened) body.reply = widened;

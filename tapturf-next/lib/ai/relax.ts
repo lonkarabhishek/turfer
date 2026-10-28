@@ -134,7 +134,36 @@ export function widenedReply(i: WidenedReplyInput): string | null {
 /** A venue as a reply names it: city as a label ("Pune"), area if known. */
 export type VenuePlace = { name: string; area?: string | null; city: string };
 
-const placeOf = (v: VenuePlace) => (v.area && v.area.toLowerCase() !== v.city.toLowerCase() ? `${v.area}, ${v.city}` : v.city);
+/**
+ * Its area and city, or the city alone when the area adds nothing: the
+ * city again ("Kudasan, Gandhinagar" in Gandhinagar is Kudasan), or no
+ * place at all ("Near", "PIN 395013", "near global Indian international school").
+ */
+function placeOf(v: VenuePlace): string {
+  let area = (v.area ?? "").trim();
+  const tail = /,\s*([^,]+)$/.exec(area);
+  if (tail && tail[1].trim().toLowerCase() === v.city.toLowerCase()) area = area.slice(0, tail.index).trim();
+  if (area.toLowerCase() === v.city.toLowerCase() || /^(?:near|opp|opposite|pin)\b|^\d/i.test(area)) area = "";
+  return area ? `${area}, ${v.city}` : v.city;
+}
+
+/** The words typed, starting a sentence or a heading: "dhaneri" is Dhaneri. */
+export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const TIMES = ["", "", "two", "three"];
+/**
+ * Card names as a reply lists them, in order: a name on two cards once
+ * ("two venues called Huddle Arena"), and semicolons between the names
+ * when one has a comma of its own ("Players Turf, Mahakali Caves;
+ * PLAYERS TURF -PPS BHANDUP; and Players Turf At Saki Naka").
+ */
+function namesList(names: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  const items = [...counts].map(([n, k]) => (k > 1 ? `${TIMES[k] ?? k} venues called ${n}` : n));
+  if (items.length < 3 || !items.some((x) => x.includes(","))) return listJoin(items);
+  return `${items.slice(0, -1).join("; ")}; and ${items.at(-1)}`;
+}
 
 /** "Mumbai", "Mumbai and Pune", "Mumbai, Ballari, Malegaon and 4 more cities". */
 function cityList(cities: string[]): string {
@@ -152,7 +181,29 @@ export type VenueReplyInput = {
   home: string | null;
   /** A city the player named that has none of them ("Hotfut in Nashik"), as a label. */
   asked: string | null;
+  /**
+   * Set when no venue by that name is in `home` (applyAskFilters'
+   * closest): the names there closest to it, as the cards show them,
+   * maybe none.
+   */
+  closest?: readonly string[] | null;
+  /**
+   * The cards have the name typed, whole ("Dribble Den", "dribble den
+   * price"), not only part of it ("Kage" for Kage Multisport Turf,
+   * "Thunder Arena" for Thunderbird turf). Only with `closest`.
+   */
+  whole?: boolean;
 };
+
+/** "No turf called Kage in Mumbai.": the venue named isn't in the player's city. */
+export function noneIn(label: string, home: string): string {
+  return `No turf called ${label} in ${home}.`;
+}
+
+const article = (s: string) => (/^[aeiou]/i.test(s) ? "an" : "a");
+
+/** The cards' names, one each however written ("Kick Off Turf" and "KICK OFF TURF" are one). */
+const namesOf = (shown: readonly VenuePlace[]) => shown.map((v) => v.name).filter((n, i, all) => all.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i);
 
 /**
  * The reply over the venues a search named (applyAskFilters' named
@@ -162,15 +213,75 @@ export type VenueReplyInput = {
  * Pune." / "There's no Hotfut in Nashik on TapTurf yet. 4 venues match
  * Hotfut, all in Pune." / "11 venues match Prime Turf, in Mumbai,
  * Ballari, Malegaon and 6 more cities."
+ *
+ * With `closest` (none by that name in the player's city), in the order
+ * the cards are: no turf by that name here, the closest names here,
+ * then where it is. The name said is the venues' own when they have it
+ * whole and share it, and "It's" is only ever that venue; other names
+ * are similar names. "No turf called Dribble Den in Hyderabad. Closest
+ * here: Cricket Den and Sports Den. Dribble Den is in Begur, Bangalore."
+ * / "No turf called Huddle Arena in Pune. There's one in Vadodara and
+ * Mumbai." / "No turf called Kage in Mumbai. Kage Multisport Turf is in
+ * Pathardi, Nashik." / "No turf called Thunder Arena in Hyderabad.
+ * Similar names are in Kolhapur and Nagercoil."
  */
 export function venueReply(i: VenueReplyInput): string | null {
   if (!i.shown.length) return null;
   const cities = [...new Set(i.shown.map((v) => v.city))];
+  if (i.closest && i.home) {
+    const names = namesOf(i.shown);
+    const same = !!i.whole && names.length === 1;
+    // Written as typed when a card has it so ("Prime Turf" over Ballari's "Prime turf").
+    const called = same ? (i.shown.find((v) => v.name === i.label)?.name ?? names[0]) : cap(i.label);
+    const near = i.closest.length ? ` Closest here: ${namesList(i.closest)}.` : "";
+    const one = i.shown.length === 1 ? i.shown[0] : null;
+    // After the closest names, "it" would be the last of them: name it again.
+    const where = one
+      ? `${same && !near ? "It's" : `${one.name} is`} in ${placeOf(one)}.`
+      : same
+        ? `There's ${near ? `${article(called)} ${called}` : "one"} in ${cityList(cities)}.`
+        : `Similar names are in ${cityList(cities)}.`;
+    return `${noneIn(called, i.home)}${near} ${where}`;
+  }
   if (!i.asked && i.home && cities.length === 1 && cities[0] === i.home) return null;
-  const lead = i.asked && !cities.includes(i.asked) ? `There's no ${i.label} in ${i.asked} on TapTurf yet. ` : "";
+  const label = cap(i.label);
+  const lead = i.asked && !cities.includes(i.asked) ? `There's no ${label} in ${i.asked} on TapTurf yet. ` : "";
   if (i.shown.length === 1) return `${lead}${i.shown[0].name} is in ${placeOf(i.shown[0])}.`;
   const n = i.shown.length;
-  return `${lead}${n} venues match ${i.label}, ${cities.length === 1 ? `all in ${cities[0]}` : `in ${cityList(cities)}`}.`;
+  return `${lead}${n} venues match ${label}, ${cities.length === 1 ? `all in ${cities[0]}` : `in ${cityList(cities)}`}.`;
+}
+
+/**
+ * A name no venue has, over the closest names in the player's city
+ * (closestNames, at least one): "No turf called Circuit on TapTurf yet.
+ * Closest in Pune: Circuit House Arena."
+ */
+export function nowhereReply(name: string, home: string, closest: readonly string[]): string {
+  return `No turf called ${cap(name)} on TapTurf yet. Closest in ${home}: ${namesList(closest)}.`;
+}
+
+/**
+ * A heading over a row of cards, in the reply's order: the closest
+ * names in the player's city, then the venues by the name typed. It
+ * reads "<label> in <place>"; the place is apart so a long name can be
+ * cut short without it ("Champion’s Field Turf and Pickle… in Pune").
+ */
+export type CardRow = { label: string; place: string; count: number };
+
+/** The row of the closest names in the player's city. */
+export const closestRow = (home: string, count: number): CardRow => ({ label: "Closest", place: home, count });
+
+/**
+ * The two rows for venueReply's `closest` (null without close names: one
+ * row, as before). The second is headed by the venues' name when they
+ * share one, else "Similar names" (Thunder turf and Thunder Club Turf
+ * for "Thunder Arena"), never the name typed over other names.
+ */
+export function venueRows(home: string, closest: number, shown: readonly VenuePlace[]): CardRow[] | null {
+  if (!closest || !shown.length) return null;
+  const cities = [...new Set(shown.map((v) => v.city))];
+  const names = namesOf(shown);
+  return [closestRow(home, closest), { label: names.length === 1 ? names[0] : "Similar names", place: cities.length === 1 ? cities[0] : "other cities", count: shown.length }];
 }
 
 /**

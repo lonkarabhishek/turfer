@@ -434,7 +434,7 @@ export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
   return res;
 }
 
-import { areaElsewhere, cityNamed, findNamedVenues, nameIn, namedInSearch, namesVenue, norm, resolveTurfNames, type VenueMatch } from "./names";
+import { areaElsewhere, cityNamed, closestNames, findNamedVenues, nameIn, namedInSearch, namesVenue, namesWhich, norm, placedAt, readsAsName, resolveTurfNames, type VenueMatch } from "./names";
 export { cityNamed, findNamedVenues, nameIn, norm, resolveTurfNames };
 
 function hasNeed(t: Turf, need: Need): boolean {
@@ -471,8 +471,19 @@ export type AskResult = {
   sport: string | null;
   /** The city the cards are in when the search settled on one (a named venue's city), or the city filter; null for several. */
   city: CityId | null;
-  /** Set when the player named a venue: the cards are the venues by that name, from every city. */
-  venue: { label: string; askedCity: CityId | null } | null;
+  /**
+   * Set when the player named a venue: the cards are the venues by that
+   * name, from every city. whole: they have the whole name typed, not
+   * only part of it ("Kage" for Kage Multisport Turf).
+   */
+  venue: { label: string; askedCity: CityId | null; whole: boolean } | null;
+  /**
+   * Set when the player's city is known and no venue by the name typed
+   * is in it (named elsewhere, or a name no venue has): the venues there
+   * with the closest names (closestNames), maybe none. Not cards yet.
+   * Not for words of a search ("rooftop turf"): only a venue's name.
+   */
+  closest: { city: CityId; turfs: Turf[] } | null;
 };
 
 /**
@@ -510,7 +521,34 @@ export function applyAskFilters(
   const inText = asName ? null : namedInSearch(all, f.free_text, opts.askedCity ?? f.city ?? opts.prefCity ?? null);
   const named = asName ?? inText?.named ?? null;
   const match = new Map<Turf, VenueMatch>((named?.matches ?? []).map((m) => [m.turf, m]));
-  const pool = named ? named.matches.map((m) => m.turf) : all;
+  const askedCity = named ? (opts.askedCity ?? named.city) : null;
+  // The player's city (the one asked about, the reading's, the visitor's),
+  // for "No turf called X here" and the closest names there.
+  const home = (named ? askedCity : opts.askedCity) ?? f.city ?? opts.prefCity ?? null;
+  const found = named ? named.matches.map((m) => m.turf) : [];
+  // The name the venues were found by.
+  const typed = named ? (asName ? f.turf_names[0] : f.free_text) : null;
+  // The whole name typed: Golden turf, not Golden Boot Turf, for "Golden turf".
+  const whole = (t: Turf) => !!match.get(t)?.whole;
+  // A venue's name, not what a venue has: the reading's turf_names, or
+  // free_text that is a venue's whole name and names one ("rooftop",
+  // "astro turf" and "turf with cafe" say what a venue has, though venues
+  // are called that: "N venues match rooftop turf", as before).
+  const asTyped = !!asName || (found.some(whole) && namesWhich(all, f.free_text));
+  // Where it is, said, as with its city typed: an area of the venue that
+  // is no word of a name found ("Dribble Den in Begur", "Prime Turf Marol").
+  const located = !!named && placedAt(found, typed, f.areas);
+  const here = found.filter((t) => t.city === home);
+  // None by that name in the player's city: none found there, or only
+  // venues with part of it while the whole name is elsewhere ("Golden
+  // turf" from Mumbai is Lucknow's; Golden Boot Turf is the closest).
+  const notHere = !!home && asTyped && !located && (!here.length || (found.some(whole) && !here.some(whole)));
+  // Then the cards are the venues with the whole name, when any has it,
+  // and of those the ones called just that ("Prime Turf", not Prime
+  // Sports Turf cricket), when any is.
+  const wholes = notHere ? found.filter(whole) : [];
+  const called = wholes.filter((t) => norm(t.name) === norm(named?.label ?? ""));
+  const pool = !named ? all : called.length ? called : wholes.length ? wholes : found;
   // Every word must appear, so "CC Turf" doesn't match every turf in the
   // city. A name we found no venue for is searched as text too, so the
   // reply can say so when it matched nothing. Words that are a search in
@@ -522,7 +560,6 @@ export function applyAskFilters(
   // other cities' addresses, but on the Nashik page it is Nashik's.
   if (!named && explicitCity && opts.askedCity !== undefined && opts.askedCity !== explicitCity && areas.length && areaElsewhere(all, f.areas, explicitCity))
     explicitCity = null;
-  const askedCity = named ? (opts.askedCity ?? named.city) : null;
   // "Near me" with no location shared yet stays in the visitor's city
   // (the Use my location card shows) rather than listing all of India.
   const scopeCity = named
@@ -639,6 +676,27 @@ export function applyAskFilters(
     }
   });
 
+  // A name no venue has (the text step went): the reading's turf_names,
+  // or free text that reads as a name on its own, with no sport, budget,
+  // needs or players asked ("Circuit", "Dribble Zone Sports Arena"; not
+  // "real grass" for pickleball or "turf for 14 players").
+  const missing =
+    named || !relaxed.includes("text")
+      ? null
+      : f.turf_names[0] && nameIn(all, f.turf_names[0])
+        ? f.turf_names[0]
+        : !f.sport && f.max_price_per_hour == null && !f.needs.length && f.players == null && readsAsName(all, f.free_text)
+          ? f.free_text
+          : null;
+  // Its closest names there pass the search's other filters (sport, budget, area) and have every word of it.
+  const kept = steps.filter((s) => !relaxed.includes(s.key) && !["text", "city", "pref_city", "area_city", "asked_city"].includes(s.key));
+  const closest = !home
+    ? null
+    : notHere
+      ? { city: home, turfs: closestNames(all, typed, home, pool, 3, { also: here }) }
+      : missing
+        ? { city: home, turfs: closestNames(all, missing, home, [], 3, { every: true, keep: (t) => kept.every((s) => s.keep(t)) }) }
+        : null;
   const shownCities = new Set(matched.map((t) => t.city));
   return {
     turfs: withDist.slice(0, limit).map(({ t, km }) => (km != null ? { ...t, distanceKm: km } : t)),
@@ -650,7 +708,8 @@ export function applyAskFilters(
         ? ([...shownCities][0] ?? null)
         : null
       : (explicitCity ?? (steps.some((s) => s.key === "area_city") && !relaxed.includes("area_city") ? (opts.prefCity ?? null) : null)),
-    venue: named ? { label: named.label, askedCity } : null,
+    venue: named ? { label: named.label, askedCity, whole: pool.some(whole) } : null,
+    closest,
   };
 }
 

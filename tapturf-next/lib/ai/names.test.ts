@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { areaElsewhere, cityNamed, findNamedVenues, nameIn, namedInSearch, namesVenue, resolveTurfNames, resolveWithPage, shownNames, wholeVenueName } from "./names";
+import { areaElsewhere, cityNamed, closestNames, findNamedVenues, nameIn, namedInSearch, namesVenue, namesWhich, placedAt, readsAsName, resolveTurfNames, resolveWithPage, shownNames, wholeVenueName } from "./names";
+import type { CityId } from "../city";
 import type { Turf } from "../../types/turf";
 
 // Real names from the turfs table (October 2026).
@@ -291,4 +292,180 @@ test("an inferred city gives way only to an area another city lists as its own",
   assert.equal(areaElsewhere(rows3, ["Model Colony"], "nashik"), false);
   // The city has it itself.
   assert.equal(areaElsewhere(rows3, ["Shivajinagar"], "pune"), false);
+});
+
+// Closest names in the player's city, for a venue named that isn't there (rows as on 28 Oct).
+const r4: [string, string, string | null, number][] = [
+  ["Dribble Den", "bangalore", "Begur", 22],
+  ["Cricket Den", "hyderabad", "Uppal", 184],
+  ["Sports Den", "hyderabad", "Pocharam", 9],
+  ["Gamer's Den", "hyderabad", "Manikonda", 395],
+  ["Champions Zone Box Cricket", "hyderabad", "Ghatkesar", 4],
+  ["Raptor Sports Zone", "hyderabad", "Kothapet", 273],
+  ["SB Arena", "hyderabad", "Puppalaguda", 67],
+  ["HotFut Inorbit", "hyderabad", "Madhapur", 1276],
+  ["HotFut Gachibowli", "hyderabad", "Gachibowli", 916],
+  ["Hotfut SB Road", "pune", "Senapati Bapat Road", 16],
+  ["Dribble Sports Club", "pune", null, 138],
+  ["Runbhumi The Multisports Turf", "pune", "Balewadi", 443],
+  ["Kage Multisport Turf", "nashik", "Pathardi", 302],
+  ["Maidaan Multi Sports Turf", "nashik", "Satpur", 60],
+  ["Prime Turf", "mumbai", "Marol", 263],
+  ["Prime Turf and pickleball arena", "mumbai", "Dombivli East", 308],
+  ["Football Turf Thane - Strikers Arena", "mumbai", "Kolshet", 694],
+  ["Spin Arena Turf", "mumbai", "Mira Road East", 45],
+  ["LEO PRIDE ACADEMY OF CRICKET EXCELLENCE", "bangalore", "Krishnarajapuram", 37],
+  ["CC Turf Ram Nagar Hill Top", "nagpur", "Ram Nagar", 884],
+  ["Ch. Mange Ram Box Cricket", "delhi", "Rohini", 23],
+  ["S K Sports Arena", "delhi", "Dwarka", 12],
+  ["The Royal Turf", "pune", "Kalewadi", 90],
+];
+const rows4 = r4.map(([name, city, area, total_reviews], i) => ({ id: `c${i}`, name, city, area, address: "", sports: [], total_reviews }) as unknown as Turf);
+const closest = (q: string, city: string, found: string[] = []) =>
+  closestNames(rows4, q, city as CityId, rows4.filter((t) => found.includes(t.name))).map((t) => t.name);
+
+test("closest names share a distinctive word, best match first, at most three, never padded", () => {
+  // "Den" is the word they share; the turf, cricket and sports around it don't count.
+  assert.deepEqual(closest("Dribble Den", "hyderabad"), ["Cricket Den", "Sports Den", "Gamer's Den"]);
+  assert.deepEqual(closest("Dribble Den", "pune"), ["Dribble Sports Club"]);
+  assert.deepEqual(closest("Dribble Den", "nashik"), []);
+  // A word ("Hotfut") makes a name close; two letters ("SB") alone never do when the name has a word.
+  assert.deepEqual(closest("Hotfut SB Road", "hyderabad", ["Hotfut SB Road"]), ["HotFut Inorbit", "HotFut Gachibowli"]);
+  // The area of the venue it was found at is where it is, not its name.
+  assert.deepEqual(closest("CC Turf Ram Nagar Hill Top", "delhi", ["CC Turf Ram Nagar Hill Top"]), []);
+  assert.deepEqual(closest("CC Turf Ram Nagar Hill Top", "delhi"), ["Ch. Mange Ram Box Cricket"]);
+});
+
+test("closest names: generic words alone never make a name close", () => {
+  // Turf, multisport, sports, arena, cricket, box, a sport, "zone" and a city are all the overlap there is.
+  assert.deepEqual(closest("Kage Multisport Turf", "mumbai"), []);
+  assert.deepEqual(closest("Raptor Sports Zone", "mumbai"), []);
+  assert.deepEqual(closest("Champions Zone Box Cricket", "mumbai"), []);
+  assert.deepEqual(closest("Sports Zone", "hyderabad"), []);
+  assert.deepEqual(closest("Mumbai Football Arena", "mumbai"), []);
+  assert.deepEqual(closest("The Box Cricket Arena Turf", "hyderabad"), []);
+  assert.deepEqual(closest("Football Turf", "mumbai"), []);
+  assert.deepEqual(closest("Turf", "delhi"), []);
+  // Half the name's distinctive words at least: one of three is another name. Common words only ("Royal", "Champions"): all of them.
+  assert.deepEqual(closest("Royal Champions", "pune"), []);
+  assert.deepEqual(closest("Royal Challengers Kings", "pune"), []);
+});
+
+test("closest names: a misspelling, run together or initials", () => {
+  assert.deepEqual(closest("Dribbel Den", "pune"), ["Dribble Sports Club"]);
+  assert.deepEqual(closest("Runbhoomi Multisport Turf", "pune"), ["Runbhumi The Multisports Turf"]);
+  assert.deepEqual(closest("Maidan The Turf", "nashik"), ["Maidaan Multi Sports Turf"]);
+  // "Prime" is spelt right and names other venues: Pride is another name, not a misspelling.
+  assert.deepEqual(closest("Prime Turf", "bangalore"), []);
+  assert.deepEqual(closest("Dribbleden", "bangalore"), ["Dribble Den"]);
+  assert.deepEqual(closest("SK Turf", "delhi"), ["S K Sports Arena"]);
+});
+
+// Review of the closest names (28 Oct): rows as the turfs table has them.
+const r5: [string, string, string | null, number][] = [
+  ["Golden turf", "lucknow", "Aishbagh", 43],
+  ["Golden Boot Turf", "mumbai", "Airoli", 226],
+  ["Thunder turf", "nagercoil", "Suchindrum", 0],
+  ["Thunderbird turf", "ajmer", "Kankarda Bhonabay", 79],
+  ["Supernova Sports Arena", "pune", null, 397],
+  ["Super Sports Park", "pune", null, 4],
+  ["Greenbox", "pune", "Range Hills", 553],
+  ["GreenBox Turf", "pune", "Shivajinagar", 199],
+  ["High Score FC", "pune", "Kothrud", 847],
+  ["Turf Up - Kharadi", "pune", "Kharadi", 1915],
+  ["Champion Turf Club", "pune", "Manjari Budruk", 262],
+  ["Free Kick Sports Arena", "bangalore", "Fraser Town", 520],
+  ["Switch Hit Arena", "bangalore", "Nagavara", 9],
+  ["HIT AND RUN", "bangalore", "Marsur", 7],
+  ["Pro Legacy Sports Academy", "bangalore", "Banashankari", 422],
+  ["GameOn Pro Sports Turf", "bangalore", "Kalkere", 357],
+  ["Sportingo", "bangalore", "Rajarajeshwari Nagar", 831],
+  ["TurfKlub Sporting Arena", "bangalore", "Rajarajeshwari Nagar", 34],
+  ["El Classico Turf", "bangalore", "Electronic City", 76],
+  ["Common Wealth Games Village Sports Complex", "delhi", "Pandav Nagar", 2696],
+  ["Om Sunder Khel Arena", "delhi", "Janakpuri", 52],
+  ["OFF SIDE TURF (OS)", "nashik", null, 68],
+  ["Champion's Turf", "nashik", "Amrutdham", 60],
+  ["Zeta Sports Arena", "kozhikode", "Mankavu", 284],
+  ["Darbari Lal Sports Arena", "noida", "Zeta 1", 19],
+  ["Dribble Den", "bangalore", "Begur", 22],
+  ["Prime Turf", "mumbai", "Marol", 263],
+];
+const rows5 = r5.map(([name, city, area, total_reviews], i) => ({ id: `v${i}`, name, city, area, address: "", sports: [], total_reviews }) as unknown as Turf);
+const at5 = (name: string) => rows5.find((t) => t.name === name)!;
+const near5 = (q: string, city: string, opts: Parameters<typeof closestNames>[5] = {}) => closestNames(rows5, q, city as CityId, [], 3, opts).map((t) => t.name);
+
+test("the whole name typed beats a venue in the player's city with only part of it; a city typed still decides", () => {
+  assert.equal(where(resolveTurfNames(rows5, ["Golden turf"], ["mumbai"])[0].turf), "Golden turf (lucknow)");
+  assert.equal(resolveTurfNames(rows5, ["Golden turf"], ["mumbai"])[0].whole, true);
+  assert.equal(where(resolveTurfNames(rows5, ["Golden turf Mumbai"], ["pune"])[0].turf), "Golden Boot Turf (mumbai)");
+  assert.equal(resolveTurfNames(rowsIndia, ["Kage"], ["mumbai"])[0].whole, false);
+  // Misspelt, it is still the whole name.
+  assert.equal(findNamedVenues(rowsIndia, "Dribbel Den")?.matches[0].whole, true);
+  assert.equal(resolveTurfNames(rowsIndia, ["Dribbel Den"], ["pune"])[0].whole, true);
+});
+
+test("the name said back keeps its own small words; only the words around it go", () => {
+  assert.equal(nameIn(rows5, "Balls Of Fury- Box cricket"), "Balls Of Fury- Box cricket");
+  assert.equal(nameIn(rows5, "Kick it arena"), "Kick it arena");
+  assert.equal(nameIn(rows5, "Lord of Turfs"), "Lord of Turfs");
+  assert.equal(nameIn(rows5, "Box22 Drive in"), "Box22 Drive in");
+  assert.equal(nameIn(rows5, "Score On"), "Score On");
+  assert.equal(nameIn(rows5, "dribble den price"), "dribble den");
+  assert.equal(nameIn(rows5, "number of Kage near me?"), "Kage");
+  assert.equal(nameIn(rows5, "Hotfut in Navi Mumbai"), "Hotfut");
+  assert.equal(findNamedVenues(rowsIndia, "Kage Turf broo")?.label, "Kage Turf");
+  // Nothing left but the words around a name: said as typed, not "Its".
+  assert.equal(nameIn(rows5, "Its prices"), "Its prices");
+});
+
+test("closest names: the same word or its plural, never the start of a longer one", () => {
+  assert.ok(!near5("Super Cricket Box", "pune").includes("Supernova Sports Arena"));
+  assert.deepEqual(near5("GREEN FIELD ARENA TURF", "pune"), []);
+  assert.deepEqual(near5("Champions Arena", "nashik"), ["Champion's Turf"]);
+  assert.deepEqual(near5("Champions Arena", "pune"), ["Champion Turf Club"]);
+});
+
+test("closest names: one common word shared (pro, hit, free, off, high, village, sporting) is another name", () => {
+  assert.deepEqual(near5("Pro Turf Arena", "bangalore"), []);
+  assert.deepEqual(near5("Free Hit Turf", "bangalore"), []);
+  assert.deepEqual(near5("RAP hit and play Turf", "bangalore"), []);
+  assert.deepEqual(near5("Kick Off Turf", "nashik"), []);
+  assert.deepEqual(near5("Sky High Turf", "pune"), []);
+  assert.deepEqual(near5("KAIRAV'S SPORTS VILLAGE", "delhi"), []);
+  assert.deepEqual(near5("Impetus Sporting Punawale", "bangalore"), []);
+});
+
+test("closest names: one or two letters shared are not enough when the name has a word", () => {
+  assert.deepEqual(near5("Level Up", "pune"), []);
+  assert.deepEqual(near5("El-Dorado Turf", "bangalore"), []);
+  assert.deepEqual(near5("Om Cricket Xperia", "delhi"), []);
+});
+
+test("closest names: venues the matcher took for the name come first, and filters and every word apply when asked", () => {
+  const also = [at5("Golden Boot Turf")];
+  assert.deepEqual(near5("Golden turf", "mumbai", { also }), ["Golden Boot Turf"]);
+  // Thunderbird only starts with Thunder.
+  assert.deepEqual(near5("Thunder turf", "ajmer", { also: [at5("Thunderbird turf")] }), []);
+  // Every word, for a name no venue has: Den alone is not Dribble Den.
+  assert.deepEqual(closestNames(rows4, "Dribble Den", "hyderabad" as CityId, [], 3, { every: true }).map((t) => t.name), []);
+  assert.deepEqual(closestNames(rows4, "Dribble Zone", "pune" as CityId, [], 3, { every: true }).map((t) => t.name), ["Dribble Sports Club"]);
+  assert.deepEqual(near5("Champions Arena", "pune", { keep: (t) => t.total_reviews > 500 }), []);
+});
+
+test("a name, not what a venue has: rooftop, astro turf, a cafe and snooker say what", () => {
+  for (const q of ["rooftop turf", "rooftop", "astro turf", "turf with cafe", "snooker", "real grass turf for kids"]) assert.equal(namesWhich(rows5, q), q === "real grass turf for kids", q);
+  for (const q of ["Kage", "Golden turf", "Champions Arena", "Dribble Den", "T & R"]) assert.equal(namesWhich(rows5, q), true, q);
+  // On its own as a name: a few words, no number, no place after "near".
+  for (const q of ["Dribble Zone Sports Arena", "Circuit", "Dribble Zone Turf"]) assert.equal(readsAsName(rows5, q), true, q);
+  for (const q of ["turf for 14 players", "turf near metro station", "I know tapturf has a score tracker", "rooftop turf"]) assert.equal(readsAsName(rows5, q), false, q);
+});
+
+test("the player said where the venue is: an area word that is no venue's name word", () => {
+  assert.equal(placedAt([at5("Dribble Den")], "Dribble Den in Begur"), true);
+  assert.equal(placedAt([at5("Dribble Den")], "Dribble Den", ["Begur"]), true);
+  assert.equal(placedAt([at5("Prime Turf")], "Prime Turf Marol"), true);
+  assert.equal(placedAt([at5("Dribble Den")], "Dribble Den"), false);
+  // Zeta is in Zeta Sports Arena's name, though Darbari Lal Sports Arena is in Zeta 1.
+  assert.equal(placedAt([at5("Zeta Sports Arena"), at5("Darbari Lal Sports Arena")], "Zeta Sports Arena"), false);
 });
