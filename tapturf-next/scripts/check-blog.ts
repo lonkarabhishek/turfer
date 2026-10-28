@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ALL_POSTS, type Block, type Post } from "../content/blog";
 import { BLOG_TURFS } from "../content/blog/data/turfs";
+import { blogTurfHref, linksByRedirect } from "../content/blog/data/turfSlugs";
 import { SPORT_PAGES } from "../lib/sports";
 import { CITIES } from "../lib/city";
 import { TOOLS } from "../lib/tools/registry";
@@ -235,14 +236,26 @@ for (const post of ALL_POSTS) {
           if (!item.label?.trim()) warn(slug, `${at}: source ${j + 1} has no label`);
         });
         break;
-      case "turf":
-        internal.push(`/turf/${b.id}`);
+      case "turf": {
+        const href = blogTurfHref(b.id);
+        if (href) internal.push(href);
+        else warn(slug, `${at}: ${b.name} is no longer listed, so its card shows without a link`);
+        if (linksByRedirect(b.id)) warn(slug, `${at}: turf id ${b.id} links through a redirect; add its slug to content/blog/data/turfSlugs.ts`);
         if (touched && !BLOG_TURFS[b.id]) warn(slug, `${at}: turf id ${b.id} is not in content/blog/data/turfs.ts, check it against the database`);
         break;
+      }
       case "related-turfs": {
         const missing = b.ids.filter((id) => !BLOG_TURFS[id]);
         if (touched && missing.length) warn(slug, `${at}: ids not in content/blog/data/turfs.ts are skipped: ${missing.join(", ")}`);
-        b.ids.filter((id) => BLOG_TURFS[id]).forEach((id) => internal.push(`/turf/${id}`));
+        const shown = b.ids.filter((id) => BLOG_TURFS[id]);
+        const gone = shown.filter((id) => blogTurfHref(id) === null);
+        if (gone.length) warn(slug, `${at}: no longer listed, so left out of the cards: ${gone.map((id) => BLOG_TURFS[id].name).join(", ")}`);
+        const unslugged = shown.filter(linksByRedirect);
+        if (unslugged.length) warn(slug, `${at}: these link through a redirect; add their slugs to content/blog/data/turfSlugs.ts: ${unslugged.join(", ")}`);
+        shown.forEach((id) => {
+          const href = blogTurfHref(id);
+          if (href) internal.push(href);
+        });
         break;
       }
       case "faq":

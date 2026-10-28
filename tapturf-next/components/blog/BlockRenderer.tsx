@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Star } from "lucide-react";
 import type { Block } from "@/content/blog/types";
 import { getBlogTurf } from "@/content/blog/data/turfs";
+import { blogTurfHref } from "@/content/blog/data/turfSlugs";
 import { slugify } from "@/lib/utils/slugify";
 import { PriceCalculator } from "./PriceCalculator";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
@@ -127,12 +128,11 @@ export function BlockRenderer({ block }: { block: Block }) {
       );
     }
 
-    case "turf":
-      return (
-        <Link
-          href={`/turf/${block.id}`}
-          className="group block my-6 rounded-2xl border border-primary-200 bg-white hover:border-accent-300 hover:shadow-elevated transition-all overflow-hidden not-prose"
-        >
+    case "turf": {
+      // A turf that is no longer listed keeps its card (the post still
+      // talks about it) but loses the link, which would be a 404.
+      const href = blogTurfHref(block.id);
+      const card = (
           <div className="flex items-stretch">
             {block.rank !== undefined && (
               <div className="flex-shrink-0 w-16 md:w-20 bg-primary-900 text-white flex items-center justify-center">
@@ -159,13 +159,23 @@ export function BlockRenderer({ block }: { block: Block }) {
               {block.note && (
                 <p className="text-[15px] leading-snug text-primary-700">{block.note}</p>
               )}
-              <p className="mt-3 text-xs font-bold text-accent-600 group-hover:text-accent-700">
-                View turf &rarr;
-              </p>
+              {href && (
+                <p className="mt-3 text-xs font-bold text-accent-600 group-hover:text-accent-700">
+                  View turf &rarr;
+                </p>
+              )}
             </div>
           </div>
-        </Link>
       );
+      const frame = "group block my-6 rounded-2xl border border-primary-200 bg-white overflow-hidden not-prose";
+      return href ? (
+        <Link href={href} className={`${frame} hover:border-accent-300 hover:shadow-elevated transition-all`}>
+          {card}
+        </Link>
+      ) : (
+        <div className={frame}>{card}</div>
+      );
+    }
 
     case "stat-grid":
       return (
@@ -261,9 +271,10 @@ export function BlockRenderer({ block }: { block: Block }) {
       );
 
     case "related-turfs": {
+      // Turfs no longer listed are left out: their pages are 404s.
       const turfs = block.ids
         .map((id) => getBlogTurf(id))
-        .filter((t): t is NonNullable<typeof t> => !!t);
+        .filter((t): t is NonNullable<typeof t> => !!t && blogTurfHref(t.id) !== null);
       if (turfs.length === 0) return null;
       return (
         <div className="not-prose my-8">
@@ -276,7 +287,7 @@ export function BlockRenderer({ block }: { block: Block }) {
             {turfs.map((t) => (
               <Link
                 key={t.id}
-                href={`/turf/${t.id}`}
+                href={blogTurfHref(t.id) ?? `/turf/${t.id}`}
                 className="group flex rounded-2xl border border-primary-200 hover:border-accent-400 bg-white hover:shadow-card-hover overflow-hidden transition-all"
               >
                 <div className="relative w-28 h-28 shrink-0 bg-primary-100">
