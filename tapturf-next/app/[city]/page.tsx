@@ -18,6 +18,7 @@ import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
 import { cityDescription, cityFacts, cityTitle, listingOgImage } from "@/lib/seo/listingMeta";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
@@ -91,7 +92,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   // "Top-rated" block: only turfs with enough reviews to trust the score.
   const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
 
-  // JSON-LD: ItemList of turfs + LocalBusiness per turf for rich results
+  // JSON-LD: ItemList of turfs, a SportsActivityLocation per turf
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -110,11 +111,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           addressRegion: stateFor(cityId),
           addressCountry: "IN",
         },
-        aggregateRating: t.rating > 0 && t.total_reviews > 0 ? {
-          "@type": "AggregateRating",
-          ratingValue: t.rating,
-          reviewCount: t.total_reviews,
-        } : undefined,
+        // No aggregateRating: t.rating and t.total_reviews are Google's,
+        // and Google's review-snippet rules want ratings the site collected
+        // itself. A turf's own page carries TapTurf players' stars once it
+        // has enough of them (lib/utils/seo.ts generateTurfJsonLd).
       },
     })),
   };
@@ -124,7 +124,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       <NoteInterest city={city} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
       {/* The chat answers for this city while the visitor is on its page. */}
       <AskPageContext city={cityId} />

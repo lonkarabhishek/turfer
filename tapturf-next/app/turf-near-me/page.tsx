@@ -16,6 +16,7 @@ import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { plural } from "@/lib/home/format";
 import { nearMeDescription } from "@/lib/seo/listingMeta";
 import { DEFAULT_OG_IMAGE, OG_BASE, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 // "Turf near me": the page for people who don't know a turf's name yet.
 // Everything a crawler needs is in the HTML (every turf linked, grouped
@@ -224,7 +225,7 @@ export default async function TurfNearMePage() {
 
   return (
     <div className="pb-16">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-primary-50 to-white">

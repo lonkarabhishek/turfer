@@ -16,6 +16,7 @@ import { turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
 import { busiestAreas, citySportDescription, citySportTitle, listingOgImage } from "@/lib/seo/listingMeta";
 import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -166,7 +167,7 @@ export default async function CitySportPage({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       {/* The chat answers for this city while the visitor is on its page. */}
       <AskPageContext city={cityId} />
       <NoteInterest city={cityId} sports={[s.name]} />
