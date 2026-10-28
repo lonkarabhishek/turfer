@@ -353,14 +353,8 @@ export default async function TurfDetailPage({
               turfUrl={turfUrl(turf)}
               initial={page.suggestions}
             />
-            {claimed ? (
-              <p className="mt-3 text-[13px] text-primary-500">
-                Also manage this turf?{" "}
-                <Link href={`/my?claim=${turf.id}`} className="font-semibold text-accent-700 hover:text-accent-800" prefetch={false}>
-                  Request access
-                </Link>
-              </p>
-            ) : (
+            {/* A claimed turf shows no "request access" link: its owner adds people. */}
+            {!claimed && (
               <div className="mt-6 rounded-2xl border border-primary-200 bg-white p-4 md:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-primary-900">Is this your turf?</p>
