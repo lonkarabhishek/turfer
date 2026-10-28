@@ -91,6 +91,8 @@ export interface Turf {
   image_review?: { url: string; usable: boolean; quality: number; shows: string; note: string }[] | null;
   /** Set when the turf owner saved prices on myTapturf; their prices then show first. */
   price_owner_confirmed?: boolean | null;
+  /** When the owner last changed those prices (ISO); the page dates "From the owner" by it. Turf pages only: list rows don't read it. */
+  price_verified_at?: string | null;
   /** Listed per-hour prices by format, time band and day type (from online listings). */
   pricing_bands?: PriceBand[] | null;
   /** Formats the venue lists, e.g. "6-a-side", "box cricket". */
@@ -104,7 +106,7 @@ export interface Turf {
 
   // System
   is_active: boolean;
-  /** An owner manages this turf on myTapturf (an active claim). Cards show "Managed by the owner". */
+  /** An owner manages this turf on myTapturf (an active claim). Cards show the green Owner-managed mark (components/turf/OwnerMark.tsx). */
   claimed?: boolean;
   created_at: string;
   updated_at: string;
