@@ -1,38 +1,27 @@
 "use client";
 
 import { AskEntry } from "@/components/ask/AskEntry";
-import { useState, useMemo, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Search, ChevronDown, Navigation, Loader2, X } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { Search, ChevronDown, Navigation, Loader2, X, RotateCw } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
-import type { Turf } from "@/types/turf";
-import { getMinimumPrice } from "@/lib/utils/prices";
-import { compareTopRated } from "@/lib/utils/ranking";
 import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
-import { haversineKm, getUserLocation, type Coords } from "@/lib/utils/location";
+import { getUserLocation, type Coords } from "@/lib/utils/location";
 import { isCity, labelFor, type CityScope } from "@/lib/city";
 import { noteInterest } from "@/lib/analytics/visitor";
-
-const PAGE_SIZE = 48;
-
-// Order by frequency in the current DB — Football (166) and Box
-// Cricket (103) dominate, so they're first. Box Cricket was missing
-// entirely from the old list, hiding 103 venues behind an unclickable
-// chip. Cricket Nets is a subset of Cricket for filtering purposes
-// (the substring match already picks it up under "Cricket").
-const SPORTS = [
-  "Football",
-  "Box Cricket",
-  "Cricket",
-  "Badminton",
-  "Volleyball",
-  "Yoga",
-  "Pickleball",
-  "Basketball",
-  "Tennis",
-];
-
-type SortOption = "nearby" | "rating" | "price-low" | "price-high" | "reviews";
+import {
+  DEFAULT_FILTERS,
+  filtersFromSearch,
+  isDefaultFilters,
+  listSearch,
+  nextBatch,
+  normalizeQ,
+  roundCoords,
+  searchForFilters,
+  type ListFilters,
+  type ListPage,
+  type SortOption,
+} from "@/lib/turfList/query";
+import { SAVE_KEY, addBatch, firstBatch, fromSaved, listKey, shownCards, startState, toSaved, wantBatch, type ListState } from "@/lib/turfList/client";
 
 const SORT_LABELS: Record<SortOption, string> = {
   nearby:      "Nearest first",
@@ -42,47 +31,213 @@ const SORT_LABELS: Record<SortOption, string> = {
   "price-high":"Price: High to Low",
 };
 
+/** How long the search box waits for the next key before it asks. */
+const TYPE_MS = 250;
+
+// Back and Forward: popstate fires before this listing mounts again, so a
+// mount right after one restores the list the player left (cards and
+// scroll), saved in sessionStorage when they tapped away. A fresh visit
+// (the Turfs tab, a link) starts at the top with the first cards.
+let popAt = -Infinity;
+let firstMount = true;
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    popAt = performance.now();
+  });
+}
+function cameBack(): boolean {
+  if (performance.now() - popAt < 3000) return true;
+  if (!firstMount) return false;
+  try {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    return nav?.type === "back_forward";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Search, filters and sort over the turfs the server rendered for this
- * page: one city's turfs on a city page, every turf on the all-India
- * page. The city never changes in here; a new city is a new page.
+ * Search, sport chips and sort over the turfs in scope (one city, or all
+ * of India), a batch of cards at a time. The server rendered the first
+ * FIRST_PAGE cards of the default list (`initial`); everything after that
+ * comes from GET /api/turfs/list, ranked by the same code
+ * (lib/turfList/query.ts), so the browser never gets the whole list:
+ * "Show more" adds 10, then 20, 40, 80 (each tap doubles what is shown, at
+ * most 80 per request), and a new search, sport or sort fetches the first
+ * 10 of the new list (the old cards stay, dimmed, until they arrive). The
+ * filters live in the URL (?q= on all of India, ?search= in a city, and
+ * sport, sort), so a reload, Back or a shared link shows the same list.
+ * The city never changes in here; a new city is a new page.
  */
 export function TurfListingClient({
-  turfs,
+  initial,
+  sports: availableSports,
   scope,
   spotlight,
-  trendingIds: trendingList,
 }: {
-  turfs: Turf[];
+  /** The server's first page of the default list. */
+  initial: ListPage;
+  /** Sport chips worth showing for this scope. */
+  sports: string[];
   scope: CityScope;
   /** This week's "Most Trending Turf" for the city in view, if any. */
   spotlight: SpotlightTurf | null;
-  /** Picks that lead the default sort. */
-  trendingIds: string[];
 }) {
-  const router = useRouter();
-  const trendingIds = useMemo(() => new Set(trendingList), [trendingList]);
+  const city = scope.kind === "city" ? scope.id : null;
   const cityLabel = scope.kind === "city" ? scope.label : null;
+  const urlScope = scope.kind === "city" ? "city" : "india";
+
+  const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
+  // The box as typed; filters.q follows it TYPE_MS after the last key.
   const [search, setSearch] = useState("");
-  const [selectedSport, setSelectedSport] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>("rating");
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [locErrorKind, setLocErrorKind] = useState<"denied" | "unavailable" | "timeout" | "other" | null>(null);
-  // Render a page of cards at a time: all of India is 2,000+ turfs and
-  // rendering every card made the page heavy. Search and filters still
-  // run over every turf; a new search or filter starts from page one.
-  const [page, setPage] = useState({ key: "", n: PAGE_SIZE });
+  const [list, setList] = useState<ListState>(() => startState(listKey(city, DEFAULT_FILTERS, null), initial));
+  // Until the URL has been read (just after hydration), nothing is fetched.
+  const [ready, setReady] = useState(false);
+  const [failedAt, setFailedAt] = useState<string | null>(null);
+  // The saved list and where the player was, until that list is on screen.
+  const restoring = useRef<{ state: ListState; y: number } | null>(null);
 
-  // The home's WebSite SearchAction lands here as /turfs?q=...; seed the
-  // box once so that search really runs.
-  useEffect(() => {
-    const seedFromUrl = () => {
-      const q = new URLSearchParams(window.location.search).get("q")?.trim();
-      if (q) setSearch(q.slice(0, 120));
+  const rounded = useMemo(() => (userLocation ? roundCoords(userLocation) : null), [userLocation]);
+  const nearby = filters.sort === "nearby" && !!rounded;
+  const wantKey = listKey(city, filters, rounded);
+  const replacing = ready && list.key !== wantKey;
+  // Ordered by the list's own key, so a list still on screen while the next loads keeps its order.
+  const shown = useMemo(() => shownCards(list, userLocation), [list, userLocation]);
+  const plan = !ready ? null : replacing ? firstBatch(nearby) : wantBatch(list, shown.length);
+  // One failed attempt is not retried by itself (no loop against a failing route); Retry asks again.
+  const attempt = plan ? `${wantKey}#${list.key}#${list.next}#${list.target}#${plan.offset}+${plan.limit}` : null;
+  const failed = attempt != null && failedAt === attempt;
+  const loading = plan != null && !failed;
+
+  // The URL's filters (or, on Back, the list the player left), once, before the first paint after hydration.
+  useLayoutEffect(() => {
+    const restore = () => {
+      const back = cameBack();
+      firstMount = false;
+      let saved = null;
+      if (back) {
+        try {
+          saved = fromSaved(window.sessionStorage.getItem(SAVE_KEY), location.pathname + location.search, city ?? "", Date.now());
+        } catch {
+          saved = null;
+        }
+      }
+      if (saved && listKey(city, saved.filters, null) === saved.state.key) {
+        setFilters(saved.filters);
+        setSearch(saved.filters.q);
+        setList(saved.state);
+        restoring.current = { state: saved.state, y: saved.y };
+      } else {
+        const f = filtersFromSearch(location.search);
+        // A sport this scope does not have would only show "No turfs found".
+        if (f.sport && !availableSports.includes(f.sport)) f.sport = null;
+        if (!isDefaultFilters(f)) {
+          setFilters(f);
+          setSearch(f.q);
+        }
+      }
+      setReady(true);
+      // The pre-paint dimming (LIST_PREPAINT_JS) hands over to `replacing`.
+      document.documentElement.removeAttribute("data-tt-list");
     };
-    seedFromUrl();
+    restore();
+    // Once per mount: the scope and chips are fixed for the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Back to where the player was, once the saved cards are on screen (the
+  // browser's own restore ran while the turf page was still showing, so it
+  // stopped short).
+  useLayoutEffect(() => {
+    const r = restoring.current;
+    if (!r || r.state !== list) return;
+    restoring.current = null;
+    window.scrollTo(0, r.y);
+  }, [list]);
+
+  // The search box, debounced into the filters (the URL already has it: onChange).
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const q = normalizeQ(search);
+      setFilters((f) => (f.q === q ? f : { ...f, q }));
+    }, TYPE_MS);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  /**
+   * The filters into the URL (replace, so Back still leaves the page),
+   * only from the player's own taps and keys, never from an effect or a
+   * timer: Next's replaceState takes the router to the URL it is given,
+   * so a write landing after a tap on a card (typing, then a tap within the
+   * debounce) would pull the player back to this list. Nearby is never
+   * written (it needs the viewer's own location).
+   */
+  const writeUrl = (f: ListFilters) => {
+    const next = searchForFilters(location.search, f, urlScope);
+    if (next !== location.search) window.history.replaceState(null, "", location.pathname + next + location.hash);
+  };
+  /** A chip, sort or clear: applied at once, with the box's text as it stands (no wait for the debounce). */
+  const change = (patch: Partial<ListFilters>, text = search) => {
+    const next = { ...filters, q: normalizeQ(text), ...patch };
+    setFilters(next);
+    writeUrl(next);
+  };
+
+  // The batch the cards on screen are missing: the first of a new list, or the next for "Show more".
+  useEffect(() => {
+    if (!plan || failed || !attempt) return;
+    const ctrl = new AbortController();
+    const fresh = list.key !== wantKey;
+    const key = wantKey;
+    const query = { city, sport: filters.sport, q: filters.q, sort: nearby ? filters.sort : filters.sort === "nearby" ? "rating" : filters.sort, at: rounded };
+    // The version of the cards on screen, so the CDN keeps batches per version (the answer names its own).
+    fetch(`/api/turfs/list?${listSearch({ query, offset: plan.offset, limit: plan.limit }, list.v)}`, { signal: ctrl.signal })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as ListPage;
+      })
+      .then((page) => {
+        if (ctrl.signal.aborted) return;
+        setList((prev) => (fresh ? startState(key, page) : prev.key === key ? addBatch(prev, page) : prev));
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setFailedAt(attempt);
+      });
+    return () => ctrl.abort();
+    // `attempt` names everything the request depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, failed]);
+
+  // Keep the list for Back: saved when the player taps a link (a card, the A to Z list) or leaves the page.
+  const saveRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    saveRef.current = () => {
+      try {
+        // Only a settled list: not one still loading, nor one the box has moved past (debounce pending).
+        const settled = ready && !replacing && normalizeQ(search) === filters.q;
+        const raw = settled ? toSaved(location.pathname + location.search, city ?? "", filters, list, window.scrollY, Date.now()) : null;
+        if (raw) window.sessionStorage.setItem(SAVE_KEY, raw);
+        else window.sessionStorage.removeItem(SAVE_KEY);
+      } catch {
+        // Storage full or blocked: Back just starts at the top.
+      }
+    };
+  });
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as Element | null)?.closest?.("a[href]")) saveRef.current();
+    };
+    const onHide = () => saveRef.current();
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("pagehide", onHide);
+    };
   }, []);
 
   const handleLocate = useCallback(async () => {
@@ -98,7 +253,7 @@ export function TurfListingClient({
         throw new Error("Received invalid coordinates from the browser.");
       }
       setUserLocation(coords);
-      setSortBy("nearby");
+      setFilters((f) => ({ ...f, sort: "nearby" }));
     } catch (err: unknown) {
       // Distinguish the three real geolocation error paths so the user
       // can act on the right one — the old generic message asked people
@@ -124,97 +279,17 @@ export function TurfListingClient({
     }
   }, []);
 
-  const cityScoped = turfs;
-
-  const turfsWithDistance = useMemo(() => {
-    return cityScoped.map((t) => {
-      let distanceKm: number | null = null;
-      if (userLocation && Number.isFinite(t.lat) && Number.isFinite(t.lng)) {
-        const d = haversineKm(userLocation, { lat: t.lat as number, lng: t.lng as number });
-        // NaN → null, so sort comparators never see a poisoned value.
-        distanceKm = Number.isFinite(d) ? d : null;
-      }
-      return { turf: t, distanceKm };
-    });
-  }, [cityScoped, userLocation]);
-
-  const filtered = useMemo(() => {
-    let result = turfsWithDistance;
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(({ turf: t }) =>
-        t.name.toLowerCase().includes(q) ||
-        t.address.toLowerCase().includes(q) ||
-        t.sports.some((s) => s.toLowerCase().includes(q))
-      );
-    }
-
-    if (selectedSport) {
-      const sportLower = selectedSport.toLowerCase();
-      result = result.filter(({ turf: t }) =>
-        t.sports.some((s) => s.toLowerCase().includes(sportLower))
-      );
-    }
-
-    result = [...result].sort((a, b) => {
-      switch (sortBy) {
-        case "nearby":
-          if (a.distanceKm == null && b.distanceKm == null) return compareTopRated(a.turf, b.turf);
-          if (a.distanceKm == null) return 1;
-          if (b.distanceKm == null) return -1;
-          return a.distanceKm - b.distanceKm;
-        case "price-low":
-        case "price-high": {
-          // Sort turfs without a real price to the end regardless of direction —
-          // never coalesce them to 500 so they don't jumble ahead of cheap real listings.
-          const ap = getMinimumPrice(a.turf);
-          const bp = getMinimumPrice(b.turf);
-          if (ap == null && bp == null) return 0;
-          if (ap == null) return 1;
-          if (bp == null) return -1;
-          return sortBy === "price-low" ? ap - bp : bp - ap;
-        }
-        case "reviews":    return b.turf.total_reviews - a.turf.total_reviews;
-        case "rating":
-        default: {
-          // The week's trending pick leads the default sort.
-          const ta = trendingIds.has(a.turf.id);
-          const tb = trendingIds.has(b.turf.id);
-          if (ta !== tb) return ta ? -1 : 1;
-          return compareTopRated(a.turf, b.turf);
-        }
-      }
-    });
-
-    return result;
-  }, [turfsWithDistance, search, selectedSport, sortBy, trendingIds]);
-
-  const filterKey = `${search.trim()}|${selectedSport ?? ""}|${sortBy}|${userLocation ? "geo" : ""}`;
-  const shown = page.key === filterKey ? page.n : PAGE_SIZE;
-
   const spotlightPicks = useMemo(() => (spotlight ? [spotlight] : []), [spotlight]);
-
-  const availableSports = useMemo(() => {
-    // Sport chips reflect the city-scoped turf set — if Nashik has no
-    // Pickleball venues, don't dangle a dead chip for a Nashik visitor.
-    const sportSet = new Set<string>();
-    cityScoped.forEach((t) => t.sports.forEach((s) => sportSet.add(s)));
-    return SPORTS.filter((s) =>
-      Array.from(sportSet).some((ts) => ts.toLowerCase().includes(s.toLowerCase()))
-    );
-  }, [cityScoped]);
-
-  // When the visitor switches city and the sport they had selected
-  // isn't offered in the new city, clear it so the "0 results" empty
-  // state doesn't lie about their filter.
-  useEffect(() => {
-    if (selectedSport && !availableSports.includes(selectedSport)) {
-      setSelectedSport(null);
-    }
-  }, [availableSports, selectedSport]);
-
-  const nearbyCount = filtered.filter(({ distanceKm }) => distanceKm != null && distanceKm <= 5).length;
+  const total = list.total;
+  const nearbyCount = userLocation && !replacing ? list.near ?? 0 : 0;
+  // What there is to show: the total, or once the route ran out, the cards fetched
+  // (a nearby list may hold more than it shows; a purge between batches may leave fewer than the total).
+  const available = list.end ? list.items.length : total;
+  const more = shown.length < available;
+  const nextCount = Math.min(nextBatch(list.target), available - shown.length);
+  // Cards still to come for "Show more" (not for a new list: its old cards stay, dimmed).
+  const pendingMore = loading && !replacing ? Math.max(0, Math.min(list.target, total) - shown.length) : 0;
+  const q = filters.q;
 
   return (
     <div>
@@ -227,7 +302,11 @@ export function TurfListingClient({
           type="search"
           placeholder="Filter by name, area, or sport"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          maxLength={120}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            writeUrl({ ...filters, q: normalizeQ(e.target.value) });
+          }}
           className="w-full pl-10 pr-4 h-11 rounded-xl bg-primary-100 text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
         />
       </div>
@@ -235,13 +314,14 @@ export function TurfListingClient({
       {/* Sport chips: always visible, scroll sideways on phones. */}
       <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-4 flex gap-2 overflow-x-auto scrollbar-hide">
         {[null, ...availableSports].map((sport) => {
-          const active = selectedSport === sport;
+          const active = filters.sport === sport;
           return (
             <button
               key={sport ?? "all"}
+              aria-pressed={active}
               onClick={() => {
-                if (sport && selectedSport !== sport) noteInterest({ sports: [sport] });
-                setSelectedSport(sport && selectedSport === sport ? null : sport);
+                if (sport && filters.sport !== sport) noteInterest({ sports: [sport] });
+                change({ sport: sport && filters.sport === sport ? null : sport });
               }}
               className={`shrink-0 h-9 px-4 rounded-full text-[14px] font-medium transition-colors ${
                 active ? "bg-primary-900 text-white" : "bg-primary-100 text-primary-900 hover:bg-primary-200"
@@ -255,9 +335,18 @@ export function TurfListingClient({
 
       {/* One quiet row: count + scope on the left, location + sort on the right. */}
       <div className="mb-5 flex items-center gap-3 text-[14px]">
-        <p className="text-primary-500 min-w-0 truncate">
-          <span className="tabular-nums">{filtered.length}</span> turf{filtered.length !== 1 ? "s" : ""}
-          {cityLabel && <span className="hidden sm:inline"> in {cityLabel}</span>}
+        <p className="text-primary-500 min-w-0 truncate inline-flex items-center gap-1.5" aria-live="polite">
+          {replacing && loading ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+              <span>Finding turfs</span>
+            </>
+          ) : (
+            <span>
+              <span className="tabular-nums">{total.toLocaleString("en-IN")}</span> turf{total !== 1 ? "s" : ""}
+              {cityLabel && <span className="hidden sm:inline"> in {cityLabel}</span>}
+            </span>
+          )}
         </p>
         <div className="ml-auto flex items-center gap-1 shrink-0">
           {!userLocation ? (
@@ -271,7 +360,10 @@ export function TurfListingClient({
             </button>
           ) : (
             <button
-              onClick={() => { setUserLocation(null); if (sortBy === "nearby") setSortBy("rating"); }}
+              onClick={() => {
+                setUserLocation(null);
+                if (filters.sort === "nearby") change({ sort: "rating" });
+              }}
               className="inline-flex items-center gap-1 h-9 px-3 rounded-full text-accent-600 hover:bg-accent-50"
               aria-label="Stop using my location"
             >
@@ -281,8 +373,8 @@ export function TurfListingClient({
           )}
           <div className="relative">
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              value={filters.sort === "nearby" && !userLocation ? "rating" : filters.sort}
+              onChange={(e) => change({ sort: e.target.value as SortOption })}
               aria-label="Sort"
               className="appearance-none h-9 pl-3 pr-7 rounded-full bg-transparent text-primary-900 hover:bg-primary-100 cursor-pointer focus:outline-none"
             >
@@ -322,65 +414,108 @@ export function TurfListingClient({
 
       {/* This week's Most Trending Turf for the city in view. Hidden
           while searching or filtering so it doesn't fight the results. */}
-      {!search && !selectedSport && (
+      {!search && !filters.sport && (
         <TrendingSpotlight picks={spotlightPicks} className="mb-8" />
       )}
 
       {/* Grid */}
-      {cityLabel && search.trim() && filtered.length === 0 ? null : filtered.length > 0 ? (
-        <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-          {filtered.slice(0, shown).map(({ turf, distanceKm }) => (
-            <TurfCard
-              key={turf.id}
-              turf={turf}
-              distanceKm={distanceKm}
-              trending={trendingIds.has(turf.id)}
-              cityLabel={cityLabel || !isCity(turf.city) ? undefined : labelFor(turf.city)}
-            />
-          ))}
-        </div>
-        {filtered.length > shown && (
-          <div className="mt-10 flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage({ key: filterKey, n: shown + PAGE_SIZE })}
-              className="press-tight h-12 px-6 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[15px] font-semibold transition-colors cursor-pointer"
-            >
-              Show more turfs
+      <div id="tt-turf-grid" aria-busy={loading} className={`transition-opacity duration-150 ${replacing && !failed ? "opacity-45 pointer-events-none" : ""}`}>
+        {cityLabel && q && total === 0 && !replacing ? null : shown.length > 0 || pendingMore > 0 ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
+              {shown.map(({ item: { turf, hot }, km }, i) => (
+                <TurfCard
+                  key={turf.id}
+                  turf={turf}
+                  distanceKm={km}
+                  priority={i < 2}
+                  trending={hot === true}
+                  cityLabel={cityLabel || !isCity(turf.city) ? undefined : labelFor(turf.city)}
+                />
+              ))}
+              {Array.from({ length: Math.min(pendingMore, 4) }, (_, i) => (
+                <CardSkeleton key={`s${i}`} />
+              ))}
+            </div>
+            {(more || failed) && (
+              <div className="mt-10 flex flex-col items-center gap-2">
+                {failed ? (
+                  <>
+                    <p className="text-[14px] text-primary-700">Couldn&apos;t load {replacing ? "these turfs" : "more turfs"}. Check your connection.</p>
+                    <button
+                      type="button"
+                      onClick={() => setFailedAt(null)}
+                      className="press-tight h-12 px-6 inline-flex items-center gap-2 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[15px] font-semibold transition-colors cursor-pointer"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                      Try again
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setList((s) => ({ ...s, target: s.target + nextBatch(s.target) }))}
+                    className="press-tight h-12 min-w-[200px] px-6 inline-flex items-center justify-center gap-2 rounded-full bg-primary-900 hover:bg-primary-700 disabled:bg-primary-700 text-white text-[15px] font-semibold transition-colors cursor-pointer disabled:cursor-wait"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                        Loading turfs
+                      </>
+                    ) : (
+                      `Show ${nextCount.toLocaleString("en-IN")} more`
+                    )}
+                  </button>
+                )}
+                <p className="text-[13px] text-primary-500 tabular-nums" aria-live="polite">
+                  Showing {shown.length.toLocaleString("en-IN")} of {available.toLocaleString("en-IN")}
+                </p>
+              </div>
+            )}
+          </>
+        ) : failed ? (
+          <div className="text-center py-20">
+            <p className="text-lg font-semibold text-primary-900">Couldn&apos;t load turfs</p>
+            <p className="text-sm text-primary-400 mt-2">Check your connection and try again.</p>
+            <button onClick={() => setFailedAt(null)} className="mt-4 text-[15px] text-accent-600 hover:text-accent-700">
+              Try again
             </button>
-            <p className="text-[13px] text-primary-500 tabular-nums">
-              Showing {shown.toLocaleString("en-IN")} of {filtered.length.toLocaleString("en-IN")}
-            </p>
+          </div>
+        ) : (
+          <div className="text-center py-20">
+            <p className="text-5xl mb-4">🏟️</p>
+            <p className="text-lg font-semibold text-primary-900">No turfs found</p>
+            <p className="text-sm text-primary-400 mt-2">Try adjusting your search or filters</p>
+            {(search || filters.sport) && (
+              <button
+                onClick={() => {
+                  setSearch("");
+                  change({ sport: null }, "");
+                }}
+                className="mt-4 text-[15px] text-accent-600 hover:text-accent-700"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         )}
-        </>
-      ) : (
-        <div className="text-center py-20">
-          <p className="text-5xl mb-4">🏟️</p>
-          <p className="text-lg font-semibold text-primary-900">No turfs found</p>
-          <p className="text-sm text-primary-400 mt-2">Try adjusting your search or filters</p>
-          {(search || selectedSport) && (
-            <button
-              onClick={() => { setSearch(""); setSelectedSport(null); }}
-              className="mt-4 text-[15px] text-accent-600 hover:text-accent-700"
-            >
-              Clear all filters
-            </button>
-          )}
-        </div>
-      )}
+      </div>
       {/* A city page searches its own turfs; offer the rest of India when that runs thin. */}
-      {cityLabel && search.trim() && filtered.length < 3 && (
+      {cityLabel && q && !replacing && total < 3 && (
         <div className="mt-8 flex flex-col items-start gap-3">
-          {filtered.length === 0 && (
+          {total === 0 && (
             <p className="text-[15px] text-primary-700">
-              Nothing in {cityLabel} for &quot;{search.trim()}&quot;.
+              Nothing in {cityLabel} for &quot;{q}&quot;.
             </p>
           )}
           <button
             type="button"
-            onClick={() => router.push(`/turfs?q=${encodeURIComponent(search.trim())}`)}
+            // The box as it stands (the player may have typed since these results
+            // came), as a full page load: /turfs?q= is a different page only
+            // because proxy.ts says so, and the client router, holding this
+            // city's /turfs from a prefetch, kept showing it for a push.
+            onClick={() => window.location.assign(`/turfs?q=${encodeURIComponent(normalizeQ(search) || q)}`)}
             className="h-11 px-5 inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white text-[14px] font-semibold text-primary-900 press-tight focus-neon hover:border-primary-900"
           >
             <Search className="w-4 h-4" />
@@ -388,6 +523,20 @@ export function TurfListingClient({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** A card's shape while its batch loads (TurfCard: 4:3 photo, name, one line, price). */
+function CardSkeleton() {
+  return (
+    <div aria-hidden className="animate-pulse">
+      <div className="w-full aspect-[4/3] rounded-2xl bg-primary-100" />
+      <div className="pt-3 px-0.5 space-y-2">
+        <div className="h-4 w-3/4 rounded bg-primary-100" />
+        <div className="h-3.5 w-1/2 rounded bg-primary-100" />
+        <div className="h-3.5 w-1/3 rounded bg-primary-100" />
+      </div>
     </div>
   );
 }

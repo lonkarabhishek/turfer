@@ -18,7 +18,7 @@ Airbnb-inspired: clean whitespace, `rounded-2xl` cards, `shadow-elevated`, frost
 
 ### Pages (66 total)
 - `/` — Home page (SSG, 10min revalidation)
-- `/turfs` — Turf listing with client-side filtering
+- `/turfs` — Turf listing: the server renders the first 10 cards; search, sport chips, sorts and "Show more" (10, 20, 40, 80 at a time) fetch batches from `GET /api/turfs/list`, ranked by the same code (`lib/turfList/query.ts`, tests: `npm run test:list`). Every turf in scope is a plain A to Z link at the bottom.
 - `/turf/[id]` — 49 individual turf pages (SSG with `generateStaticParams`)
 - `/sport/[sport]` — sport pages from `lib/sports.ts` (football, box-cricket, cricket, badminton, pickleball, volleyball, basketball, tennis); exact label match, add new sports there. `venue` says turf or court (racquet/ball-court sports are "courts" in all copy)
 - `/games` — Games listing with sport/skill filters

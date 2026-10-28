@@ -712,3 +712,11 @@ html[data-city-pending] main:has(#city-line) > :not(#city-line):not(:has(#city-l
   .report-chips-in, .report-star, .report-pop { animation: none; }
   .report-tick { animation: none; stroke-dashoffset: 0; }
 }
+
+/* ── Turf listing (components/search/TurfListingClient.tsx) ───
+   A URL with a search, sport or sort gets cards the static page could not
+   render: lib/turfList/client.ts LIST_PREPAINT_JS marks <html> before the
+   first paint, so the server's default cards show dimmed, not as results,
+   until the listing has read the URL (it then drops the mark and dims them
+   itself until the right ones arrive). */
+html[data-tt-list="wait"] #tt-turf-grid { opacity: .45; pointer-events: none; }
