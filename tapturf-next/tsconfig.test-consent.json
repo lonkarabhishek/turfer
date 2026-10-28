@@ -13,5 +13,5 @@
     "lib": ["es2023", "dom"],
     "types": ["node"]
   },
-  "files": ["lib/consent.test.ts", "lib/analytics/consentGates.test.ts"]
+  "files": ["lib/consent.test.ts", "lib/analytics/consentGates.test.ts", "lib/policy.test.ts"]
 }
