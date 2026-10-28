@@ -4,7 +4,8 @@
 // revoked; a username with tagging on; owners, then managers, then staff,
 // the earliest first; one account once, whichever sign-ins claimed; at most
 // 3 and how many more), that only the username and the tick come out, that
-// anon can call it and nothing else, and which pages the triggers queue.
+// anon can call it and nothing else, which pages the triggers queue, and
+// that applying it queues every turf with an active claim (once per run).
 // Never touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/turf_managers.check.mjs supabase/migrations/20261028_turf_managers.sql
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
@@ -58,11 +59,23 @@ await q(`insert into public.usernames (user_id, username, taggable) values
 await q(`insert into private.ticked values ('${U(2)}')`);
 await q(`insert into private.key_accounts values ('e:old@x.in', '${U(9)}')`);
 
-await db.exec(sql);
-await db.exec(sql); // safe to run again
-await q("truncate private.dirty_log");
+// A turf already claimed when the migration runs: its page may have been
+// cached without the line (the read was missing), so applying queues it.
+const T7 = "aaaaaaaa-0000-4000-8000-000000000007";
+const U10 = "bbbbbbbb-0000-4000-8000-000000000010";
+await q(`insert into public.turfs (id, slug) values ('${T7}', 'turf-seven')`);
+await q(`insert into public.usernames (user_id, username) values ('${U10}', 'early_j')`);
+await q(`insert into public.turf_owners (turf_id, user_key, user_id, status, role, decided_at) values
+  ('${T7}', 'p:9800000100', '${U10}', 'active', 'owner', '2026-10-27'),
+  ('${T7}', 'e:wait@x.in', null, 'pending', 'staff', null),
+  ('${T(1)}', 'e:was@x.in', null, 'revoked', 'owner', '2026-10-01')`);
+
+const applyLog = async () => { await db.exec(sql); const r = await q("select keys, urgent from private.dirty_log"); await q("truncate private.dirty_log"); return r; };
+eq(await applyLog(), [{ keys: ["turf:turf-seven"], urgent: true }], "applying queues the page of each turf with an active claim, urgent (not pending or revoked ones)");
+eq(await applyLog(), [{ keys: ["turf:turf-seven"], urgent: true }], "safe to run again: the same pages, queued again");
 
 const managers = async (id) => (await q(`select public.turf_managers($1::uuid) j`, [id]))[0].j;
+eq(await managers(T7), { managers: [{ u: "early_j", v: false }], more: 0 }, "a claim from before the migration is on the line");
 const log = async () => { const r = await q("select keys, urgent from private.dirty_log"); await q("truncate private.dirty_log"); return r; };
 
 eq(await managers(T(1)), { managers: [], more: 0 }, "no claims: nobody");

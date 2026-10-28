@@ -25,16 +25,25 @@
 --    mark_owner_dirty leaves alone (urgent: the order or the name on the
 --    line changes). The page stays ISR with its day-long backstop.
 --
--- Additive: the read, a helper and two trigger functions, six triggers.
--- Nothing is replaced, dropped or deleted. Safe to run again. The app
--- works with either database: before this, the read fails and the line
--- is hidden.
+-- 3. Once, at the end: queue the page of every turf with an active claim
+--    (urgent). A page rendered before this, while the read was missing,
+--    was cached without the line; nothing else would purge it for a day.
+--    2 turfs on 28 Oct.
+--
+-- Additive: the read, a helper and two trigger functions, six triggers,
+-- one round of page refreshes. Nothing is replaced, dropped or deleted.
+-- Safe to run again (it queues those pages again). The app works with
+-- either database: before this, the read fails and the line is hidden;
+-- applying this brings the line at the next cache flush.
 --
 -- After applying (read only):
 --   select t.slug, public.turf_managers(t.id) from public.turfs t
 --    where t.id in (select turf_id from public.turf_owners where status = 'active');
 --   select tgname from pg_trigger where tgname like '%mark_managed_turfs%'
 --      or tgname = 'turf_owners_mark_manager_change';   -- 6 rows
+--   select key, urgent, sent_at from private.cache_dirty
+--    where key in (select private.turf_key(turf_id) from public.turf_owners where status = 'active');
+--      -- one row per such turf, urgent; sent_at set once the flush ran
 -- Test: scripts/sql-tests/turf_managers.check.mjs (PGlite).
 
 set local lock_timeout = '5s';
@@ -168,3 +177,10 @@ create or replace trigger turf_owners_mark_manager_change
   when (old.status = 'active' and new.status = 'active'
         and (old.role is distinct from new.role or old.user_id is distinct from new.user_id))
   execute function private.mark_manager_turf_dirty();
+
+-- ── 3. Pages rendered before this ──────────────────────────
+
+-- Every turf with an active claim (managed_turf_keys' rule, for all accounts): urgent, at the next flush.
+select private.mark_dirty(coalesce(array_agg(distinct private.turf_key(o.turf_id)), '{}'::text[]), true)
+  from public.turf_owners o
+ where o.status = 'active';
