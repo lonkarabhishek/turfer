@@ -302,6 +302,36 @@ test("anything not fully understood goes to Claude", () => {
   }
 });
 
+test("a venue named after its area stays a venue, and a compare can name a venue in another city", () => {
+  const venuesData = {
+    areas: { bangalore: ["Begur"], mumbai: ["Marol"], pune: ["Kothrud", "Mundhwa"] },
+    turfs: [
+      ["Begur Turf", "bangalore", "Begur"],
+      ["Dribble Den", "bangalore", "Begur"],
+      ["Mundhwa Turf Ground", "pune", "Mundhwa"],
+      ["Kanade Sports Club", "pune", "Undri"],
+      ["Prime Turf", "mumbai", "Marol"],
+    ].map(([name, city, area], i) => ({ id: `v${i}`, name, city, area, address: "", total_reviews: 10, sports: [] }) as unknown as Turf),
+  };
+  const read = (q: string, ctx: QuickContext = {}) => {
+    const f = quickAnswer(q, venuesData, ctx);
+    assert.ok(f, `expected a ready answer for "${q}"`);
+    wellFormed(q, f);
+    return f;
+  };
+  // Asked from Pune: Begur is in Bangalore, and Begur Turf is the venue, not just the area's best rated.
+  let f = read("Begur Turf", { prefCity: "pune" });
+  assert.deepEqual([f.intent, f.city, f.areas, f.free_text], ["find_turf", "bangalore", ["Begur"], "Begur Turf"]);
+  assert.equal(f.reply, "Here is Begur Turf in Begur, Bangalore.");
+  assert.equal(read("Mundhwa turf", { prefCity: "pune" }).free_text, "Mundhwa turf");
+  // No venue called that: the area search, as before.
+  f = read("Kothrud turf", { prefCity: "pune" });
+  assert.deepEqual([f.areas, f.free_text], [["Kothrud"], null]);
+  // The whole name and then its area: Prime Turf in Marol, Mumbai, from Pune.
+  f = read("Kanade Sports Club vs Prime Turf Marol", { prefCity: "pune" });
+  assert.deepEqual([f.intent, f.turf_names, f.city], ["compare", ["Kanade Sports Club", "Prime Turf Marol"], null]);
+});
+
 test("hostile input stays fast", () => {
   const t0 = performance.now();
   for (const q of [`host a game ${"11 ".repeat(48)}x`, `${"box cricket ".repeat(13)}x`, `${"a vs ".repeat(30)}b`, `compare ${"a and ".repeat(25)}b`]) ask(q.slice(0, 160));
