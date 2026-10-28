@@ -5,6 +5,7 @@ export const post: Post = {
   title: "Box Cricket vs Full Cricket: Which One Is Right for Your Squad?",
   description:
     "Box cricket vs full-format cricket, how they differ in pitch, format, cost, and vibe, and how to pick the right one for your squad size and skill level.",
+  seoTitle: "Box Cricket vs Full Cricket: Which Is Right for Your Squad?",
   hook: "Compact and fast, or full-sized and traditional, the actual differences that matter.",
   category: "Guides",
   city: null,

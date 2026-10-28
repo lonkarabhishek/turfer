@@ -9,6 +9,7 @@ export const post: Post = {
   title: "How to Start a Turf Business on Leased Land: A Nashik and Pune Guide",
   description:
     "What a turf costs to build and run on leased land, how much rent you can afford, the hours you must sell to break even, and what to put in the lease.",
+  seoTitle: "How to Start a Turf Business on Leased Land: Nashik, Pune",
   hook: "At Nashik prices, a Rs 60,000 rent means selling about 44% of your hours just to break even. Here is the maths before you sign a lease.",
   category: "Guides",
   city: null,

@@ -5,6 +5,8 @@ export const post: Post = {
   title: "Box Cricket in Nashik: The Complete 2026 Guide",
   description:
     "How to pick, book and play box cricket in Nashik like you know what you're doing — team sizes, nets, floodlights, cost splitting and evening slots explained, with links to every real Nashik cricket turf on TapTurf.",
+  seoDescription:
+    "How to pick and play box cricket in Nashik: team sizes, nets, floodlights, cost splitting and evening slots, with links to every Nashik cricket turf.",
   hook: "Everything you actually need to know before you WhatsApp a turf owner at 9pm on Friday.",
   category: "Guides",
   city: "nashik",

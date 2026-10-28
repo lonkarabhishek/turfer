@@ -14,6 +14,9 @@ import { NearMeFinder } from "@/components/near/NearMeFinder";
 import type { Turf } from "@/types/turf";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { plural } from "@/lib/home/format";
+import { nearMeDescription } from "@/lib/seo/listingMeta";
+import { DEFAULT_OG_IMAGE, OG_BASE, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 // "Turf near me": the page for people who don't know a turf's name yet.
 // Everything a crawler needs is in the HTML (every turf linked, grouped
@@ -21,6 +24,8 @@ import { plural } from "@/lib/home/format";
 export const revalidate = 3600;
 
 const PAGE_URL = "https://www.tapturf.in/turf-near-me";
+// Keyword first; absolute so the layout template doesn't add a second brand.
+const TITLE = "Turf Near Me: Find Football & Box Cricket Turfs | TapTurf";
 /** Turf link lists: styled from the parent so each of the ~240 rows stays tiny. */
 const LIST =
   "mt-3 text-[15px] text-primary-800 [&_a]:flex [&_a]:items-center [&_a]:justify-between [&_a]:gap-3 [&_a]:py-1.5 [&_a:hover]:text-accent-600 [&_span]:min-w-0 [&_span]:truncate [&_small]:text-[13px] [&_small]:text-primary-500 [&_i]:not-italic [&_i]:shrink-0 [&_i]:text-[13px] [&_i]:text-primary-600 [&_i]:tabular-nums";
@@ -108,11 +113,11 @@ function cityLine(blocks: { label: string }[]) {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { total, blocks } = await load();
-  const cities = cityLine(blocks);
-  const description = `Find a turf near you in ${cities}. ${total} football and box cricket turfs sorted by distance, with photos, ratings and timings. Call or WhatsApp to book, no booking fee.`;
+  // The HTML lists every turf by city and area; distance sorting starts
+  // at "Use my location", so the snippet says so instead of promising it.
+  const description = nearMeDescription(total, blocks.map((b) => b.label), blocks.length);
   return {
-    // Keyword first; absolute so the layout template doesn't add a second brand.
-    title: { absolute: "Turf Near Me: Find Football & Box Cricket Turfs | TapTurf" },
+    title: { absolute: TITLE },
     description,
     keywords: [
       "turf near me",
@@ -124,14 +129,13 @@ export async function generateMetadata(): Promise<Metadata> {
       ...blocks.map((b) => `turf near me ${b.label.toLowerCase()}`),
     ].join(", "),
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: "Find a Turf Near You | TapTurf",
+      ...OG_BASE,
+      images: [DEFAULT_OG_IMAGE],
+      title: TITLE,
       description,
       url: PAGE_URL,
-      type: "website",
-      siteName: "TapTurf",
-      locale: "en_IN",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: PAGE_URL },
   };
 }
@@ -221,7 +225,7 @@ export default async function TurfNearMePage() {
 
   return (
     <div className="pb-16">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-primary-50 to-white">

@@ -14,6 +14,11 @@ import { AskPageContext } from "@/components/ask/AskPageContext";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
+import { busiestAreas, citySportDescription, citySportTitle, listingOgImage } from "@/lib/seo/listingMeta";
+import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { listingReach, reachOf } from "@/lib/seo/turfFacts";
+import { getTurfFacts } from "@/lib/queries/turfFacts";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -52,30 +57,34 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { city, sport } = await params;
   const data = await load(city, sport);
-  if (!data) return { title: "Not found", robots: { index: false } };
+  if (!data) return { title: "Not found", robots: ROBOTS_NOINDEX_FOLLOW };
   const { sport: s, turfs } = data;
   const cityLabel = labelFor(data.city);
   const stats = sportCityStats(turfs);
+  // Which of them show timings, photos or a number to call (a day-long copy).
+  const reach = listingReach(turfs, reachOf(await getTurfFacts()));
   const lower = s.name.toLowerCase();
   const word = venueWord(s, 1);
   const url = `https://www.tapturf.in/${data.city}/${s.slug}`;
-  const noun = s.venue === "turf" ? "Ground" : `${s.venue[0].toUpperCase()}${s.venue.slice(1)}`;
-
-  const bits = [
-    `Find a ${lower} ${word} near you in ${cityLabel}: ${stats.count} ${venueWord(s, stats.count)} with ratings, prices, timings and location.`,
-    stats.topAreas.length > 0 ? `Popular areas: ${stats.topAreas.slice(0, 3).map((a) => a.area).join(", ")}.` : null,
-    // Floodlights only mean something for outdoor turfs, not indoor courts.
-    s.venue === "turf" && stats.floodlit > 0 ? `${stats.floodlit} with floodlights.` : null,
-    // No price in the search snippet: some listed rates look per-player
-    // rather than per-hour (data team checking), and a misleading
-    // "From ₹200/hr" in Google results does more harm than good.
-    "Call or WhatsApp to book, no booking fee.",
-  ].filter(Boolean);
+  // Counts from the rows; no price range in the snippet (QUOTE_CITY_PRICE_RANGE):
+  // some listed rates look per player rather than per hour (data team checking).
+  const facts = {
+    ...reach,
+    cityLabel,
+    sport: s,
+    count: stats.count,
+    priced: stats.priced,
+    floodlit: stats.floodlit,
+    areas: busiestAreas(turfs),
+    priceMin: stats.priceMin,
+    priceMax: stats.priceMax,
+  };
+  const title = citySportTitle(facts);
+  const description = citySportDescription(facts);
 
   return {
-    // Layout's template appends "| TapTurf".
-    title: `${sportVenues(s, { title: true })} in ${cityLabel}: ${stats.count} ${noun}${stats.count === 1 ? "" : "s"}, Prices & Timings`,
-    description: bits.join(" "),
+    title: { absolute: title },
+    description,
     keywords: [
       `${lower} ${word} in ${cityLabel.toLowerCase()}`,
       `${lower} ${word} ${cityLabel.toLowerCase()}`,
@@ -84,17 +93,17 @@ export async function generateMetadata({
       `book ${lower} ${word} ${cityLabel.toLowerCase()}`,
       ...stats.topAreas.slice(0, 4).map((a) => `${lower} ${word} ${a.area.toLowerCase()}`),
     ].join(", "),
-    // Thin pages (1-2 turfs) stay out of the index.
-    robots: stats.count >= MIN_TURFS_TO_INDEX ? undefined : { index: false, follow: true },
+    // Thin pages (1-2 venues) stay out of the index. Always a whole
+    // robots value: undefined would wipe the layout's.
+    robots: stats.count >= MIN_TURFS_TO_INDEX ? ROBOTS_INDEX : ROBOTS_NOINDEX_FOLLOW,
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `${sportVenues(s, { title: true })} in ${cityLabel} | TapTurf`,
-      description: bits.join(" "),
+      ...OG_BASE,
+      images: [listingOgImage(turfs, `${sportVenues(s)} in ${cityLabel}`)],
+      title,
+      description,
       url,
-      type: "website",
-      siteName: "TapTurf",
-      locale: "en_IN",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: url },
   };
 }
@@ -163,7 +172,7 @@ export default async function CitySportPage({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       {/* The chat answers for this city while the visitor is on its page. */}
       <AskPageContext city={cityId} />
       <NoteInterest city={cityId} sports={[s.name]} />

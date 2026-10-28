@@ -5,6 +5,8 @@ export const post: Post = {
   title: "How to Host a Cricket Match at a Turf: A Captain's Playbook",
   description:
     "The complete captain's playbook for hosting a cricket match at a turf, squad sizing, splitting cost, running the game, and how to make sure everyone comes back next week.",
+  seoDescription:
+    "A captain's playbook for hosting a cricket match at a turf: squad size, splitting the cost, running the game, and getting everyone back next week.",
   hook: "You booked the turf. Now here's how to actually run the match.",
   category: "Playbook",
   city: null,

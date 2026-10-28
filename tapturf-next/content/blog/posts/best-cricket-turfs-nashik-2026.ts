@@ -5,6 +5,8 @@ export const post: Post = {
   title: "10 Best Cricket Turfs in Nashik (2026 Guide)",
   description:
     "The 10 best cricket turfs in Nashik for 2026, ranked by real Google ratings, review volume, and playability. Named venues across Panchavati, Deolali, Indira Nagar, and beyond.",
+  seoDescription:
+    "The 10 best cricket turfs in Nashik for 2026, ranked by Google rating, review volume and playability, across Panchavati, Deolali, Indira Nagar and more.",
   hook: "Every one of these picks is a real, working ground with a Google rating to back it up.",
   category: "Best Turfs",
   city: "nashik",

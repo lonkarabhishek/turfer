@@ -72,6 +72,14 @@ export interface Post {
   slug: string;
   title: string;
   description: string; // SEO meta description + card subtitle
+  /**
+   * The search title when `title` (the H1 and card title) runs over 60
+   * characters or about 580px; " | TapTurf" is added only if it still
+   * fits. npm run check:blog stops the build on an SEO title that is too long.
+   */
+  seoTitle?: string;
+  /** The meta description when `description` runs over 155 characters (110 to 155). */
+  seoDescription?: string;
   hook: string;        // one-line hook for the listing card
   category: PostCategory;
   city: PostCity;

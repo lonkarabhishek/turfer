@@ -12,6 +12,9 @@ export const post: Post = {
   title: "Free Ad-Free Cricket Scorer: A CricHeroes Alternative for Turf",
   description:
     "Score box cricket ball by ball with no ads and no Pro plan. How TapTurf's free live scorer compares with CricHeroes for turf games, and where CricHeroes is better.",
+  seoTitle: "Ad-Free Cricket Scorer: A Free CricHeroes Alternative",
+  seoDescription:
+    "Score box cricket ball by ball with no ads and no Pro plan. How TapTurf's free scorer compares with CricHeroes for turf games, and where CricHeroes wins.",
   hook: "For a one-hour turf game you need a scorecard and a live link, not ads between every screen.",
   category: "Guides",
   city: null,

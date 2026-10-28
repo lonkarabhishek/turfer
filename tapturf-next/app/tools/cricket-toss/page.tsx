@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ToolPage } from "@/components/tools/ToolPage";
 import { CricketToss } from "@/components/tools/CricketToss";
 import { toolBySlug, TOOLS_BASE } from "@/lib/tools/registry";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 
 const tool = toolBySlug("cricket-toss")!;
 const URL = `${TOOLS_BASE}/${tool.slug}`;
@@ -10,8 +11,9 @@ export const metadata: Metadata = {
   title: { absolute: tool.title },
   description: tool.description,
   alternates: { canonical: URL },
-  robots: { index: true, follow: true },
-  openGraph: { title: tool.title, description: tool.description, url: URL, siteName: "TapTurf", type: "website" },
+  robots: ROBOTS_INDEX,
+  openGraph: { ...OG_BASE, title: tool.title, description: tool.description, url: URL, images: [DEFAULT_OG_IMAGE] },
+  twitter: TWITTER_CARD,
 };
 
 const FAQ = [

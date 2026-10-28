@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Header } from "@/components/layout/Header";
-import { CITY_LIST_AND, CITY_LIST_SHORT } from "@/lib/city";
+import { CITY_LIST_SHORT } from "@/lib/city";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { Footer } from "@/components/layout/Footer";
 import { AskProvider } from "@/components/ask/AskProvider";
 import { AskLauncher } from "@/components/ask/AskLauncher";
@@ -26,32 +27,38 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: `TapTurf: Find & Book Turfs in ${CITY_LIST_SHORT}`,
+    default: `TapTurf: Find Turfs in ${CITY_LIST_SHORT}`,
     template: "%s | TapTurf",
   },
   description:
-    `Find and book football, box cricket and sports turfs in ${CITY_LIST_AND}. Compare prices, check ratings, call or WhatsApp to book.`,
+    `Find football, box cricket and sports turfs in ${CITY_LIST_SHORT}. Prices, timings and photos. Call or WhatsApp the turf, no booking fee.`,
   metadataBase: new URL("https://www.tapturf.in"),
+  // Indexable with the large image preview and full snippets. A page
+  // that sets robots replaces this whole object (lib/seo/defaults.ts).
+  robots: ROBOTS_INDEX,
   // Default share image for pages that don't set their own.
   openGraph: {
-    siteName: "TapTurf",
-    locale: "en_IN",
-    type: "website",
-    images: [{ url: "/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
+    ...OG_BASE,
+    images: [DEFAULT_OG_IMAGE],
   },
+  twitter: TWITTER_CARD,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "TapTurf",
   },
+  // app/favicon.ico (16, 32 and 48px) is added by the file convention,
+  // first; listing it here too gave every page two favicon links. The
+  // SVG is the same white T on #00A699, drawn on a 48px grid so it stays
+  // sharp at the 16px Google shows beside each mobile result.
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: "/apple-icon.png",
+    apple: { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
   },
 };
 

@@ -9,6 +9,9 @@ export const post: Post = {
   title: "TapTurf September Awards 2026: The Best Turfs in Nashik, Pune and Mumbai",
   description:
     "The TapTurf September Awards: Turf of the Month, Rising Star, Crowd Favourite and sport picks for Nashik, Pune and Mumbai, decided by Google ratings and TapTurf player reviews. Every winner links to its turf page.",
+  seoTitle: "TapTurf September 2026 Awards: Nashik, Pune and Mumbai",
+  seoDescription:
+    "Turf of the Month, Rising Star, Crowd Favourite and sport picks for Nashik, Pune and Mumbai, decided by Google ratings and TapTurf player reviews.",
   hook: "Twelve awards across three cities, decided by reviews, not by who paid. Here are the turfs that earned them in September.",
   category: "Best Turfs",
   city: null,

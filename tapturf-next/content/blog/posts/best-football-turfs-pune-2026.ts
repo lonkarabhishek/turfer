@@ -5,6 +5,9 @@ export const post: Post = {
   title: "Best Football Turfs in Pune: 12 Grounds Worth Playing At in 2026",
   description:
     "Twelve of the best football turfs in Pune for 2026, chosen from real Google reviews and mapped by area — Kothrud, Aundh, Wakad, Hinjewadi, Kharadi, Karve Nagar and more. Every venue links straight to its TapTurf page.",
+  seoTitle: "12 Best Football Turfs in Pune for 2026, Area by Area",
+  seoDescription:
+    "Twelve of the best football turfs in Pune for 2026, picked from Google reviews and mapped by area: Kothrud, Aundh, Wakad, Hinjewadi, Kharadi and more.",
   hook: "Real venues, real reviews, real areas — pick a turf close enough that half your squad will actually show up.",
   category: "Best Turfs",
   city: "pune",

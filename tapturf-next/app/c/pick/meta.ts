@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { CITIES, CITY_LIST_AND, CITY_LIST_SHORT, cityCopyFrom, type CityCount } from "@/lib/city";
+import { CITIES, CITY_LIST_SHORT, type CityCount } from "@/lib/city";
+import { allTurfsDescription, homeDescription, homeTitle } from "@/lib/seo/listingMeta";
 import { getLiveCities } from "@/lib/queries/cities";
 import { GAMES_METADATA, turfsMetadata } from "@/lib/seo/pageMetadata";
 import type { PickPage } from "@/components/city/CityPick";
-import { plural } from "@/lib/home/format";
 
 const SITE = "https://www.tapturf.in";
+/** The curated cities, biggest first, for the static copy (it states no count). */
+const CURATED_LABELS = CITIES.map((c) => c.label);
 
 /**
  * The pick screen's title, description and canonical when the live
@@ -17,13 +19,13 @@ const SITE = "https://www.tapturf.in";
  */
 export const PICK_METADATA: Record<PickPage, Metadata> = {
   "/": {
-    title: { absolute: "TapTurf: Football & Box Cricket Turfs in India" },
-    description: `Football, box cricket and sports turfs in ${CITY_LIST_AND}. Photos, ratings and prices. No booking fee.`,
+    title: { absolute: homeTitle(0, 0) },
+    description: homeDescription(CURATED_LABELS, 0),
     alternates: { canonical: SITE },
   },
   "/turfs": {
     title: `All Sports Turfs in ${CITY_LIST_SHORT}`,
-    description: `Every sports turf in ${CITY_LIST_AND}. Compare prices, check ratings, view photos. Call or WhatsApp to book, no booking fee.`,
+    description: allTurfsDescription(CURATED_LABELS, 0),
     alternates: { canonical: `${SITE}/turfs` },
   },
   "/games": {
@@ -48,10 +50,11 @@ export async function pickMetadata(page: PickPage): Promise<Metadata> {
     if (page === "/") {
       const live = await getLiveCities();
       if (live.length > 0) {
-        const { listAnd } = cityCopyFrom(live.map((c) => c.label));
+        // The home's own title and description (lib/seo/listingMeta.ts), from the same live list.
+        const total = live.reduce((n, c) => n + c.n, 0);
         return {
-          title: { absolute: `TapTurf: Football & Box Cricket Turfs in ${plural(live.length, "Indian City", "Indian Cities")}` },
-          description: `Football, box cricket and sports turfs in ${listAnd}. Photos, ratings and prices. No booking fee.`,
+          title: { absolute: homeTitle(total, live.length) },
+          description: homeDescription(live.map((c) => c.label), live.length),
           alternates: { canonical: SITE },
         };
       }

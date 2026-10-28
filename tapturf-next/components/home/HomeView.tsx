@@ -13,6 +13,7 @@ import { ToolsRow } from "./ToolsRow";
 import { GuidesRow } from "./GuidesRow";
 import { FinalBand } from "./FinalBand";
 import { plural } from "@/lib/home/format";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 /**
  * The home, for one city or all of India. `requested` is the city from
@@ -33,7 +34,7 @@ export async function HomeView({ requested }: { requested: string | null }) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd(d)) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(homeJsonLd(d)) }} />
       <div id="tt-scope" data-scope={requested ?? ""} hidden />
       {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
       <AskPageContext city={s.scope.kind === "city" ? s.scope.id : null} />

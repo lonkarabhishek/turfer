@@ -3,6 +3,9 @@ import { GameDetailClient } from "@/components/game/GameDetailClient";
 import { getGameByIdServer } from "@/lib/queries/games.server";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 import { isGameExpired } from "@/lib/utils/game";
+import { gameDates } from "@/lib/seo/gameDates";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 export const revalidate = 60;
 
@@ -50,16 +53,15 @@ export async function generateMetadata(
     title,
     description,
     // A game that has been played is no use in search; keep its links followed.
-    ...(isGameExpired(game) ? { robots: { index: false, follow: true } } : {}),
+    ...(isGameExpired(game) ? { robots: ROBOTS_NOINDEX_FOLLOW } : {}),
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
+      ...OG_BASE,
+      images: [DEFAULT_OG_IMAGE],
       title,
       description,
       url: `https://www.tapturf.in/game/${id}`,
-      siteName: "TapTurf",
-      locale: "en_IN",
-      type: "website",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: `https://www.tapturf.in/game/${id}` },
   };
 }
@@ -79,8 +81,8 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       "@id": `https://www.tapturf.in/game/${id}`,
       name: `${game.sport} at ${venueName}`,
       description: `Join a ${game.sport} game at ${venueName} on TapTurf.`,
-      startDate: `${game.date}T${game.start_time}`,
-      endDate: `${game.date}T${game.end_time}`,
+      // India time (+05:30); an end at or before the start is the next day.
+      ...gameDates(game),
       sport: game.sport,
       eventStatus: "https://schema.org/EventScheduled",
       eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
@@ -121,7 +123,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
         />
       )}
       {/* The live link copy only when live links are set up (LIVE_WRITE_KEY is server-only). */}

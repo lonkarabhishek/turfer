@@ -72,6 +72,13 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 - Game queries fetch turfs separately (no JOINs) to avoid RLS issues
 - Dual auth: localStorage for phone users, Supabase session for Google users
 
+## SEO & Metadata
+- Titles and descriptions are built from each page's own data in `lib/seo/`: `turfMeta.ts` (turf pages), `listingMeta.ts` (home, city, city+sport, sport, near-me), `blogMeta.ts` (posts, with optional `seoTitle`/`seoDescription`; `npm run check:blog` checks them), `pageMetadata.ts` (home, /turfs, /games). Titles fit 60 characters and about 580px (`width.ts`), descriptions 155 characters. Shared robots/OG/Twitter pieces are in `defaults.ts`. Tests: `npm run test:seo`.
+- Honest snippets: no booking claims (players call or WhatsApp the turf), no invented numbers or urgency. Google ratings may appear in visible text as "on Google", never in structured data.
+- Every `<script type="application/ld+json">` uses `jsonLdHtml` from `lib/seo/jsonLd.ts` (escapes `<`, `>`, `&`), never raw `JSON.stringify`.
+- A turf's JSON-LD carries `aggregateRating` only from TapTurf players' own live reports, at `AGGREGATE_RATING_MIN_REPORTS` (5, `lib/seo/defaults.ts`) or more. Listing pages carry no ratings.
+- `/turf/<uuid>` answers 308 to `/turf/<slug>` from the page itself (`permanentRedirect` in `app/turf/[id]/page.tsx`). Edge redirects are not on; `scripts/turf-redirects.mjs` says how to turn them on.
+
 ## Commits & Deploys
 - Batch the work: commit to the working branch as you go, but merge into `main` (which deploys to production) once per batch, not after every commit.
 - Pushing the working branch only makes a Vercel preview; only `main` goes live.

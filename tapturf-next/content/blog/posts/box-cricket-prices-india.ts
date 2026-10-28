@@ -10,6 +10,9 @@ export const post: Post = {
   title: "What an Hour of Box Cricket Costs in Pune, Mumbai, Nagpur and Hyderabad (October 2026)",
   description:
     "Real listed hourly rates for box cricket across four cities, from 153 venues that publish prices: cheapest, typical and most expensive slots, what moves the price, and how much it works out per player.",
+  seoTitle: "Box Cricket Prices in Pune, Mumbai, Nagpur and Hyderabad",
+  seoDescription:
+    "Listed hourly box cricket rates from 153 venues in Pune, Mumbai, Nagpur and Hyderabad: the cheapest, typical and priciest slots, and the cost per player.",
   hook: "153 venues publish a rate. We lined them all up. Pune is cheapest, Mumbai is double, and the evening bump is bigger than you think.",
   category: "Guides",
   city: null,

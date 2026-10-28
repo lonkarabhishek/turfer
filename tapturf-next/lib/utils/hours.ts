@@ -76,6 +76,10 @@ function to24h(hStr: string, minStr: string | undefined, mer: string | undefined
   return `${String(h % 24).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
+/** A per-day value that names days or has several day-scoped parts ("::"). */
+const NAMES_DAYS =
+  /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun|week\s*days?|week\s*ends?)\b|::/i;
+
 /**
  * Turn the DB opening_hours jsonb into a per-day list (Mon…Sun).
  * When the value is `{daily: "..."}` every day gets the same parse.
@@ -105,10 +109,25 @@ export function normaliseOpeningHours(
   }
 
   if (oh && typeof oh === "object") {
-    const perDay = oh as Partial<Record<DayName, string>>;
+    // Day keys in any case: 3,289 of 3,662 active turfs store "monday"
+    // (26 Oct), 22 "Monday". Read case-sensitively, the lower-case ones
+    // lost their per-day hours, and 398 of them showed none at all.
+    const perDay = new Map<string, unknown>();
+    for (const [k, v] of Object.entries(oh)) {
+      const key = k.trim().toLowerCase();
+      // An exact "Monday" wins over a stray "monday" on the same row.
+      if (!perDay.has(key) || k.trim() === key.charAt(0).toUpperCase() + key.slice(1)) perDay.set(key, v);
+    }
     for (const day of DAYS) {
-      const raw = perDay[day];
+      const raw = perDay.get(day.toLowerCase());
       if (typeof raw !== "string") continue;
+      // A whole-week schedule stored under a day ("Mon–Fri: 5 AM–11 PM,
+      // Sat & Sun: 5 AM–1 AM", 3 turfs on 28 Oct): its ranges belong to
+      // other days, so the day shows the text and claims no hours.
+      if (NAMES_DAYS.test(raw)) {
+        rows.push({ day, raw, closed: false, spans: [] });
+        continue;
+      }
       const parsed = parseHoursString(raw);
       rows.push({ day, raw, closed: parsed.closed, spans: parsed.spans });
     }
@@ -159,11 +178,15 @@ export function openingHoursJsonLd(
   for (const row of rows) {
     if (row.closed) continue;
     for (const span of row.spans) {
+      // A whole day stored as "12 AM–12 AM" (00:00-00:00) reads as closed
+      // to Google: an open-all-day span is 00:00 to 23:59, as the page's
+      // "Open 24 hours" says.
+      const allDay = isAllDaySpan(span);
       specs.push({
         "@type": "OpeningHoursSpecification",
         dayOfWeek: row.day,
-        opens: span.opens,
-        closes: span.closes,
+        opens: allDay ? "00:00" : span.opens,
+        closes: allDay ? "23:59" : span.closes,
       });
     }
   }

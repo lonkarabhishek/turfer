@@ -16,6 +16,8 @@ export const post: Post = {
   title: "Turfs in Tathawade, Pune: 10 Listed, Prices and Hours",
   description:
     "TapTurf data, 28 Oct 2026: 10 turfs in Tathawade, Pune. What an hour costs, why no venue lists over ₹1,000, cheaper afternoons, late hours and what to check.",
+  seoDescription:
+    "TapTurf data, 28 Oct 2026: 10 turfs in Tathawade, Pune. What an hour costs, why no venue lists over ₹1,000, cheaper afternoons and late hours.",
   hook: "10 turfs, a ₹900 typical weekday evening rate, and not one priced venue above ₹1,000 an hour. Here is Tathawade venue by venue, with the data's limits.",
   category: "Pune",
   city: "pune",

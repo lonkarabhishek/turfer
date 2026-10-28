@@ -1,7 +1,7 @@
 {
   "name": "TapTurf",
   "short_name": "TapTurf",
-  "description": "Book turf. Find your squad. Run the pitch.",
+  "description": "Find a turf. Find your squad. Run the pitch.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",

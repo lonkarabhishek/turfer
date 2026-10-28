@@ -5,6 +5,8 @@ export const post: Post = {
   title: "How Much Does It Cost to Book a Turf in Pune?",
   description:
     "Real Pune turf slot prices from the TapTurf database — from ₹200/hr at some Hotfut slots up to ₹1,200/hr at premium venues — plus a per-player calculator so you and your squad can split the cost before you commit.",
+  seoDescription:
+    "Real Pune turf slot prices from the TapTurf database, from ₹200/hr at some Hotfut slots to ₹1,200/hr at premium venues, plus a per-player cost calculator.",
   hook: "Actual published prices, not averages. And a calculator that does the per-player split so nobody has to open Google Sheets.",
   category: "Guides",
   city: "pune",

@@ -10,6 +10,8 @@ import { CITY_IDS, isCity, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { plural } from "@/lib/home/format";
+import { pricedCount, sportDescription, sportTitle } from "@/lib/seo/listingMeta";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 
 export const revalidate = 3600;
 
@@ -66,29 +68,32 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { sport } = await params;
   const info = sportBySlug(sport);
-  if (!info) return { title: "Sport not found", robots: { index: false } };
+  if (!info) return { title: "Sport not found", robots: ROBOTS_NOINDEX_FOLLOW };
 
   const lower = info.name.toLowerCase();
   const word = venueWord(info, 1);
-  const cities = citiesFor(await turfsFor(info), info);
-  const place = placeFor(cities);
+  const turfs = await turfsFor(info);
+  const cities = citiesFor(turfs, info);
+  // Counted from the rows: venues, cities (most first) and how many list prices.
+  const facts = { sport: info, count: turfs.length, priced: pricedCount(turfs), cities: cities.map((c) => ({ label: c.label, count: c.count })) };
+  const title = sportTitle(facts);
+  const description = sportDescription(facts);
   return {
-    // Layout's title template appends "| TapTurf".
-    // "Football Turfs across 88 Cities: Compare & Book" stays under 60 with the suffix.
-    title: `${sportVenues(info, { title: true })} ${place.title}: Compare & Book`,
-    description: `${info.blurb} Compare ${lower} ${venueWord(info)} ${place.prose} by price, rating and photos. Call or WhatsApp to book.`,
+    title: { absolute: title },
+    description,
     keywords: [`${lower} ${word}`, `${lower} ${word} near me`, `book ${lower} ${word}`, ...cities.flatMap((c) => [
       `${lower} ${word} ${c.label.toLowerCase()}`,
       `${lower} ${c.label.toLowerCase()}`,
       `book ${lower} ${c.label.toLowerCase()}`,
     ])].join(", "),
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `${sportVenues(info, { title: true })} ${place.title} | TapTurf`,
-      description: info.blurb,
+      ...OG_BASE,
+      images: [DEFAULT_OG_IMAGE],
+      title,
+      description,
       url: `https://www.tapturf.in/sport/${info.slug}`,
-      type: "website",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: `https://www.tapturf.in/sport/${info.slug}` },
   };
 }

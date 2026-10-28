@@ -1,13 +1,36 @@
-import type { Turf } from "@/types/turf";
+import type { Turf } from "../../types/turf";
+import type { ReviewSummary, ReviewWithUser } from "../../types/review";
 import { summarisePagePrice } from "./prices";
 import { isOwnPhoto, normalizeImageUrl, orderPhotos } from "./images";
 import { googleMapsUrl, publicLink, scrubBookingApps } from "./bookingApps";
-import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
+import { guessCityFromAddress, isCity, labelFor, stateFor } from "../city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
 import { openingHoursJsonLd } from "./hours";
 import { turfUrl } from "./turfPath";
+import { areaFor } from "./area";
+import { displayArea, turfMeta } from "../seo/turfMeta";
+import { AGGREGATE_RATING_MIN_REPORTS } from "../seo/defaults";
 
-export function generateTurfJsonLd(turf: Turf) {
+// Relative imports only, so node --test runs this (lib/utils/seo.test.ts).
+
+/** What turf_page knows besides the row: TapTurf players' reports. */
+export interface TurfJsonLdExtra {
+  /** turf_page review_stats: live TapTurf reports only (source null, status live). */
+  reviewStats?: ReviewSummary | null;
+  /** turf_page reviews: the latest 20 live ones, TapTurf's and Google's. */
+  reviews?: readonly ReviewWithUser[] | null;
+  /** Accounts that manage the turf (turfs.owner_id): their reports never reach the markup. */
+  managerIds?: readonly string[] | null;
+}
+
+/** The page's Call and WhatsApp buttons, for templates that name the channel. */
+export function turfContact(turf: Turf): { call: boolean; whatsapp: boolean } {
+  return { call: !!getPhone(turf), whatsapp: !!getWhatsAppPhone(turf) };
+}
+
+export function generateTurfJsonLd(turf: Turf, extra: TurfJsonLdExtra = {}) {
+  const contact = turfContact(turf);
+  const meta = turfMeta({ turf, contact, reports: extra.reviewStats });
   // The rate the page's own Pricing table shows (listed bands or slot
   // columns), so priceRange never states a rate missing from the page.
   const pagePrice = summarisePagePrice(turf);
@@ -25,13 +48,30 @@ export function generateTurfJsonLd(turf: Turf) {
   // guessed one (a wrong locality is worse for rich results than none).
   const cityId = isCity(turf.city) ? turf.city : guessCityFromAddress(turf.address);
   const locality = cityId ? labelFor(cityId) : null;
-  // Only emit aggregateRating when we actually have ratings — a null
-  // rating masquerading as 0.0 hurts SERP trust.
-  const hasRatings =
-    typeof turf.rating === "number" &&
-    turf.rating > 0 &&
-    typeof turf.total_reviews === "number" &&
-    turf.total_reviews > 0;
+  // Stars in search come only from TapTurf's own players: Google's
+  // review-snippet rules want ratings the site collected itself, so the
+  // Google Maps rating (turf.rating, total_reviews) is never marked up.
+  // From AGGREGATE_RATING_MIN_REPORTS live reports on, the same count and
+  // average the page's TapTurf score shows (no turf had 5 on 28 Oct).
+  //
+  // review_save refuses a report from an account that manages the turf,
+  // but one written before the claim stays live, and turf_page counts it
+  // in review_stats. While such a report is among the reviews, the count
+  // and average include the owner's own stars: no rating markup at all
+  // (the source fix is turf_page leaving managers' reports out).
+  const stats = extra.reviewStats;
+  const managers = new Set((extra.managerIds ?? []).filter(Boolean));
+  const managerReported = (extra.reviews ?? []).some((r) => !r.source && managers.has(r.user_id));
+  const firstParty =
+    !managerReported && stats && stats.count >= AGGREGATE_RATING_MIN_REPORTS && stats.average >= 1 && stats.average <= 5 ? stats : null;
+  const ownReviews = firstParty
+    ? (extra.reviews ?? [])
+        .filter((r) => !r.source && !managers.has(r.user_id) && typeof r.comment === "string" && !!r.comment.trim() && r.rating >= 1 && r.rating <= 5)
+        .slice(0, 5)
+    : [];
+  // Where it is, for the fallback description: area and city as the page shows them.
+  const where = [...new Set([displayArea(areaFor(turf)), locality].filter((x): x is string => !!x))].join(", ");
+  const reach = contact.call && contact.whatsapp ? " Call or WhatsApp the turf." : contact.call ? " Call the turf." : contact.whatsapp ? " WhatsApp the turf." : "";
   const normalizedPhone = normalizeIndianPhone(phone);
   // Real prices only — reviewer-reported price_mentions must never
   // land in JSON-LD priceRange (Google treats it as our price).
@@ -41,9 +81,9 @@ export function generateTurfJsonLd(turf: Turf) {
     "@context": "https://schema.org",
     "@type": "SportsActivityLocation",
     "@id": turfUrl(turf),
-    name: turf.name,
-    description:
-      scrubBookingApps(turf.description) || `Book ${turf.name} for sports${locality ? ` in ${locality}` : ""}.`,
+    name: meta.name,
+    ...(meta.name !== turf.name.trim() && { alternateName: turf.name.trim() }),
+    description: scrubBookingApps(turf.description) || `${meta.type}${where ? ` in ${where}` : ""}.${reach}`,
     address: {
       "@type": "PostalAddress",
       streetAddress: turf.address,
@@ -58,14 +98,23 @@ export function generateTurfJsonLd(turf: Turf) {
         longitude: turf.lng,
       },
     }),
-    ...(hasRatings && {
+    ...(firstParty && {
       aggregateRating: {
         "@type": "AggregateRating",
-        ratingValue: turf.rating,
-        reviewCount: turf.total_reviews,
+        ratingValue: firstParty.average,
+        ratingCount: firstParty.count,
         bestRating: 5,
         worstRating: 1,
       },
+    }),
+    ...(ownReviews.length > 0 && {
+      review: ownReviews.map((r) => ({
+        "@type": "Review",
+        author: { "@type": "Person", name: r.user_name?.trim() || "TapTurf player" },
+        ...(r.created_at && { datePublished: r.created_at.slice(0, 10) }),
+        reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5, worstRating: 1 },
+        reviewBody: (r.comment ?? "").trim(),
+      })),
     }),
     ...(hasRealPriceRange && {
       priceRange: minPrice === maxPrice ? `₹${minPrice}` : `₹${minPrice}–₹${maxPrice}`,
@@ -86,7 +135,7 @@ export function generateTurfJsonLd(turf: Turf) {
     url: turfUrl(turf),
     // Prefer per-day opening_hours (jsonb) so Sunday-closed turfs and
     // split shifts get their own spec entries; fall back to the old
-    // single-window start_time / end_time.
+    // single-window start_time / end_time. Day keys in any case.
     ...(() => {
       const spec = openingHoursJsonLd(turf.opening_hours, {
         start_time: turf.start_time,
@@ -98,29 +147,19 @@ export function generateTurfJsonLd(turf: Turf) {
   };
 }
 
+/** Home › {City} › {name}: the city page is the turf's parent (Home › Turfs when the row has no city). */
 export function generateBreadcrumbJsonLd(turf: Turf) {
+  const name = turfMeta({ turf, contact: turfContact(turf) }).name;
+  const city = isCity(turf.city) ? turf.city : null;
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Home",
-        item: "https://www.tapturf.in",
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Turfs",
-        item: "https://www.tapturf.in/turfs",
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: turf.name,
-        item: turfUrl(turf),
-      },
+      { "@type": "ListItem", position: 1, name: "Home", item: "https://www.tapturf.in" },
+      city
+        ? { "@type": "ListItem", position: 2, name: labelFor(city), item: `https://www.tapturf.in/${city}` }
+        : { "@type": "ListItem", position: 2, name: "Turfs", item: "https://www.tapturf.in/turfs" },
+      { "@type": "ListItem", position: 3, name, item: turfUrl(turf) },
     ],
   };
 }

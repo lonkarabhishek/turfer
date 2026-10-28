@@ -2,23 +2,27 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
+import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { CITY_LIST_AND } from "@/lib/city";
 
 const UPDATED = "2026-10-21";
 const PAGE_URL = "https://www.tapturf.in/terms";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | TapTurf",
+  // absolute: the layout template would add a second " | TapTurf".
+  title: { absolute: "Terms of Service | TapTurf" },
   description:
     "The rules for using TapTurf: finding turfs and courts, contacting venues, hosting and joining games, reviews and suggestions.",
   alternates: { canonical: PAGE_URL },
-  robots: { index: true, follow: true },
+  robots: ROBOTS_INDEX,
+  twitter: TWITTER_CARD,
   openGraph: {
+    ...OG_BASE,
+    images: [DEFAULT_OG_IMAGE],
     title: "Terms of Service | TapTurf",
-    description: "The rules for using TapTurf.",
+    description:
+      "The rules for using TapTurf: finding turfs and courts, contacting venues, hosting and joining games, reviews and suggestions.",
     url: PAGE_URL,
-    siteName: "TapTurf",
-    type: "website",
   },
 };
 

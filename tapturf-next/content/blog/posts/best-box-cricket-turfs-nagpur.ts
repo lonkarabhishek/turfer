@@ -9,6 +9,9 @@ export const post: Post = {
   title: "Best Box Cricket Turfs in Nagpur: 12 Grounds Worth Booking in 2026",
   description:
     "The 12 best box cricket turfs in Nagpur ranked by Google rating and review count, from the CC Turf trio to Xciteplay, Run Bhumi and the Jaripatka cluster. Listed rates where venues publish them, 24-hour grounds, and what to ask before you book.",
+  seoTitle: "12 Best Box Cricket Turfs in Nagpur for 2026",
+  seoDescription:
+    "12 Nagpur box cricket turfs ranked by Google rating and reviews, from the CC Turf trio to Xciteplay, Run Bhumi and Jaripatka. Rates and 24-hour grounds.",
   hook: "46 cages across 41 neighbourhoods. Nagpur rates its turfs higher than any other city we cover, and these are the reasons why.",
   category: "Best Turfs",
   city: "nagpur",

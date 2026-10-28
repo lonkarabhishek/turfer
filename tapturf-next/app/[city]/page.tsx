@@ -16,6 +16,11 @@ import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
+import { cityDescription, cityFacts, cityTitle, listingOgImage } from "@/lib/seo/listingMeta";
+import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { listingReach, reachOf } from "@/lib/seo/turfFacts";
+import { getTurfFacts } from "@/lib/queries/turfFacts";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
@@ -37,13 +42,18 @@ export async function generateMetadata(
   { params }: { params: Promise<{ city: string }> }
 ): Promise<Metadata> {
   const { city } = await params;
-  if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: { index: false } };
+  if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: ROBOTS_NOINDEX_FOLLOW };
   const label = labelFor(city);
+  // The rows the page reads anyway (one read per render, React cache),
+  // and which of them show timings or a number to call (a day-long copy).
+  const [turfs, turfFacts] = await Promise.all([getAllActiveTurfs(city), getTurfFacts()]);
+  const facts = cityFacts(label, turfs, citySportLinks(city, turfs), listingReach(turfs, reachOf(turfFacts)));
+  const title = cityTitle(facts);
+  const description = cityDescription(facts);
 
   return {
-    // Football and box cricket are what most turfs here are for.
-    title: `Football & Box Cricket Turfs in ${label}: Compare & Book`,
-    description: `Every football, box cricket and sports turf in ${label} in one place. Compare prices, ratings and photos, then call or WhatsApp to book. No booking fee.`,
+    title: { absolute: title },
+    description,
     keywords: [
       `turfs in ${label.toLowerCase()}`,
       `football turf in ${label.toLowerCase()}`,
@@ -55,14 +65,13 @@ export async function generateMetadata(
       `sports ${label.toLowerCase()}`,
     ].join(", "),
     openGraph: {
-      images: [{ url: "https://www.tapturf.in/og-logo.png", width: 1200, height: 630, alt: "TapTurf" }],
-      title: `Sports Turfs in ${label} | TapTurf`,
-      description: `Every turf in ${label}, one tap away. Compare & book instantly.`,
+      ...OG_BASE,
+      images: [listingOgImage(turfs, `Turfs in ${label}`)],
+      title,
+      description,
       url: `https://www.tapturf.in/${city}`,
-      siteName: "TapTurf",
-      locale: "en_IN",
-      type: "website",
     },
+    twitter: TWITTER_CARD,
     alternates: { canonical: `https://www.tapturf.in/${city}` },
   };
 }
@@ -86,7 +95,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   // "Top-rated" block: only turfs with enough reviews to trust the score.
   const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
 
-  // JSON-LD: ItemList of turfs + LocalBusiness per turf for rich results
+  // JSON-LD: ItemList of turfs, a SportsActivityLocation per turf
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -105,11 +114,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           addressRegion: stateFor(cityId),
           addressCountry: "IN",
         },
-        aggregateRating: t.rating > 0 && t.total_reviews > 0 ? {
-          "@type": "AggregateRating",
-          ratingValue: t.rating,
-          reviewCount: t.total_reviews,
-        } : undefined,
+        // No aggregateRating: t.rating and t.total_reviews are Google's,
+        // and Google's review-snippet rules want ratings the site collected
+        // itself. A turf's own page carries TapTurf players' stars once it
+        // has enough of them (lib/utils/seo.ts generateTurfJsonLd).
       },
     })),
   };
@@ -119,7 +127,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       <NoteInterest city={city} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
       {/* The chat answers for this city while the visitor is on its page. */}
       <AskPageContext city={cityId} />
@@ -153,16 +161,6 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             Compare, contact, and book without a booking fee.
           </p>
 
-          {/* Sr-only for crawlers */}
-          <ul className="sr-only" aria-hidden>
-            {turfs.map((t) => (
-              <li key={t.id}>
-                <Link href={turfPath(t)}>
-                  {t.name}, {t.address}
-                </Link>
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 
@@ -206,7 +204,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Popular in {label}
               </h2>
             </div>
-            {turfs.length > 6 && (
+            {turfs.length > featured.length && (
               <Link
                 href="#all-turfs"
                 className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
@@ -223,11 +221,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         </section>
       )}
 
-      {/* Full crawlable list (visible) */}
-      {turfs.length > 6 && (
+      {/* Every turf, whenever the Top-rated grid does not show them all:
+          the ItemList above marks up only turfs a visitor can see. */}
+      {turfs.length > featured.length && (
         <section id="all-turfs" className="max-w-7xl mx-auto px-4 sm:px-6 mt-14" style={{ scrollMarginTop: "4.5rem" }}>
           <h2 className="font-display text-2xl text-primary-800 tracking-tight mb-4">
-            All {turfs.length} turfs in {label}
+            {turfs.length === 1 ? `1 turf in ${label}` : `All ${turfs.length} turfs in ${label}`}
           </h2>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {turfs.map((t) => (

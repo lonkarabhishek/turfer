@@ -23,6 +23,8 @@ import { SPORT_PAGES } from "../lib/sports";
 import { CITIES } from "../lib/city";
 import { TOOLS } from "../lib/tools/registry";
 import nextConfig from "../next.config";
+import { BLOG_DESCRIPTION_MAX, BLOG_DESCRIPTION_MIN, blogSeoDescription, blogShareImage } from "../lib/seo/blogMeta";
+import { TITLE_MAX_CHARS, TITLE_MAX_PX, textWidthPx } from "../lib/seo/width";
 
 const STYLE_SINCE = "2026-10-19";
 const ROOT = process.cwd();
@@ -191,6 +193,19 @@ for (const post of ALL_POSTS) {
   }
   if (!Number.isFinite(post.readMinutes) || post.readMinutes <= 0) err(slug, `readMinutes must be a positive number`);
   if (!Array.isArray(post.blocks) || post.blocks.length === 0) err(slug, `post has no blocks`);
+
+  // What Google shows: the title (or seoTitle) whole on a phone and a
+  // desktop, and a description it will not cut. Errors, for every post:
+  // a cut title or snippet costs clicks on every search it shows for.
+  const seoTitle = post.seoTitle ?? post.title;
+  if (typeof seoTitle === "string" && (seoTitle.length > TITLE_MAX_CHARS || textWidthPx(seoTitle) > TITLE_MAX_PX))
+    err(slug, `search title is ${seoTitle.length} characters, ${textWidthPx(seoTitle)}px; Google shows ${TITLE_MAX_CHARS} characters and about ${TITLE_MAX_PX}px. Add a shorter seoTitle`);
+  const seoDescription = blogSeoDescription(post);
+  if (typeof seoDescription === "string" && (seoDescription.length < BLOG_DESCRIPTION_MIN || seoDescription.length > BLOG_DESCRIPTION_MAX))
+    err(slug, `search description is ${seoDescription.length} characters; keep it ${BLOG_DESCRIPTION_MIN} to ${BLOG_DESCRIPTION_MAX} (add or fix seoDescription)`);
+  if (blogShareImage(post).generated) warn(slug, `no raster share image (heroImage.og, or a PNG or JPG hero), so links show the generated card`);
+  if (post.heroImage && /^https?:\/\/lh\d+\.googleusercontent\.com\//i.test(post.heroImage.url))
+    warn(slug, `hero is a Google Maps photo link, which expires; put a copy in public/blog/art/ (the share card is the generated one meanwhile)`);
 
   // Images go through next/image on the article, the blog index and the home page.
   if (post.heroImage) {

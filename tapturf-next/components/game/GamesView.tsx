@@ -6,6 +6,7 @@ import { cityLineFor } from "@/lib/cityLine";
 import { gamesJsonLd } from "@/lib/seo/pageMetadata";
 import { GamesListingClient } from "./GamesListingClient";
 import type { Game } from "@/types/game";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 function cityOf(g: Game): string | null {
   return g.turfs?.city ?? guessCityFromAddress(g.turfs?.address);
@@ -33,7 +34,7 @@ export async function GamesView({ requested }: { requested: string | null }) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(gamesJsonLd(games)) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(gamesJsonLd(games)) }} />
       <div id="tt-scope" data-scope={requested ?? ""} hidden />
       {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
       <AskPageContext city={scope.kind === "city" ? scope.id : null} />

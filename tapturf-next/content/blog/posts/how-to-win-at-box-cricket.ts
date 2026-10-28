@@ -5,6 +5,9 @@ export const post: Post = {
   title: "How to Win at Box Cricket: Tactics for 6 Overs, 6 Players and Four Walls",
   description:
     "Box cricket is a different sport from the one on TV. Here is how to bat, bowl, field and captain inside a cage: the maths of six overs, playing the walls, the fielding shape that works, and the house rules to agree before the first ball.",
+  seoTitle: "How to Win at Box Cricket: Tactics for 6 Overs and 4 Walls",
+  seoDescription:
+    "How to bat, bowl, field and captain inside a box cricket cage: the maths of six overs, playing the walls, the fielding shape that works and house rules.",
   hook: "Your squad has the talent. It keeps losing to a team that understands the cage. Fix that in one read.",
   category: "Playbook",
   city: null,
