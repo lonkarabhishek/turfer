@@ -57,7 +57,9 @@ export function relaxSteps<T>(
  * A search: sport and an explicit city stay. A narrow sport widens after
  * the area (nets elsewhere in Pune beat cricket grounds in Kothrud) but
  * before the visitor's own city (cricket grounds in Nashik beat nets in
- * Mumbai). Area and pref_city never both apply. relaxSteps puts back
+ * Mumbai). Area and pref_city never both apply; an area with no city
+ * stays in the visitor's ("area_city") until the area alone has rows
+ * elsewhere ("Begur" from Nashik). relaxSteps puts back
  * what the widening made possible again, so a budget dropped for an
  * empty area still applies across the city.
  *
@@ -71,7 +73,7 @@ export function relaxSteps<T>(
 export function dropOrder(needKeys: readonly string[], named: boolean): string[] {
   return named
     ? ["rating", ...needKeys, "open_24x7", "price", "pref_city", "narrow_sport", "sport", "area", "city", "asked_city"]
-    : ["text", "rating", ...needKeys, "open_24x7", "price", "area", "narrow_sport", "pref_city"];
+    : ["text", "rating", ...needKeys, "open_24x7", "price", "area_city", "area", "narrow_sport", "pref_city"];
 }
 
 function listJoin(items: string[]): string {

@@ -10,19 +10,18 @@ import {
   applyAskFilters,
   areasFromTurfs,
   cityNamed,
-  findNamedVenues,
   isAskConfigured,
   keywordFilters,
   nameIn,
   newUsage,
   parseAsk,
   relaxedLabel,
-  resolveTurfNames,
   SPORT_FALLBACK,
   type AskContext,
   type AskTurn,
 } from "@/lib/ai/ask";
 import { quickAnswer } from "@/lib/ai/quick";
+import { resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
 import { citiesLine, venueLine, venueReply, widenedReply } from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
@@ -71,13 +70,16 @@ function ipHash(req: Request): string {
 
 const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.distanceKm != null ? { distanceKm: t.distanceKm } : {}) });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** What page the player is on, trimmed. blog: the slug of the article on screen. */
 function parseContext(raw: string | null): AskContext & { blog: string | null } {
   if (!raw) return { blog: null };
   try {
-    const o = JSON.parse(raw) as { turf?: unknown; city?: unknown; blog?: unknown };
+    const o = JSON.parse(raw) as { turf?: unknown; turfId?: unknown; city?: unknown; blog?: unknown };
     return {
       turf: typeof o.turf === "string" ? o.turf.slice(0, 80) : null,
+      turfId: typeof o.turfId === "string" && UUID.test(o.turfId) ? o.turfId : null,
       city: isCity(typeof o.city === "string" ? o.city : null) ? (o.city as AskContext["city"]) : null,
       blog: typeof o.blog === "string" ? o.blog.slice(0, 120) : null,
     };
@@ -162,7 +164,6 @@ export async function GET(req: Request) {
   // Signed-in players send their account id; visitors a browser id and
   // get three answers a day before sign-in. Phone users have no server
   // session, so both are trusted ids; the per-IP budget caps abuse.
-  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const uid = searchParams.get("uid") ?? "";
   const aid = searchParams.get("aid") ?? "";
   const userId = UUID.test(uid) ? uid : null;
@@ -293,7 +294,9 @@ export async function GET(req: Request) {
   // The city the player's own words name, if any: it beats the page's
   // and theirs when a venue name is shared ("Prime Turf in Ballari").
   const askedCity = cityNamed(turfs, q);
-  let filters: AskFilters = keywordFilters(q, { turfs, pageTurf: ctx.turf });
+  // The venues the last answer showed, for "compare the top two" and "the second one".
+  const lastTop = [...history].reverse().find((h) => h.filters.top?.length)?.filters.top ?? [];
+  let filters: AskFilters = keywordFilters(q, { turfs, pageTurf: ctx.turf, shown: lastTop });
   let via: Via = "keywords";
   const quick = fresh ? quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }) : null;
   const quickOk = quick ? AskFilters.safeParse(quick) : null;
@@ -321,11 +324,12 @@ export async function GET(req: Request) {
     }
   }
   ms.parse = Math.round(performance.now() - parseStart);
-  // A message that is only a venue's name, read as small talk ("Dribble
-  // den", ask 396): a search for that venue.
-  if (filters.intent === "other" && via !== "quick") {
-    const named = findNamedVenues(turfs, q);
-    if (named && named.matches[0].tier <= 1)
+  // A first message that is only a venue's whole name, read as small
+  // talk ("Dribble den", ask 396): a search for that venue. Not a word
+  // some venue's name starts with ("sure", "really"), nor a reply to the box.
+  if (filters.intent === "other" && via !== "quick" && fresh) {
+    const named = wholeVenueName(turfs, q);
+    if (named)
       filters = { ...filters, intent: "find_turf", free_text: named.label, turf_names: [], summary: named.label.slice(0, 120), reply: `Here is what matches ${named.label}.`, followups: [] };
   }
   filters = withoutBookingApps(filters);
@@ -385,6 +389,9 @@ export async function GET(req: Request) {
   const label = (c: string | null | undefined) => (c && isCity(c) ? labelFor(c) : null);
   // Who a shared name means: the city the player named, the reading's, then theirs.
   const prefer = [askedCity, filters.city, prefCity];
+  // The venue page the player is on, by its row: two venues can share a
+  // name in one city (three Huddle Arenas in Vadodara), so "this turf" is never looked up by name.
+  const page = { name: ctx.turf, turf: ctx.turfId ? (turfs.find((t) => t.id === ctx.turfId) ?? null) : null };
 
   const handlerStart = performance.now();
   try {
@@ -407,10 +414,10 @@ export async function GET(req: Request) {
       }
       case "compare": {
         // "Compare the top two" with no names: fall back to what was shown last.
-        const lastTop = [...history].reverse().find((h) => h.filters.top?.length)?.filters.top ?? [];
         const named = filters.turf_names.length ? filters.turf_names : lastTop.slice(0, 2);
         const cmpNames = ctx.turf && named.length === 1 ? [ctx.turf, ...named] : named;
-        const resolved = resolveTurfNames(turfs, cmpNames.slice(0, 3), prefer);
+        // Each a different venue ("compare the top two" under five Huddle Arenas is two of them), the page's own by its row.
+        const resolved = resolveWithPage(turfs, cmpNames.slice(0, 3), prefer, page, { distinct: true });
         const found = resolved.filter((r) => r.turf) as { name: string; turf: Turf }[];
         const missing = resolved.filter((r) => !r.turf).map((r) => r.name);
         // Venues in other cities are compared all the same; say where they are.
@@ -427,7 +434,8 @@ export async function GET(req: Request) {
       }
       case "question": {
         const names = filters.turf_names.length ? filters.turf_names : ctx.turf ? [ctx.turf] : [];
-        const [hit] = resolveTurfNames(turfs, names.slice(0, 1), prefer);
+        // "This turf" on a venue page is that row; no other venue by its name to mention.
+        const [hit] = resolveWithPage(turfs, names.slice(0, 1), prefer, page);
         if (!hit?.turf) {
           body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
           break;
@@ -524,8 +532,11 @@ export async function GET(req: Request) {
   ms.handler = Math.round(performance.now() - handlerStart);
   ms.total = Date.now() - started;
 
-  // Names shown this turn, so the next message can say "the first one".
-  const shown = (body.turfs as { name: string }[] | undefined)?.map((t) => t.name) ?? (body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? [];
+  // Names shown this turn, so the next message can say "the first one";
+  // a shared name with its area and city, so it comes back as that venue.
+  const shown = body.turfs
+    ? shownNames(body.turfs as Turf[], turfs)
+    : ((body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? []);
   body.memo = { ...(body.memo as Record<string, unknown>), top: shown.slice(0, 5) };
 
   logFinish(supabase, logId, {

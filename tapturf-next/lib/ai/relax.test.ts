@@ -196,3 +196,28 @@ test("question and compare lines name the venue's city when it isn't the player'
   assert.equal(citiesLine([kanade, { ...kanade, name: "Hotfut Kharadi" }], "Mumbai"), "Both are in Pune.");
   assert.equal(citiesLine([kanade, { ...kanade, name: "Hotfut Kharadi" }], "Pune"), null);
 });
+
+test("an area with no city stays in the visitor's city once it matches nothing, and leaves it for an area elsewhere", () => {
+  const SEARCH = dropOrder([], false);
+  assert.ok(SEARCH.indexOf("area_city") >= 0 && SEARCH.indexOf("area_city") < SEARCH.indexOf("area"));
+  const places: Row[] = [
+    ...rows,
+    { name: "Begur Box", sport: ["Box Cricket"], area: "Begur", city: "bangalore", price: null },
+    { name: "Camp Turf", sport: ["Football"], area: "Camp", city: "belagavi", price: null },
+  ];
+  // "box cricket in Swargate" from Pune, read with no city: no row has Swargate, so Pune box cricket.
+  let out = relaxSteps(places, [
+    { key: "sport", keep: plays(["Box Cricket"]) },
+    { key: "area", keep: (r) => r.area === "Swargate" },
+    { key: "area_city", keep: (r) => r.city === "pune" },
+  ], SEARCH);
+  assert.deepEqual(names(out), ["Kothrud Box"]);
+  assert.deepEqual(out.relaxed, ["area"]);
+  // "Begur" from Nashik: the area is Bangalore's, so the visitor's city gives way.
+  out = relaxSteps(places, [
+    { key: "area", keep: (r) => r.area === "Begur" },
+    { key: "area_city", keep: (r) => r.city === "nashik" },
+  ], SEARCH);
+  assert.deepEqual(names(out), ["Begur Box"]);
+  assert.deepEqual(out.relaxed, ["area_city"]);
+});

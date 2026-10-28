@@ -205,7 +205,10 @@ export function AskProvider({ children }: { children: ReactNode }) {
         }
         if (history.length) params.set("h", JSON.stringify(history));
         if (pageContext.turf || pageContext.city || pageContext.blog)
-          params.set("ctx", JSON.stringify({ turf: pageContext.turf?.name ?? null, city: pageContext.city ?? null, blog: pageContext.blog?.slug ?? null }));
+          params.set(
+            "ctx",
+            JSON.stringify({ turf: pageContext.turf?.name ?? null, turfId: pageContext.turf?.id ?? null, city: pageContext.city ?? null, blog: pageContext.blog?.slug ?? null }),
+          );
         let r: Response;
         try {
           r = await fetch(`/api/ask?${params}`, { signal: ctl.signal });
