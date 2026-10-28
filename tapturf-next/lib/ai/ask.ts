@@ -7,7 +7,7 @@ import { areaFor } from "@/lib/utils/area";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { haversineKm, type Coords } from "@/lib/utils/location";
-import { relaxSteps } from "./relax";
+import { dropOrder, relaxSteps } from "./relax";
 import type { Turf } from "@/types/turf";
 
 /**
@@ -36,7 +36,7 @@ export const AskFilters = z.object({
   city: z.enum(CITY_IDS as [CityId, ...CityId[]]).nullable(),
   sport: z.enum(SPORT_SLUGS).nullable(),
   areas: z.array(z.string()),
-  /** Venue names the player typed, for compare and question. */
+  /** Venue names the player typed, for compare, question and a find_turf that names one (looked up in every city). */
   turf_names: z.array(z.string()),
   /** The question itself, for question intent, in the player's words. */
   question: z.string().nullable(),
@@ -70,7 +70,7 @@ export function isAskConfigured(): boolean {
 }
 
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
-export const ROUTER_VERSION = 6;
+export const ROUTER_VERSION = 7;
 
 /**
  * Stable system prompt (cacheable): cities, sports, and the areas we
@@ -111,9 +111,9 @@ Intents:
   For a question about the rules of NRR or a toss, still use tool: the tool page explains it.
 - other: greetings, small talk, thanks, or anything not about sports venues or games.
 
-Page context: the message may say what the player is looking at right now (a venue page or a city page). Then "this turf", "this place", "here", "it" mean that venue: put its name in turf_names for question and compare, and use its city when none is stated.
+Page context: the message may say what the player is looking at right now (a venue page or a city page). Then "this turf", "this place", "here", "it" mean that venue: put its name in turf_names for question and compare, and use its city when none is stated. But when the player names another venue, or an area that is not listed under the page's city, leave city null unless they state one: we look venues up in every city, and players ask about venues in other cities.
 
-Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football"), keep the earlier intent and filters and change only what the player changed. A new topic resets them. Each earlier turn lists "top": the venues that were shown, in order. "The top two", "the first one", "the second", "compare those", "that one" refer to those names: copy the exact names into turf_names (two for compare, one for question).
+Follow-ups: the message may come with the last few turns of this conversation. When the new message refines the previous one ("cheaper", "what about Baner", "only 24 hours", "and for football", "is it open late"), keep the earlier intent and filters and change only what the player changed; a venue named earlier (turf_names, free_text) stays until they name another or start a new search. A new topic resets them. Each earlier turn lists "top": the venues that were shown, in order. "The top two", "the first one", "the second", "compare those", "that one" refer to those names: copy the exact names into turf_names (two for compare, one for question).
 
 Cities: ${cities}. Other names: ${otherNames}. Panvel is mumbai.
 Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket" mean box-cricket; "nets", "practice nets", "net practice", "bowling machine" mean cricket-nets; "cricket ground" means cricket; "futsal", "5-a-side", "7-a-side" mean football.
@@ -122,10 +122,10 @@ Known areas by city:
 ${areas}
 
 Rules:
-- turf_names: venue names exactly as typed, one per entry, for compare and question. Empty otherwise.
+- turf_names: venue names exactly as typed, one per entry, for compare, question, and a find_turf that names a venue ("Prime Turf Marol", "kage turf bro" gives "kage turf", "DN Parande Football And Cricket Turf"). Leave out words around the name (near me, bro, a city). Empty otherwise.
 - question: the player's question in their words, for question intent. Else null.
-- areas: neighbourhoods the player names, using the known spelling when one matches. Empty when none. Never a city, never a venue name.
-- city: when stated, or when every area named belongs to one city. Otherwise null.
+- areas: neighbourhoods the player names, using the known spelling when one matches. Empty when none. Never a city, never a venue name, even when a venue is named after its area ("Begur Turf" is a venue: turf_names and free_text, no area).
+- city: when stated, or when every area named belongs to one city. Otherwise null. A venue name never sets a city: many venues share a name across cities, and we find the venue in every city.
 - wants_nearby: true for "near me", "nearby", "close by", "around here". Then leave areas empty.
 - max_price_per_hour: only when a budget is given. "cheap", "budget", "affordable" alone mean 800.
 - time: morning (before 12), afternoon, evening (after 5pm, "tonight"), late_night (after 11pm, "midnight", "2am").
@@ -135,10 +135,10 @@ Rules:
 - needs: only features the player asks for. "lights" or "night match" means floodlights. "rain" or "indoor" means covered. "equipment", "kit", "bat and ball provided" means equipment.
 - players: the number of people, if given.
 - sort: price_low when the player cares about cost, reviews for "popular", nearby when wants_nearby, else rating.
-- free_text: for find_turf, a single venue name or words you could not map ("rooftop"). Else null.
+- free_text: for find_turf, the venue name when one is named (as in turf_names), else words you could not map ("rooftop"). Else null. A message that is only a venue's name ("Dribble den", "Praxis") is find_turf with that name, never other.
 - summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a 3 to 6 word label like "Just saying hi".
 - followups: two or three things the player might say next, each under 6 words, as they would type them ("Only 24 hours", "Cheaper ones", "Compare the top two", "Any games there this weekend"). For a greeting: three example asks. Never repeat the current message.
-- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For tool: one line saying which free tool does it and that it needs no sign-in ("TapTurf has a free NRR calculator for exactly this. It reads overs the cricket way, so 5.3 is five overs and three balls."); when the message includes numbers you may give the answer in the reply too, but only if you are sure of the maths. For other: when the player is clearly after cricket admin we do not have a tool for, say so and offer the nearest tool. For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.
+- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For a named venue, say you are looking it up ("Let me find Prime Turf Marol."), never a city you guessed for it. For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For tool: one line saying which free tool does it and that it needs no sign-in ("TapTurf has a free NRR calculator for exactly this. It reads overs the cricket way, so 5.3 is five overs and three balls."); when the message includes numbers you may give the answer in the reply too, but only if you are sure of the maths. For other: when the player is clearly after cricket admin we do not have a tool for, say so and offer the nearest tool. For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.
 - Never name, recommend or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow, Turfwala, TIDA Sports, Sporloc and the like) in reply, summary or followups, not even when the player names one ("Hudle pe Baner me football turf?" gets "Here are football turfs in Baner."), and never say a venue is booked online or through an app: TapTurf lists venues itself.`;
 }
 
@@ -306,9 +306,54 @@ export async function parseAsk(
   return filters ? { filters, usage } : null;
 }
 
-/** Plain keyword fallback when the API is unavailable. */
-export function keywordFilters(query: string): AskFilters {
+// The commonest question shapes, for the keyword reading: the venue is the part in the middle.
+const QUESTION_SHAPES = [
+  /^(?:does|do|did|can|will)\s+(.+?)\s+(?:have|has|had|allow|allows|provide|provides|offer|offers|open|close|charge|cost|take|serve|let)\b/i,
+  /^(?:what time|when)\s+(?:does|do|is|will)\s+(.+?)\s+(?:open|close|start|shut|opens|closes)\b/i,
+  /^how much\s+(?:is|does|at)\s+(.+?)(?:\s+(?:per|for|an|a|cost|costs|charge|charges)\b.*)?$/i,
+  /^is\s+(.+?)\s+(?:open|good|any good|safe|available|cheap|expensive|crowded|covered|indoor|lit|worth)\b/i,
+];
+const THIS_VENUE = /^(?:this|the|that)?\s*(?:turf|place|ground|venue|court|one)$|^(?:it|here|this|that)$/i;
+
+/**
+ * Plain keyword fallback when the API is unavailable. With `turfs`, it
+ * also reads "A vs B", the commonest questions about one venue, and a
+ * venue named next to a city or a sport ("Hotfut in Hyderabad"), which
+ * would otherwise be a plain city search. `pageTurf`: the venue page
+ * the player is on, for "does this turf have parking".
+ */
+export function keywordFilters(query: string, opts: { turfs?: readonly Turf[]; pageTurf?: string | null } = {}): AskFilters {
   const q = query.toLowerCase();
+  const raw = query.trim().replace(/[?.!]+$/, "");
+  const { turfs } = opts;
+  if (turfs) {
+    const blank = keywordFilters(query);
+    if (/^compare\s+(?:the\s+)?(?:top\s+(?:two|2)|those|them|these|both|the two)$/i.test(raw))
+      return { ...blank, intent: "compare", free_text: null, summary: "Compare the top two", reply: "Let me put those two side by side." };
+    const cmp = /^(?:compare\s+)?(.+?)\s+(?:vs\.?|v\/s|versus)\s+(.+)$/i.exec(raw) ?? /^compare\s+(.+?)\s+(?:and|with|&)\s+(.+)$/i.exec(raw);
+    // Each side must be a name, not "Pune" or "football".
+    if (cmp && nameIn(turfs, cmp[1]) && nameIn(turfs, cmp[2])) {
+      const names = [cmp[1].trim(), cmp[2].trim()];
+      return { ...blank, intent: "compare", city: null, sport: null, free_text: null, turf_names: names, summary: `${names[0]} vs ${names[1]}`.slice(0, 120), reply: "Let me put those two side by side." };
+    }
+    for (const shape of QUESTION_SHAPES) {
+      const m = shape.exec(raw);
+      if (!m) continue;
+      const name = m[1].trim();
+      const here = THIS_VENUE.test(name) && !!opts.pageTurf;
+      if (!here && !findNamedVenues(turfs, name)) break;
+      return {
+        ...blank,
+        intent: "question",
+        sport: null,
+        free_text: null,
+        turf_names: here ? [] : [name],
+        question: raw,
+        summary: `Question about ${here ? opts.pageTurf : name}`.slice(0, 120),
+        reply: "Let me check.",
+      };
+    }
+  }
   // Labels, ids and other names on word boundaries ("goal" is not Goa).
   const cityId = cityInText(query);
   const city = cityId ? cityInfo(cityId) : null;
@@ -339,8 +384,9 @@ export function keywordFilters(query: string): AskFilters {
     players: null,
     needs: [],
     sort: /near me|nearby/.test(q) ? "nearby" : "rating",
-    // With a sport or city recognised, the rest of the words are noise.
-    free_text: known || game ? null : query,
+    // With a sport or city recognised, the rest of the words are noise,
+    // unless they name a venue: "Hotfut in Hyderabad" is Hotfut.
+    free_text: game ? null : known ? (turfs ? (findNamedVenues(turfs, query)?.label ?? null) : null) : query,
     summary,
     reply: game ? "Here are the open games that match." : "Here is what matches on TapTurf.",
     followups: [],
@@ -373,8 +419,8 @@ export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
   return res;
 }
 
-import { norm, resolveTurfNames } from "./names";
-export { norm, resolveTurfNames };
+import { cityNamed, findNamedVenues, nameIn, norm, resolveTurfNames, type VenueMatch } from "./names";
+export { cityNamed, findNamedVenues, nameIn, norm, resolveTurfNames };
 
 function hasNeed(t: Turf, need: Need): boolean {
   const am = (t.amenities ?? []).map(norm).join(" ");
@@ -408,25 +454,58 @@ export type AskResult = {
   relaxed: string[];
   /** The sport the cards are for: the wider one when a narrow sport had none ("cricket" for nets). */
   sport: string | null;
+  /** The city the cards are in when the search settled on one (a named venue's city), or the city filter; null for several. */
+  city: CityId | null;
+  /** Set when the player named a venue: the cards are the venues by that name, from every city. */
+  venue: { label: string; askedCity: CityId | null } | null;
 };
 
 /**
  * Apply the filters to our rows. Hard filters first; when nothing
  * matches, drop the least important ones one at a time so the player
  * always sees something close rather than an empty page.
+ *
+ * A venue the player named (turf_names, or free_text that names one) is
+ * looked up in every city first (lib/ai/names.ts), and the cards are
+ * those venues: "Prime Turf Marol" asked from Pune is the Mumbai venue,
+ * not Pune's top rated turfs. The cities (the one asked about, the
+ * reading's, the visitor's) then only choose among venues by that name,
+ * and give way before the name does. `askedCity`: the city the
+ * player's words name (cityNamed), when the caller knows it: a reading's
+ * city that the words don't name (the page's) then gives way to an area
+ * it doesn't have ("Begur" on the Nashik page is Bangalore's Begur).
  */
 export function applyAskFilters(
   all: Turf[],
   f: AskFilters,
-  opts: { prefCity?: CityId | null; loc?: Coords | null; limit?: number } = {},
+  opts: { prefCity?: CityId | null; loc?: Coords | null; limit?: number; askedCity?: CityId | null } = {},
 ): AskResult {
   const limit = opts.limit ?? 12;
   const sport = f.sport ? sportBySlug(f.sport) : undefined;
   const areas = f.areas.map(norm).filter(Boolean);
-  // Every word must appear, so "CC Turf" doesn't match every turf in the city.
-  const freeWords = f.free_text ? norm(f.free_text).split(" ").filter((w) => w.length >= 2) : [];
-  const explicitCity = f.city;
-  const scopeCity = explicitCity ?? (!f.wants_nearby && areas.length === 0 ? (opts.prefCity ?? null) : null);
+  const inArea = (t: Turf) => {
+    const hay = `${norm(areaFor(t) ?? "")} ${norm(t.address ?? "")}`;
+    return areas.some((a) => hay.includes(a));
+  };
+  const named = findNamedVenues(all, f.turf_names[0]) ?? findNamedVenues(all, f.free_text);
+  const match = new Map<Turf, VenueMatch>((named?.matches ?? []).map((m) => [m.turf, m]));
+  const pool = named ? named.matches.map((m) => m.turf) : all;
+  // Every word must appear, so "CC Turf" doesn't match every turf in the
+  // city. A name we found no venue for is searched as text too, so the
+  // reply can say so when it matched nothing.
+  const text = named ? null : (f.free_text ?? f.turf_names[0] ?? null);
+  const freeWords = text ? norm(text).split(" ").filter((w) => w.length >= 2) : [];
+  let explicitCity = f.city;
+  if (!named && explicitCity && opts.askedCity !== undefined && opts.askedCity !== explicitCity && areas.length) {
+    const there = all.filter(inArea);
+    if (there.length && !there.some((t) => t.city === explicitCity)) explicitCity = null;
+  }
+  const askedCity = named ? (opts.askedCity ?? named.city) : null;
+  // "Near me" with no location shared yet stays in the visitor's city
+  // (the Use my location card shows) rather than listing all of India.
+  const scopeCity = named
+    ? null
+    : (explicitCity ?? (!(f.wants_nearby && opts.loc) && areas.length === 0 ? (opts.prefCity ?? null) : null));
 
   type Step = { key: string; keep: (t: Turf) => boolean };
   const steps: Step[] = [];
@@ -440,15 +519,18 @@ export function applyAskFilters(
     steps.push({ key: "sport", keep: (t) => turfPlaysSport(t.sports, widerSport) || turfPlaysSport(t.sports, sport) });
     steps.push({ key: "narrow_sport", keep: (t) => turfPlaysSport(t.sports, sport) });
   } else if (sport) steps.push({ key: "sport", keep: (t) => turfPlaysSport(t.sports, sport) });
-  if (areas.length)
-    steps.push({
-      key: "area",
-      keep: (t) => {
-        const hay = `${norm(areaFor(t) ?? "")} ${norm(t.address ?? "")}`;
-        return areas.some((a) => hay.includes(a));
-      },
+  if (areas.length) steps.push({ key: "area", keep: inArea });
+  if (named) {
+    // The city asked about, then the reading's, then the visitor's: the first that has the venue.
+    const cities = [
+      ["asked_city", askedCity],
+      ["city", f.city],
+      ["pref_city", opts.prefCity ?? null],
+    ] as const;
+    cities.forEach(([key, c], i) => {
+      if (c && !cities.slice(0, i).some(([, d]) => d === c)) steps.push({ key, keep: (t) => t.city === c });
     });
-  if (explicitCity) steps.push({ key: "city", keep: (t) => t.city === explicitCity });
+  } else if (explicitCity) steps.push({ key: "city", keep: (t) => t.city === explicitCity });
   else if (scopeCity) steps.push({ key: "pref_city", keep: (t) => t.city === scopeCity });
   if (f.max_price_per_hour != null) {
     const max = f.max_price_per_hour;
@@ -475,15 +557,8 @@ export function applyAskFilters(
       },
     });
 
-  // Drop order when nothing matches: softest first. Sport and an explicit
-  // city stay. A narrow sport widens after the area (nets elsewhere in
-  // Pune beat cricket grounds in Kothrud) but before the visitor's own
-  // city (cricket grounds in Nashik beat nets in Mumbai). Area and
-  // pref_city never both apply. relaxSteps puts back what the widening
-  // made possible again, so a budget dropped for an empty area still
-  // applies across the city.
-  const dropOrder = ["text", "rating", ...f.needs.map((n) => `need:${n}`), "open_24x7", "price", "area", "narrow_sport", "pref_city"];
-  const { matched, relaxed } = relaxSteps(all, steps, dropOrder);
+  // Softest first (dropOrder in lib/ai/relax.ts).
+  const { matched, relaxed } = relaxSteps(pool, steps, dropOrder(f.needs.map((n) => `need:${n}`), !!named));
 
   const withDist = matched.map((t) => {
     const km =
@@ -494,7 +569,18 @@ export function applyAskFilters(
   });
 
   const sort = f.sort === "nearby" && !opts.loc ? "rating" : f.sort;
+  // A named venue: the closest match first ("Mundhwa Turf Ground" before
+  // the other turfs in Mundhwa, the exact "Prime Turf" before Prime Turf
+  // Zone), then the order asked for. Near me with a location: nearest first.
+  const byName = (a: Turf, b: Turf) => {
+    const ma = match.get(a);
+    const mb = match.get(b);
+    if (!ma || !mb) return 0;
+    return mb.nameHits - ma.nameHits || (sort === "nearby" ? 0 : Number(mb.exact) - Number(ma.exact));
+  };
   withDist.sort((a, b) => {
+    const closer = byName(a.t, b.t);
+    if (closer) return closer;
     switch (sort) {
       case "nearby":
         if (a.km == null && b.km == null) return compareTopRated(a.t, b.t);
@@ -523,11 +609,14 @@ export function applyAskFilters(
     }
   });
 
+  const shownCities = new Set(matched.map((t) => t.city));
   return {
     turfs: withDist.slice(0, limit).map(({ t, km }) => (km != null ? { ...t, distanceKm: km } : t)),
     total: withDist.length,
     relaxed,
-    sport: relaxed.includes("narrow_sport") && widerSport ? widerSport.slug : (f.sport ?? null),
+    sport: relaxed.includes("sport") ? null : relaxed.includes("narrow_sport") && widerSport ? widerSport.slug : (f.sport ?? null),
+    city: named ? (shownCities.size === 1 ? ([...shownCities][0] ?? null) : null) : explicitCity,
+    venue: named ? { label: named.label, askedCity } : null,
   };
 }
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { relaxSteps, widenedReply, type RelaxStep } from "./relax";
+import { citiesLine, dropOrder, relaxSteps, venueLine, venueReply, widenedReply, type RelaxStep } from "./relax";
 
 type Row = { name: string; sport: string[]; area: string; city: string; price: number | null };
 
@@ -121,4 +121,78 @@ test("widened reply for a narrow sport that fell back", () => {
     widenedReply({ ...base, relaxed: ["pref_city"], prefCity: "Nashik" }),
     "Nothing in Nashik matched, so here are matches from other cities.",
   );
+});
+
+test("widened reply says a typed venue name matched nothing, instead of leading in to other turfs", () => {
+  assert.equal(
+    widenedReply({ ...base, relaxed: ["text"], prefCity: "Pune", name: "Circuit" }),
+    "No venue called Circuit is listed on TapTurf yet, so here are other turfs in Pune.",
+  );
+  // Generic words dropped from the search: nothing to say, as before.
+  assert.equal(widenedReply({ ...base, relaxed: ["text"], prefCity: "Pune", name: null }), null);
+});
+
+// The venues by a typed name, from every city (applyAskFilters' named path).
+const venues: Row[] = [
+  { name: "Kage Multisport Turf", sport: ["Cricket", "Football"], area: "Pathardi", city: "nashik", price: null },
+  { name: "Hotfut Kharadi", sport: ["Football", "Box Cricket", "Badminton"], area: "Kharadi", city: "pune", price: 1200 },
+  { name: "HotFut Gachibowli", sport: ["Football", "Box Cricket"], area: "Gachibowli", city: "hyderabad", price: 1500 },
+];
+const NAMED = dropOrder([], true);
+
+test("a named venue is never swapped for local turfs: the cities and a guessed sport give way first", () => {
+  // "Kage Turf broo" read as box cricket on the Pune page.
+  let out = relaxSteps(venues.slice(0, 1), [
+    { key: "sport", keep: plays(["Box Cricket"]) },
+    { key: "city", keep: (r) => r.city === "pune" },
+    { key: "pref_city", keep: (r) => r.city === "pune" },
+  ], NAMED);
+  assert.deepEqual(names(out), ["Kage Multisport Turf"]);
+  assert.deepEqual(out.relaxed.sort(), ["city", "pref_city", "sport"]);
+
+  // "Hotfut" from Hyderabad: the visitor's city decides between the venues by that name.
+  out = relaxSteps(venues.slice(1), [{ key: "pref_city", keep: (r) => r.city === "hyderabad" }], NAMED);
+  assert.deepEqual(names(out), ["HotFut Gachibowli"]);
+
+  // "Hotfut in Pune" from Hyderabad: the city asked about beats the visitor's.
+  out = relaxSteps(venues.slice(1), [
+    { key: "asked_city", keep: (r) => r.city === "pune" },
+    { key: "pref_city", keep: (r) => r.city === "hyderabad" },
+  ], NAMED);
+  assert.deepEqual(names(out), ["Hotfut Kharadi"]);
+
+  // "Hotfut badminton" from Hyderabad: the sport typed beats the visitor's city.
+  out = relaxSteps(venues.slice(1), [
+    { key: "sport", keep: plays(["Badminton"]) },
+    { key: "pref_city", keep: (r) => r.city === "hyderabad" },
+  ], NAMED);
+  assert.deepEqual(names(out), ["Hotfut Kharadi"]);
+  // A search still never drops the sport or a stated city.
+  assert.ok(!dropOrder([], false).includes("sport") && !dropOrder([], false).includes("city"));
+});
+
+test("venue reply says which city, plainly, when it isn't the player's", () => {
+  const dn = { name: "DN Parande Football And Cricket Turf", area: "Dhanori", city: "Pune" };
+  assert.equal(venueReply({ label: "DN Parande", shown: [dn], home: "Hyderabad", asked: null }), "DN Parande Football And Cricket Turf is in Dhanori, Pune.");
+  // In the player's own city: the reading's reply stands.
+  assert.equal(venueReply({ label: "DN Parande", shown: [dn], home: "Pune", asked: null }), null);
+  const prime = ["Mumbai", "Ballari", "Malegaon", "Pune", "Salem"].map((city) => ({ name: "Prime Turf", area: null, city }));
+  assert.equal(venueReply({ label: "Prime Turf", shown: prime, home: "Hyderabad", asked: null }), "5 venues match Prime Turf, in Mumbai, Ballari, Malegaon and 2 more cities.");
+  const hot = ["Kharadi", "Undri"].map((area) => ({ name: `Hotfut ${area}`, area, city: "Pune" }));
+  assert.equal(
+    venueReply({ label: "Hotfut", shown: hot, home: "Nashik", asked: "Nashik" }),
+    "There's no Hotfut in Nashik on TapTurf yet. 2 venues match Hotfut, all in Pune.",
+  );
+  assert.equal(venueReply({ label: "Hotfut", shown: [], home: "Nashik", asked: null }), null);
+});
+
+test("question and compare lines name the venue's city when it isn't the player's", () => {
+  const marol = { name: "Prime Turf", area: "Marol", city: "Mumbai" };
+  assert.equal(venueLine(marol, "Mumbai", ["Ballari", "Malegaon"]), "It's the one in Marol, Mumbai. There's also a Prime Turf in Ballari and Malegaon.");
+  assert.equal(venueLine(marol, "Pune", []), "It's in Marol, Mumbai.");
+  assert.equal(venueLine(marol, "Mumbai", []), null);
+  const kanade = { name: "Kanade Sports Club", area: "Undri", city: "Pune" };
+  assert.equal(citiesLine([kanade, marol], "Pune"), "Kanade Sports Club is in Pune and Prime Turf is in Mumbai.");
+  assert.equal(citiesLine([kanade, { ...kanade, name: "Hotfut Kharadi" }], "Mumbai"), "Both are in Pune.");
+  assert.equal(citiesLine([kanade, { ...kanade, name: "Hotfut Kharadi" }], "Pune"), null);
 });

@@ -1,5 +1,6 @@
-import { CITIES, CITY_ALIASES, CITY_IDS, NOT_IN_TEXT, type CityId } from "../city";
+import { CITIES, CITY_ALIASES, CITY_IDS, NOT_IN_TEXT, labelFor, type CityId } from "../city";
 import { sportBySlug, type SportPage } from "../sports";
+import { areaFor } from "../utils/area";
 import { norm, resolveTurfNames } from "./names";
 import type { Turf } from "../../types/turf";
 import type { AskFilters, Need } from "./ask";
@@ -392,11 +393,15 @@ function compareNames(query: string, data: QuickData, ctx: QuickContext): AskFil
   const hits = resolveTurfNames(data.turfs, names, ctx.prefCity ?? null);
   const turfs = hits.map((h) => h.turf);
   if (!turfs[0] || !turfs[1] || turfs[0].id === turfs[1].id) return null;
-  // The typed name must be how the venue's name starts (a chip is the first words of it).
+  // The typed name must be how the venue's name starts (a chip is the
+  // first words of it), or the whole name and then its area or city
+  // ("Prime Turf Marol", in Mumbai, asked from Pune).
   const starts = (t: Turf, typed: string) => {
     const a = norm(t.name);
     const b = norm(typed);
-    return a === b || a.startsWith(`${b} `);
+    if (a === b || a.startsWith(`${b} `)) return true;
+    const rest = b.startsWith(`${a} `) ? b.slice(a.length + 1) : null;
+    return !!rest && [areaFor(t), t.city, t.city ? labelFor(t.city) : null].some((p) => p && norm(p) === rest);
   };
   if (!starts(turfs[0], names[0]) || !starts(turfs[1], names[1])) return null;
   const shared = turfs[0].city === turfs[1].city ? knownCity(turfs[0].city) : null;
@@ -449,6 +454,13 @@ const NEED_WORDS: Record<Need, string> = {
   covered: "cover",
   equipment: "equipment provided",
 };
+
+/** The venue in `city` whose name is the words typed, or starts with them: "Mundhwa turf" is Mundhwa Turf Ground. */
+function venueCalled(query: string, turfs: Turf[], city: string | null): Turf | null {
+  const q = norm(query);
+  if (q.split(" ").length < 2) return null;
+  return turfs.find((t) => t.city === city && (norm(t.name) === q || norm(t.name).startsWith(`${q} `))) ?? null;
+}
 
 function findAnswer(query: string, data: QuickData, ctx: QuickContext): AskFilters | null {
   const got = read(words(query), placesFor(data.areas));
@@ -522,6 +534,17 @@ function findAnswer(query: string, data: QuickData, ctx: QuickContext): AskFilte
   f.open_24x7 = o24;
   f.needs = needs;
   f.sort = priceLow ? "price_low" : popular ? "reviews" : near ? "nearby" : "rating";
+  // "Begur Turf", "Mundhwa Turf Ground": an area and venue words that
+  // are also a venue's own name. Kept as the name, so that venue comes
+  // first (applyAskFilters), not just the area's best rated.
+  const named = area && of("venue").length && !got.max && !needs.length ? venueCalled(query, data.turfs, city) : null;
+  if (named) {
+    f.free_text = query.trim().replace(/[?.!]+$/, "");
+    f.summary = cap(`${named.name}.`);
+    f.reply = `Here is ${named.name} in ${area!.name}, ${labelFor(named.city ?? "")}.`;
+    f.followups = ["Cheaper ones", "Only 24 hours", "Any games there this weekend"];
+    return f;
+  }
   const kind = `${needs.includes("covered") ? "covered " : ""}${venues(sport)}`;
   const extras = needs.filter((n) => n !== "covered").map((n) => NEED_WORDS[n]);
   const withs = `${o24 ? " open 24 hours" : ""}${extras.length ? ` with ${extras.join(" and ")}` : ""}`;
