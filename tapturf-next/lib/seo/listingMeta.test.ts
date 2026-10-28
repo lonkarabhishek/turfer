@@ -157,11 +157,34 @@ test("reach: a number the page can dial or WhatsApp, hours from opening_hours or
   assert.deepEqual(listingReach(turfs, null), { withHours: 1, withPhotos: 1, rated: 1, contactable: 0 });
 });
 
+/** Why a SEO_TEMPLATE_DATE value is not a moment in the past, or null. */
+function templateDateProblem(v: string, now: number): string | null {
+  // A date alone, or a time with no offset, reads as midnight UTC or the machine's own zone.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(v)) return "not a full timestamp with an offset";
+  const t = new Date(v).getTime();
+  if (!Number.isFinite(t)) return "not a date";
+  if (/T00:00(:00(\.0+)?)?(Z|[+-])/.test(v)) return "midnight";
+  if (new Date(t + 5.5 * 3_600_000).toISOString().slice(11, 16) === "00:00") return "midnight in India";
+  if (t > now) return "in the future";
+  return null;
+}
+
 test("SEO_TEMPLATE_DATE is a moment, not a day, and not in the future", () => {
-  const t = new Date(SEO_TEMPLATE_DATE).getTime();
-  assert.ok(Number.isFinite(t), SEO_TEMPLATE_DATE);
-  assert.ok(!/T00:00(?::00)?/.test(SEO_TEMPLATE_DATE), `midnight: ${SEO_TEMPLATE_DATE}`);
-  assert.ok(t <= Date.now(), `in the future: ${SEO_TEMPLATE_DATE}`);
+  assert.equal(templateDateProblem(SEO_TEMPLATE_DATE, Date.now()), null, SEO_TEMPLATE_DATE);
+  const now = new Date("2026-11-03T12:00:00+05:30").getTime();
+  assert.equal(templateDateProblem("2026-11-02T16:30:00+05:30", now), null);
+  assert.equal(templateDateProblem("2026-11-02T11:00Z", now), null);
+  for (const [v, why] of [
+    ["2026-11-02", "not a full timestamp with an offset"],
+    ["2026-11-02T16:30", "not a full timestamp with an offset"],
+    ["2026-11-02 16:30+05:30", "not a full timestamp with an offset"],
+    ["2026-11-02T00:00:00+05:30", "midnight"],
+    ["2026-11-02T00:00Z", "midnight"],
+    ["2026-11-01T18:30:00Z", "midnight in India"],
+    ["2026-11-03T16:30:00+05:30", "in the future"],
+  ]) {
+    assert.equal(templateDateProblem(v, now), why, v);
+  }
 });
 
 test("sport page: count and top cities first", () => {

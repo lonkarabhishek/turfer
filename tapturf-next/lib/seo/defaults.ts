@@ -60,9 +60,11 @@ export const AGGREGATE_RATING_MIN_REPORTS = 5;
  * changed. The sitemap gives turf, city, sport and blog pages at least
  * this lastmod, so Google fetches every page whose head changed. In the
  * commit that merges the change into main, set it to that moment as a
- * full timestamp (not the day: midnight comes before every crawl that
- * day saw the old head), never a time in the future, and bump it the
- * same way whenever the templates change again.
+ * full timestamp with its offset, like "2026-10-28T16:30:00+05:30" (not
+ * the day: midnight comes before every crawl that day saw the old head;
+ * not without an offset: each machine reads that in its own zone), never
+ * a time in the future, and bump it the same way whenever the templates
+ * change again. test:seo checks all three.
  */
 export const SEO_TEMPLATE_DATE = "2026-10-28T16:30:00+05:30";
 

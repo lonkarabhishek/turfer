@@ -44,7 +44,13 @@ export function turfFactsFrom(rows: readonly TurfFactRow[]): TurfFacts {
   const seen = new Map<string, number>();
   const contact: string[] = [];
   const hours: string[] = [];
+  // The read pages by offset, one statement a page: a turf added mid-read
+  // shifts the next page back a row, so a row can come twice. Counted twice,
+  // its name would look shared with itself.
+  const ids = new Set<string>();
   for (const r of rows) {
+    if (ids.has(r.id)) continue;
+    ids.add(r.id);
     const key = sharedNameKey(r.name, r.city);
     if (key) seen.set(key, (seen.get(key) ?? 0) + 1);
     let ci = r.contact_info;

@@ -256,6 +256,18 @@ test("two branches of one brand in a city: the shared name is found, and each ti
   assert.equal(sharedNameKey("Goal Zone", null), "");
 });
 
+test("a turf the paged read returns twice does not share its name with itself", () => {
+  const row = (id: string, name: string): TurfFactRow =>
+    ({ id, name, city: "pune", owner_phone: "98765 43210", landline_phone: null, whatsapp_phone: null, contact_info: null, opening_hours: null, start_time: null, end_time: null, is_24x7: true }) as TurfFactRow;
+  // Offset paging: a row added mid-read pushes the last row of one page onto the next.
+  const facts = turfFactsFrom([row("a", "Goal Zone"), row("b", "Venue Number 342 Arena"), row("b", "Venue Number 342 Arena"), row("c", "Kick Off")]);
+  assert.deepEqual(facts.sharedNames, []);
+  assert.deepEqual(facts.contact, ["a", "b", "c"]);
+  assert.deepEqual(facts.hours, ["a", "b", "c"]);
+  // Two turfs with the name still share it.
+  assert.deepEqual(turfFactsFrom([row("a", "Goal Zone"), row("b", "Goal Zone"), row("b", "Goal Zone")]).sharedNames, [sharedNameKey("Goal Zone", "pune")]);
+});
+
 test("the description quotes the format the page's Format row shows", () => {
   const base = { name: "Goal Zone", city: "pune", sports: ["Football"], ground_format: "7-a-side" };
   const desc = (over: Partial<Turf>) => turfMeta({ turf: turf({ ...base, ...over }), contact: { call: true, whatsapp: true } }).description;
