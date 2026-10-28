@@ -59,14 +59,11 @@ export type SaveError = { error: string; field?: string };
  * saved value changes (the same number typed another way is no change).
  * Checked as the database does: a field that isn't a number, or a change
  * that would leave the page with nothing to call or WhatsApp, is an error
- * and nothing should be sent. `callNow` is the number the Call button
- * dials today (shownCallNumber), for when the call field isn't shown.
+ * and nothing should be sent. The second check needs the call field: on an
+ * older database (no owner_phone in the form) the editor can't tell which
+ * number the page dials, so owner_update_turf decides, as it did before.
  */
-export function numberPatch(
-  base: NumberForm,
-  form: NumberForm,
-  callNow: string | null = null,
-): { patch: Partial<Record<NumberField, string>>; error: SaveError | null } {
+export function numberPatch(base: NumberForm, form: NumberForm): { patch: Partial<Record<NumberField, string>>; error: SaveError | null } {
   const patch: Partial<Record<NumberField, string>> = {};
   const read: Record<NumberField, (s: string) => string | null> = { owner_phone: readCallNumber, whatsapp_phone: readWhatsApp };
   for (const k of ["owner_phone", "whatsapp_phone"] as const) {
@@ -77,8 +74,8 @@ export function numberPatch(
     if (v === null) return { patch: {}, error: { error: "bad_value", field: k } };
     if (v !== read[k](base[k] ?? "")) patch[k] = v;
   }
-  if (Object.keys(patch).length > 0) {
-    const call = patch.owner_phone !== undefined ? patch.owner_phone : form.owner_phone !== undefined ? readCallNumber(form.owner_phone) : (callNow ?? "");
+  if (Object.keys(patch).length > 0 && form.owner_phone !== undefined) {
+    const call = patch.owner_phone !== undefined ? patch.owner_phone : readCallNumber(form.owner_phone);
     const wa = patch.whatsapp_phone !== undefined ? patch.whatsapp_phone : readWhatsApp(form.whatsapp_phone);
     if (!call && !wa) return { patch: {}, error: { error: "no_number" } };
   }

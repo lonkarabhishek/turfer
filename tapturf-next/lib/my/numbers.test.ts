@@ -22,12 +22,12 @@ test("the format table: what the Call button dials, and what the editor saves", 
 
 test("prefixes, spaces and dashes; STD landlines; what is refused", () => {
   for (const t of ["+91 98765 43210", "0 98765 43210", "091 98765 43210", "0091 98765 43210", "98765-43210", " 9876543210 "]) assert.equal(readCallNumber(t), "+919876543210", t);
-  assert.equal(readCallNumber("0253 235 0977"), "+912532350977");
-  assert.equal(readCallNumber("022-2437-9284"), "+912224379284");
-  assert.equal(readCallNumber("2350977"), null, "a 7-digit number without its STD code");
+  assert.equal(readCallNumber("0253 200 0123"), "+912532000123");
+  assert.equal(readCallNumber("022-2000-4567"), "+912220004567");
+  assert.equal(readCallNumber("2000123"), null, "a 7-digit number without its STD code");
   assert.equal(readCallNumber("1800 123 4567"), null, "toll-free");
   assert.equal(readCallNumber("+44 20 7946 0958"), null, "foreign");
-  assert.equal(readWhatsApp("0253 235 0977"), null, "WhatsApp takes mobiles only");
+  assert.equal(readWhatsApp("0253 200 0123"), null, "WhatsApp takes mobiles only");
 });
 
 test("a blank field clears the number", () => {
@@ -38,21 +38,21 @@ test("a blank field clears the number", () => {
 
 test("numberInput: how a stored number shows after +91", () => {
   assert.equal(numberInput("+91 98765 43210"), "9876543210");
-  assert.equal(numberInput("+912532350977"), "02532350977", "a landline keeps its 0 and STD code");
-  assert.equal(numberInput("0253 2350977"), "02532350977");
+  assert.equal(numberInput("+912532000123"), "02532000123", "a landline keeps its 0 and STD code");
+  assert.equal(numberInput("0253 2000123"), "02532000123");
   assert.equal(numberInput("12345"), "");
   assert.equal(numberInput(null), "");
   // What the editor shows reads back as the same number.
-  for (const raw of ["+919876543210", "+912224379284", "9876543210"]) assert.equal(readCallNumber(numberInput(raw)), normalizeIndianPhone(raw)?.e164);
+  for (const raw of ["+919876543210", "+912220004567", "9876543210"]) assert.equal(readCallNumber(numberInput(raw)), normalizeIndianPhone(raw)?.e164);
 });
 
 const turf = (over: Partial<Turf>): Turf => ({ owner_phone: null, contact_info: null, landline_phone: null, whatsapp_phone: null, ...over }) as unknown as Turf;
 const fixtures: Partial<Turf>[] = [
   { owner_phone: "9876543210" },
   { owner_phone: "12345", contact_info: { phone: "+91 90000 00001" } },
-  { owner_phone: null, contact_info: { phone: "0253 2350977" }, landline_phone: "022 2437 9284" },
-  { owner_phone: "junk", contact_info: { phone: "also junk" }, landline_phone: "0253 2350977" },
-  { owner_phone: "+919876543210", contact_info: { phone: "+919000000001" }, landline_phone: "0253 2350977" },
+  { owner_phone: null, contact_info: { phone: "0253 2000123" }, landline_phone: "022 2000 4567" },
+  { owner_phone: "junk", contact_info: { phone: "also junk" }, landline_phone: "0253 2000123" },
+  { owner_phone: "+919876543210", contact_info: { phone: "+919000000001" }, landline_phone: "0253 2000123" },
   { owner_phone: null, contact_info: null, landline_phone: null, whatsapp_phone: "+919000000002" },
   { owner_phone: "1800 123 4567", contact_info: { email: "x@example.com" } },
 ];
@@ -69,7 +69,7 @@ test("numberPatch sends a number only when it changes", () => {
   const base = { owner_phone: "9876543210", whatsapp_phone: "9000000002" };
   assert.deepEqual(numberPatch(base, base), { patch: {}, error: null });
   assert.deepEqual(numberPatch(base, { owner_phone: "+91 98765-43210", whatsapp_phone: "09000000002" }), { patch: {}, error: null }, "the same numbers typed another way");
-  assert.deepEqual(numberPatch(base, { ...base, owner_phone: "0253 235 0977" }), { patch: { owner_phone: "+912532350977" }, error: null });
+  assert.deepEqual(numberPatch(base, { ...base, owner_phone: "0253 200 0123" }), { patch: { owner_phone: "+912532000123" }, error: null });
   assert.deepEqual(numberPatch(base, { ...base, whatsapp_phone: "" }), { patch: { whatsapp_phone: "" }, error: null }, "WhatsApp cleared: the call number stays");
   assert.deepEqual(numberPatch(base, { owner_phone: "", whatsapp_phone: "9000000002" }), { patch: { owner_phone: "" }, error: null }, "call cleared: WhatsApp stays");
   assert.deepEqual(numberPatch({ whatsapp_phone: "" }, { whatsapp_phone: "9000000003" }), { patch: { whatsapp_phone: "+919000000003" }, error: null }, "no call field on an older database");
@@ -77,12 +77,14 @@ test("numberPatch sends a number only when it changes", () => {
 
 test("numberPatch says what's wrong before the save", () => {
   const base = { owner_phone: "9876543210", whatsapp_phone: "" };
-  assert.deepEqual(numberPatch(base, { ...base, owner_phone: "2350977" }), { patch: {}, error: { error: "bad_value", field: "owner_phone" } });
-  assert.deepEqual(numberPatch(base, { ...base, whatsapp_phone: "0253 2350977" }), { patch: {}, error: { error: "bad_value", field: "whatsapp_phone" } });
+  assert.deepEqual(numberPatch(base, { ...base, owner_phone: "2000123" }), { patch: {}, error: { error: "bad_value", field: "owner_phone" } });
+  assert.deepEqual(numberPatch(base, { ...base, whatsapp_phone: "0253 2000123" }), { patch: {}, error: { error: "bad_value", field: "whatsapp_phone" } });
   assert.deepEqual(numberPatch(base, { ...base, owner_phone: "" }), { patch: {}, error: { error: "no_number" } }, "the last number");
   assert.deepEqual(numberPatch({ owner_phone: "", whatsapp_phone: "9000000002" }, { owner_phone: "", whatsapp_phone: "" }), { patch: {}, error: { error: "no_number" } });
-  assert.deepEqual(numberPatch({ whatsapp_phone: "9000000002" }, { whatsapp_phone: "" }, "0253 2350977"), { patch: { whatsapp_phone: "" }, error: null }, "an older database: the page still dials its call number");
-  assert.deepEqual(numberPatch({ whatsapp_phone: "9000000002" }, { whatsapp_phone: "" }, null), { patch: {}, error: { error: "no_number" } });
+  // An older database sends no call number, so the editor can't know whether the page has one: owner_update_turf decides, as before.
+  // (The form EditListing builds there from { whatsapp_phone: "+919000000002" }.)
+  const older = { whatsapp_phone: numberInput("+919000000002") };
+  assert.deepEqual(numberPatch(older, { whatsapp_phone: "" }), { patch: { whatsapp_phone: "" }, error: null }, "an older database: WhatsApp can be cleared");
   // A stored number the editor can't read is left alone, unless it's changed.
   assert.deepEqual(numberPatch({ owner_phone: "", whatsapp_phone: "12345" }, { owner_phone: "9876543210", whatsapp_phone: "12345" }), { patch: { owner_phone: "+919876543210" }, error: null });
 });

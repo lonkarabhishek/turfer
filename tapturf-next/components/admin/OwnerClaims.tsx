@@ -171,7 +171,7 @@ export function OwnerClaims() {
                       {c.numberEdits.map((e, i) => (
                         <li key={i}>
                           {e.at !== null && `${istDateTime(e.at)}: `}
-                          {e.field === "owner_phone" ? "call" : "WhatsApp"} {shownNumber(e.from)} → {shownNumber(e.to)}, by {editorLabel(e, c.userKey)}
+                          {e.field === "owner_phone" ? "call" : e.field === "contact_phone" ? "listing phone" : "WhatsApp"} {shownNumber(e.from)} → {shownNumber(e.to)}, by {editorLabel(e, c.userKey)}
                           {/* The number this claimant gave was on the listing until an owner took it off: worth a closer look. */}
                           {c.phoneGiven && !c.verifiedPhone && !e.byTapturf && digits10(e.from) === c.phoneGiven && (
                             <span className="font-semibold text-amber-800"> (the number they gave)</span>

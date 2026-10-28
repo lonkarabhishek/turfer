@@ -58,7 +58,7 @@ test("a detail column queues only the turf page", () => {
 });
 
 test("an owner's new call number (owner_phone, the mirrored contact_info, the emptied landline) queues only the turf page", () => {
-  const old = row({ owner_phone: "+91 90000 00101", contact_info: { phone: "+91 90000 00101", email: "x@example.com" }, landline_phone: "0253 2350977" });
+  const old = row({ owner_phone: "+91 90000 00101", contact_info: { phone: "+91 90000 00101", email: "x@example.com" }, landline_phone: "0253 2000123" });
   const rec = row({ owner_phone: "+919876543210", contact_info: { phone: "+919876543210", email: "x@example.com" }, landline_phone: null, updated_at: "later" });
   assert.deepEqual(keysForRow("turfs", "UPDATE", rec, old), ["turf:turf-up-hinjewadi"]);
   for (const c of ["owner_phone", "contact_info", "landline_phone", "whatsapp_phone"]) {

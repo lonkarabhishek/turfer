@@ -18,15 +18,23 @@
 --     no save may leave the turf with neither a call nor a WhatsApp number.
 --     Patch keys contact_info and landline_phone stay ignored.
 --   turf_trusted_phones, marked (1): contact_info.phone opens a turf at
---     once only when an owner or a suggestion did not put it there (the
---     same rule owner_phone has), since it now mirrors an owner's number.
---     On 2026-10-28 this took no number off any production turf.
+--     once only when an owner or a suggestion did not put it there, since
+--     it now mirrors an owner's number. Two logged histories say so: its
+--     own (owner_update_turf logs contact_info; an owner's number left in
+--     it after an approved suggestion moved owner_phone on still counts as
+--     the owner's) and owner_phone's (a suggestion logs only owner_phone,
+--     and the data team copies it into contact_info by hand). On
+--     2026-10-28 this took no number off any production turf.
 --   owner_dashboard, marked (1): the turf also returns owner_phone,
 --     landline_phone and contact_info.phone (contact_phone), so the editor
 --     shows the number the page dials.
 --   admin_owner_claims, marked (1): number_edits, the last 5 call or
 --     WhatsApp number changes on the claim's turf (at, by, tapturf: made
---     by the site owner, field, from, to).
+--     by the site owner, field, from, to). A call number's "from" is the
+--     number the Call button dialled before (owner_phone, then
+--     contact_info.phone, then landline_phone: the first it can dial), and
+--     a listing phone holding another mobile that a save replaced is its
+--     own change (field contact_phone).
 -- One new helper, private.call_phone10. Written without the destructive
 -- SQL keywords. Safe to run again.
 --
@@ -271,9 +279,20 @@ security definer
 set search_path = ''
 as $$
   select coalesce(array_agg(x) filter (where x is not null), '{}') from (
-    -- (1) The listing's phone, unless an owner or a suggestion put it there: owner_update_turf
-    -- writes an owner's call number into it as well as into owner_phone (and logs it as owner_phone).
-    select case when not private.number_set_by_others(t.id, 'owner_phone', t.contact_info ->> 'phone') then public._phone10(t.contact_info ->> 'phone') end as x
+    -- (1) The listing's phone, unless an owner or a suggestion put it there. owner_update_turf
+    -- writes an owner's call number into it as well as into owner_phone and logs both, so its own
+    -- latest logged change counts (a suggestion approved later moves owner_phone on, not this);
+    -- a suggestion logs only owner_phone, which the data team copies in, so owner_phone's counts too.
+    select case when not private.number_set_by_others(t.id, 'owner_phone', t.contact_info ->> 'phone')
+                 and not coalesce((
+                   select not public._is_admin_key(l.user_key)
+                          and public._phone10(l.after -> 'contact_info' ->> 'phone') is not distinct from public._phone10(t.contact_info ->> 'phone')
+                     from public.turf_edit_log l
+                    where l.turf_id = t.id and l.after ? 'contact_info'
+                      and public._phone10(l.before -> 'contact_info' ->> 'phone') is distinct from public._phone10(l.after -> 'contact_info' ->> 'phone')
+                    order by l.created_at desc, l.id desc
+                    limit 1), false)
+           then public._phone10(t.contact_info ->> 'phone') end as x
       from public.turfs t where t.id = p_turf_id
     union all
     select case when not private.number_set_by_others(t.id, 'owner_phone', t.owner_phone) then public._phone10(t.owner_phone) end
@@ -413,16 +432,29 @@ begin
                where x = o.verified_phone or 'p:' || x = o.user_key limit 1) as their_listed_phone,
              t.name as turf_name, t.slug, t.city, t.area, public._turf_phones(t.id) as listed_phones,
              -- (1) The last 5 changes to this turf's call or WhatsApp number, newest first, so a
-             -- number given on a claim can be matched with one an owner took off the listing.
+             -- number given on a claim can be matched with one an owner took off the listing. A call
+             -- number's "from" is the number the Call button dialled before (getPhone's order:
+             -- owner_phone, the listing phone, landline_phone; the first it can dial, else
+             -- owner_phone as it was); a listing phone holding another mobile, which the same save
+             -- replaced, is its own change (contact_phone).
              coalesce((
                select jsonb_agg(e.j order by e.at desc, e.id desc, e.k) from (
                  select l.created_at as at, l.id, f.k,
                         jsonb_build_object('at', l.created_at, 'by', l.user_key, 'tapturf', public._is_admin_key(l.user_key),
-                                           'field', f.k, 'from', l.before ->> f.k, 'to', l.after ->> f.k) as j
+                                           'field', f.k, 'from', f.b, 'to', f.a) as j
                    from public.turf_edit_log l
-                   cross join lateral (values ('owner_phone'), ('whatsapp_phone')) f(k)
-                  where l.turf_id = o.turf_id and l.after ? f.k
-                    and (l.before ->> f.k) is distinct from (l.after ->> f.k)
+                   cross join lateral (select coalesce(
+                       case when private.call_phone10(l.before ->> 'owner_phone') is not null then l.before ->> 'owner_phone' end,
+                       case when private.call_phone10(l.before -> 'contact_info' ->> 'phone') is not null then l.before -> 'contact_info' ->> 'phone' end,
+                       case when private.call_phone10(l.before ->> 'landline_phone') is not null then l.before ->> 'landline_phone' end,
+                       l.before ->> 'owner_phone') as dialled) d
+                   cross join lateral (values
+                       ('owner_phone', d.dialled, l.after ->> 'owner_phone', l.after ? 'owner_phone'),
+                       ('whatsapp_phone', l.before ->> 'whatsapp_phone', l.after ->> 'whatsapp_phone', l.after ? 'whatsapp_phone'),
+                       ('contact_phone', l.before -> 'contact_info' ->> 'phone', l.after -> 'contact_info' ->> 'phone',
+                        l.after ? 'contact_info' and public._phone10(l.before -> 'contact_info' ->> 'phone') is not null
+                        and public._phone10(l.before -> 'contact_info' ->> 'phone') is distinct from private.call_phone10(d.dialled))) f(k, b, a, has)
+                  where l.turf_id = o.turf_id and f.has and f.b is distinct from f.a
                   order by l.created_at desc, l.id desc, f.k
                   limit 5) e
              ), '[]'::jsonb) as number_edits,

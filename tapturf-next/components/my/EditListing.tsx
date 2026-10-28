@@ -90,7 +90,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   // What the last refused save was about: the field to mark, and whether only the numbers were held.
   const [refused, setRefused] = useState<SaveError | null>(null);
   const rest = diff(base, f);
-  const numbers = numberPatch(base, f, shownCallNumber(turf));
+  const numbers = numberPatch(base, f);
   const typedNumbers = (["owner_phone", "whatsapp_phone"] as const).filter((k) => f[k] !== undefined && f[k] !== base[k]);
   // A number typed another way is no change; one that isn't a number yet still counts, so Save can say so.
   const count = Object.keys(rest).length + (numbers.error ? typedNumbers.length : Object.keys(numbers.patch).length);
@@ -278,7 +278,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
               />
             </div>
             <p id="call-number-help" className="mt-1 text-[12px] text-primary-500">
-              {callKind === "landline" ? "Landline: players can call it, but not WhatsApp it." : "A mobile, or a landline with its STD code (like 0253 2350977)."}
+              {callKind === "landline" ? "Landline: players can call it, but not WhatsApp it." : "A mobile, or a landline with its STD code in front (like 0253 for Nashik)."}
             </p>
           </div>
         )}

@@ -22,14 +22,18 @@ export type ClaimAccount = {
   /** Google checked this email; an old-app email was only typed. */
   emailChecked: boolean;
 };
-/** A change to the turf's call or WhatsApp number (turf_edit_log), as admin_owner_claims lists it. */
+/**
+ * A change to the turf's call or WhatsApp number (turf_edit_log), as admin_owner_claims lists it.
+ * owner_phone: the call number, from the number the Call button dialled before. contact_phone: the
+ * listing phone, when it held another mobile that the same save replaced.
+ */
 export type NumberEdit = {
   at: number | null;
   /** The myTapturf key that made it ("p:<10 digits>", "e:<email>"). */
   by: string | null;
   /** Made by the site owner (TapTurf's own change, trusted for instant claims). */
   byTapturf: boolean;
-  field: "owner_phone" | "whatsapp_phone";
+  field: "owner_phone" | "whatsapp_phone" | "contact_phone";
   from: string | null;
   to: string | null;
 };
@@ -90,7 +94,7 @@ export function toNumberEdits(x: unknown): NumberEdit[] {
   const out: NumberEdit[] = [];
   for (const y of x) {
     const e = obj(y);
-    if (!e || (e.field !== "owner_phone" && e.field !== "whatsapp_phone")) continue;
+    if (!e || (e.field !== "owner_phone" && e.field !== "whatsapp_phone" && e.field !== "contact_phone")) continue;
     out.push({ at: time(e.at), by: str(e.by), byTapturf: e.tapturf === true, field: e.field, from: str(e.from), to: str(e.to) });
   }
   return out;

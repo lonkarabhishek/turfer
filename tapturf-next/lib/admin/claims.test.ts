@@ -72,26 +72,28 @@ test("typed names that differ from the account", () => {
   assert.equal(typedNameDiffers(e), false, "nothing to compare");
 });
 
-test("number edits: the latest call and WhatsApp changes, [] when the database has none", () => {
+test("number edits: the latest call, listing phone and WhatsApp changes, [] when the database has none", () => {
   const [c] = toClaims([row()]);
   assert.deepEqual(c.numberEdits, [], "an older database sends no number_edits");
   const [d] = toClaims([
     row({
       number_edits: [
-        { at: "2026-10-28T09:00:00Z", by: "p:9800000001", tapturf: false, field: "owner_phone", from: "+91 98000 00005", to: "+912532350977" },
+        { at: "2026-10-28T09:00:00Z", by: "p:9800000001", tapturf: false, field: "owner_phone", from: "+91 98000 00005", to: "+912532000123" },
         { at: "2026-10-27T09:00:00Z", by: "e:site.owner@example.com", tapturf: true, field: "whatsapp_phone", from: null, to: "+919800000002" },
         { at: "nope", by: 5, field: "owner_phone", from: "", to: "+919800000003" },
         { at: "2026-10-26T09:00:00Z", field: "contact_info", from: "x", to: "y" },
+        { at: "2026-10-25T09:00:00Z", by: "p:9800000001", tapturf: false, field: "contact_phone", from: "9800000006", to: "+912532000123" },
         "junk",
         null,
       ],
     }),
   ]);
   assert.deepEqual(d.numberEdits, [
-    { at: Date.parse("2026-10-28T09:00:00Z"), by: "p:9800000001", byTapturf: false, field: "owner_phone", from: "+91 98000 00005", to: "+912532350977" },
+    { at: Date.parse("2026-10-28T09:00:00Z"), by: "p:9800000001", byTapturf: false, field: "owner_phone", from: "+91 98000 00005", to: "+912532000123" },
     { at: Date.parse("2026-10-27T09:00:00Z"), by: "e:site.owner@example.com", byTapturf: true, field: "whatsapp_phone", from: null, to: "+919800000002" },
     { at: null, by: null, byTapturf: false, field: "owner_phone", from: null, to: "+919800000003" },
-  ], "only the two number fields; odd values read as missing");
+    { at: Date.parse("2026-10-25T09:00:00Z"), by: "p:9800000001", byTapturf: false, field: "contact_phone", from: "9800000006", to: "+912532000123" },
+  ], "only the number fields (call, listing phone, WhatsApp); odd values read as missing");
   assert.deepEqual(toClaims([row({ number_edits: { not: "a list" } })])[0].numberEdits, []);
   const [a, b, x] = d.numberEdits;
   assert.equal(editorLabel(a, "p:9800000001"), "this claimant");
@@ -99,7 +101,7 @@ test("number edits: the latest call and WhatsApp changes, [] when the database h
   assert.equal(editorLabel(b, "e:sam@x.in"), "TapTurf");
   assert.equal(editorLabel(x, "e:sam@x.in"), "someone");
   assert.equal(digits10("+91 98000 00005"), "9800000005");
-  assert.equal(digits10("+912532350977"), "2532350977");
+  assert.equal(digits10("+912532000123"), "2532000123");
   assert.equal(digits10("12345"), null);
   assert.equal(digits10(null), null);
 });
