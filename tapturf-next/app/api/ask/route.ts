@@ -21,8 +21,8 @@ import {
   type AskTurn,
 } from "@/lib/ai/ask";
 import { quickAnswer } from "@/lib/ai/quick";
-import { resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
-import { citiesLine, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
+import { placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
+import { cap, citiesLine, closestRow, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
@@ -443,11 +443,16 @@ export async function GET(req: Request) {
         // A venue typed that isn't in the player's city (the one asked
         // about, the reading's, theirs): say so first, as a search does
         // ("No turf called Kage in Mumbai."). Not for the page's venue, a
-        // card shown last turn or a venue named earlier in the conversation.
+        // card shown last turn or a venue named earlier in the conversation
+        // (free_text or turf_names), nor when the player said where it is
+        // ("does Prime Turf Marol have parking"), as a search reads it.
         const home = label(askedCity ?? filters.city ?? prefCity);
         const typed = filters.turf_names[0];
-        const carried = !!typed && [ctx.turf ?? "", ...lastTop, ...history.map((h) => h.filters.free_text ?? "")].some((n) => n.toLowerCase() === typed.toLowerCase());
-        const lead = home && typed && !carried && place(hit.turf).city !== home ? noneIn(nameIn(turfs, typed) ?? typed, home) : null;
+        const earlier = [ctx.turf ?? "", ...lastTop, ...history.flatMap((h) => [h.filters.free_text ?? "", ...(h.filters.turf_names ?? [])])];
+        const carried = !!typed && earlier.some((n) => n.toLowerCase() === typed.toLowerCase());
+        const away = !!home && !!typed && !carried && place(hit.turf).city !== home && !placedAt([hit.turf], typed, filters.areas);
+        // The venue's own name when typed whole ("Kick it arena"), else the words typed ("Kage").
+        const lead = away && home ? noneIn(hit.whole ? place(hit.turf).name : cap(nameIn(turfs, typed) ?? typed), home) : null;
         // Which venue this is, when it isn't in the player's city or the name is shared.
         const which = venueLine(place(hit.turf), lead ? home : label(prefCity), hit.others.map((t) => labelFor(t.city ?? "")));
         if (!canCallClaude) {
@@ -508,9 +513,10 @@ export async function GET(req: Request) {
             home: label(r.venue.askedCity ?? filters.city ?? prefCity),
             asked: label(r.venue.askedCity),
             closest: r.closest ? near.map((t) => place(t).name) : null,
+            whole: r.venue.whole,
           });
           if (said) body.reply = said;
-          const rows = r.closest ? venueRows(r.venue.label, labelFor(r.closest.city), near.length, r.turfs.map(place)) : null;
+          const rows = r.closest ? venueRows(labelFor(r.closest.city), near.length, r.turfs.map(place)) : null;
           if (rows) {
             body.turfs = [...near, ...r.turfs].map(card);
             body.rows = rows;
@@ -525,7 +531,7 @@ export async function GET(req: Request) {
           body.turfs = r.closest.turfs.map(card);
           body.total = 0;
           body.relaxed = [];
-          body.rows = [{ label: `Closest in ${home}`, count: r.closest.turfs.length }];
+          body.rows = [closestRow(home, r.closest.turfs.length)];
           body.reply = nowhereReply(typedName, home, r.closest.turfs.map((t) => place(t).name));
           break;
         }

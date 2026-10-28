@@ -123,7 +123,11 @@ function HeadedRows({ turfs, rows }: { turfs: (Turf & { distanceKm?: number })[]
         if (!part.length) return null;
         return (
           <div key={`${k}:${row.label}`} className={k ? "mt-3" : undefined}>
-            <p className="mb-1.5 truncate text-[12px] font-semibold text-primary-500">{row.label}</p>
+            {/* A long name is cut short, never the place: "Champion’s Field Turf and Pickle… in Pune". */}
+            <p className="mb-1.5 flex min-w-0 text-[12px] font-semibold text-primary-500">
+              <span className="truncate">{row.label}</span>
+              {row.place && <span className="shrink-0 whitespace-pre"> in {row.place}</span>}
+            </p>
             <Row>
               {part.map((t, i) => (
                 <TurfMiniCard key={t.id} turf={t} priority={starts[k] + i < 2} />
