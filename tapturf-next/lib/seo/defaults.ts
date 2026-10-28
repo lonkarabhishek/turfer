@@ -66,7 +66,7 @@ export const AGGREGATE_RATING_MIN_REPORTS = 5;
  * a time in the future, and bump it the same way whenever the templates
  * change again. test:seo checks all three.
  */
-export const SEO_TEMPLATE_DATE = "2026-10-28T16:30:00+05:30";
+export const SEO_TEMPLATE_DATE = "2026-10-28T17:15:00+05:30";
 
 /** The openGraph fields every page repeats (a page's openGraph replaces the layout's). */
 export const OG_BASE = { siteName: SITE_NAME, locale: "en_IN", type: "website" } as const;
