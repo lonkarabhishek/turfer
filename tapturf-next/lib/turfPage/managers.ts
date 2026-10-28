@@ -79,7 +79,7 @@ export function managerNote({
 
 /** The part of a Supabase client this needs. */
 type RpcClient = {
-  rpc: (fn: string, args: Record<string, unknown>) => { abortSignal: (s: AbortSignal) => PromiseLike<{ data: unknown; error: { message: string } | null }> };
+  rpc: (fn: string, args: Record<string, unknown>) => { abortSignal: (s: AbortSignal) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> };
 };
 
 /**
@@ -88,21 +88,39 @@ type RpcClient = {
  * answers PGRST202) hides the line; the page itself never fails over it.
  * The caller's abort is not a database failure, so the read-only
  * client's breaker (lib/supabase/guard.ts) does not count it.
+ *
+ * A read that failed for now (an error, the timeout, the network; not a
+ * missing function) also calls failedForNow, so the page can be kept a
+ * minute instead of a day (markStaleRender) and comes back with the line
+ * once the database answers. Not an older answer kept in memory: the
+ * rebuild may be the one that takes a revoked or hidden manager off.
  */
 export async function readTurfManagers(
   db: RpcClient,
   turfId: string,
-  { timeoutMs = 2500, warn = (msg: string) => console.warn(msg) }: { timeoutMs?: number; warn?: (msg: string) => void } = {},
+  {
+    timeoutMs = 2500,
+    warn = (msg: string) => console.warn(msg),
+    failedForNow = async () => {},
+  }: { timeoutMs?: number; warn?: (msg: string) => void; failedForNow?: () => Promise<void> } = {},
 ): Promise<TurfManagers> {
+  const forNow = async () => {
+    try {
+      await failedForNow();
+    } catch {
+      // Only shortens the page's life; never fails it.
+    }
+    return NO_MANAGERS;
+  };
   try {
     const { data, error } = await db.rpc("turf_managers", { p_turf_id: turfId }).abortSignal(AbortSignal.timeout(timeoutMs));
     if (error) {
       warn(`turf_managers failed for ${turfId}: ${error.message}`);
-      return NO_MANAGERS;
+      return error.code === "PGRST202" ? NO_MANAGERS : await forNow();
     }
     return shapeTurfManagers(data);
   } catch (e) {
     warn(`turf_managers failed for ${turfId}: ${e instanceof Error ? e.message : String(e)}`);
-    return NO_MANAGERS;
+    return await forNow();
   }
 }

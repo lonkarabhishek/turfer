@@ -75,3 +75,27 @@ test("managers read: a missing function, an error or a hang hides the line", asy
   const boom: typeof fetch = async () => { throw new TypeError("fetch failed"); };
   assert.deepEqual(await readTurfManagers(db(boom), "t1", { warn: quiet }), NO_MANAGERS);
 });
+
+test("managers read: a failure for now shortens the page's life; a missing function and a good answer do not", async () => {
+  const run = async (f: typeof fetch, opts: { timeoutMs?: number } = {}) => {
+    let marked = 0;
+    const out = await readTurfManagers(db(f), "t1", { ...opts, warn: quiet, failedForNow: async () => void marked++ });
+    return { out, marked };
+  };
+  const good = JSON.stringify({ managers: [{ u: "asha", v: false }], more: 0 });
+  const missing = JSON.stringify({ code: "PGRST202", message: "Could not find the function public.turf_managers(p_turf_id) in the schema cache" });
+  assert.deepEqual(await run(answer(200, good)), { out: { list: [{ u: "asha", v: false }], more: 0 }, marked: 0 }, "a good answer: the day-long copy");
+  assert.deepEqual(await run(answer(404, missing)), { out: NO_MANAGERS, marked: 0 }, "before the migration: no line, kept as usual (the migration queues the page)");
+  // Never an older answer: a rebuild after a revoke or "tagging off" must not bring the name back.
+  assert.deepEqual(await run(answer(500, JSON.stringify({ code: "57014", message: "timeout" }))), { out: NO_MANAGERS, marked: 1 }, "a statement timeout");
+  assert.deepEqual(await run(answer(522, "<html>522</html>")), { out: NO_MANAGERS, marked: 1 }, "a gateway error");
+  const hang: typeof fetch = (_i, init) => new Promise((_r, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+  const keepAlive = setTimeout(() => {}, 5000);
+  assert.deepEqual(await run(hang, { timeoutMs: 20 }), { out: NO_MANAGERS, marked: 1 }, "the timeout");
+  clearTimeout(keepAlive);
+  const boom: typeof fetch = async () => { throw new TypeError("fetch failed"); };
+  assert.deepEqual(await run(boom), { out: NO_MANAGERS, marked: 1 }, "the network");
+  // The mark itself failing never fails the read.
+  const out = await readTurfManagers(db(boom), "t1", { warn: quiet, failedForNow: async () => { throw new Error("no cache"); } });
+  assert.deepEqual(out, NO_MANAGERS);
+});

@@ -116,7 +116,8 @@ export default async function TurfDetailPage({
   const { turf, claimed } = page;
   if (turf.slug && key !== turf.slug) permanentRedirect(turfPath(turf));
   // Who runs a claimed turf, by username, for the line at the foot of the
-  // page. Read only for claimed turfs; never fails the page (no line).
+  // page. Read only for claimed turfs; never fails the page (no line; a
+  // read that failed for now keeps this copy a minute, not a day).
   const managers = claimed ? await getTurfManagers(turf.id) : NO_MANAGERS;
 
   const phone = getPhone(turf);
