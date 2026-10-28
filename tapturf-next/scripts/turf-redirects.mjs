@@ -2,16 +2,24 @@
 /**
  * Writes redirects/turf-ids.csv: one permanent redirect per active turf
  * from its old id URL to its slug URL (/turf/<uuid> -> /turf/<slug>).
- * vercel.json "bulkRedirectsPath" serves them at the edge, before any
- * page renders, so Google's old /turf/<uuid> links (still listed in
- * Search Console) move with one hop and no render. The turf page's own
- * permanentRedirect stays as the fallback for turfs added after the file
- * was made.
+ * Nothing reads that file today, and it is not committed.
  *
- * Read only: one paged select of id and slug, with the public anon key.
- * Run it again when turfs are added (slugs never change on rename, see
- * supabase/migrations/20261019_turf_slugs.sql; a slug edited by hand
- * needs its old slug added here too):
+ * Old id URLs are already handled: app/turf/[id]/page.tsx calls
+ * permanentRedirect, so /turf/<uuid> answers 308 to /turf/<slug> on every
+ * request (since commit 859cdd4). That costs one function run per old link,
+ * which is fine at today's traffic.
+ *
+ * To serve these at the edge later, before any page renders: once the
+ * owner confirms the Vercel plan includes bulk redirects (it can be a paid
+ * add-on), run this script, commit redirects/turf-ids.csv, and add
+ *   "bulkRedirectsPath": "redirects/turf-ids.csv"
+ * to vercel.json. Keep the page's permanentRedirect as the fallback for
+ * turfs added after the file was made, and run the script again when turfs
+ * are added (slugs never change on rename, see
+ * supabase/migrations/20261019_turf_slugs.sql; a slug edited by hand needs
+ * its old slug added here too).
+ *
+ * Read only: one paged select of id and slug, with the public anon key:
  *
  *   NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... node scripts/turf-redirects.mjs
  *

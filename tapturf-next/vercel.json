@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["sin1"],
-  "ignoreCommand": "[ \"${VERCEL_GIT_COMMIT_REF#claude/}\" = \"$VERCEL_GIT_COMMIT_REF\" ] && exit 1 || exit 0",
-  "bulkRedirectsPath": "redirects/turf-ids.csv"
+  "ignoreCommand": "[ \"${VERCEL_GIT_COMMIT_REF#claude/}\" = \"$VERCEL_GIT_COMMIT_REF\" ] && exit 1 || exit 0"
 }
