@@ -2,11 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { keyLabel, toClaims, typedNameDiffers, type AdminClaim, type ClaimStatus } from "@/lib/admin/claims";
+import { digits10, editorLabel, keyLabel, toClaims, typedNameDiffers, type AdminClaim, type ClaimStatus } from "@/lib/admin/claims";
 import { METHOD_NAMES, ago, istDateTime, whatsappLink } from "@/lib/admin/people";
 import { adminFetch } from "@/lib/admin/adminFetch";
 
 const spaced = (p10: string) => p10.replace(/^(\d{5})(\d{5})$/, "$1 $2");
+/** A stored number as admin reads it: +91 and the mobile, 0 and the STD code for a landline, "none" for none. */
+const shownNumber = (n: string | null) => {
+  const d = digits10(n);
+  return !n ? "none" : !d ? n : /^[6-9]/.test(d) ? `+91 ${spaced(d)}` : `0${d}`;
+};
 
 /** myTapturf claims: pending ones to approve or reject, then everyone with access. Each shows the account it came from. */
 export function OwnerClaims() {
@@ -158,6 +163,23 @@ export function OwnerClaims() {
                       ? "(on the listing, but it can't open the turf at once: an owner or a suggestion put it there, or it was on a revoked claim)"
                       : "(not on the listing)"}
                   </p>
+                )}
+                {c.numberEdits.length > 0 && (
+                  <div className="text-[13px] text-primary-700">
+                    <p className="font-semibold text-primary-800">Number changes on this turf</p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {c.numberEdits.map((e, i) => (
+                        <li key={i}>
+                          {e.at !== null && `${istDateTime(e.at)}: `}
+                          {e.field === "owner_phone" ? "call" : "WhatsApp"} {shownNumber(e.from)} → {shownNumber(e.to)}, by {editorLabel(e, c.userKey)}
+                          {/* The number this claimant gave was on the listing until an owner took it off: worth a closer look. */}
+                          {c.phoneGiven && !c.verifiedPhone && !e.byTapturf && digits10(e.from) === c.phoneGiven && (
+                            <span className="font-semibold text-amber-800"> (the number they gave)</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 {c.note && <p className="text-[13px] text-primary-600">&ldquo;{c.note}&rdquo;</p>}
                 {c.rejectedAt !== null && <p className="text-[13px] text-primary-600">Turned down before, on {istDateTime(c.rejectedAt)}.</p>}

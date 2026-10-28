@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateBreadcrumbJsonLd, generateTurfJsonLd } from "./seo";
+import { generateBreadcrumbJsonLd, generateTurfJsonLd, getPhone, getWhatsAppPhone, turfContact } from "./seo";
 import { AGGREGATE_RATING_MIN_REPORTS } from "../seo/defaults";
 import { jsonLdHtml } from "../seo/jsonLd";
 import type { Turf } from "../../types/turf";
@@ -165,4 +165,19 @@ test("a player's '</script>' in a review or name cannot close the ld+json tag", 
   assert.equal(JSON.parse(jsonLdHtml({ s: "a\u2028b" })).s, "a\u2028b");
   assert.equal(jsonLdHtml({ s: "a\u2028b" }).includes("\u2028"), false);
   assert.equal(jsonLdHtml(undefined), "null");
+});
+
+test("an owner's landline (mirrored into contact_info, no WhatsApp): Call only, and telephone in E.164", () => {
+  // As owner_update_turf (20261028_owner_call_number.sql) leaves a turf whose owner saved "0253 235 0977".
+  const t = turf({ owner_phone: "+912532350977", contact_info: { phone: "+912532350977", email: "x@example.com" }, landline_phone: null, whatsapp_phone: null });
+  assert.equal(getPhone(t), "+912532350977");
+  assert.equal(getWhatsAppPhone(t), null, "a landline can't take WhatsApp");
+  assert.deepEqual(turfContact(t), { call: true, whatsapp: false });
+  const ld = generateTurfJsonLd(t) as Record<string, unknown>;
+  assert.equal(ld.telephone, "+912532350977");
+  assert.equal(ld.description, "Box cricket & football turf in Marol, Mumbai. Call the turf.");
+  // Their mobile instead: both buttons, the same number.
+  const m = turf({ owner_phone: "+919876543210", contact_info: { phone: "+919876543210" }, whatsapp_phone: null });
+  assert.deepEqual([getPhone(m), getWhatsAppPhone(m)], ["+919876543210", "+919876543210"]);
+  assert.deepEqual(turfContact(m), { call: true, whatsapp: true });
 });

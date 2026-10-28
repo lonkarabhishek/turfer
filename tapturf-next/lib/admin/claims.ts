@@ -22,6 +22,17 @@ export type ClaimAccount = {
   /** Google checked this email; an old-app email was only typed. */
   emailChecked: boolean;
 };
+/** A change to the turf's call or WhatsApp number (turf_edit_log), as admin_owner_claims lists it. */
+export type NumberEdit = {
+  at: number | null;
+  /** The myTapturf key that made it ("p:<10 digits>", "e:<email>"). */
+  by: string | null;
+  /** Made by the site owner (TapTurf's own change, trusted for instant claims). */
+  byTapturf: boolean;
+  field: "owner_phone" | "whatsapp_phone";
+  from: string | null;
+  to: string | null;
+};
 export type AdminClaim = {
   turfId: string;
   userKey: string;
@@ -49,6 +60,8 @@ export type AdminClaim = {
   storedName: string | null;
   userId: string | null;
   account: ClaimAccount | null;
+  /** The last 5 call or WhatsApp number changes on this turf, newest first ([] on an older database). */
+  numberEdits: NumberEdit[];
 };
 
 const STATUSES: readonly string[] = ["active", "pending", "rejected", "revoked"];
@@ -69,6 +82,31 @@ function toAccount(x: unknown): ClaimAccount | null {
   const method = typeof a.method === "string" && METHODS.includes(a.method) ? (a.method as Method) : "unknown";
   const other = typeof a.other_claims === "number" && Number.isFinite(a.other_claims) ? Math.max(0, Math.round(a.other_claims)) : 0;
   return { id, name: str(a.name), username: str(a.username), email: str(a.email), phone: str(a.phone), method, signedUpAt: time(a.signed_up_at), lastSeen: time(a.last_seen), otherClaims: other, signInFinished: a.signin_finished !== false, emailChecked: a.email_checked === true };
+}
+
+/** number_edits from 20261028_owner_call_number.sql; missing on an older database, malformed entries left out. */
+export function toNumberEdits(x: unknown): NumberEdit[] {
+  if (!Array.isArray(x)) return [];
+  const out: NumberEdit[] = [];
+  for (const y of x) {
+    const e = obj(y);
+    if (!e || (e.field !== "owner_phone" && e.field !== "whatsapp_phone")) continue;
+    out.push({ at: time(e.at), by: str(e.by), byTapturf: e.tapturf === true, field: e.field, from: str(e.from), to: str(e.to) });
+  }
+  return out;
+}
+
+/** Who made a number change, for one claim's card: this claimant, TapTurf, or another sign-in. */
+export function editorLabel(e: NumberEdit, claimKey: string): string {
+  if (e.byTapturf) return "TapTurf";
+  if (!e.by) return "someone";
+  return e.by === claimKey ? "this claimant" : keyLabel(e.by);
+}
+
+/** The 10 digits of a stored number, for matching one an owner took off with one a claimant gave (mobiles and landlines). */
+export function digits10(n: string | null): string | null {
+  const d = (n ?? "").replace(/\D/g, "");
+  return d.length >= 10 ? d.slice(-10) : null;
 }
 
 /** Rows from admin_owner_claims; anything malformed is left out. */
@@ -102,6 +140,7 @@ export function toClaims(data: unknown): AdminClaim[] {
       storedName: str(r.name),
       userId: str(r.user_id),
       account: toAccount(r.account),
+      numberEdits: toNumberEdits(r.number_edits),
     });
   }
   return out;

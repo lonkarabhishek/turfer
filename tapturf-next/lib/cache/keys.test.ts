@@ -57,6 +57,15 @@ test("a detail column queues only the turf page", () => {
   assert.deepEqual(keysForRow("turfs", "UPDATE", row({ brand_new_column: 1 }), row()), ["turf:turf-up-hinjewadi"]);
 });
 
+test("an owner's new call number (owner_phone, the mirrored contact_info, the emptied landline) queues only the turf page", () => {
+  const old = row({ owner_phone: "+91 90000 00101", contact_info: { phone: "+91 90000 00101", email: "x@example.com" }, landline_phone: "0253 2350977" });
+  const rec = row({ owner_phone: "+919876543210", contact_info: { phone: "+919876543210", email: "x@example.com" }, landline_phone: null, updated_at: "later" });
+  assert.deepEqual(keysForRow("turfs", "UPDATE", rec, old), ["turf:turf-up-hinjewadi"]);
+  for (const c of ["owner_phone", "contact_info", "landline_phone", "whatsapp_phone"]) {
+    assert.ok(!LIST_COLUMNS.includes(c) && !IGNORE_COLUMNS.includes(c), `${c}: a page column, not a list or ignored one`);
+  }
+});
+
 test("a list column queues the city lists and the page", () => {
   assert.deepEqual(sorted(keysForRow("turfs", "UPDATE", row({ name: "Turf Up 2" }), row())), ["list:pune", "turf:turf-up-hinjewadi"]);
 });
