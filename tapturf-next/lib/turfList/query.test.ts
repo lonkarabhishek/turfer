@@ -8,6 +8,8 @@ import {
   FIRST_PAGE,
   MAX_LIMIT,
   MAX_Q,
+  NEAR_KM,
+  ROUND_SLACK_KM,
   SORTS,
   availableSports,
   exactNearest,
@@ -17,6 +19,7 @@ import {
   nextBatch,
   pageOf,
   parseListParams,
+  picksTag,
   rankTurfs,
   roundCoords,
   searchForFilters,
@@ -248,9 +251,13 @@ test("parseListParams: defaults", () => {
 });
 
 test("parseListParams: a full query, the location rounded to about a kilometre", () => {
-  const r = parse("city=pune&sport=box-cricket&q=%20baner%20&sort=nearby&lat=18.52041&lng=73.85674&offset=20&limit=20&v=12");
+  const r = parse("city=pune&sport=box-cricket&q=%20baner%20&sort=nearby&lat=18.52041&lng=73.85674&offset=20&limit=20&v=12&t=1k3x9a");
   assert.ok(r.ok);
   assert.deepEqual(r.req, { query: { city: "pune", sport: "Box Cricket", q: "baner", sort: "nearby", at: { lat: 18.52, lng: 73.86 } }, offset: 20, limit: 20 });
+  assert.deepEqual(r.seen, { v: 12, t: "1k3x9a" });
+  const none = parse("offset=0&limit=10");
+  assert.ok(none.ok);
+  assert.deepEqual(none.seen, { v: null, t: null });
 });
 
 test("parseListParams: caps the limit and the search text", () => {
@@ -283,6 +290,14 @@ test("parseListParams: rejects bad values", () => {
     "limit=-5",
     "limit=ten",
     `q=${"a".repeat(1001)}`,
+    "v=abc",
+    "v=-1",
+    "v=1.5",
+    "v=1234567890123456",
+    "t=",
+    "t=ABC",
+    "t=a-b",
+    `t=${"a".repeat(14)}`,
   ]) {
     assert.equal(parse(s).ok, false, s);
   }
@@ -290,11 +305,14 @@ test("parseListParams: rejects bad values", () => {
 
 test("listSearch: fixed order, defaults left out, and parseListParams reads it back", () => {
   const query: ListQuery = { city: "pune", sport: "Box Cricket", q: " kick ", sort: "price-low", at: { lat: 18.520412, lng: 73.856744 } };
-  const s = listSearch({ query, offset: 10, limit: 10 }, 7);
-  assert.equal(s, "city=pune&sport=box-cricket&q=kick&sort=price-low&lat=18.52&lng=73.86&offset=10&limit=10&v=7");
+  const s = listSearch({ query, offset: 10, limit: 10 }, 7, "zx81");
+  assert.equal(s, "city=pune&sport=box-cricket&q=kick&sort=price-low&lat=18.52&lng=73.86&offset=10&limit=10&v=7&t=zx81");
   const back = parse(s);
   assert.ok(back.ok);
   assert.deepEqual(back.req, { query: { ...query, q: "kick", at: { lat: 18.52, lng: 73.86 } }, offset: 10, limit: 10 });
+  assert.deepEqual(back.seen, { v: 7, t: "zx81" });
+  // A tag that could not be read back is left out, not sent as a 400.
+  assert.equal(listSearch({ query, offset: 0, limit: 10 }, null, "Bad tag"), "city=pune&sport=box-cricket&q=kick&sort=price-low&lat=18.52&lng=73.86&offset=0&limit=10");
   assert.equal(listSearch({ query: { city: null, sport: null, q: "", sort: "rating", at: null }, offset: 0, limit: 10 }), "offset=0&limit=10");
   assert.equal(listSearch({ query: { city: null, sport: null, q: "", sort: "rating", at: { lat: -0.001, lng: 0.004 } }, offset: 0, limit: 10 }), "lat=0.00&lng=0.00&offset=0&limit=10");
   assert.ok(parse("lat=-0.00&lng=0.00").ok);
@@ -352,4 +370,42 @@ test("exactNearest: once everything is fetched, all turfs, the ones without coor
   // Not done and no turf without coordinates seen: only the ones that are surely in place.
   const partial = exactNearest([turfs[1]], false, { lat: 18.504, lng: 73.804 }, { lat: 18.5, lng: 73.8 });
   assert.deepEqual(partial, []);
+});
+
+test("picksTag: the same for the same picks in any order, other picks another tag, 0 for none", () => {
+  assert.equal(picksTag([]), "0");
+  assert.equal(picksTag(new Set<string>()), "0");
+  assert.equal(picksTag(["b", "a"]), picksTag(new Set(["a", "b"])));
+  assert.notEqual(picksTag(["a"]), picksTag(["b"]));
+  assert.notEqual(picksTag(["a"]), picksTag(["a", "b"]));
+  for (const t of [picksTag(["4f6c-uuid"]), picksTag(["x", "y", "z"])]) assert.match(t, /^[0-9a-z]{1,13}$/);
+  // Every page names the picks it was ranked with; only the first batch with a location carries nearAt.
+  const turfs = randomTurfs(50, 4);
+  const trending = new Set([turfs[7].id]);
+  const page = pageOf(turfs, { q: "", sport: null, sort: "rating", at: null }, trending, 0, 10, 3);
+  assert.equal(page.t, picksTag(trending));
+  assert.equal(page.nearAt, undefined);
+  assert.equal(pageOf(turfs, { q: "", sport: null, sort: "rating", at: null }, new Set(), 0, 10, 3).t, "0");
+  assert.equal(pageOf(turfs, { q: "", sport: null, sort: "nearby", at: { lat: 18.5, lng: 73.8 } }, trending, 10, 10, 3).nearAt, undefined);
+});
+
+test("nearAt: every matching turf within 5 km of any location in the rounded cell, so the browser counts exactly", () => {
+  const r = rng(21);
+  let differed = 0;
+  for (let round = 0; round < 200; round++) {
+    const turfs = randomTurfs(300, 300 + (round % 7));
+    const me = { lat: 18.45 + r() * 0.15, lng: 73.75 + r() * 0.15 };
+    const at = roundCoords(me);
+    assert.ok(haversineKm(me, at) <= ROUND_SLACK_KM);
+    const sport = round % 3 === 0 ? "Football" : null;
+    const page = pageOf(turfs, { q: "", sport, sort: round % 2 ? "nearby" : "price-low", at }, new Set(), 0, 10, 1);
+    const exact = rankTurfs(turfs, { q: "", sport, sort: "nearby", at: me }, new Set()).near!;
+    const counted = page.nearAt!.filter(([lat, lng]) => haversineKm(me, { lat, lng }) <= NEAR_KM).length;
+    assert.equal(counted, exact, `round ${round}`);
+    if (page.near !== exact) differed++;
+    // Only turfs that could be within 5 km of someone in the cell.
+    for (const [lat, lng] of page.nearAt!) assert.ok(haversineKm(at, { lat, lng }) <= NEAR_KM + ROUND_SLACK_KM);
+  }
+  // The count from the rounded point alone is often off (why nearAt exists).
+  assert.ok(differed > 50, `${differed} of 200 differed`);
 });

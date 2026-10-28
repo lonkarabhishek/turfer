@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import type { Turf } from "../../types/turf";
 import { compareTopRated } from "../utils/ranking";
 import { haversineKm } from "../utils/location";
-import { FIRST_PAGE, nextBatch, pageOf, roundCoords, type ListFilters, type ListPage } from "./query";
+import { FIRST_PAGE, NEAR_KM, listSearch, nextBatch, pageOf, picksTag, rankTurfs, roundCoords, type ListFilters, type ListPage } from "./query";
 import {
   LIST_PREPAINT_JS,
   SAVE_TTL_MS,
@@ -13,6 +13,7 @@ import {
   fromSaved,
   isGeoKey,
   listKey,
+  nearCount,
   nearbyFrom,
   shownCards,
   startState,
@@ -87,10 +88,47 @@ test("a batch from a newer version: appended after the server's offset, repeats 
 });
 
 test("an empty batch ends the list (no loop when the route has fewer rows than it said)", () => {
-  const s = startState("k|", { v: 1, total: 50, near: null, offset: 0, items: route()(0, 10).items });
-  const t = addBatch({ ...s, target: 20 }, { v: 2, total: 50, near: null, offset: 10, items: [] });
+  const s = startState("k|", { v: 1, t: "0", total: 50, near: null, offset: 0, items: route()(0, 10).items });
+  const t = addBatch({ ...s, target: 20 }, { v: 2, t: "0", total: 50, near: null, offset: 10, items: [] });
   assert.equal(t.end, true);
   assert.equal(wantBatch(t, 10), null);
+});
+
+test("an older batch (a process behind the purge) adds its rows but never lowers the version asked for next", () => {
+  const trending = new Set([turfs[40].id]);
+  const v2 = (o: number, l: number) => pageOf(turfs, DEFAULT_QUERY(), trending, o, l, 2);
+  const s = startState(listKey("pune", DEFAULT, null), v2(0, 10));
+  assert.equal(s.v, 2);
+  assert.equal(s.t, picksTag(trending));
+  // The old list had one turf less.
+  const old = pageOf(turfs.slice(1), DEFAULT_QUERY(), none, 10, 10, 1);
+  const t = addBatch({ ...s, target: 20 }, old);
+  assert.equal(t.v, 2);
+  assert.equal(t.total, s.total);
+  assert.equal(t.t, s.t);
+  assert.equal(t.items.length, 20);
+  const query = { city: "pune", ...DEFAULT_QUERY() };
+  assert.match(listSearch({ query, offset: t.next, limit: 20 }, t.v, t.t), new RegExp(`&v=2&t=${s.t}$`));
+  // A newer one moves it up.
+  const u = addBatch({ ...t, target: 40 }, pageOf(turfs, DEFAULT_QUERY(), trending, 20, 20, 3));
+  assert.equal(u.v, 3);
+  assert.equal(u.t, s.t);
+});
+
+test("within 5 km: counted from the precise location, as the cards' distances are", () => {
+  for (const me of [{ lat: 18.47677, lng: 73.81516 }, { lat: 18.5312, lng: 73.8277 }, { lat: 18.5049, lng: 73.8349 }]) {
+    const rounded = roundCoords(me);
+    const s = startState(listKey("pune", { ...DEFAULT, sort: "nearby" }, rounded), pageOf(turfs, { ...DEFAULT_QUERY(), sort: "nearby", at: rounded }, none, 0, 20, 1));
+    const exact = turfs.filter((t) => haversineKm(me, { lat: t.lat!, lng: t.lng! }) <= NEAR_KM).length;
+    assert.equal(nearCount(s, me), exact);
+    assert.equal(rankTurfs(turfs, { ...DEFAULT_QUERY(), sort: "nearby", at: me }, none).near, exact);
+    // Later batches keep the first one's list.
+    const t = addBatch({ ...s, target: 40 }, pageOf(turfs, { ...DEFAULT_QUERY(), sort: "nearby", at: rounded }, none, 20, 30, 1));
+    assert.equal(nearCount(t, me), exact);
+  }
+  assert.equal(nearCount(startState("k|", route()(0, 10)), null), null);
+  // A page without nearAt (no location when it was asked for): the route's count.
+  assert.equal(nearCount({ ...startState("k|", route()(0, 10)), near: 7 }, { lat: 18.5, lng: 73.8 }), 7);
 });
 
 test("nearby: exact order from the precise location, a little extra fetched, distances from the precise point", () => {

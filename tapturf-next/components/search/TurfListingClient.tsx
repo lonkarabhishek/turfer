@@ -21,7 +21,7 @@ import {
   type ListPage,
   type SortOption,
 } from "@/lib/turfList/query";
-import { SAVE_KEY, addBatch, firstBatch, fromSaved, listKey, shownCards, startState, toSaved, wantBatch, type ListState } from "@/lib/turfList/client";
+import { SAVE_KEY, addBatch, firstBatch, fromSaved, listKey, nearCount, shownCards, startState, toSaved, wantBatch, type ListState } from "@/lib/turfList/client";
 
 const SORT_LABELS: Record<SortOption, string> = {
   nearby:      "Nearest first",
@@ -64,7 +64,8 @@ function cameBack(): boolean {
  * (lib/turfList/query.ts), so the browser never gets the whole list:
  * "Show more" adds 10, then 20, 40, 80 (each tap doubles what is shown, at
  * most 80 per request), and a new search, sport or sort fetches the first
- * 10 of the new list (the old cards stay, dimmed, until they arrive). The
+ * 10 of the new list (the old cards stay, dimmed, until they arrive; if
+ * that fails they are hidden, never shown as the new list). The
  * filters live in the URL (?q= on all of India, ?search= in a city, and
  * sport, sort), so a reload, Back or a shared link shows the same list.
  * The city never changes in here; a new city is a new page.
@@ -112,6 +113,15 @@ export function TurfListingClient({
   const attempt = plan ? `${wantKey}#${list.key}#${list.next}#${list.target}#${plan.offset}+${plan.limit}` : null;
   const failed = attempt != null && failedAt === attempt;
   const loading = plan != null && !failed;
+  // The first batch of a new search, sport or sort failed: the cards on screen belong to another list.
+  const replaceFailed = replacing && failed;
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // The URL's filters (or, on Back, the list the player left), once, before the first paint after hydration.
   useLayoutEffect(() => {
@@ -194,8 +204,8 @@ export function TurfListingClient({
     const fresh = list.key !== wantKey;
     const key = wantKey;
     const query = { city, sport: filters.sport, q: filters.q, sort: nearby ? filters.sort : filters.sort === "nearby" ? "rating" : filters.sort, at: rounded };
-    // The version of the cards on screen, so the CDN keeps batches per version (the answer names its own).
-    fetch(`/api/turfs/list?${listSearch({ query, offset: plan.offset, limit: plan.limit }, list.v)}`, { signal: ctrl.signal })
+    // The version and picks of the cards on screen, so the CDN keeps batches per both (the answer names its own).
+    fetch(`/api/turfs/list?${listSearch({ query, offset: plan.offset, limit: plan.limit }, list.v, list.t)}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return (await r.json()) as ListPage;
@@ -241,6 +251,7 @@ export function TurfListingClient({
   }, []);
 
   const handleLocate = useCallback(async () => {
+    const path = location.pathname;
     setLocating(true);
     setLocError("");
     setLocErrorKind(null);
@@ -254,6 +265,15 @@ export function TurfListingClient({
       }
       setUserLocation(coords);
       setFilters((f) => ({ ...f, sort: "nearby" }));
+      // The URL follows: nearby is written as the default sort, so a sort=
+      // from before goes (a reload or Back would bring it back otherwise).
+      // The location can come seconds later: not once the player has left
+      // the list (a late replaceState would pull them back to it). The URL
+      // holds the box's latest text already (written on every key).
+      if (mounted.current && location.pathname === path) {
+        const next = searchForFilters(location.search, { ...filtersFromSearch(location.search), sort: "nearby" }, urlScope);
+        if (next !== location.search) window.history.replaceState(null, "", location.pathname + next + location.hash);
+      }
     } catch (err: unknown) {
       // Distinguish the three real geolocation error paths so the user
       // can act on the right one — the old generic message asked people
@@ -277,11 +297,11 @@ export function TurfListingClient({
     } finally {
       setLocating(false);
     }
-  }, []);
+  }, [urlScope]);
 
   const spotlightPicks = useMemo(() => (spotlight ? [spotlight] : []), [spotlight]);
   const total = list.total;
-  const nearbyCount = userLocation && !replacing ? list.near ?? 0 : 0;
+  const nearbyCount = userLocation && !replacing ? nearCount(list, userLocation) ?? 0 : 0;
   // What there is to show: the total, or once the route ran out, the cards fetched
   // (a nearby list may hold more than it shows; a purge between batches may leave fewer than the total).
   const available = list.end ? list.items.length : total;
@@ -341,6 +361,9 @@ export function TurfListingClient({
               <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
               <span>Finding turfs</span>
             </>
+          ) : replaceFailed ? (
+            // Never the old list's total. Phones leave it blank (no room; the alert right below says it).
+            <span className="hidden sm:inline">Couldn&apos;t load</span>
           ) : (
             <span>
               <span className="tabular-nums">{total.toLocaleString("en-IN")}</span> turf{total !== 1 ? "s" : ""}
@@ -390,6 +413,21 @@ export function TurfListingClient({
         </div>
       </div>
 
+      {/* Right under the count, where the player is looking: the cards below are another list's, so they are hidden. */}
+      {replaceFailed && (
+        <div role="alert" className="mb-4 flex items-center gap-3 text-[14px] text-primary-900 bg-primary-100 rounded-xl px-4 py-3">
+          <span className="flex-1">Couldn&apos;t load these turfs. Check your connection.</span>
+          <button
+            type="button"
+            onClick={() => setFailedAt(null)}
+            className="inline-flex items-center gap-1.5 font-semibold text-accent-600 hover:text-accent-700 whitespace-nowrap cursor-pointer"
+          >
+            <RotateCw className="w-4 h-4" aria-hidden />
+            Try again
+          </button>
+        </div>
+      )}
+
       {locError && (
         <div className="mb-4 flex items-start gap-3 text-[14px] text-primary-900 bg-primary-100 rounded-xl px-4 py-3">
           <span className="flex-1">{locError}</span>
@@ -419,8 +457,8 @@ export function TurfListingClient({
       )}
 
       {/* Grid */}
-      <div id="tt-turf-grid" aria-busy={loading} className={`transition-opacity duration-150 ${replacing && !failed ? "opacity-45 pointer-events-none" : ""}`}>
-        {cityLabel && q && total === 0 && !replacing ? null : shown.length > 0 || pendingMore > 0 ? (
+      <div id="tt-turf-grid" aria-busy={loading} className={`transition-opacity duration-150 ${replacing ? "opacity-45 pointer-events-none" : ""}`}>
+        {replaceFailed || (cityLabel && q && total === 0 && !replacing) ? null : shown.length > 0 || pendingMore > 0 ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
               {shown.map(({ item: { turf, hot }, km }, i) => (
@@ -441,7 +479,7 @@ export function TurfListingClient({
               <div className="mt-10 flex flex-col items-center gap-2">
                 {failed ? (
                   <>
-                    <p className="text-[14px] text-primary-700">Couldn&apos;t load {replacing ? "these turfs" : "more turfs"}. Check your connection.</p>
+                    <p className="text-[14px] text-primary-700">Couldn&apos;t load more turfs. Check your connection.</p>
                     <button
                       type="button"
                       onClick={() => setFailedAt(null)}
@@ -454,9 +492,13 @@ export function TurfListingClient({
                 ) : (
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => setList((s) => ({ ...s, target: s.target + nextBatch(s.target) }))}
-                    className="press-tight h-12 min-w-[200px] px-6 inline-flex items-center justify-center gap-2 rounded-full bg-primary-900 hover:bg-primary-700 disabled:bg-primary-700 text-white text-[15px] font-semibold transition-colors cursor-pointer disabled:cursor-wait"
+                    // Not `disabled`: a focused button that turns disabled drops the focus to <body>
+                    // (keyboard and screen reader users would lose their place on every tap).
+                    aria-disabled={loading}
+                    onClick={() => {
+                      if (!loading) setList((s) => ({ ...s, target: s.target + nextBatch(s.target) }));
+                    }}
+                    className="press-tight h-12 min-w-[200px] px-6 inline-flex items-center justify-center gap-2 rounded-full bg-primary-900 hover:bg-primary-700 aria-disabled:bg-primary-700 text-white text-[15px] font-semibold transition-colors cursor-pointer aria-disabled:cursor-wait"
                   >
                     {loading ? (
                       <>

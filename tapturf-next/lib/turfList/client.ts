@@ -4,6 +4,7 @@ import { haversineKm } from "../utils/location";
 import {
   FIRST_PAGE,
   MAX_LIMIT,
+  NEAR_KM,
   exactNearest,
   normalizeQ,
   sportSlug,
@@ -24,19 +25,28 @@ import {
  * and the total is the newest. At worst a turf whose rank moved across the
  * batch boundary in that purge is skipped until the next search or reload;
  * refetching instead would reshuffle cards the player already scrolled
- * past. A purge changes few rows, and the route answers by version (`v` in
- * the URL), so this is rare.
+ * past. A purge changes few rows, and the CDN keeps batches by version and
+ * picks (`v` and `t` in the URL; the route never caches an answer older
+ * than the `v` or with other picks than the `t` it was asked for), so this
+ * is rare. The version asked for never goes down: an older answer (a
+ * process that has not loaded the newest list yet) is used, but the next
+ * request still asks for the newest version seen. `t` stays the list's
+ * own, from its first batch.
  */
 
 export type ListState = {
   /** Which list these are: scope, filters and rounded location (listKey). */
   key: string;
-  /** Version of the newest batch. */
+  /** The newest version any batch came from (never lowered). */
   v: number;
+  /** The trending picks of the list's first batch (picksTag), sent with every batch. */
+  t: string;
   /** Matching turfs in all (newest batch). */
   total: number;
   /** Within 5 km of the rounded location (newest batch), or null. */
   near: number | null;
+  /** Turfs that may be within 5 km of the exact location (ListPage.nearAt, first batch), or null. */
+  nearAt: [number, number][] | null;
   /** In the route's order, each turf once. */
   items: ListItem[];
   /** The route's offset after the last batch: where the next one starts. */
@@ -70,22 +80,40 @@ export function nearbyFrom(key: string): Coords | null {
 }
 
 export function startState(key: string, page: ListPage, target = FIRST_PAGE): ListState {
-  return addBatch({ key, v: page.v, total: page.total, near: page.near, items: [], next: 0, end: false, target }, page);
+  const t = typeof page.t === "string" ? page.t : "";
+  return addBatch({ key, v: page.v, t, total: page.total, near: page.near, nearAt: null, items: [], next: 0, end: false, target }, page);
 }
 
 export function addBatch(s: ListState, page: ListPage): ListState {
   const seen = new Set(s.items.map((i) => i.turf.id));
   const fresh = page.items.filter((i) => !seen.has(i.turf.id));
   const next = Math.max(s.next, page.offset + page.items.length);
+  // An older batch than the cards before it adds its rows, not its version or counts.
+  const newer = page.v >= s.v;
+  const total = newer ? page.total : s.total;
   return {
     ...s,
-    v: page.v,
-    total: page.total,
-    near: page.near,
+    v: newer ? page.v : s.v,
+    total,
+    near: newer ? page.near : s.near,
+    nearAt: newer && Array.isArray(page.nearAt) ? page.nearAt : s.nearAt,
     items: [...s.items, ...fresh],
     next,
-    end: page.items.length === 0 || next >= page.total,
+    end: page.items.length === 0 || next >= total,
   };
+}
+
+/**
+ * "N within 5 km" for the viewer at `me`, exactly (the same distances as
+ * the cards): counted from the list's nearAt, or the route's count from
+ * the rounded point when there is none. Null without a location.
+ */
+export function nearCount(s: ListState, me: Coords | null): number | null {
+  if (!me) return null;
+  if (!s.nearAt) return s.near;
+  let n = 0;
+  for (const [lat, lng] of s.nearAt) if (haversineKm(me, { lat, lng }) <= NEAR_KM) n++;
+  return n;
 }
 
 export type Shown = { item: ListItem; km: number | null };
@@ -174,7 +202,7 @@ export function fromSaved(raw: string | null, url: string, scope: string, now: n
   if (!st.items.every((i) => i && i.turf && typeof i.turf.id === "string" && typeof i.turf.name === "string")) return null;
   if (![st.v, st.total, st.next, st.target].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return null;
   if (!s.filters || typeof s.filters.q !== "string" || typeof s.filters.sort !== "string") return null;
-  return { ...s, y: typeof s.y === "number" && Number.isFinite(s.y) ? s.y : 0 };
+  return { ...s, state: { ...st, t: typeof st.t === "string" ? st.t : "", nearAt: null }, y: typeof s.y === "number" && Number.isFinite(s.y) ? s.y : 0 };
 }
 
 /**

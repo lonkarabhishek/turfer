@@ -46,6 +46,11 @@ export const MAX_OFFSET = 20_000;
 export const MAX_Q = 120;
 /** "N within 5 km" on the Near me button. */
 export const NEAR_KM = 5;
+/**
+ * Farthest a location can be from its rounded point (roundCoords): half the
+ * diagonal of a 0.01 degree cell, 0.79 km at the equator and less elsewhere.
+ */
+export const ROUND_SLACK_KM = 0.8;
 
 export type ListFilters = {
   /** Trimmed, at most MAX_Q characters; "" for none. */
@@ -176,13 +181,42 @@ export type ListItem<T = Turf> = { turf: T; hot?: true };
 export type ListPage<T = Turf> = {
   /** The list snapshot's version these rows came from (0: read from the table). */
   v: number;
+  /** The trending picks that ranked these rows (picksTag): they lead the default sort and frame their cards. */
+  t: string;
   /** Turfs matching the query in all. */
   total: number;
   /** Turfs within NEAR_KM of the rounded location, or null without one. */
   near: number | null;
+  /**
+   * With a location, on the first batch (offset 0) only: [lat, lng] of every
+   * matching turf within NEAR_KM + ROUND_SLACK_KM of the rounded point, so
+   * the browser counts "within 5 km" from the exact location
+   * (client.ts nearCount), as the cards' distances are; `near` is counted
+   * from the rounded point and can be off by a dozen. Every turf within
+   * NEAR_KM of any location in the cell is in it (triangle inequality),
+   * and the answer is still the same for everyone there.
+   */
+  nearAt?: [number, number][];
   offset: number;
   items: ListItem<T>[];
 };
+
+/**
+ * A short fingerprint of the trending picks in scope, "0" for none. A pick
+ * change purges the pages but does not move the list version `v` (the rows
+ * are unchanged), so the route's URL carries this too (`t`): batches ranked
+ * with other picks never share a CDN entry with these. FNV-1a, base 36.
+ */
+export function picksTag(ids: Iterable<string>): string {
+  const all = [...ids].sort().join(",");
+  if (!all) return "0";
+  let h = 0x811c9dc5;
+  for (let i = 0; i < all.length; i++) {
+    h ^= all.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
 
 export function pageOf<T extends Turf>(
   turfs: readonly T[],
@@ -194,7 +228,12 @@ export function pageOf<T extends Turf>(
 ): ListPage<T> {
   const { ranked, near } = rankTurfs(turfs, query, trendingIds);
   const items = ranked.slice(offset, offset + limit).map(({ turf }) => (trendingIds.has(turf.id) ? { turf, hot: true as const } : { turf }));
-  return { v, total: ranked.length, near, offset, items };
+  const page: ListPage<T> = { v, t: picksTag(trendingIds), total: ranked.length, near, offset, items };
+  if (query.at && offset === 0) {
+    page.nearAt = [];
+    for (const r of ranked) if (r.km != null && r.km <= NEAR_KM + ROUND_SLACK_KM) page.nearAt.push([r.turf.lat as number, r.turf.lng as number]);
+  }
+  return page;
 }
 
 /**
@@ -213,11 +252,14 @@ export type ListRequest = { query: ListQuery; offset: number; limit: number };
 
 /**
  * The route's query string, in one fixed order with defaults left out, so
- * every client asks for a batch with the same URL (one CDN entry). `v`, the
- * version the client's cards came from, only splits the CDN's cache by
- * version: the route always answers from the version it has.
+ * every client asks for a batch with the same URL (one CDN entry). `v` and
+ * `t`, the list version and the picks (picksTag) the client's cards came
+ * from, split the CDN's cache by both: the route always answers from what
+ * it has, and when that is older than `v` or other picks than `t`, it
+ * answers uncached (app/api/turfs/list/route.ts), so an entry under a key
+ * is never ranked from an older list or other picks than the key names.
  */
-export function listSearch({ query, offset, limit }: ListRequest, v?: number | null): string {
+export function listSearch({ query, offset, limit }: ListRequest, v?: number | null, t?: string | null): string {
   const p = new URLSearchParams();
   if (query.city) p.set("city", query.city);
   if (query.sport) p.set("sport", sportSlug(query.sport));
@@ -232,11 +274,17 @@ export function listSearch({ query, offset, limit }: ListRequest, v?: number | n
   p.set("offset", String(offset));
   p.set("limit", String(limit));
   if (v != null && Number.isSafeInteger(v) && v >= 0) p.set("v", String(v));
+  if (t && TAG_RE.test(t)) p.set("t", t);
   return p.toString();
 }
 
 const INT_RE = /^\d{1,9}$/;
+const VERSION_RE = /^\d{1,15}$/;
+const TAG_RE = /^[0-9a-z]{1,13}$/;
 const NUM_RE = /^-?\d{1,3}(\.\d{1,12})?$/;
+
+/** What the client's cards came from (`v`, `t`), or null when the URL does not say. */
+export type ListSeen = { v: number | null; t: string | null };
 
 /**
  * GET /api/turfs/list's parameters, checked and capped. A bad value is an
@@ -244,7 +292,7 @@ const NUM_RE = /^-?\d{1,3}(\.\d{1,12})?$/;
  * and the limit (capped at MAX_LIMIT). The location is rounded to about a
  * kilometre here whatever the client sent.
  */
-export function parseListParams(p: URLSearchParams): { ok: true; req: ListRequest } | { ok: false; error: string } {
+export function parseListParams(p: URLSearchParams): { ok: true; req: ListRequest; seen: ListSeen } | { ok: false; error: string } {
   const city = p.get("city") ?? "";
   if (city && !CITY_RE.test(city)) return { ok: false, error: "bad city" };
 
@@ -281,7 +329,12 @@ export function parseListParams(p: URLSearchParams): { ok: true; req: ListReques
   if (!INT_RE.test(limRaw) || Number(limRaw) < 1) return { ok: false, error: "bad limit" };
   const limit = Math.min(MAX_LIMIT, Number(limRaw));
 
-  return { ok: true, req: { query: { city: city || null, sport, q, sort, at }, offset, limit } };
+  const vRaw = p.get("v");
+  if (vRaw != null && !VERSION_RE.test(vRaw)) return { ok: false, error: "bad v" };
+  const t = p.get("t");
+  if (t != null && !TAG_RE.test(t)) return { ok: false, error: "bad t" };
+
+  return { ok: true, req: { query: { city: city || null, sport, q, sort, at }, offset, limit }, seen: { v: vRaw == null ? null : Number(vRaw), t } };
 }
 
 /* ---------- the page URL ---------- */
