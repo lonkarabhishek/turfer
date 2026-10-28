@@ -62,6 +62,14 @@ export function ProfileSection({ user }: { user: AppUser }) {
     void refreshUser();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // myTapturf's "Pick a username" comes here (#username): the box, ready to type in.
+  useEffect(() => {
+    if (window.location.hash !== "#username") return;
+    const box = document.getElementById("profile-username");
+    box?.scrollIntoView({ block: "center" });
+    box?.focus({ preventScroll: true });
+  }, []);
+
   const u = username.trim();
   const usernameChanged = u !== (user.username ?? "");
   const availability = useUsernameCheck(u, user.username, getToken);
@@ -263,7 +271,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
         </div>
 
         {/* Username */}
-        <div>
+        <div id="username" className="scroll-mt-24">
           <label htmlFor="profile-username" className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
           <div className="relative">
             <AtSign className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -303,7 +311,7 @@ export function ProfileSection({ user }: { user: AppUser }) {
             on={taggable}
             disabled={!username.trim()}
             onChange={(on) => setDraft((d) => ({ ...d, taggable: on }))}
-            detail="Friends who score live matches can tag you as a player. Off also hides your profile page."
+            detail="Friends who score live matches can tag you as a player. Off also hides your profile page and the “Managed by” line on turfs you run."
           />
           {user.username && user.taggable !== false && (
             <Link href={`/u/${user.username}`} className="inline-block mt-2 text-sm font-semibold text-accent-700 underline underline-offset-2">

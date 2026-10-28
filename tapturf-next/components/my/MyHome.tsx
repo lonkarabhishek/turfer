@@ -12,6 +12,7 @@ import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type Owner
 import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
 import { firstImageUrl, imageUrlForCard } from "@/lib/utils/images";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
+import { ManagerNameNote } from "./ManagerNameNote";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
@@ -100,6 +101,7 @@ export function MyHome() {
                   </li>
                 ))}
               </ul>
+              <RunsNote home={home} />
             </section>
           )}
 
@@ -130,6 +132,16 @@ export function MyHome() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 md:py-12">{children}</div>;
+}
+
+/** Under your turfs, once one is confirmed: a username puts "Managed by @you" on its page. */
+function RunsNote({ home }: { home: Extract<OwnerHome, { signed_in: true }> }) {
+  const active = home.turfs.filter((t) => t.status === "active");
+  // No account for this sign-in (an old claim made before claims named one): no username to pick yet.
+  if (active.length === 0 || ("account" in home && !home.account)) return null;
+  // owner_home's own read of the account (fresh); a database from before it sends none: the profile's.
+  const username = "account" in home ? (home.account?.username ?? null) : undefined;
+  return <ManagerNameNote className="mt-3" turfName={active.length === 1 ? cleanVenueName(active[0].name) : null} username={username} />;
 }
 
 function Thumb({ src }: { src: string | null }) {

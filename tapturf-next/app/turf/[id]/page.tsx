@@ -7,6 +7,8 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { BadgeCheck, ChevronRight, Flame, KeyRound, MapPin, Star, User } from "lucide-react";
 import { getTopTurfKeys } from "@/lib/queries/turfs";
 import { loadTurfPage } from "@/lib/queries/turfPage";
+import { getTurfManagers } from "@/lib/queries/turfManagers";
+import { NO_MANAGERS } from "@/lib/turfPage/managers";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { playerPriceRange, positivePrice, priceRangeText, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone, turfContact } from "@/lib/utils/seo";
@@ -25,6 +27,7 @@ import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { TurfReviews } from "@/components/turf/TurfReviews";
+import { TurfManagedBy } from "@/components/turf/TurfManagedBy";
 import { CTAButtons } from "@/components/ui/CTAButtons";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
@@ -35,9 +38,12 @@ import { NoteInterest } from "@/components/analytics/VisitTracker";
 // A day: since the 20 Oct outage the cache queue purges a turf's page
 // when the turf, its reviews or their votes, suggestions, games, claim or
 // trending pick change, so the timer is only a backstop. A refresh is one
-// turf_page call. Nothing the page renders may be cached for less than a
-// day, or the page refreshes that often (the footer has its own day-long
-// city list for this reason, see getFooterCities).
+// turf_page call, plus one turf_managers call on a claimed turf (the
+// "Managed by @name" line; the queue also purges the page when one of its
+// managers changes their username or tagging switch, see
+// 20261028_turf_managers.sql). Nothing the page renders may be cached for
+// less than a day, or the page refreshes that often (the footer has its
+// own day-long city list for this reason, see getFooterCities).
 export const revalidate = 86400;
 
 // The [id] segment is the turf's slug (/turf/turf-up-hinjewadi). Old
@@ -109,6 +115,9 @@ export default async function TurfDetailPage({
   if (!page) notFound();
   const { turf, claimed } = page;
   if (turf.slug && key !== turf.slug) permanentRedirect(turfPath(turf));
+  // Who runs a claimed turf, by username, for the line at the foot of the
+  // page. Read only for claimed turfs; never fails the page (no line).
+  const managers = claimed ? await getTurfManagers(turf.id) : NO_MANAGERS;
 
   const phone = getPhone(turf);
   const whatsappPhone = getWhatsAppPhone(turf);
@@ -408,6 +417,9 @@ export default async function TurfDetailPage({
               googleReviewUrl={googleReviewUrl}
               playersSay={playersSay}
             />
+
+            {/* "Managed by @name": the people who run this claimed turf, last on the page. */}
+            <TurfManagedBy managers={managers} />
           </div>
 
           {/* Right sidebar — sticky booking card */}

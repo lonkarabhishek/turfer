@@ -3,7 +3,7 @@
  * sitemap). A change to what we collect or share also bumps
  * PRIVACY_NOTICE, which signed-in people see once (PolicyNotice).
  */
-export const PRIVACY_UPDATED = "2026-10-27";
+export const PRIVACY_UPDATED = "2026-10-28";
 
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {

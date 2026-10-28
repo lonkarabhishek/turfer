@@ -102,16 +102,20 @@ const SECTIONS: LegalSection[] = [
           <strong>If you claim a turf on myTapturf.</strong> We keep the TapTurf account you claimed it from,
           your role and any note you add. If you check a phone number against the listing, we keep that number
           with your claim so our team can confirm it with you; if you confirm the listed number with a code, we
-          keep which number it was. Only TapTurf&rsquo;s team sees these.
+          keep which number it was. Only TapTurf&rsquo;s team sees these. Once we confirm your claim, the
+          turf&rsquo;s page says &ldquo;Managed by @your-username&rdquo; if you have a username and
+          &ldquo;Let others find and tag me&rdquo; is on, with the verified tick if you have it. Your name,
+          number and email never show there. Turning the switch off takes it off within a minute or so.
         </p>
         <p id="usernames" className="scroll-mt-24">
           <strong>Your username and public profile.</strong> You can pick a TapTurf username. Your username,
           name and photo then show on your public profile page, tapturf.in/u/your-username, with the month you
           joined. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
           matches can find you by username or name and tag you as a player, and the tag links to your profile.
-          Turning it off hides your profile page and takes you out of search within about a minute. New views
-          of a live score stop showing your tag within about a minute too; a live score page someone already
-          has open drops it at its next score update or when it is reloaded.
+          If you run a turf on myTapturf, its page also says &ldquo;Managed by @your-username&rdquo; (see
+          above). Turning it off hides your profile page and that line, and takes you out of search, within
+          about a minute. New views of a live score stop showing your tag within about a minute too; a live
+          score page someone already has open drops it at its next score update or when it is reloaded.
         </p>
         <p id="live-links" className="scroll-mt-24">
           <strong>Live score links.</strong> The free Live Cricket Scorer and Live Scoreboard keep your match
