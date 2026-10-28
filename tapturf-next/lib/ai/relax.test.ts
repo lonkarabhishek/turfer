@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { citiesLine, dropOrder, relaxSteps, venueLine, venueReply, widenedReply, type RelaxStep } from "./relax";
+import { citiesLine, dropOrder, noneIn, nowhereReply, relaxSteps, venueLine, venueReply, venueRows, widenedReply, type RelaxStep } from "./relax";
 
 type Row = { name: string; sport: string[]; area: string; city: string; price: number | null };
 
@@ -184,6 +184,72 @@ test("venue reply says which city, plainly, when it isn't the player's", () => {
     "There's no Hotfut in Nashik on TapTurf yet. 2 venues match Hotfut, all in Pune.",
   );
   assert.equal(venueReply({ label: "Hotfut", shown: [], home: "Nashik", asked: null }), null);
+});
+
+test("a venue not in the player's city: no turf by that name here, the closest names here, then where it is", () => {
+  const den = { name: "Dribble Den", area: "Begur", city: "Bangalore" };
+  const base = { label: "Dribble Den", shown: [den], home: "Hyderabad", asked: null };
+  // No close name: no "Closest here", and "it" is the venue.
+  assert.equal(venueReply({ ...base, closest: [] }), "No turf called Dribble Den in Hyderabad. It's in Begur, Bangalore.");
+  assert.equal(
+    venueReply({ ...base, closest: ["Cricket Den"] }),
+    "No turf called Dribble Den in Hyderabad. Closest here: Cricket Den. Dribble Den is in Begur, Bangalore.",
+  );
+  assert.equal(
+    venueReply({ ...base, closest: ["Cricket Den", "Sports Den"] }),
+    "No turf called Dribble Den in Hyderabad. Closest here: Cricket Den and Sports Den. Dribble Den is in Begur, Bangalore.",
+  );
+  assert.equal(
+    venueReply({ ...base, closest: ["Cricket Den", "Sports Den", "Gamer's Den"] }),
+    "No turf called Dribble Den in Hyderabad. Closest here: Cricket Den, Sports Den and Gamer's Den. Dribble Den is in Begur, Bangalore.",
+  );
+  // The venue's own name, not a misspelling as typed.
+  assert.equal(
+    venueReply({ ...base, label: "Dribbel Den", closest: ["Cricket Den"] }),
+    "No turf called Dribbel Den in Hyderabad. Closest here: Cricket Den. Dribble Den is in Begur, Bangalore.",
+  );
+  // The city the player typed is the one said ("Hotfut in Nashik").
+  const hot = ["Kharadi", "Undri"].map((area) => ({ name: `Hotfut ${area}`, area, city: "Pune" }));
+  assert.equal(venueReply({ label: "Hotfut", shown: hot, home: "Nashik", asked: "Nashik", closest: [] }), "No turf called Hotfut in Nashik. It's in Pune.");
+  // Without `closest` (the player's city has one by that name, filtered out): as before.
+  assert.equal(venueReply({ label: "Dribble Den", shown: [den], home: "Hyderabad", asked: null }), "Dribble Den is in Begur, Bangalore.");
+});
+
+test("a shared name not in the player's city says the cities, with no count", () => {
+  const prime = ["Mumbai", "Ballari", "Malegaon", "Salem", "Kolkata"].map((city) => ({ name: "Prime Turf", area: null, city }));
+  assert.equal(
+    venueReply({ label: "Prime Turf", shown: prime, home: "Nashik", asked: null, closest: [] }),
+    "No turf called Prime Turf in Nashik. It's in Mumbai, Ballari, Malegaon and 2 more cities.",
+  );
+  assert.equal(
+    venueReply({ label: "Prime Turf", shown: prime.slice(0, 2), home: "Nashik", asked: null, closest: ["Prime Sports Arena"] }),
+    "No turf called Prime Turf in Nashik. Closest here: Prime Sports Arena. Prime Turf is in Mumbai and Ballari.",
+  );
+  // Two close venues by one name are said once.
+  assert.equal(
+    venueReply({ label: "Prime Turf", shown: prime.slice(0, 1), home: "Nashik", asked: null, closest: ["Prime Arena", "Prime Arena"] }),
+    "No turf called Prime Turf in Nashik. Closest here: Prime Arena. Prime Turf is in Mumbai.",
+  );
+});
+
+test("a name found nowhere: the closest names in the player's city", () => {
+  assert.equal(nowhereReply("Circuit", "Pune", ["Circuit House Arena"]), "No turf called Circuit on TapTurf yet. Closest in Pune: Circuit House Arena.");
+  assert.equal(nowhereReply("Dribble Zone", "Pune", ["Dribble Sports Club", "Dribble Hub"]), "No turf called Dribble Zone on TapTurf yet. Closest in Pune: Dribble Sports Club and Dribble Hub.");
+});
+
+test("rows of cards follow the reply: the closest names, then the venue named", () => {
+  const den = { name: "Dribble Den", area: "Begur", city: "Bangalore" };
+  assert.deepEqual(venueRows("Dribble Den", "Hyderabad", 2, [den]), [
+    { label: "Closest in Hyderabad", count: 2 },
+    { label: "Dribble Den in Bangalore", count: 1 },
+  ]);
+  // No close names: one row, unheaded, as before.
+  assert.equal(venueRows("Dribble Den", "Hyderabad", 0, [den]), null);
+  const huddle = ["Vadodara", "Mumbai"].map((city) => ({ name: "Huddle Arena", area: null, city }));
+  assert.deepEqual(venueRows("huddle arena", "Pune", 1, huddle)?.[1], { label: "Huddle Arena in other cities", count: 2 });
+  const hot = ["Kharadi", "Undri"].map((area) => ({ name: `Hotfut ${area}`, area, city: "Pune" }));
+  assert.deepEqual(venueRows("Hotfut", "Hyderabad", 3, hot)?.[1], { label: "Hotfut in Pune", count: 2 });
+  assert.equal(noneIn("Kage", "Mumbai"), "No turf called Kage in Mumbai.");
 });
 
 test("question and compare lines name the venue's city when it isn't the player's", () => {

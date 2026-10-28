@@ -434,7 +434,7 @@ export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
   return res;
 }
 
-import { areaElsewhere, cityNamed, findNamedVenues, nameIn, namedInSearch, namesVenue, norm, resolveTurfNames, type VenueMatch } from "./names";
+import { areaElsewhere, cityNamed, closestNames, findNamedVenues, nameIn, namedInSearch, namesVenue, norm, resolveTurfNames, type VenueMatch } from "./names";
 export { cityNamed, findNamedVenues, nameIn, norm, resolveTurfNames };
 
 function hasNeed(t: Turf, need: Need): boolean {
@@ -473,6 +473,12 @@ export type AskResult = {
   city: CityId | null;
   /** Set when the player named a venue: the cards are the venues by that name, from every city. */
   venue: { label: string; askedCity: CityId | null } | null;
+  /**
+   * Set when the player's city is known and no venue by the name typed
+   * is in it (named elsewhere, or a name no venue has): the venues there
+   * with the closest names (closestNames), maybe none. Not cards yet.
+   */
+  closest: { city: CityId; turfs: Turf[] } | null;
 };
 
 /**
@@ -639,6 +645,23 @@ export function applyAskFilters(
     }
   });
 
+  // The player's city (the one asked about, the reading's, the visitor's)
+  // without the venue typed: its closest names, for "Closest here".
+  const home = (named ? askedCity : opts.askedCity) ?? f.city ?? opts.prefCity ?? null;
+  // The name typed: the one the venues were found by, or one that matched
+  // nothing (the text step went). Not a sentence the keyword reading took
+  // for a name ("which turf has best grass"): three words at most.
+  const nowhere = !named && relaxed.includes("text") ? (nameIn(all, f.turf_names[0]) ?? nameIn(all, f.free_text)) : null;
+  const typedName = named ? (asName ? f.turf_names[0] : f.free_text) : nowhere && nowhere.split(/\s+/).length <= 3 ? nowhere : null;
+  // The player said where it is, as with its city typed: an area of the
+  // venue that isn't in its name ("Dribble Den in Begur", "Prime Turf Marol").
+  const words = (s: string | null | undefined) => norm(s ?? "").split(" ").filter((w) => w.length >= 3);
+  const said = new Set(words([typedName, ...f.areas].join(" ")));
+  const located = !!named && pool.some((t) => words(areaFor(t)).some((w) => said.has(w) && !words(t.name).includes(w)));
+  const closest =
+    home && typedName && !located && !(named && pool.some((t) => t.city === home))
+      ? { city: home, turfs: closestNames(all, typedName, home, named ? pool : []) }
+      : null;
   const shownCities = new Set(matched.map((t) => t.city));
   return {
     turfs: withDist.slice(0, limit).map(({ t, km }) => (km != null ? { ...t, distanceKm: km } : t)),
@@ -651,6 +674,7 @@ export function applyAskFilters(
         : null
       : (explicitCity ?? (steps.some((s) => s.key === "area_city") && !relaxed.includes("area_city") ? (opts.prefCity ?? null) : null)),
     venue: named ? { label: named.label, askedCity } : null,
+    closest,
   };
 }
 

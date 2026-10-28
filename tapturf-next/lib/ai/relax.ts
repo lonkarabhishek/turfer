@@ -152,7 +152,18 @@ export type VenueReplyInput = {
   home: string | null;
   /** A city the player named that has none of them ("Hotfut in Nashik"), as a label. */
   asked: string | null;
+  /**
+   * Set when no venue by that name is in `home` (applyAskFilters'
+   * closest): the names there closest to it, as the cards show them,
+   * maybe none.
+   */
+  closest?: readonly string[] | null;
 };
+
+/** "No turf called Kage in Mumbai.": the venue named isn't in the player's city. */
+export function noneIn(label: string, home: string): string {
+  return `No turf called ${label} in ${home}.`;
+}
 
 /**
  * The reply over the venues a search named (applyAskFilters' named
@@ -162,15 +173,51 @@ export type VenueReplyInput = {
  * Pune." / "There's no Hotfut in Nashik on TapTurf yet. 4 venues match
  * Hotfut, all in Pune." / "11 venues match Prime Turf, in Mumbai,
  * Ballari, Malegaon and 6 more cities."
+ *
+ * With `closest` (none by that name in the player's city), in the order
+ * the cards are: no turf by that name here, the closest names here,
+ * then where it is. "No turf called Dribble Den in Hyderabad. Closest
+ * here: Cricket Den and Sports Den. Dribble Den is in Begur, Bangalore."
+ * / "No turf called Kage in Mumbai. It's in Pathardi, Nashik."
  */
 export function venueReply(i: VenueReplyInput): string | null {
   if (!i.shown.length) return null;
   const cities = [...new Set(i.shown.map((v) => v.city))];
+  if (i.closest && i.home) {
+    const near = i.closest.length ? ` Closest here: ${listJoin([...new Set(i.closest)])}.` : "";
+    const where = i.shown.length === 1 ? placeOf(i.shown[0]) : cityList(cities);
+    // After the closest names, "it" would be the last of them: name it again.
+    const it = !near ? "It's" : `${i.shown.length === 1 ? i.shown[0].name : i.label} is`;
+    return `${noneIn(i.label, i.home)}${near} ${it} in ${where}.`;
+  }
   if (!i.asked && i.home && cities.length === 1 && cities[0] === i.home) return null;
   const lead = i.asked && !cities.includes(i.asked) ? `There's no ${i.label} in ${i.asked} on TapTurf yet. ` : "";
   if (i.shown.length === 1) return `${lead}${i.shown[0].name} is in ${placeOf(i.shown[0])}.`;
   const n = i.shown.length;
   return `${lead}${n} venues match ${i.label}, ${cities.length === 1 ? `all in ${cities[0]}` : `in ${cityList(cities)}`}.`;
+}
+
+/**
+ * A name no venue has, over the closest names in the player's city
+ * (closestNames, at least one): "No turf called Circuit on TapTurf yet.
+ * Closest in Pune: Circuit House Arena."
+ */
+export function nowhereReply(name: string, home: string, closest: readonly string[]): string {
+  return `No turf called ${name} on TapTurf yet. Closest in ${home}: ${listJoin([...new Set(closest)])}.`;
+}
+
+/** Headings over the rows of cards, in the reply's order: the closest names in the player's city, then the venues by the name typed. */
+export type CardRow = { label: string; count: number };
+
+/** The two rows for venueReply's `closest` (null without close names: one row, as before). */
+export function venueRows(label: string, home: string, closest: number, shown: readonly VenuePlace[]): CardRow[] | null {
+  if (!closest || !shown.length) return null;
+  const cities = [...new Set(shown.map((v) => v.city))];
+  const name = new Set(shown.map((v) => v.name)).size === 1 ? shown[0].name : label;
+  return [
+    { label: `Closest in ${home}`, count: closest },
+    { label: `${name} in ${cities.length === 1 ? cities[0] : "other cities"}`, count: shown.length },
+  ];
 }
 
 /**

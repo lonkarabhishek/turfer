@@ -1,5 +1,6 @@
 import { areaFor } from "../utils/area";
 import { CITIES, CITY_ALIASES, NOT_IN_TEXT, cityInText, labelFor, type CityId } from "../city";
+import { SPORT_PAGES } from "../sports";
 import type { Turf } from "../../types/turf";
 
 // Venue-name matching for Ask TapTurf (find a turf, compare, a question
@@ -504,6 +505,75 @@ export function wholeVenueName(all: readonly Turf[], text: string): NamedVenues 
   const one = named?.matches.length === 1;
   const matches = named?.matches.filter((m) => m.tier === 0 && (m.whole || (one && m.cover >= 2 / 3))) ?? [];
   return named && matches.length ? { ...named, matches } : null;
+}
+
+/**
+ * Words that say what or where a venue is, not which one, for closest
+ * names only: the sports, and words many names carry ("zone" is in 71
+ * names on 28 Oct, "cafe" in 76, "nagar" in 20). A venue still matches
+ * by them (Champions Zone); they just never make a name close.
+ */
+const KIND = new Set([
+  ...SPORT_PAGES.flatMap((s) => s.labels.flatMap((l) => norm(l).split(" "))),
+  ...("zone cafe caf soccer futsal pickle pitch nets net pool park centre center stadium pavilion station spot point corner square yard garden house adda " +
+    "fitness gym khel khelo fc sc cc sportz international india indian sevens eleven by de nagar road rd sector sec colony layout phase town greater").split(" "),
+]);
+
+const nameWordMemo = new WeakMap<readonly Turf[], Set<string>>();
+/** Every word of every venue's name, to tell a misspelling from another name ("Pride" is no misspelt "Prime"). */
+function nameWordsFor(all: readonly Turf[]): Set<string> {
+  let m = nameWordMemo.get(all);
+  if (!m) {
+    m = new Set(all.flatMap((t) => hayOf(t).name));
+    nameWordMemo.set(all, m);
+  }
+  return m;
+}
+
+/**
+ * The venues in `city` whose names are closest to a typed name that
+ * isn't there ("Dribble Den" from Hyderabad: Cricket Den, Sports Den,
+ * Gamer's Den), best first, at most `limit`, often none. Close is by
+ * name only: a distinctive word shared (whole or by prefix, as the
+ * matcher takes it), the same word misspelt (nearWord; a five-letter
+ * word only when no venue's name has it as typed), or the whole name
+ * run together or as initials ("Dribbleden", "S K"). Generic words
+ * (turf, sports, arena, a sport, a city, "zone") never count, nor the
+ * area of the venues it was found at (`found`): "Kharadi" of Hotfut
+ * Kharadi is where it is. At least half the typed name's distinctive
+ * words must be in the venue's. More words shared first, then more of
+ * the venue's own name typed, then the most reviewed.
+ */
+export function closestNames(all: readonly Turf[], text: string | null | undefined, city: CityId, found: readonly Turf[] = [], limit = 3): Turf[] {
+  const typed = text ? readName(text, cityWordsFor(all), false) : null;
+  if (!typed) return [];
+  const own = (w: string) => w.length >= 2 && !/^\d+$/.test(w) && !STOP.has(w) && !WEAK.has(w) && !FILLER.has(w) && !KIND.has(w);
+  const there = new Set(found.flatMap((t) => hayOf(t).place));
+  const ws = [...new Set(typed.words.filter((x) => !x.city && own(x.w) && !there.has(x.w)).map((x) => x.w))];
+  // Run together, only for a name with a distinctive word or initials ("Sports Zone" is no "Zone Turf").
+  const run = ws.length || typed.short ? typed.compact : "";
+  if (!ws.length && !run) return [];
+  const known = nameWordsFor(all);
+  // Not the "sport" coinages either, a letter or two apart by design (Sportivo, Sportingo, Sportygen).
+  const misspelt = ws.filter((w) => (w.length >= 6 || !known.has(w)) && !w.startsWith("sport"));
+  const close = all.flatMap((t) => {
+    if (t.city !== city) return [];
+    const h = hayOf(t);
+    const mine = h.name.filter(own);
+    const hit = (w: string) => mine.some((n) => hitWord(w, n));
+    const near = (w: string) => misspelt.includes(w) && mine.some((n) => nearWord(w, n));
+    // A two-letter word ("SB" of Hotfut SB Road) counts for less than a word ("Hotfut").
+    const hits = ws.filter(hit).reduce((n, w) => n + (w.length >= 3 ? 2 : 1), 0);
+    const nears = ws.filter((w) => !hit(w) && near(w)).length;
+    const joined = run.length >= 2 && h.compact === run;
+    // At least half the name's distinctive words: one of three is another name ("Royal" of Royal Challengers Kings).
+    const matched = ws.filter((w) => hit(w) || near(w)).length;
+    if (!joined && (!matched || matched * 2 < ws.length)) return [];
+    const cover = mine.length ? mine.filter((n) => ws.some((w) => hitWord(w, n) || (misspelt.includes(w) && nearWord(w, n)))).length / mine.length : 0;
+    return [{ t, score: (joined ? 10 : 0) + hits + nears, cover }];
+  });
+  close.sort((a, b) => b.score - a.score || b.cover - a.cover || (b.t.total_reviews ?? 0) - (a.t.total_reviews ?? 0));
+  return close.slice(0, limit).map((c) => c.t);
 }
 
 const nameCounts = new WeakMap<readonly Turf[], Map<string, number>>();

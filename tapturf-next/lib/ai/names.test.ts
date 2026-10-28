@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { areaElsewhere, cityNamed, findNamedVenues, nameIn, namedInSearch, namesVenue, resolveTurfNames, resolveWithPage, shownNames, wholeVenueName } from "./names";
+import { areaElsewhere, cityNamed, closestNames, findNamedVenues, nameIn, namedInSearch, namesVenue, resolveTurfNames, resolveWithPage, shownNames, wholeVenueName } from "./names";
+import type { CityId } from "../city";
 import type { Turf } from "../../types/turf";
 
 // Real names from the turfs table (October 2026).
@@ -291,4 +292,71 @@ test("an inferred city gives way only to an area another city lists as its own",
   assert.equal(areaElsewhere(rows3, ["Model Colony"], "nashik"), false);
   // The city has it itself.
   assert.equal(areaElsewhere(rows3, ["Shivajinagar"], "pune"), false);
+});
+
+// Closest names in the player's city, for a venue named that isn't there (rows as on 28 Oct).
+const r4: [string, string, string | null, number][] = [
+  ["Dribble Den", "bangalore", "Begur", 22],
+  ["Cricket Den", "hyderabad", "Uppal", 184],
+  ["Sports Den", "hyderabad", "Pocharam", 9],
+  ["Gamer's Den", "hyderabad", "Manikonda", 395],
+  ["Champions Zone Box Cricket", "hyderabad", "Ghatkesar", 4],
+  ["Raptor Sports Zone", "hyderabad", "Kothapet", 273],
+  ["SB Arena", "hyderabad", "Puppalaguda", 67],
+  ["HotFut Inorbit", "hyderabad", "Madhapur", 1276],
+  ["HotFut Gachibowli", "hyderabad", "Gachibowli", 916],
+  ["Hotfut SB Road", "pune", "Senapati Bapat Road", 16],
+  ["Dribble Sports Club", "pune", null, 138],
+  ["Runbhumi The Multisports Turf", "pune", "Balewadi", 443],
+  ["Kage Multisport Turf", "nashik", "Pathardi", 302],
+  ["Maidaan Multi Sports Turf", "nashik", "Satpur", 60],
+  ["Prime Turf", "mumbai", "Marol", 263],
+  ["Prime Turf and pickleball arena", "mumbai", "Dombivli East", 308],
+  ["Football Turf Thane - Strikers Arena", "mumbai", "Kolshet", 694],
+  ["Spin Arena Turf", "mumbai", "Mira Road East", 45],
+  ["LEO PRIDE ACADEMY OF CRICKET EXCELLENCE", "bangalore", "Krishnarajapuram", 37],
+  ["CC Turf Ram Nagar Hill Top", "nagpur", "Ram Nagar", 884],
+  ["Ch. Mange Ram Box Cricket", "delhi", "Rohini", 23],
+  ["S K Sports Arena", "delhi", "Dwarka", 12],
+  ["The Royal Turf", "pune", "Kalewadi", 90],
+];
+const rows4 = r4.map(([name, city, area, total_reviews], i) => ({ id: `c${i}`, name, city, area, address: "", sports: [], total_reviews }) as unknown as Turf);
+const closest = (q: string, city: string, found: string[] = []) =>
+  closestNames(rows4, q, city as CityId, rows4.filter((t) => found.includes(t.name))).map((t) => t.name);
+
+test("closest names share a distinctive word, best match first, at most three, never padded", () => {
+  // "Den" is the word they share; the turf, cricket and sports around it don't count.
+  assert.deepEqual(closest("Dribble Den", "hyderabad"), ["Cricket Den", "Sports Den", "Gamer's Den"]);
+  assert.deepEqual(closest("Dribble Den", "pune"), ["Dribble Sports Club"]);
+  assert.deepEqual(closest("Dribble Den", "nashik"), []);
+  // A word ("Hotfut") before two letters ("SB").
+  assert.deepEqual(closest("Hotfut SB Road", "hyderabad", ["Hotfut SB Road"]), ["HotFut Inorbit", "HotFut Gachibowli", "SB Arena"]);
+  // The area of the venue it was found at is where it is, not its name.
+  assert.deepEqual(closest("CC Turf Ram Nagar Hill Top", "delhi", ["CC Turf Ram Nagar Hill Top"]), []);
+  assert.deepEqual(closest("CC Turf Ram Nagar Hill Top", "delhi"), ["Ch. Mange Ram Box Cricket"]);
+});
+
+test("closest names: generic words alone never make a name close", () => {
+  // Turf, multisport, sports, arena, cricket, box, a sport, "zone" and a city are all the overlap there is.
+  assert.deepEqual(closest("Kage Multisport Turf", "mumbai"), []);
+  assert.deepEqual(closest("Raptor Sports Zone", "mumbai"), []);
+  assert.deepEqual(closest("Champions Zone Box Cricket", "mumbai"), []);
+  assert.deepEqual(closest("Sports Zone", "hyderabad"), []);
+  assert.deepEqual(closest("Mumbai Football Arena", "mumbai"), []);
+  assert.deepEqual(closest("The Box Cricket Arena Turf", "hyderabad"), []);
+  assert.deepEqual(closest("Football Turf", "mumbai"), []);
+  assert.deepEqual(closest("Turf", "delhi"), []);
+  // Half the name's distinctive words at least: one of three is another name.
+  assert.deepEqual(closest("Royal Champions", "pune"), ["The Royal Turf"]);
+  assert.deepEqual(closest("Royal Challengers Kings", "pune"), []);
+});
+
+test("closest names: a misspelling, run together or initials", () => {
+  assert.deepEqual(closest("Dribbel Den", "pune"), ["Dribble Sports Club"]);
+  assert.deepEqual(closest("Runbhoomi Multisport Turf", "pune"), ["Runbhumi The Multisports Turf"]);
+  assert.deepEqual(closest("Maidan The Turf", "nashik"), ["Maidaan Multi Sports Turf"]);
+  // "Prime" is spelt right and names other venues: Pride is another name, not a misspelling.
+  assert.deepEqual(closest("Prime Turf", "bangalore"), []);
+  assert.deepEqual(closest("Dribbleden", "bangalore"), ["Dribble Den"]);
+  assert.deepEqual(closest("SK Turf", "delhi"), ["S K Sports Arena"]);
 });

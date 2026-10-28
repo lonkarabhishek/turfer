@@ -477,6 +477,8 @@ function Subline({ res, className = "" }: { res: Turn["res"] & object; className
   else
     switch (res.intent) {
       case "find_turf":
+        // Only the closest names to one no venue has: the reply says so, and they are no match.
+        if (res.total === 0 && res.rows?.length) break;
         text = res.total === 0 ? "Nothing matched that. Try fewer conditions." : `${res.total} match${res.total === 1 ? "" : "es"}${res.relaxed.length ? `, after widening ${res.relaxed.join(" and ")}.` : "."}`;
         break;
       case "find_game":

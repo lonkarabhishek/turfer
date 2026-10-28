@@ -37,6 +37,11 @@ export type AskResponse = {
   total: number;
   failed?: boolean;
   turfs?: (Turf & { distanceKm?: number })[];
+  /**
+   * find_turf: headed rows over `turfs`, in order ("Closest in Nashik" 2,
+   * "Dribble Den in Bangalore" 1). Missing: one row, as before.
+   */
+  rows?: { label: string; count: number }[];
   games?: (Game & { distanceKm?: number })[];
   missing?: string[];
   compare?: { verdict: string; rows: { label: string; values: string[] }[]; best_for: string[]; caveats: string | null } | null;
