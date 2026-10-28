@@ -7,13 +7,16 @@ export function TurfJsonLd({
   turf,
   reviewStats,
   reviews,
+  managerIds,
 }: {
   turf: Turf;
   /** TapTurf players' live reports: an AggregateRating from 5 of them. */
   reviewStats?: ReviewSummary | null;
   reviews?: readonly ReviewWithUser[] | null;
+  /** Accounts that manage the turf: their reports never reach the markup. */
+  managerIds?: readonly string[] | null;
 }) {
-  const turfSchema = generateTurfJsonLd(turf, { reviewStats, reviews });
+  const turfSchema = generateTurfJsonLd(turf, { reviewStats, reviews, managerIds });
   const breadcrumbSchema = generateBreadcrumbJsonLd(turf);
 
   return (

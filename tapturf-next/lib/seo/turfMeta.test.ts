@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compactHours, displayArea, normPlace, placeFor, seoName, turfMeta, typePhrase } from "./turfMeta";
-import { PROTOTYPE_ROWS, type PrototypeRow } from "./turfMeta.fixtures";
+import { compactHours, displayArea, nameCuts, normPlace, placeFor, seoName, turfMeta, typePhrase } from "./turfMeta";
+import { EDGE_ROWS, PROTOTYPE_ROWS, type EdgeRow, type PrototypeRow } from "./turfMeta.fixtures";
+import { sharedNameKey, turfFactsFrom, type TurfFactRow } from "./turfFacts";
 import { bannedCopy, DEFAULT_OG_IMAGE } from "./defaults";
 import { DESCRIPTION_MAX_CHARS, textWidthPx, TITLE_MAX_CHARS, TITLE_MAX_PX, titleFits, withBrand } from "./width";
 import type { Turf } from "../../types/turf";
@@ -155,6 +156,116 @@ test("seoName keeps what identifies the venue and drops the padding", () => {
     ["Ch. Mange Ram Box Cricket", "delhi", "Ch. Mange Ram Box Cricket"],
   ];
   for (const [raw, city, want, area] of cases) assert.equal(seoName(raw, city, area), want, raw);
+});
+
+test("seoName: shouted names read as words, possessives and ordinary short words included", () => {
+  const cases: [string, string | null, string][] = [
+    ["CHAMPION'S DEN CRICKET & FOOTBALL TURF", "bangalore", "Champion's Den Cricket & Football Turf"],
+    ["AGNEL'S TURF", "pune", "Agnel's Turf"],
+    ["LET’S PLAY MULTISPORTS TURF", "nashik", "Let’s Play Multisports Turf"],
+    ["STYUDS RJ'S MULTI SPORTS TURF", "puducherry", "Styuds RJ's Multi Sports Turf"],
+    ["D'SOUZA SPORTS ARENA", "mumbai", "D'Souza Sports Arena"],
+    ["THE BIG TURF", "mumbai", "The Big Turf"],
+    ["HULK IN THE BOX", "tirupati", "Hulk in the Box"],
+    ["HIT AND RUN TURF", "madurai", "Hit and Run Turf"],
+    ["KICK OFF TURF", "kozhikode", "Kick Off Turf"],
+    ["ELITE TURFS BY CRL", "pune", "Elite Turfs by CRL"],
+    // Real acronyms with vowels stay capitals.
+    ["SVA SPORTS ARENA", "pune", "SVA Sports Arena"],
+    ["OMR SPORTS ARENA", "chennai", "OMR Sports Arena"],
+    ["ARK SPORTS ARENA", "pune", "ARK Sports Arena"],
+  ];
+  for (const [raw, city, want] of cases) assert.equal(seoName(raw, city), want, raw);
+});
+
+test("seoName: no stray dot, no split bracket, no name cut down to sport words", () => {
+  const cases: [string, string | null, string, string?][] = [
+    ["Skyland Turf.", "chennai", "Skyland Turf", "Ayanavaram"],
+    ["Game On..!", "kurnool", "Game On", "Kurnool"],
+    ["Camp nou Turf, Polukkara.", "thrissur", "Camp nou Turf, Polukkara"],
+    // Dotted initials keep their dot.
+    ["F.A.S.E.", "pune", "F.A.S.E.", "Pashan"],
+    ["M(R)ETRO Play Arena", "bangalore", "M(R)ETRO Play Arena", "Electronic City"],
+    ["Ranangan The Multisport's Best Turf in Nashik", "nashik", "Ranangan", "Trimbak Road"],
+    ["Turf cricket", "patiala", "Turf cricket", "Sular"],
+    // Unchanged: a bracket after a word that is only sport words still goes.
+    ["Goal Zone(Turf)", "pune", "Goal Zone"],
+  ];
+  for (const [raw, city, want, area] of cases) assert.equal(seoName(raw, city, area), want, raw);
+});
+
+test("nameCuts: at a part's end first, never an open bracket, never a part of sport words", () => {
+  const c = nameCuts("BSA - Blitzz Sports Academy - Cricket and Football Turf - Salem");
+  // "... - Cricket and Football Turf" ends on sport words, and "BSA" alone is too short.
+  assert.deepEqual(c.parts, ["BSA - Blitzz Sports Academy"]);
+  assert.deepEqual(nameCuts("ASSC Cricket Academy (Elegants Cricket Nets & Box)").parts, ["ASSC Cricket Academy"]);
+  assert.ok(nameCuts("ASSC Cricket Academy (Elegants Cricket Nets & Box)").words.every((w) => !w.includes("(")));
+  assert.deepEqual(nameCuts("Sportozen: Box Cricket, Football Turf & Cricket Nets").parts, ["Sportozen"]);
+});
+
+// ── real rows the round 3 review found ──
+
+function fromEdge(r: EdgeRow) {
+  const { key, photos, call, whatsapp, reports, title, description, seoName: n, nameShared, ...row } = r;
+  void title;
+  void description;
+  void n;
+  return {
+    turf: turf({ ...row, slug: key, images: Array.from({ length: photos }, (_, i) => googlePhoto(i)) } as Partial<Turf>),
+    contact: { call, whatsapp },
+    reports,
+    nameShared,
+  };
+}
+
+for (const r of EDGE_ROWS) {
+  test(`real row ${r.key}: name, title and description`, () => {
+    const m = turfMeta(fromEdge(r));
+    assert.equal(m.name, r.seoName);
+    assert.equal(m.title, r.title);
+    assert.equal(m.description, r.description);
+    assert.ok(titleFits(m.title), m.title);
+    assert.ok((m.title.match(/\(/g)?.length ?? 0) <= (m.title.match(/\)/g)?.length ?? 0), `open bracket: ${m.title}`);
+    assert.ok(!/\.,/.test(m.title), m.title);
+    assert.ok(m.cityLabel && normPlace(m.title).includes(normPlace(m.cityLabel)), `no city: ${m.title}`);
+  });
+}
+
+test("two branches of one brand in a city: the shared name is found, and each title keeps its area", () => {
+  const pairs: [string, string][] = [
+    ["dynamosOmega", "dynamosGnw"],
+    ["sportyzo66", "sportyzo65"],
+  ];
+  const row = (k: string) => EDGE_ROWS.find((r) => r.key === k)!;
+  const facts = turfFactsFrom(
+    EDGE_ROWS.map((r) => ({ id: r.key, name: r.name, city: r.city ?? null, opening_hours: null, start_time: null, end_time: null, is_24x7: null, owner_phone: null, landline_phone: null, whatsapp_phone: null, contact_info: null }) as TurfFactRow),
+  );
+  for (const [a, b] of pairs) {
+    const key = sharedNameKey(row(a).name, row(a).city);
+    assert.equal(key, sharedNameKey(row(b).name, row(b).city));
+    assert.ok(facts.sharedNames.includes(key), key);
+    const ta = turfMeta(fromEdge(row(a))).title;
+    const tb = turfMeta(fromEdge(row(b))).title;
+    assert.notEqual(ta, tb);
+    // Without the flag the facets win and the two collide (the bug).
+    assert.equal(turfMeta({ ...fromEdge(row(a)), nameShared: false }).title, turfMeta({ ...fromEdge(row(b)), nameShared: false }).title);
+  }
+  assert.equal(facts.sharedNames.length, 2);
+  // Other cities never share: the key carries the city.
+  assert.notEqual(sharedNameKey("Goal Zone", "pune"), sharedNameKey("Goal Zone", "mumbai"));
+  assert.equal(sharedNameKey("Goal Zone", null), "");
+});
+
+test("the description quotes the format the page's Format row shows", () => {
+  const base = { name: "Goal Zone", city: "pune", sports: ["Football"], ground_format: "7-a-side" };
+  const desc = (over: Partial<Turf>) => turfMeta({ turf: turf({ ...base, ...over }), contact: { call: true, whatsapp: true } }).description;
+  assert.match(desc({ formats: ["5-a-side"] } as Partial<Turf>), /Football turf, 5-a-side\./);
+  assert.ok(!desc({ formats: ["5-a-side"] } as Partial<Turf>).includes("7-a-side"));
+  // "box cricket" is a format the type already says; no side count, no format.
+  assert.match(desc({ formats: ["box cricket"] } as Partial<Turf>), /Football turf\./);
+  assert.match(desc({ formats: ["6-a-side", "box cricket"] } as Partial<Turf>), /Football turf, 6-a-side\./);
+  // No formats: ground_format, as the page.
+  assert.match(desc({}), /Football turf, 7-a-side\./);
 });
 
 test("displayArea: the first part, no brackets, no 'opposite'", () => {

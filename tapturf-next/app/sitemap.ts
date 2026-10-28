@@ -50,28 +50,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Every city with active turfs, from the database.
   const liveCities = await getLiveCities();
 
+  // A lastmod only where a date says when the page last changed: the
+  // time of this regeneration (new Date()) told Google every hour that
+  // they all had. / and /games change as games expire and picks move,
+  // which nothing dates, so they carry none (lastmod is optional).
+  const newestTurf = latest((turfs ?? []).map((t) => t.updated_at));
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: BASE,
-      lastModified: new Date(),
       changeFrequency: "daily",
       priority: 1.0,
     },
     {
       url: `${BASE}/turfs`,
-      lastModified: new Date(),
+      lastModified: newestTurf,
       changeFrequency: "daily",
       priority: 0.9,
     },
     {
       url: `${BASE}/turf-near-me`,
-      lastModified: new Date(),
+      lastModified: newestTurf,
       changeFrequency: "daily",
       priority: 0.9,
     },
     {
       url: `${BASE}/games`,
-      lastModified: new Date(),
       changeFrequency: "hourly",
       priority: 0.9,
     },
@@ -97,7 +100,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
     {
       url: `${BASE}/blog`,
-      lastModified: new Date(),
+      // As new as its newest post.
+      lastModified: latest(ALL_POSTS.map((p) => p.updatedAt || p.publishedAt)),
       changeFrequency: "weekly",
       priority: 0.8,
     },

@@ -19,6 +19,8 @@ import { fitFontSize } from "@/lib/utils/fitText";
 import { cityDescription, cityFacts, cityTitle, listingOgImage } from "@/lib/seo/listingMeta";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { listingReach, reachOf } from "@/lib/seo/turfFacts";
+import { getTurfFacts } from "@/lib/queries/turfFacts";
 
 // One page per city: a hard SEO landing so each city ranks for its own
 // local queries.
@@ -42,9 +44,10 @@ export async function generateMetadata(
   const { city } = await params;
   if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: ROBOTS_NOINDEX_FOLLOW };
   const label = labelFor(city);
-  // The rows the page reads anyway (one read per render, React cache).
-  const turfs = await getAllActiveTurfs(city);
-  const facts = cityFacts(label, turfs, citySportLinks(city, turfs));
+  // The rows the page reads anyway (one read per render, React cache),
+  // and which of them show timings or a number to call (a day-long copy).
+  const [turfs, turfFacts] = await Promise.all([getAllActiveTurfs(city), getTurfFacts()]);
+  const facts = cityFacts(label, turfs, citySportLinks(city, turfs), listingReach(turfs, reachOf(turfFacts)));
   const title = cityTitle(facts);
   const description = cityDescription(facts);
 
@@ -158,16 +161,6 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             Compare, contact, and book without a booking fee.
           </p>
 
-          {/* Sr-only for crawlers */}
-          <ul className="sr-only" aria-hidden>
-            {turfs.map((t) => (
-              <li key={t.id}>
-                <Link href={turfPath(t)}>
-                  {t.name}, {t.address}
-                </Link>
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 
@@ -211,7 +204,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Popular in {label}
               </h2>
             </div>
-            {turfs.length > 6 && (
+            {turfs.length > featured.length && (
               <Link
                 href="#all-turfs"
                 className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
@@ -228,11 +221,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         </section>
       )}
 
-      {/* Full crawlable list (visible) */}
-      {turfs.length > 6 && (
+      {/* Every turf, whenever the Top-rated grid does not show them all:
+          the ItemList above marks up only turfs a visitor can see. */}
+      {turfs.length > featured.length && (
         <section id="all-turfs" className="max-w-7xl mx-auto px-4 sm:px-6 mt-14" style={{ scrollMarginTop: "4.5rem" }}>
           <h2 className="font-display text-2xl text-primary-800 tracking-tight mb-4">
-            All {turfs.length} turfs in {label}
+            {turfs.length === 1 ? `1 turf in ${label}` : `All ${turfs.length} turfs in ${label}`}
           </h2>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {turfs.map((t) => (

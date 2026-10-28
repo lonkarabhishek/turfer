@@ -15,6 +15,7 @@ import { isOwnPhoto, turfPhotos } from "../utils/images";
 import { summarisePrice } from "../utils/prices";
 import { DEFAULT_OG_IMAGE } from "./defaults";
 import { displayArea } from "./turfMeta";
+import type { ListingReach } from "./turfFacts";
 import { DESCRIPTION_MAX_CHARS, titleFits, withBrand } from "./width";
 
 const inr = (n: number) => n.toLocaleString("en-IN");
@@ -65,6 +66,22 @@ export function pricedCount(turfs: readonly Turf[]): number {
   return turfs.filter((t) => summarisePrice(t).kind === "real").length;
 }
 
+/**
+ * The end of a city or city+sport description: "Call or WhatsApp" only
+ * when at least one of the venues has a number the page can dial or
+ * WhatsApp (ListingReach.contactable).
+ */
+function listingCta(contactable: number): string {
+  return contactable > 0 ? "Call or WhatsApp, no booking fee." : "No booking fee.";
+}
+
+/** "Timings", "Photos", "Ratings" in a listing title, each only when a venue behind the page has it. */
+function facetsFrom(on: { timings: boolean; photos: boolean; ratings?: boolean }): string[] {
+  const have = [on.timings && "Timings", on.photos && "Photos", on.ratings && "Ratings"].filter((f): f is string => !!f);
+  const join = (f: string[]) => (f.length <= 1 ? f.join("") : `${f.slice(0, -1).join(", ")} & ${f.at(-1)}`);
+  return [...new Set([have, have.slice(0, 2), have.slice(0, 1)].map(join))].filter(Boolean);
+}
+
 /** The top venue's own photo (our storage, not an expiring Google link), else the site card. */
 export function listingOgImage(turfs: readonly Turf[], alt: string): { url: string; alt: string; width?: number; height?: number } {
   const own = turfs[0] ? turfPhotos(turfs[0]).find(isOwnPhoto) : undefined;
@@ -73,7 +90,7 @@ export function listingOgImage(turfs: readonly Turf[], alt: string): { url: stri
 
 // ── /<city> ──
 
-export interface CityFacts {
+export interface CityFacts extends ListingReach {
   label: string;
   count: number;
   /** Sport pages in this city, most venues first (practice nets and futsal are inside cricket and football). */
@@ -83,8 +100,14 @@ export interface CityFacts {
   priced: number;
 }
 
-export function cityFacts(label: string, turfs: readonly Turf[], sportLinks: readonly { slug: string; name: string; count: number }[]): CityFacts {
+export function cityFacts(
+  label: string,
+  turfs: readonly Turf[],
+  sportLinks: readonly { slug: string; name: string; count: number }[],
+  reach: ListingReach,
+): CityFacts {
   return {
+    ...reach,
     label,
     count: turfs.length,
     sports: sportLinks
@@ -104,12 +127,16 @@ export function cityTitle(f: CityFacts): string {
   const head = `${inr(f.count)} ${f.count === 1 ? "Turf" : "Turfs"} in ${f.label}`;
   const top = f.sports.slice(0, 2).map((s) => s.name);
   const pricedMost = f.priced * 2 > f.count;
-  const facets = pricedMost ? ["Prices & Timings", "Prices"] : ["Timings & Photos", "Timings"];
+  // A facet only when a turf here has it: no "Timings" for a city none of whose turfs lists hours.
+  const facets = pricedMost
+    ? [f.withHours > 0 && "Prices & Timings", "Prices"].filter((x): x is string => !!x)
+    : facetsFrom({ timings: f.withHours > 0, photos: f.withPhotos > 0 }).slice(0, 2);
   const sports = [top.join(" & "), top[0]].filter((s, i, all) => !!s && all.indexOf(s) === i);
   const candidates: string[] = [];
   for (const sp of sports) for (const fc of facets) candidates.push(`${head}: ${sp}, ${fc}`);
   for (const sp of sports) candidates.push(`${head}: ${sp}`);
-  candidates.push(`${head}: ${facets[0]}`, head);
+  if (facets[0]) candidates.push(`${head}: ${facets[0]}`);
+  candidates.push(head);
   return firstFitting(candidates, titleFits);
 }
 
@@ -131,7 +158,7 @@ export function cityDescription(f: CityFacts): string {
     const areas = get("areas");
     const lit = get("floodlit");
     const where = areas ? `Most in ${areas}${lit ? `; ${lit}` : ""}.` : lit ? `${lit.charAt(0).toUpperCase()}${lit.slice(1)}.` : "";
-    return [`${inr(f.count)} ${noun} in ${f.label}${sports ? `: ${sports}` : ""}.`, where, "Call or WhatsApp, no booking fee."].filter(Boolean).join(" ");
+    return [`${inr(f.count)} ${noun} in ${f.label}${sports ? `: ${sports}` : ""}.`, where, listingCta(f.contactable)].filter(Boolean).join(" ");
   };
   return greedy(options, make);
 }
@@ -141,7 +168,7 @@ export function cityDescription(f: CityFacts): string {
 /** Off until the data team confirms the listed rates are per hour (some look per player). */
 export const QUOTE_CITY_PRICE_RANGE = false;
 
-export interface CitySportFacts {
+export interface CitySportFacts extends ListingReach {
   cityLabel: string;
   sport: SportPage;
   count: number;
@@ -160,8 +187,8 @@ export function citySportTitle(f: CitySportFacts): string {
   const head = `${inr(f.count)} ${venues} in ${f.cityLabel}`;
   const facets =
     f.priced * 2 > f.count
-      ? ["Prices & Timings", "Prices"]
-      : ["Timings, Photos & Ratings", "Timings & Photos", "Timings"];
+      ? [f.withHours > 0 && "Prices & Timings", "Prices"].filter((x): x is string => !!x)
+      : facetsFrom({ timings: f.withHours > 0, photos: f.withPhotos > 0, ratings: f.rated > 0 });
   return firstFitting([...facets.map((fc) => `${head}: ${fc}`), head], titleFits);
 }
 
@@ -180,7 +207,8 @@ export function citySportDescription(f: CitySportFacts): string {
     range ? [{ kind: "range", text: range }] : [],
     [3, 2, 1].map((k) => ({ kind: "areas" as const, text: andList(f.areas.slice(0, k)) })).filter((p) => !!p.text),
     lit ? [{ kind: "lit", text: lit }] : [],
-    [{ kind: "what", text: "Timings, photos, map." }],
+    // What the turf pages show: the map always, timings and photos when a venue has them.
+    [{ kind: "what", text: f.withHours > 0 || f.withPhotos > 0 ? `${cap([f.withHours > 0 && "timings", f.withPhotos > 0 && "photos", "map"].filter(Boolean).join(", "))}.` : "Map and directions." }],
   ];
   const make = (chosen: Part[]) => {
     const get = (k: Part["kind"]) => chosen.find((p) => p.kind === k)?.text;
@@ -188,7 +216,7 @@ export function citySportDescription(f: CitySportFacts): string {
     const areas = get("areas");
     const litText = get("lit");
     const where = areas ? `Most in ${areas}${litText ? `; ${litText}` : ""}.` : litText ? `${cap(litText)}.` : "";
-    return [head, where, get("what"), "Call or WhatsApp, no booking fee."].filter(Boolean).join(" ");
+    return [head, where, get("what"), listingCta(f.contactable)].filter(Boolean).join(" ");
   };
   return greedy(options, make);
 }

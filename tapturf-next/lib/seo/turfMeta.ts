@@ -18,6 +18,7 @@ import type { Turf } from "../../types/turf";
 import { CITY_ALIASES, guessCityFromAddress, isCity, labelFor } from "../city";
 import { courtType, sportPageForLabel } from "../sports";
 import { areaFor } from "../utils/area";
+import { formatLabel } from "../utils/formats";
 import { dailyHoursSummary, normaliseOpeningHours } from "../utils/hours";
 import { orderPhotos, turfPhotos } from "../utils/images";
 import { priceUnitSuffix, showsPriceBands, summarisePagePrice } from "../utils/prices";
@@ -32,10 +33,21 @@ const FILLER =
 /** Words a " - " part may also carry and still be padding ("The Multisports Turf", "Best Turf in Thane"). */
 const PAD_WORDS = new Set(["the", "a", "an", "in", "best", "first"]);
 const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu;
-/** All-caps words of 3 letters or fewer stay capitals (AMR, FC, KSR), except these ordinary words. */
-const SHORT_WORDS = new Set(["THE", "AND", "FOR", "OF", "BOX", "NET", "PRO", "ONE", "TOP", "ACE", "HUB"]);
+/**
+ * All-caps words of 3 letters or fewer stay capitals (AMR, FC, KSR, SVA,
+ * ARK), except these ordinary words ("THE BIG TURF" -> "The Big Turf",
+ * "HULK IN THE BOX" -> "Hulk in the Box"). No vowel rule: real acronyms
+ * have vowels too (MAC, ANA, OMR, AUK).
+ */
+const SHORT_WORDS = new Set([
+  "THE", "AND", "FOR", "OF", "BOX", "NET", "PRO", "ONE", "TOP", "ACE", "HUB",
+  "AIR", "ALL", "AT", "BIG", "BY", "DE", "DEN", "EL", "FIT", "GEN", "HIT", "IN", "LEO", "LET", "MUD", "NOU", "OFF",
+  "OLD", "OM", "ON", "OUT", "RAJ", "RAM", "RUN", "SIX", "SKY", "TO", "TON", "TWO", "WAR", "ZAM",
+]);
 /** Connecting words that read lower case inside a title-cased name. */
-const SMALL_WORDS = new Set(["and", "of", "for", "the"]);
+const SMALL_WORDS = new Set(["and", "of", "for", "the", "in", "by", "to", "at"]);
+/** A name ending in dotted initials (F.A.S.E.) keeps its last dot; any other trailing dot goes. */
+const DOTTED_END = /(?:^|[^\p{L}.])(?:\p{L}\.){2,}$/u;
 /** Vowel-less 2-3 letter words that are abbreviations, not initials. */
 const NOT_INITIALS = new Set(["st", "dr", "mr", "mrs", "rd", "no", "ltd", "pvt", "sq", "ch"]);
 
@@ -68,8 +80,13 @@ function unShout(name: string): string {
   const letters = name.replace(/[^\p{L}]/gu, "");
   if (letters.length < 8 || letters !== letters.toUpperCase()) return name;
   let first = true;
-  // Letters in any script, so "CAFÉ" reads "Café", not "CAFÉ".
-  return name.replace(/\p{L}+/gu, (w) => {
+  // Letters in any script, so "CAFÉ" reads "Café", not "CAFÉ". A word
+  // runs on past an apostrophe: "CHAMPION'S" -> "Champion's" (one letter
+  // after it is a possessive), "D'SOUZA" -> "D'Souza".
+  return name.replace(/\p{L}+(?:['’"]\p{L}+)*/gu, (tok) => {
+    const at = tok.search(/['’"]/);
+    const w = at < 0 ? tok : tok.slice(0, at);
+    const tail = at < 0 ? "" : tok.slice(at);
     const out =
       w.length <= 3 && !SHORT_WORDS.has(w)
         ? w
@@ -77,7 +94,7 @@ function unShout(name: string): string {
           ? w.toLowerCase()
           : w[0] + w.slice(1).toLowerCase();
     first = false;
-    return out;
+    return out + (tail.length <= 2 ? tail.toLowerCase() : tail.slice(0, 2) + tail.slice(2).toLowerCase());
   });
 }
 
@@ -121,7 +138,8 @@ export function seoName(raw: string, cityId: string | null, area?: string | null
   const branches = rest.map(stripCity).filter((t) => t && !FILLER.test(t));
   s = [base, ...branches].join(" ");
 
-  s = s.replace(/\s*\(([^)]*)\)/g, (_m, inner: string) => {
+  // A bracket inside a word is part of the brand ("M(R)ETRO Play Arena").
+  s = s.replace(/\s*\(([^)]*)\)(?!\p{L})/gu, (_m, inner: string) => {
     const t = inner.trim();
     return !t || FILLER.test(t) || isCityOnly(t) ? "" : ` (${t})`;
   });
@@ -145,12 +163,20 @@ export function seoName(raw: string, cityId: string | null, area?: string | null
     return mostlyFiller && rest && FILLER.test(rest) && head && !FILLER.test(head) ? before : m;
   });
 
-  s = s
-    .replace(/\s*(?:-|–|,)?\s*best turf.*$/i, "")
-    .replace(/(\bturf)\s+(?:box cricket|cricket|football)(?:[,\s]+(?:box cricket|cricket|football|etc\.?))*$/i, "$1")
-    .replace(/\s{2,}/g, " ")
-    .replace(/^[\s,–-]+|[\s,–-]+$/g, "")
-    .trim();
+  const tidy = (t: string) => {
+    const x = t.replace(/\s{2,}/g, " ").replace(/^[\s,–-]+|[\s,–-]+$/g, "").trim();
+    // "Skyland Turf." and "Game On.." (from "Game On..!") end clean; "F.A.S.E." keeps its dot.
+    return DOTTED_END.test(x) ? x : x.replace(/[\s,.–-]+$/u, "");
+  };
+  const named = tidy(s);
+  // "Best turf in ..." padding, with a "The Multisport's" just before it, and a trailing sport list.
+  s = tidy(
+    s
+      .replace(/\s*(?:-|–|,)?\s*(?:(?:the\s+)?\S+['’]s\s+)?best turf.*$/i, "")
+      .replace(/(\bturf)\s+(?:box cricket|cricket|football)(?:[,\s]+(?:box cricket|cricket|football|etc\.?))*$/i, "$1"),
+  );
+  // Only sport words left ("Turf cricket" -> "Turf"): the name before those cuts.
+  if (!s || FILLER.test(s)) s = named;
   return fixInitials(unShout(s)) || raw.trim();
 }
 
@@ -232,6 +258,36 @@ function joinFacets(f: string[]): string {
   return f.length <= 1 ? f.join("") : `${f.slice(0, -1).join(", ")} & ${f.at(-1)}`;
 }
 
+/** Without a "(" the cut left open: "ASSC Cricket Academy (Elegants Cricket Nets" -> "ASSC Cricket Academy". */
+function closeBrackets(s: string): string {
+  let t = s;
+  while ((t.match(/\(/g)?.length ?? 0) > (t.match(/\)/g)?.length ?? 0)) t = t.slice(0, t.lastIndexOf("("));
+  return t.replace(/[\s,:;@|–—-]+$/u, "").trim();
+}
+
+/**
+ * Shorter forms of a name too long for a title, longest first: first cut
+ * where a part ends (" - ", " – ", " | ", ": ", " @ ", ", ", " ("), each
+ * keeping a word of 4 letters or two words ("BSA - Blitzz Sports Academy",
+ * "Skygoal"), then cut at a word. None leaves a "(" open.
+ */
+export function nameCuts(name: string): { parts: string[]; words: string[] } {
+  const parts: string[] = [];
+  let from = 0;
+  for (const m of name.matchAll(/\s+[-–—|@]\s*|\s*:\s+|,\s+|\s+\(/gu)) {
+    // A cut that ends on sport words ("Sportozen: Box Cricket") says no more than the part before it.
+    const last = name.slice(from, m.index).replace(/^[\s(]+/, "");
+    from = m.index + m[0].length;
+    if (FILLER.test(last)) continue;
+    const t = closeBrackets(name.slice(0, m.index));
+    if (t && !FILLER.test(t) && (t.split(/\s+/).length >= 2 || t.replace(/[^\p{L}\d]/gu, "").length >= 4)) parts.push(t);
+  }
+  const words: string[] = [];
+  for (let max = name.length - 1; max > 8; max--) words.push(closeBrackets(truncateWords(name, max)));
+  const uniq = (a: string[]) => [...new Set(a)].filter((t) => t && t !== name);
+  return { parts: uniq(parts).sort((a, b) => b.length - a.length), words: uniq(words) };
+}
+
 // ── the template ──
 
 export interface TurfMetaInput {
@@ -240,6 +296,11 @@ export interface TurfMetaInput {
   contact: { call: boolean; whatsapp: boolean };
   /** Live TapTurf player reports (turf_page review_stats: source null, status live). */
   reports?: { count: number; average: number } | null;
+  /**
+   * Another active turf in the same city has this name (sharedNameKey):
+   * the title keeps the area before any facet, so the two differ.
+   */
+  nameShared?: boolean;
 }
 
 export interface TurfMeta {
@@ -261,7 +322,7 @@ export const MIN_GOOGLE_REVIEWS_TO_QUOTE = 5;
 /** Photos worth mentioning. */
 const MIN_PHOTOS_TO_QUOTE = 3;
 
-export function turfMeta({ turf, contact, reports }: TurfMetaInput): TurfMeta {
+export function turfMeta({ turf, contact, reports, nameShared = false }: TurfMetaInput): TurfMeta {
   const cityId = isCity(turf.city) ? turf.city : guessCityFromAddress(turf.address);
   const cityLabel = cityId ? labelFor(cityId) : null;
   const name = seoName(turf.name, cityId, areaFor(turf));
@@ -294,22 +355,29 @@ export function turfMeta({ turf, contact, reports }: TurfMetaInput): TurfMeta {
     .slice(0, 3);
   const head = (where: string) => (where ? `${name}, ${where}` : name);
   const withFacets = (where: string, k: number) => (facets.length >= k ? `${head(where)} – ${joinFacets(facets.slice(0, k))}` : null);
-  const candidates = [
-    withFacets(place.full, 3),
-    withFacets(place.full, 2),
-    withFacets(place.city, 3),
-    withFacets(place.city, 2),
-    // A price on its own earns a title slot; "Timings" alone does not.
-    ...(titlePrice ? [withFacets(place.full, 1), withFacets(place.city, 1)] : []),
-    head(place.full),
-    head(place.city),
-  ];
+  // A price on its own earns a title slot; "Timings" alone does not.
+  const byArea = [withFacets(place.full, 3), withFacets(place.full, 2), ...(titlePrice ? [withFacets(place.full, 1)] : []), head(place.full)];
+  const byCity = [withFacets(place.city, 3), withFacets(place.city, 2), ...(titlePrice ? [withFacets(place.city, 1)] : []), head(place.city)];
+  const candidates = nameShared
+    ? // Two "Sportyzo Sports Academy" in Gurgaon: the area tells them apart, so it goes before any facet.
+      [...byArea, ...byCity]
+    : [byArea[0], byArea[1], byCity[0], byCity[1], ...(titlePrice ? [withFacets(place.full, 1), withFacets(place.city, 1)] : []), head(place.full), head(place.city)];
   let title = candidates.find((t): t is string => !!t && titleFits(t)) ?? null;
-  for (let max = 60; !title && max > 8; max--) {
-    const t = place.city ? `${truncateWords(name, max - place.city.length - 2)}, ${place.city}` : truncateWords(name, max);
-    if (t.replace(/[, ]/g, "") && titleFits(t)) title = t;
+  if (!title) {
+    // Too long even with the city alone: a shorter name, cut where a part
+    // ends before anywhere else, with the place worked out again for it (a
+    // cut can drop the area or city the name carried, "... - Salem").
+    const area = areaFor(turf);
+    const cuts = nameCuts(name);
+    const tries = [
+      ...cuts.parts.map((c) => [c, placeFor(c, area, cityId).full] as const),
+      ...cuts.parts.map((c) => [c, placeFor(c, area, cityId).city] as const),
+      ...cuts.words.map((c) => [c, placeFor(c, area, cityId).city] as const),
+      ...cuts.words.map((c) => [c, ""] as const),
+    ];
+    title = tries.map(([c, where]) => (where ? `${c}, ${where}` : c)).find((t) => titleFits(t)) ?? null;
   }
-  title ??= truncateWords(name, 40);
+  title ??= closeBrackets(truncateWords(name, 40));
 
   // ── description: facts, most useful first, each only while it fits ──
   const type = typePhrase(turf.sports ?? []);
@@ -331,7 +399,11 @@ export function turfMeta({ turf, contact, reports }: TurfMetaInput): TurfMeta {
   if (turf.is_covered === true) optional.push(["extra", "covered"]);
   if (reports && reports.count >= 5) optional.push(["fact", `${reports.average.toFixed(1)} from ${reports.count} TapTurf player reports`]);
   else if (reportCount > 0) optional.push(["fact", `${reportCount} TapTurf player report${reportCount > 1 ? "s" : ""}`]);
-  const format = turf.ground_format?.trim();
+  // The format the page's Format row shows (TurfDetails: formats first,
+  // ground_format only without them), and only side counts ("7-a-side"):
+  // "box cricket" is in the type already.
+  const sides = (turf.formats ?? []).map((f) => formatLabel(f)).filter((f) => /^\d+-a-side$/i.test(f));
+  const format = turf.formats?.length ? [...new Set(sides)].join(" / ") : turf.ground_format?.trim();
   if (format && format.length <= 12) optional.push(["extra", format]);
   if (photos.length >= MIN_PHOTOS_TO_QUOTE) optional.push(["fact", `${photos.length} photos`]);
 

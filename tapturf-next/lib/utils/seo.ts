@@ -19,6 +19,8 @@ export interface TurfJsonLdExtra {
   reviewStats?: ReviewSummary | null;
   /** turf_page reviews: the latest 20 live ones, TapTurf's and Google's. */
   reviews?: readonly ReviewWithUser[] | null;
+  /** Accounts that manage the turf (turfs.owner_id): their reports never reach the markup. */
+  managerIds?: readonly string[] | null;
 }
 
 /** The page's Call and WhatsApp buttons, for templates that name the channel. */
@@ -51,11 +53,20 @@ export function generateTurfJsonLd(turf: Turf, extra: TurfJsonLdExtra = {}) {
   // Google Maps rating (turf.rating, total_reviews) is never marked up.
   // From AGGREGATE_RATING_MIN_REPORTS live reports on, the same count and
   // average the page's TapTurf score shows (no turf had 5 on 28 Oct).
+  //
+  // review_save refuses a report from an account that manages the turf,
+  // but one written before the claim stays live, and turf_page counts it
+  // in review_stats. While such a report is among the reviews, the count
+  // and average include the owner's own stars: no rating markup at all
+  // (the source fix is turf_page leaving managers' reports out).
   const stats = extra.reviewStats;
-  const firstParty = stats && stats.count >= AGGREGATE_RATING_MIN_REPORTS && stats.average >= 1 && stats.average <= 5 ? stats : null;
+  const managers = new Set((extra.managerIds ?? []).filter(Boolean));
+  const managerReported = (extra.reviews ?? []).some((r) => !r.source && managers.has(r.user_id));
+  const firstParty =
+    !managerReported && stats && stats.count >= AGGREGATE_RATING_MIN_REPORTS && stats.average >= 1 && stats.average <= 5 ? stats : null;
   const ownReviews = firstParty
     ? (extra.reviews ?? [])
-        .filter((r) => !r.source && typeof r.comment === "string" && !!r.comment.trim() && r.rating >= 1 && r.rating <= 5)
+        .filter((r) => !r.source && !managers.has(r.user_id) && typeof r.comment === "string" && !!r.comment.trim() && r.rating >= 1 && r.rating <= 5)
         .slice(0, 5)
     : [];
   // Where it is, for the fallback description: area and city as the page shows them.

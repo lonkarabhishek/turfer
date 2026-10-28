@@ -21,6 +21,8 @@ export interface TurfPageData {
   turf: Turf;
   /** An owner manages this turf on myTapturf (turf_claim_status). */
   claimed: boolean;
+  /** turfs.owner_id, when set: that account's reports stay out of the JSON-LD (generateTurfJsonLd). Server only. */
+  managerIds: string[];
   /** Set when this turf is its city's live Most Trending Turf. */
   trending: { city: string; tagline: string | null } | null;
   reviews: ReviewWithUser[];
@@ -58,9 +60,11 @@ export const loadTurfPage = cache(async (key: string): Promise<TurfPageData | nu
   if (!data) return null;
 
   const turf = transformTurf(data.turf);
+  const ownerId = (data.turf as { owner_id?: unknown }).owner_id;
   return {
     turf,
     claimed: data.claimed === true,
+    managerIds: typeof ownerId === "string" && ownerId ? [ownerId] : [],
     trending: trendingFor(data.trending, turf.city),
     reviews: shapeReviews(data.reviews),
     reviewStats: shapeReviewStats(data.review_stats),

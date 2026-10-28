@@ -56,13 +56,15 @@ export const TWITTER_CARD = { card: "summary_large_image" } as const satisfies N
 export const AGGREGATE_RATING_MIN_REPORTS = 5;
 
 /**
- * The day the search templates (titles, descriptions, JSON-LD) last
+ * When the search templates (titles, descriptions, JSON-LD) last
  * changed. The sitemap gives turf, city, sport and blog pages at least
- * this lastmod, so Google fetches every page whose head changed. Set it
- * to the day the change goes live, and bump it when the templates
- * change again.
+ * this lastmod, so Google fetches every page whose head changed. In the
+ * commit that merges the change into main, set it to that moment as a
+ * full timestamp (not the day: midnight comes before every crawl that
+ * day saw the old head), never a time in the future, and bump it the
+ * same way whenever the templates change again.
  */
-export const SEO_TEMPLATE_DATE = "2026-10-28T00:00:00+05:30";
+export const SEO_TEMPLATE_DATE = "2026-10-28T16:30:00+05:30";
 
 /** The openGraph fields every page repeats (a page's openGraph replaces the layout's). */
 export const OG_BASE = { siteName: SITE_NAME, locale: "en_IN", type: "website" } as const;

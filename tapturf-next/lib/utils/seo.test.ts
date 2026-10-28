@@ -94,6 +94,19 @@ test("from 5 live TapTurf reports: their average and count, and up to 5 of their
   assert.equal(rv[0].reviewRating.ratingValue, 4);
 });
 
+test("an owner's own report keeps the turf's stars out of the markup (review_save refuses new ones, older ones stay live)", () => {
+  const owner = "owner-account";
+  const reviews = [review(1, { user_id: owner, rating: 5, comment: "Best turf in town" }), review(2), review(3), review(4), review(5)];
+  const stats = { count: 5, average: 4.0, histogram: [0, 0, 0, 4, 1] as [number, number, number, number, number] };
+  const ld = generateTurfJsonLd(turf(), { reviewStats: stats, reviews, managerIds: [owner] }) as Record<string, unknown>;
+  assert.equal("aggregateRating" in ld, false);
+  assert.equal("review" in ld, false);
+  // Without a manager's report the same numbers are marked up, and a manager's text never is.
+  const fine = generateTurfJsonLd(turf(), { reviewStats: stats, reviews: reviews.slice(1), managerIds: [owner] }) as Record<string, unknown>;
+  assert.equal((fine.aggregateRating as { ratingCount: number }).ratingCount, 5);
+  assert.ok((fine.review as { reviewBody: string }[]).every((r) => r.reviewBody !== "Best turf in town"));
+});
+
 test("name is the clean name, the listed one stays as alternateName", () => {
   const plain = generateTurfJsonLd(turf()) as Record<string, unknown>;
   assert.equal(plain.name, "Prime Turf");

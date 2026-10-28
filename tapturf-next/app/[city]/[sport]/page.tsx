@@ -17,6 +17,8 @@ import { fitFontSize } from "@/lib/utils/fitText";
 import { busiestAreas, citySportDescription, citySportTitle, listingOgImage } from "@/lib/seo/listingMeta";
 import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { listingReach, reachOf } from "@/lib/seo/turfFacts";
+import { getTurfFacts } from "@/lib/queries/turfFacts";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -59,12 +61,15 @@ export async function generateMetadata({
   const { sport: s, turfs } = data;
   const cityLabel = labelFor(data.city);
   const stats = sportCityStats(turfs);
+  // Which of them show timings, photos or a number to call (a day-long copy).
+  const reach = listingReach(turfs, reachOf(await getTurfFacts()));
   const lower = s.name.toLowerCase();
   const word = venueWord(s, 1);
   const url = `https://www.tapturf.in/${data.city}/${s.slug}`;
   // Counts from the rows; no price range in the snippet (QUOTE_CITY_PRICE_RANGE):
   // some listed rates look per player rather than per hour (data team checking).
   const facts = {
+    ...reach,
     cityLabel,
     sport: s,
     count: stats.count,

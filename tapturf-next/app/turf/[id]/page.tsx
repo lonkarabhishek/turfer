@@ -10,7 +10,9 @@ import { loadTurfPage } from "@/lib/queries/turfPage";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { playerPriceRange, positivePrice, priceRangeText, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone, turfContact } from "@/lib/utils/seo";
-import { turfMeta } from "@/lib/seo/turfMeta";
+import { normPlace, turfMeta } from "@/lib/seo/turfMeta";
+import { sharedNameKey } from "@/lib/seo/turfFacts";
+import { getTurfFacts, sharedNameSet } from "@/lib/queries/turfFacts";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { googleMapsUrl, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
 import { areaFor } from "@/lib/utils/area";
@@ -63,8 +65,10 @@ export async function generateMetadata({
   // Title, description and share card from the turf's own facts
   // (lib/seo/turfMeta.ts): the listed prices, hours, photos, Google
   // rating and TapTurf player reports, and only the contact channels
-  // the page shows.
-  const meta = turfMeta({ turf, contact: turfContact(turf), reports: page.reviewStats });
+  // the page shows. A name another turf in the city shares keeps its
+  // area in the title (a day-long copy of the names, lib/queries/turfFacts.ts).
+  const nameShared = sharedNameSet(await getTurfFacts()).has(sharedNameKey(turf.name, isCity(turf.city) ? turf.city : null));
+  const meta = turfMeta({ turf, contact: turfContact(turf), reports: page.reviewStats, nameShared });
   const cityLabel = meta.cityLabel;
   const area = areaFor(turf);
 
@@ -159,7 +163,7 @@ export default async function TurfDetailPage({
 
   return (
     <div className="has-bottom-cta">
-      <TurfJsonLd turf={turf} reviewStats={page.reviewStats} reviews={page.reviews} />
+      <TurfJsonLd turf={turf} reviewStats={page.reviewStats} reviews={page.reviews} managerIds={page.managerIds} />
       <NoteInterest city={turf.city} sports={turf.sports} turfId={turf.id} />
 
       {/* Breadcrumb */}
@@ -225,7 +229,8 @@ export default async function TurfDetailPage({
             <span className="text-cream-400">·</span>
             <span className="text-primary-500 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" />
-              {meta.name !== listedName ? `${listedName}, ${turf.address}` : turf.address}
+              {/* The listed name only when the H1 dropped or changed words, not just their case. */}
+              {normPlace(meta.name) !== normPlace(listedName) ? `${listedName}, ${turf.address}` : turf.address}
             </span>
           </div>
 

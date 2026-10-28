@@ -68,3 +68,15 @@ test("a whole-week schedule stored under every day claims no hours (3 turfs, 28 
   // A plain range under its own day still parses.
   assert.equal(dailyHoursSummary(week("5 AM–11 PM", (d) => d.toLowerCase())), "Open 5:00 AM – 11:00 PM daily");
 });
+
+test("a whole day stored as '12 AM–12 AM' is marked up 00:00 to 23:59, as the page says 'Open 24 hours' (2 turfs, 28 Oct)", () => {
+  const oh = week("12 AM–12 AM", (d) => d.toLowerCase());
+  const fallback = { start_time: "00:00:00", end_time: "00:00:00", is_24x7: false };
+  assert.equal(dailyHoursSummary(oh, fallback), "Open 24 hours");
+  const spec = openingHoursJsonLd(oh, fallback);
+  assert.equal(spec?.length, 7);
+  assert.ok(spec!.every((s) => s.opens === "00:00" && s.closes === "23:59"), JSON.stringify(spec));
+  // A span that only ends at midnight keeps its hours; "Open 24 hours" stays 00:00 to 23:59.
+  assert.deepEqual(openingHoursJsonLd(week("6 AM–12 AM", (d) => d.toLowerCase()))?.[0], { "@type": "OpeningHoursSpecification", dayOfWeek: "Monday", opens: "06:00", closes: "00:00" });
+  assert.deepEqual(openingHoursJsonLd(week("Open 24 hours", (d) => d.toLowerCase()))?.[0], { "@type": "OpeningHoursSpecification", dayOfWeek: "Monday", opens: "00:00", closes: "23:59" });
+});

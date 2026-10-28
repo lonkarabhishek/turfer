@@ -178,11 +178,15 @@ export function openingHoursJsonLd(
   for (const row of rows) {
     if (row.closed) continue;
     for (const span of row.spans) {
+      // A whole day stored as "12 AM–12 AM" (00:00-00:00) reads as closed
+      // to Google: an open-all-day span is 00:00 to 23:59, as the page's
+      // "Open 24 hours" says.
+      const allDay = isAllDaySpan(span);
       specs.push({
         "@type": "OpeningHoursSpecification",
         dayOfWeek: row.day,
-        opens: span.opens,
-        closes: span.closes,
+        opens: allDay ? "00:00" : span.opens,
+        closes: allDay ? "23:59" : span.closes,
       });
     }
   }
