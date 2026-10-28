@@ -67,8 +67,10 @@ export function transformTurf(raw: any): Turf {
   // duplicates, and normalizes Google / Drive links. firstImageUrl does
   // the same for the cover, so an app's cover is no cover.
   let images = convertImageUrls(rawImages);
+  let cover = firstImageUrl(raw.cover_image);
   // Photos the cover pass flagged (logos, screenshots, blur) stay in the
-  // row but never reach a card or gallery.
+  // row but never reach a card or gallery, the cover included (2 turfs
+  // on 28 Oct), so a share card never shows one either.
   if (Array.isArray(raw.image_review)) {
     const bad = new Set(
       (raw.image_review as { url?: string; usable?: boolean }[])
@@ -78,6 +80,7 @@ export function transformTurf(raw: any): Turf {
     if (bad.size) {
       const kept = images.filter((u) => !bad.has(u));
       if (kept.length) images = kept;
+      if (cover && kept.length && (bad.has(cover) || bad.has(raw.cover_image))) cover = null;
     }
   }
 
@@ -102,7 +105,7 @@ export function transformTurf(raw: any): Turf {
     sports,
     amenities,
     images,
-    cover_image: firstImageUrl(raw.cover_image),
+    cover_image: cover,
     signboard_image: firstImageUrl(raw.signboard_image),
     entry_parking_image: firstImageUrl(raw.entry_parking_image),
     contact_info: contactInfo || null,

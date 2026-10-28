@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { TOOLS, TOOLS_BASE, toolPath, type ToolDef } from "@/lib/tools/registry";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 export type Faq = { q: string; a: string };
 export type Explainer = { title: string; body: ReactNode };
@@ -51,7 +52,7 @@ export function ToolPage({ tool, intro, children, explainer, faq, compact = fals
 
   return (
     <article className={`max-w-3xl mx-auto px-4 sm:px-6 ${compact ? "pt-3 pb-6 sm:py-6" : "py-6"} md:py-10`}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
 
       <nav aria-label="Breadcrumb" className={`text-[13px] text-primary-500 ${compact ? "mb-2 sm:mb-4" : "mb-4"} flex items-center gap-1`}>
         <Link href="/tools" className="hover:text-primary-900">

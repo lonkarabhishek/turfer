@@ -48,3 +48,23 @@ test("{daily} and the start/end fallback still work", () => {
   assert.equal(normaliseOpeningHours(null, { start_time: "00:00:00", end_time: "23:59:00" }).length, 0);
   assert.equal(dailyHoursSummary(null, { start_time: null, end_time: null, is_24x7: true }), "Open 24 hours");
 });
+
+test("a whole-week schedule stored under every day claims no hours (3 turfs, 28 Oct)", () => {
+  for (const s of [
+    "Weekdays: 6 PM–10 PM :: Saturday: 12 PM–10 PM :: Sunday: 8 AM–10 PM", // elite-sports-academy-uttarahalli-hobli
+    "Mon–Fri: 5 AM–11 PM, Sat & Sun: 5 AM–1 AM", // royal-turf-pavilion-kadugondanahalli
+    "Mon–Sat: 3 PM–5 PM & 7 PM–10 PM, Sunday: 10 AM–10 PM", // don-bosco-futsal-turf-panaji
+  ]) {
+    const oh = week(s, (d) => d.toLowerCase());
+    const fallback = { start_time: "18:00:00", end_time: "22:00:00" };
+    const rows = normaliseOpeningHours(oh, fallback);
+    // The page still shows the text for each day...
+    assert.equal(rows.length, 7);
+    assert.ok(rows.every((r) => r.raw === s && !r.closed && r.spans.length === 0));
+    // ...but no snippet line and no OpeningHoursSpecification.
+    assert.equal(dailyHoursSummary(oh, fallback), null);
+    assert.equal(openingHoursJsonLd(oh, fallback), null);
+  }
+  // A plain range under its own day still parses.
+  assert.equal(dailyHoursSummary(week("5 AM–11 PM", (d) => d.toLowerCase())), "Open 5:00 AM – 11:00 PM daily");
+});

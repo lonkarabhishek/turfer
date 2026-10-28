@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateBreadcrumbJsonLd, generateTurfJsonLd } from "./seo";
 import { AGGREGATE_RATING_MIN_REPORTS } from "../seo/defaults";
+import { jsonLdHtml } from "../seo/jsonLd";
 import type { Turf } from "../../types/turf";
 import type { ReviewWithUser } from "../../types/review";
 
@@ -134,4 +135,21 @@ test("breadcrumb: Home › City › name", () => {
   );
   const noCity = generateBreadcrumbJsonLd(turf({ city: null }));
   assert.equal(noCity.itemListElement[1].item, "https://www.tapturf.in/turfs");
+});
+
+test("a player's '</script>' in a review or name cannot close the ld+json tag", () => {
+  const evil = "Great turf</script><script>alert(document.cookie)</script> & <!--";
+  const reviews = [1, 2, 3, 4, 5].map((i) => review(i, { comment: evil, user_name: `P${i}</script><img src=x onerror=alert(1)>` }));
+  const ld = generateTurfJsonLd(turf({ description: "Floodlit </script> turf" }), { reviewStats: { count: 5, average: 4, histogram: [0, 0, 0, 5, 0] }, reviews });
+  const html = jsonLdHtml(ld);
+  // No raw "<", ">" or "&" at all, so no tag can open or close inside the script.
+  assert.equal(/[<>&]/.test(html), false);
+  // The JSON Google reads is the same value.
+  assert.deepEqual(JSON.parse(html), JSON.parse(JSON.stringify(ld)));
+  const rv = (JSON.parse(html) as { review: { reviewBody: string; author: { name: string } }[] }).review;
+  assert.equal(rv[0].reviewBody, evil);
+  assert.equal(rv[1].author.name, "P2</script><img src=x onerror=alert(1)>");
+  assert.equal(JSON.parse(jsonLdHtml({ s: "a\u2028b" })).s, "a\u2028b");
+  assert.equal(jsonLdHtml({ s: "a\u2028b" }).includes("\u2028"), false);
+  assert.equal(jsonLdHtml(undefined), "null");
 });

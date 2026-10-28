@@ -5,6 +5,7 @@ import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
 import { isGameExpired } from "@/lib/utils/game";
 import { gameDates } from "@/lib/seo/gameDates";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 export const revalidate = 60;
 
@@ -122,7 +123,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
         />
       )}
       {/* The live link copy only when live links are set up (LIVE_WRITE_KEY is server-only). */}

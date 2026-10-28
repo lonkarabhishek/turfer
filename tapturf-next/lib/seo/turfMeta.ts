@@ -19,7 +19,7 @@ import { CITY_ALIASES, guessCityFromAddress, isCity, labelFor } from "../city";
 import { courtType, sportPageForLabel } from "../sports";
 import { areaFor } from "../utils/area";
 import { dailyHoursSummary, normaliseOpeningHours } from "../utils/hours";
-import { turfPhotos } from "../utils/images";
+import { orderPhotos, turfPhotos } from "../utils/images";
 import { priceUnitSuffix, showsPriceBands, summarisePagePrice } from "../utils/prices";
 import { DEFAULT_OG_IMAGE } from "./defaults";
 import { DESCRIPTION_MAX_CHARS, titleFits, truncateWords } from "./width";
@@ -28,14 +28,16 @@ import { DESCRIPTION_MAX_CHARS, titleFits, truncateWords } from "./width";
 
 /** Sport and "turf" padding that says nothing about which venue this is. */
 const FILLER =
-  /^(?:box\s*cricket|cricket(?:\s*box)?|football(?:\s*academy)?|pickle\s*ball|pickleball|badminton|turf|turfs|sports?|arena|ground|academy|multi\s*sports?|etc\.?|&|and|,|\s)+$/i;
+  /^(?:box\s*cricket|cricket(?:\s*box)?|football(?:\s*academy)?|futsal|pickle\s*ball|pickleball|badminton|turf|turfs|sports?|arena|ground|academy|multi\s*sports?|etc\.?|&|and|,|\s)+$/i;
+/** Words a " - " part may also carry and still be padding ("The Multisports Turf", "Best Turf in Thane"). */
+const PAD_WORDS = new Set(["the", "a", "an", "in", "best", "first"]);
 const EMOJI = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu;
 /** All-caps words of 3 letters or fewer stay capitals (AMR, FC, KSR), except these ordinary words. */
 const SHORT_WORDS = new Set(["THE", "AND", "FOR", "OF", "BOX", "NET", "PRO", "ONE", "TOP", "ACE", "HUB"]);
 /** Connecting words that read lower case inside a title-cased name. */
 const SMALL_WORDS = new Set(["and", "of", "for", "the"]);
 /** Vowel-less 2-3 letter words that are abbreviations, not initials. */
-const NOT_INITIALS = new Set(["st", "dr", "mr", "mrs", "rd", "no", "ltd", "pvt", "sq"]);
+const NOT_INITIALS = new Set(["st", "dr", "mr", "mrs", "rd", "no", "ltd", "pvt", "sq", "ch"]);
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -63,10 +65,11 @@ export function cityNames(cityId: string | null): string[] {
 }
 
 function unShout(name: string): string {
-  const letters = name.replace(/[^A-Za-z]/g, "");
+  const letters = name.replace(/[^\p{L}]/gu, "");
   if (letters.length < 8 || letters !== letters.toUpperCase()) return name;
   let first = true;
-  return name.replace(/[A-Za-z]+/g, (w) => {
+  // Letters in any script, so "CAFÉ" reads "Café", not "CAFÉ".
+  return name.replace(/\p{L}+/gu, (w) => {
     const out =
       w.length <= 3 && !SHORT_WORDS.has(w)
         ? w
@@ -78,9 +81,9 @@ function unShout(name: string): string {
   });
 }
 
-/** "Jk" -> "JK": a short word with no vowel is someone's initials. */
+/** "Jk" -> "JK": a short word with no vowel (y counts as one: Sky, My, By, Fly) is someone's initials. */
 function fixInitials(s: string): string {
-  return s.replace(/\b[B-DF-HJ-NP-TV-Zb-df-hj-np-tv-z]{2,3}\b/g, (w) =>
+  return s.replace(/\b[B-DF-HJ-NP-TV-XZb-df-hj-np-tv-xz]{2,3}\b/g, (w) =>
     NOT_INITIALS.has(w.toLowerCase()) || w === w.toLowerCase() ? w : w.toUpperCase(),
   );
 }
@@ -93,14 +96,17 @@ function fixInitials(s: string): string {
  * - " | " parts: a branch stays ("ClayGrounds | Sec 65 Gurugram" ->
  *   "ClayGrounds Sec 65"), a part that is only the city or sport words goes;
  * - brackets: a place stays ("(Gandhi Bhavan)"), sport words or the city go;
- * - a " - " part of sport words plus at most the area goes ("THE TOWN
- *   CRICKET TURF - BOX CRICKET TURF Jagatpura" -> "The Town Cricket Turf");
+ * - a " - " part of sport words plus at most the area or city goes ("THE
+ *   TOWN CRICKET TURF - BOX CRICKET TURF Jagatpura" -> "The Town Cricket
+ *   Turf"), never a name ("Football Turf Thane - Strikers Arena" stays),
+ *   and never when the part before it is itself only sport words and a
+ *   place ("Jaipur Futsal - Jaipur Football Academy" stays);
  * - "Best turf in ..." padding and a trailing sport list go;
  * - an all-caps name is title-cased, keeping short capitals (AMR, FC);
  *   vowel-less short words become initials ("Jk" -> "JK").
  * The database keeps the original; the data team cleans names separately.
  */
-export function seoName(raw: string, cityId: string | null): string {
+export function seoName(raw: string, cityId: string | null, area?: string | null): string {
   let s = raw ?? "";
   const cut = s.search(/[\p{Extended_Pictographic}!]/u);
   if (cut > 0 && s.slice(0, cut).trim().split(/\s+/).length >= 2) s = s.slice(0, cut);
@@ -120,10 +126,23 @@ export function seoName(raw: string, cityId: string | null): string {
     return !t || FILLER.test(t) || isCityOnly(t) ? "" : ` (${t})`;
   });
 
-  s = s.replace(/\s+[-–]\s+(.+)$/, (m, seg: string) => {
+  // The words of the area and the city's names; what is left of a part
+  // without them and PAD_WORDS ("" when it was only those).
+  const placeWords = new Set([displayArea(area) ?? "", ...cities].flatMap((p) => normPlace(p).split(" ")).filter(Boolean));
+  const withoutPlace = (t: string) =>
+    normPlace(t)
+      .split(" ")
+      .filter((w) => w && !placeWords.has(w) && !PAD_WORDS.has(w))
+      .join(" ");
+  s = s.replace(/^(.*?)\s+[-–]\s+(.+)$/, (m, before: string, seg: string) => {
     const words = seg.trim().split(/\s+/);
     const fill = words.filter((w) => FILLER.test(w)).length;
-    return fill >= Math.ceil(words.length / 2) && words.length - fill <= 2 ? "" : m;
+    const mostlyFiller = fill >= Math.ceil(words.length / 2) && words.length - fill <= 2;
+    // The other words must be the area, the city or PAD_WORDS, and the
+    // part before must name the venue by itself.
+    const rest = withoutPlace(seg);
+    const head = withoutPlace(before);
+    return mostlyFiller && rest && FILLER.test(rest) && head && !FILLER.test(head) ? before : m;
   });
 
   s = s
@@ -245,7 +264,7 @@ const MIN_PHOTOS_TO_QUOTE = 3;
 export function turfMeta({ turf, contact, reports }: TurfMetaInput): TurfMeta {
   const cityId = isCity(turf.city) ? turf.city : guessCityFromAddress(turf.address);
   const cityLabel = cityId ? labelFor(cityId) : null;
-  const name = seoName(turf.name, cityId);
+  const name = seoName(turf.name, cityId, areaFor(turf));
   const place = placeFor(name, areaFor(turf), cityId);
 
   // The page's own Pricing table (bands when it lists them); reported or
@@ -259,7 +278,9 @@ export function turfMeta({ turf, contact, reports }: TurfMetaInput): TurfMeta {
   const fallback = { start_time: turf.start_time, end_time: turf.end_time, is_24x7: turf.is_24x7 };
   const hours = dailyHoursSummary(turf.opening_hours, fallback);
   const hasTimings = normaliseOpeningHours(turf.opening_hours, fallback).length > 0;
-  const photos = turfPhotos(turf);
+  // Counted from what the gallery shows (orderPhotos of images); the
+  // share card still leads with the cover.
+  const photos = orderPhotos(turf.images ?? []);
   const googleOk = Number(turf.total_reviews) >= MIN_GOOGLE_REVIEWS_TO_QUOTE && Number(turf.rating) > 0;
   const reportCount = reports && reports.count > 0 ? reports.count : 0;
 
@@ -334,7 +355,7 @@ export function turfMeta({ turf, contact, reports }: TurfMetaInput): TurfMeta {
   let description = build(chosen, shape);
   if (description.length > DESCRIPTION_MAX_CHARS) description = `${truncateWords(description, DESCRIPTION_MAX_CHARS - 1)}.`;
 
-  const first = photos[0];
+  const first = turfPhotos(turf)[0];
   const alt = place.full ? `${name}, ${place.full}` : name;
   const ogImage = first ? { url: first, alt } : { ...DEFAULT_OG_IMAGE };
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Activity, Calculator, Coins, ImageIcon, ListOrdered, Tally5, Users } from "lucide-react";
 import { TOOLS, TOOLS_BASE, toolPath, type ToolSlug } from "@/lib/tools/registry";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 // 59 characters, about 541px: the whole title shows on a phone and a desktop.
 const TITLE = "Free Cricket Tools: Live Scorer, NRR, Toss & More | TapTurf";
@@ -43,7 +44,7 @@ export default function ToolsHub() {
   };
   return (
     <section className="max-w-3xl mx-auto px-4 sm:px-6 py-8 md:py-14">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       <header className="mb-8">
         <p className="text-[11px] font-bold tracking-[0.14em] uppercase text-accent-600">Free</p>
         <h1 className="font-display tracking-tight text-primary-900 text-3xl sm:text-4xl md:text-5xl leading-[1.05] mt-2">Turf Tools in a Tap!</h1>

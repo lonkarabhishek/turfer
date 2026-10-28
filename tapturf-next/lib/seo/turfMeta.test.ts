@@ -109,14 +109,25 @@ for (const r of PROTOTYPE_ROWS) {
 // ── names ──
 
 test("seoName keeps what identifies the venue and drops the padding", () => {
-  const cases: [string, string | null, string][] = [
+  // [stored name, city, seoName, area (areaFor)]
+  const cases: [string, string | null, string, string?][] = [
     ["Bellator Sports Arena 🏟️ Cricket box ! pickleball !Football academy", "gurgaon", "Bellator Sports Arena"],
     ["24/7 Sports Club & Turf", "indore", "24/7 Sports Club & Turf"],
     ["Hatrics Football/Cricket Turf Thane", "mumbai", "Hatrics Football/Cricket Turf Thane"],
     ["AMRUTHA SPORTS ARENA A/C", "hyderabad", "Amrutha Sports Arena A/C"],
     ["ZESTO FOOTBALL TURF", "pune", "Zesto Football Turf"],
     ["Smash TO PLAY Bangalore", "bangalore", "Smash TO PLAY Bangalore"],
-    ["THE TOWN CRICKET TURF - BOX CRICKET TURF Jagatpura", "jaipur", "The Town Cricket Turf"],
+    ["THE TOWN CRICKET TURF - BOX CRICKET TURF Jagatpura", "jaipur", "The Town Cricket Turf", "Jagatpura"],
+    // A " - " part goes only when it is sport words plus the area or city, never a name.
+    ["Football Turf Thane - Strikers Arena", "mumbai", "Football Turf Thane - Strikers Arena", "Kolshet"],
+    ["Proplay - Playpoint Sports Arena", "bangalore", "Proplay - Playpoint Sports Arena", "Gangondanahalli"],
+    // ...and never when the part before it is only sport words and a place.
+    ["Jaipur Futsal - Jaipur Football Academy", "jaipur", "Jaipur Futsal - Jaipur Football Academy", "Narayan Vihar"],
+    ["Kridabhumi - The Multisports Turf", "nashik", "Kridabhumi", "Dwarka"],
+    ["COCO - TURF & CAFÉ", "bangalore", "Coco - Turf & Café", "Horamavu"],
+    ["Sports Zone Shimoga - First/Best Turf", "shivamogga", "Sports Zone Shimoga", "Malligena Halli"],
+    ["The Turf - Cricket Pitch/Ground", "amritsar", "The Turf - Cricket Pitch/Ground", "Nanngli"],
+    ["Apollo Turf - Best Turf in Thane", "mumbai", "Apollo Turf", "Kalwa"],
     ["ClayGrounds | Deep VK", "gurgaon", "ClayGrounds Deep VK"],
     ["ClayGrounds | Sec 65 Gurugram", "gurgaon", "ClayGrounds Sec 65"],
     ["Premier League Park | Delhi", "delhi", "Premier League Park"],
@@ -136,8 +147,14 @@ test("seoName keeps what identifies the venue and drops the padding", () => {
     ["SPORTS AND FITNESS HUB", null, "Sports and Fitness Hub"],
     ["KSR FC ARENA", "bangalore", "KSR FC Arena"],
     ["🏏 Cricket Hub", null, "Cricket Hub"],
+    // y is a vowel: ordinary words are not initials.
+    ["KV Sky Turf", "bangalore", "KV Sky Turf"],
+    ["My Cricket Box", "pune", "My Cricket Box"],
+    ["Fly High Sports Arena Turf", "pune", "Fly High Sports Arena Turf"],
+    ["008 Ultimate powerplay Turf By Fabzia", "mumbai", "008 Ultimate powerplay Turf By Fabzia"],
+    ["Ch. Mange Ram Box Cricket", "delhi", "Ch. Mange Ram Box Cricket"],
   ];
-  for (const [raw, city, want] of cases) assert.equal(seoName(raw, city), want, raw);
+  for (const [raw, city, want, area] of cases) assert.equal(seoName(raw, city, area), want, raw);
 });
 
 test("displayArea: the first part, no brackets, no 'opposite'", () => {

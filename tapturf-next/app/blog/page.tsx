@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getSortedPosts } from "@/content/blog";
 import { PostCard } from "@/components/blog/PostCard";
 import { DEFAULT_OG_IMAGE, OG_BASE, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 export const revalidate = 3600;
 
@@ -70,7 +71,7 @@ export default async function BlogIndexPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 md:py-14">

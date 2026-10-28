@@ -76,6 +76,10 @@ function to24h(hStr: string, minStr: string | undefined, mer: string | undefined
   return `${String(h % 24).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
+/** A per-day value that names days or has several day-scoped parts ("::"). */
+const NAMES_DAYS =
+  /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun|week\s*days?|week\s*ends?)\b|::/i;
+
 /**
  * Turn the DB opening_hours jsonb into a per-day list (Mon…Sun).
  * When the value is `{daily: "..."}` every day gets the same parse.
@@ -117,6 +121,13 @@ export function normaliseOpeningHours(
     for (const day of DAYS) {
       const raw = perDay.get(day.toLowerCase());
       if (typeof raw !== "string") continue;
+      // A whole-week schedule stored under a day ("Mon–Fri: 5 AM–11 PM,
+      // Sat & Sun: 5 AM–1 AM", 3 turfs on 28 Oct): its ranges belong to
+      // other days, so the day shows the text and claims no hours.
+      if (NAMES_DAYS.test(raw)) {
+        rows.push({ day, raw, closed: false, spans: [] });
+        continue;
+      }
       const parsed = parseHoursString(raw);
       rows.push({ day, raw, closed: parsed.closed, spans: parsed.spans });
     }

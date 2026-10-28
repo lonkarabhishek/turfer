@@ -19,6 +19,7 @@ import { AskPageContext } from "@/components/ask/AskPageContext";
 import { labelFor } from "@/lib/city";
 import { blogSeoDescription, blogSeoTitle, blogShareImage } from "@/lib/seo/blogMeta";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 export const revalidate = 3600;
 export const dynamicParams = false;
@@ -161,16 +162,16 @@ export default async function BlogPostPage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(blogJsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(breadcrumbJsonLd) }}
       />
       {faqJsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(faqJsonLd) }}
         />
       )}
 

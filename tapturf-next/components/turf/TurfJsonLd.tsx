@@ -1,6 +1,7 @@
 import type { Turf } from "@/types/turf";
 import type { ReviewSummary, ReviewWithUser } from "@/types/review";
 import { generateTurfJsonLd, generateBreadcrumbJsonLd } from "@/lib/utils/seo";
+import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 export function TurfJsonLd({
   turf,
@@ -19,11 +20,11 @@ export function TurfJsonLd({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(turfSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(turfSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(breadcrumbSchema) }}
       />
     </>
   );
