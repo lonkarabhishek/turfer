@@ -108,6 +108,15 @@ export type OwnerTurf = {
   surface_type: string | null;
   formats: string[] | null;
   whatsapp_phone: string | null;
+  /**
+   * The numbers the Call button picks from, first dialable one wins (lib/my/numbers.ts
+   * shownCallNumber). From 20261028_owner_call_number.sql, missing on an older database,
+   * where the editor shows no call field.
+   */
+  owner_phone?: string | null;
+  landline_phone?: string | null;
+  /** contact_info.phone */
+  contact_phone?: string | null;
 };
 /** One of the latest reviews on /my: a TapTurf report (with its scorecard) or a Google review. */
 export type OwnerRecentReview = {

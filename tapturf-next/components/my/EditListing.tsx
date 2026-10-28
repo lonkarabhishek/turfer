@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { ownerRpc, refreshTurfPage, type OwnerTurf } from "@/lib/my/client";
+import { numberInput, numberKind, numberPatch, saveMessage, shownCallNumber, type NumberField, type SaveError } from "@/lib/my/numbers";
 import { formatLabel } from "@/lib/utils/formats";
 
 type Flag = "has_floodlights" | "is_covered" | "parking_available" | "washroom_available" | "changing_room_available" | "has_cafeteria" | "has_drinking_water" | "equipment_provided";
@@ -38,6 +39,8 @@ type Form = {
   surface_type: string;
   description: string;
   whatsapp_phone: string;
+  /** The number the Call button dials; undefined on an older database, which can't save it. */
+  owner_phone?: string;
 };
 
 function fromTurf(t: OwnerTurf): Form {
@@ -60,15 +63,16 @@ function fromTurf(t: OwnerTurf): Form {
     number_of_grounds: t.number_of_grounds ? String(t.number_of_grounds) : "",
     surface_type: t.surface_type ?? "",
     description: t.description ?? "",
-    whatsapp_phone: t.whatsapp_phone?.replace(/^\+91/, "") ?? "",
+    whatsapp_phone: numberInput(t.whatsapp_phone),
+    ...("owner_phone" in t ? { owner_phone: numberInput(shownCallNumber(t)) } : {}),
   };
 }
 
-/** Only what changed, in the shape owner_update_turf takes. */
+/** Only what changed, in the shape owner_update_turf takes (numbers: numberPatch). */
 function diff(a: Form, b: Form): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(b.prices) as PriceKey[]) if (a.prices[k] !== b.prices[k]) out[k] = b.prices[k];
-  for (const k of ["start_time", "end_time", "closed_days", "number_of_grounds", "surface_type", "description", "whatsapp_phone"] as const)
+  for (const k of ["start_time", "end_time", "closed_days", "number_of_grounds", "surface_type", "description"] as const)
     if (a[k] !== b[k]) out[k] = b[k];
   if (a.is_24x7 !== b.is_24x7) out.is_24x7 = b.is_24x7;
   for (const [k] of FLAGS) if (a.flags[k] !== b.flags[k]) out[k] = b.flags[k];
@@ -83,29 +87,34 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   const [f, setF] = useState<Form>(base);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [msg, setMsg] = useState("");
-  const changes = diff(base, f);
-  const dirty = Object.keys(changes).length > 0;
+  // What the last refused save was about: the field to mark, and whether only the numbers were held.
+  const [refused, setRefused] = useState<SaveError | null>(null);
+  const rest = diff(base, f);
+  const numbers = numberPatch(base, f);
+  const typedNumbers = (["owner_phone", "whatsapp_phone"] as const).filter((k) => f[k] !== undefined && f[k] !== base[k]);
+  // A number typed another way is no change; one that isn't a number yet still counts, so Save can say so.
+  const count = Object.keys(rest).length + (numbers.error ? typedNumbers.length : Object.keys(numbers.patch).length);
+  const dirty = count > 0;
+
+  const fail = (r: SaveError) => {
+    setState("error");
+    setRefused(r);
+    setMsg(saveMessage(r));
+  };
 
   const save = async () => {
+    if (numbers.error) return fail(numbers.error);
     setState("saving");
     try {
-      const r = await ownerRpc<{ ok?: boolean; error?: string; field?: string }>("owner_update_turf", { p_turf_id: turf.id, p_patch: changes });
-      if (!r.ok) {
-        setState("error");
-        setMsg(
-          r.error === "bad_value"
-            ? `Check ${r.field?.replace(/_/g, " ")}: that value doesn't look right.`
-            : r.error === "held"
-              ? "You can change the WhatsApp number two weeks after you got in. If it's urgent, email info@tapturf.in."
-              : "Couldn't save. Sign in again and retry.",
-        );
-        return;
-      }
+      const r = await ownerRpc<{ ok?: boolean; error?: string; field?: string }>("owner_update_turf", { p_turf_id: turf.id, p_patch: { ...rest, ...numbers.patch } });
+      if (!r.ok) return fail({ error: r.error ?? "unknown", field: r.field });
       await refreshTurfPage(turf.id);
       setState("saved");
+      setRefused(null);
       onSaved();
     } catch {
       setState("error");
+      setRefused(null);
       setMsg("Couldn't save. Check your connection and try again.");
     }
   };
@@ -113,7 +122,17 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
     setF((x) => ({ ...x, [k]: v }));
     setState("idle");
+    setRefused(null);
   };
+  // Held over a number field: put the numbers back as they were, keep the rest of the changes.
+  // (Held over a phone number in the text: the owner takes it out; Undo undoes everything.)
+  const undoNumbers = () => {
+    setF((x) => ({ ...x, whatsapp_phone: base.whatsapp_phone, owner_phone: base.owner_phone }));
+    setState("idle");
+    setRefused(null);
+  };
+  const badField: NumberField | null = refused && (refused.error === "bad_value" || refused.error === "held") && (refused.field === "owner_phone" || refused.field === "whatsapp_phone") ? refused.field : null;
+  const callKind = f.owner_phone !== undefined ? numberKind(f.owner_phone) : null;
 
   return (
     <section className="mt-10" id="edit">
@@ -241,33 +260,70 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
         </label>
       </Group>
 
-      <Group title="Booking contact">
-        <label className="block text-[12px] font-semibold text-primary-500">
-          WhatsApp number for bookings
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-[15px] text-primary-500">+91</span>
-            <input inputMode="tel" value={f.whatsapp_phone} onChange={(e) => set("whatsapp_phone", e.target.value.replace(/\D/g, "").slice(-10))} placeholder="10-digit mobile" className={INPUT} />
+      <Group title="Your numbers" hint="Players tap these on your TapTurf page to call or WhatsApp you.">
+        {f.owner_phone !== undefined && (
+          <div className="mb-4">
+            <label htmlFor="call-number" className="block text-[12px] font-semibold text-primary-500">Call number</label>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-[15px] text-primary-500">+91</span>
+              <input
+                id="call-number"
+                inputMode="tel"
+                autoComplete="tel-national"
+                value={f.owner_phone}
+                onChange={(e) => set("owner_phone", e.target.value.replace(/[^\d +()-]/g, "").slice(0, 20))}
+                placeholder="Mobile or landline"
+                aria-invalid={badField === "owner_phone" || undefined}
+                aria-describedby="call-number-help"
+                className={`${INPUT} ${badField === "owner_phone" ? "border-red-400 focus:border-red-500" : ""}`}
+              />
+            </div>
+            <p id="call-number-help" className="mt-1 text-[12px] text-primary-500">
+              {callKind === "landline" ? "Landline: players can call it, but not WhatsApp it." : "A mobile, or a landline with its STD code in front (like 0253 for Nashik)."}
+            </p>
           </div>
-        </label>
+        )}
+        <label htmlFor="whatsapp-number" className="block text-[12px] font-semibold text-primary-500">WhatsApp number</label>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="text-[15px] text-primary-500">+91</span>
+          <input
+            id="whatsapp-number"
+            inputMode="tel"
+            value={f.whatsapp_phone}
+            onChange={(e) => set("whatsapp_phone", e.target.value.replace(/\D/g, "").slice(-10))}
+            placeholder="10-digit mobile"
+            aria-invalid={badField === "whatsapp_phone" || undefined}
+            aria-describedby="whatsapp-number-help"
+            className={`${INPUT} ${badField === "whatsapp_phone" ? "border-red-400 focus:border-red-500" : ""}`}
+          />
+        </div>
+        <p id="whatsapp-number-help" className="mt-1 text-[12px] text-primary-500">Leave blank to use your call number, if it&rsquo;s a mobile.</p>
       </Group>
 
       {/* Sticky save bar while there are unsaved changes. */}
       <div className={`sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-4 mt-6 transition-opacity ${dirty || state !== "idle" ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-        <div className="flex items-center justify-between gap-3 rounded-2xl bg-white border border-primary-200 shadow-elevated px-4 py-3">
-          <p className="text-[14px] text-primary-700">
+        {/* A refusal gets the full width, with the buttons on their own line under it. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-2xl bg-white border border-primary-200 shadow-elevated px-4 py-3">
+          <p className={`min-w-0 text-[14px] text-primary-700 ${state === "error" ? "basis-full" : "flex-1 basis-32"}`} role={state === "error" ? "alert" : undefined}>
             {state === "saved" ? (
               <span className="inline-flex items-center gap-1 text-accent-700 font-semibold"><Check className="w-4 h-4" /> Saved. Live within a minute.</span>
             ) : state === "error" ? (
               <span className="text-red-600">{msg}</span>
             ) : (
-              <>{Object.keys(changes).length} unsaved change{Object.keys(changes).length === 1 ? "" : "s"}</>
+              <>{count} unsaved change{count === 1 ? "" : "s"}</>
             )}
           </p>
-          <div className="flex gap-2">
+          <div className="ml-auto flex gap-2 shrink-0">
             {dirty && state !== "saving" && (
-              <button type="button" onClick={() => { setF(base); setState("idle"); }} className="h-10 px-4 rounded-full text-[14px] font-semibold text-primary-600 hover:bg-primary-100 cursor-pointer">
-                Undo
-              </button>
+              refused?.error === "held" && badField ? (
+                <button type="button" onClick={undoNumbers} className="h-10 px-4 rounded-full text-[14px] font-semibold text-primary-600 hover:bg-primary-100 cursor-pointer">
+                  Undo number change
+                </button>
+              ) : (
+                <button type="button" onClick={() => { setF(base); setState("idle"); setRefused(null); }} className="h-10 px-4 rounded-full text-[14px] font-semibold text-primary-600 hover:bg-primary-100 cursor-pointer">
+                  Undo
+                </button>
+              )
             )}
             <button type="button" onClick={() => void save()} disabled={!dirty || state === "saving"} className="h-10 px-5 rounded-full bg-primary-900 text-white text-[14px] font-semibold cursor-pointer disabled:opacity-40">
               {state === "saving" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}

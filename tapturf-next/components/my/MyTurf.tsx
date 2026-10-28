@@ -145,7 +145,7 @@ export function MyTurf({ id }: { id: string }) {
           <ul className="mt-2 space-y-1 text-[13px] text-primary-600">
             {data.edits.map((e, i) => (
               <li key={i}>
-                {new Date(e.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}: {e.fields.map(fieldLabel).join(", ")}
+                {new Date(e.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}: {[...new Set((e.fields ?? []).map(fieldLabel))].join(", ")}
               </li>
             ))}
           </ul>
@@ -189,6 +189,10 @@ const LABELS: Record<string, string> = {
   number_of_grounds: "grounds",
   formats: "formats",
   whatsapp_phone: "WhatsApp number",
+  // A new call number also writes the listing's phone and empties an old landline: one change.
+  owner_phone: "call number",
+  contact_info: "call number",
+  landline_phone: "call number",
   photos_added: "new photos",
   photo_removed: "removed a photo",
   cover_image: "cover photo",

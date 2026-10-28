@@ -1,0 +1,33 @@
+{
+  "about": "Call numbers as owners type them, and the 10 digits the Call button dials (null: not a number to call). Read by lib/my/numbers.test.ts (normalizeIndianPhone, readCallNumber) and scripts/sql-tests/owner_call_number.check.mjs (private.call_phone10), so the editor and the database agree. Made-up numbers: none is on a TapTurf listing (counted 28 Oct 2026).",
+  "cases": [
+    ["9876543210", "9876543210", "mobile"],
+    ["98765 43210", "9876543210", "mobile"],
+    ["+91 98765 43210", "9876543210", "mobile"],
+    ["+91-98765-43210", "9876543210", "mobile"],
+    ["919876543210", "9876543210", "mobile"],
+    ["09876543210", "9876543210", "mobile"],
+    ["091 98765 43210", "9876543210", "mobile"],
+    ["0091 98765 43210", "9876543210", "mobile"],
+    ["6000000001", "6000000001", "mobile"],
+    ["0253 200 0123", "2532000123", "landline"],
+    ["02532000123", "2532000123", "landline"],
+    ["022-2000-4567", "2220004567", "landline"],
+    ["+91 22 2000 4567", "2220004567", "landline"],
+    ["040 2345 6789", "4023456789", "landline"],
+    ["2532000123", "2532000123", "landline"],
+    ["2000123", null, null],
+    ["20001230", null, null],
+    ["1800 123 4567", null, null],
+    ["1800-000-1234", null, null],
+    ["+1 415 555 0100", null, null],
+    ["44 20 7946 0958", null, null],
+    ["+91 0253 2000123", null, null],
+    ["0123456789", null, null],
+    ["1234567890", null, null],
+    ["98765 4321", null, null],
+    ["12345", null, null],
+    ["call me", null, null],
+    ["", null, null]
+  ]
+}
