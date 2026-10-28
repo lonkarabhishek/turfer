@@ -2,9 +2,9 @@
 -- WhatsApp number. Apply before the app code that sends owner_phone (the
 -- editor shows the call field only once owner_dashboard returns it).
 --
--- Body-only changes, same signatures, return types, settings and grants,
--- each copied from the live body (the file named above it) with the
--- changes marked (n):
+-- Body-only changes, same signatures, return types, settings and grants
+-- (turf_trusted_phones also gets cost 10000), each copied from the live
+-- body (the file named above it) with the changes marked (n):
 --   owner_update_turf, marked (3) to (6) after the two marks it already
 --     has: patch key owner_phone, a mobile or a landline with its STD code
 --     (private.call_phone10, the rules of normalizeIndianPhone in
@@ -15,16 +15,22 @@
 --     it; other keys kept, never created), landline_phone is emptied, and
 --     every old value goes into turf_edit_log.before. The 14-day hold on a
 --     claim opened with a code to someone else's number covers it too, and
---     no save may leave the turf with neither a call nor a WhatsApp number.
---     Patch keys contact_info and landline_phone stay ignored.
+--     a phone number (private.phone_runs) the description, surface or
+--     closed days did not have before, since the page shows those. No save
+--     may leave the turf with neither a call nor a WhatsApp number. Patch
+--     keys contact_info and landline_phone stay ignored.
 --   turf_trusted_phones, marked (1): contact_info.phone opens a turf at
 --     once only when an owner or a suggestion did not put it there, since
 --     it now mirrors an owner's number. Two logged histories say so: its
 --     own (owner_update_turf logs contact_info; an owner's number left in
 --     it after an approved suggestion moved owner_phone on still counts as
 --     the owner's) and owner_phone's (a suggestion logs only owner_phone,
---     and the data team copies it into contact_info by hand). On
---     2026-10-28 this took no number off any production turf.
+--     and the data team copies it into contact_info by hand; any owner_phone
+--     an owner or a suggestion ever set to it counts, unless TapTurf set it
+--     since). On 2026-10-28 this took no number off any production turf.
+--     Marked (2): cost 10000 (from 100), so owner_home's matches, which also
+--     asks _phone10 of each active turf, asks that first and this only of
+--     the turfs that list the number.
 --   owner_dashboard, marked (1): the turf also returns owner_phone,
 --     landline_phone and contact_info.phone (contact_phone), so the editor
 --     shows the number the page dials.
@@ -34,9 +40,10 @@
 --     number the Call button dialled before (owner_phone, then
 --     contact_info.phone, then landline_phone: the first it can dial), and
 --     a listing phone holding another mobile that a save replaced is its
---     own change (field contact_phone).
--- One new helper, private.call_phone10. Written without the destructive
--- SQL keywords. Safe to run again.
+--     own change (field contact_phone). Older changes an owner made from
+--     the number the claimant gave are listed too, beyond the 5.
+-- Two new helpers, private.call_phone10 and private.phone_runs. Written
+-- without the destructive SQL keywords. Safe to run again.
 --
 -- Replaced bodies; md5(pg_proc.prosrc) on production, read 2026-10-28,
 -- equals the body in:
@@ -75,6 +82,20 @@ as $$
 $$;
 revoke all on function private.call_phone10(text) from public, anon, authenticated;
 
+-- The digits of each phone-like run in a text: 8 or more digits with at most two spaces, dots,
+-- hyphens or brackets between any two (91000 00899, (0253) 200-0123). Prices and hours written
+-- the usual way (Rs 800, 6am to 11pm, 5-a-side) are not.
+create or replace function private.phone_runs(p text)
+returns text[]
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(array_agg(regexp_replace(m[1], '[^0-9]', '', 'g')), '{}')
+    from regexp_matches(coalesce(p, ''), '([0-9](?:[ .()-]{0,2}[0-9]){7,})', 'g') m;
+$$;
+revoke all on function private.phone_runs(text) from public, anon, authenticated;
+
 -- 20261026_account_links_reads.sql
 
 create or replace function public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb)
@@ -104,8 +125,16 @@ begin
   -- Opened with a code to someone else's number: no new WhatsApp number for the first 14 days,
   -- so a code read out to a stranger can't send players' chats elsewhere straight away. (Whoever
   -- then signs in with that number itself is, for TapTurf, its holder, and is not held.)
-  -- (3) Nor a new call number: the same hold, told by the field asked for.
-  if (p_patch ? 'whatsapp_phone' or p_patch ? 'owner_phone') and not public._is_admin_key(k) and exists (
+  -- (3) Nor a new call number, nor a phone number the text the turf page shows (description,
+  -- surface, closed days) did not have before: the same hold, told by the field asked for.
+  f := case when p_patch ? 'owner_phone' then 'owner_phone' when p_patch ? 'whatsapp_phone' then 'whatsapp_phone' end;
+  if f is null then
+    select u.fld into f from unnest(array['description', 'surface_type', 'closed_days']) with ordinality u(fld, n)
+     where p_patch ? u.fld
+       and not private.phone_runs(p_patch ->> u.fld) <@ private.phone_runs((select to_jsonb(x) ->> u.fld from public.turfs x where x.id = p_turf_id))
+     order by u.n limit 1;
+  end if;
+  if f is not null and not public._is_admin_key(k) and exists (
        select 1 from public.turf_owners o
         where o.turf_id = p_turf_id and o.status = 'active'
           -- (1) A claim that lets this sign-in in (_can_manage): this account's, from whichever of
@@ -116,7 +145,7 @@ begin
           -- (2) A code to the account's own number is not someone else's.
           and o.verified_phone is distinct from private.account_phone10(o.user_id)
           and o.decided_at > now() - interval '14 days') then
-    return jsonb_build_object('error', 'held', 'field', case when p_patch ? 'owner_phone' then 'owner_phone' else 'whatsapp_phone' end);
+    return jsonb_build_object('error', 'held', 'field', f);
   end if;
   select * into t from public.turfs where id = p_turf_id for update;
 
@@ -277,12 +306,17 @@ language sql
 stable
 security definer
 set search_path = ''
+-- (2) Costly to run (it reads turf_edit_log several times), so a query that asks cheaper things of
+-- each turf as well (owner_home's matches: is this one of its numbers?) asks those first.
+cost 10000
 as $$
   select coalesce(array_agg(x) filter (where x is not null), '{}') from (
     -- (1) The listing's phone, unless an owner or a suggestion put it there. owner_update_turf
     -- writes an owner's call number into it as well as into owner_phone and logs both, so its own
     -- latest logged change counts (a suggestion approved later moves owner_phone on, not this);
-    -- a suggestion logs only owner_phone, which the data team copies in, so owner_phone's counts too.
+    -- a suggestion logs only owner_phone, which the data team copies in, so owner_phone's counts
+    -- too, and not only its latest change: any owner_phone an owner or a suggestion ever set to
+    -- this number, unless TapTurf set the number since (a later change by the site owner).
     select case when not private.number_set_by_others(t.id, 'owner_phone', t.contact_info ->> 'phone')
                  and not coalesce((
                    select not public._is_admin_key(l.user_key)
@@ -292,6 +326,15 @@ as $$
                       and public._phone10(l.before -> 'contact_info' ->> 'phone') is distinct from public._phone10(l.after -> 'contact_info' ->> 'phone')
                     order by l.created_at desc, l.id desc
                     limit 1), false)
+                 and not exists (
+                   select 1 from public.turf_edit_log l
+                    where l.turf_id = t.id and not public._is_admin_key(l.user_key) and l.after ? 'owner_phone'
+                      and public._phone10(l.before ->> 'owner_phone') is distinct from public._phone10(l.after ->> 'owner_phone')
+                      and public._phone10(l.after ->> 'owner_phone') = public._phone10(t.contact_info ->> 'phone')
+                      and not exists (select 1 from public.turf_edit_log a
+                                       where a.turf_id = t.id and public._is_admin_key(a.user_key)
+                                         and (a.created_at, a.id) > (l.created_at, l.id)
+                                         and public._phone10(t.contact_info ->> 'phone') in (public._phone10(a.after ->> 'owner_phone'), public._phone10(a.after -> 'contact_info' ->> 'phone'))))
            then public._phone10(t.contact_info ->> 'phone') end as x
       from public.turfs t where t.id = p_turf_id
     union all
@@ -436,10 +479,13 @@ begin
              -- number's "from" is the number the Call button dialled before (getPhone's order:
              -- owner_phone, the listing phone, landline_phone; the first it can dial, else
              -- owner_phone as it was); a listing phone holding another mobile, which the same save
-             -- replaced, is its own change (contact_phone).
+             -- replaced, is its own change (contact_phone). Older changes an owner made from the
+             -- number this claimant gave are kept too (OwnerClaims marks them), so later saves can't
+             -- push the one that took it off out of view.
              coalesce((
                select jsonb_agg(e.j order by e.at desc, e.id desc, e.k) from (
-                 select l.created_at as at, l.id, f.k,
+                 select l.created_at as at, l.id, f.k, f.b, public._is_admin_key(l.user_key) as tapturf,
+                        row_number() over (order by l.created_at desc, l.id desc, f.k) as n,
                         jsonb_build_object('at', l.created_at, 'by', l.user_key, 'tapturf', public._is_admin_key(l.user_key),
                                            'field', f.k, 'from', f.b, 'to', f.a) as j
                    from public.turf_edit_log l
@@ -454,9 +500,15 @@ begin
                        ('contact_phone', l.before -> 'contact_info' ->> 'phone', l.after -> 'contact_info' ->> 'phone',
                         l.after ? 'contact_info' and public._phone10(l.before -> 'contact_info' ->> 'phone') is not null
                         and public._phone10(l.before -> 'contact_info' ->> 'phone') is distinct from private.call_phone10(d.dialled))) f(k, b, a, has)
-                  where l.turf_id = o.turf_id and f.has and f.b is distinct from f.a
-                  order by l.created_at desc, l.id desc, f.k
-                  limit 5) e
+                  where l.turf_id = o.turf_id and f.has and f.b is distinct from f.a) e
+                where e.n <= 5
+                   -- digits10 in lib/admin/claims.ts: the last 10 digits, when there are 10 or more.
+                   or (not e.tapturf and o.verified_phone is null
+                       and length(regexp_replace(coalesce(e.b, ''), '[^0-9]', '', 'g')) >= 10
+                       and right(regexp_replace(e.b, '[^0-9]', '', 'g'), 10) = (
+                         select c.phone from private.claim_phone_checks c
+                          where c.user_key = o.user_key and c.turf_id = o.turf_id and c.listed is false
+                          order by c.at desc limit 1))
              ), '[]'::jsonb) as number_edits,
              u.id as user_id,
              case when u.id is null then null else jsonb_build_object(

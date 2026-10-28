@@ -9,8 +9,12 @@
 // numbers; the admin never held; clearing a number, never the last one; and the
 // claim-anchor rule (a number an owner set opens no claim at once, nor does the
 // researched number it replaced, nor an owner's number left in the listing
-// phone after an approved suggestion moved owner_phone on); admin's number
-// changes, whose call "from" is the number the Call button dialled. Then, in
+// phone after an approved suggestion moved owner_phone on, nor one the data
+// team copied there by hand); the hold also covers a new phone number in the
+// description, surface and closed days; admin's number changes, whose call
+// "from" is the number the Call button dialled, and which keep an owner's
+// change from the claimant's number however many saves came after; and
+// turf_trusted_phones' cost, so owner_home's matches asks _phone10 first. Then, in
 // the database game_reports.check.mjs uses, that owner_dashboard returns the
 // three numbers and is otherwise the same.
 // Never touches a real database. Made-up numbers only.
@@ -96,7 +100,7 @@ const MIG = ["20261019_mytapturf.sql", "20261019_mytapturf_claims.sql", "2026102
 for (const f of MIG) await db.exec(fs.readFileSync(`${M}/${f}`, "utf8"));
 
 // What production has for the functions the file replaces (pg_proc, read 2026-10-28), before and after.
-const FNS = [["public", "owner_update_turf"], ["private", "turf_trusted_phones"], ["public", "owner_dashboard"], ["public", "admin_owner_claims"], ["private", "call_phone10"]];
+const FNS = [["public", "owner_update_turf"], ["private", "turf_trusted_phones"], ["public", "owner_dashboard"], ["public", "admin_owner_claims"], ["private", "call_phone10"], ["private", "phone_runs"]];
 const sigs = async () => (await q(`
   select n.nspname || '.' || p.proname || '(' || pg_get_function_arguments(p.oid) || ') -> ' || pg_get_function_result(p.oid)
          || ' ' || p.prosecdef::text || ' ' || p.provolatile::text || ' ' || coalesce(array_to_string(p.proconfig, ','), '') || ' '
@@ -113,6 +117,14 @@ const LIVE_SIGS = [
   `public.owner_update_turf(p_token text, p_turf_id uuid, p_patch jsonb) -> jsonb true v search_path=public aap`,
 ];
 eq(await sigs(), LIVE_SIGS, "before: the stand-in matches production's signatures, settings and grants");
+// owner_home's matches (20261026_account_links_reads.sql): which question the planner asks of each active turf first.
+const ttpCost = async () => Number((await one(`select p.procost from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and p.proname = 'turf_trusted_phones'`)).procost);
+const matchesFilter = async () => (await q(`explain (costs off) select t.id from public.turfs t where t.is_active
+    and '6000000000' in (public._phone10(t.contact_info ->> 'phone'), public._phone10(t.owner_phone), public._phone10(t.whatsapp_phone))
+    and '6000000000' = any(private.turf_trusted_phones(t.id))`)).map((x) => x["QUERY PLAN"]).find((x) => /Filter/.test(x)) ?? "";
+const phone10First = async () => { const f = await matchesFilter(); return f.indexOf("_phone10(") >= 0 && f.indexOf("_phone10(") < f.indexOf("turf_trusted_phones("); };
+eq(await ttpCost(), 100, "before: turf_trusted_phones costs 100, as on production");
+eq(await phone10First(), false, "before: owner_home's matches asks turf_trusted_phones of every active turf before _phone10");
 
 // Firebase can't be reached here: _caller_key and firebase_phone10 stand-ins, as in claims_account.check.mjs.
 const STANDINS = `
@@ -164,12 +176,24 @@ eq(await tp(T(4)), ["9000000401"], "before the file: the listing phone still cou
 await db.exec(NEW);
 await db.exec(NEW); // safe to run again
 await db.exec(STANDINS);
-eq(await sigs(), [`private.call_phone10(p text) -> text false i search_path="" ---`, ...LIVE_SIGS], "after: the same signatures, settings and grants, and call_phone10 closed");
+eq(await sigs(), [`private.call_phone10(p text) -> text false i search_path="" ---`, `private.phone_runs(p text) -> text[] false i search_path="" ---`, ...LIVE_SIGS],
+  "after: the same signatures, settings and grants, and call_phone10 and phone_runs closed");
+eq(await ttpCost(), 10000, "after: turf_trusted_phones costs 10000");
+eq(await phone10First(), true, "after: owner_home's matches asks _phone10 first, turf_trusted_phones only of the turfs that list the number");
 
 // ── call_phone10 agrees with the editor (lib/my/numberCases.json, also run against normalizeIndianPhone). ──
 const CASES = JSON.parse(fs.readFileSync(new URL("../../lib/my/numberCases.json", import.meta.url), "utf8")).cases;
 for (const [typed, want] of CASES) eq((await one("select private.call_phone10($1) p", [typed])).p, want, `call_phone10(${JSON.stringify(typed)})`);
 eq((await one("select private.call_phone10(null) p")).p, null, "call_phone10(null)");
+// phone_runs: the digits of each phone-like run, and none in prices, hours and years written the usual way.
+for (const [text, want] of [
+  ["Call or WhatsApp 91000 00899 to book.", ["9100000899"]],
+  ["Book on (0253) 200-0123 or +91 98765.43210", ["02532000123", "919876543210"]],
+  ["9100000899, 9876543210", ["9100000899", "9876543210"]],
+  ["2 grounds, 5-a-side and 7-a-side. Open 6am to 11pm, Rs 800 to 1200 an hour. Since 2019.", []],
+  ["1234567", []],
+  [null, []],
+]) eq((await one("select private.phone_runs($1) p", [text])).p, want, `phone_runs(${JSON.stringify(text)})`);
 
 // ── Trust after the file: an owner-set or suggested listing phone opens nothing at once. ──
 eq(await tp(T(4)), [], "a listing phone equal to a suggested owner_phone is not trusted");
@@ -255,6 +279,24 @@ eq(await update("9000000102", T(2), { whatsapp_phone: "9000000556", owner_phone:
 eq(await update("9000000102", T(2), { owner_phone: "1800 123 4567" }), { error: "held", field: "owner_phone" }, "held before the number is even read");
 eq((await update("9000000102", T(2), { morning_price: "700" })).ok, true, "prices still save");
 eq(await turf(T(2)), { owner_phone: "9000000201", contact_info: null, landline_phone: null, whatsapp_phone: null, morning_price: 700 }, "no number changed");
+// Nor a phone number in the text the page shows, while held (a new one: a number it had already stays).
+const text2 = () => one(`select description, surface_type, closed_days from public.turfs where id = $1`, [T(2)]);
+const text2before = await text2();
+eq(await update("9000000102", T(2), { description: "New booking number: call or WhatsApp 91000 00899. The old one is off." }), { error: "held", field: "description" }, "held: a phone number in the description");
+eq(await update("9000000102", T(2), { surface_type: "Call 91000 00899" }), { error: "held", field: "surface_type" }, "held: in the surface");
+eq(await update("9000000102", T(2), { closed_days: "Book on (0253) 200-0123" }), { error: "held", field: "closed_days" }, "held: a landline in closed days");
+eq(await update("9000000102", T(2), { closed_days: "x 9100000897", surface_type: "y 9100000898", description: "z 9100000899" }), { error: "held", field: "description" }, "all three: told about the description");
+eq(await update("9000000102", T(2), { owner_phone: "9000000555", description: "z 9100000899" }), { error: "held", field: "owner_phone" }, "with a call number: told about the call number");
+eq(await update("9000000102", T(2), { morning_price: "750", closed_days: "Book on 9100000899" }), { error: "held", field: "closed_days" }, "with a price: nothing saves");
+eq([(await turf(T(2))).morning_price, await text2()], [700, text2before], "nothing written");
+r = await update("9000000102", T(2), { description: "2 grounds, 5-a-side and 7-a-side. Open 6am to 11pm, Rs 800 to 1200 an hour. Since 2019.", surface_type: "artificial grass", closed_days: "Monday" });
+eq([r.ok, [...r.changed].sort()], [true, ["closed_days", "description", "surface_type"]], "text with prices, hours and a year still saves");
+await q(`update public.turfs set description = 'Call 9000000201 to book.' where id = '${T(2)}'`);
+r = await update("9000000102", T(2), { description: "Call 9000000201 to book. Floodlights till 11pm." });
+eq([r.ok, r.changed], [true, ["description"]], "a number the description already had stays, and the text around it can change");
+eq(await update("9000000102", T(2), { description: "Call 9000000201 or 9100000899 to book." }), { error: "held", field: "description" }, "but another number is held");
+eq(await update("9000000102", T(2), { description: "Call 9000000201 9100000899 to book." }), { error: "held", field: "description" }, "even run on after the old one");
+eq((await update("9403612979", T(2), { closed_days: "Call 91000 00777" })).ok, true, "the admin's text is never held");
 // The admin is never held, and a number the admin sets is TapTurf's: trusted.
 eq((await update("9403612979", T(2), { owner_phone: "9000000777" })).ok, true, "the admin changes it at once");
 eq(await tp(T(2)), ["9000000777"], "a number the admin set opens the turf at once");
@@ -266,8 +308,10 @@ eq([r.ok, r.changed], [true, ["owner_phone"]], "after 14 days the call number ch
 eq(await turf(T(2)), { owner_phone: "+919000000555", contact_info: null, landline_phone: null, whatsapp_phone: null, morning_price: 700 }, "a null contact_info stays null");
 eq(await tp(T(2)), [], "and the owner's number is not trusted");
 eq((await update("9000000102", T(2), { whatsapp_phone: "9000000556" })).ok, true, "nor is WhatsApp held any more");
+eq((await update("9000000102", T(2), { description: "Book on 91000 00899." })).ok, true, "nor a number in the text");
 // A claim opened with a code to the account's own number is not held (W got in with its own number on Three).
 eq((await update("9000000302", T(3), { whatsapp_phone: "9000000303" })).ok, true, "an own-number claim: never held");
+eq((await update("9000000302", T(3), { description: "Call 90000 00303" })).ok, true, "nor its text");
 
 // ── 8. The trusted-number cases from claims_account.check.mjs still hold. ──
 const T6 = T(6);
@@ -409,9 +453,83 @@ eq((await asAdmin(() => rpc("admin_owner_claims", [null]))).find((c) => c.turf_i
   { field: "owner_phone", from: "9000002101", to: "+919000002199" },
 ], "TwentyOne: the admin's (M, left in the listing phone, too), the suggestion's and H's changes");
 
+// ── 9d. Admin: an owner's change from the number a claimant gave stays listed, however many saves came after. ──
+const bury = async (i, saves) => {
+  const X = T(i), L = `900000${i}01`, Hk = `900000${i}10`, Lnew = `900000${i}99`;
+  await q(`insert into public.turfs (id, name, slug, city, owner_phone) values ('${X}', 'Bury ${i}', 'bury-${i}', 'pune', '${L}')`);
+  await phoneAccount(Hk, `Manager ${i}`);
+  eq(await rpc("owner_claim_verified", [`phone:${Hk}`, `proof:${L}`, X, null, "manager"]), { status: "active" }, `${i}: H gets in with a code to the listed number`);
+  await q(`update public.turf_owners set decided_at = now() - interval '15 days' where turf_id = $1 and user_key = $2`, [X, `p:${Hk}`]);
+  eq((await update(Hk, X, { owner_phone: Lnew })).ok, true, `${i}: 14 days on, H takes the listed number off`);
+  for (let n = 0; n < saves; n++) eq((await update(Hk, X, { whatsapp_phone: `900000${i}8${n % 2}` })).ok, true, `${i}: WhatsApp save ${n + 1}`);
+  await phoneAccount(L, `Real owner ${i}`);
+  eq(await rpc("owner_phone_listed", [`phone:${L}`, X, L]), { listed: false }, `${i}: the real owner's number is not on the listing`);
+  eq(await rpc("owner_claim", [`phone:${L}`, X, null, null, "owner"]), { status: "pending" }, `${i}: their claim: pending`);
+  const all = await asAdmin(() => rpc("admin_owner_claims", [null]));
+  const g = all.find((c) => c.turf_id === X && c.status === "pending"), h = all.find((c) => c.turf_id === X && c.status === "active");
+  eq(g.phone_given, L, `${i}: the number they gave`);
+  return { g, h, L, Hk, Lnew };
+};
+const took = (b) => ({ at: b.g.number_edits.at(-1).at, by: `p:${b.Hk}`, tapturf: false, field: "owner_phone", from: b.L, to: `+91${b.Lnew}` });
+const b4 = await bury(27, 4);
+eq(b4.g.number_edits.map((e) => e.field), ["whatsapp_phone", "whatsapp_phone", "whatsapp_phone", "whatsapp_phone", "owner_phone"], "4 saves after: the 5 newest, the one that took the number off among them");
+eq(b4.g.number_edits.at(-1), took(b4), "who took it off, and from what");
+ok(marked(b4.g), "marked as the number they gave");
+eq(b4.h.number_edits, b4.g.number_edits, "H's own claim: the same 5");
+const b5 = await bury(28, 5);
+eq(b5.g.number_edits.length, 6, "5 saves after: the 5 newest and the older one from the number they gave");
+eq(b5.g.number_edits.slice(0, 5).map((e) => e.field), Array(5).fill("whatsapp_phone"), "the 5 newest first");
+eq(b5.g.number_edits.at(-1), took(b5), "then the one that took it off");
+ok(marked(b5.g), "still marked as the number they gave");
+eq(b5.h.number_edits, b5.g.number_edits.slice(0, 5), "a claim that gave no number (H's own): the 5 newest only");
+
+// ── 9e. A number an owner or a suggestion put in owner_phone, copied into the listing phone by hand, stays untrusted after another suggestion moves owner_phone on. ──
+const approve = async (X, changes) => {
+  const sid = (await one(`insert into public.turf_suggestions (turf_id, status) values ($1, 'pending') returning id`, [X])).id;
+  await asAdmin(() => q(`select public.moderate_suggestion($1, 'approve', $2::jsonb, null)`, [sid, JSON.stringify(changes)]));
+};
+const handCopy = (X) => q(`update public.turfs set contact_info = coalesce(contact_info, '{}'::jsonb) || jsonb_build_object('phone', owner_phone) where id = $1`, [X]);
+{
+  const X = T(29), L = "9000002901", Hk = "9000002910", Y = "9000002999", Z = "9000002902";
+  await q(`insert into public.turfs (id, name, slug, city, owner_phone, contact_info) values ('${X}', 'TwentyNine', 'twentynine', 'pune', '${L}', '{"email":"x29@example.com"}')`);
+  await phoneAccount(Hk, "Manager 29");
+  eq(await rpc("owner_claim_verified", [`phone:${Hk}`, `proof:${L}`, X, null, "manager"]), { status: "active" }, "TwentyNine: H gets in with a code to the listed number");
+  await q(`update public.turf_owners set decided_at = now() - interval '15 days' where turf_id = $1 and user_key = $2`, [X, `p:${Hk}`]);
+  r = await update(Hk, X, { owner_phone: Y });
+  eq([r.ok, r.changed], [true, ["owner_phone"]], "TwentyNine: H sets Y (no listing phone key, so owner_phone only)");
+  await handCopy(X);
+  ok(!(await tp(X)).includes(Y), "TwentyNine: Y copied into the listing phone by hand: not trusted");
+  await approve(X, { owner_phone: Z });
+  const t29 = await turf(X);
+  eq([t29.owner_phone, t29.contact_info.phone], [Z, `+91${Y}`], "TwentyNine: a suggestion moves owner_phone on, Y stays in the listing phone");
+  ok(!(await tp(X)).includes(Y), "TwentyNine: Y is still not trusted");
+  eq(await asAdmin(() => rpc("admin_decide_owner_claim", [null, X, `p:${Hk}`, "revoked"])), { ok: true }, "TwentyNine: H is revoked");
+  ok(!(await tp(X)).includes(Y), "TwentyNine: nor after the revoke");
+  await phoneAccount(Y, "H's second phone 29");
+  eq(await rpc("owner_claim_info", [`phone:${Y}`, X]), { mobiles: 0, endings: [] }, "TwentyNine: the claim form offers no number to send a code to");
+  eq(await rpc("owner_claim", [`phone:${Y}`, X, null, null, "owner"]), { status: "pending" }, "TwentyNine: Y's own sign-in: pending");
+  eq((await one(`select public._can_manage($1, $2) c`, [`p:${Y}`, X])).c, false, "TwentyNine: and not in");
+}
+{
+  const X = T(30), L = "9000003001", Y = "9000003099", Z = "9000003002", Z2 = "9000003003";
+  await q(`insert into public.turfs (id, name, slug, city, owner_phone, contact_info) values ('${X}', 'Thirty', 'thirty', 'pune', '${L}', '{"phone":"${L}"}')`);
+  await approve(X, { owner_phone: Y });
+  await handCopy(X);
+  ok(!(await tp(X)).includes(Y), "Thirty: a suggested number, copied by hand: not trusted");
+  await approve(X, { owner_phone: Z });
+  ok(!(await tp(X)).includes(Y), "Thirty: nor after a second suggestion moved owner_phone on");
+  await phoneAccount(Y, "Suggester 30");
+  eq(await rpc("owner_claim", [`phone:${Y}`, X, null, null, "owner"]), { status: "pending" }, "Thirty: the suggester's sign-in: pending");
+  // TapTurf setting the number since makes it TapTurf's again.
+  eq((await update("9403612979", X, { owner_phone: Y })).ok, true, "Thirty: the admin sets Y");
+  await approve(X, { owner_phone: Z2 });
+  eq(await tp(X), [Y], "Thirty: Y, set by TapTurf since, counts in the listing phone; the suggested owner_phone does not");
+}
+
 // ── 10. Grants. ──
 eq((await one(`select has_function_privilege('anon', 'private.call_phone10(text)', 'execute') a`)).a, false, "call_phone10 closed");
 eq((await one(`select has_function_privilege('anon', 'private.turf_trusted_phones(uuid)', 'execute') a`)).a, false, "turf_trusted_phones closed");
+eq((await one(`select has_function_privilege('anon', 'private.phone_runs(text)', 'execute') a`)).a, false, "phone_runs closed");
 
 // ── 11. owner_dashboard, in the database game_reports.check.mjs uses: three more keys, nothing else changed. ──
 const db2 = await makeDb(PGlite, M);

@@ -124,7 +124,8 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
     setState("idle");
     setRefused(null);
   };
-  // Held: put the numbers back as they were, keep the rest of the changes.
+  // Held over a number field: put the numbers back as they were, keep the rest of the changes.
+  // (Held over a phone number in the text: the owner takes it out; Undo undoes everything.)
   const undoNumbers = () => {
     setF((x) => ({ ...x, whatsapp_phone: base.whatsapp_phone, owner_phone: base.owner_phone }));
     setState("idle");
@@ -314,7 +315,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
           </p>
           <div className="ml-auto flex gap-2 shrink-0">
             {dirty && state !== "saving" && (
-              refused?.error === "held" ? (
+              refused?.error === "held" && badField ? (
                 <button type="button" onClick={undoNumbers} className="h-10 px-4 rounded-full text-[14px] font-semibold text-primary-600 hover:bg-primary-100 cursor-pointer">
                   Undo number change
                 </button>

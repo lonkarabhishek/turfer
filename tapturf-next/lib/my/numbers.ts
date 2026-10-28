@@ -82,6 +82,8 @@ export function numberPatch(base: NumberForm, form: NumberForm): { patch: Partia
   return { patch, error: null };
 }
 
+const HELD_TEXT: Record<string, string> = { description: "description", surface_type: "surface", closed_days: "closed days" };
+
 /** What to tell the owner when owner_update_turf (or numberPatch) says no. */
 export function saveMessage(r: SaveError): string {
   if (r.error === "bad_value") {
@@ -89,7 +91,12 @@ export function saveMessage(r: SaveError): string {
     if (r.field === "whatsapp_phone") return "Check the WhatsApp number: it needs to be a 10-digit mobile.";
     return `Check ${r.field ? r.field.replace(/_/g, " ") : "your changes"}: that value doesn't look right.`;
   }
-  if (r.error === "held") return "You can change your numbers two weeks after you got in. Undo the number change to save the rest. If it's urgent, email info@tapturf.in.";
+  if (r.error === "held") {
+    // A phone number the description, surface or closed days didn't have before is held as well (the page shows them).
+    const text = r.field ? HELD_TEXT[r.field] : undefined;
+    if (text) return `You can add a phone number to your ${text} two weeks after you got in. Take the number out to save the rest. If it's urgent, email info@tapturf.in.`;
+    return "You can change your numbers two weeks after you got in. Undo the number change to save the rest. If it's urgent, email info@tapturf.in.";
+  }
   if (r.error === "no_number") return "Keep at least one number, so players can reach you.";
   return "Couldn't save. Sign in again and retry.";
 }

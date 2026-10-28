@@ -96,6 +96,10 @@ test("saveMessage covers every answer", () => {
   assert.equal(saveMessage({ error: "bad_value" }), "Check your changes: that value doesn't look right.");
   assert.equal(saveMessage({ error: "held", field: "owner_phone" }), "You can change your numbers two weeks after you got in. Undo the number change to save the rest. If it's urgent, email info@tapturf.in.");
   assert.equal(saveMessage({ error: "held", field: "whatsapp_phone" }), saveMessage({ error: "held", field: "owner_phone" }));
+  assert.equal(saveMessage({ error: "held", field: "description" }), "You can add a phone number to your description two weeks after you got in. Take the number out to save the rest. If it's urgent, email info@tapturf.in.");
+  assert.equal(saveMessage({ error: "held", field: "surface_type" }), "You can add a phone number to your surface two weeks after you got in. Take the number out to save the rest. If it's urgent, email info@tapturf.in.");
+  assert.equal(saveMessage({ error: "held", field: "closed_days" }), "You can add a phone number to your closed days two weeks after you got in. Take the number out to save the rest. If it's urgent, email info@tapturf.in.");
+  assert.equal(saveMessage({ error: "held" }), saveMessage({ error: "held", field: "owner_phone" }), "held without a field: the numbers");
   assert.equal(saveMessage({ error: "no_number" }), "Keep at least one number, so players can reach you.");
   assert.equal(saveMessage({ error: "forbidden" }), "Couldn't save. Sign in again and retry.");
   assert.equal(saveMessage({ error: "bad_patch" }), "Couldn't save. Sign in again and retry.");
