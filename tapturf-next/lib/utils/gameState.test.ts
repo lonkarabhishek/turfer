@@ -65,7 +65,7 @@ test("who may still ask to join", () => {
 test("the host's number: the host and accepted players only", () => {
   assert.equal(canSeeHostNumber({ isHost: false, isParticipant: true, signedIn: true }), true);
   assert.equal(canSeeHostNumber({ isHost: true, isParticipant: true, signedIn: true }), true);
-  assert.equal(canSeeHostNumber({ isHost: false, isParticipant: false, signedIn: true }), false);
+  assert.equal(canSeeHostNumber({ isHost: false, isParticipant: false, signedIn: true }), true);
   assert.equal(canSeeHostNumber({ isHost: false, isParticipant: false, signedIn: false }), false);
   assert.equal(canSeeHostNumber({ isHost: false, isParticipant: true, signedIn: false }), false);
 });

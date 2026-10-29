@@ -381,6 +381,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               phone={phone}
               showNumber={showNumber}
               closed={ended || cancelled}
+              onSignIn={login}
             />
 
             <GameLineup

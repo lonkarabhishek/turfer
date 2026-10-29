@@ -63,13 +63,14 @@ export function canRequest(state: CtaState): boolean {
 }
 
 /**
- * Who sees the host's number on the game page: the host and the players
- * they accepted. Switch back to "anyone signed in" here and nowhere else.
- * (The row still reaches every browser through getGameById's select("*"):
- * hiding it here is not the privacy line, a server check is the follow-up.)
+ * Who sees the host's number on the game page: anyone signed in, as
+ * before the redesign (the owner kept it so on 29 Oct; "accepted players
+ * only" was offered). Change it here and nowhere else. (The row still
+ * reaches every browser through getGameById's select("*"): hiding it here
+ * is not the privacy line, a server check is the follow-up.)
  */
 export function canSeeHostNumber(v: { isHost: boolean; isParticipant: boolean; signedIn: boolean }): boolean {
-  return v.signedIn && (v.isHost || v.isParticipant);
+  return v.signedIn;
 }
 
 /** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */

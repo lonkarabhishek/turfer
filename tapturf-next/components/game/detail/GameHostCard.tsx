@@ -18,6 +18,7 @@ export function GameHostCard({
   phone,
   showNumber,
   closed = false,
+  onSignIn,
 }: {
   hostName: string;
   /** firstName(): "Rahul", or "the host". */
@@ -32,6 +33,8 @@ export function GameHostCard({
   showNumber: boolean;
   /** Ended or cancelled: no line about when the number shows. */
   closed?: boolean;
+  /** Signed out: the sign-in sheet, after which the number shows. */
+  onSignIn?: () => void;
 }) {
   const named = hostFirst !== "the host";
   return (
@@ -61,7 +64,7 @@ export function GameHostCard({
       {isHost ? (
         closed ? null : <p className="mt-4 flex items-start gap-2 text-[14px] text-primary-500">
           <Lock className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
-          Players you accept see your number here.
+          Players who sign in see your number here.
         </p>
       ) : showNumber && phone ? (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -84,10 +87,21 @@ export function GameHostCard({
           </a>
         </div>
       ) : phone && !closed ? (
-        <p className="mt-4 flex items-start gap-2 text-[14px] text-primary-500">
-          <Lock className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
-          {named ? `Once ${hostFirst} accepts you, their number shows here.` : "Once the host accepts you, their number shows here."}
-        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <p className="flex items-start gap-2 text-[14px] text-primary-500">
+            <Lock className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
+            {named ? `Sign in to see ${hostFirst}'s number.` : "Sign in to see the host's number."}
+          </p>
+          {onSignIn && (
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="h-11 inline-flex items-center rounded-full bg-primary-900 hover:bg-primary-700 px-4 text-[14px] font-semibold text-white press-tight cursor-pointer"
+            >
+              Sign in to contact
+            </button>
+          )}
+        </div>
       ) : null}
     </section>
   );
