@@ -37,7 +37,7 @@ const CARD_COLUMNS = [
   "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria", "equipment_provided",
   // AI cover pass: photos judged unusable are dropped from images below.
   "image_review",
-  // An owner manages it on myTapturf: the card's Owner-managed mark.
+  // An owner manages it on myTapturf: the card's Claimed mark.
   "claimed",
 ].join(", ");
 

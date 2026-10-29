@@ -1,4 +1,4 @@
-// The words a claimed (owner-managed) turf page shows about its owner: the
+// The words a claimed turf page shows about its owner: the
 // dated "from the owner" price label, and who leads the "by @name" line
 // under the name. Pure: no database, no clock of its own (the caller
 // passes the render time), so the page stays one cached render.

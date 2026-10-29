@@ -136,7 +136,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
         {/* Photo. Only the pager dots sit on top; everything else lives
             below so the picture reads clean, App Store style. The
             trending pick gets a thin gold frame and one badge; a turf its
-            owner manages on myTapturf gets the green Owner-managed label
+            owner manages on myTapturf gets the green Claimed label
             under it (no frame and no motion: that stays the trending pick's). */}
         <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
         <div
@@ -161,7 +161,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                 // The h3 says it once for screen readers, next to the name.
                 <span aria-hidden className="inline-flex h-6 items-center gap-1 rounded-full bg-white/95 pl-1 pr-2.5 text-[11px] font-semibold text-accent-800 shadow-soft">
                   <OwnerMark size={16} />
-                  Owner-managed
+                  Claimed
                 </span>
               )}
             </div>
@@ -256,7 +256,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               {turf.claimed && (
                 <>
                   <OwnerMark size={16} />
-                  <span className="sr-only">, owner-managed</span>
+                  <span className="sr-only">, claimed by its owner</span>
                 </>
               )}
             </h3>

@@ -120,7 +120,7 @@ export default async function TurfDetailPage({
   const { turf, claimed } = page;
   if (turf.slug && key !== turf.slug) permanentRedirect(turfPath(turf));
   // Who runs a claimed turf, by username, for "by @name" under the name
-  // and the Owner-managed panel. Read only for claimed turfs; never fails
+  // and the Claimed turf panel. Read only for claimed turfs; never fails
   // the page (no names; a read that failed for now keeps this copy a
   // minute, not a day).
   const managers = claimed ? await getTurfManagers(turf.id) : NO_MANAGERS;
@@ -220,7 +220,7 @@ export default async function TurfDetailPage({
           <h1 className="text-[28px] md:text-[36px] font-bold text-primary-800 leading-tight font-serif">
             {meta.name}
           </h1>
-          {/* Owner-managed, and by whom; it jumps to the panel that says what it means. */}
+          {/* Claimed, and by whom; it jumps to the panel that says what it means. */}
           {claimed && <OwnerBadge managers={managers} />}
           <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
             {turf.rating > 0 ? (
@@ -399,7 +399,7 @@ export default async function TurfDetailPage({
             {/* The owner's lines come last, after the map and the reviews
                 players came for. An unclaimed turf: the invite for its owner
                 (ClaimHint under the sport chips jumps here). A claimed turf:
-                what Owner-managed means and who runs it (the badge under the
+                what Claimed means and who runs it (the badge under the
                 name jumps here; last, as the owner asked on 29 Oct), then one
                 line for the owner of another turf, and no "request access"
                 link (its owner adds people). */}

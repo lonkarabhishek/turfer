@@ -1,4 +1,4 @@
-// "Managed by @a and @b" on a claimed turf's page (by @a under the name, the full line in the Owner-managed panel): the shape of
+// "Managed by @a and @b" on a claimed turf's page (by @a under the name, the full line in the Claimed turf panel): the shape of
 // public.turf_managers (supabase/migrations/20261028_turf_managers.sql), the
 // line's wording, and the read that never fails the page.
 // No "@/" imports so the unit test compiles it on its own (npm run test:turf).

@@ -1,12 +1,12 @@
 /**
- * The Owner-managed mark: a green shield with a white tick. It means one
+ * The Claimed mark: a green shield with a white tick. It means one
  * thing only: the turf's owner, checked by TapTurf, keeps this page (an
  * active claim). It is never a rating of the turf. Green is the owner;
  * gold means trending; blue is a person's tick (VerifiedTick), so the
  * three never get mixed up.
  *
  * Always hidden from screen readers and always next to words that say it
- * ("Owner-managed", "from the owner"). The grey outline is only for the
+ * ("Claimed", "from the owner"). The grey outline is only for the
  * hint on an unclaimed page ("Own this turf? Claim it free").
  *
  * A plain function with no hooks, so server and client components both

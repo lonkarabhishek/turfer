@@ -24,9 +24,9 @@ export function ClaimHint() {
 
 /**
  * The invite on an unclaimed turf's page, for its owner: what a claim gets
- * them, a preview of this page with the Owner-managed badge (in a dashed
+ * them, a preview of this page with the Claimed badge (in a dashed
  * frame marked Preview, and said to screen readers as a preview: this
- * turf is not owner-managed), and the free claim on myTapturf. A neutral
+ * turf is not claimed), and the free claim on myTapturf. A neutral
  * border on purpose: the green rim is what the page gets once claimed.
  * No numbers, no deadlines; TapTurf takes no bookings.
  */
@@ -44,7 +44,7 @@ export function ClaimInvite({ turfId, turfName }: { turfId: string; turfName: st
           Is this your turf?
         </h2>
         <p className="mt-1.5 text-[15px] text-primary-600 leading-snug">
-          Claim it free. Players then see it&rsquo;s owner-managed, and you see how they find you.
+          Claim it free. Players then see it&rsquo;s a claimed turf, and you see how they find you.
         </p>
       </div>
 
@@ -87,13 +87,13 @@ function ClaimPreview({ turfName }: { turfName: string }) {
       <span aria-hidden className="absolute -top-3 left-4 inline-flex h-6 items-center rounded-full bg-primary-900 px-2.5 text-[11px] font-semibold text-white">
         Preview
       </span>
-      <p className="sr-only">Preview: how this page would look once you claim it. It is not owner-managed yet.</p>
+      <p className="sr-only">Preview: how this page would look once you claim it. It is not claimed yet.</p>
       <div aria-hidden className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[17px] font-bold text-primary-900 font-serif leading-tight line-clamp-2 [overflow-wrap:anywhere]">{turfName}</p>
           <span className="owner-pill mt-2 inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-2.5 text-[13px] font-semibold text-accent-800 shadow-soft">
             <OwnerMark size={20} />
-            <span className="whitespace-nowrap">Owner-managed</span>
+            <span className="whitespace-nowrap">Claimed</span>
           </span>
           <p className="mt-1.5 text-[13px] text-primary-500">
             Managed by <span className="font-semibold text-primary-800">@you</span>

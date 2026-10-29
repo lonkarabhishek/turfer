@@ -6,7 +6,7 @@ import { ownerPriceSetOn, type OwnerPriceNote } from "@/lib/turfPage/owner";
 import { OwnerMedallion } from "./OwnerMark";
 
 /**
- * What "Owner-managed" means, at the end of a claimed turf's page: who
+ * What "Claimed" means, at the end of a claimed turf's page: who
  * runs it ("Managed by @a and @b", each with their tick; no such line
  * when nobody can be named, so the heading stands alone), that TapTurf
  * checked them (not how), and, when the prices are theirs, when they
@@ -23,7 +23,7 @@ export function OwnerPanel({ managers, priceNote, className = "" }: { managers: 
         <OwnerMedallion />
         <div className="min-w-0">
           <h2 id="owner-h" className="text-[20px] font-bold text-primary-900 font-serif leading-tight">
-            Owner-managed
+            Claimed turf
           </h2>
           {parts && (
             <p className="mt-0.5 text-[14px] text-primary-500 leading-snug">

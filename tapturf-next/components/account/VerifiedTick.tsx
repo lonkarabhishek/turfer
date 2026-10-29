@@ -9,8 +9,8 @@ export const TICK_LABEL = "Phone and email verified";
 
 /**
  * The verified tick next to a name: a solid blue badge with a white
- * check, so it never reads as the green shield mark (OwnerMark) of an
- * owner-managed turf. It says only that this person confirmed both a phone number
+ * check, so it never reads as the green shield mark (OwnerMark) of a
+ * claimed turf. It says only that this person confirmed both a phone number
  * and an email, never either one, or which one is missing.
  */
 export function VerifiedTick({

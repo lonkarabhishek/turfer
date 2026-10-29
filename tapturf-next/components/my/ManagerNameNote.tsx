@@ -71,7 +71,7 @@ export function ManagerNameNote({
   if (note.kind === "shown") {
     return (
       <p className={`text-[13px] text-primary-500 leading-snug ${className}`}>
-        Players see &ldquo;Managed by <span className="font-semibold text-primary-800">@{note.u}</span>&rdquo; with the Owner-managed badge on your page.
+        Players see &ldquo;Managed by <span className="font-semibold text-primary-800">@{note.u}</span>&rdquo; with the Claimed badge on your page.
         {pageHref && (
           <>
             {" "}
@@ -94,7 +94,7 @@ export function ManagerNameNote({
           <>
             <p className="text-[14px] font-semibold text-primary-900 leading-snug">Pick a username so players see who runs {who}</p>
             <p className="mt-0.5 text-[13px] text-primary-600 leading-snug">
-              {turfName ? "The turf’s page" : "Each turf’s page"} shows the Owner-managed badge, and will then say &ldquo;Managed by @your-username&rdquo;. Your number and email never show.
+              {turfName ? "The turf’s page" : "Each turf’s page"} shows the Claimed badge, and will then say &ldquo;Managed by @your-username&rdquo;. Your number and email never show.
             </p>
           </>
         ) : (

@@ -6,7 +6,7 @@ import { managedByLead } from "@/lib/turfPage/owner";
 import { OwnerMark } from "./OwnerMark";
 
 /**
- * Under a claimed turf's name: the Owner-managed pill, which jumps to the
+ * Under a claimed turf's name: the Claimed pill, which jumps to the
  * panel that says what it means (#managed-by), then "by @name" for the
  * first person who runs it (with their tick) and "and N more". With
  * nobody to name (no username, tagging off, or the read failed) the pill
@@ -22,7 +22,7 @@ export function OwnerBadge({ managers }: { managers: TurfManagers }) {
       <a href="#managed-by" className="group inline-flex min-h-11 -my-2 items-center rounded-full focus-visible:outline-none!">
         <span className="owner-pill owner-sheen inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-2.5 text-[13px] font-semibold text-accent-800 shadow-soft group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-600 group-focus-visible:outline-solid">
           <OwnerMark size={20} />
-          <span className="whitespace-nowrap">Owner-managed</span>
+          <span className="whitespace-nowrap">Claimed</span>
           <span className="sr-only">: what this means</span>
           <ChevronDown className="w-3.5 h-3.5 text-accent-700" aria-hidden />
         </span>

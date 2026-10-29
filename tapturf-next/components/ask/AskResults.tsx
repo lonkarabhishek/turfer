@@ -56,7 +56,7 @@ export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distan
           {turf.claimed && (
             <>
               <OwnerMark size={14} />
-              <span className="sr-only">, owner-managed</span>
+              <span className="sr-only">, claimed by its owner</span>
             </>
           )}
         </p>

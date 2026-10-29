@@ -106,7 +106,7 @@ export interface Turf {
 
   // System
   is_active: boolean;
-  /** An owner manages this turf on myTapturf (an active claim). Cards show the green Owner-managed mark (components/turf/OwnerMark.tsx). */
+  /** An owner manages this turf on myTapturf (an active claim). Cards show the green Claimed mark (components/turf/OwnerMark.tsx). */
   claimed?: boolean;
   created_at: string;
   updated_at: string;

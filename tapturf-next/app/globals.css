@@ -169,7 +169,7 @@ button, a, [role="button"], summary, label[for] {
   color: transparent;
 }
 
-/* ─── Owner-managed (a claimed turf) ───────────────────
+/* ─── Claimed (a turf its owner runs) ───────────────────
    The green twin of the spotlight. Green = the owner keeps this page;
    gold = trending; blue = a person's tick. Literal hex values that match
    the accent tokens, as the spotlight classes do. The pill and the panel

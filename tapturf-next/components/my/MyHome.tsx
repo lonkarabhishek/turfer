@@ -110,7 +110,7 @@ export function MyHome() {
               <h2 className="text-[13px] font-semibold text-primary-500 mb-1">Turfs that list your number</h2>
               <p className="text-[13px] text-primary-500 mb-3">
                 Your number {home.who.replace(/^(\d{5})(\d{5})$/, "$1 $2")} is on these listings, so you can open them straight away. A turf you open then
-                shows the Owner-managed badge on its page, and says &ldquo;Managed by @your-username&rdquo; if you have a username.
+                shows the Claimed badge on its page, and says &ldquo;Managed by @your-username&rdquo; if you have a username.
               </p>
               <ul className="space-y-2">
                 {home.matches.map((t) => (
@@ -519,7 +519,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
             Claiming as <span className="font-semibold text-primary-900">{me.name || "your account"}</span>
             <span className="text-primary-500"> · {me.kind === "email" ? `Google, ${me.who}` : `phone, +91 ${spaced(me.who)}`}</span>
             <span className="block mt-0.5 text-primary-500">
-              Once it&rsquo;s yours, the turf&rsquo;s page shows the Owner-managed badge, and says &ldquo;Managed by @your-username&rdquo; if you have a username. Your number and email never show.
+              Once it&rsquo;s yours, the turf&rsquo;s page shows the Claimed badge, and says &ldquo;Managed by @your-username&rdquo; if you have a username. Your number and email never show.
             </span>
           </div>
 
