@@ -23,14 +23,25 @@
 --    'none'. The route asks only while it cannot check sign-ins at all
 --    (Firebase or Supabase down): a link with a recorded starter keeps
 --    taking writes with its secret, a new one waits until checks work.
--- 4. public.admin_live_links2 (site owner only): every column of
+-- 4. public.live_link_created (live write key only): a link's status, when
+--    its row was made and when its starter was recorded (null: none). The
+--    route asks only for a write with no valid sign-in on a link with an
+--    old code: a row whose starter came with the write that made it was
+--    made by the server that checks sign-ins (no server before it recorded
+--    one), so the grace for links already running at the deploy never
+--    covers an old code started since with a single login.
+-- 5. public.admin_live_links2 (site owner only): every column of
 --    admin_live_links, then who started the link: their account id, name,
 --    username, sign-in method and when it was recorded (null for a link
---    with no row here). admin_live_links stays as it is for instances
---    still on the old code (a function's columns cannot change in place).
+--    with no row here). p_min_writes leaves out links with fewer writes
+--    (1: no stop markers, for the admin home's latest link).
+--    admin_live_links stays as it is for instances still on the old code
+--    (a function's columns cannot change in place).
 --
 -- The app works before this file is applied: recording fails quietly and
--- the admin says "Not recorded"; the login check does not depend on it.
+-- the admin says "Not recorded"; the login check does not depend on it
+-- (a running link with an old code goes on with its secret alone, as it
+-- would right after the deploy).
 --
 -- Erasing an account: user_id has no foreign key, like the other private
 -- per-user tables (private.tool_use_log, private.user_cities). On an
@@ -105,15 +116,46 @@ begin
 end;
 $$;
 
+-- The app compares the two (lib/live/gate.ts legacyRead): a starter
+-- recorded within a minute of the row being made came with the write that
+-- made it. live_match_put sets a row's created_at at its first write, over
+-- a stop marker too.
+create or replace function public.live_link_created(p_key text, p_code text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not private.live_key_ok(p_key) then
+    return jsonb_build_object('r', 'unavailable');
+  end if;
+  if p_code is null or p_code !~ '^[a-z0-9]{12}$' then
+    return null;
+  end if;
+  return (
+    select jsonb_build_object(
+             'status', m.status,
+             'created_at', m.created_at,
+             'started_at', s.started_at)
+      from public.live_matches m
+      left join private.live_link_starts s on s.code = m.code
+     where m.code = p_code);
+end;
+$$;
+
 -- Callable with the anon key; the write key check inside is the gate, as for live_match_put.
 revoke all on function public.live_link_start_record(text, text, uuid, text, text) from public;
 revoke all on function public.live_link_starter_known(text, text) from public;
+revoke all on function public.live_link_created(text, text) from public;
 grant execute on function public.live_link_start_record(text, text, uuid, text, text) to anon, authenticated;
 grant execute on function public.live_link_starter_known(text, text) to anon, authenticated;
+grant execute on function public.live_link_created(text, text) to anon, authenticated;
 
 -- admin_live_links (20261026_admin_live_links.sql) with the starter after
 -- its own columns. The name is the account's as it is now, cut to 60.
-create or replace function public.admin_live_links2(p_firebase_token text default null)
+create or replace function public.admin_live_links2(p_firebase_token text default null, p_min_writes integer default 0)
 returns table (
   code text,
   status text,
@@ -165,8 +207,9 @@ begin
     left join private.live_link_starts s on s.code = m.code
     left join public.users u on u.id = s.user_id
     left join public.usernames un on un.user_id = s.user_id
+   where m.writes >= coalesce(p_min_writes, 0)
    order by m.created_at desc, m.code;
 end;
 $$;
-revoke all on function public.admin_live_links2(text) from public;
-grant execute on function public.admin_live_links2(text) to anon, authenticated;
+revoke all on function public.admin_live_links2(text, integer) from public;
+grant execute on function public.admin_live_links2(text, integer) to anon, authenticated;

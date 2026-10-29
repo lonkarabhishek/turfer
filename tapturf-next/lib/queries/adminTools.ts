@@ -72,20 +72,23 @@ export type LiveFilter = keyof typeof LIVE_FILTERS;
 
 /**
  * Live links newest first, with who started each (admin_live_links2,
- * owner only), every one or the first `limit`. Before
- * 20261029_live_link_starts.sql is applied that read is not there: the
- * links come from admin_live_links, every starter "Not recorded".
+ * owner only), every one or the first `limit`, leaving out links with
+ * fewer than `minWrites` writes. Before 20261029_live_link_starts.sql is
+ * applied that read is not there: the links come from admin_live_links,
+ * every starter "Not recorded", filtered here from a few more rows.
  */
-async function readLiveLinks(limit: number | null): Promise<Section<AdminLiveLink[]>> {
-  const read = (fn: string) =>
+async function readLiveLinks(limit: number | null, minWrites = 0): Promise<Section<AdminLiveLink[]>> {
+  const read = (fn: string, args: Record<string, unknown>, n: number | null) =>
     ownerRead(fn, async ({ supabase, token }, signal): Promise<Record<string, unknown>[]> =>
-      limit === null
-        ? readAllPages<Record<string, unknown>>((from, to) => supabase.rpc(fn, { p_firebase_token: token }).range(from, to).abortSignal(signal), fn)
-        : rowsOf<Record<string, unknown>>(await supabase.rpc(fn, { p_firebase_token: token }).range(0, limit - 1).abortSignal(signal), fn),
+      n === null
+        ? readAllPages<Record<string, unknown>>((from, to) => supabase.rpc(fn, { p_firebase_token: token, ...args }).range(from, to).abortSignal(signal), fn)
+        : rowsOf<Record<string, unknown>>(await supabase.rpc(fn, { p_firebase_token: token, ...args }).range(0, n - 1).abortSignal(signal), fn),
     );
-  let s = await read("admin_live_links2");
-  if (!s.ok && s.reason === "not_set_up") s = await read("admin_live_links");
-  return s.ok ? { ok: true, data: s.data.map(toAdminLiveLink) } : s;
+  let s = await read("admin_live_links2", minWrites ? { p_min_writes: minWrites } : {}, limit);
+  if (!s.ok && s.reason === "not_set_up") s = await read("admin_live_links", {}, limit === null || !minWrites ? limit : limit + 20);
+  if (!s.ok) return s;
+  const links = s.data.map(toAdminLiveLink).filter((l) => l.writes >= minWrites);
+  return { ok: true, data: limit === null ? links : links.slice(0, limit) };
 }
 
 /** Every live scoreboard link, newest first, with its starter; or why it can't be read. */
@@ -95,8 +98,12 @@ export async function getAdminLiveLinks(filter: LiveFilter = "all"): Promise<Sec
   return { ok: true, data: s.data.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : r.status === filter)) };
 }
 
-/** The newest live link and who started it, for the admin home (null: none yet). */
+/**
+ * The newest live link that went live and who started it, for the admin
+ * home (null: none yet). A stop marker (turned off before its first send,
+ * no write, no starter) never stands in for it.
+ */
 export const getLatestLiveLink = cache(async (): Promise<Section<AdminLiveLink | null>> => {
-  const s = await readLiveLinks(1);
+  const s = await readLiveLinks(1, 1);
   return s.ok ? { ok: true, data: s.data[0] ?? null } : s;
 });

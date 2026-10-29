@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Identity, IdentityResult } from "../account/identity";
-import { LIVE_LEGACY_UNTIL, LIVE_WHO_MAX, createLiveWho, decideLiveWrite, gateLiveWrite, liveLinkKind, type LinkRead, type LiveGate, type LiveLinkKind, type LiveWho } from "./gate";
+import { LIVE_LEGACY_UNTIL, LIVE_SIGNED_START_MS, LIVE_WHO_MAX, createLiveWho, decideLiveWrite, gateLiveWrite, legacyRead, liveLinkKind, type LinkRead, type LiveGate, type LiveLinkKind, type LiveWho } from "./gate";
 
 const SIGNER = { userId: "aaaaaaaa-aaaa-4aaa-8aaa-000000000001", method: "google" as const };
 const WHO: Record<string, LiveWho> = { valid: { ok: SIGNER }, invalid: { invalid: true }, missing: { missing: true }, unavailable: { unavailable: true } };
@@ -66,6 +66,29 @@ test("link kinds: a new code always needs the sign-in; an old one only when its 
   assert.equal(liveLinkKind(1, "unknown", before), "unknown");
   // The grace is a fixed, documented date: a week after the planned 30 Oct 2026 deploy.
   assert.equal(new Date(LIVE_LEGACY_UNTIL).toISOString(), "2026-11-05T18:30:00.000Z");
+});
+
+test("legacy rows: a running row keeps the grace unless this server made it, with a sign-in (its starter recorded at that first write)", () => {
+  const made = Date.parse("2026-10-30T09:00:00Z");
+  // Before 20261029_live_link_starts.sql is applied (the old read: no created_at), or no starter: running is enough, as before.
+  assert.equal(legacyRead(true, null, null), "running");
+  assert.equal(legacyRead(true, null, made + 500), "running", "the old read gives no created_at");
+  assert.equal(legacyRead(true, made, null), "running", "a row from before the deploy: no starter");
+  // A row from before the deploy whose starter a later signed-in write recorded keeps its grace (an old tab may still write to it).
+  assert.equal(legacyRead(true, made, made + LIVE_SIGNED_START_MS), "running");
+  assert.equal(legacyRead(true, made, made + 2 * 3600_000), "running");
+  // An old code kept back and started after the deploy with one login: its starter came with that write. No grace.
+  assert.equal(legacyRead(true, made, made + 400), "none");
+  assert.equal(legacyRead(true, made, made + LIVE_SIGNED_START_MS - 1), "none");
+  // A match that is not running never has a grace.
+  for (const [c, s] of [[null, null], [made, null], [made, made + 400], [made, made + 3600_000]] as [number | null, number | null][]) assert.equal(legacyRead(false, c, s), "none");
+  // And what that means at the gate: an old code, no sign-in, inside the grace dates.
+  const at = made + 60_000;
+  assert.equal(liveLinkKind(1, legacyRead(true, made, null), at), "legacy");
+  assert.deepEqual(decideLiveWrite(WHO.missing, liveLinkKind(1, legacyRead(true, made, null), at), null), WRITE);
+  assert.deepEqual(decideLiveWrite(WHO.missing, liveLinkKind(1, legacyRead(true, made, made + 400), at), null), LOGIN);
+  assert.deepEqual(decideLiveWrite(WHO.invalid, liveLinkKind(1, legacyRead(true, made, made + 400), at), null), LOGIN);
+  assert.equal(LIVE_SIGNED_START_MS, 60_000);
 });
 
 test("the gate reads only what the decision needs", async () => {
@@ -143,6 +166,58 @@ test("signer: a match on one token costs one check, not one per ball (measured)"
   await h.who(t2);
   await h.who(t2);
   assert.deepEqual(h.counts, { identify: 2, account: 2 });
+});
+
+test("signer: a Google sign-in is checked again every minute, as on the account routes, so a revoked one stops within a minute", async () => {
+  let now = 1_800_000_000_000;
+  let id: IdentityResult = { ok: GOOGLE };
+  const counts = { identify: 0, account: 0 };
+  const who = createLiveWho({
+    identify: async () => (counts.identify++, id),
+    account: async () => (counts.account++, { ok: "user-2" }),
+    now: () => now,
+  });
+  const t = tokenFor("x", Math.floor(now / 1000) + 3600, "https://example.supabase.co/auth/v1");
+  for (let ball = 0; ball < 120; ball++) {
+    assert.deepEqual(await who(t), { ok: { userId: "user-2", method: "google" } });
+    now += 2_500;
+  }
+  assert.deepEqual(counts, { identify: 5, account: 5 }, "120 writes in 5 minutes: one check a minute");
+  // Signed out (GoTrue now refuses the token): refused at the next check, within a minute, for a mint as for a write.
+  id = { invalid: true };
+  let refusedAfter = -1;
+  for (let s = 0; s <= 60; s++) {
+    if ("invalid" in (await who(t))) {
+      refusedAfter = s;
+      break;
+    }
+    now += 1_000;
+  }
+  assert.ok(refusedAfter >= 0 && refusedAfter <= 60, `refused ${refusedAfter} s after the sign-out`);
+  assert.deepEqual(await who(t), { invalid: true }, "and stays refused");
+});
+
+test("signer: a phone sign-in is kept 5 minutes at most, never past its token", async () => {
+  let now = 1_800_000_000_000;
+  let calls = 0;
+  const who = createLiveWho({ identify: async () => (calls++, { ok: PHONE }), account: async () => ({ ok: "user-1" }), now: () => now });
+  const t = tokenFor("x", Math.floor(now / 1000) + 3600);
+  await who(t);
+  now += 5 * 60_000 - 1;
+  await who(t);
+  assert.equal(calls, 1);
+  now += 1;
+  await who(t);
+  assert.equal(calls, 2, "checked again at 5 minutes");
+  // A token with 30 s left is kept only those 30 s.
+  const short = tokenFor("y", Math.floor(now / 1000) + 30);
+  await who(short);
+  now += 29_000;
+  await who(short);
+  assert.equal(calls, 3);
+  now += 1_000;
+  assert.deepEqual(await who(short), { invalid: true }, "expired: refused from its own exp, no check");
+  assert.equal(calls, 3);
 });
 
 test("signer: Google sign-ins say google; only verified answers are kept", async () => {

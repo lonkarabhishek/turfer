@@ -218,7 +218,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
                         {methodLabel(l.starter.method)}
                       </span>
                       {recordedLater(l) && (
-                        <span className="block text-[12px] text-primary-400" title={`Recorded ${fmtDateTime(l.starter.at)}, from a signed-in update to a link started before logins were checked`}>
+                        <span className="block text-[12px] text-primary-400" title={`Recorded ${fmtDateTime(l.starter.at)}, after the link began (from a later signed-in update)`}>
                           Recorded later
                         </span>
                       )}
@@ -229,7 +229,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
                 </td>
                 <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{sportName(l.sport) ?? <span className="text-primary-400">-</span>}</td>
                 <td className="px-4 py-3 text-primary-900">
-                  {l.team_a || l.team_b ? `${l.team_a || "?"} vs ${l.team_b || "?"}` : <span className="text-primary-400">{l.status === "stopped" || l.status === "expired" ? "Cleared when it ended" : "-"}</span>}
+                  {l.team_a || l.team_b ? `${l.team_a || "?"} vs ${l.team_b || "?"}` : <span className="text-primary-400">{l.writes === 0 ? "Never went live" : l.status === "stopped" || l.status === "expired" ? "Cleared when it ended" : "-"}</span>}
                 </td>
                 <td className="px-4 py-3 text-primary-600">{[l.title, l.venue].filter(Boolean).join(" · ") || <span className="text-primary-400">-</span>}</td>
                 <td className="px-4 py-3"><Badge className={LIVE_STYLE[l.status] ?? "bg-primary-100 text-primary-500"}>{l.status}</Badge></td>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Link2, Play, Plus, Trash2 } from "lucide-react";
+import { Check, Link2, LogIn, Play, Plus, Trash2 } from "lucide-react";
 import { boardShape, deriveBoard } from "@/lib/board";
 import type { Board, BoardSport, BoardView } from "@/lib/board/types";
 import { trackTool } from "@/lib/analytics/tools";
@@ -289,6 +289,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   const cardLink = liveLinks && board ? live.info(board.id) : null;
   const cardUrl = cardLink ? urlOf(cardLink) : null;
   const copied = cardUrl !== null && copiedUrl === cardUrl;
+  const cardPaused = cardLink?.fault === "login";
   const keepFrom = view && canKeepLink(cardLink?.link, now) ? `${view.teams.a.name} vs ${view.teams.b.name}` : null;
   const initialSport = prefill.sport ?? index.list[0]?.sport ?? "football";
 
@@ -314,14 +315,21 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
           <p className="text-[22px] font-bold leading-tight">{view.status === "done" && view.result ? view.result.text : view.headline}</p>
           {cardUrl && (
             <div className="mt-3 flex items-center gap-2 rounded-2xl bg-white/10 pl-3 pr-1 py-1">
-              <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" aria-hidden />
+              {/* Paused while the server wants a login again (fault login): followers see the score up to here until then. */}
+              <span className={`w-2 h-2 rounded-full shrink-0 ${cardPaused ? "bg-amber-400" : "bg-green-400"}`} aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-bold">Live link on</span>
+                <span className="block text-[14px] font-bold">{cardPaused ? "Live link paused, log in again" : "Live link on"}</span>
                 <span className="block text-[12px] text-white/70 truncate">{shortUrl(cardUrl)}</span>
               </span>
-              <button type="button" onClick={() => copyLink(cardUrl)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-white/15 text-[14px] font-bold hover:bg-white/25">
-                {copied ? <Check className="w-4 h-4" aria-hidden /> : <Link2 className="w-4 h-4" aria-hidden />} {copied ? "Copied" : "Copy link"}
-              </button>
+              {cardPaused ? (
+                <button type="button" onClick={() => loginForLink(board.id)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-amber-300 text-amber-950 text-[14px] font-bold hover:bg-amber-200">
+                  <LogIn className="w-4 h-4" aria-hidden /> Log in
+                </button>
+              ) : (
+                <button type="button" onClick={() => copyLink(cardUrl)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-white/15 text-[14px] font-bold hover:bg-white/25">
+                  {copied ? <Check className="w-4 h-4" aria-hidden /> : <Link2 className="w-4 h-4" aria-hidden />} {copied ? "Copied" : "Copy link"}
+                </button>
+              )}
               <span className="sr-only" aria-live="polite">
                 {copied ? "Link copied" : ""}
               </span>

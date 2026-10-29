@@ -57,6 +57,8 @@ export function faultText(info: LiveInfo): string | null {
   // Still on: the server took writes for this link and keeps showing them, so it stays until turned off.
   if (info.on && info.fault === "limit") return "This live link has reached its limit. Turn it off, then turn on a new one to keep sharing.";
   if (info.on && info.fault === "too_big") return "This match is too long to share live now. Friends see the score up to here until you turn the link off.";
+  // Not on: the server would not give a link, so there is nothing to keep updating yet.
+  if (!info.on && info.fault === "login") return "Log in again to turn on the live link. Your match is saved here.";
   return LIVE_FAULT[info.fault];
 }
 
@@ -86,13 +88,15 @@ export function PrivacyNote() {
  * Over the scoring pad while the server wants a login again (fault
  * login): scoring goes on, the link waits. Once per screen; the LIVE pill
  * and the share sheet still say it after it is closed. behind: a toast
- * has the spot for now.
+ * has the spot for now. inline: in the footer's own flow, taking room
+ * rather than covering what is above it (the racquet halves, tap zones to
+ * their bottom edge); it stays put while a toast floats above it.
  */
-export function LiveLoginNote({ live, behind = false }: { live?: ShareLive; behind?: boolean }) {
+export function LiveLoginNote({ live, behind = false, inline = false }: { live?: ShareLive; behind?: boolean; inline?: boolean }) {
   const [closed, setClosed] = useState(false);
-  if (!live || live.info.fault !== "login" || !live.onLogin || closed || behind) return null;
+  if (!live || live.info.fault !== "login" || !live.onLogin || closed || (behind && !inline)) return null;
   return (
-    <div role="status" className="absolute left-3 right-3 bottom-full mb-2 z-10 rounded-2xl pl-4 pr-2 py-2 min-h-14 shadow-elevated flex items-center gap-2 bg-amber-300 text-amber-950">
+    <div role="status" className={`${inline ? "mb-2" : "absolute left-3 right-3 bottom-full mb-2 z-10 shadow-elevated"} rounded-2xl pl-4 pr-2 py-2 min-h-14 flex items-center gap-2 bg-amber-300 text-amber-950`}>
       <span className="flex-1 min-w-0 text-[14px] font-semibold leading-snug">{live.info.on ? "Live link paused. Log in again to keep it updating." : "Log in again to turn on the live link."}</span>
       <button type="button" onClick={live.onLogin} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-amber-950 text-white text-[14px] font-bold">
         <LogIn className="w-4 h-4" aria-hidden /> Log in
@@ -138,7 +142,7 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
         <button type="button" onClick={live.onStart} className="press-tight mt-3 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[17px] font-bold hover:bg-primary-800">
           <Radio className="w-5 h-5" aria-hidden /> {live.loginFirst ? "Log in and turn on live link" : "Turn on live link"}
         </button>
-        {live.loginFirst && <p className="mt-2 text-[13px] leading-snug text-primary-500">Log in with Google or your phone to share. Your match is saved on this phone.</p>}
+        {live.loginFirst && info.fault !== "login" && <p className="mt-2 text-[13px] leading-snug text-primary-500">Log in with Google or your phone to share. Your match is saved on this phone.</p>}
         <PrivacyNote />
       </section>
     );

@@ -65,10 +65,14 @@ export const methodLabel = (m: LiveStarter["method"]): string => (m === "google"
 /** Who started it, in a word or two. */
 export const starterName = (s: LiveStarter | null): string => (s ? s.name || (s.username ? `@${s.username}` : "No name on the account") : "Not recorded");
 
-/** A starter recorded this long after the link began came from a later signed-in write (a link from before the check). */
+/**
+ * A starter recorded this long after the link began came from a later
+ * signed-in write: a link from before the check, or one that began before
+ * 20261029_live_link_starts.sql was applied (recording waited for it).
+ */
 const LATER_MS = 10 * 60_000;
 
-/** Whether the starter was recorded well after the link began: the account that scored it later, from the browser holding its secret. */
+/** Whether the starter was recorded well after the link began, by a later signed-in write from the browser holding its secret. */
 export function recordedLater(link: Pick<AdminLiveLink, "created_at" | "starter">): boolean {
   const a = Date.parse(link.created_at);
   const b = link.starter?.at ? Date.parse(link.starter.at) : NaN;

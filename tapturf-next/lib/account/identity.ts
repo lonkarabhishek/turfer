@@ -121,9 +121,9 @@ export type IdentityDeps = {
   now: () => number;
 };
 
-/** How long a verified identity is reused, at most. */
-const FIREBASE_CACHE_MS = 5 * 60_000;
-const SUPABASE_CACHE_MS = 60_000;
+/** How long a verified identity is reused, at most (the live link gate, lib/live/gate.ts, keeps to these too). */
+export const FIREBASE_CACHE_MS = 5 * 60_000;
+export const SUPABASE_CACHE_MS = 60_000;
 const CACHE_MAX = 5_000;
 
 /**

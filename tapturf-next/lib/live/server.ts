@@ -11,7 +11,7 @@ import { MAX_TRACKED, clientNetwork, windowCounter } from "../limits";
 import { bearerToken, identifyToken } from "../account/identity";
 import { resolveAccount } from "../account/server";
 import { checkLiveTags, createTagLookup } from "./tags";
-import { createLiveWho, type LinkRead, type LiveSigner, type LiveWho } from "./gate";
+import { createLiveWho, legacyRead, type LinkRead, type LiveSigner, type LiveWho } from "./gate";
 import {
   LIVE_MAX_MATCH_CHARS,
   LIVE_MAX_REV,
@@ -189,19 +189,34 @@ export function liveSigner(req: Request): Promise<LiveWho> {
 const runningSeen = new Map<string, number>();
 const RUNNING_SEEN_MS = 60_000;
 
-/** Whether a link's match is running (live or done), for the legacy grace. Never throws. */
+const timeOf = (v: unknown): number | null => {
+  const t = typeof v === "string" ? Date.parse(v) : NaN;
+  return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * Whether a link's match is running (live or done) on a row from before
+ * the check, for the legacy grace (gate.ts legacyRead). Before
+ * 20261029_live_link_starts.sql is applied there is no live_link_created:
+ * the status alone, as before. Never throws.
+ */
 export async function liveLinkRunning(code: string): Promise<LinkRead> {
   const t = Date.now();
   if ((runningSeen.get(code) ?? 0) > t) return "running";
   const key = liveWriteKey();
   if (!key) return "unknown";
   try {
-    const { data, error } = await liveWriteClient().rpc("live_match_get_k", { p_key: key, p_code: code });
+    let res = await liveWriteClient().rpc("live_link_created", { p_key: key, p_code: code });
+    if (res.error && (res.error.code === "PGRST202" || res.error.code === "42883")) {
+      res = await liveWriteClient().rpc("live_match_get_k", { p_key: key, p_code: code });
+    }
+    const { data, error } = res;
     if (error) throw new Error(error.message);
     if (data == null) return "none";
-    const d = data as { r?: unknown; status?: unknown };
+    const d = data as { r?: unknown; status?: unknown; created_at?: unknown; started_at?: unknown };
     if (d.r === "unavailable") return "unknown";
-    if (d.status !== "live" && d.status !== "done") return "none";
+    const read = legacyRead(d.status === "live" || d.status === "done", timeOf(d.created_at), timeOf(d.started_at));
+    if (read !== "running") return read;
     if (runningSeen.size >= MAX_TRACKED) runningSeen.clear();
     runningSeen.set(code, t + RUNNING_SEEN_MS);
     return "running";

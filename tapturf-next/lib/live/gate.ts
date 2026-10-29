@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { peekToken, type Identity, type IdentityResult } from "../account/identity";
+import { FIREBASE_CACHE_MS, SUPABASE_CACHE_MS, peekToken, type Identity, type IdentityResult } from "../account/identity";
 import type { LiveCodeGen } from "./codes";
 
 /**
@@ -18,10 +18,11 @@ import type { LiveCodeGen } from "./codes";
  * nothing is written, with two exceptions, both only for a writer that
  * holds the link's secret (live_match_put still checks it):
  *   legacy       the code is from before the check (the first tag,
- *                lib/live/codes.ts) and its match was already running, so
- *                its scorer may be on a tab with the old page, which sends
- *                no sign-in. Until LIVE_LEGACY_UNTIL; each link's own 36
- *                hour write window (live_match_put) ends most sooner.
+ *                lib/live/codes.ts) and its match was already running, on
+ *                a row made before the check (legacyRead), so its scorer
+ *                may be on a tab with the old page, which sends no
+ *                sign-in. Until LIVE_LEGACY_UNTIL; each link's own 36 hour
+ *                write window (live_match_put) ends most sooner.
  *   unavailable  the sign-in cannot be checked right now (Firebase's certs
  *                or Supabase's auth not answering; never a token found
  *                invalid). A link whose starter is recorded carries on:
@@ -38,7 +39,8 @@ import type { LiveCodeGen } from "./codes";
  * leaves running matches alone. No legacy link can take writes 36 hours
  * after the deploy anyway (live_match_put's window from its first write,
  * which came before); a link with an old code first written after the
- * deploy needed the sign-in for it. Past this date the grace code can go.
+ * deploy needed the sign-in for it, and gets no grace once the database
+ * can tell (legacyRead). Past this date the grace code can go.
  */
 export const LIVE_LEGACY_UNTIL = Date.parse("2026-11-06T00:00:00+05:30");
 
@@ -50,8 +52,10 @@ export type LiveWho = { ok: LiveSigner } | { missing: true } | { invalid: true }
 
 /**
  * The link as the grace sees it. new: a code minted since the check, or
- * an older one with no running match (the sign-in is needed to start it);
- * legacy: an older code whose match is running, before LIVE_LEGACY_UNTIL;
+ * an older one with no running match from before the check (the sign-in
+ * is needed to start it, and to go on with one started since);
+ * legacy: an older code whose match is running on a row from before the
+ * check, before LIVE_LEGACY_UNTIL;
  * legacy_out: an older code after it; unknown: the read that tells failed.
  */
 export type LiveLinkKind = "new" | "legacy" | "legacy_out" | "unknown";
@@ -68,8 +72,34 @@ export function decideLiveWrite(who: LiveWho, link: LiveLinkKind, starter: boole
   return link === "unknown" ? { refuse: "unavailable" } : { refuse: "login" };
 }
 
-/** What the link's row says: a running match (live or done), none (no row, or stopped, expired or a stop marker), or unknown. */
+/**
+ * What the link's row says: a running match (live or done) on a row from
+ * before the check, none (no row; stopped, expired or a stop marker; or a
+ * row this server made, with a sign-in), or unknown (the read failed).
+ */
 export type LinkRead = "running" | "none" | "unknown";
+
+/** A starter recorded within this long of its row being made came from the write that made the row. */
+export const LIVE_SIGNED_START_MS = 60_000;
+
+/**
+ * Whether a running row is one from before the check, from what
+ * live_link_created (20261029_live_link_starts.sql) says: when the row was
+ * made, and when its starter was recorded. A row this server made had a
+ * verified sign-in on the write that made it, and its starter is recorded
+ * right after that write; no server before this one recorded any. Such a
+ * row needs the sign-in like a new code, so an old code kept from before
+ * the deploy and first written after it with one login cannot go on
+ * without one. A row the old page made (before the deploy, or during a
+ * rollback) has no starter, or one recorded later by a signed-in write,
+ * and keeps the grace. No date to set. createdAt null (before that file is
+ * applied: the status alone), or no starter: a running match is enough.
+ */
+export function legacyRead(running: boolean, createdAt: number | null, startedAt: number | null): LinkRead {
+  if (!running) return "none";
+  const signedStart = createdAt !== null && startedAt !== null && startedAt - createdAt < LIVE_SIGNED_START_MS;
+  return signedStart ? "none" : "running";
+}
 
 export function liveLinkKind(gen: LiveCodeGen, row: LinkRead, now: number): LiveLinkKind {
   if (gen === 2) return "new";
@@ -111,15 +141,17 @@ export type LiveWhoDeps = {
 };
 
 /**
- * The signer of a write, from its Bearer token. A scorer sends one PUT per
- * ball: the identity checker keeps a verified Firebase sign-in 5 minutes
- * and a Supabase one 1 minute, and the account behind it is a database
- * call, so this keeps the account a token opens, by a hash of the token
- * (never the token), until the token expires (an hour at most for both).
- * A match then costs one check per token, not one per ball. Only answers
- * that verified are kept; an expired token is refused from its own exp
- * before any check. A token signed out before it expires keeps writing,
- * until then, to links whose secret its browser holds.
+ * The signer of a write or a mint, from its Bearer token. A scorer sends
+ * one PUT per ball, and the account behind a sign-in is a database call,
+ * so this keeps the account a token opens, by a hash of the token (never
+ * the token), for as long as the identity checker keeps the sign-in
+ * itself: 5 minutes for Firebase, 1 minute for Supabase (so GoTrue sees a
+ * Google session again every minute), and never past the token's own
+ * exp. A match then costs one check a minute (Google) or every 5 minutes
+ * (phone), not one per ball. Only answers that verified are kept; an
+ * expired token is refused from its own exp before any check. A Google
+ * session signed out or revoked therefore stops minting codes and writing
+ * within a minute, as on every account route.
  */
 export function createLiveWho(deps: LiveWhoDeps) {
   const cache = new Map<string, { until: number; who: LiveSigner }>();
@@ -150,7 +182,7 @@ export function createLiveWho(deps: LiveWhoDeps) {
     // A sign-in that opens no account (a sign-up not finished) logs in again, which makes it.
     if ("none" in acc) return { invalid: true };
     const signer: LiveSigner = { userId: acc.ok, method: id.ok.kind === "google" ? "google" : "phone" };
-    remember(key, signer, peek.exp * 1000);
+    remember(key, signer, Math.min(peek.exp * 1000, now + (id.ok.kind === "google" ? SUPABASE_CACHE_MS : FIREBASE_CACHE_MS)));
     return { ok: signer };
   };
 }

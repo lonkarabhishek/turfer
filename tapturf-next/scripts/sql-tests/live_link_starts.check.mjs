@@ -3,8 +3,11 @@
 // stand-ins for what they read (Supabase's roles, the key table, the owner
 // check, users and usernames, pg_cron), and checks who started each link: a
 // starter is recorded once (the first stays), only with the live write key and
-// only for a link that took a write; the admin read answers only the site owner
-// and returns admin_live_links' columns as they were plus the starter's.
+// only for a link that took a write; live_link_created (write key only) says
+// a link's status, when its row was made and when its starter was recorded
+// (right after its first write, or later, or never); the admin read
+// answers only the site owner, returns admin_live_links' columns as they were
+// plus the starter's, and leaves out stop markers when asked (p_min_writes).
 // Never touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/live_link_starts.check.mjs supabase/migrations
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
@@ -64,6 +67,7 @@ const record = async (code, user = ASHA, tool = "cricket", method = "google", ke
   (await q(`select public.live_link_start_record($1, $2, $3, $4, $5) as r`, [key, code, user, tool, method]))[0].r;
 const known = async (code, key = "live-key") => (await q(`select public.live_link_starter_known($1, $2) as r`, [key, code]))[0].r;
 const starts = async () => q(`select code, user_id, tool, method from private.live_link_starts order by code`);
+const created = async (code, key = "live-key") => (await q(`select public.live_link_created($1, $2) as r`, [key, code]))[0].r;
 
 // A link that took its first write.
 eq((await put("aaaaaaaaaaaa", 1)).r, "ok", "the first write makes the link");
@@ -73,6 +77,12 @@ eq(await record("aaaaaaaaaaaa", ASHA, "cricket", "google", null), "unavailable",
 eq(await starts(), [], "nothing recorded without the key");
 eq(await known("aaaaaaaaaaaa", "wrong"), "unavailable", "the lookup needs the key too");
 eq(await known("aaaaaaaaaaaa"), "none", "no starter yet");
+const first = await created("aaaaaaaaaaaa");
+eq([first.status, typeof first.created_at, first.started_at], ["live", "string", null], "live_link_created: the status and when the row was made; no starter yet");
+eq(await created("aaaaaaaaaaaa", "wrong"), { r: "unavailable" }, "live_link_created needs the key");
+eq(await created("aaaaaaaaaaaa", null), { r: "unavailable" }, "and a key at all");
+eq(await created("AAAA"), null, "a code that isn't one");
+eq(await created("zzzzzzzzzzzz"), null, "a link with no row");
 
 // Shapes.
 eq(await record("AAAA", ASHA), "bad", "a code that isn't one");
@@ -106,11 +116,29 @@ eq(await record("dddddddddddd", RAVI, "board", "phone"), "ok", "its starter");
 // An older link nobody recorded.
 eq((await put("eeeeeeeeeeee", 1)).r, "ok", "a link with no starter");
 await q(`update public.live_matches set created_at = created_at - interval '1 day' where code = 'eeeeeeeeeeee'`);
+// A link from before the deploy (made 2 hours back), whose starter a later signed-in write recorded: it moves nothing.
+eq((await put("ffffffffffff", 1)).r, "ok", "a link from before the deploy");
+await q(`update public.live_matches set created_at = created_at - interval '2 hours' where code = 'ffffffffffff'`);
+eq(await record("ffffffffffff", RAVI, "cricket", "phone"), "ok", "its starter, recorded later");
+
+// When each row was made and its starter recorded: the app's legacyRead tells a row made with a sign-in
+// (its starter recorded right after the write that made it) from one made before the check.
+const ca = await created("aaaaaaaaaaaa");
+const cd = await created("dddddddddddd");
+const ce = await created("eeeeeeeeeeee");
+const cf = await created("ffffffffffff");
+const ms = (v) => Date.parse(v);
+const lag = (c) => ms(c.started_at) - ms(c.created_at);
+ok(lag(ca) >= 0 && lag(ca) < 60_000 && lag(cd) >= 0 && lag(cd) < 60_000, "rows made with a sign-in: starter recorded within a minute of the row");
+ok(lag(cf) >= 2 * 3600_000, "a row from before the deploy, recorded by a later signed-in write: hours after");
+eq([typeof ce.created_at, ce.started_at], ["string", null], "a row from before the deploy with no starter");
+eq([cd.status, (await created("cccccccccccc")).status, (await created("cccccccccccc")).started_at], ["live", "stopped", null], "with each row's status (a stop marker has no starter)");
+ok(!Object.keys(ca).some((k) => /secret|ip|user|stopper|match/.test(k)), "nothing but the status and the two times");
 
 // Nobody but the server: no table grants, no direct reads.
 ok(!(await q(`select has_table_privilege('anon', 'private.live_link_starts', 'select') as p`))[0].p, "anon cannot read the table");
 ok(!(await q(`select has_table_privilege('authenticated', 'private.live_link_starts', 'insert') as p`))[0].p, "authenticated cannot write it");
-for (const fn of ["live_link_start_record(text,text,uuid,text,text)", "live_link_starter_known(text,text)", "admin_live_links2(text)"]) {
+for (const fn of ["live_link_start_record(text,text,uuid,text,text)", "live_link_starter_known(text,text)", "live_link_created(text,text)", "admin_live_links2(text,integer)"]) {
   const grants = await q(`select grantee from information_schema.routine_privileges where specific_name ~ $1 and privilege_type = 'EXECUTE'`, [`^${fn.split("(")[0]}_[0-9]+$`]);
   ok(grants.some((g) => g.grantee === "anon") && !grants.some((g) => g.grantee === "PUBLIC"), `${fn}: anon may call it (the check is inside), PUBLIC not`);
   const def = (await q(`select prosecdef, proconfig from pg_proc where oid = $1::regprocedure`, [`public.${fn}`]))[0];
@@ -120,8 +148,9 @@ for (const fn of ["live_link_start_record(text,text,uuid,text,text)", "live_link
 // The admin read: the site owner only.
 await db.exec(`set test.owner = 'no'`);
 await assert.rejects(q(`select * from public.admin_live_links2(null)`), /not allowed/);
+await assert.rejects(q(`select * from public.admin_live_links2(null, 1)`), /not allowed/);
 await assert.rejects(q(`select * from public.admin_live_links(null)`), /not allowed/);
-passed += 2;
+passed += 3;
 await db.exec(`set test.owner = 'yes'`);
 
 const OLD = ["code", "status", "sport", "team_a", "team_b", "title", "venue", "events", "writes", "created_at", "updated_at"];
@@ -140,7 +169,12 @@ ok(by.aaaaaaaaaaaa.started_at instanceof Date, "with when it was recorded");
 eq([by.dddddddddddd.starter_name, by.dddddddddddd.starter_username, by.dddddddddddd.starter_method, by.dddddddddddd.sport], ["Ravi Kumar", null, "phone", "football"], "a phone starter without a username, on a board");
 eq([by.eeeeeeeeeeee.starter_id, by.eeeeeeeeeeee.starter_name, by.eeeeeeeeeeee.starter_method, by.eeeeeeeeeeee.started_at], [null, null, null, null], "an unrecorded link has no starter");
 eq([by.cccccccccccc.status, by.cccccccccccc.starter_id], ["stopped", null], "a stop marker has none either");
-eq(rows.map((r) => r.code), ["dddddddddddd", "cccccccccccc", "aaaaaaaaaaaa", "eeeeeeeeeeee"].sort((a, b) => (by[b].created_at - by[a].created_at) || a.localeCompare(b)), "newest first, as before");
+eq(rows.map((r) => r.code), ["dddddddddddd", "cccccccccccc", "aaaaaaaaaaaa", "eeeeeeeeeeee", "ffffffffffff"].sort((a, b) => (by[b].created_at - by[a].created_at) || a.localeCompare(b)), "newest first, as before");
+// The admin home's latest link: links that went live only, never a stop marker.
+const live1 = (await q(`select code from public.admin_live_links2('t', 1)`)).map((r) => r.code);
+eq(live1, rows.filter((r) => r.writes >= 1).map((r) => r.code), "p_min_writes 1: the same rows in the same order, without the stop marker");
+ok(!live1.includes("cccccccccccc") && live1.length === rows.length - 1, "only the marker is left out");
+eq((await q(`select code from public.admin_live_links2('t', null)`)).map((r) => r.code), rows.map((r) => r.code), "null: every link");
 // A long name is cut, as the other admin reads cut theirs.
 await q(`update public.users set name = $1 where id = $2`, ["N".repeat(80), RAVI]);
 eq((await q(`select starter_name from public.admin_live_links2('t') where code = 'dddddddddddd'`))[0].starter_name.length, 60, "names cut to 60");

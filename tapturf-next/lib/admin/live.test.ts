@@ -28,7 +28,7 @@ test("names and sign-in methods as the admin reads them", () => {
   assert.deepEqual([methodLabel("google"), methodLabel("phone"), methodLabel(null)], ["Google", "Phone", "Sign-in"]);
 });
 
-test("a starter recorded well after the link began says so (a link from before the check, scored later signed in)", () => {
+test("a starter recorded well after the link began says so (a later signed-in write)", () => {
   const at = (iso: string | null) => ({ created_at: base.created_at, starter: { id: ID, name: "A", username: null, method: "google" as const, at: iso } });
   assert.equal(recordedLater(at("2026-10-29T14:06:01.500Z")), false, "its first write");
   assert.equal(recordedLater(at("2026-10-29T14:15:00.000Z")), false);
