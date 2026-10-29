@@ -108,21 +108,25 @@ export function pricesAreForSport(labels: readonly string[], sport: CardSport): 
 /**
  * The sports pricing_bands formats name (29 Oct: every band with a format
  * is one of these). "box cricket", "box cricket (7-a-side)" is box
- * cricket, and comes first so its "(7-a-side)" never reads as football.
- * "6-a-side" is football, and futsal too: the futsal page is "futsal
- * courts and 5-a-side turfs" (lib/sports.ts) and Ask reads "5-a-side" as
- * football (lib/ai/ask.ts). A band with no format, or any other, names
- * no sport and is left out.
+ * cricket only, and comes first so its "(7-a-side)" never reads as
+ * football. Any "N-a-side" is football (Ask reads "5-a-side" as football,
+ * lib/ai/ask.ts). Only "5-a-side" and "6-a-side" are futsal too: the
+ * futsal page is "futsal courts and 5-a-side turfs" (lib/sports.ts), and a
+ * 7- or 11-a-side rate is another game's. A band with no format, or any
+ * other, names no sport and is left out.
  */
 const BAND_KINDS: readonly { kind: SportBandKind; re: RegExp; labels: readonly string[] }[] = [
   { kind: "box-cricket", re: /^\s*box\s*cricket\b/i, labels: ["Box Cricket"] },
-  { kind: "football", re: /^\s*\d+\s*-?\s*a\s*-?\s*side\b/i, labels: ["Football", "Futsal"] },
+  { kind: "football", re: /^\s*\d+\s*-?\s*a\s*-?\s*side\b/i, labels: ["Football"] },
+  { kind: "futsal", re: /^\s*[56]\s*-?\s*a\s*-?\s*side\b/i, labels: ["Futsal"] },
 ];
 
-/** The sport kind a band's format names, or null. */
-export function bandKind(format: string | null | undefined): SportBandKind | null {
-  if (typeof format !== "string") return null;
-  return BAND_KINDS.find((k) => k.re.test(format))?.kind ?? null;
+/** The sport kinds a band's format names: box cricket alone, else every kind it matches (none: []). */
+export function bandKinds(format: string | null | undefined): SportBandKind[] {
+  if (typeof format !== "string") return [];
+  const [box, ...rest] = BAND_KINDS;
+  if (box.re.test(format)) return [box.kind];
+  return rest.filter((k) => k.re.test(format)).map((k) => k.kind);
 }
 
 /**
@@ -133,11 +137,12 @@ export function bandKind(format: string | null | undefined): SportBandKind | nul
 export function sportBandsOf(bands: readonly Pick<PriceBand, "format" | "price_per_hour">[] | null | undefined): SportBands | null {
   const out: { [K in SportBandKind]?: [number, number] } = {};
   for (const b of bands ?? []) {
-    const kind = bandKind(b?.format);
     const p = positivePrice(b?.price_per_hour);
-    if (!kind || p == null) continue;
-    const r = out[kind];
-    out[kind] = r ? [Math.min(r[0], p), Math.max(r[1], p)] : [p, p];
+    if (p == null) continue;
+    for (const kind of bandKinds(b?.format)) {
+      const r = out[kind];
+      out[kind] = r ? [Math.min(r[0], p), Math.max(r[1], p)] : [p, p];
+    }
   }
   return Object.keys(out).length ? out : null;
 }
@@ -166,9 +171,9 @@ export function sportBandMap(
 /**
  * The per-hour range a venue's price bands give the selected sport: the
  * lowest and highest band of every kind the sport's filter matches
- * (N-a-side for Football and Futsal; box cricket for Box Cricket and the
- * Cricket chip, which lists box cricket). null: the bands name sports,
- * none of them this one. undefined: no band names a sport.
+ * (N-a-side for Football, 5- and 6-a-side for Futsal; box cricket for Box
+ * Cricket and the Cricket chip, which lists box cricket). null: the bands
+ * name sports, none of them this one. undefined: no band names a sport.
  */
 export function sportBandRange(bands: SportBands | null | undefined, sport: CardSport): readonly [number, number] | null | undefined {
   let lo = Infinity;

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bandKind,
+  bandKinds,
   cardPrice,
   cardSports,
   isTurfSport,
@@ -343,16 +343,20 @@ test("P2: a card with nothing listed stays so, bands or not", () => {
 });
 
 test("P2 bands: only formats that name a sport count", () => {
-  assert.equal(bandKind("box cricket"), "box-cricket");
-  assert.equal(bandKind("box cricket (7-a-side)"), "box-cricket");
-  assert.equal(bandKind("Box Cricket (Large (Tennis))"), "box-cricket");
-  for (const f of ["5-a-side", "11-a-side", "6 - a - side", "4 a side", " 7-a-side (turf 2)"]) assert.equal(bandKind(f), "football", f);
-  for (const f of [null, undefined, "", "standard", "turf 1", "a-side"]) assert.equal(bandKind(f), null, String(f));
+  assert.deepEqual(bandKinds("box cricket"), ["box-cricket"]);
+  assert.deepEqual(bandKinds("box cricket (7-a-side)"), ["box-cricket"]);
+  assert.deepEqual(bandKinds("box cricket (5-a-side)"), ["box-cricket"]);
+  assert.deepEqual(bandKinds("Box Cricket (Large (Tennis))"), ["box-cricket"]);
+  // Any N-a-side is football; only 5- and 6-a-side are futsal too.
+  for (const f of ["5-a-side", "6 - a - side", " 5 a side (turf 2)"]) assert.deepEqual(bandKinds(f), ["football", "futsal"], f);
+  for (const f of ["11-a-side", "4 a side", " 7-a-side (turf 2)", "8-a-side", "15-a-side"]) assert.deepEqual(bandKinds(f), ["football"], f);
+  for (const f of [null, undefined, "", "standard", "turf 1", "a-side"]) assert.deepEqual(bandKinds(f), [], String(f));
   assert.equal(sportBandsOf(null), null);
   assert.equal(sportBandsOf([]), null);
   assert.equal(sportBandsOf([band(null, 900), band("full court", 900)]), null);
   assert.deepEqual(sportBandsOf([band("5-a-side", 900), band("7-a-side", 1300), band("box cricket (Half)", 700), band("box cricket", 0), band(null, 5000)]), {
     football: [900, 1300],
+    futsal: [900, 900],
     "box-cricket": [700, 700],
   });
   // A venue whose only bands name no sport is decided without them (case 4).
@@ -364,7 +368,12 @@ test("P2 bands: only formats that name a sport count", () => {
 test("sportBandRange: every band kind the sport's filter matches; null for other sports only; undefined for none", () => {
   const both = { football: [900, 1300], "box-cricket": [700, 1500] } as const;
   assert.deepEqual(sportBandRange(both, page("football")), [900, 1300]);
-  assert.deepEqual(sportBandRange(both, page("futsal")), [900, 1300]);
+  // Football bands of no futsal size: the futsal page's sport is not among them.
+  assert.equal(sportBandRange(both, page("futsal")), null);
+  const small = { football: [900, 1300], futsal: [900, 1000], "box-cricket": [700, 1500] } as const;
+  assert.deepEqual(sportBandRange(small, page("futsal")), [900, 1000]);
+  assert.deepEqual(sportBandRange(small, page("football")), [900, 1300]);
+  assert.deepEqual(sportBandRange(small, chip("Football")), [900, 1300]);
   assert.deepEqual(sportBandRange(both, chip("Football")), [900, 1300]);
   assert.deepEqual(sportBandRange(both, page("box-cricket")), [700, 1500]);
   assert.deepEqual(sportBandRange(both, chip("Box Cricket")), [700, 1500]);
@@ -378,6 +387,22 @@ test("sportBandRange: every band kind the sport's filter matches; null for other
   assert.equal(sportBandRange({}, page("football")), undefined);
 });
 
+test("P2 futsal: only 5- and 6-a-side bands are a futsal rate; a 7- or 11-a-side one is never shown as futsal", () => {
+  // PlayAll Gaur City 1 (Noida) shape: futsal and football listed, 7- and 11-a-side bands only.
+  const big = withBands({ sports: ["Futsal", "Football", "Box Cricket"], morning_price: 1500, evening_price: 2500 }, [band("7-a-side", 2000), band("11-a-side", 6000, "evening")]);
+  assert.deepEqual(cardPrice(big, page("futsal")), NOT_LISTED);
+  assert.equal(sportMinimumPrice(big, page("futsal")), null);
+  // On the football page the same bands are football's rate (case 2).
+  assert.deepEqual(cardPrice(big, page("football")), { label: "₹2000 – ₹6000/hr", kind: "real", min: 2000, max: 6000, unit: "/hr" });
+  // A 6-a-side band is a futsal rate; the 11-a-side one stays football's.
+  const mixed = withBands({ sports: ["Futsal", "Football", "Box Cricket"], morning_price: 900, evening_price: 3000 }, [band("6-a-side", 1100), band("11-a-side", 3000, "evening")]);
+  assert.deepEqual(cardPrice(mixed, page("futsal")), { label: "₹1100/hr", kind: "real", min: 1100, max: 1100, unit: "/hr" });
+  assert.deepEqual(cardPrice(mixed, page("football")), { label: "₹1100 – ₹3000/hr", kind: "real", min: 1100, max: 3000, unit: "/hr" });
+  // A futsal-only venue keeps its own price, whatever its bands say (one sport: no ambiguity).
+  const solo = withBands({ sports: ["Futsal"], morning_price: 1200 }, [band("7-a-side", 2000)]);
+  assert.deepEqual(cardPrice(solo, page("futsal")), summarisePrice(solo));
+});
+
 test("sportBandMap: each venue's sport bands, marked owner where the owner confirmed its prices", () => {
   const map = sportBandMap([
     { id: "a", pricing_bands: [band("6-a-side", 1200), band("box cricket", 1400)], price_owner_confirmed: null },
@@ -388,7 +413,11 @@ test("sportBandMap: each venue's sport bands, marked owner where the owner confi
     { id: "owner-plain", pricing_bands: [band(null, 900)], price_owner_confirmed: true },
     { id: "empty", pricing_bands: null, price_owner_confirmed: null },
   ]);
-  assert.deepEqual<SportBandMap>(map, { a: { football: [1200, 1200], "box-cricket": [1400, 1400] }, owner: { football: [1200, 1200], owner: true }, unconfirmed: { football: [900, 900] } });
+  assert.deepEqual<SportBandMap>(map, {
+    a: { football: [1200, 1200], futsal: [1200, 1200], "box-cricket": [1400, 1400] },
+    owner: { football: [1200, 1200], futsal: [1200, 1200], owner: true },
+    unconfirmed: { football: [900, 900], futsal: [900, 900] },
+  });
   // The owner set prices on myTapturf: theirs win over the bands, as on the turf page (ownerSetPrices),
   // so the card decides without them: its price shows at a turf sport, as before.
   const owner = turf({ sports: ["Box Cricket", "Football"], morning_price: 800, price_owner_confirmed: true, sport_bands: map.owner });
@@ -405,7 +434,7 @@ test("sportBandMap: an owner-confirmed venue with no prices of its own shows its
     band("5-a-side", 1300), band("5-a-side", 1400, "evening"), band("7-a-side", 2100, "day"), band("7-a-side", 2500, "evening"),
   ];
   const map = sportBandMap([{ id: "den", pricing_bands, price_owner_confirmed: true }]);
-  assert.deepEqual<SportBandMap>(map, { den: { football: [1300, 2500], "box-cricket": [1300, 2500], owner: true } });
+  assert.deepEqual<SportBandMap>(map, { den: { football: [1300, 2500], futsal: [1300, 1400], "box-cricket": [1300, 2500], owner: true } });
   const row = { sports: ["Box Cricket", "Football"], price_owner_confirmed: true, price_mentions: [{ text: "." }] };
   // The turf page lists the bands and sums them up as ₹1300 – ₹2500/hr.
   const turfPage = turf({ ...row, pricing_bands });

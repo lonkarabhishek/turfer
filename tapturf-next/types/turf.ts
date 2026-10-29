@@ -143,12 +143,12 @@ export type PriceBand = {
   source?: string | null;
 };
 
-/** The sports pricing_bands formats name: "football" for the N-a-side formats, "box-cricket" for box cricket. */
-export type SportBandKind = "football" | "box-cricket";
+/** The sports pricing_bands formats name: "football" for the N-a-side formats, "futsal" for 5- and 6-a-side, "box-cricket" for box cricket. */
+export type SportBandKind = "football" | "futsal" | "box-cricket";
 
 /**
  * The lowest and highest listed per-hour price of each sport a venue's
- * price bands name, as [min, max] (the only two kinds the bands name).
+ * price bands name, as [min, max] (the only kinds the bands name).
  */
 export type SportBands = Partial<Record<SportBandKind, readonly [number, number]>> & {
   /** The owner confirmed the venue's prices on myTapturf: its own listed prices, when it has any, win over these (ownerSetPrices). */
