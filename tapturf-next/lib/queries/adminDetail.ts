@@ -231,7 +231,7 @@ export async function getAdminRequests(filter: RequestFilter = "all") {
 
 // ── Turfs ───────────────────────────────────────────────
 
-export const TURF_FILTERS = { all: "All active", hyderabad: "Hyderabad", bangalore: "Bangalore", mumbai: "Mumbai", pune: "Pune", delhi: "Delhi", chennai: "Chennai", nashik: "Nashik", nagpur: "Nagpur", nophone: "No phone" } as const;
+export const TURF_FILTERS = { all: "All active", hyderabad: "Hyderabad", bangalore: "Bangalore", mumbai: "Mumbai", pune: "Pune", delhi: "Delhi", chennai: "Chennai", nashik: "Nashik", nagpur: "Nagpur", nophone: "No phone", claimed: "Claimed" } as const;
 export type TurfFilter = keyof typeof TURF_FILTERS;
 
 type TurfListRow = {
@@ -246,6 +246,8 @@ type TurfListRow = {
   contact_info: { phone?: string } | null;
   images: unknown;
   updated_at: string | null;
+  /** An owner manages it on myTapturf (20261025_turf_claimed.sql). */
+  claimed: boolean | null;
 };
 
 /** Every active turf (paged: there are more than the 1,000 one request returns), by name. */
@@ -254,11 +256,13 @@ export async function getAdminTurfs(filter: TurfFilter = "all") {
     const all = await readAllPages<TurfListRow>((from, to) => {
       let q = s
         .from("turfs")
-        .select("id, name, slug, city, address, rating, total_reviews, owner_phone, contact_info, images, updated_at")
+        .select("id, name, slug, city, address, rating, total_reviews, owner_phone, contact_info, images, updated_at, claimed")
         .eq("is_active", true)
         .order("name", { ascending: true })
         .order("id", { ascending: true });
-      if (isCity(filter)) q = q.eq("city", filter);
+      // isCity is only slug-shaped: "all", "nophone" and "claimed" pass it too, and would ask for a city of that name.
+      if (filter !== "all" && filter !== "nophone" && filter !== "claimed" && isCity(filter)) q = q.eq("city", filter);
+      if (filter === "claimed") q = q.eq("claimed", true);
       return q.range(from, to).abortSignal(signal);
     }, "turfs");
     let rows = all.map((t) => ({

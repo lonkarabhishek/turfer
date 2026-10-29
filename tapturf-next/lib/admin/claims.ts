@@ -45,6 +45,8 @@ export type AdminClaim = {
   role: "owner" | "manager" | "staff" | null;
   note: string | null;
   createdAt: number | null;
+  /** When TapTurf or a listed-number match last decided it (approved, revoked, rejected); null while pending. */
+  decidedAt: number | null;
   pending: boolean;
   siteOwner: boolean;
   turfName: string;
@@ -130,6 +132,7 @@ export function toClaims(data: unknown): AdminClaim[] {
       role: typeof r.role === "string" && ROLES.includes(r.role) ? (r.role as AdminClaim["role"]) : null,
       note: str(r.note),
       createdAt: time(r.created_at),
+      decidedAt: time(r.decided_at),
       pending: r.status === "pending",
       siteOwner: r.site_owner === true,
       turfName: str(r.turf_name) ?? "A turf",

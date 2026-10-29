@@ -89,6 +89,18 @@ export const activeTurfCount = cache(() =>
 );
 
 /**
+ * Active turfs an owner manages on myTapturf now: turfs.claimed, which a
+ * trigger on turf_owners keeps true while the turf has an active claim
+ * (20261025_turf_claimed.sql). A count on ids, like activeTurfCount: the
+ * claims themselves are read by /admin/claimed, not on the home.
+ */
+export const claimedTurfCount = cache(() =>
+  anonRead("claimed turfs", async (s, signal) =>
+    countOf(await s.from("turfs").select("id", { count: "exact", head: true }).eq("is_active", true).eq("claimed", true).abortSignal(signal), "claimed turfs"),
+  ),
+);
+
+/**
  * Active turfs by city: the city_turf_counts view (one row a city) and the
  * active count for the turfs without a city ("unknown"). Before, every
  * active turf's city was paged in seven reads, and a failed page threw out
