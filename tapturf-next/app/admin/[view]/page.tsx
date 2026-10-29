@@ -40,6 +40,7 @@ import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 import { turfPath } from "@/lib/utils/turfPath";
 import { LIVE_FILTERS, getAdminLiveLinks, type LiveFilter } from "@/lib/queries/adminTools";
+import { methodLabel, recordedLater, starterName } from "@/lib/admin/live";
 import { SectionError } from "@/components/admin/SectionStatus";
 import type { Reason } from "@/lib/admin/section";
 
@@ -190,13 +191,41 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
       return {
         count: links.length,
         node: (
-          <Table head={["Link", "Sport", "Match", "Title and venue", "Status", "Updates", "Started", "Last update"]} empty={links.length === 0}>
+          <Table head={["Link", "Started by", "Sport", "Match", "Title and venue", "Status", "Updates", "Started", "Last update"]} empty={links.length === 0}>
             {links.map((l) => (
               <tr key={l.code}>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <a href={`/live/${l.code}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-mono text-[12px] text-accent-700 hover:underline">
                     /live/{l.code} <ExternalLink className="w-3 h-3" />
                   </a>
+                </td>
+                {/* The account the server verified on the link's first write (20261029_live_link_starts.sql); older links have none. */}
+                <td className="px-4 py-3 min-w-[8.5rem]">
+                  {l.starter ? (
+                    <>
+                      <a href={`/admin?person=${l.starter.id}#people`} className="font-semibold text-accent-700 hover:underline">
+                        {starterName(l.starter)}
+                      </a>
+                      <span className="block text-[12px] text-primary-500">
+                        {l.starter.username && (
+                          <>
+                            <a href={`/u/${l.starter.username}`} target="_blank" rel="noopener" className="hover:underline">
+                              @{l.starter.username}
+                            </a>
+                            {" · "}
+                          </>
+                        )}
+                        {methodLabel(l.starter.method)}
+                      </span>
+                      {recordedLater(l) && (
+                        <span className="block text-[12px] text-primary-400" title={`Recorded ${fmtDateTime(l.starter.at)}, from a signed-in update to a link started before logins were checked`}>
+                          Recorded later
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-primary-400 whitespace-nowrap">Not recorded</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{sportName(l.sport) ?? <span className="text-primary-400">-</span>}</td>
                 <td className="px-4 py-3 text-primary-900">

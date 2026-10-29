@@ -20,6 +20,8 @@
     "lib/live/codes.test.ts",
     "lib/live/server.test.ts",
     "components/live/follow.test.ts",
-    "lib/live/tags.test.ts"
+    "lib/live/tags.test.ts",
+    "lib/live/gate.test.ts",
+    "lib/admin/live.test.ts"
   ]
 }

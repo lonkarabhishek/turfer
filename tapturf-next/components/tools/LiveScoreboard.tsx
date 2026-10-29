@@ -10,6 +10,7 @@ import { sportIcon } from "@/components/board/shared";
 import { useWatchers } from "@/components/live/useWatchers";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
+import { liveToken } from "./scorer/liveToken";
 import { ToolCta } from "./ToolCta";
 import { SecondaryButton } from "./inputs";
 import { Setup, type SetupLive } from "./board/Setup";
@@ -65,7 +66,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   const [prefill, setPrefill] = useState<{ sport: BoardSport | null; name: string; venue: string; live: boolean }>({ sport: null, name: "", venue: "", live: false });
   /** The link last copied from the page card: one turned on since shows "Copy link" again. */
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  const live = useLiveSync(liveLinks, { load: loadForLive });
+  const live = useLiveSync(liveLinks, { load: loadForLive, token: liveToken });
   const auth = useAuth();
   /** Back from the live link login (?live=1): the board whose link to turn on once auth has settled. */
   const loginAsk = useRef<string | null>(null);
@@ -177,11 +178,22 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
     live.changed(b.id, boardShape(view));
   };
 
+  const loginForLink = (id: string) => {
+    trackTool("tool_action", TOOL, { action: "live_link_login" });
+    // Looks signed in here, but the server turned that sign-in down: the login page must not bounce straight back.
+    askLiveLogin("board", id, undefined, !!auth.user);
+  };
+
   const startLink = async (id: string) => {
     // Sharing needs a login (Google first, then phone); scoring does not. The board is saved, so the trip loses nothing.
-    if (!auth.user) {
-      trackTool("tool_action", TOOL, { action: "live_link_login" });
-      askLiveLogin("board", id);
+    // The server asking for one again (fault login) goes the same way.
+    if (!auth.user || live.info(id).fault === "login") {
+      loginForLink(id);
+      return;
+    }
+    // Already on (back from logging in again): it sends what waited.
+    if (live.info(id).on) {
+      live.resume(id);
       return;
     }
     const fault = await live.start(id);
@@ -194,7 +206,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
 
   const liveFor = (id: string): ShareLive => {
     const info = live.info(id);
-    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user };
+    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user || info.fault === "login", onLogin: () => loginForLink(id) };
   };
 
   const onChange = (b: Board) => {

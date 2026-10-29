@@ -142,7 +142,8 @@ const SECTIONS: LegalSection[] = [
           is kept with a random tag your browser makes for this, which says nothing about you or your device;
           if you did not accept, it is kept with no tag at all and your browser keeps nothing. The tag is never
           sent while you are signed in, your browser makes a new one each time you sign in or out, so it is not
-          tied to your account, and choosing Reject deletes it. Only TapTurf&rsquo;s team sees these records,
+          tied to your account, and choosing Reject deletes it. A live link needs a login, and the account
+          that turns one on is recorded with that link. Only TapTurf&rsquo;s team sees these records,
           to learn who uses the tools and how.
         </p>
         <p>

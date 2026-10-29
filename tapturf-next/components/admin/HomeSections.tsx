@@ -17,7 +17,8 @@ import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { adminTickRows, signupPeople } from "@/lib/queries/adminUsers";
-import { getToolUsage } from "@/lib/queries/adminTools";
+import { getLatestLiveLink, getToolUsage } from "@/lib/queries/adminTools";
+import { latestLinkSub, starterName } from "@/lib/admin/live";
 import { personId, tickTotals, tickedOnly } from "@/lib/admin/people";
 import { reasonText, type Reason, type Section } from "@/lib/admin/section";
 import { StatTile } from "./StatTile";
@@ -175,7 +176,7 @@ export async function LoginsSection() {
 
 /** Live scoreboard links and the tools' counted uses (counted since 26 Oct 2026, lib/tools/usage.ts). */
 export async function ToolsSection() {
-  const { live, uses } = await getToolUsage();
+  const [{ live, uses }, latest] = await Promise.all([getToolUsage(), getLatestLiveLink()]);
   const n = (r: Record<string, number> | undefined, ...keys: string[]) => keys.reduce((s, k) => s + (r?.[k] ?? 0), 0);
   const since = uses?.since ? `Counted since ${dayLabel(uses.since)}` : "Counting from today";
   const scorecards = n(uses?.started, "live_scorer", "live_scoreboard");
@@ -199,9 +200,19 @@ export async function ToolsSection() {
         />
         <StatTile label="Coin tosses" href="/admin/tools?tool=toss" value={uses ? n(uses.started, "toss") : DASH} sub={uses ? `${n(uses.started7, "toss")} this week · ${since}` : "Couldn't load"} />
         <StatTile label="Other tools" href="/admin/tools" value={uses ? otherTotal : DASH} sub={uses ? others.map(([k, name]) => `${name} ${n(uses.started, k)}`).join(" · ") : "Couldn't load"} />
+        {/* Who turned on the newest link, as the server recorded it (older links: "Not recorded"). Opens every link. */}
+        <div className="col-span-2">
+          <StatTile
+            label="Latest live link"
+            href="/admin/live"
+            compact
+            value={latest.ok ? (latest.data ? starterName(latest.data.starter) : DASH) : DASH}
+            sub={latest.ok ? (latest.data ? latestLinkSub(latest.data, timeAgo(latest.data.created_at)) : "No live links yet") : reasonText(latest.reason)}
+          />
+        </div>
       </section>
       <div className="-mt-1 mb-4 flex flex-wrap items-center justify-end gap-3">
-        <SomeFailed count={(live ? 0 : 1) + (uses ? 0 : 3)} />
+        <SomeFailed count={(live ? 0 : 1) + (uses ? 0 : 3) + (latest.ok ? 0 : 1)} />
         <Link href="/admin/tools" className="text-xs font-semibold text-accent-600 hover:text-accent-700">
           Who used the tools, and what
         </Link>

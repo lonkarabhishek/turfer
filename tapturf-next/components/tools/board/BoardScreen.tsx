@@ -12,7 +12,7 @@ import { TEAM, bigScore, isSetSport, order, sportIcon, unitWord } from "@/compon
 import { WatchCount } from "@/components/live/WatchCount";
 import type { Watchers } from "@/components/live/watch";
 import { pillTone, type LiveInfo } from "../scorer/live";
-import { BOARD_WORDS, ConfirmSheet, ShareSheet, type ShareLive } from "../scorer/ShareSheet";
+import { BOARD_WORDS, ConfirmSheet, LiveLoginNote, ShareSheet, type ShareLive } from "../scorer/ShareSheet";
 import { Sheet } from "../scorer/ui";
 import { EndSheet, MoreSheet, NamesSheet, PlayerSheet, RulesSheet, SetTimeSheet, type MoreAction } from "./Sheets";
 import { RALLY_GUARD_MS, TAP_GUARD_MS, answer, answered, guardMs, knownPlayers, namePrompt, offersName, padParts, playerTeam, promptKey, stamp, swappedNow, withPlayer } from "./logic";
@@ -56,6 +56,7 @@ function pillLabel(info: LiveInfo): string {
   if (info.state === "synced") return "Live link on, up to date";
   if (info.state === "sending") return "Live link on, sending";
   if (info.state === "offline") return "Live link on, offline";
+  if (info.fault === "login") return "Live link paused, log in again";
   return "Live link stopped";
 }
 
@@ -502,6 +503,7 @@ export function BoardScreen({
             )}
             <footer className="relative bg-white border-t border-primary-200 px-3 pt-2" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
               {toastEl}
+              <LiveLoginNote live={live} behind={!!toast} />
               <div className="grid grid-cols-3 lg:grid-cols-2 gap-2">
                 <button type="button" onClick={swapSides} className={`${KEY} h-14 border-2 border-primary-200 bg-white text-primary-800 inline-flex flex-col items-center justify-center gap-0.5 active:bg-primary-100`}>
                   <ArrowLeftRight className="w-5 h-5" aria-hidden />
@@ -519,6 +521,7 @@ export function BoardScreen({
         ) : (
           <footer className="relative bg-white border-t border-primary-200 px-3 pt-2 lg:col-start-1 lg:row-start-2 lg:self-start lg:rounded-3xl lg:border" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
             {toastEl}
+            <LiveLoginNote live={live} behind={!!toast} />
             {isLive ? (
               <>
                 <div className="grid grid-cols-2 gap-2">

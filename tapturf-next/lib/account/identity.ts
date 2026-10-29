@@ -207,6 +207,11 @@ let shared: ReturnType<typeof createIdentityChecker> | null = null;
 
 /** The caller's identity from the request's Bearer token. */
 export function identify(req: Request): Promise<IdentityResult> {
+  return identifyToken(bearerToken(req));
+}
+
+/** The same for a token already taken from its request (the live link routes), through the same checker and cache. */
+export function identifyToken(token: string | null): Promise<IdentityResult> {
   shared ??= createIdentityChecker({
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, ""),
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -215,5 +220,5 @@ export function identify(req: Request): Promise<IdentityResult> {
     fetchImpl: (input, init) => fetch(input, init),
     now: Date.now,
   });
-  return shared(bearerToken(req));
+  return shared(token);
 }

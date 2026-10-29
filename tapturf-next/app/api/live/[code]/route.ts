@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
-import { verifyLiveCode } from "@/lib/live/codes";
-import { sanitizeLive } from "@/lib/live/match";
+import { liveCodeGen, verifyLiveCode } from "@/lib/live/codes";
+import { gateLiveWrite } from "@/lib/live/gate";
+import { isLiveBoard, sanitizeLive } from "@/lib/live/match";
+import { later } from "@/lib/account/route";
 import {
   createLiveLimiter,
   getLive,
   liveHttpStatus,
   liveIpHash,
+  liveLinkRunning,
   liveMatchToStore,
   liveResult,
+  liveSigner,
+  liveStarterKnown,
   liveTagsChecked,
   liveWriteClient,
   liveWriteKey,
@@ -15,6 +20,8 @@ import {
   parseStopBody,
   purgeLive,
   readLiveBody,
+  recordLiveStarter,
+  starterWanted,
   type LiveRow,
 } from "@/lib/live/server";
 import { LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib/live/types";
@@ -23,8 +30,12 @@ import { LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib
 //   GET    -> LiveGetResponse, what followers poll. Served by the CDN and
 //             the data cache, so the database sees about one read per
 //             write whatever the follower count.
-//   PUT    { secret, match, rev } -> the scorer's latest match or board.
-//   DELETE { secret } -> turn the link off.
+//   PUT    { secret, match, rev } -> the scorer's latest match or board,
+//             with the scorer's sign-in (lib/live/gate.ts says who may).
+//   DELETE { secret } -> turn the link off. The secret alone, on purpose:
+//             stopping only hides the match, only the browser that made
+//             the link has the secret, and a scorer whose login lapsed
+//             must still be able to take their match down.
 // Write answers follow LiveError's table; none of them is cached.
 //
 // No `revalidate` or `dynamic` export on purpose: as a plain dynamic
@@ -77,12 +88,16 @@ export async function PUT(req: Request, { params }: Ctx) {
   const key = liveWriteKey();
   if (!key) return reply("unavailable");
   const { code } = await params;
-  if (!verifyLiveCode(code, key)) return reply("gone");
+  const gen = liveCodeGen(code, key);
+  if (!gen) return reply("gone");
   const ipHash = liveIpHash(req, key);
   // Before reading the body, so a looping client costs neither the
   // database nor the parse.
   const held = limits.write(code, ipHash);
   if (held) return reply(held);
+  // Before the body too: a write without a sign-in reads nothing more (a verified one is cached, lib/live/gate.ts).
+  const gate = await gateLiveWrite(await liveSigner(req), gen, Date.now(), { row: () => liveLinkRunning(code), starter: () => liveStarterKnown(code) });
+  if ("refuse" in gate) return reply(gate.refuse);
 
   const read = await readLiveBody(req, LIVE_MAX_BODY_BYTES);
   if ("error" in read) return reply(read.error);
@@ -122,6 +137,9 @@ export async function PUT(req: Request, { params }: Ctx) {
   const rev = Number.isSafeInteger(out.rev) ? (out.rev as number) : undefined;
   if (r === "ok") {
     purgeLive(code);
+    // Who started the link, once, after the reply: a failure only leaves the admin's "Not recorded".
+    const signer = gate.record;
+    if (signer && starterWanted(code)) later(() => recordLiveStarter(code, signer, isLiveBoard(match) ? "board" : "cricket"));
     return reply("ok", { rev: rev ?? body.rev });
   }
   return reply(r, r === "stale" && rev !== undefined ? { rev } : {});

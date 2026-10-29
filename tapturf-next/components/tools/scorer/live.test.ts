@@ -23,6 +23,7 @@ import {
   syncState,
   type LiveIo,
   type LiveNet,
+  type LiveToken,
 } from "./live";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./liveLogin";
 import { MAX_SAVED, loadMatch, saveMatch, type MatchMeta } from "./storage";
@@ -73,7 +74,7 @@ test("answers are read by their body; anything else is unavailable", () => {
   assert.deepEqual(readReply(200, { ok: true, rev: 5 }), { r: "ok", rev: 5 });
   assert.deepEqual(readReply(200, { ok: true }), { r: "ok", rev: undefined });
   assert.deepEqual(readReply(409, { error: "stale", rev: 9 }), { r: "stale", rev: 9 });
-  for (const e of ["slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "unavailable"]) assert.equal(readReply(400, { error: e }).r, e);
+  for (const e of ["slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "login", "unavailable"]) assert.equal(readReply(400, { error: e }).r, e);
   assert.equal(readReply(502, null).r, "unavailable");
   assert.equal(readReply(404, "<html>").r, "unavailable");
   assert.equal(readReply(400, { error: "nope" }).r, "unavailable");
@@ -84,6 +85,7 @@ test("answers are read by their body; anything else is unavailable", () => {
   assert.deepEqual(readNew(200, { code: "SHORT" }), { fault: "unavailable" });
   assert.deepEqual(readNew(429, { error: "limit" }), { fault: "limit" });
   assert.deepEqual(readNew(503, { error: "unavailable" }), { fault: "unavailable" });
+  assert.deepEqual(readNew(401, { error: "login" }), { fault: "login" });
 });
 
 test("handleResult follows the LiveError table", () => {
@@ -131,6 +133,12 @@ test("handleResult follows the LiveError table", () => {
   const bad = handleResult(l, T0 + 10, { r: "bad" }, 0, true);
   assert.equal(bad.halt, true);
   assert.equal(bad.link.on, true);
+
+  // login: nothing was written. The link stays on with every edit kept; sending waits for a login.
+  const login = handleResult(l, T0 + 10, { r: "login" }, 2, true);
+  assert.deepEqual([login.link, login.fault, login.halt, login.wait], [l, "login", true, 0]);
+  const loginInfo = liveInfo(l, net({ halted: true, fault: "login" }));
+  assert.deepEqual([loginInfo.on, loginInfo.state, loginInfo.fault, pillTone(loginInfo)], [true, "error", "login", "red"]);
 
   const net0 = handleResult(l, T0 + 10, { r: "network" }, 0, true);
   assert.deepEqual([net0.wait, net0.fails, net0.offline], [LIVE_RETRY_MS[0], 1, true]);
@@ -258,13 +266,15 @@ type Call = {
   url: string;
   body: { secret?: string; rev?: number; match?: { n: number; sentAt?: number } } | null;
   keepalive: boolean;
+  /** The sign-in it carried (Authorization: Bearer), or null. */
+  token: string | null;
   answer: (status: number, body: unknown) => Promise<void>;
   drop: () => Promise<void>;
 };
 
 const tickOver = () => new Promise<void>((r) => setImmediate(r));
 
-function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<string, { n: number }>; load?: (id: string, now: number) => unknown } = {}) {
+function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<string, { n: number }>; load?: (id: string, now: number) => unknown; token?: () => Promise<LiveToken> } = {}) {
   let now = T0;
   let seq = 0;
   const timers: { id: number; at: number; fn: () => void }[] = [];
@@ -282,13 +292,15 @@ function rig(start: { links?: Record<string, LiveLinkRecord>; matches?: Record<s
       if (i >= 0) timers.splice(i, 1);
     },
     online: () => true,
-    request: (method, url, body, keepalive) =>
+    token: start.token,
+    request: (method, url, body, keepalive, token) =>
       new Promise((resolve, reject) => {
         calls.push({
           method,
           url,
           body: body === null ? null : JSON.parse(body),
           keepalive,
+          token: token ?? null,
           answer: async (status, b) => {
             resolve({ status, body: b });
             await tickOver();
@@ -802,4 +814,145 @@ test("live link login: the ask survives the trip and is read once, by its own to
   askLiveLogin("board", "b123", 1_000);
   assert.equal(takeLiveAsk("board", 5_000), "b123");
   assert.equal(takeLiveAsk("board", 5_000), null, "read once");
+  // Asked by the server to log in again: the login page must not bounce a device that still looks signed in.
+  askLiveLogin("cricket", "m9", 1_000, true);
+  assert.equal(went, `/login?next=${encodeURIComponent("/tools/live-scoreboard?tab=2&live=1")}&via=live&again=1`);
+  assert.equal(takeLiveAsk("cricket", 2_000), "m9");
+});
+
+/* ------------------------------------------------------------------ */
+/* The sign-in on every send (lib/live/gate.ts checks it)              */
+/* ------------------------------------------------------------------ */
+
+/** A sign-in that answers from a list, the last one for good, counting reads. */
+function tokens(...list: LiveToken[]) {
+  const reads = { n: 0 };
+  const left = [...list];
+  return { reads, get: async (): Promise<LiveToken> => (reads.n++, left.length > 1 ? left.shift()! : left[0]), set: (...next: LiveToken[]) => left.splice(0, left.length, ...next) };
+}
+const LOGIN = { error: "login" };
+
+test("engine: the code and every send carry the sign-in, read fresh for each", async () => {
+  const tk = tokens({ token: "t1" }, { token: "t2" }, { token: "t3" });
+  const t = rig({ matches: { m1: { n: 1 } }, token: tk.get });
+  const started = t.sync.start("m1");
+  await tickOver();
+  assert.deepEqual([t.calls[0].method, t.calls[0].token], ["POST", "t1"], "the mint asks with the sign-in");
+  await fail(t.calls[0], 200, { code: CODE });
+  assert.equal(await started, null);
+  await tickOver();
+  assert.deepEqual([t.calls[1].method, t.calls[1].token], ["PUT", "t2"], "the first send reads it again");
+  await ok(t.calls[1]);
+  await t.advance(LIVE_SEND_EVERY_MS);
+  t.edit("m1", 2);
+  await tickOver();
+  assert.deepEqual([t.calls[2].token, tk.reads.n], ["t3", 3], "one read per send");
+  await ok(t.calls[2]);
+  assert.equal(liveInfo(t.links.m1, t.sync.snapshot().net.m1).state, "synced");
+});
+
+test("engine: a login answer is tried once more with a fresh token, and an expired one carries on unnoticed", async () => {
+  const tk = tokens({ token: "expired" }, { token: "fresh" });
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 1 } }, token: tk.get });
+  t.edit("m1", 1);
+  await tickOver();
+  assert.equal(t.calls[0].token, "expired");
+  await fail(t.calls[0], 401, LOGIN);
+  assert.equal(t.calls.length, 1, "not inside the route's gap between two writes, which would answer slow");
+  await t.advance(600);
+  await tickOver();
+  assert.deepEqual([t.calls.length, t.calls[1].token, t.calls[1].body?.rev], [2, "fresh", t.calls[0].body?.rev], "the same send, again, right after the gap");
+  await ok(t.calls[1]);
+  const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.state, info.fault], ["synced", null], "the scorer sees nothing");
+});
+
+test("engine: a login that stands: scoring goes on here, the link stays on and waits, then resumes after the login", async () => {
+  const tk = tokens({ token: "turned-down" });
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 1 } }, token: tk.get });
+  t.edit("m1", 1);
+  await tickOver();
+  await fail(t.calls[0], 401, LOGIN);
+  await t.advance(600);
+  await tickOver();
+  await fail(t.calls[1], 401, LOGIN);
+  assert.equal(t.calls.length, 2, "tried twice, no more");
+  let info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.on, info.state, info.fault, pillTone(info)], [true, "error", "login", "red"]);
+  // Balls go on being saved and counted; nothing is sent while it waits.
+  for (let n = 2; n <= 6; n++) {
+    await t.advance(3000);
+    t.edit("m1", n);
+  }
+  await t.advance(120_000);
+  assert.equal(t.calls.length, 2, "no sends while waiting for the login");
+  assert.ok(t.links.m1.rev > t.links.m1.sentRev, "every ball kept to send");
+  // Back from the login (or logged in again): the latest match goes at once.
+  tk.set({ token: "new-login" });
+  t.sync.resume("m1");
+  await tickOver();
+  assert.deepEqual([t.calls.length, t.calls[2].token, t.calls[2].body?.match?.n], [3, "new-login", 6]);
+  await ok(t.calls[2]);
+  info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.state, info.fault], ["synced", null]);
+  // resume touches only a link waiting for a login.
+  t.sync.resume("m1");
+  assert.equal(t.calls.length, 3);
+});
+
+test("engine: signed out gets no second try; a sign-in that can't be read now is not sent as signed out", async () => {
+  const out = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 1 } }, token: tokens({ none: true }).get });
+  out.edit("m1", 1);
+  await tickOver();
+  assert.equal(out.calls[0].token, null, "no sign-in: sent without (a link from before the check takes it)");
+  await fail(out.calls[0], 401, LOGIN);
+  assert.equal(out.calls.length, 1, "no token to try again with");
+  assert.equal(out.sync.snapshot().net.m1.fault, "login");
+
+  const tk = tokens({ unknown: true });
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 1 } }, token: tk.get });
+  t.edit("m1", 1);
+  await tickOver();
+  await tickOver();
+  assert.equal(t.calls.length, 0, "nothing sent");
+  assert.equal(liveInfo(t.links.m1, t.sync.snapshot().net.m1).state, "sending", "retried, no login asked for");
+  tk.set({ token: "t1" });
+  await t.advance(LIVE_RETRY_MS[0]);
+  await tickOver();
+  assert.deepEqual([t.calls.length, t.calls[0].token], [1, "t1"]);
+});
+
+test("engine: a flush leaves at once with the last token, no read in the way", async () => {
+  const tk = tokens({ token: "t1" });
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 1 } }, token: tk.get });
+  t.edit("m1", 1);
+  await tickOver();
+  await ok(t.calls[0]);
+  t.edit("m1", 2);
+  t.sync.flushAll(true);
+  assert.deepEqual([t.calls.length, t.calls.at(-1)?.keepalive, t.calls.at(-1)?.token], [2, true, "t1"], "sent in the same tick as pagehide");
+});
+
+test("engine: a mint without an accepted sign-in says login and saves nothing; one that can't be read now does not ask", async () => {
+  const t = rig({ matches: { m1: { n: 1 } }, token: tokens({ token: "turned-down" }).get });
+  const started = t.sync.start("m1");
+  await tickOver();
+  await fail(t.calls[0], 401, LOGIN);
+  assert.equal(await started, "login");
+  assert.equal(t.links.m1, undefined);
+  assert.equal(t.sync.snapshot().net.m1.fault, "login");
+
+  const u = rig({ matches: { m1: { n: 1 } }, token: tokens({ unknown: true }).get });
+  assert.equal(await u.sync.start("m1"), "unavailable");
+  assert.equal(u.calls.length, 0);
+});
+
+test("engine: a stop needs no sign-in", async () => {
+  const tk = tokens({ token: "t1" });
+  const t = rig({ links: { m1: link({ rev: T0, sentRev: T0 }) }, matches: { m1: { n: 1 } }, token: tk.get });
+  const off = t.sync.stop("m1");
+  await tickOver();
+  assert.deepEqual([t.calls[0].method, t.calls[0].token, tk.reads.n], ["DELETE", null, 0]);
+  await ok(t.calls[0]);
+  assert.equal(await off, true);
 });
