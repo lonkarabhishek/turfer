@@ -77,6 +77,22 @@ export function readTurfFactRows(db: SupabaseClient): Promise<TurfFactRow[]> {
   );
 }
 
+export type SportBandRow = { id: string; pricing_bands: unknown; price_owner_confirmed: boolean | null };
+
+/** Every active turf with price bands: its id, bands and whether the owner confirmed its prices (lib/queries/sportBands.ts). */
+export function readSportBandRows(db: SupabaseClient): Promise<SportBandRow[]> {
+  return fetchAllRows<SportBandRow>(
+    (from, to) =>
+      db
+        .from("turfs")
+        .select("id, pricing_bands, price_owner_confirmed")
+        .eq("is_active", true)
+        .not("pricing_bands", "is", null)
+        .order("id")
+        .range(from, to) as unknown as PromiseLike<{ data: SportBandRow[] | null; error: unknown }>,
+  );
+}
+
 export type SitemapTurf = { id: string; slug: string | null; updated_at: string | null; city: string | null; sports: unknown };
 export type SitemapGame = { id: string; updated_at: string | null; date: string | null; start_time: string | null; status: string | null };
 

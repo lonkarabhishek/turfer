@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
-import { priceRangeText, summarisePrice } from "@/lib/utils/prices";
+import { priceRangeText } from "@/lib/utils/prices";
+import { cardPrice, cardSports, sportLineParts, type CardSport, type SportLineParts } from "@/lib/utils/cardSport";
 import { areaFor } from "@/lib/utils/area";
 import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
@@ -20,19 +21,26 @@ interface TurfCardProps {
   trending?: boolean;
   /** Lists that span cities name the city: "Rasbihari Road, Nashik". */
   cityLabel?: string;
+  /**
+   * The sport the list is filtered on (a sport page, a /turfs sport chip).
+   * Its label leads the sports and stays on screen, and a price shows only
+   * when it is that sport's (lib/utils/cardSport.ts). Unset on every other
+   * list, which renders as before.
+   */
+  sport?: CardSport | null;
 }
 
 // Slide duration when a swipe or arrow moves to the next photo.
 const FADE_MS = 500;
 
-export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport }: TurfCardProps) {
   // Cover first (unless it is a tiny thumb), then the rest, with our own
   // copies ahead of Google links: a turf whose Google cover has expired
   // but has photos in our storage leads with one of those.
   const photos = turfPhotos(turf);
 
-  const priceSummary = summarisePrice(turf);
-  const sports = turf.sports.slice(0, 2);
+  const priceSummary = cardPrice(turf, sport);
+  const sports = cardSports(turf.sports, sport);
   // Photos that failed to load drop out of the slideshow instead of
   // showing a blank frame; the placeholder appears only if all fail.
   const [broken, setBroken] = useState<string[]>([]);
@@ -272,11 +280,23 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-[14px] text-primary-500 truncate">
-            {[place, distanceLabel ? `${distanceLabel} away` : null, turf.is_24x7 ? "Open 24 hours" : null, sports.join(", ") || null]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+          {sport ? (
+            // Filtered on a sport: the selected sport (first of the sports,
+            // right after the distance) is never the part cut off.
+            <SportLine
+              {...sportLineParts(place, {
+                distance: distanceLabel ? `${distanceLabel} away` : null,
+                sports,
+                hours: turf.is_24x7 ? "Open 24 hours" : null,
+              })}
+            />
+          ) : (
+            <p className="mt-0.5 text-[14px] text-primary-500 truncate">
+              {[place, distanceLabel ? `${distanceLabel} away` : null, turf.is_24x7 ? "Open 24 hours" : null, sports.join(", ") || null]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
           <p className="mt-1 text-[14px] text-primary-900">
             {range && priceSummary.kind === "real" ? (
               <>
@@ -300,5 +320,23 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
         </div>
       </article>
     </Link>
+  );
+}
+
+/**
+ * The card's grey line on a sport-filtered list: the same words,
+ * separators and style as the unfiltered one, in three grid columns. The
+ * lead (distance and the selected sport) always gets its full width; the
+ * place gets what is left, up to its own width; the tail (other sports,
+ * hours) gets the rest. So a line too long for the card loses the end of
+ * the tail first, as before, and the place only when the tail is gone.
+ */
+function SportLine({ place, lead, tail }: SportLineParts) {
+  return (
+    <p className="mt-0.5 grid grid-cols-[minmax(0,max-content)_max-content_minmax(0,1fr)] text-[14px] text-primary-500">
+      <span className="truncate">{place}</span>
+      <span className="whitespace-pre">{lead}</span>
+      <span className="overflow-hidden text-ellipsis whitespace-pre">{tail}</span>
+    </p>
   );
 }

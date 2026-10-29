@@ -7,6 +7,7 @@ import {
   NEAR_KM,
   exactNearest,
   normalizeQ,
+  sportFromSlug,
   sportSlug,
   type ListFilters,
   type ListItem,
@@ -60,6 +61,15 @@ export type ListState = {
 export function listKey(city: string | null, f: ListFilters, rounded: Coords | null): string {
   const sort = f.sort === "nearby" && !rounded ? "rating" : f.sort;
   return [city ?? "", f.sport ? sportSlug(f.sport) : "", normalizeQ(f.q).toLowerCase(), sort, rounded ? `${rounded.lat.toFixed(2)},${rounded.lng.toFixed(2)}` : ""].join("|");
+}
+
+/**
+ * The sport chip a list was fetched for (its listKey), or null. The cards
+ * take their sport from the list they belong to, not from the chip just
+ * tapped, so the old cards, dimmed while the new sport's load, keep theirs.
+ */
+export function sportOfKey(key: string): string | null {
+  return sportFromSlug(key.split("|")[1]);
 }
 
 /** True for a key whose list depends on the viewer's location (never saved for Back). */

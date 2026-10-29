@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildData, FIRST_LIFE_S, firstLifeOf, manifestProblem, MANIFEST, MANIFEST_MAX_AGE_MS, recorded, type BuildDatasets, type Manifest } from "./data";
+import { buildData, FAILED, FIRST_LIFE_S, firstLifeOf, isFailed, manifestProblem, MANIFEST, MANIFEST_MAX_AGE_MS, recorded, type BuildDatasets, type Manifest } from "./data";
 import { buildDataDir } from "./env";
 import { backoffMs, createPatientFetch, readEach, retryAfterMs } from "./patient";
 import { CARD_COLUMNS, livePicks, topTurfKeys, type TrendingRow } from "./reads";
@@ -357,6 +357,8 @@ type FakeState = {
   cities: () => Response;
   pages: Record<string, unknown>;
   managers: Record<string, unknown>;
+  /** Turfs with price bands (readSportBandRows). */
+  bands: Row[];
   /** Answers before the defaults (an outage, a rebuild...). */
   override?: (path: string, u: URL, body: Row, s: FakeState) => Response | Promise<Response> | undefined;
   calls: string[];
@@ -379,6 +381,10 @@ function fakeDb(over: Partial<FakeState> = {}) {
     cities: () => json([{ city: "pune", n: 600, lat: 18.5, lng: 73.8 }, { city: "nashik", n: 600, lat: 20, lng: 73.8 }]),
     pages: {},
     managers: {},
+    bands: [
+      { id: rows[0].id, pricing_bands: [{ band: "morning", days: "all", format: "6-a-side", price_per_hour: 1200 }], price_owner_confirmed: null },
+      { id: rows[5].id, pricing_bands: [{ band: "evening", days: "weekend", format: "box cricket", price_per_hour: 1500 }], price_owner_confirmed: true },
+    ],
     calls: [],
     ...over,
   };
@@ -406,6 +412,7 @@ function fakeDb(over: Partial<FakeState> = {}) {
         return s.cities();
       case "/rest/v1/turfs":
         if (sel.startsWith("id,name,city,owner_phone")) return page(s.rows.map((r) => ({ id: r.id, name: `Turf ${r.id}`, city: r.city, owner_phone: "9000000000" })));
+        if (sel === "id,pricing_bands,price_owner_confirmed") return page(s.bands);
         if (u.searchParams.get("id")?.startsWith("in.(")) {
           const ids = new Set(u.searchParams.get("id")!.slice(4, -1).split(","));
           return json(s.rows.filter((r) => ids.has(r.id as string)));
@@ -451,7 +458,7 @@ test("step: every dataset, one request at a time, the turf pages it could read, 
   try {
     assert.equal(r.manifest.db, DB);
     assert.equal(r.manifest.v, 7);
-    assert.deepEqual(Object.keys(r.manifest.datasets).sort(), ["cities", "games", "list", "sitemap", "trending", "turf-facts", "turf-pages"]);
+    assert.deepEqual(Object.keys(r.manifest.datasets).sort(), ["cities", "games", "list", "sitemap", "sport-bands", "trending", "turf-facts", "turf-pages"]);
     assert.equal(r.list.parts!.length, 3);
     assert.equal(r.list.rows, null);
     const pages = r.read("turf-pages") as BuildDatasets["turf-pages"];
@@ -464,6 +471,8 @@ test("step: every dataset, one request at a time, the turf pages it could read, 
     assert.equal(games.available.turfs.length, 1);
     // Facts keep ids and keys, never a number.
     assert.doesNotMatch(JSON.stringify(r.read("turf-facts")), /9000000000/);
+    // The sport bands as read: the pages shape them as they shape their own read.
+    assert.deepEqual(r.read("sport-bands"), r.s.bands);
     assert.equal(r.summary.moved, false);
   } finally {
     r.cleanup();
@@ -648,11 +657,81 @@ test("step: turf facts that cannot be read never fail it: noted, and pages build
   }
 });
 
+test("step: the sport bands are read the way getSportBands reads them, paged by id, and named in the summary line", async () => {
+  const bands = Array.from({ length: 620 }, (_, i) => ({ id: `00000000-0000-4000-9000-${String(i).padStart(12, "0")}`, pricing_bands: [{ band: "day", days: "all", format: "5-a-side", price_per_hour: 900 + i }], price_owner_confirmed: i === 3 }));
+  const urls: URL[] = [];
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (m: string) => void lines.push(m);
+  try {
+    const r = await step({ bands, override: (p, u) => void (p === "/rest/v1/turfs" && u.searchParams.get("select") === "id,pricing_bands,price_owner_confirmed" && urls.push(u)) });
+    try {
+      assert.deepEqual(r.read("sport-bands"), bands);
+      // One query, the one the pages make: active turfs with bands, by id, 500 a page.
+      assert.deepEqual(urls.map((u) => u.searchParams.get("offset")), ["0", "500"]);
+      for (const u of urls) {
+        assert.equal(u.searchParams.get("is_active"), "eq.true");
+        assert.equal(u.searchParams.get("pricing_bands"), "not.is.null");
+        assert.equal(u.searchParams.get("order"), "id.asc");
+      }
+      assert.match(lines.join("\n"), /^build data: .*; sport bands of 620 turfs; turf pages 300 recorded/m);
+    } finally {
+      r.cleanup();
+    }
+  } finally {
+    console.log = log;
+  }
+});
+
+test("step: sport bands that cannot be read never fail it: noted, and the sport pages build without them", async () => {
+  const banded = (u: URL) => u.searchParams.get("select") === "id,pricing_bands,price_owner_confirmed";
+  // A column privilege taken away answers at once; a statement that keeps timing out is given 2 minutes.
+  for (const [res, most] of [[() => json({ code: "42501", message: "permission denied for table turfs" }, 401), 0], [() => json({ code: "57014", message: "canceling statement due to statement timeout" }, 503), 2 * 60_000]] as const) {
+    let bandReads = 0;
+    const lines: string[] = [];
+    const log = console.log;
+    console.log = (m: string) => void lines.push(m);
+    try {
+      const r = await step({ override: (_p, u) => (banded(u) ? (bandReads++, res()) : undefined) });
+      try {
+        assert.deepEqual(r.read("sport-bands"), { failed: true });
+        assert.ok(r.logs.some((l) => /^build data: sport bands not recorded \(Paged fetch failed at row 0\); sport pages build without them/.test(l)));
+        // Everything else is as it would be, the facts and the turf pages included.
+        assert.notDeepEqual(r.read("turf-facts"), { failed: true });
+        assert.equal((r.read("turf-pages") as BuildDatasets["turf-pages"]).keys.length, 300);
+        assert.ok(r.summary.ms <= most + 1000, `${r.summary.ms} ms`);
+        assert.ok(most === 0 ? bandReads === 1 : bandReads > 5, `${bandReads} band reads`);
+        assert.match(lines.join("\n"), /; sport bands not recorded; /);
+      } finally {
+        r.cleanup();
+      }
+    } finally {
+      console.log = log;
+    }
+  }
+});
+
+test("buildData: sport bands the step could not read come back as failed, never as none", () => {
+  const dir = folder({ "sport-bands": FAILED });
+  try {
+    withEnv(building(dir), () => {
+      assert.ok(isFailed(buildData("sport-bands")));
+      assert.equal(buildData("turf-facts"), undefined);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("step: previews record no turf pages", async () => {
-  const r = await step({}, { VERCEL_ENV: "preview" });
+  let bandReads = 0;
+  const r = await step({ override: (_p, u) => void (u.searchParams.get("select") === "id,pricing_bands,price_owner_confirmed" && bandReads++) }, { VERCEL_ENV: "preview" });
   try {
     assert.equal(r.manifest.datasets["turf-pages"], undefined);
     assert.ok(!r.s.calls.includes("rpc/turf_page"));
+    // Previews prerender no sport page either: no bands read, none recorded.
+    assert.equal(r.manifest.datasets["sport-bands"], undefined);
+    assert.equal(bandReads, 0);
   } finally {
     r.cleanup();
   }

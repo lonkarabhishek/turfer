@@ -95,6 +95,14 @@ export interface Turf {
   price_verified_at?: string | null;
   /** Listed per-hour prices by format, time band and day type (from online listings). */
   pricing_bands?: PriceBand[] | null;
+  /**
+   * Only on a sport-filtered list (sport pages, a /turfs sport chip): the
+   * per-hour range of each sport the venue's pricing_bands name
+   * (lib/utils/cardSport.ts sportBandsOf), so a card can tell whether its
+   * price is the selected sport's. List rows carry no pricing_bands; this
+   * comes from lib/queries/sportBands.ts. Never stored.
+   */
+  sport_bands?: SportBands | null;
   /** Formats the venue lists, e.g. "6-a-side", "box cricket". */
   formats?: string[] | null;
   has_nets?: boolean | null;
@@ -133,6 +141,18 @@ export type PriceBand = {
   format: string | null;
   price_per_hour: number;
   source?: string | null;
+};
+
+/** The sports pricing_bands formats name: "football" for the N-a-side formats, "futsal" for 5- and 6-a-side, "box-cricket" for box cricket. */
+export type SportBandKind = "football" | "futsal" | "box-cricket";
+
+/**
+ * The lowest and highest listed per-hour price of each sport a venue's
+ * price bands name, as [min, max] (the only kinds the bands name).
+ */
+export type SportBands = Partial<Record<SportBandKind, readonly [number, number]>> & {
+  /** The owner confirmed the venue's prices on myTapturf: its own listed prices, when it has any, win over these (ownerSetPrices). */
+  owner?: true;
 };
 
 export type PriceMention = {

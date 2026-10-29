@@ -181,8 +181,8 @@ function toPlayersSay(raw: unknown): Turf["review_summary"] {
 const BANDS = new Set(["morning", "day", "evening", "night"]);
 const DAYS = new Set(["weekday", "weekend", "all"]);
 
-/** Keep only well-formed price bands with a real per-hour price. */
-function toBands(raw: unknown): PriceBand[] | null {
+/** Keep only well-formed price bands with a real per-hour price (also lib/queries/sportBands.ts). */
+export function toBands(raw: unknown): PriceBand[] | null {
   if (!Array.isArray(raw)) return null;
   const out = raw.filter(
     (b): b is PriceBand =>
@@ -223,8 +223,9 @@ async function buildRetry<T extends { error: unknown }>(call: () => PromiseLike<
  * two keys, so a cold route handler read the database even with the entry
  * cached. A fixed toString leaves the key parts to name the entry, in every
  * bundle and across deploys. Bump a key part when the cached shape changes.
+ * Also lib/queries/sportBands.ts.
  */
-function cacheKeyed<A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
+export function cacheKeyed<A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
   const cb = (...args: A) => fn(...args);
   cb.toString = () => name;
   return cb;

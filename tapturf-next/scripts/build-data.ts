@@ -22,6 +22,11 @@
  *   fails, the step notes that, and pages build without the facts and
  *   without a read of their own (snippets then leave out "Call or
  *   WhatsApp", as they did when the pages' own read failed).
+ * - Production only (the sport pages prerender there): the sport bands,
+ *   the same way, with 2 minutes of their own. Their read never failed a
+ *   page either (getSportBands): when it fails, the step notes that, and
+ *   the sport pages' cards decide without bands, as when their own read
+ *   failed.
  * - Production only: the turf pages to prerender, 3 at a time, for 4
  *   minutes. A key is recorded only with everything its page reads; one
  *   the step could not read renders on its first visit instead. A failed
@@ -55,6 +60,7 @@ import {
   readOpenGames,
   readSitemapGames,
   readSitemapTurfs,
+  readSportBandRows,
   readTrendingRows,
   readTurfFactRows,
   topTurfKeys,
@@ -72,6 +78,8 @@ type Env = Record<string, string | undefined>;
 const REQUIRED_MS = 6 * 60_000;
 /** How long the turf facts may take; after that pages build without them. */
 const FACTS_MS = 2 * 60_000;
+/** How long the sport bands may take; after that the sport pages build without them. */
+const BANDS_MS = 2 * 60_000;
 /** How long turf pages are read; keys not done by then render on their first visit. */
 const TURF_PAGES_MS = 4 * 60_000;
 const TURF_PAGE_READS = 3;
@@ -273,6 +281,18 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
     return FAILED;
   });
 
+  // The sport bands (production builds prerender the sport pages), the same
+  // way on their own clock. No bands at all is an answer (none listed yet).
+  let bands: BuildDatasets["sport-bands"] | null = null;
+  if (env.VERCEL_ENV === "production") {
+    const bandsCtx = begin(BANDS_MS);
+    bands = await required(bandsCtx, "sport bands", () => readSportBandRows(bandsCtx.db)).catch((e: unknown): BuildDatasets["sport-bands"] => {
+      if (!(e instanceof StepFailed)) throw e;
+      log(`build data: sport bands not recorded (${message(e.cause ?? e)}); sport pages build without them, as when their own read failed`);
+      return FAILED;
+    });
+  }
+
   // 3. Turf pages (production builds prerender them), 3 at a time.
   let turfPages: BuildDatasets["turf-pages"] | null = null;
   let skipped = 0;
@@ -319,6 +339,7 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
   write("list", list);
   write("cities", cities);
   write("turf-facts", facts);
+  if (bands) write("sport-bands", bands);
   write("sitemap", sitemap);
   write("trending", trending);
   write("games", games);
@@ -335,6 +356,7 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
   console.log(
     `build data: ${summary.requests} reads (${summary.retries} retried, ${(summary.waitedMs / 1000).toFixed(1)} s waiting); ` +
       `list ${source}${moved ? ", moved and read again" : ""}; ${cities.length} cities; ${isFailed(facts) ? "no turf facts; " : ""}` +
+      `sport bands ${bands === null ? "none (not production)" : isFailed(bands) ? "not recorded" : `of ${bands.length} turfs`}; ` +
       `turf pages ${turfPages ? `${summary.turfPages} recorded, ${skipped} skipped` : "none (not production)"}; ` +
       `${(bytes / 1e6).toFixed(1)} MB in ${(summary.ms / 1000).toFixed(1)} s`,
   );

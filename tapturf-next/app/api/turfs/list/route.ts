@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { pageOf, parseListParams } from "@/lib/turfList/query";
 import { listInputs } from "@/lib/queries/turfList";
+import { getSportBands, listWithSportBands } from "@/lib/queries/sportBands";
 
 /**
  * GET /api/turfs/list?city&sport&q&sort&lat&lng&offset&limit[&v&t]: one
@@ -10,6 +11,10 @@ import { listInputs } from "@/lib/queries/turfList";
  * of the list snapshot (lib/queries/turfs.ts getCardTurfs): a route handler
  * reads Next's data cache, so a cold instance loads the parts from there
  * and never reads the turfs table or calls turf_list_part per request.
+ *
+ * With a sport chip, each row also carries its venue's sport bands (a
+ * day-cached read, lib/queries/sportBands.ts), so a card shows only that
+ * sport's price.
  *
  * Every answer is public and the same for everyone with the same query
  * string, so Vercel's CDN keeps it 5 minutes (and serves it stale for 10
@@ -42,9 +47,15 @@ export async function GET(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400, headers: BAD_HEADERS });
   const { query, offset, limit } = parsed.req;
   const { seen } = parsed;
+  // A sport chip: each row carries its venue's sport bands, so the card shows
+  // (and the price sorts use) only that sport's price (lib/utils/cardSport.ts).
+  // Without a chip the rows, and the answer, are as before. Read alongside
+  // the rows; it never throws.
+  const bands = query.sport ? getSportBands() : null;
   try {
     const { v, stale, turfs, trending } = await listInputs(query.city);
-    const page = pageOf(turfs, query, trending, offset, limit, v);
+    const rows = bands ? listWithSportBands(turfs, await bands) : turfs;
+    const page = pageOf(rows, query, trending, offset, limit, v);
     const behind = (seen.v != null && page.v < seen.v) || (seen.t != null && page.t !== seen.t);
     return NextResponse.json(page, { headers: behind ? BEHIND_HEADERS : stale ? STALE_HEADERS : HEADERS });
   } catch (e) {
