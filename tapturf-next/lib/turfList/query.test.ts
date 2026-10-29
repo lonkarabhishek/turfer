@@ -107,8 +107,12 @@ function oldClient(turfs: Turf[], search: string, selectedSport: string | null, 
         return a.distanceKm - b.distanceKm;
       case "price-low":
       case "price-high": {
-        const ap = getMinimumPrice(a.turf);
-        const bp = getMinimumPrice(b.turf);
+        // Since 29 Oct, with a chip, a venue's price counts only when every
+        // sport it lists is the chip's (the card shows no other: cardPrice).
+        const chipPrice = (t: Turf) =>
+          selectedSport && !t.sports.every((s) => s.toLowerCase().includes(selectedSport.toLowerCase())) ? null : getMinimumPrice(t);
+        const ap = chipPrice(a.turf);
+        const bp = chipPrice(b.turf);
         if (ap == null && bp == null) return 0;
         if (ap == null) return 1;
         if (bp == null) return -1;
@@ -193,6 +197,25 @@ test("price sorts put turfs without a price last both ways; nearby puts turfs wi
   assert.equal(near.ranked.at(-1)!.turf.id, "nogeo");
   assert.equal(near.ranked.at(-2)!.turf.id, "far");
   assert.equal(near.near, 3); // none, cheap, dear sit on the point; far is 44 km off
+});
+
+test("price sorts with a chip: another sport's price never orders the list (it is not on the card)", () => {
+  const turfs = [
+    mk({ id: "multi-cheap", sports: ["Box Cricket", "Football", "Badminton"], morning_price: 300 }),
+    mk({ id: "court", sports: ["Badminton"], morning_price: 500 }),
+    mk({ id: "court-dear", sports: ["Badminton"], morning_price: 900 }),
+    mk({ id: "court-none", sports: ["Badminton"], morning_price: null }),
+    mk({ id: "turf", sports: ["Football"], morning_price: 200 }),
+  ];
+  const none = new Set<string>();
+  const low = ids(rankTurfs(turfs, { q: "", sport: "Badminton", sort: "price-low", at: null }, none).ranked);
+  const high = ids(rankTurfs(turfs, { q: "", sport: "Badminton", sort: "price-high", at: null }, none).ranked);
+  assert.deepEqual(low.slice(0, 2), ["court", "court-dear"]);
+  assert.deepEqual(high.slice(0, 2), ["court-dear", "court"]);
+  assert.deepEqual(new Set(low.slice(2)), new Set(["multi-cheap", "court-none"]));
+  // Without a chip, every price orders the list, as before.
+  const all = ids(rankTurfs(turfs, { q: "", sport: null, sort: "price-low", at: null }, none).ranked);
+  assert.deepEqual(all.slice(0, 4), ["turf", "multi-cheap", "court", "court-dear"]);
 });
 
 test("pages at the batch offsets add up to the whole ranking, with hot flags and totals", () => {

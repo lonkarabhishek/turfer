@@ -1,5 +1,6 @@
 import type { Turf } from "../../types/turf";
 import { getMinimumPrice } from "../utils/prices";
+import { pricesAreForSport } from "../utils/cardSport";
 import { compareTopRated } from "../utils/ranking";
 import { haversineKm, type Coords } from "../utils/location";
 
@@ -141,6 +142,8 @@ export function rankTurfs<T extends Turf>(
     result.push({ turf: t, km: distance(query.at, t) });
   }
   const sortBy = query.sort === "nearby" && !query.at ? "rating" : query.sort;
+  const chip = query.sport ? { chip: query.sport } : null;
+  const priceFor = (t: T) => (chip && !pricesAreForSport(t.sports, chip) ? null : getMinimumPrice(t));
   result = result.sort((a, b) => {
     switch (sortBy) {
       case "nearby":
@@ -152,8 +155,10 @@ export function rankTurfs<T extends Turf>(
       case "price-high": {
         // Sort turfs without a real price to the end regardless of direction —
         // never coalesce them to 500 so they don't jumble ahead of cheap real listings.
-        const ap = getMinimumPrice(a.turf);
-        const bp = getMinimumPrice(b.turf);
+        // With a chip, a price the card does not show (another sport's, cardPrice)
+        // counts as none, so it never orders the list either.
+        const ap = priceFor(a.turf);
+        const bp = priceFor(b.turf);
         if (ap == null && bp == null) return 0;
         if (ap == null) return 1;
         if (bp == null) return -1;

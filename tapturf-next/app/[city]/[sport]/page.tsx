@@ -229,7 +229,7 @@ export default async function CitySportPage({
         )}
       </header>
 
-      <SportTurfList turfs={turfs} venues={venues.toLowerCase()} placeLabel={cityLabel} />
+      <SportTurfList turfs={turfs} venues={venues.toLowerCase()} placeLabel={cityLabel} sport={{ labels: s.labels }} />
 
       {/* FAQ: visible text matches the FAQPage JSON-LD */}
       <section className="mt-14 max-w-3xl">

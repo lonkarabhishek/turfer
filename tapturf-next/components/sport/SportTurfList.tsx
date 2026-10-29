@@ -5,6 +5,7 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { areaFor } from "@/lib/utils/area";
 import { labelFor, isCity } from "@/lib/city";
 import type { Turf } from "@/types/turf";
+import type { CardSport } from "@/lib/utils/cardSport";
 import { turfPath } from "@/lib/utils/turfPath";
 
 /** How many turfs get a full photo card; the rest are a plain list. */
@@ -21,6 +22,7 @@ export function SportTurfList({
   venues,
   placeLabel,
   showCity = false,
+  sport,
 }: {
   turfs: Turf[];
   /** Lowercase plural, e.g. "football turfs" or "pickleball courts". */
@@ -28,6 +30,8 @@ export function SportTurfList({
   placeLabel: string;
   /** Show the city next to each name (all-cities pages). */
   showCity?: boolean;
+  /** The page's sport (its lib/sports.ts labels): each card leads with it and shows only its price. */
+  sport: CardSport;
 }) {
   const cards = turfs.slice(0, CARD_LIMIT);
   const rest = turfs.slice(CARD_LIMIT);
@@ -36,7 +40,7 @@ export function SportTurfList({
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
         {cards.map((turf, i) => (
-          <TurfCard key={turf.id} turf={forCard(turf)} priority={i < 3} />
+          <TurfCard key={turf.id} turf={forCard(turf)} priority={i < 3} sport={sport} />
         ))}
       </div>
 

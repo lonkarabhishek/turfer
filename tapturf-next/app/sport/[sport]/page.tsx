@@ -182,7 +182,7 @@ export default async function SportPage({
 
       {/* Top 24 as cards, the rest as a light list */}
       {turfs.length > 0 ? (
-        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity />
+        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity sport={{ labels: info.labels }} />
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
