@@ -66,8 +66,9 @@ export async function TurfsView({ requested }: { requested: string | null }) {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
       <div id="tt-scope" data-scope={requested ?? ""} hidden />
-      {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
-      <AskPageContext city={scope.kind === "city" ? scope.id : null} />
+      {/* Ask follows the city on screen (a fallback view shows a nearby one);
+          the floating pill offers, once a visit, to answer turf questions. */}
+      <AskPageContext city={scope.kind === "city" ? scope.id : null} listing />
       <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">Find your turf</h1>
       <CityLine {...cityLineFor(scope, "#turfs-by-city", "/turfs")} />
       <Link href="/turf-near-me" className="inline-block text-[15px] font-medium text-accent-600 hover:text-accent-700">

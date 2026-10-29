@@ -8,17 +8,16 @@ import { useAsk } from "./AskProvider";
 const EXAMPLES = ["Box cricket near me under ₹1,000", "Football turf with floodlights tonight", "Compare two turfs", "Host a game Saturday 7pm"];
 
 /**
- * Inline entry on the home page and /turfs. Typing here opens the
+ * Inline entry on the home page (turf lists have the pill's offer
+ * instead, AskLauncher). Typing here opens the
  * chat with the message already sent, so the landing page stays
  * clean and the conversation lives in one place.
  */
 export function AskEntry({
-  compact = false,
   examples = EXAMPLES,
   center = false,
   className,
 }: {
-  compact?: boolean;
   /** Centre the chips (the centred home hero). */
   center?: boolean;
   /** Chips under the input; the home passes city-aware ones. */
@@ -29,7 +28,7 @@ export function AskEntry({
   const { openPanel } = useAsk();
   const [q, setQ] = useState("");
   return (
-    <section className={className ?? (compact ? "mb-4" : "mt-7")} aria-label="Ask TapTurf">
+    <section className={className ?? "mt-7"} aria-label="Ask TapTurf">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -66,20 +65,18 @@ export function AskEntry({
           <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
         </button>
       </form>
-      {!compact && (
-        <div className={`mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible${center ? " sm:justify-center" : ""}`}>
-          {examples.map((ex) => (
-            <button
-              key={ex}
-              type="button"
-              onClick={() => openPanel(ex)}
-              className="shrink-0 h-8 px-3 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] text-primary-700 whitespace-nowrap cursor-pointer transition-colors"
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className={`mt-2.5 flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible${center ? " sm:justify-center" : ""}`}>
+        {examples.map((ex) => (
+          <button
+            key={ex}
+            type="button"
+            onClick={() => openPanel(ex)}
+            className="shrink-0 h-8 px-3 rounded-full bg-primary-100 hover:bg-primary-200 text-[13px] text-primary-700 whitespace-nowrap cursor-pointer transition-colors"
+          >
+            {ex}
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

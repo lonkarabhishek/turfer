@@ -62,6 +62,8 @@ export type PageContext = {
   turf?: { id: string; name: string } | null;
   city?: CityId | null;
   blog?: { slug: string; title: string; questions?: string[]; charts?: boolean } | null;
+  /** A turf list (/turfs, /c/<city>/turfs): the pill offers, once, to answer turf questions. */
+  listing?: boolean;
 };
 
 type Ctx = {

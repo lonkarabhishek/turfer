@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useAsk, type PageContext } from "./AskProvider";
 
 /** Tells the chat what the player is looking at. Render once per page that has context. */
-export function AskPageContext({ turf, city, blog }: PageContext) {
+export function AskPageContext({ turf, city, blog, listing = false }: PageContext) {
   const { setPageContext } = useAsk();
   const id = turf?.id ?? null;
   const name = turf?.name ?? null;
@@ -18,8 +18,9 @@ export function AskPageContext({ turf, city, blog }: PageContext) {
       turf: id && name ? { id, name } : null,
       city: city ?? null,
       blog: slug && title ? { slug, title, questions: questions ? questions.split("\n") : [], charts } : null,
+      listing,
     });
     return () => setPageContext({});
-  }, [id, name, city, slug, title, questions, charts, setPageContext]);
+  }, [id, name, city, slug, title, questions, charts, listing, setPageContext]);
   return null;
 }
