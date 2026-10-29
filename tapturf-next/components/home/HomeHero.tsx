@@ -9,8 +9,8 @@ import type { CityLineProps } from "@/lib/cityLine";
 import type { HomeScope, ScopedHome } from "@/lib/home/select";
 
 /**
- * Home hero for visitors: the centred "Playing should be easy."
- * (the owner's line, 29 Oct) in the layout people know, with two actions and the Ask box. Additions stay
+ * Home hero for visitors: the centred "Book turf. Find your squad."
+ * layout people know, with two actions and the Ask box. Additions stay
  * quiet: one grey line with the live count, chips for the visitor's own
  * city, and the city line where the old city button sat. Every string
  * comes from server props for the city the page was rendered for, so
@@ -31,12 +31,12 @@ export function HomeHero({ hero, line }: { hero: ScopedHome["hero"]; scope: Home
     <section className="min-h-[calc(100svh-3.5rem-3.5rem-4rem)] md:min-h-[calc(100vh-4rem-6rem)] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-[520px] text-center">
         <h1 className="font-display text-primary-900 text-display-xl mb-4">
-          Playing should
+          Book turf.
           <br />
-          <span className="text-accent-500">be easy.</span>
+          <span className="text-accent-500">Find your squad.</span>
         </h1>
         <p className="text-primary-500 text-[17px] md:text-xl leading-snug max-w-[420px] mx-auto">
-          Find a sports turf or join an open match near you.
+          The easiest way to find a sports turf or join an open match near you.
         </p>
         {count && <p className="mt-2 text-[14px] text-primary-400 tabular-nums">{count}, with photos, ratings and prices</p>}
 
