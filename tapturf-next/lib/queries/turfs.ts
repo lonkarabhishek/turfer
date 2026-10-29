@@ -181,8 +181,8 @@ function toPlayersSay(raw: unknown): Turf["review_summary"] {
 const BANDS = new Set(["morning", "day", "evening", "night"]);
 const DAYS = new Set(["weekday", "weekend", "all"]);
 
-/** Keep only well-formed price bands with a real per-hour price. */
-function toBands(raw: unknown): PriceBand[] | null {
+/** Keep only well-formed price bands with a real per-hour price (also lib/queries/sportBands.ts). */
+export function toBands(raw: unknown): PriceBand[] | null {
   if (!Array.isArray(raw)) return null;
   const out = raw.filter(
     (b): b is PriceBand =>

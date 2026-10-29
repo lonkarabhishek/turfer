@@ -20,7 +20,8 @@ import {
   type ListPage,
   type SortOption,
 } from "@/lib/turfList/query";
-import { SAVE_KEY, addBatch, firstBatch, fromSaved, listKey, nearCount, shownCards, startState, toSaved, wantBatch, type ListState } from "@/lib/turfList/client";
+import { SAVE_KEY, addBatch, firstBatch, fromSaved, listKey, nearCount, shownCards, sportOfKey, startState, toSaved, wantBatch, type ListState } from "@/lib/turfList/client";
+import type { CardSport } from "@/lib/utils/cardSport";
 
 const SORT_LABELS: Record<SortOption, string> = {
   nearby:      "Nearest first",
@@ -107,6 +108,9 @@ export function TurfListingClient({
   const replacing = ready && list.key !== wantKey;
   // Ordered by the list's own key, so a list still on screen while the next loads keeps its order.
   const shown = useMemo(() => shownCards(list, userLocation), [list, userLocation]);
+  // The chip the cards on screen were fetched for: each card leads with it and shows only its price.
+  const listSport = sportOfKey(list.key);
+  const cardSport = useMemo<CardSport | null>(() => (listSport ? { chip: listSport } : null), [listSport]);
   const plan = !ready ? null : replacing ? firstBatch(nearby) : wantBatch(list, shown.length);
   // One failed attempt is not retried by itself (no loop against a failing route); Retry asks again.
   const attempt = plan ? `${wantKey}#${list.key}#${list.next}#${list.target}#${plan.offset}+${plan.limit}` : null;
@@ -466,6 +470,7 @@ export function TurfListingClient({
                   priority={i < 2}
                   trending={hot === true}
                   cityLabel={cityLabel || !isCity(turf.city) ? undefined : labelFor(turf.city)}
+                  sport={cardSport}
                 />
               ))}
               {Array.from({ length: Math.min(pendingMore, 4) }, (_, i) => (

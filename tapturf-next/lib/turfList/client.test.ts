@@ -16,6 +16,7 @@ import {
   nearCount,
   nearbyFrom,
   shownCards,
+  sportOfKey,
   startState,
   toSaved,
   wantBatch,
@@ -173,6 +174,17 @@ test("listKey: scope, sport, search (any case), sort and rounded location; nearb
   assert.equal(listKey(null, { q: "", sport: null, sort: "nearby" }, { lat: 18.52, lng: 73.86 }), "|||nearby|18.52,73.86");
   assert.equal(isGeoKey("|||nearby|18.52,73.86"), true);
   assert.equal(isGeoKey("pune||kick|rating|"), false);
+});
+
+test("sportOfKey: the chip a list was fetched for, whatever the search text holds", () => {
+  assert.equal(sportOfKey(listKey("pune", { q: "", sport: "Badminton", sort: "rating" }, null)), "Badminton");
+  assert.equal(sportOfKey(listKey(null, { q: "", sport: "Box Cricket", sort: "nearby" }, { lat: 18.52, lng: 73.86 })), "Box Cricket");
+  assert.equal(sportOfKey(listKey("pune", { q: "a|tennis|b", sport: null, sort: "rating" }, null)), null);
+  assert.equal(sportOfKey(listKey("pune", { q: "x|y", sport: "Tennis", sort: "rating" }, null)), "Tennis");
+  assert.equal(sportOfKey(listKey(null, DEFAULT, null)), null);
+  assert.equal(sportOfKey("k|"), null);
+  assert.equal(sportOfKey(""), null);
+  assert.equal(sportOfKey("pune|squash|||"), null);
 });
 
 test("saved lists: only for the same URL and scope, recent, well formed and not nearby", () => {

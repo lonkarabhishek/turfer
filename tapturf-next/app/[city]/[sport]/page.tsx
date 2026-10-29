@@ -19,6 +19,7 @@ import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/li
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
+import { getSportBands } from "@/lib/queries/sportBands";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -133,7 +134,7 @@ export default async function CitySportPage({
   // first. The points come from the live list (the page read it already,
   // isLiveCity), so this city is placed even when its own sport page is
   // too thin to be in the sport's list.
-  const [sportCities, live] = await Promise.all([getCitiesForSport(s.slug), getLiveCities()]);
+  const [sportCities, live, bands] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands()]);
   const otherCities = pickOtherCities(sportCities, cityId, cityPointsOf(live)).flatMap((c) => {
     const href = citySportHref(c.id, s.slug, c.n);
     return href ? [{ ...c, href }] : [];
@@ -229,7 +230,7 @@ export default async function CitySportPage({
         )}
       </header>
 
-      <SportTurfList turfs={turfs} venues={venues.toLowerCase()} placeLabel={cityLabel} />
+      <SportTurfList turfs={turfs} venues={venues.toLowerCase()} placeLabel={cityLabel} sport={{ labels: s.labels }} bands={bands} />
 
       {/* FAQ: visible text matches the FAQPage JSON-LD */}
       <section className="mt-14 max-w-3xl">

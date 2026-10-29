@@ -53,19 +53,19 @@ export const post: Post = {
       { value: "≤5 km", label: "Sweet spot", hint: "Half of Pune plays here" },
       { value: "60 sec", label: "From search to WhatsApp", hint: "vs 8+ minutes the old way" },
       { value: "0", label: "Booking fee", hint: "You talk to the turf directly" },
-      { value: "3", label: "Cities live", hint: "Nashik, Pune, Mumbai" },
+      { value: "India", label: "Cities live", hint: "Hyderabad, Bangalore, Pune, Mumbai, Delhi and more" },
     ] },
 
     { type: "h2", text: "Nashik? Pune? Mumbai? Pick your city" },
-    { type: "p", text: "TapTurf ships full coverage for Nashik and Pune with Mumbai rolling out. Pick your city once and every page — home, listings, sport pages — remembers your choice." },
+    { type: "p", text: "TapTurf lists turfs in cities across India, from Nashik, Pune and Mumbai to Hyderabad, Bangalore and Delhi. Pick your city once and every page — home, listings, sport pages — remembers your choice." },
     { type: "ol", items: [
       "Nashik — every active turf across Pathardi, Deolali, Gangapur, Indira Nagar and more.",
       "Pune — 125+ turfs across Kothrud, Aundh, Wakad, Kharadi, Hinjewadi, Baner and beyond.",
-      "Mumbai — rolling out; the city picker will light up as venues go live.",
+      "Mumbai — turfs across Mira Road, Andheri, Dombivli, Bandra, Chembur and more.",
     ] },
 
     { type: "h2", text: "Filtering by sport" },
-    { type: "p", text: "The listing page has one-tap filters for the sports people actually play in Maharashtra: football, box cricket, cricket, badminton, pickleball, basketball, tennis, volleyball, yoga. Pick one and the list is sport-scoped instantly." },
+    { type: "p", text: "The listing page has one-tap filters for the sports people actually play: football, box cricket, cricket, badminton, pickleball, basketball, tennis, volleyball, yoga. Pick one and the list is sport-scoped instantly." },
 
     { type: "h2", text: "The other jobs Google can't do" },
     { type: "ul", items: [
