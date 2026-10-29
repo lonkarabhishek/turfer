@@ -12,6 +12,7 @@ import { NearMeBand } from "./NearMeBand";
 import { ToolsRow } from "./ToolsRow";
 import { GuidesRow } from "./GuidesRow";
 import { FinalBand } from "./FinalBand";
+import { ClosingLine } from "./ClosingLine";
 import { plural } from "@/lib/home/format";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
@@ -78,6 +79,7 @@ export async function HomeView({ requested }: { requested: string | null }) {
       <ToolsRow />
       <GuidesRow posts={d.posts} />
       <FinalBand />
+      <ClosingLine />
     </>
   );
 }
