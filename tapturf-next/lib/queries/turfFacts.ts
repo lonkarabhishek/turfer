@@ -1,17 +1,12 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/queries/turfs";
-import { TURF_FACT_COLUMNS, turfFactsFrom, type TurfFactRow, type TurfFacts } from "@/lib/seo/turfFacts";
+import { turfFactsFrom, type TurfFacts } from "@/lib/seo/turfFacts";
+import { readTurfFactRows } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 
+// While building: the facts the build-data step made from the same read.
 async function readTurfFacts(): Promise<TurfFacts> {
-  const supabase = createReadOnlyClient();
-  const rows = await fetchAllRows<TurfFactRow>((from, to) =>
-    supabase.from("turfs").select(TURF_FACT_COLUMNS).eq("is_active", true).order("id").range(from, to) as unknown as PromiseLike<{
-      data: TurfFactRow[] | null;
-      error: unknown;
-    }>,
-  );
-  return turfFactsFrom(rows);
+  return buildData("turf-facts") ?? turfFactsFrom(await readTurfFactRows(createReadOnlyClient()));
 }
 
 /**

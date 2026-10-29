@@ -164,13 +164,36 @@ export function coversColumns(have: string, need: string): boolean {
 
 const MAX_PARTS = 200;
 
+/** A snapshot not built for this long (seconds) is not trusted: the builder is stuck. */
+export const SNAPSHOT_MAX_AGE_S = 10_800;
+
+/**
+ * Why no snapshot is usable for an app that selects `cols` ("no snapshot",
+ * "columns missing", "snapshot stale"), or null when one is. Exported for
+ * the build-data step (scripts/build-data.ts), which records the table's
+ * rows exactly when the store would read them.
+ */
+export function unusable(meta: ListMeta | null, cols: string, maxAgeS = SNAPSHOT_MAX_AGE_S): string | null {
+  if (!meta || !(meta.v > 0)) return "no snapshot";
+  if (typeof meta.cols !== "string" || !coversColumns(meta.cols, cols)) return "columns missing";
+  if (!(meta.age_s < maxAgeS)) return "snapshot stale";
+  return null;
+}
+
+/** Part 0's numbers make sense: some rows, 1 to MAX_PARTS parts. */
+export const headerOk = <R>(p: ListPart<R>) => p.n > 0 && Number.isInteger(p.parts) && p.parts >= 1 && p.parts <= MAX_PARTS;
+
+/** The part is of that one build (same v, n and parts) and has rows. */
+export const sameBuild = <R>(p: ListPart<R> | null, b: { v: number; n: number; parts: number }) =>
+  !!p && Array.isArray(p.rows) && p.v === b.v && p.n === b.n && p.parts === b.parts;
+
 /** Parts that do not fit together. Retried at once: no sign of a slow database. */
 class Mismatch extends Error {}
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
-  const maxAgeS = opts.maxAgeS ?? 10_800;
+  const maxAgeS = opts.maxAgeS ?? SNAPSHOT_MAX_AGE_S;
   const liveTtlMs = opts.liveTtlMs ?? 3_600_000;
   const retryAfterMs = Math.max(0, opts.retryAfterMs ?? 20_000);
   const maxPartReads = Math.max(1, Math.floor(opts.maxPartReads ?? 1));
@@ -225,17 +248,6 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
       waiting.shift()?.();
     }
   }
-
-  function unusable(meta: ListMeta | null): string | null {
-    if (!meta || !(meta.v > 0)) return "no snapshot";
-    if (typeof meta.cols !== "string" || !coversColumns(meta.cols, opts.cols)) return "columns missing";
-    if (!(meta.age_s < maxAgeS)) return "snapshot stale";
-    return null;
-  }
-
-  const headerOk = (p: ListPart<R>) => p.n > 0 && Number.isInteger(p.parts) && p.parts >= 1 && p.parts <= MAX_PARTS;
-  const sameBuild = (p: ListPart<R> | null, b: { v: number; n: number; parts: number }) =>
-    !!p && Array.isArray(p.rows) && p.v === b.v && p.n === b.n && p.parts === b.parts;
 
   async function loadSnapshot(meta: ListMeta, slot: Slot): Promise<RowsRead<R> | HandOver> {
     const t0 = now();
@@ -405,7 +417,7 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   }
 
   function read(meta: ListMeta | null): Promise<RowsRead<R>> {
-    const why = unusable(meta);
+    const why = unusable(meta, opts.cols, maxAgeS);
     if (!why && meta) {
       if (snap && snap.v >= meta.v) return Promise.resolve(fresh(snap));
       if (pending.snapshot && pending.snapshot.v >= meta.v) return pending.snapshot.p;

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run check:blog && next build",
+    "build": "npm run check:blog && tsc -p tsconfig.build-data.json && node .test-out/build-data/scripts/build.js",
+    "build:data": "tsc -p tsconfig.build-data.json && node .test-out/build-data/scripts/build-data.js",
     "start": "next start",
     "lint": "eslint",
     "test:cricket": "tsc lib/cricket/overs.ts lib/cricket/nrr.ts lib/cricket/cricket.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cricket.test.js",
@@ -27,7 +28,8 @@
     "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js",
     "test:seo": "tsc -p tsconfig.test-seo.json && node --test .test-out/seo/lib/seo/turfMeta.test.js .test-out/seo/lib/seo/listingMeta.test.js .test-out/seo/lib/seo/blogMeta.test.js .test-out/seo/lib/utils/seo.test.js",
     "test:consent": "tsc -p tsconfig.test-consent.json && node --test .test-out/consent/lib/consent.test.js .test-out/consent/lib/analytics/consentGates.test.js .test-out/consent/lib/policy.test.js",
-    "test:list": "tsc -p tsconfig.test-list.json && node --test .test-out/list/lib/turfList/query.test.js .test-out/list/lib/turfList/client.test.js"
+    "test:list": "tsc -p tsconfig.test-list.json && node --test .test-out/list/lib/turfList/query.test.js .test-out/list/lib/turfList/client.test.js",
+    "test:build": "tsc -p tsconfig.test-build.json && node --test .test-out/build/lib/build/build.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

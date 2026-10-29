@@ -10,36 +10,10 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { turfPlaysSport, type SportPage } from "@/lib/sports";
 import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { PriceBand, Turf } from "@/types/turf";
+import { CARD_COLUMNS, readCardRows } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-/**
- * Columns for list pages (cards, search, sort, near-me). select("*")
- * shipped descriptions, data_sources and field_confidence for 240+
- * turfs on every listing: /turfs was 3.4 MB of HTML. Detail pages
- * still use "*" via getTurfById().
- *
- * The list snapshot carries the same columns (v_cols in
- * private.build_turf_list(), 20261026_cache_list_snapshot.sql; keys.test.ts
- * checks they agree). To add a column, replace that function first: a
- * snapshot with extra columns still serves this code. A column added here
- * first makes this app read the table itself (once per list build per
- * process) until the snapshot has it.
- */
-const CARD_COLUMNS = [
-  "id", "slug", "name", "address", "area", "city", "sports", "images", "cover_image",
-  "rating", "total_reviews", "lat", "lng",
-  "morning_price", "afternoon_price", "evening_price",
-  "weekend_morning_price", "weekend_afternoon_price", "weekend_evening_price",
-  "price_mentions", "price_unit", "slot_minutes", "is_covered", "has_floodlights",
-  "start_time", "end_time", "is_24x7", "membership_required", "is_active",
-  // Ask TapTurf filters on these; forCard() drops them before pages ship them.
-  "amenities", "parking_available", "washroom_available", "changing_room_available", "has_cafeteria", "equipment_provided",
-  // AI cover pass: photos judged unusable are dropped from images below.
-  "image_review",
-  // An owner manages it on myTapturf: the card's Claimed mark.
-  "claimed",
-].join(", ");
 
 // Exported for lib/queries/turfPage.ts (turf pages read the row through
 // the turf_page RPC).
@@ -224,45 +198,6 @@ function toBands(raw: unknown): PriceBand[] | null {
   return out.length ? out : null;
 }
 
-// Supabase returns at most 1,000 rows per request; 500 keeps each
-// statement well inside the 3 s timeout the public role has when the
-// database is busy (a 1,000-row page of card columns took up to 2.98 s).
-const PAGE = 500;
-
-/**
- * We have more turfs than one request returns. Page with .range()
- * until a page comes back short.
- * The page function must apply a stable order (rating, then id) so
- * rows never straddle two pages.
- *
- * A failed page throws rather than return part of the list, because a
- * partial list gets cached and shows wrong counts (a home title once
- * said 51 cities instead of 54). A throw keeps the last good cached page
- * or snapshot in place. No retries while serving: on 20 Oct three
- * retries per page turned one slow statement into four against a
- * database that was already overloaded. A production build retries a
- * page once, since a failed page there fails the whole deploy.
- */
-export async function fetchAllRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
-  const retries = process.env.NEXT_PHASE === "phase-production-build" ? 1 : 0;
-  const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    let res = await page(from, from + PAGE - 1);
-    for (let attempt = 1; res.error && attempt <= retries; attempt++) {
-      await new Promise((r) => setTimeout(r, 1500));
-      res = await page(from, from + PAGE - 1);
-    }
-    if (res.error) {
-      console.error("Paged fetch failed:", res.error);
-      throw new Error(`Paged fetch failed at row ${from}`);
-    }
-    const rows = res.data ?? [];
-    out.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return out;
-}
-
 /** Rating high to low (no rating first, as Postgres sorts DESC), then id: the order the query returns. */
 function byRatingThenId(a: Record<string, unknown>, b: Record<string, unknown>): number {
   const ra = a.rating == null ? Infinity : Number(a.rating);
@@ -277,7 +212,7 @@ type Row = Record<string, unknown>;
  * One retry while `next build` prerenders (a failed read there fails the
  * whole deploy), none while serving: on 20 Oct retries turned one slow
  * statement into four against a database that was already overloaded.
- * Same rule as fetchAllRows.
+ * Same rule as fetchAllRows (lib/supabase/paged.ts).
  */
 async function buildRetry<T extends { error: unknown }>(call: () => PromiseLike<T>): Promise<T> {
   let res = await call();
@@ -304,6 +239,9 @@ function cacheKeyed<A extends unknown[], R>(name: string, fn: (...args: A) => Pr
 
 /** The list snapshot's version, or null before the first build. A failed read throws. */
 async function readListMeta(): Promise<ListMeta | null> {
+  // While building: the version the build-data step read (lib/build/data.ts).
+  const built = buildData("list");
+  if (built) return built.meta;
   const { data, error } = await buildRetry(() => createServerClient().rpc("turf_list_version"));
   if (error) {
     console.error("turf_list_version failed:", error);
@@ -316,6 +254,8 @@ async function readListMeta(): Promise<ListMeta | null> {
 // it), not one per part: a burst of failed part reads wrote 5 to 7 error
 // lines per failed render on 27 Oct.
 async function readListPart(i: number): Promise<ListPart<Row> | null> {
+  const parts = buildData("list")?.parts;
+  if (parts) return parts[i] ?? null;
   const { data, error } = await buildRetry(() => createServerClient().rpc("turf_list_part", { p_part: i }));
   if (error) {
     const e = error as { message?: unknown; code?: unknown };
@@ -520,20 +460,14 @@ let liveReadNo = 0;
  * judged fresh by each reader's revalidate: pages of rows from an earlier
  * build or an earlier read could come back, mixed with fresh ones. A header
  * unique to each build-time read keeps it its own. Serving, those fetches
- * are never cached.
+ * are never cached. A build from the build-data step's files gets the
+ * rows the step read with this same query instead.
  */
-function readLiveRows(): Promise<Row[]> {
+async function readLiveRows(): Promise<Row[]> {
+  const built = buildData("list")?.rows;
+  if (built) return built.slice();
   const tag = process.env.NEXT_PHASE === "phase-production-build" ? `${INSTANCE}.${++liveReadNo}` : null;
-  return fetchAllRows<Row>((from, to) => {
-    const query = createServerClient()
-      .from("turfs")
-      .select(CARD_COLUMNS)
-      .eq("is_active", true)
-      .order("rating", { ascending: false })
-      .order("id")
-      .range(from, to);
-    return (tag ? query.setHeader("x-tapturf-read", tag) : query) as unknown as PromiseLike<{ data: Row[] | null; error: unknown }>;
-  });
+  return readCardRows(createServerClient(), tag);
 }
 
 /**

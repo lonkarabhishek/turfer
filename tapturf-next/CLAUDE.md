@@ -86,9 +86,10 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 ## Build & Run
 ```bash
 npm run dev          # Dev server (Turbopack)
-npx next build       # Production build
+npm run build        # Production build: the build-data step, then next build
 npx next start -p 3005  # Production server
 ```
+`npm run build` (what Vercel runs) first reads every row the prerendered pages share, once, patiently (`scripts/build-data.ts`, waits out a slow database for up to 6 min, else fails and production keeps the last deploy), and `next build` prerenders from those files: page generation reads nothing from the database (`lib/build/data.ts`). A new shared read a prerendered page makes needs a hook there (`buildData`), or the build logs `build: a page read the database <path>` (`TAPTURF_BUILD_DATA_STRICT=1` makes that fail; `npm run test:build`). `TAPTURF_BUILD_DATA=off npm run build` (or `npx next build`) builds without the step, as before, e.g. with no database.
 
 ## Original SPA Reference
 The old Vite SPA is at `../src/`. Key files to reference when porting:

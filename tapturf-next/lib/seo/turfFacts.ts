@@ -1,6 +1,6 @@
 /**
  * What a search snippet must check before it promises something, but the
- * list rows (CARD_COLUMNS, lib/queries/turfs.ts) leave out: which turfs a
+ * list rows (CARD_COLUMNS, lib/build/reads.ts) leave out: which turfs a
  * player can call or WhatsApp (the page's buttons), which show timings,
  * and which names two turfs in one city share. Made from one read of the
  * active turfs (lib/queries/turfFacts.ts); only ids and keys are kept.

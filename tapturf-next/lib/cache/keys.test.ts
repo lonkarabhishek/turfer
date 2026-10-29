@@ -141,9 +141,9 @@ function sqlArray(name: string, fn = "private.mark_turf_dirty()"): string[] {
 }
 
 function cardColumns(): string[] {
-  const src = readFileSync(join(process.cwd(), "lib", "queries", "turfs.ts"), "utf8");
-  const m = src.match(/const CARD_COLUMNS = \[([\s\S]*?)\]\.join/);
-  assert.ok(m, "CARD_COLUMNS not found in lib/queries/turfs.ts");
+  const src = readFileSync(join(process.cwd(), "lib", "build", "reads.ts"), "utf8");
+  const m = src.match(/export const CARD_COLUMNS = \[([\s\S]*?)\]\.join/);
+  assert.ok(m, "CARD_COLUMNS not found in lib/build/reads.ts");
   return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
 }
 

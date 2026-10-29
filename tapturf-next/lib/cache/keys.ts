@@ -59,7 +59,7 @@ export const IGNORE_COLUMNS: readonly string[] = [
 ];
 
 /**
- * turfs columns list pages read: CARD_COLUMNS in lib/queries/turfs.ts plus
+ * turfs columns list pages read: CARD_COLUMNS in lib/build/reads.ts plus
  * is_active, city and slug. A change here refreshes the lists; any other
  * column (including ones added later) refreshes only the turf's own page.
  * Mirrors v_list in private.mark_turf_dirty(); keys.test.ts checks both.

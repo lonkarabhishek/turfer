@@ -6,6 +6,8 @@ import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ChevronRight, Flame, KeyRound, MapPin, Star } from "lucide-react";
 import { getTopTurfKeys } from "@/lib/queries/turfs";
+import { PRERENDERED_TURF_PAGES } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 import { loadTurfPage } from "@/lib/queries/turfPage";
 import { getTurfManagers } from "@/lib/queries/turfManagers";
 import { NO_MANAGERS } from "@/lib/turfPage/managers";
@@ -55,10 +57,12 @@ export const revalidate = 86400;
 // reviewed turfs are built at deploy; the rest render on first visit
 // and are cached (all of them are in the sitemap either way). Previews
 // and local builds build none, so they never render against the
-// production database.
+// production database. With the build-data step (npm run build), exactly
+// the keys it recorded everything for: one it could not read in time
+// renders on its first visit instead.
 export async function generateStaticParams() {
   if (process.env.VERCEL_ENV !== "production") return [];
-  const keys = await getTopTurfKeys(300);
+  const keys = buildData("turf-pages")?.keys ?? (await getTopTurfKeys(PRERENDERED_TURF_PAGES));
   return keys.map((id) => ({ id }));
 }
 
