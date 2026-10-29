@@ -1,25 +1,25 @@
 import Link from "next/link";
-import { ArrowRight, IndianRupee, ShieldCheck } from "lucide-react";
+import { ArrowRight, IndianRupee } from "lucide-react";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { managedByParts, type ManagedByPart, type TurfManagers } from "@/lib/turfPage/managers";
 import { ownerPriceSetOn, type OwnerPriceNote } from "@/lib/turfPage/owner";
-import { OwnerMedallion } from "./OwnerMark";
+import { OwnerMedallion, VerifiedStamp } from "./OwnerMark";
 
 /**
  * What "Claimed" means, at the end of a claimed turf's page: who
  * runs it ("Managed by @a and @b", each with their tick; no such line
- * when nobody can be named, so the heading stands alone), that TapTurf
- * checked them (not how), and, when the prices are theirs, when they
- * set them. #managed-by is where the badge under the name jumps to, and
- * myTapturf's "See it" link too. Says plainly that it is about who
- * keeps the page, not a rating.
+ * when nobody can be named, so the heading stands alone), a "TapTurf
+ * verified" stamp in the corner (never how TapTurf checked them), and,
+ * when the prices are theirs, when they set them. #managed-by is where
+ * the badge under the name jumps to, and myTapturf's "See it" link too.
  */
 export function OwnerPanel({ managers, priceNote, className = "" }: { managers: TurfManagers; priceNote: OwnerPriceNote | null; className?: string }) {
   const parts = managedByParts(managers);
   const setOn = priceNote ? ownerPriceSetOn(priceNote) : null;
   return (
-    <section id="managed-by" aria-labelledby="owner-h" className={`scroll-mt-24 owner-surface rounded-2xl p-5 md:p-6 ${className}`}>
-      <div className="flex items-center gap-3.5">
+    <section id="managed-by" aria-labelledby="owner-h" className={`relative scroll-mt-24 owner-surface rounded-2xl p-5 md:p-6 ${className}`}>
+      <VerifiedStamp className="absolute -top-3 -right-2 md:top-1 md:right-3 -rotate-12 opacity-90" />
+      <div className="flex items-center gap-3.5 pr-20 md:pr-24">
         <OwnerMedallion />
         <div className="min-w-0">
           <h2 id="owner-h" className="text-[20px] font-bold text-primary-900 font-serif leading-tight">
@@ -30,20 +30,19 @@ export function OwnerPanel({ managers, priceNote, className = "" }: { managers: 
               Managed by <ManagedByNames parts={parts} />
             </p>
           )}
+          <p className="sr-only">TapTurf verified.</p>
         </div>
       </div>
       <p className="mt-4 text-[15px] text-primary-800 leading-relaxed">
         The owner runs this page on TapTurf and can change its prices, hours and numbers.
       </p>
-      <ul className="mt-4 rounded-xl border border-accent-100 bg-white divide-y divide-accent-100">
-        <Fact icon={<ShieldCheck className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="Checked by TapTurf" />
-        {priceNote && (
+      {priceNote && (
+        <ul className="mt-4 rounded-xl border border-accent-100 bg-white divide-y divide-accent-100">
           <Fact icon={<IndianRupee className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="Prices from the owner">
             {setOn}
           </Fact>
-        )}
-      </ul>
-      <p className="mt-3 text-[13px] text-primary-500 leading-snug">This is about who keeps the page, not a rating of the turf.</p>
+        </ul>
+      )}
     </section>
   );
 }

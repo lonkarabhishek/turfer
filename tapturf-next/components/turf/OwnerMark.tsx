@@ -49,6 +49,30 @@ export function OwnerMark({ size = 16, tone = "green", className = "" }: { size?
 }
 
 /**
+ * "TapTurf verified" as an ink stamp: two rings, TAPTURF over a band that
+ * reads VERIFIED, a tick under it, no fill (it sits on the panel like
+ * ink). Tilt it where it is placed. Its words are drawn, so it is hidden
+ * from screen readers: say "TapTurf verified" beside it.
+ */
+export function VerifiedStamp({ size = 88, className = "" }: { size?: number; className?: string }) {
+  const ink = "#15803D";
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden focusable="false" className={`shrink-0 ${className}`}>
+      <circle cx="50" cy="50" r="46" fill="none" stroke={ink} strokeWidth="3" />
+      <circle cx="50" cy="50" r="40" fill="none" stroke={ink} strokeWidth="1.2" />
+      <text x="50" y="34" textAnchor="middle" fill={ink} fontSize="11" fontWeight="800" letterSpacing="1.1">
+        TAPTURF
+      </text>
+      <rect x="3" y="41" width="94" height="19" rx="2" fill="none" stroke={ink} strokeWidth="2.5" />
+      <text x="50" y="55.5" textAnchor="middle" fill={ink} fontSize="12.5" fontWeight="800" letterSpacing="1.6">
+        VERIFIED
+      </text>
+      <path d="M40 70.5l6.5 6.5 13.5-13.5" fill="none" stroke={ink} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
  * The mark in a round green-rimmed medallion (52px, or 56 in the claim
  * preview), for the owner panel. Decorative: its heading says it.
  */
