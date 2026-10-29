@@ -9,6 +9,10 @@
 // at once for 30 s, then lets one probe through. Cached pages keep serving
 // their last copy meanwhile: a failed refresh leaves the old one in place.
 
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+import { buildDataDir, buildDataStrict, TRIPWIRE_FILE } from "../build/env";
+
 export type GuardOptions = {
   /** Abandon a request after this long. */
   timeoutMs?: number;
@@ -21,6 +25,8 @@ export type GuardOptions = {
   now?: () => number;
   fetchImpl?: typeof fetch;
   log?: (msg: string, extra?: Record<string, unknown>) => void;
+  /** Sees each request's URL before it goes out; a throw stops it (the build tripwire, below). */
+  onRequest?: (url: string) => void;
 };
 
 export class CircuitOpenError extends Error {
@@ -84,6 +90,7 @@ export function createGuardedFetch(opts: GuardOptions = {}): typeof fetch {
   };
 
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    opts.onRequest?.(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     let probe = false;
     if (openedAt !== null) {
       // One request at a time may test the database once the period is over.
@@ -122,13 +129,55 @@ export function createGuardedFetch(opts: GuardOptions = {}): typeof fetch {
 }
 
 /**
+ * While `next build` prerenders from the build-data step's files
+ * (lib/build/data.ts), no page should read the database: a read the step
+ * did not record is logged once per path in each worker ("build: a page
+ * read the database <path>") and noted in the step's folder, where
+ * scripts/build.ts counts the notes for its summary. With
+ * TAPTURF_BUILD_DATA_STRICT=1 (test builds and measurements) the read also
+ * fails, and so does the build. Undefined when not building from files.
+ * (turbopackIgnore: the folder is named at run time; see lib/build/data.ts.)
+ */
+export function buildTripwire(
+  env: Record<string, string | undefined>,
+  log: (msg: string) => void = (msg) => console.warn(msg),
+  note: (dir: string, path: string) => void = (dir, path) => appendFileSync(/* turbopackIgnore: true */ join(/* turbopackIgnore: true */ dir, TRIPWIRE_FILE), `${path}\n`),
+): ((url: string) => void) | undefined {
+  const dir = buildDataDir(env);
+  if (!dir) return undefined;
+  const strict = buildDataStrict(env);
+  const seen = new Set<string>();
+  return (url) => {
+    let path = url;
+    try {
+      path = new URL(url).pathname;
+    } catch {
+      // Not a URL: log it as it is.
+    }
+    if (!seen.has(path)) {
+      seen.add(path);
+      log(`build: a page read the database ${path}`);
+      try {
+        note(dir, path);
+      } catch {
+        // The log line is enough.
+      }
+    }
+    if (strict) throw new Error(`build: a page read the database ${path} (TAPTURF_BUILD_DATA_STRICT=1)`);
+  };
+}
+
+/**
  * No breaker while `next build` prerenders (Next sets NEXT_PHASE before
  * it starts the build workers). One per worker would fail every page in
  * that worker for 30 s after a short blip, retries included, and fail the
- * deploy (the daily blog push). The 5 s timeout still applies.
+ * deploy (the daily blog push). The 5 s timeout still applies. Building
+ * from the step's files, the tripwire watches every request.
  */
 export function defaultGuardOptions(env: Record<string, string | undefined> = process.env): GuardOptions {
-  return env.NEXT_PHASE === "phase-production-build" ? { threshold: Infinity } : {};
+  if (env.NEXT_PHASE !== "phase-production-build") return {};
+  const onRequest = buildTripwire(env);
+  return onRequest ? { threshold: Infinity, onRequest } : { threshold: Infinity };
 }
 
 /** One breaker per server instance, shared by every read-only client. */

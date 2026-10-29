@@ -5,7 +5,8 @@ import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { getLiveCities } from "@/lib/queries/cities";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
-import { fetchAllRows } from "@/lib/queries/turfs";
+import { readSitemapGames, readSitemapTurfs } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 import { isGameExpired } from "@/lib/utils/game";
 import { turfPath } from "@/lib/utils/turfPath";
 import { PRIVACY_UPDATED } from "@/lib/policy";
@@ -37,15 +38,11 @@ function latest(dates: (string | null | undefined)[]): Date {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createReadOnlyClient();
 
-  const [turfs, { data: games }] = await Promise.all([
-    fetchAllRows<{ id: string; slug: string | null; updated_at: string | null; city: string | null; sports: unknown }>((from, to) =>
-      supabase.from("turfs").select("id, slug, updated_at, city, sports").eq("is_active", true).order("id").range(from, to),
-    ),
-    supabase
-      .from("games")
-      .select("id, updated_at, date, start_time, status")
-      .in("status", ["open", "upcoming", "active"]),
-  ]);
+  // While building: both reads as the build-data step made them (lib/build/data.ts).
+  const built = buildData("sitemap");
+  const [turfs, { data: games }] = built
+    ? [built.turfs, { data: built.games }]
+    : await Promise.all([readSitemapTurfs(supabase), readSitemapGames(supabase)]);
 
   // Every city with active turfs, from the database.
   const liveCities = await getLiveCities();
@@ -168,7 +165,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Only games still to come (India time); past ones are noindex.
   const gamePages: MetadataRoute.Sitemap = (games ?? [])
-    .filter((g) => !!g.date && !!g.start_time && !isGameExpired(g))
+    .filter((g) => !!g.date && !!g.start_time && !isGameExpired({ date: g.date, start_time: g.start_time }))
     .map((g) => ({
       url: `${BASE}/game/${g.id}`,
       lastModified: g.updated_at ? new Date(g.updated_at) : new Date(),

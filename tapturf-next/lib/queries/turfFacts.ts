@@ -1,17 +1,15 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/queries/turfs";
-import { TURF_FACT_COLUMNS, turfFactsFrom, type TurfFactRow, type TurfFacts } from "@/lib/seo/turfFacts";
+import { turfFactsFrom, type TurfFacts } from "@/lib/seo/turfFacts";
+import { readTurfFactRows } from "@/lib/build/reads";
+import { buildData, isFailed } from "@/lib/build/data";
 
+// While building: the facts the build-data step made from the same read,
+// or its note that the read failed (a failed read here, no read of our own).
 async function readTurfFacts(): Promise<TurfFacts> {
-  const supabase = createReadOnlyClient();
-  const rows = await fetchAllRows<TurfFactRow>((from, to) =>
-    supabase.from("turfs").select(TURF_FACT_COLUMNS).eq("is_active", true).order("id").range(from, to) as unknown as PromiseLike<{
-      data: TurfFactRow[] | null;
-      error: unknown;
-    }>,
-  );
-  return turfFactsFrom(rows);
+  const built = buildData("turf-facts");
+  if (isFailed(built)) throw new Error("the build-data step could not read them");
+  return built ?? turfFactsFrom(await readTurfFactRows(createReadOnlyClient()));
 }
 
 /**

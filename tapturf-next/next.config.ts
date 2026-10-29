@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
   // struggling (fetchAllRows also retries a page once while building).
   // The value is attempts, not retries (next/dist/export/worker.js runs
   // `while (attempt < maxAttempts)`): 2 is one try plus one retry.
+  // Since 29 Oct `npm run build` reads the database before `next build`
+  // (scripts/build-data.ts) and pages prerender from its files, so these
+  // pages make no database reads; both settings matter again only for a
+  // build with TAPTURF_BUILD_DATA=off.
   experimental: {
     staticGenerationMaxConcurrency: 4,
     staticGenerationRetryCount: 2,

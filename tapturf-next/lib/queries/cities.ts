@@ -5,6 +5,8 @@ import { activeTurfRows, markStaleRender } from "@/lib/queries/turfs";
 import { CITIES, cityCopyFrom, cityInfo, isCitySlug, type CityInfo } from "@/lib/city";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
+import { readCityCountRows } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 
 // Pure, in lib/city.ts so test:city covers them; still imported from here.
 export { HOME_CITIES, pickOtherCities } from "@/lib/city";
@@ -23,26 +25,19 @@ export type LiveCity = CityCountRow & { lat: number | null; lng: number | null }
 
 type CountsRow = { city: string; n: number; lat?: unknown; lng?: unknown };
 
-/** The error for a selected column the view does not have (Postgres 42703, passed on by PostgREST). */
-function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  return error.code === "42703" || /column \S*\b(?:lat|lng)\b\S* does not exist/i.test(error.message ?? "");
-}
-
 const coord = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-// One read of the city_turf_counts view (see getLiveCities).
+// One read of the city_turf_counts view (see getLiveCities); while
+// building, the one the build-data step made (lib/build/data.ts).
 async function readLiveCities(): Promise<LiveCity[]> {
-  const supabase = createReadOnlyClient();
-  let { data, error } = await supabase.from("city_turf_counts").select("city, n, lat, lng");
-  // Before 20261028_city_centroids.sql the view has no lat or lng, and
-  // naming them fails the whole read: read the counts alone, so a deploy
-  // ahead of the migration only loses the centroids (uncurated cities
-  // list last, as before), never the city list.
-  if (isMissingColumn(error)) ({ data, error } = await supabase.from("city_turf_counts").select("city, n"));
-  if (error || !data) {
-    console.error("getLiveCities failed", error);
-    throw new Error("Live cities read failed");
+  let data = buildData("cities");
+  if (!data) {
+    const res = await readCityCountRows(createReadOnlyClient());
+    if (res.error || !res.data) {
+      console.error("getLiveCities failed", res.error);
+      throw new Error("Live cities read failed");
+    }
+    data = res.data;
   }
   // Slug-shaped and not reserved: a turfs.city of "blog" must never
   // become a city whose /blog link is another page.

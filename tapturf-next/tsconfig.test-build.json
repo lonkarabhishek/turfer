@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/build",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": ["es2023", "dom"],
+    "types": ["node"],
+    "paths": { "@/*": ["./*"] }
+  },
+  "files": ["lib/build/build.test.ts"]
+}

@@ -6,6 +6,8 @@ import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { summarisePrice } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { turfPhotos } from "@/lib/utils/images";
+import { livePicks, readTrendingRows } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 
 /** The live "Most Trending Turf" pick for a city (server-side). */
 export interface TrendingPick {
@@ -21,20 +23,21 @@ export interface TrendingPick {
  * starts_at and ends_at; if windows overlap the latest start wins.
  * Throws on a failed read: for callers that cache the answer
  * (lib/home/data.ts), which must not store "no picks" for a failure.
+ * While building, the picks the build-data step read, judged live at
+ * this render, so a window that opened or closed since still counts.
  */
 export async function readTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
-  const now = new Date().toISOString();
-  const { data, error } = await createReadOnlyClient()
-    .from("trending_turfs")
-    .select("city, turf_id, tagline, starts_at, ends_at")
-    .lte("starts_at", now)
-    .gt("ends_at", now)
-    .order("starts_at", { ascending: false });
-  if (error || !data) throw new Error(`trending picks read failed: ${error?.message ?? "no data"}`);
+  const now = new Date();
+  let rows = buildData("trending");
+  if (!rows) {
+    const { data, error } = await readTrendingRows(createReadOnlyClient(), now);
+    if (error || !data) throw new Error(`trending picks read failed: ${error?.message ?? "no data"}`);
+    rows = data;
+  }
   const out: Partial<Record<CityId, TrendingPick>> = {};
-  for (const r of data as { city: CityId; turf_id: string; tagline: string | null; starts_at: string; ends_at: string }[]) {
-    if (out[r.city]) continue;
-    out[r.city] = { city: r.city, turfId: r.turf_id, tagline: r.tagline, startsAt: r.starts_at, endsAt: r.ends_at };
+  for (const r of livePicks(rows, now)) {
+    const city = r.city as CityId;
+    out[city] = { city, turfId: r.turf_id, tagline: r.tagline, startsAt: r.starts_at, endsAt: r.ends_at };
   }
   return out;
 }

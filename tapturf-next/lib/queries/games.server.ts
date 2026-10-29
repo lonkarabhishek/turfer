@@ -3,6 +3,8 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { cardGame, filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
+import { readAvailableGames, readGameTurfs } from "@/lib/build/reads";
+import { buildData } from "@/lib/build/data";
 
 /**
  * Server-side game queries — used by SSG/ISR pages so Google indexes
@@ -10,31 +12,26 @@ import type { Game } from "@/types/game";
  */
 
 export async function getAvailableGamesServer(): Promise<Game[]> {
+  // While building: the games and turfs the build-data step read (lib/build/data.ts), copied (the rows get their turf below).
+  const built = buildData("games")?.available;
   const supabase = createReadOnlyClient();
-  const { data } = await supabase
-    .from("games")
-    .select("*")
-    .in("status", ["open", "upcoming", "active"])
-    .order("date", { ascending: true });
+  const data = built ? built.games.map((g) => ({ ...g })) : (await readAvailableGames(supabase)).data;
 
   if (!data || data.length === 0) return [];
 
   // Batch-fetch related turfs
-  const turfIds = [...new Set(data.map((g) => g.turf_id).filter(Boolean))];
+  const turfIds = [...new Set(data.map((g) => g.turf_id as string).filter(Boolean))];
   if (turfIds.length > 0) {
-    const { data: turfs } = await supabase
-      .from("turfs")
-      .select('id, slug, name, address, area, city, lat, lng, "Gmap Embed link", cover_image, images, image_review')
-      .in("id", turfIds);
+    const turfs = built ? built.turfs : (await readGameTurfs(supabase, turfIds, { card: true })).data;
     if (turfs) {
-      const map = Object.fromEntries(turfs.map((t) => [t.id, { ...t, name: cleanVenueName(t.name) }]));
+      const map = Object.fromEntries(turfs.map((t) => [t.id, { ...t, name: cleanVenueName(t.name as string) }]));
       data.forEach((g: Record<string, unknown>) => {
         if (g.turf_id && map[g.turf_id as string]) g.turfs = map[g.turf_id as string];
       });
     }
   }
 
-  return data as Game[];
+  return data as unknown as Game[];
 }
 
 export async function getGameByIdServer(gameId: string): Promise<Game | null> {
