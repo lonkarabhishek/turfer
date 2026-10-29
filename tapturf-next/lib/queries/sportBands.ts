@@ -1,34 +1,21 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { toBands } from "@/lib/queries/turfs";
-import { fetchAllRows } from "@/lib/supabase/paged";
-import { sportBandsOf } from "@/lib/utils/cardSport";
-import type { SportBands, Turf } from "@/types/turf";
+import { readSportBandRows } from "@/lib/build/reads";
+import { buildData, isFailed } from "@/lib/build/data";
+import { sportBandMap, type SportBandMap } from "@/lib/utils/cardSport";
+import type { Turf } from "@/types/turf";
 
-type BandRow = { id: string; pricing_bands: unknown; price_owner_confirmed: boolean | null };
+export type { SportBandMap };
 
-/** Venue id -> the range of each sport its price bands name. Plain JSON, for the data cache. */
-export type SportBandMap = Record<string, SportBands>;
-
+// While building: the rows the build-data step read with this same query,
+// or its note that the read failed (a failed read here, no read of our own).
 async function readSportBands(): Promise<SportBandMap> {
-  const supabase = createReadOnlyClient();
-  const rows = await fetchAllRows<BandRow>((from, to) =>
-    supabase
-      .from("turfs")
-      .select("id, pricing_bands, price_owner_confirmed")
-      .eq("is_active", true)
-      .not("pricing_bands", "is", null)
-      .order("id")
-      .range(from, to) as unknown as PromiseLike<{ data: BandRow[] | null; error: unknown }>,
-  );
-  const out: SportBandMap = {};
-  for (const r of rows) {
-    // The owner's own prices win over the bands, as on the turf page (showsPriceBands).
-    if (r.price_owner_confirmed === true) continue;
-    const bands = sportBandsOf(toBands(r.pricing_bands));
-    if (bands) out[r.id] = bands;
-  }
-  return out;
+  const built = buildData("sport-bands");
+  if (isFailed(built)) throw new Error("the build-data step could not read them");
+  const rows = built ?? (await readSportBandRows(createReadOnlyClient()));
+  // The same checked bands as the turf page's Pricing table.
+  return sportBandMap(rows.map((r) => ({ ...r, pricing_bands: toBands(r.pricing_bands) })));
 }
 
 /**
@@ -43,7 +30,7 @@ async function readSportBands(): Promise<SportBandMap> {
  * band the data team changed is fine (the turf page itself is current). A
  * warm instance keeps it an hour in memory, and concurrent renders share
  * one read. A failed read gives the last copy, or null: the cards then
- * decide without bands, as before bands were read (priceIsForSport).
+ * decide without bands, as before bands were read (sportPrice).
  * Never throws.
  */
 const getSportBandsCached = unstable_cache(readSportBands, ["sport-bands-v1"], { revalidate: 86400 });

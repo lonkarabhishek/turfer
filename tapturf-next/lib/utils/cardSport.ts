@@ -1,5 +1,5 @@
 import type { PriceBand, SportBands, Turf } from "../../types/turf";
-import { getMaximumPrice, getMinimumPrice, positivePrice, summarisePrice, type PriceSummary } from "./prices";
+import { getMinimumPrice, positivePrice, priceUnitSuffix, realPriceSummary, summarisePrice, type PriceSummary } from "./prices";
 import { SPORT_PAGES, type SportPage } from "../sports";
 
 /**
@@ -142,18 +142,35 @@ export function sportBandsOf(bands: readonly Pick<PriceBand, "format" | "price_p
   return Object.keys(out).length ? out : null;
 }
 
+/** Venue id -> the range of each sport its price bands name. Plain JSON, for the data cache. */
+export type SportBandMap = Record<string, SportBands>;
+
 /**
- * What a venue's price bands say about a card's price on a list filtered
- * to one sport. "confirmed": the bands of that sport span exactly the
- * card's range. "contradicted": the bands name a sport but not this one,
- * or this one at another range, so the card's number is (at least partly)
- * another sport's. "silent": no band names a sport.
+ * Each venue's sport bands (sportBandsOf), for the venues that have any
+ * (lib/queries/sportBands.ts). None for a venue whose owner confirmed its
+ * prices on myTapturf: the owner's own prices win over the bands, as on
+ * the turf page (showsPriceBands), so its card decides without them.
  */
-export function bandCheck(
-  bands: SportBands | null | undefined,
-  price: Pick<PriceSummary, "min" | "max">,
-  sport: CardSport,
-): "confirmed" | "contradicted" | "silent" {
+export function sportBandMap(
+  rows: readonly { id: string; pricing_bands: readonly Pick<PriceBand, "format" | "price_per_hour">[] | null; price_owner_confirmed: boolean | null }[],
+): SportBandMap {
+  const out: SportBandMap = {};
+  for (const r of rows) {
+    if (r.price_owner_confirmed === true) continue;
+    const bands = sportBandsOf(r.pricing_bands);
+    if (bands) out[r.id] = bands;
+  }
+  return out;
+}
+
+/**
+ * The per-hour range a venue's price bands give the selected sport: the
+ * lowest and highest band of every kind the sport's filter matches
+ * (N-a-side for Football and Futsal; box cricket for Box Cricket and the
+ * Cricket chip, which lists box cricket). null: the bands name sports,
+ * none of them this one. undefined: no band names a sport.
+ */
+export function sportBandRange(bands: SportBands | null | undefined, sport: CardSport): readonly [number, number] | null | undefined {
   let lo = Infinity;
   let hi = -Infinity;
   let named = false;
@@ -165,8 +182,8 @@ export function bandCheck(
     lo = Math.min(lo, r[0]);
     hi = Math.max(hi, r[1]);
   }
-  if (!named) return "silent";
-  return price.min === lo && price.max === hi ? "confirmed" : "contradicted";
+  if (!named) return undefined;
+  return lo <= hi ? [lo, hi] : null;
 }
 
 const norm = (l: string) => l.trim().toLowerCase();
@@ -193,44 +210,62 @@ export function isTurfSport(sport: CardSport): boolean {
 }
 
 /**
- * Whether a card on a list filtered to one sport may show this price as
- * that sport's. The venue's price bands decide when they name a sport:
- * only a range they confirm shows. Otherwise, at a turf sport, the price
- * shows as before (isTurfSport); at any other sport (courts, tables,
- * pools, nets), only when the venue lists no other sport.
+ * Which price a card on a list filtered to one sport shows:
+ * - "card": its own, unchanged. The venue's bands give the sport exactly
+ *   that range; or they name no sport and, at a turf sport, the price
+ *   shows as before (isTurfSport), at any other sport (courts, tables,
+ *   pools, nets) only when the venue lists no other sport.
+ * - "band": the range the bands give the sport, which is not the card's
+ *   (its number is, at least partly, another sport's): what the data says
+ *   this sport costs there.
+ * - "none": the bands name only other sports, or none at a court sport's
+ *   multi-sport venue. The card reads "Prices not listed yet".
+ * The slot columns, the numbers players reported and the research notes
+ * name no sport; only pricing_bands do (turf.sport_bands).
  */
-export function priceIsForSport(
+export type SportPrice = { from: "card" } | { from: "band"; min: number; max: number } | { from: "none" };
+
+export function sportPrice(
   turf: Pick<Turf, "sports" | "sport_bands">,
   price: Pick<PriceSummary, "min" | "max">,
   sport: CardSport,
-): boolean {
-  const check = bandCheck(turf.sport_bands, price, sport);
-  if (check !== "silent") return check === "confirmed";
-  return isTurfSport(sport) || pricesAreForSport(turf.sports, sport);
+): SportPrice {
+  const range = sportBandRange(turf.sport_bands, sport);
+  if (range === undefined) return isTurfSport(sport) || pricesAreForSport(turf.sports, sport) ? { from: "card" } : { from: "none" };
+  if (range === null) return { from: "none" };
+  const [min, max] = range;
+  return price.min === min && price.max === max ? { from: "card" } : { from: "band", min, max };
 }
+
+/** What a band's price is per (price_per_hour), in the card's words. */
+const PER_HOUR = priceUnitSuffix({ price_unit: "per_hour", slot_minutes: null });
 
 /**
  * A card's price. Unfiltered: summarisePrice(), as before. On a list
- * filtered to one sport, a price shows only when priceIsForSport() says
- * it is that sport's; otherwise the card reads "Prices not listed yet"
- * rather than show, say, the box cricket rate on a badminton page. The
- * slot columns, the numbers players reported and the research notes name
- * no sport; only pricing_bands do (turf.sport_bands). A price that does
- * show is unchanged.
+ * filtered to one sport, sportPrice() decides: the card's own price, the
+ * range the venue's bands give that sport (worded as any listed per-hour
+ * price), or "Prices not listed yet" rather than show, say, the box
+ * cricket rate on a badminton page. A card with nothing listed stays so,
+ * bands or not.
  */
 export function cardPrice(turf: Turf, sport?: CardSport | null): PriceSummary {
   const summary = summarisePrice(turf);
-  if (!sport || summary.kind === "unknown" || priceIsForSport(turf, summary, sport)) return summary;
+  if (!sport || summary.kind === "unknown") return summary;
+  const shown = sportPrice(turf, summary, sport);
+  if (shown.from === "card") return summary;
+  if (shown.from === "band") return realPriceSummary(shown.min, shown.max, PER_HOUR);
   return { label: "Prices not listed yet", kind: "unknown", min: null, max: null, unit: summary.unit };
 }
 
 /**
- * The lowest listed price the chip price sorts order by: getMinimumPrice(),
- * or null when the card on that list does not show it (cardPrice), so
- * another sport's rate never orders the list either.
+ * The lowest listed price the chip price sorts order by: getMinimumPrice()
+ * unfiltered; with a chip, the low end of the listed price the card shows
+ * (cardPrice), so another sport's rate never orders the list, and a range
+ * from the bands orders it as it reads. A reported price orders nothing,
+ * as before.
  */
 export function sportMinimumPrice(turf: Turf, sport?: CardSport | null): number | null {
-  const min = getMinimumPrice(turf);
-  if (min == null || !sport) return min;
-  return priceIsForSport(turf, { min, max: getMaximumPrice(turf) }, sport) ? min : null;
+  if (!sport) return getMinimumPrice(turf);
+  const shown = cardPrice(turf, sport);
+  return shown.kind === "real" ? shown.min : null;
 }

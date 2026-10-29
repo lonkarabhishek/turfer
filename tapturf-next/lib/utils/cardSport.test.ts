@@ -1,20 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  bandCheck,
   bandKind,
   cardPrice,
   cardSports,
   isTurfSport,
   labelRank,
-  priceIsForSport,
   pricesAreForSport,
+  sportBandMap,
+  sportBandRange,
   sportBandsOf,
   sportLineParts,
   sportMinimumPrice,
+  sportPrice,
   type CardSport,
 } from "./cardSport";
-import { getMinimumPrice, summarisePrice } from "./prices";
+import { getMinimumPrice, priceRangeText, summarisePrice } from "./prices";
 import { SPORT_PAGES, sportBySlug, turfPlaysSport } from "../sports";
 import type { PriceBand, Turf } from "../../types/turf";
 
@@ -141,7 +142,7 @@ test("labelRank agrees with turfPlaysSport for every sport page", () => {
   assert.equal(labelRank("Volleyball", chip("Volleyball")), 0);
 });
 
-test("P2: a venue that lists only the selected sport keeps its price, unchanged", () => {
+test("P2 case 4: a venue that lists only the selected sport keeps its price, unchanged", () => {
   const solo = turf({ sports: ["Badminton"], morning_price: 400, evening_price: 600, price_unit: "per_hour" });
   assert.deepEqual(cardPrice(solo, page("badminton")), summarisePrice(solo));
   assert.equal(cardPrice(solo, page("badminton")).kind, "real");
@@ -158,7 +159,7 @@ test("P2: a venue that lists only the selected sport keeps its price, unchanged"
   assert.equal(cardPrice(note, page("pickleball")).kind, "reported_text");
 });
 
-test("P2: at a court, table, pool or nets sport, a multi-sport venue's untagged price never shows as that sport's", () => {
+test("P2 case 4: at a court, table, pool or nets sport, a multi-sport venue's untagged price never shows as that sport's", () => {
   // Sprintplay Sports Arena: ₹800–1,400 is its 6-a-side and large box cricket rate.
   const sprint = turf({ sports: ["Box Cricket", "Football", "Badminton"], morning_price: 800, evening_price: 1400, price_unit: "per_hour" });
   assert.deepEqual(cardPrice(sprint, page("badminton")), NOT_LISTED);
@@ -177,7 +178,7 @@ test("P2: at a court, table, pool or nets sport, a multi-sport venue's untagged 
   assert.deepEqual(cardPrice(none, page("badminton")), summarisePrice(none));
 });
 
-test("P2: at a turf sport, a price the bands do not speak to shows as before (owner's call, D3/V1)", () => {
+test("P2 case 4: at a turf sport, a price the bands do not speak to shows as before (owner's call, D3/V1)", () => {
   // No bands: Sprintplay keeps its card price on the football and box cricket pages.
   const sprint = turf({ sports: ["Box Cricket", "Football", "Badminton"], morning_price: 800, evening_price: 1400, price_unit: "per_hour" });
   for (const sp of [page("football"), page("box-cricket"), page("cricket"), page("futsal"), chip("Football"), chip("Box Cricket"), chip("Cricket")]) {
@@ -193,61 +194,107 @@ test("P2: at a turf sport, a price the bands do not speak to shows as before (ow
 const band = (format: string | null, price_per_hour: number, b: PriceBand["band"] = "morning"): PriceBand => ({ band: b, days: "all", format, price_per_hour });
 const withBands = (over: Partial<Turf>, bands: PriceBand[]): Turf => turf({ ...over, sport_bands: sportBandsOf(bands) });
 
-test("P2 bands: a range the venue's bands give the selected sport shows, also at a multi-sport venue", () => {
+// The P2 rule on a sport-filtered card (29 Oct):
+//   1. the bands give the sport exactly the card's range: the card's price, unchanged;
+//   2. they give the sport another range: that range, worded as any listed per-hour price;
+//   3. they name other sports only: "Prices not listed yet";
+//   4. they name no sport: a turf sport keeps the price, any other only at a one-sport venue;
+//   5. unfiltered: summarisePrice(), unchanged.
+
+test("P2 case 1: the bands give the sport exactly the card's range: the card's price, unchanged", () => {
   // Agira Cricket academy and Box cricket (Bangalore): 6-a-side and box cricket both ₹800–1,200.
   const agira = withBands({ sports: ["Box Cricket", "Football"], morning_price: 800, evening_price: 1200, price_unit: "per_hour" }, [
     band("6-a-side", 800), band("6-a-side", 1200, "evening"), band("box cricket", 800), band("box cricket", 1200, "evening"),
   ]);
-  for (const sp of [page("football"), page("box-cricket"), chip("Football"), chip("Cricket"), chip("Box Cricket")]) {
+  for (const sp of [page("football"), page("box-cricket"), page("futsal"), chip("Football"), chip("Cricket"), chip("Box Cricket")]) {
     assert.deepEqual(cardPrice(agira, sp), summarisePrice(agira), JSON.stringify(sp));
     assert.equal(cardPrice(agira, sp).label, "₹800 – ₹1200/hr");
+    assert.deepEqual(sportPrice(agira, summarisePrice(agira), sp), { from: "card" });
   }
-  // CHAMPION'S DEN (Bangalore): every slot ₹1,400; 6-a-side ₹1,400, box cricket (Medium) ₹1,500.
-  const den = withBands({ sports: ["Box Cricket", "Football"], morning_price: 1400, afternoon_price: 1400, evening_price: 1400, weekend_morning_price: 1400, weekend_afternoon_price: 1400, weekend_evening_price: 1400, price_unit: "per_hour" }, [
+  // A single value: CHAMPION'S DEN (Bangalore), every slot and its 6-a-side ₹1,400.
+  const den = withBands({ sports: ["Box Cricket", "Football"], morning_price: 1400, afternoon_price: 1400, evening_price: 1400, price_unit: "per_hour" }, [
     band("6-a-side", 1400), band("6-a-side", 1400, "night"), band("box cricket (Medium)", 1500), band("box cricket (Medium)", 1500, "night"),
   ]);
   assert.equal(cardPrice(den, page("football")).label, "₹1400/hr");
-  assert.equal(cardPrice(den, chip("Football")).label, "₹1400/hr");
-  // ₹1,400 is not its box cricket rate.
-  assert.deepEqual(cardPrice(den, page("box-cricket")), NOT_LISTED);
-  assert.deepEqual(cardPrice(den, chip("Cricket")), NOT_LISTED);
-  // Futsal is played on the N-a-side pitches: the futsal page reads them too.
-  const futsal = withBands({ sports: ["Futsal", "Box Cricket"], morning_price: 1000 }, [band("5-a-side", 1000), band("box cricket", 900)]);
-  assert.equal(cardPrice(futsal, page("futsal")).kind, "real");
-  assert.deepEqual(cardPrice(futsal, page("box-cricket")), NOT_LISTED);
+  assert.deepEqual(cardPrice(den, chip("Football")), summarisePrice(den));
+  // A per-slot card whose number the bands give the sport keeps its own wording.
+  const slot = withBands({ sports: ["Football"], morning_price: 1200, price_unit: "per_slot", slot_minutes: 90 }, [band("7-a-side", 1200)]);
+  assert.deepEqual(cardPrice(slot, page("football")), summarisePrice(slot));
+  assert.equal(cardPrice(slot, page("football")).unit, "/90-min slot");
+  // Reported numbers the bands match stay reported.
+  const rep = withBands({ sports: ["Football"], price_mentions: [{ price_inr: 1000 }] }, [band("6-a-side", 1000)]);
+  assert.deepEqual(cardPrice(rep, page("football")), summarisePrice(rep));
+  assert.equal(cardPrice(rep, page("football")).kind, "reported");
 });
 
-test("P2 bands: a price they give another sport, or another range, never shows as the selected sport's", () => {
+test("P2 case 2: the bands give the sport another range: the card shows that range, as a listed per-hour price", () => {
+  // CHAMPION'S DEN: ₹1,400 is its 6-a-side rate; box cricket (Medium) is ₹1,500. A single value.
+  const den = withBands({ sports: ["Box Cricket", "Football"], morning_price: 1400, afternoon_price: 1400, evening_price: 1400, price_unit: "per_hour" }, [
+    band("6-a-side", 1400), band("6-a-side", 1400, "night"), band("box cricket (Medium)", 1500), band("box cricket (Medium)", 1500, "night"),
+  ]);
+  const want = { label: "₹1500/hr", kind: "real", min: 1500, max: 1500, unit: "/hr" };
+  assert.deepEqual(cardPrice(den, page("box-cricket")), want);
+  assert.deepEqual(cardPrice(den, chip("Box Cricket")), want);
+  // The Cricket chip lists box cricket (substring): its bands are the chip's.
+  assert.deepEqual(cardPrice(den, chip("Cricket")), want);
+  // Worded exactly as summarisePrice words a listed per-hour range, and the card renders it the same way.
+  const same = turf({ sports: ["Box Cricket"], morning_price: 1500, price_unit: "per_hour" });
+  assert.deepEqual(cardPrice(den, page("box-cricket")), summarisePrice(same));
+  assert.equal(priceRangeText(want.min, want.max), "₹1,500");
+  // Switch Sports Station (Hyderabad): card ₹700–1,500; box cricket ₹800–1,500, 7-a-side ₹700–1,500.
+  const sw = withBands({ sports: ["Box Cricket", "Football"], morning_price: 700, evening_price: 1500 }, [
+    band("box cricket", 800), band("box cricket", 1500, "evening"), band("7-a-side", 700), band("7-a-side", 1500, "evening"),
+  ]);
+  assert.deepEqual(cardPrice(sw, page("box-cricket")), { label: "₹800 – ₹1500/hr", kind: "real", min: 800, max: 1500, unit: "/hr" });
+  assert.equal(priceRangeText(800, 1500), "₹800–1,500");
+  assert.deepEqual(cardPrice(sw, page("football")), summarisePrice(sw));
+  // Football bands count for the Football and Futsal labels: page, futsal page and chip alike.
+  const fut = withBands({ sports: ["Futsal", "Box Cricket"], morning_price: 600, evening_price: 1100 }, [band("5-a-side", 1000), band("5-a-side", 1100, "evening"), band("box cricket", 600)]);
+  for (const sp of [page("football"), page("futsal"), chip("Football")]) {
+    assert.deepEqual(cardPrice(fut, sp), { label: "₹1000 – ₹1100/hr", kind: "real", min: 1000, max: 1100, unit: "/hr" }, JSON.stringify(sp));
+  }
+  assert.equal(cardPrice(fut, page("box-cricket")).label, "₹600/hr");
+  // A per-slot card: the band's own unit, per hour.
+  const slot = withBands({ sports: ["Football", "Box Cricket"], morning_price: 900, price_unit: "per_slot", slot_minutes: 90 }, [band("6-a-side", 1200)]);
+  assert.deepEqual(cardPrice(slot, page("football")), { label: "₹1200/hr", kind: "real", min: 1200, max: 1200, unit: "/hr" });
+  // Reported numbers or notes the bands do not match: the bands' range, a listed price.
+  const rep = withBands({ sports: ["Football"], price_mentions: [{ price_inr: 900 }] }, [band("6-a-side", 1000)]);
+  assert.deepEqual(cardPrice(rep, page("football")), { label: "₹1000/hr", kind: "real", min: 1000, max: 1000, unit: "/hr" });
+  const note = withBands({ sports: ["Football", "Box Cricket"], price_mentions: [{ text: "Rates at the gate" }] }, [band("6-a-side", 1000)]);
+  assert.equal(cardPrice(note, page("football")).label, "₹1000/hr");
+  assert.deepEqual(sportPrice(sw, summarisePrice(sw), page("box-cricket")), { from: "band", min: 800, max: 1500 });
+});
+
+test("P2 case 3: the bands name other sports only: Prices not listed yet", () => {
   // Eden Sports (Hyderabad): lists Football; its only bands are box cricket ₹1,400–1,600.
   const eden = withBands({ sports: ["Football"], morning_price: 1400, evening_price: 1600 }, [band("box cricket", 1400), band("box cricket", 1600, "evening")]);
   assert.deepEqual(cardPrice(eden, page("football")), NOT_LISTED);
   assert.deepEqual(cardPrice(eden, chip("Football")), NOT_LISTED);
-  // Switch Sports Station (Hyderabad): lists Box Cricket; box cricket ₹800–1,500, 7-a-side ₹700–1,500.
-  const sw = withBands({ sports: ["Box Cricket"], morning_price: 700, evening_price: 1500 }, [
-    band("box cricket", 800), band("box cricket", 1500, "evening"), band("7-a-side", 700), band("7-a-side", 1500, "evening"),
-  ]);
-  assert.deepEqual(cardPrice(sw, page("box-cricket")), NOT_LISTED);
-  assert.deepEqual(cardPrice(sw, chip("Cricket")), NOT_LISTED);
   // Gymlife Turf (Pune): lists Box Cricket; its only band is 6-a-side ₹1,200.
   const gym = withBands({ sports: ["Box Cricket"], morning_price: 1200 }, [band("6-a-side", 1200)]);
   assert.deepEqual(cardPrice(gym, page("box-cricket")), NOT_LISTED);
-  // A cricket ground page is not box cricket: box cricket bands are another sport's.
+  assert.deepEqual(cardPrice(gym, chip("Cricket")), NOT_LISTED);
+  // A cricket ground page is not box cricket (exact labels): box cricket bands are another sport's.
   const ground = withBands({ sports: ["Cricket", "Box Cricket"], morning_price: 1000 }, [band("box cricket", 1000)]);
   assert.deepEqual(cardPrice(ground, page("cricket")), NOT_LISTED);
-  // The Cricket chip lists box cricket (substring): there it is the chip's rate.
-  assert.equal(cardPrice(ground, chip("Cricket")).kind, "real");
-  // A court at a venue whose bands are all turf formats.
-  const court = withBands({ sports: ["Badminton", "Football"], morning_price: 1000 }, [band("5-a-side", 1000)]);
-  assert.deepEqual(cardPrice(court, page("badminton")), NOT_LISTED);
-  // Reported numbers and notes at a venue with bands: the bands decide.
-  const rep = withBands({ sports: ["Football"], price_mentions: [{ price_inr: 900 }] }, [band("6-a-side", 1000)]);
-  assert.deepEqual(cardPrice(rep, page("football")), NOT_LISTED);
-  const repSame = withBands({ sports: ["Football"], price_mentions: [{ price_inr: 1000 }] }, [band("6-a-side", 1000)]);
-  assert.equal(cardPrice(repSame, page("football")).kind, "reported");
-  const note = withBands({ sports: ["Football", "Box Cricket"], price_mentions: [{ text: "Rates at the gate" }] }, [band("6-a-side", 1000)]);
-  assert.deepEqual(cardPrice(note, page("football")), NOT_LISTED);
-  // Unfiltered, bands or not, the card is as before.
-  assert.deepEqual(cardPrice(eden), summarisePrice(eden));
+  assert.deepEqual(cardPrice(ground, page("cricket-nets")), NOT_LISTED);
+  // The Cricket chip lists box cricket (substring): there it is the chip's own rate (case 1).
+  assert.deepEqual(cardPrice(ground, chip("Cricket")), summarisePrice(ground));
+  // A court at a venue whose bands are all turf formats; reported numbers and notes too.
+  assert.deepEqual(cardPrice(withBands({ sports: ["Badminton", "Football"], morning_price: 1000 }, [band("5-a-side", 1000)]), page("badminton")), NOT_LISTED);
+  assert.deepEqual(cardPrice(withBands({ sports: ["Badminton"], morning_price: 400 }, [band("5-a-side", 1000)]), chip("Badminton")), NOT_LISTED);
+  assert.deepEqual(cardPrice(withBands({ sports: ["Football"], price_mentions: [{ price_inr: 900 }] }, [band("box cricket", 900)]), page("football")), NOT_LISTED);
+  assert.deepEqual(cardPrice(withBands({ sports: ["Football"], price_mentions: [{ text: "Rates at the gate" }] }, [band("box cricket", 900)]), page("football")), NOT_LISTED);
+  // The hidden price keeps the venue's unit, so nothing else on the card changes.
+  const slot = withBands({ sports: ["Football"], morning_price: 600, price_unit: "per_slot", slot_minutes: 90 }, [band("box cricket", 600)]);
+  assert.equal(cardPrice(slot, page("football")).unit, "/90-min slot");
+  assert.deepEqual(sportPrice(eden, summarisePrice(eden), page("football")), { from: "none" });
+});
+
+test("P2: a card with nothing listed stays so, bands or not", () => {
+  const none = withBands({ sports: ["Football", "Box Cricket"] }, [band("6-a-side", 1200)]);
+  for (const sp of [page("football"), page("box-cricket"), chip("Football"), chip("Cricket")]) assert.deepEqual(cardPrice(none, sp), summarisePrice(none), JSON.stringify(sp));
+  assert.equal(sportMinimumPrice(none, chip("Football")), null);
 });
 
 test("P2 bands: only formats that name a sport count", () => {
@@ -263,12 +310,64 @@ test("P2 bands: only formats that name a sport count", () => {
     football: [900, 1300],
     "box-cricket": [700, 700],
   });
-  // A venue whose only bands name no sport is decided without them.
+  // A venue whose only bands name no sport is decided without them (case 4).
   const plain = turf({ sports: ["Football", "Badminton"], morning_price: 900, sport_bands: sportBandsOf([band(null, 900)]) });
   assert.equal(cardPrice(plain, page("football")).kind, "real");
   assert.deepEqual(cardPrice(plain, page("badminton")), NOT_LISTED);
-  assert.equal(bandCheck(null, { min: 1, max: 1 }, page("football")), "silent");
-  assert.equal(bandCheck({ football: [900, 900] }, { min: null, max: null }, page("football")), "contradicted");
+});
+
+test("sportBandRange: every band kind the sport's filter matches; null for other sports only; undefined for none", () => {
+  const both = { football: [900, 1300], "box-cricket": [700, 1500] } as const;
+  assert.deepEqual(sportBandRange(both, page("football")), [900, 1300]);
+  assert.deepEqual(sportBandRange(both, page("futsal")), [900, 1300]);
+  assert.deepEqual(sportBandRange(both, chip("Football")), [900, 1300]);
+  assert.deepEqual(sportBandRange(both, page("box-cricket")), [700, 1500]);
+  assert.deepEqual(sportBandRange(both, chip("Box Cricket")), [700, 1500]);
+  assert.deepEqual(sportBandRange(both, chip("Cricket")), [700, 1500]);
+  assert.equal(sportBandRange(both, page("cricket")), null);
+  assert.equal(sportBandRange(both, page("badminton")), null);
+  assert.equal(sportBandRange(both, chip("Tennis")), null);
+  assert.equal(sportBandRange({ football: [900, 900] }, page("box-cricket")), null);
+  assert.equal(sportBandRange(null, page("football")), undefined);
+  assert.equal(sportBandRange(undefined, chip("Badminton")), undefined);
+  assert.equal(sportBandRange({}, page("football")), undefined);
+});
+
+test("sportBandMap: each venue's sport bands; none for a venue whose owner confirmed its prices", () => {
+  const map = sportBandMap([
+    { id: "a", pricing_bands: [band("6-a-side", 1200), band("box cricket", 1400)], price_owner_confirmed: null },
+    // The owner set prices on myTapturf: theirs win over the bands, as on the turf page.
+    { id: "owner", pricing_bands: [band("6-a-side", 1200)], price_owner_confirmed: true },
+    { id: "unconfirmed", pricing_bands: [band("5-a-side", 900)], price_owner_confirmed: false },
+    // Bands that name no sport, or none at all: no entry.
+    { id: "plain", pricing_bands: [band(null, 900)], price_owner_confirmed: null },
+    { id: "empty", pricing_bands: null, price_owner_confirmed: null },
+  ]);
+  assert.deepEqual(map, { a: { football: [1200, 1200], "box-cricket": [1400, 1400] }, unconfirmed: { football: [900, 900] } });
+  // So the owner's card decides without bands: its price shows at a turf sport, as before.
+  const owner = turf({ sports: ["Box Cricket", "Football"], morning_price: 800, sport_bands: map.owner });
+  assert.deepEqual(cardPrice(owner, page("box-cricket")), summarisePrice(owner));
+  assert.deepEqual(cardPrice(owner, page("football")), summarisePrice(owner));
+});
+
+test("P2 case 5: unfiltered, every card is exactly as before, bands or not", () => {
+  const shapes: Partial<Turf>[] = [
+    { sports: ["Box Cricket", "Football", "Badminton"], morning_price: 800, evening_price: 1400 },
+    { sports: ["Football"], morning_price: 1400, evening_price: 1600, sport_bands: { "box-cricket": [1400, 1600] } },
+    { sports: ["Box Cricket", "Football"], morning_price: 1400, sport_bands: { football: [1400, 1400], "box-cricket": [1500, 1500] } },
+    { sports: ["Football"], morning_price: 900, price_unit: "per_slot", slot_minutes: 90, sport_bands: { football: [1200, 1200] } },
+    { sports: ["Pickleball"], price_mentions: [{ price_inr: 900 }], sport_bands: { football: [1000, 1000] } },
+    { sports: ["Football", "Box Cricket"], price_mentions: [{ text: "Rates at the gate" }], sport_bands: { football: [1000, 1000] } },
+    { sports: ["Badminton"] },
+  ];
+  for (const over of shapes) {
+    const t = turf(over);
+    for (const sp of [undefined, null]) {
+      assert.deepEqual(cardPrice(t, sp), summarisePrice(t));
+      assert.equal(JSON.stringify(cardPrice(t, sp)), JSON.stringify(summarisePrice(t)));
+      assert.equal(sportMinimumPrice(t, sp), getMinimumPrice(t));
+    }
+  }
 });
 
 test("isTurfSport: the sport pages whose venue is a turf, and the chips that are those sports", () => {
@@ -298,20 +397,30 @@ test("P2: court chips use their own filter: every label must contain the chip", 
   assert.deepEqual(cardPrice(turf({ sports: ["Yoga", "Football"], morning_price: 300 }), chip("Yoga")), NOT_LISTED);
 });
 
-test("sportMinimumPrice: the card's own rule, for the chip price sorts", () => {
+test("sportMinimumPrice: the low end of the listed price the card shows, for the chip price sorts", () => {
   const sprint = turf({ sports: ["Box Cricket", "Football", "Badminton"], morning_price: 800, evening_price: 1400 });
   assert.equal(sportMinimumPrice(sprint, null), getMinimumPrice(sprint));
   assert.equal(sportMinimumPrice(sprint, chip("Badminton")), null);
   assert.equal(sportMinimumPrice(sprint, chip("Football")), 800);
   const den = withBands({ sports: ["Box Cricket", "Football"], morning_price: 1400 }, [band("6-a-side", 1400), band("box cricket", 1500)]);
   assert.equal(sportMinimumPrice(den, chip("Football")), 1400);
-  assert.equal(sportMinimumPrice(den, chip("Cricket")), null);
+  // Case 2: the band minimum the card shows.
+  assert.equal(sportMinimumPrice(den, chip("Cricket")), 1500);
+  assert.equal(sportMinimumPrice(den, chip("Box Cricket")), 1500);
+  const sw = withBands({ sports: ["Box Cricket", "Football"], morning_price: 700, evening_price: 1500 }, [band("box cricket", 800), band("box cricket", 1500), band("7-a-side", 700)]);
+  assert.equal(sportMinimumPrice(sw, chip("Box Cricket")), 800);
+  // Case 3: none.
+  const eden = withBands({ sports: ["Football"], morning_price: 1400 }, [band("box cricket", 1400)]);
+  assert.equal(sportMinimumPrice(eden, chip("Football")), null);
+  // A reported price orders nothing, as before, unless the bands give the sport a listed one.
+  assert.equal(sportMinimumPrice(turf({ sports: ["Football"], price_mentions: [{ price_inr: 900 }] }), chip("Football")), null);
+  assert.equal(sportMinimumPrice(withBands({ sports: ["Football"], price_mentions: [{ price_inr: 900 }] }, [band("6-a-side", 1000)]), chip("Football")), 1000);
   assert.equal(sportMinimumPrice(turf({ sports: ["Football"] }), chip("Football")), null);
   // The same decision as the card, for every shown price.
-  for (const t of [sprint, den]) {
-    for (const sp of [chip("Football"), chip("Cricket"), chip("Badminton"), page("football")]) {
-      assert.equal(sportMinimumPrice(t, sp) != null, cardPrice(t, sp).kind === "real", JSON.stringify(sp));
-      assert.equal(priceIsForSport(t, summarisePrice(t), sp), cardPrice(t, sp).kind === "real");
+  for (const t of [sprint, den, sw, eden]) {
+    for (const sp of [chip("Football"), chip("Cricket"), chip("Box Cricket"), chip("Badminton"), page("football")]) {
+      const shown = cardPrice(t, sp);
+      assert.equal(sportMinimumPrice(t, sp), shown.kind === "real" ? shown.min : null, JSON.stringify(sp));
     }
   }
 });

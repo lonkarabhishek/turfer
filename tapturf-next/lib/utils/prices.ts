@@ -165,6 +165,17 @@ export type PriceSummary = {
   unit: string;
 };
 
+/** A listed range as summarisePrice() words it: "₹600 – ₹800/hr", or "₹600/hr" when min == max. */
+export function realPriceSummary(min: number, max: number, unit: string): PriceSummary {
+  return {
+    label: min === max ? `₹${min}${unit}` : `₹${min} – ₹${max}${unit}`,
+    kind: "real",
+    min,
+    max,
+    unit,
+  };
+}
+
 /**
  * Short label for a turf card. Priority:
  *   1. real range        → "₹600 – ₹800/hr" (or "₹600/hr" if min==max)
@@ -180,15 +191,7 @@ export function summarisePrice(turf: Turf): PriceSummary {
   const unit = priceUnitSuffix(turf);
   const min = getMinimumPrice(turf);
   const max = getMaximumPrice(turf);
-  if (min != null && max != null) {
-    return {
-      label: min === max ? `₹${min}${unit}` : `₹${min} – ₹${max}${unit}`,
-      kind: "real",
-      min,
-      max,
-      unit,
-    };
-  }
+  if (min != null && max != null) return realPriceSummary(min, max, unit);
   const reported = getReportedPriceRange(turf);
   if (reported) {
     const label =

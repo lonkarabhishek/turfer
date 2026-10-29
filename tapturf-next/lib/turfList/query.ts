@@ -141,8 +141,9 @@ export function rankTurfs<T extends Turf>(
     result.push({ turf: t, km: distance(query.at, t) });
   }
   const sortBy = query.sort === "nearby" && !query.at ? "rating" : query.sort;
-  // With a chip, a price the card does not show (another sport's, cardPrice)
-  // counts as none, so it never orders the list either. Worked out once a turf.
+  // With a chip, the price the card shows orders the list (cardPrice): another
+  // sport's counts as none, the sport's range from the bands as it reads.
+  // Worked out once a turf.
   const chip = query.sport ? { chip: query.sport } : null;
   const prices = sortBy === "price-low" || sortBy === "price-high" ? new Map(result.map((r) => [r.turf, sportMinimumPrice(r.turf, chip)])) : null;
   result = result.sort((a, b) => {
