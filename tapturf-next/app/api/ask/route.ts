@@ -27,6 +27,9 @@ import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
+import { hasReviewText } from "@/lib/ai/facts";
+import { googleReviewsLink, isReviewsAsk, reviewsAnswer } from "@/lib/ai/reviewsAnswer";
+import { REVIEWS_CHIP } from "@/lib/ask/chips";
 import type { Turf } from "@/types/turf";
 import { toolBySlug, toolPath } from "@/lib/tools/registry";
 import { getHomeDataShared } from "@/lib/home/data";
@@ -455,18 +458,31 @@ export async function GET(req: Request) {
         const lead = away && home ? noneIn(hit.whole ? place(hit.turf).name : cap(nameIn(turfs, typed) ?? typed), home) : null;
         // Which venue this is, when it isn't in the player's city or the name is shared.
         const which = venueLine(place(hit.turf), lead ? home : label(prefCity), hit.others.map((t) => labelFor(t.city ?? "")));
-        if (!canCallClaude) {
+        const asked = filters.question ?? q;
+        // "What do players say about it?": TapTurf players' reports, then Google's rating and reviews.
+        const aboutReviews = isReviewsAsk(asked);
+        // After any other question about the page's venue, what players say is the next chip.
+        const followups =
+          page.turf?.id === hit.turf.id && !aboutReviews
+            ? [REVIEWS_CHIP, ...base.followups.filter((f) => f.toLowerCase() !== REVIEWS_CHIP.toLowerCase())].slice(0, 3)
+            : base.followups;
+        const sheet = canCallClaude || aboutReviews ? await loadFacts(hit.turf.id) : null;
+        // Said from the sheet without the model when there is no model, or nothing written to read:
+        // then the model has only numbers and used to dress them up as "reviewers mention...".
+        const plain = sheet && aboutReviews && (!canCallClaude || !hasReviewText(sheet.facts)) ? reviewsAnswer(sheet.facts) : null;
+        if (!canCallClaude && !plain) {
           // No answer without the model, but the venue's card has its hours, prices and facilities.
           const reply = lead
             ? `${lead} ${which} Its page has the timings, prices and facilities.`
             : `Here is ${place(hit.turf).name}. Its page has the timings, prices and facilities.${which ? ` ${which}` : ""}`;
-          body = { ...base, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: null };
+          body = { ...base, followups, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: null };
           break;
         }
-        const sheet = await loadFacts(hit.turf.id);
-        const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts, usage) : null;
+        const out = plain ?? (sheet ? ((await answerQuestion(asked, sheet.facts, usage)) ?? (aboutReviews ? reviewsAnswer(sheet.facts) : null)) : null);
+        // Under an answer about what people say: the Google reviews, as the page links them.
+        const link = out && aboutReviews && sheet ? googleReviewsLink(sheet.turf) : null;
         const reply = lead ? `${lead} ${which}` : which ? `${filters.reply} ${which}` : filters.reply;
-        body = { ...base, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
+        body = { ...base, followups, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out && link ? { ...out, link } : out };
         break;
       }
       case "tool": {

@@ -258,6 +258,22 @@ test("the page's city fills in when none is typed, and a turf page changes the g
   assert.doesNotMatch(hit("hi", { turf: "Hindu Gymkhana Ground" }).reply, /Hindu/);
 });
 
+test("on a turf page, what players say about it is a question about that turf", () => {
+  const page = { turf: "Hindu Gymkhana Ground", city: "nashik" as const };
+  for (const q of ["What do players say about it?", "reviews?", "Is it any good", "what do people think of this turf"]) {
+    const f = hit(q, page);
+    assert.equal(f.intent, "question", q);
+    // No name: the route takes the page's venue by its row.
+    assert.deepEqual(f.turf_names, [], q);
+    assert.equal(f.question, q, q);
+    assert.equal(f.city, "nashik", q);
+  }
+  // Off a turf page, or about another venue, or a search: as before.
+  assert.notEqual(ask("What do players say about it?")?.intent, "question");
+  assert.equal(ask("What do players say about Vedant Sports Academy", page), null);
+  assert.notEqual(ask("best rated turfs in Nashik", page)?.intent, "question");
+});
+
 test("anything not fully understood goes to Claude", () => {
   for (const q of [
     "Cheaper ones",

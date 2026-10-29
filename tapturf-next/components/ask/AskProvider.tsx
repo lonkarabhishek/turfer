@@ -46,7 +46,8 @@ export type AskResponse = {
   games?: (Game & { distanceKm?: number })[];
   missing?: string[];
   compare?: { verdict: string; rows: { label: string; values: string[] }[]; best_for: string[]; caveats: string | null } | null;
-  answer?: { answer: string; covered: boolean } | null;
+  /** link: under an answer about what people say, the venue's Google reviews ("Read Google reviews"). */
+  answer?: { answer: string; covered: boolean; link?: { label: string; href: string } } | null;
   /** For create_game: the sentence to draft the wizard from. */
   draft?: string;
   /** For tool: the free cricket tool that fits. */

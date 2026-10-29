@@ -2,6 +2,7 @@ import { CITIES, CITY_ALIASES, CITY_IDS, NOT_IN_TEXT, labelFor, type CityId } fr
 import { sportBySlug, type SportPage } from "../sports";
 import { areaFor } from "../utils/area";
 import { norm, resolveTurfNames } from "./names";
+import { reviewsSubject } from "./reviewsAnswer";
 import type { Turf } from "../../types/turf";
 import type { AskFilters, Need } from "./ask";
 
@@ -377,6 +378,24 @@ function smallTalk(key: string, query: string, ctx: QuickContext): AskFilters | 
   return null;
 }
 
+/**
+ * On a venue page, "What do players say about it?" (the page's own chip),
+ * "reviews?" or "is it any good": a question about that venue, answered
+ * from what its players and Google say (lib/ai/reviewsAnswer.ts).
+ */
+function aboutThisTurf(query: string, ctx: QuickContext): AskFilters | null {
+  if (!ctx.turf || reviewsSubject(query) !== "it") return null;
+  return {
+    ...blank(),
+    intent: "question",
+    city: knownCity(ctx.city),
+    question: query.trim(),
+    summary: `What players say about ${ctx.turf}`.slice(0, 120),
+    reply: "Let me check.",
+    followups: ["Does it have parking", "What time does it open"],
+  };
+}
+
 /** "Hindu Gymkhana vs Vedant Sports Academy": both names must be venues we list. */
 function compareNames(query: string, data: QuickData, ctx: QuickContext): AskFilters | null {
   const raw = query.trim().replace(/[?.!]+$/, "");
@@ -578,5 +597,5 @@ export function quickAnswer(query: string, data: QuickData, ctx: QuickContext = 
   if (/[^\x20-\x7E₹’‘]/.test(query)) return null;
   const ws = words(query);
   if (!ws.length || ws.length > 16) return null;
-  return smallTalk(ws.join(" "), query, ctx) ?? compareNames(query, data, ctx) ?? findAnswer(query, data, ctx);
+  return smallTalk(ws.join(" "), query, ctx) ?? aboutThisTurf(query, ctx) ?? compareNames(query, data, ctx) ?? findAnswer(query, data, ctx);
 }

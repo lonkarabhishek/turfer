@@ -17,7 +17,8 @@ import { normPlace, turfMeta } from "@/lib/seo/turfMeta";
 import { sharedNameKey } from "@/lib/seo/turfFacts";
 import { getTurfFacts, sharedNameSet } from "@/lib/queries/turfFacts";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
-import { googleMapsUrl, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
+import { googleMapsUrl, scrubBookingApps } from "@/lib/utils/bookingApps";
+import { playersSayOf } from "@/lib/reviews/playersSay";
 import { areaFor } from "@/lib/utils/area";
 import { dailyHoursSummary } from "@/lib/utils/hours";
 import { labelFor, isCity } from "@/lib/city";
@@ -152,18 +153,8 @@ export default async function TurfDetailPage({
   const accessNotes = scrubBookingApps(turf.access_notes);
   // "Read them on Google" goes to Google Maps only.
   const googleReviewUrl = googleMapsUrl(turf.external_review_url);
-  // "What players say" is made from reviews, which can name an app.
-  const playersSay = (() => {
-    const s = turf.review_summary;
-    if (!s) return null;
-    const out = {
-      ...s,
-      summary: scrubBookingApps(s.summary) ?? "",
-      likes: s.likes.filter((l) => !mentionsBookingApp(l)),
-      gripes: s.gripes.filter((g) => !mentionsBookingApp(g)),
-    };
-    return out.summary || out.likes.length || out.gripes.length ? out : null;
-  })();
+  // "What players say" is made from reviews, which can name an app (Ask reads it the same way).
+  const playersSay = playersSayOf(turf.review_summary);
   const hoursLine = dailyHoursSummary(turf.opening_hours, {
     start_time: turf.start_time,
     end_time: turf.end_time,

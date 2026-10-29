@@ -3,7 +3,7 @@ import type { Turf } from "@/types/turf";
 import { getPhone } from "@/lib/utils/seo";
 import { isBookingAppUrl, mentionsBookingApp } from "@/lib/utils/bookingApps";
 import { ROUTER_MODEL, structured } from "./ask";
-import { buildFacts } from "./compare";
+import { buildFacts } from "./facts";
 
 /**
  * Listing gap checker for data ops. Haiku reads one turf row and flags
@@ -48,8 +48,9 @@ Rules:
 - At most 6 issues, most important first. Indian English, no hedging.`;
 
 export function listingFacts(t: Turf): Record<string, unknown> {
-  const facts = buildFacts(t, []);
-  delete facts.recent_reviews;
+  // The row alone: what people say is not the editor's to check.
+  const facts = buildFacts(t);
+  delete facts.players_say;
   // buildFacts gives the text as players see it (booking apps taken out);
   // the editor gets the stored text, and which fields still name an app.
   // A link counts by its host only: a Google Maps link carries the venue's
