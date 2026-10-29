@@ -5,7 +5,7 @@
  * id, named for that change's date, or nobody who dismissed the last one
  * is told. A later change that needs no notice moves only this date.
  */
-export const PRIVACY_UPDATED = "2026-10-29";
+export const PRIVACY_UPDATED = "2026-10-30";
 
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {
