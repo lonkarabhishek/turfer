@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MapPin, Map as MapIcon } from "lucide-react";
 import { useConsent } from "@/lib/consent";
-import { mapsSearchUrl } from "@/lib/utils/maps";
+import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
 import { MapPlaceholder } from "@/components/consent/MapPlaceholder";
 
 interface TurfMapProps {
@@ -16,37 +16,6 @@ interface TurfMapProps {
   address?: string | null;
   /** Turf name — nicer label on the directions link. */
   name?: string | null;
-}
-
-/**
- * Extracts a src URL from an <iframe> snippet or returns the input if it
- * already looks like a URL. Only Google Maps EMBED URLs work inside an
- * iframe — a plain `/maps/place/` or shortlink is served with an
- * X-Frame-Options header that refuses framing ("www.google.com refused
- * to connect"). We detect embed URLs specifically.
- */
-function extractEmbeddableSrc(raw: string): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  const srcMatch = trimmed.match(/\bsrc\s*=\s*"([^"]+)"/i);
-  const candidate = srcMatch ? srcMatch[1] : trimmed;
-  // Google's embeddable formats: /maps/embed?..., /maps/embed/v1/...,
-  // maps.google.com/maps?...&output=embed
-  if (/google\.[^/]+\/maps\/embed/i.test(candidate)) return candidate;
-  if (/[?&]output=embed\b/i.test(candidate)) return candidate;
-  // Anything else (a shared /maps/place/… URL, a maps.app.goo.gl link)
-  // is NOT embeddable and would render as an error frame.
-  return null;
-}
-
-function buildLatLngEmbed(lat: number, lng: number): string {
-  // Standard "q=" search embed keyed to a lat/lng point. Works without
-  // an API key and reliably drops a pin.
-  return `https://www.google.com/maps?q=${lat},${lng}&z=16&hl=en&output=embed`;
-}
-
-function buildAddressEmbed(address: string): string {
-  return `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
 }
 
 function buildDirectionsHref({
@@ -81,15 +50,7 @@ export function TurfMap({ embedLink, lat, lng, address, name }: TurfMapProps) {
   const [showMap, setShowMap] = useState(false);
   const consent = useConsent();
   // Priority: lat/lng > embeddable iframe/URL > address search embed.
-  let src: string | null = null;
-  if (lat != null && lng != null) {
-    src = buildLatLngEmbed(lat, lng);
-  } else if (embedLink) {
-    src = extractEmbeddableSrc(embedLink);
-  }
-  if (!src && address) {
-    src = buildAddressEmbed(address);
-  }
+  const src = mapEmbedSrc({ embedLink, lat, lng, address });
   if (!src) return null;
 
   const directionsHref = buildDirectionsHref({ lat, lng, address, name });

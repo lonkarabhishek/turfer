@@ -23,7 +23,7 @@ import {
 import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber } from "@/lib/utils/gameState";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
-import { mapsSearchUrl } from "@/lib/utils/maps";
+import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
@@ -311,11 +311,9 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     shared,
   };
 
-  const mapSrc = (() => {
-    const raw = game.turfs?.["Gmap Embed link"] ?? "";
-    const srcMatch = raw.match(/src="([^"]+)"/);
-    return raw ? (srcMatch ? srcMatch[1] : raw) : null;
-  })();
+  // A frame-able map only: the stored link is usually a /maps/place/ URL,
+  // which Google refuses to frame (an empty white box).
+  const mapSrc = mapEmbedSrc({ embedLink: game.turfs?.["Gmap Embed link"], lat: game.turfs?.lat, lng: game.turfs?.lng, address: game.turfs?.address });
 
   return (
     <div className="md:max-w-2xl lg:max-w-6xl mx-auto sm:px-6 sm:pt-5 lg:pt-6">
