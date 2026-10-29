@@ -136,7 +136,11 @@ export type EachResult<K, V> = {
   got: Map<K, V>;
   /** absent: the read said there is no such thing (null); failed: maxTries failed; deadline: not done in time. */
   skipped: { key: K; why: "absent" | "failed" | "deadline" }[];
-  /** The last `window` tries all failed: the database is failing now, not just slow. */
+  /**
+   * The last `window` tries all failed. With keys left at the deadline the
+   * database is failing now, not just slow; at a natural end it can also
+   * be a few keys whose reads keep failing on their own (the last tries).
+   */
   failingAtEnd: boolean;
   tries: number;
   failures: number;

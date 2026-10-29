@@ -22,6 +22,9 @@
 // - A dataset the step did not record means a live read (and the tripwire
 //   in lib/supabase/guard.ts says so). A malformed file, a manifest from
 //   another database or one more than an hour old fails the build.
+// - A read the step tried and lost (the turf facts, a turf's managers) is
+//   recorded as FAILED: the page then does what it does when its own read
+//   fails, and reads nothing.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -43,7 +46,7 @@ export type BuildDatasets = {
   /** city_turf_counts as read (readCityCountRows). */
   cities: Row[];
   /** turfFactsFrom() of the facts read: ids and keys only, never a number. */
-  "turf-facts": TurfFacts;
+  "turf-facts": TurfFacts | Failed;
   sitemap: { turfs: SitemapTurf[]; games: SitemapGame[] };
   /** Picks whose window had not closed; pages take the ones live when they render (livePicks). */
   trending: TrendingRow[];
@@ -52,12 +55,18 @@ export type BuildDatasets = {
   /**
    * The turf pages to prerender (keys), each one's turf_page answer by key
    * and, for a claimed turf, its turf_managers answer by turf id (null: the
-   * function is missing, as from a database before its migration).
+   * function is missing, as from a database before its migration; FAILED:
+   * the read failed).
    */
   "turf-pages": { keys: string[]; pages: Record<string, unknown>; managers: Record<string, unknown> };
 };
 
 export type DatasetName = keyof BuildDatasets;
+
+/** A read the step could not make (see Rules). */
+export type Failed = { failed: true };
+export const FAILED: Failed = { failed: true };
+export const isFailed = (v: unknown): v is Failed => typeof v === "object" && v !== null && (v as Partial<Failed>).failed === true;
 
 export type Manifest = {
   /** NEXT_PUBLIC_SUPABASE_URL the step read. */

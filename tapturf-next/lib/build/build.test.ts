@@ -430,9 +430,9 @@ function fakeDb(over: Partial<FakeState> = {}) {
   return { s, fetchImpl };
 }
 
-async function step(over: Partial<FakeState> = {}, env: Record<string, string> = {}) {
+async function step(over: Partial<FakeState> = {}, env: Record<string, string> = {}, ck = clock()) {
   const { s, fetchImpl } = fakeDb(over);
-  const { c, now, sleep } = clock();
+  const { c, now, sleep } = ck;
   const logs: string[] = [];
   const dir = mkdtempSync(join(tmpdir(), "tapturf-step-test-"));
   const read = (name: string) => JSON.parse(readFileSync(join(dir, `${name}.json`), "utf8"));
@@ -559,6 +559,92 @@ test("step: a database failing when the turf pages' time is up fails it (health 
     assert.equal((r.read("turf-pages") as BuildDatasets["turf-pages"]).keys.length, 300);
   } finally {
     r.cleanup();
+  }
+});
+
+test("step: a turf_managers read that fails is recorded as failed (the page's own rule), and never fails it", async () => {
+  // Two claimed turfs among the top 300 whose turf_managers keeps failing (a statement timeout, a revoked grant).
+  const claimed = new Set(["turf-3", "turf-5"]);
+  const r = await step({
+    override: (p, _u, body, s) => {
+      if (p.endsWith("turf_page") && claimed.has(String(body.p_key))) return json({ turf: s.rows.find((x) => x.slug === body.p_key), claimed: true });
+      if (p.endsWith("turf_managers") && body.p_turf_id === s.rows[3].id) return json({ code: "57014", message: "canceling statement due to statement timeout" }, 500);
+      if (p.endsWith("turf_managers") && body.p_turf_id === s.rows[5].id) return json({ code: "42501", message: "permission denied for function turf_managers" }, 401);
+      return undefined;
+    },
+  });
+  try {
+    const pages = r.read("turf-pages") as BuildDatasets["turf-pages"];
+    assert.equal(pages.keys.length, 300);
+    assert.deepEqual(pages.managers[r.s.rows[3].id as string], { failed: true });
+    assert.deepEqual(pages.managers[r.s.rows[5].id as string], { failed: true });
+    assert.deepEqual(pages.managers[r.s.rows[1].id as string], { managers: [{ u: "owner_one", v: true }], more: 0 });
+    assert.equal(r.summary.skipped, 0);
+    assert.ok(r.logs.some((l) => l === "build data: turf_managers failed for turf-3 (canceling statement due to statement timeout); its page is built without the line"));
+    // One read each: a failed line is no reason to read the page again.
+    assert.equal(r.s.calls.filter((c) => c === "rpc/turf_managers").length, 3);
+  } finally {
+    r.cleanup();
+  }
+});
+
+test("step: keys whose read keeps failing render on their first visit; the gate is only for time running out", async () => {
+  const bad = new Set(["turf-4", "turf-6"]);
+  const r = await step({ override: (p, _u, body) => (p.endsWith("turf_page") && bad.has(String(body.p_key)) ? json({ code: "XX000", message: "boom" }, 500) : undefined) });
+  try {
+    const pages = r.read("turf-pages") as BuildDatasets["turf-pages"];
+    assert.equal(pages.keys.length, 298);
+    assert.ok(!pages.keys.includes("turf-4") && !pages.keys.includes("turf-6"));
+    assert.equal(r.summary.skipped, 2);
+    assert.ok(r.logs.some((l) => /2 of 300 turf pages render on their first visit instead \(\{"failed":2\}\)/.test(l)));
+  } finally {
+    r.cleanup();
+  }
+});
+
+test("step: a database down for the last turf pages is waited out by the list re-check, or fails it there", async () => {
+  // Unreachable from the 299th turf_page on: the last 2 keys use up their tries inside the outage.
+  const outage = (ms: number) => {
+    const ck = clock();
+    let n = 0;
+    let downUntil = -1;
+    const over: Partial<FakeState> = {
+      override: (p) => {
+        if (p.endsWith("turf_page") && ++n === 299) downUntil = ck.c.t + ms;
+        return ck.c.t < downUntil ? Promise.reject(new TypeError("fetch failed")) : undefined;
+      },
+    };
+    return { ck, over };
+  };
+  const brief = outage(3 * 60_000);
+  const r = await step(brief.over, {}, brief.ck);
+  try {
+    assert.equal((r.read("turf-pages") as BuildDatasets["turf-pages"]).keys.length, 298);
+    assert.equal(r.summary.skipped, 2);
+    assert.ok(r.logs.some((l) => /retry \/rest\/v1\/rpc\/turf_list_version \(fetch failed\)/.test(l)), "the re-check waited");
+  } finally {
+    r.cleanup();
+  }
+  const lasting = outage(Infinity);
+  await assert.rejects(step(lasting.over, {}, lasting.ck), (e: Error) => e instanceof StepFailed && e.message.startsWith(UNREACHABLE) && /turf_list_version \(again\)/.test(e.message));
+});
+
+test("step: turf facts that cannot be read never fail it: noted, and pages build without them", async () => {
+  const facts = (u: URL) => (u.searchParams.get("select") ?? "").startsWith("id,name,city,owner_phone");
+  // A column privilege taken away answers at once; a statement that keeps timing out is given 2 minutes.
+  for (const [res, most] of [[() => json({ code: "42501", message: "permission denied for table turfs" }, 401), 0], [() => json({ code: "57014", message: "canceling statement due to statement timeout" }, 503), 2 * 60_000]] as const) {
+    let factsRead = 0;
+    const r = await step({ override: (_p, u) => (facts(u) ? (factsRead++, res()) : undefined) });
+    try {
+      assert.deepEqual(r.read("turf-facts"), { failed: true });
+      assert.ok(r.manifest.datasets["turf-facts"]);
+      assert.ok(r.logs.some((l) => /^build data: turf facts not recorded \(Paged fetch failed at row 0\); pages build without them/.test(l)));
+      assert.equal((r.read("turf-pages") as BuildDatasets["turf-pages"]).keys.length, 300);
+      assert.ok(r.summary.ms <= most + 1000, `${r.summary.ms} ms`);
+      assert.ok(most === 0 ? factsRead === 1 : factsRead > 5, `${factsRead} facts reads`);
+    } finally {
+      r.cleanup();
+    }
   }
 });
 
