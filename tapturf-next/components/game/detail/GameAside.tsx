@@ -2,6 +2,7 @@
 
 import { CalendarDays, Clock, Pencil, Share2, Users } from "lucide-react";
 import { AskButton, FindGame, InPill, OpenGames, WaitingPill, WhatsAppHost, btn, cap, type CtaModel } from "./GameCta";
+import { RangeAndLength } from "./GameFacts";
 
 /** Wide screens: the card beside the page, sticky, with the price, when and who, and the one thing to do. */
 export function GameAside({ m }: { m: CtaModel }) {
@@ -18,11 +19,11 @@ export function GameAside({ m }: { m: CtaModel }) {
             <CalendarDays className="w-4 h-4 text-primary-500 shrink-0" aria-hidden />
             <span className="truncate">{m.day.title}</span>
           </li>
-          <li className="h-12 flex items-center gap-3 px-4 text-[15px] text-primary-900">
+          {/* Never cut: a night game's "ends next day" takes a second line. */}
+          <li className="min-h-12 py-2.5 flex items-center gap-3 px-4 text-[15px] leading-snug text-primary-900">
             <Clock className="w-4 h-4 text-primary-500 shrink-0" aria-hidden />
-            <span className="truncate">
-              <span className="whitespace-nowrap">{m.range}</span>
-              {m.duration && ` · ${m.duration}`}
+            <span className="min-w-0">
+              <RangeAndLength range={m.range} length={m.duration} />
             </span>
           </li>
           <li className="h-12 flex items-center gap-3 px-4 text-[15px] text-primary-900">

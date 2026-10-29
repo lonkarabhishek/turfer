@@ -121,6 +121,7 @@ test("spots: honest with 1 of 22, no urgency", () => {
   const one = spotsInfo(1, 22, false);
   assert.equal(one.title, "1 of 22 going");
   assert.equal(one.hint, "21 spots open");
+  assert.equal(one.short, "21 open");
   assert.equal(one.line, "21 open spots. Be one of the first to join.");
   assert.equal(one.plainLine, "21 open spots.");
   assert.equal(one.first, true);
@@ -130,20 +131,23 @@ test("spots: honest with 1 of 22, no urgency", () => {
   assert.equal(nearly.line, "2 open spots.");
   assert.equal(nearly.first, false);
   assert.equal(spotsInfo(13, 14, false).hint, "1 spot open");
+  assert.equal(spotsInfo(13, 14, false).short, "1 open");
   assert.equal(spotsInfo(13, 14, false).line, "1 open spot.");
   // Two joined but one spot left: no "be one of the first".
   assert.equal(spotsInfo(2, 3, false).line, "1 open spot.");
   assert.equal(spotsInfo(2, 4, false).line, "2 open spots. Be one of the first to join.");
   const full = spotsInfo(14, 14, false);
   assert.equal(full.hint, "No spots left");
+  assert.equal(full.short, "Full");
   assert.equal(full.line, "All 14 spots are taken.");
   assert.equal(spotsInfo(15, 14, false).open, 0);
   const ended = spotsInfo(6, 12, true);
   assert.equal(ended.title, "6 of 12 joined");
   assert.equal(ended.hint, "Joining is closed");
+  assert.equal(ended.short, "Closed");
   assert.equal(ended.line, "6 players joined this game.");
   assert.equal(spotsInfo(1, 12, true).line, "1 player joined this game.");
-  for (const s of [one, nearly, full, ended]) assert.doesNotMatch(`${s.title} ${s.hint} ${s.line}`, /only|last|fast|hurry/i);
+  for (const s of [one, nearly, full, ended]) assert.doesNotMatch(`${s.title} ${s.hint} ${s.short} ${s.line}`, /only|last|fast|hurry/i);
 });
 
 test("the host's note: their own words only", () => {

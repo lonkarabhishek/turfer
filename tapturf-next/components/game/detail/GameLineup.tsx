@@ -53,8 +53,9 @@ export function GameLineup({
 }) {
   const [all, setAll] = useState(false);
   const n = participants.length;
-  const hiddenOnPhone = !all && n > PHONE;
-  const hiddenWide = !all && n > WIDE;
+  // The toggle stays put once pressed ("Show fewer"), so focus stays on it. Wide screens need it past 16 only.
+  const toggleOnPhone = n > PHONE;
+  const toggleWide = n > WIDE;
   const over = ended || cancelled;
   return (
     <section aria-labelledby="lineup-h">
@@ -71,7 +72,7 @@ export function GameLineup({
       </p>
 
       {n > 0 && (
-        <ul aria-label="Players" className="mt-3 flex flex-wrap gap-2">
+        <ul id="lineup-players" aria-label="Players" className="mt-3 flex flex-wrap gap-2">
           {participants.map((p, i) => {
             const host = p.user_id === creatorId;
             const you = !!viewerId && p.user_id === viewerId;
@@ -91,26 +92,31 @@ export function GameLineup({
           })}
         </ul>
       )}
-      {(hiddenOnPhone || hiddenWide) && (
-        <button
-          type="button"
-          onClick={() => setAll(true)}
-          className={`mt-1 h-11 text-[15px] font-semibold text-accent-800 hover:underline underline-offset-2 ${hiddenWide ? "" : "lg:hidden"}`}
-        >
-          Show all {n}
-        </button>
-      )}
-
-      {canAsk && (
-        <button
-          type="button"
-          onClick={onAsk}
-          aria-label="Request to join this game"
-          className="mt-2 h-11 inline-flex items-center gap-2 rounded-full border-2 border-dashed border-accent-600 px-3 text-[15px] font-semibold text-accent-800 hover:bg-accent-50"
-        >
-          <UserPlus className="w-5 h-5" aria-hidden />
-          Your spot?
-        </button>
+      {(toggleOnPhone || canAsk) && (
+        <div className={`mt-2 flex flex-wrap items-center gap-3 ${!canAsk && !toggleWide ? "lg:hidden" : ""}`}>
+          {toggleOnPhone && (
+            <button
+              type="button"
+              onClick={() => setAll((v) => !v)}
+              aria-expanded={all}
+              aria-controls="lineup-players"
+              className={`h-11 text-[15px] font-semibold text-accent-800 hover:underline underline-offset-2 ${toggleWide ? "" : "lg:hidden"}`}
+            >
+              {all ? "Show fewer" : `Show all ${n}`}
+            </button>
+          )}
+          {canAsk && (
+            <button
+              type="button"
+              onClick={onAsk}
+              aria-label="Request to join this game"
+              className="h-11 inline-flex items-center gap-2 rounded-full border-2 border-dashed border-accent-600 px-3 text-[15px] font-semibold text-accent-800 hover:bg-accent-50"
+            >
+              <UserPlus className="w-5 h-5" aria-hidden />
+              Your spot?
+            </button>
+          )}
+        </div>
       )}
 
       <p className="mt-3 text-[15px] text-primary-900">{isHost ? spots.plainLine : spots.line}</p>

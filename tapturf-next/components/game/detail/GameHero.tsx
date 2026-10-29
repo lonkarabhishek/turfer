@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { ArrowLeft, Ban, History, Share2, Users } from "lucide-react";
+import type { HeroChip } from "@/lib/utils/gameState";
 import type { SportFamily } from "@/lib/utils/sport";
 import { GamePhoto } from "./GamePhoto";
 import { SportGlyph } from "./SportArt";
 
-export type HeroChip = "hosting" | "live" | "full" | "ended" | "cancelled" | null;
+export type { HeroChip };
 
 const chipBase = "photo-chip inline-flex items-center gap-1.5 h-8 px-3 rounded-full shadow-soft text-[13px] font-semibold whitespace-nowrap";
+/** White chips (photo-chip-light: solid white with a dark border under prefers-contrast: more). */
+const lightChip = `${chipBase} photo-chip-light bg-white/95 text-primary-900`;
 
 /**
  * The turf's photo (or its sport drawing) with the sport and one status
@@ -62,13 +65,13 @@ export function GameHero({
         <Share2 className="w-5 h-5" aria-hidden />
       </button>
       <div className="absolute left-4 bottom-8 sm:bottom-4 flex flex-wrap items-center gap-2 pr-4">
-        <span className={`${chipBase} bg-white/95 text-primary-900`}>
+        <span className={lightChip}>
           <SportGlyph sport={sport} className="w-4 h-4 text-accent-700" />
           {sportName}
         </span>
         {chip === "hosting" && <span className={`${chipBase} bg-accent-600 text-white`}>You&apos;re hosting</span>}
         {chip === "live" && (
-          <span className={`${chipBase} bg-white/95 text-primary-900`}>
+          <span className={lightChip}>
             <span className="pulse-live size-2 rounded-full bg-hot-500" aria-hidden />
             Happening now
           </span>
@@ -80,13 +83,13 @@ export function GameHero({
           </span>
         )}
         {chip === "ended" && (
-          <span className={`${chipBase} bg-white/95 text-primary-900`}>
+          <span className={lightChip}>
             <History className="w-4 h-4" aria-hidden />
             Ended
           </span>
         )}
         {chip === "cancelled" && (
-          <span className={`${chipBase} bg-white/95 text-primary-900`}>
+          <span className={lightChip}>
             <Ban className="w-4 h-4" aria-hidden />
             Cancelled
           </span>

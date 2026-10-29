@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { imageUrlForCard } from "@/lib/utils/images";
 import type { SportFamily } from "@/lib/utils/sport";
 import { SportArt } from "./SportArt";
 
 /**
  * A turf photo over its sport drawing, in a box the caller sizes (so
- * nothing moves when it loads). The photo fades in once loaded; a photo
- * that fails gives way to the next one, and after the last, the drawing
- * stays. Google and Drive links go out with no referrer.
+ * nothing moves when it loads). A photo mounted in the browser (the game
+ * page's hero) fades in once loaded; a server-rendered one (the /games
+ * cards) is never hidden, so it shows as soon as it arrives, before
+ * hydration and without JS. A photo that fails gives way to the next one,
+ * and after the last, the drawing stays. Google and Drive links go out
+ * with no referrer.
  */
 export function GamePhoto({
   photos,
@@ -58,11 +61,29 @@ export function GamePhoto({
   );
 }
 
+const noSubscribe = () => () => {};
+
 /**
- * The <img>: marked ready (data-ready, which fades it in) when it loads,
- * and reported broken when it fails, including when either happened
- * before hydration (a server-rendered card's photo), which React's
- * onLoad and onError never hear about (see components/ui/PhotoImg.tsx).
+ * True when this render is in the browser after hydration; false on the
+ * server and while hydrating server HTML (React uses the server snapshot
+ * then), so a server-rendered <img> keeps the attributes it was sent with.
+ */
+function useMountedOnClient(): boolean {
+  return useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * The <img>: marked ready (data-ready) when it loads, and reported broken
+ * when it fails, including when either happened before hydration (a
+ * server-rendered card's photo), which React's onLoad and onError never
+ * hear about (see components/ui/PhotoImg.tsx). Only an <img> first
+ * rendered in the browser gets data-fade (hidden until ready, then a
+ * fade); one that came in the server HTML is decided once, at hydration,
+ * and is never hidden.
  */
 function FadeImg({
   src,
@@ -82,6 +103,9 @@ function FadeImg({
   onBroken: () => void;
 }) {
   const [ready, setReady] = useState(false);
+  // Decided on the first render only: the later re-render after hydration (the snapshot turns true) keeps it.
+  const mountedOnClient = useMountedOnClient();
+  const [fade] = useState(mountedOnClient);
   const broken = useRef(onBroken);
   useEffect(() => {
     broken.current = onBroken;
@@ -113,6 +137,7 @@ function FadeImg({
       fetchPriority={hero ? "high" : undefined}
       decoding="async"
       referrerPolicy="no-referrer"
+      data-fade={fade ? "" : undefined}
       data-ready={ready ? "" : undefined}
       onLoad={() => setReady(true)}
       onError={onBroken}

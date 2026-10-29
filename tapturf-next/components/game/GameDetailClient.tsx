@@ -20,7 +20,7 @@ import {
   spotsInfo,
   turfInfo,
 } from "@/lib/utils/game";
-import { canRequest, canSeeHostNumber, ctaState, waNumber } from "@/lib/utils/gameState";
+import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber } from "@/lib/utils/gameState";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { mapsSearchUrl } from "@/lib/utils/maps";
@@ -287,7 +287,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const phone = game.host_phone?.trim() || null;
   const showNumber = !isHost && canSeeHostNumber({ isHost, isParticipant: isParticipant || mine?.status === "accepted", signedIn: !!user });
   const venue = game.turfs?.name || `${sportName} game`;
-  const chip: HeroChip = isHost ? "hosting" : cancelled ? "cancelled" : ended ? "ended" : spotsLeft <= 0 ? "full" : status === "live" ? "live" : null;
+  const chip: HeroChip = heroChip({ isHost, status: game.status, timing: status, spotsLeft });
   const note = cta === "cancelled" || cta === "ended" || cta === "full" ? cta : null;
 
   const model: CtaModel = {
@@ -327,7 +327,8 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
         All games
       </Link>
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10 lg:items-start">
+      {/* No items-start: the aside stretches to the row's height, so its card stays in view (sticky) all the way down. */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
         <div className="min-w-0">
           <GameHero
             photos={game.turfs?.photos}
@@ -335,7 +336,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
             sport={game.sport}
             sportName={sportName}
             chip={chip}
-            muted={ended || cancelled}
+            muted={chip === "ended" || chip === "cancelled"}
             onShare={handleShare}
           />
 
@@ -363,7 +364,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               past={ended}
               range={range}
               spokenRange={speakTimeRange(game.start_time, game.end_time)}
-              duration={duration}
+              length={model.duration}
               price={{ free, label: price }}
               spots={spots}
               skill={skillInfo(game.skill_level)}

@@ -38,6 +38,25 @@ export function ctaState(i: CtaInput): CtaState {
   return "open";
 }
 
+/** The one status chip on the hero photo (and its grey photo for ended or cancelled). */
+export type HeroChip = "hosting" | "live" | "full" | "ended" | "cancelled" | null;
+
+/**
+ * In this order: cancelled, ended, hosting, full, live. A game that is
+ * over says so to everyone, the host included: their game from yesterday
+ * reads "Ended", never "You're hosting" (the old page showed its "Game
+ * Ended" badge to every viewer). The host still gets their bar and card
+ * (ctaState "host").
+ */
+export function heroChip(i: Pick<CtaInput, "isHost" | "status" | "timing" | "spotsLeft">): HeroChip {
+  if (i.status === "cancelled") return "cancelled";
+  if (i.timing === "expired") return "ended";
+  if (i.isHost) return "hosting";
+  if (i.spotsLeft <= 0) return "full";
+  if (i.timing === "live") return "live";
+  return null;
+}
+
 /** States where a player can still ask to join (the main button and the "Your spot?" chip). */
 export function canRequest(state: CtaState): boolean {
   return state === "open" || state === "live";

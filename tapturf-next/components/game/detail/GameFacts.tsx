@@ -25,6 +25,28 @@ export function CalTile({ day, past }: { day: GameDay; past: boolean }) {
   );
 }
 
+/**
+ * "10 AM – 12 PM · 2 hours"; a night game "11 PM – 1 AM · 2 hours · ends
+ * next day". The range and the length each stay on one line and the only
+ * place it can break is after the "·" that follows the range, so on a
+ * narrow screen it reads "11 PM – 1 AM ·" / "2 hours · ends next day",
+ * never with "day" alone. `spoken` (speakTimeRange) is what screen readers
+ * hear instead of the range.
+ */
+export function RangeAndLength({ range, spoken, length }: { range: string; spoken?: string; length: string | null }) {
+  return (
+    <>
+      {spoken && <span className="sr-only">{spoken}</span>}
+      <span aria-hidden={spoken ? "true" : undefined} className="whitespace-nowrap">{range}</span>
+      {length && (
+        <>
+          <span className="whitespace-nowrap">{"\u00a0·"}</span> <span className="whitespace-nowrap">{length}</span>
+        </>
+      )}
+    </>
+  );
+}
+
 function FactRow({ tile, title, hint, className = "" }: { tile: React.ReactNode; title: React.ReactNode; hint: React.ReactNode; className?: string }) {
   return (
     <li className={`flex items-center gap-3 px-4 py-3 min-h-16 ${className}`}>
@@ -50,7 +72,7 @@ export function GameFacts({
   past,
   range,
   spokenRange,
-  duration,
+  length,
   price,
   spots,
   skill,
@@ -62,7 +84,8 @@ export function GameFacts({
   range: string;
   /** speakTimeRange(): what screen readers hear instead. */
   spokenRange: string;
-  duration: { text: string; endsNextDay: boolean } | null;
+  /** "2 hours", "2 hours · ends next day" (null when the slot has no end). */
+  length: string | null;
   price: { free: boolean; label: string };
   spots: SpotsInfo;
   skill: SkillInfo;
@@ -78,13 +101,7 @@ export function GameFacts({
       <FactRow
         tile={<CalTile day={day} past={past} />}
         title={day.title}
-        hint={
-          <>
-            <span aria-hidden="true" className="whitespace-nowrap">{range}</span>
-            <span className="sr-only">{spokenRange}</span>
-            {duration && <> · {duration.text}{duration.endsNextDay ? " · ends next day" : ""}</>}
-          </>
-        }
+        hint={<RangeAndLength range={range} spoken={spokenRange} length={length} />}
       />
       <FactRow
         tile={

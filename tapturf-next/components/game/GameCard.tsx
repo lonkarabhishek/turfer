@@ -13,6 +13,8 @@ import { SportGlyph } from "./detail/SportArt";
 
 const chip = "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-semibold whitespace-nowrap";
 const photoChip = "photo-chip inline-flex items-center gap-1.5 h-8 px-3 rounded-full shadow-soft text-[13px] font-semibold whitespace-nowrap";
+/** White chips on the photo (photo-chip-light: solid white with a dark border under prefers-contrast: more). */
+const lightPhotoChip = `${photoChip} photo-chip-light bg-white/95 text-primary-900`;
 
 /**
  * A game in a list: the turf's photo (or its sport drawing) with the
@@ -52,7 +54,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
   return (
     <Link
       href={`/game/${game.id}`}
-      className="group block card-lift overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-soft hover:shadow-card-hover"
+      className="group flex flex-col card-lift overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-soft hover:shadow-card-hover"
     >
       {!hideVenue && (
         <GamePhoto
@@ -63,7 +65,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
           imgClassName="object-[center_60%]"
         >
           <div className="absolute left-3 top-3 right-3 flex flex-wrap gap-2">
-            <span className={`${photoChip} bg-white/95 text-primary-900`}>
+            <span className={lightPhotoChip}>
               <SportGlyph sport={game.sport} className="w-4 h-4 text-accent-700" />
               {sportName}
             </span>
@@ -73,7 +75,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
                 Full
               </span>
             ) : live ? (
-              <span className={`${photoChip} bg-white/95 text-primary-900`}>
+              <span className={lightPhotoChip}>
                 <span className="pulse-live size-2 rounded-full bg-hot-500" aria-hidden />
                 Happening now
               </span>
@@ -82,7 +84,8 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
         </GamePhoto>
       )}
 
-      <div className="p-4">
+      {/* A column, so in a grid row of cards of different heights the players and price line up at the bottom. */}
+      <div className="p-4 flex-1 flex flex-col">
         {hideVenue ? (
           <h3 className="text-[16px] font-semibold text-accent-800 leading-snug">{when}</h3>
         ) : (
@@ -106,7 +109,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
           <VerifiedTickFor id={game.creator_id} className="-ml-1" />
         </p>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 mb-3 flex flex-wrap gap-2">
           {hideVenue && (
             <span className={`${chip} bg-primary-50 border border-primary-200 text-primary-900`}>
               <SportGlyph sport={game.sport} className="w-4 h-4 text-accent-700" />
@@ -131,7 +134,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
           )}
         </div>
 
-        <div className="mt-3 border-t border-primary-100 pt-3 flex items-center justify-between gap-3">
+        <div className="mt-auto border-t border-primary-100 pt-3 flex items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 text-[14px] text-primary-700 min-w-0">
             <Users className="w-4 h-4 text-primary-500 shrink-0" aria-hidden />
             <span className="truncate tabular">
@@ -141,7 +144,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
           {price === "Free" ? (
             <span className="shrink-0 h-7 px-3 inline-flex items-center rounded-full bg-accent-50 text-accent-800 text-[13px] font-semibold">Free</span>
           ) : (
-            <span className="shrink-0 text-[14px] text-primary-500 whitespace-nowrap">
+            <span className="shrink-0 leading-7 text-[14px] text-primary-500 whitespace-nowrap">
               <span className="text-[17px] font-bold text-primary-900 tabular">{price}</span> / player
             </span>
           )}

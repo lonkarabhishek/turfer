@@ -35,19 +35,24 @@ export type CtaModel = {
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export const btn = "h-12 inline-flex items-center justify-center gap-2 rounded-full px-5 text-[16px] font-semibold whitespace-nowrap press-tight";
 
-export function AskButton({ m, wide }: { m: CtaModel; wide?: boolean }) {
+/** In the phone bar under 400px: less padding, so the lines beside the button fit on a 360px phone. */
+const compactPad = "max-[399px]:px-4";
+
+/** compact: the phone bar's button. */
+export function AskButton({ m, wide, compact }: { m: CtaModel; wide?: boolean; compact?: boolean }) {
   return (
-    <button type="button" onClick={m.onAsk} className={`${btn} px-6 bg-accent-600 hover:bg-accent-700 text-white ${wide ? "w-full" : ""}`}>
+    <button type="button" onClick={m.onAsk} className={`${btn} px-6 ${compact ? compactPad : ""} bg-accent-600 hover:bg-accent-700 text-white ${wide ? "w-full" : ""}`}>
       Request to join
     </button>
   );
 }
 
-export function FindGame({ wide, label = "Find a game" }: { wide?: boolean; label?: string }) {
+/** compact: the phone bar's link (no arrow under 400px). */
+export function FindGame({ wide, compact, label = "Find a game" }: { wide?: boolean; compact?: boolean; label?: string }) {
   return (
-    <Link href="/games" className={`${btn} bg-primary-900 hover:bg-primary-800 text-white ${wide ? "w-full" : ""}`}>
+    <Link href="/games" className={`${btn} ${compact ? compactPad : ""} bg-primary-900 hover:bg-primary-800 text-white ${wide ? "w-full" : ""}`}>
       {label}
-      <ArrowRight className="w-4 h-4" aria-hidden />
+      <ArrowRight className={`w-4 h-4 ${compact ? "max-[399px]:hidden" : ""}`} aria-hidden />
     </Link>
   );
 }

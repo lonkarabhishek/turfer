@@ -5,7 +5,11 @@ import { CircleCheck, Pencil } from "lucide-react";
 import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 import { AskButton, FindGame, InPill, OpenGames, PriceTitle, WaitingPill, WhatsAppHost, btn, cap, type CtaModel } from "./GameCta";
 
-/** The bar's two lines for each state. */
+/**
+ * The bar's two lines for each state. The second line is one line beside
+ * the button, so it stays short enough for a 360px phone in a wide font:
+ * "Tomorrow · 21 open", "Till 11:47 AM · 2 open".
+ */
 function barText(m: CtaModel): { title: React.ReactNode; sub: React.ReactNode } {
   switch (m.state) {
     case "host":
@@ -38,16 +42,18 @@ function barText(m: CtaModel): { title: React.ReactNode; sub: React.ReactNode } 
     case "full":
       return { title: <PriceTitle m={m} />, sub: `${m.day.short} · Full` };
     case "live":
-      return { title: <PriceTitle m={m} />, sub: `Till ${m.endClock} · ${m.spots.hint}` };
+      return { title: <PriceTitle m={m} />, sub: `Till ${m.endClock} · ${m.spots.short}` };
     default:
-      return { title: <PriceTitle m={m} />, sub: `${m.day.short} · ${m.spots.hint}` };
+      return { title: <PriceTitle m={m} />, sub: `${m.day.short} · ${m.spots.short}` };
   }
 }
 
 /**
  * Phones and tablets: a solid white bar over the bottom nav (at the very
  * bottom from 768px, where there is no nav) with what matters now on the
- * left and the one thing to do on the right.
+ * left and the one thing to do on the right. Under 400px the gap and the
+ * button's padding shrink a little, so both lines fit beside it on a
+ * 360px phone even in a wide font.
  */
 export function GameCtaBar({ m }: { m: CtaModel }) {
   const { title, sub } = barText(m);
@@ -56,7 +62,7 @@ export function GameCtaBar({ m }: { m: CtaModel }) {
       ref={liftCookieBanner}
       className="fixed inset-x-0 z-30 lg:hidden bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:bottom-0 md:pb-[calc(0.625rem+env(safe-area-inset-bottom))] bg-white border-t border-primary-200 px-4 md:pr-36 py-2.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)]"
     >
-      <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+      <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 min-[400px]:gap-3">
         <div className="min-w-0">
           <p className="text-[17px] font-bold text-primary-900 leading-tight truncate">{title}</p>
           <p className="text-[13px] text-primary-500 leading-snug truncate">{sub}</p>
@@ -96,7 +102,7 @@ function BarControl({ m }: { m: CtaModel }) {
     case "cancelled":
     case "ended":
     case "declined":
-      return <FindGame />;
+      return <FindGame compact />;
     case "accepted":
       return m.waHref ? <WhatsAppHost href={m.waHref} /> : <InPill />;
     case "pending":
@@ -104,6 +110,6 @@ function BarControl({ m }: { m: CtaModel }) {
     case "full":
       return <OpenGames />;
     default:
-      return <AskButton m={m} />;
+      return <AskButton m={m} compact />;
   }
 }

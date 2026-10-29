@@ -246,6 +246,8 @@ export type SpotsInfo = {
   title: string;
   /** "21 spots open", "1 spot open", "No spots left"; after the game "Joining is closed". */
   hint: string;
+  /** For the phone bar beside its button: "21 open", "1 open", "Full"; after the game "Closed". */
+  short: string;
   /** The lineup's sentence, with "Be one of the first to join." when that is true. */
   line: string;
   /** The same without the invitation (the host's view). */
@@ -262,12 +264,13 @@ export function spotsInfo(current: number, max: number, ended: boolean): SpotsIn
   const open = Math.max(0, cap - cur);
   if (ended) {
     const line = `${cur} player${cur === 1 ? "" : "s"} joined this game.`;
-    return { title: `${cur} of ${cap} joined`, hint: "Joining is closed", line, plainLine: line, first: false, open };
+    return { title: `${cur} of ${cap} joined`, hint: "Joining is closed", short: "Closed", line, plainLine: line, first: false, open };
   }
   const hint = open === 0 ? "No spots left" : open === 1 ? "1 spot open" : `${open} spots open`;
+  const short = open === 0 ? "Full" : `${open} open`;
   const plainLine = open === 0 ? `All ${cap} spots are taken.` : open === 1 ? "1 open spot." : `${open} open spots.`;
   const first = cur <= 2 && open >= 2;
-  return { title: `${cur} of ${cap} going`, hint, line: first ? `${plainLine} Be one of the first to join.` : plainLine, plainLine, first, open };
+  return { title: `${cur} of ${cap} going`, hint, short, line: first ? `${plainLine} Be one of the first to join.` : plainLine, plainLine, first, open };
 }
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canRequest, canSeeHostNumber, ctaState, waNumber, type CtaInput } from "./gameState";
+import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber, type CtaInput } from "./gameState";
 
 const base: CtaInput = { isHost: false, status: "open", timing: "upcoming", isParticipant: false, joinStatus: "idle", myRequest: null, spotsLeft: 21 };
 const with_ = (o: Partial<CtaInput>) => ctaState({ ...base, ...o });
@@ -37,6 +37,23 @@ test("earlier states win", () => {
   assert.equal(with_({ timing: "live", spotsLeft: 0 }), "full");
   // A failed send leaves the button.
   assert.equal(with_({ joinStatus: "error" }), "open");
+});
+
+test("the hero chip: over is over, for the host too", () => {
+  const base = { isHost: false, status: "open", timing: "upcoming" as const, spotsLeft: 5 };
+  // The host's own game from yesterday says Ended, not "You're hosting".
+  assert.equal(heroChip({ ...base, isHost: true, timing: "expired" }), "ended");
+  assert.equal(heroChip({ ...base, isHost: true, status: "cancelled" }), "cancelled");
+  assert.equal(heroChip({ ...base, isHost: true }), "hosting");
+  assert.equal(heroChip({ ...base, isHost: true, timing: "live" }), "hosting");
+  assert.equal(heroChip({ ...base, isHost: true, spotsLeft: 0 }), "hosting");
+  // Everyone else.
+  assert.equal(heroChip({ ...base, status: "cancelled", timing: "expired" }), "cancelled");
+  assert.equal(heroChip({ ...base, timing: "expired", spotsLeft: 0 }), "ended");
+  assert.equal(heroChip({ ...base, spotsLeft: 0 }), "full");
+  assert.equal(heroChip({ ...base, spotsLeft: 0, timing: "live" }), "full");
+  assert.equal(heroChip({ ...base, timing: "live" }), "live");
+  assert.equal(heroChip(base), null);
 });
 
 test("who may still ask to join", () => {
