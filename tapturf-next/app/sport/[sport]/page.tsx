@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
+import { getSportBands } from "@/lib/queries/sportBands";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, citySportHref, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
 import { CITY_IDS, isCity, labelFor } from "@/lib/city";
@@ -107,7 +108,7 @@ export default async function SportPage({
   const info = sportBySlug(sport);
   if (!info) notFound();
 
-  const turfs = await turfsFor(info);
+  const [turfs, bands] = await Promise.all([turfsFor(info), getSportBands()]);
   const perCity = citiesFor(turfs, info);
   const place = placeFor(perCity);
 
@@ -182,7 +183,7 @@ export default async function SportPage({
 
       {/* Top 24 as cards, the rest as a light list */}
       {turfs.length > 0 ? (
-        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity sport={{ labels: info.labels }} />
+        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity sport={{ labels: info.labels }} bands={bands} />
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>

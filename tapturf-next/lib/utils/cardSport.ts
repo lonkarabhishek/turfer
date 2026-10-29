@@ -1,5 +1,6 @@
-import type { Turf } from "../../types/turf";
-import { summarisePrice, type PriceSummary } from "./prices";
+import type { PriceBand, SportBands, Turf } from "../../types/turf";
+import { getMaximumPrice, getMinimumPrice, positivePrice, summarisePrice, type PriceSummary } from "./prices";
+import { SPORT_PAGES, type SportPage } from "../sports";
 
 /**
  * The sport a list of cards is filtered on, for the cards: a sport page's
@@ -105,17 +106,131 @@ export function pricesAreForSport(labels: readonly string[], sport: CardSport): 
 }
 
 /**
+ * The sports pricing_bands formats name (29 Oct: every band with a format
+ * is one of these). "box cricket", "box cricket (7-a-side)" is box
+ * cricket, and comes first so its "(7-a-side)" never reads as football.
+ * "6-a-side" is football, and futsal too: the futsal page is "futsal
+ * courts and 5-a-side turfs" (lib/sports.ts) and Ask reads "5-a-side" as
+ * football (lib/ai/ask.ts). A band with no format, or any other, names
+ * no sport and is left out.
+ */
+const BAND_KINDS: readonly { kind: keyof SportBands; re: RegExp; labels: readonly string[] }[] = [
+  { kind: "box-cricket", re: /^\s*box\s*cricket\b/i, labels: ["Box Cricket"] },
+  { kind: "football", re: /^\s*\d+\s*-?\s*a\s*-?\s*side\b/i, labels: ["Football", "Futsal"] },
+];
+
+/** The sport kind a band's format names, or null. */
+export function bandKind(format: string | null | undefined): keyof SportBands | null {
+  if (typeof format !== "string") return null;
+  return BAND_KINDS.find((k) => k.re.test(format))?.kind ?? null;
+}
+
+/**
+ * The per-hour range of each sport a venue's bands name, or null when no
+ * band names one. Read from the same checked bands the turf page's
+ * Pricing table shows (lib/queries/turfs.ts toBands).
+ */
+export function sportBandsOf(bands: readonly Pick<PriceBand, "format" | "price_per_hour">[] | null | undefined): SportBands | null {
+  const out: { [K in keyof SportBands]: [number, number] } = {};
+  for (const b of bands ?? []) {
+    const kind = bandKind(b?.format);
+    const p = positivePrice(b?.price_per_hour);
+    if (!kind || p == null) continue;
+    const r = out[kind];
+    out[kind] = r ? [Math.min(r[0], p), Math.max(r[1], p)] : [p, p];
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * What a venue's price bands say about a card's price on a list filtered
+ * to one sport. "confirmed": the bands of that sport span exactly the
+ * card's range. "contradicted": the bands name a sport but not this one,
+ * or this one at another range, so the card's number is (at least partly)
+ * another sport's. "silent": no band names a sport.
+ */
+export function bandCheck(
+  bands: SportBands | null | undefined,
+  price: Pick<PriceSummary, "min" | "max">,
+  sport: CardSport,
+): "confirmed" | "contradicted" | "silent" {
+  let lo = Infinity;
+  let hi = -Infinity;
+  let named = false;
+  for (const k of BAND_KINDS) {
+    const r = bands?.[k.kind];
+    if (!r) continue;
+    named = true;
+    if (!k.labels.some((l) => labelRank(l, sport) != null)) continue;
+    lo = Math.min(lo, r[0]);
+    hi = Math.max(hi, r[1]);
+  }
+  if (!named) return "silent";
+  return price.min === lo && price.max === hi ? "confirmed" : "contradicted";
+}
+
+const norm = (l: string) => l.trim().toLowerCase();
+
+/** The sport page a card's sport is: the page with these labels, or the page that lists the chip. */
+function pageOf(sport: CardSport): SportPage | undefined {
+  if ("labels" in sport) {
+    const key = sport.labels.map(norm).join("|");
+    const first = norm(sport.labels[0] ?? "");
+    return SPORT_PAGES.find((p) => p.labels.map(norm).join("|") === key) ?? SPORT_PAGES.find((p) => p.labels.some((l) => norm(l) === first));
+  }
+  const chip = norm(sport.chip);
+  return SPORT_PAGES.find((p) => p.labels.some((l) => norm(l) === chip));
+}
+
+/**
+ * Turf sports (football, box cricket, cricket, futsal, frisbee: venue
+ * "turf" in lib/sports.ts) keep a price the bands do not speak to, as
+ * before 29 Oct, until the owner decides how far the rule below goes on
+ * the established turf pages (D3 / V1, and their price copy, D6).
+ */
+export function isTurfSport(sport: CardSport): boolean {
+  return pageOf(sport)?.venue === "turf";
+}
+
+/**
+ * Whether a card on a list filtered to one sport may show this price as
+ * that sport's. The venue's price bands decide when they name a sport:
+ * only a range they confirm shows. Otherwise, at a turf sport, the price
+ * shows as before (isTurfSport); at any other sport (courts, tables,
+ * pools, nets), only when the venue lists no other sport.
+ */
+export function priceIsForSport(
+  turf: Pick<Turf, "sports" | "sport_bands">,
+  price: Pick<PriceSummary, "min" | "max">,
+  sport: CardSport,
+): boolean {
+  const check = bandCheck(turf.sport_bands, price, sport);
+  if (check !== "silent") return check === "confirmed";
+  return isTurfSport(sport) || pricesAreForSport(turf.sports, sport);
+}
+
+/**
  * A card's price. Unfiltered: summarisePrice(), as before. On a list
- * filtered to one sport, a price shows only when the data says it is that
- * sport's: the venue lists no other sport. The price columns, the numbers
- * players reported and the research notes name no sport, and list rows
- * carry no pricing_bands (the only data that does name one), so at a
- * multi-sport venue the card reads "Prices not listed yet" rather than
- * show, say, the box cricket rate on a badminton page. A price that does
+ * filtered to one sport, a price shows only when priceIsForSport() says
+ * it is that sport's; otherwise the card reads "Prices not listed yet"
+ * rather than show, say, the box cricket rate on a badminton page. The
+ * slot columns, the numbers players reported and the research notes name
+ * no sport; only pricing_bands do (turf.sport_bands). A price that does
  * show is unchanged.
  */
 export function cardPrice(turf: Turf, sport?: CardSport | null): PriceSummary {
   const summary = summarisePrice(turf);
-  if (!sport || summary.kind === "unknown" || pricesAreForSport(turf.sports, sport)) return summary;
+  if (!sport || summary.kind === "unknown" || priceIsForSport(turf, summary, sport)) return summary;
   return { label: "Prices not listed yet", kind: "unknown", min: null, max: null, unit: summary.unit };
+}
+
+/**
+ * The lowest listed price the chip price sorts order by: getMinimumPrice(),
+ * or null when the card on that list does not show it (cardPrice), so
+ * another sport's rate never orders the list either.
+ */
+export function sportMinimumPrice(turf: Turf, sport?: CardSport | null): number | null {
+  const min = getMinimumPrice(turf);
+  if (min == null || !sport) return min;
+  return priceIsForSport(turf, { min, max: getMaximumPrice(turf) }, sport) ? min : null;
 }

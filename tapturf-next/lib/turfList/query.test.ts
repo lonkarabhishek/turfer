@@ -107,10 +107,14 @@ function oldClient(turfs: Turf[], search: string, selectedSport: string | null, 
         return a.distanceKm - b.distanceKm;
       case "price-low":
       case "price-high": {
-        // Since 29 Oct, with a chip, a venue's price counts only when every
-        // sport it lists is the chip's (the card shows no other: cardPrice).
+        // Since 29 Oct, with a chip that is not a turf sport (Badminton,
+        // Pickleball, Tennis...), a venue's price counts only when every sport
+        // it lists is the chip's (the card shows no other: cardPrice). The turf
+        // chips keep every price the venue's bands do not contradict, and these
+        // rows carry no bands.
+        const turfChip = !!selectedSport && ["football", "box cricket", "cricket"].includes(selectedSport.toLowerCase());
         const chipPrice = (t: Turf) =>
-          selectedSport && !t.sports.every((s) => s.toLowerCase().includes(selectedSport.toLowerCase())) ? null : getMinimumPrice(t);
+          selectedSport && !turfChip && !t.sports.every((s) => s.toLowerCase().includes(selectedSport.toLowerCase())) ? null : getMinimumPrice(t);
         const ap = chipPrice(a.turf);
         const bp = chipPrice(b.turf);
         if (ap == null && bp == null) return 0;
@@ -216,6 +220,29 @@ test("price sorts with a chip: another sport's price never orders the list (it i
   // Without a chip, every price orders the list, as before.
   const all = ids(rankTurfs(turfs, { q: "", sport: null, sort: "price-low", at: null }, none).ranked);
   assert.deepEqual(all.slice(0, 4), ["turf", "multi-cheap", "court", "court-dear"]);
+});
+
+test("price sorts with a turf chip: the venue's bands decide, else every price counts as before", () => {
+  const turfs = [
+    // Its bands give football ₹300 (the card's whole range): it leads.
+    mk({ id: "confirmed", sports: ["Box Cricket", "Football"], morning_price: 300, sport_bands: { football: [300, 300], "box-cricket": [300, 300] } }),
+    // ₹200 is its box cricket rate; football is ₹900 in the bands: not ordered by price.
+    mk({ id: "other-rate", sports: ["Box Cricket", "Football"], morning_price: 200, evening_price: 900, sport_bands: { football: [900, 900], "box-cricket": [200, 200] } }),
+    // Lists Football, but its only bands are box cricket.
+    mk({ id: "other-sport", sports: ["Football"], morning_price: 100, sport_bands: { "box-cricket": [100, 100] } }),
+    // No bands: as before.
+    mk({ id: "no-bands", sports: ["Box Cricket", "Football"], morning_price: 500 }),
+  ];
+  const none = new Set<string>();
+  const low = ids(rankTurfs(turfs, { q: "", sport: "Football", sort: "price-low", at: null }, none).ranked);
+  assert.deepEqual(low.slice(0, 2), ["confirmed", "no-bands"]);
+  assert.deepEqual(new Set(low.slice(2)), new Set(["other-rate", "other-sport"]));
+  // On the Box Cricket chip, other-rate's card reads ₹200–900, part football's: still last.
+  // other-sport lists no box cricket, so it is not on the chip at all.
+  const box = ids(rankTurfs(turfs, { q: "", sport: "Box Cricket", sort: "price-low", at: null }, none).ranked);
+  assert.deepEqual(box, ["confirmed", "no-bands", "other-rate"]);
+  const high = ids(rankTurfs(turfs, { q: "", sport: "Football", sort: "price-high", at: null }, none).ranked);
+  assert.deepEqual(high.slice(0, 2), ["no-bands", "confirmed"]);
 });
 
 test("pages at the batch offsets add up to the whole ranking, with hot flags and totals", () => {

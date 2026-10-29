@@ -60,7 +60,7 @@ export const post: Post = {
     { type: "p", text: "TapTurf lists turfs in cities across India, from Nashik, Pune and Mumbai to Hyderabad, Bangalore and Delhi. Pick your city once and every page — home, listings, sport pages — remembers your choice." },
     { type: "ol", items: [
       "Nashik — every active turf across Pathardi, Deolali, Gangapur, Indira Nagar and more.",
-      "Pune — turfs across Kothrud, Aundh, Wakad, Kharadi, Hinjewadi, Baner and beyond.",
+      "Pune — 125+ turfs across Kothrud, Aundh, Wakad, Kharadi, Hinjewadi, Baner and beyond.",
       "Mumbai — turfs across Mira Road, Andheri, Dombivli, Bandra, Chembur and more.",
     ] },
 
