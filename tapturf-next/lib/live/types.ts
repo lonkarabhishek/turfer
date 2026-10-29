@@ -46,7 +46,8 @@ export const LIVE_POLL_TIMEOUT_MS = 8_000;
  * is closed: the server takes no more writes (live_match_put answers gone
  * with idle, supabase/migrations/20261029_live_idle_close.sql, which has
  * the same 2 hours), followers keep its last score, and the scorer can
- * turn on a new link. Worked out from updated_at, never stored.
+ * turn it off (which clears it) or start a new link. Worked out from
+ * updated_at, never stored.
  */
 export const LIVE_IDLE_CLOSE_MS = 2 * 60 * 60_000;
 
@@ -93,7 +94,8 @@ export type LiveStopBody = { secret: string };
  * slow (429)      retry after LIVE_SEND_EVERY_MS / 2.
  * forbidden (403) this browser's secret is not the link's: turn the link off locally, offer a new one.
  * gone (410)      the link was turned off or expired: turn it off locally. With idle: true it closed
- *                 after LIVE_IDLE_CLOSE_MS without an update, and the scorer is told so.
+ *                 after LIVE_IDLE_CLOSE_MS without an update but still shows its last score: stop
+ *                 sending, keep it so it can still be turned off, and say so.
  * limit (429)     too many new links from this network (8 an hour, 30 a day), or this link has hit its write cap: stop, say so.
  * busy (503)      too many new links site-wide this hour (not this network's doing): back off and retry, keep the link on.
  * too_big (413)   the match is too long to share live: stop, say so.
@@ -122,7 +124,13 @@ export type LiveLinkRecord = {
   rev: number;
   /** The last rev the server accepted. rev > sentRev means there is something to send. */
   sentRev: number;
-  /** Why the link stopped, for the share sheet. closed: gone after LIVE_IDLE_CLOSE_MS without an update. */
+  /** When the server last said ok to a write, by this browser's clock: the link closes LIVE_IDLE_CLOSE_MS after its last update. */
+  okAt?: number;
+  /**
+   * Why the link stopped, for the share sheet. closed: gone after
+   * LIVE_IDLE_CLOSE_MS without an update; on stays true, as the server
+   * still shows its last score until the link is turned off.
+   */
   stopped?: "off" | "gone" | "closed" | "forbidden" | "limit" | "too_big";
   createdAt: number;
 };

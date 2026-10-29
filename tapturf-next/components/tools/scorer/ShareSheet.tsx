@@ -89,6 +89,31 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
   const fault = faultText(info);
   const box = "rounded-2xl border-2 border-primary-200 p-3";
   const heading = <h3 className="text-[16px] font-bold text-primary-900">Live link</h3>;
+  const stopping = info.mode === "stopping";
+  const offControl = confirmOff ? (
+    <div className="mt-3 rounded-2xl bg-red-50 p-3">
+      <p className="text-[14px] font-semibold leading-snug text-red-800">Turn off the live link? Friends will see that it is off.</p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => setConfirmOff(false)} className="press-tight h-12 rounded-full border-2 border-primary-200 bg-white text-[15px] font-bold text-primary-800">
+          Keep it on
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setConfirmOff(false);
+            live.onStop();
+          }}
+          className="press-tight h-12 rounded-full bg-red-600 text-white text-[15px] font-bold hover:bg-red-700"
+        >
+          Turn off
+        </button>
+      </div>
+    </div>
+  ) : (
+    <button type="button" onClick={() => setConfirmOff(true)} disabled={stopping} className="press-tight mt-2 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full text-[15px] font-bold text-red-700 hover:bg-red-50 disabled:opacity-60">
+      {stopping && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {stopping ? "Turning off…" : "Turn off live link"}
+    </button>
+  );
 
   if (info.mode === "starting") {
     return (
@@ -97,6 +122,29 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
         <p role="status" className="min-h-14 flex items-center gap-2 text-[15px] font-semibold text-primary-800">
           <Loader2 className="w-5 h-5 shrink-0 text-accent-600 animate-spin" aria-hidden /> Getting your link…
         </p>
+      </section>
+    );
+  }
+
+  // Closed after 2 hours without an update: friends still see its last score, so it can be turned off here; a new link turns it off first.
+  if (info.closed) {
+    return (
+      <section className={box}>
+        {heading}
+        <p role="alert" className="mt-1 text-[14px] font-semibold leading-snug text-red-700">
+          {LIVE_FAULT.closed}
+        </p>
+        {fault && info.fault !== "closed" && (
+          <p role="alert" className="mt-2 text-[14px] font-semibold leading-snug text-red-700">
+            {fault}
+          </p>
+        )}
+        <p className="mt-1 text-[13px] leading-snug text-primary-600">Friends with this link still see its last score. A new link turns this one off.</p>
+        <button type="button" onClick={live.onStart} className="press-tight mt-3 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[17px] font-bold hover:bg-primary-800">
+          <Radio className="w-5 h-5" aria-hidden /> {live.loginFirst ? "Log in and start a new link" : "Start a new link"}
+        </button>
+        {offControl}
+        <PrivacyNote />
       </section>
     );
   }
@@ -132,7 +180,6 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
   // Sending, but the server said busy and is being retried: say so rather than a plain "Sending…".
   const shown = info.state === "sending" && info.fault === "busy" ? "busy" : info.state;
   const status = shown === "synced" || shown === "sending" || shown === "offline" || shown === "busy" ? liveStatus(words)[shown] : null;
-  const stopping = info.mode === "stopping";
 
   return (
     <section className={box}>
@@ -159,30 +206,7 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
           {fault}
         </p>
       )}
-      {confirmOff ? (
-        <div className="mt-3 rounded-2xl bg-red-50 p-3">
-          <p className="text-[14px] font-semibold leading-snug text-red-800">Turn off the live link? Friends will see that it is off.</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setConfirmOff(false)} className="press-tight h-12 rounded-full border-2 border-primary-200 bg-white text-[15px] font-bold text-primary-800">
-              Keep it on
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmOff(false);
-                live.onStop();
-              }}
-              className="press-tight h-12 rounded-full bg-red-600 text-white text-[15px] font-bold hover:bg-red-700"
-            >
-              Turn off
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button type="button" onClick={() => setConfirmOff(true)} disabled={stopping} className="press-tight mt-2 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full text-[15px] font-bold text-red-700 hover:bg-red-50 disabled:opacity-60">
-          {stopping && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {stopping ? "Turning off…" : "Turn off live link"}
-        </button>
-      )}
+      {offControl}
       <span className="sr-only" aria-live="polite">
         {copied ? "Link copied" : ""}
       </span>

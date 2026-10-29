@@ -10,10 +10,11 @@
 --
 -- live_match_put answers a write to a closed link with 'gone' and
 -- 'idle': true ({"r": "gone", "idle": true}) and changes nothing. The
--- scorer's browser already turns the link off on 'gone' (an app from
--- before this file reads it as a plain 'gone'); with idle it says the
--- link closed after 2 hours. The match is kept, not cleared: the hourly
--- job still clears it 30 days after its last update, as before.
+-- scorer's browser stops sending on 'gone' (an app from before this file
+-- reads it as a plain 'gone' and turns the link off); with idle it says
+-- the link closed after 2 hours and keeps its secret, so the scorer can
+-- still turn it off. The match is kept, not cleared: the hourly job
+-- still clears it 30 days after its last update, as before.
 --
 -- Closed is worked out on read, from updated_at, and never stored:
 -- * the status check (live, done, stopped, expired) stays as it is, so

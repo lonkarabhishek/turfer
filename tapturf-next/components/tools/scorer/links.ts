@@ -16,6 +16,7 @@ function readLink(x: unknown): LiveLinkRecord | null {
   if (typeof l.code !== "string" || !LIVE_CODE_RE.test(l.code) || typeof l.secret !== "string" || !LIVE_SECRET_RE.test(l.secret)) return null;
   if (typeof l.on !== "boolean" || !Number.isSafeInteger(l.rev) || !Number.isSafeInteger(l.sentRev) || typeof l.createdAt !== "number" || !Number.isFinite(l.createdAt)) return null;
   const rec: LiveLinkRecord = { code: l.code, secret: l.secret, on: l.on, rev: l.rev as number, sentRev: l.sentRev as number, createdAt: l.createdAt };
+  if (typeof l.okAt === "number" && Number.isFinite(l.okAt)) rec.okAt = l.okAt;
   if (l.stopped && STOPPED.has(l.stopped)) rec.stopped = l.stopped;
   return rec;
 }
