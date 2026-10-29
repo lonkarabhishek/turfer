@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">A square cricket result card reading Titans 71/5 in 6 overs against Strikers 63/4 in 6 overs, Titans won by 8 runs, next to three steps: enter scores, check the result, download PNG</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="110" font-size="50" font-weight="700">Cricket scorecard maker</text>
+<text x="80" y="155" font-size="26" fill-opacity="0.7">A shareable match result card in 3 steps</text>
+<g font-size="34" font-weight="700">
+<rect x="80" y="220" width="540" height="100" rx="16" fill="#FFFFFF" fill-opacity="0.08"/><text x="110" y="283"><tspan fill="#4ADE80">1</tspan>  Enter both scores</text>
+<rect x="80" y="340" width="540" height="100" rx="16" fill="#FFFFFF" fill-opacity="0.08"/><text x="110" y="403"><tspan fill="#4ADE80">2</tspan>  Check the result line</text>
+<rect x="80" y="460" width="540" height="100" rx="16" fill="#FFFFFF" fill-opacity="0.08"/><text x="110" y="523"><tspan fill="#4ADE80">3</tspan>  Download or share</text>
+</g>
+<rect x="700" y="200" width="420" height="420" rx="24" fill="#111113"/>
+<rect x="700" y="200" width="420" height="8" fill="#16A34A"/>
+<text x="728" y="250" font-size="16" font-weight="700" fill="#86EFAC">SUNDAY BOX LEAGUE</text>
+<text x="728" y="318" font-size="30" font-weight="800">Titans</text>
+<text x="1092" y="318" font-size="30" font-weight="800" text-anchor="end">71/5 (6 ov)</text>
+<rect x="728" y="345" width="364" height="2" fill="#FFFFFF" fill-opacity="0.12"/>
+<text x="910" y="372" font-size="13" font-weight="700" fill-opacity="0.5" text-anchor="middle">VS</text>
+<text x="728" y="420" font-size="30" font-weight="800">Strikers</text>
+<text x="1092" y="420" font-size="30" font-weight="800" text-anchor="end">63/4 (6 ov)</text>
+<rect x="728" y="460" width="364" height="60" rx="14" fill="#16A34A"/>
+<text x="910" y="500" font-size="24" font-weight="800" text-anchor="middle">Titans won by 8 runs</text>
+<text x="728" y="560" font-size="13" font-weight="600" fill-opacity="0.5">PLAYER OF THE MATCH</text>
+<text x="1092" y="560" font-size="16" font-weight="700" text-anchor="end">Rohan</text>
+<text x="728" y="600" font-size="13" font-weight="600" fill-opacity="0.45">Made with TapTurf.in</text>
+<text x="80" y="625" font-size="24" fill-opacity="0.7">tapturf.in/tools/cricket-scorecard-maker</text>
+</g>
+</svg>
