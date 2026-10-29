@@ -40,6 +40,9 @@ import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 import { turfPath } from "@/lib/utils/turfPath";
 import { LIVE_FILTERS, getAdminLiveLinks, type LiveFilter } from "@/lib/queries/adminTools";
+import { getAdminClaims } from "@/lib/queries/adminClaims";
+import { CLAIMED_FILTERS, claimCounts, claimWhen, claimedTurfs, howVerified, phoneLabel, type ClaimedFilter } from "@/lib/admin/claimed";
+import { keyLabel } from "@/lib/admin/claims";
 import { SectionError } from "@/components/admin/SectionStatus";
 import type { Reason } from "@/lib/admin/section";
 
@@ -52,6 +55,7 @@ const VIEWS = {
   logins: { title: "Latest logins", filters: LOGIN_FILTERS },
   requests: { title: "Join requests", filters: REQUEST_FILTERS },
   turfs: { title: "Turfs", filters: TURF_FILTERS },
+  claimed: { title: "Claimed turfs", filters: CLAIMED_FILTERS },
   bookings: { title: "Bookings", filters: BOOKING_FILTERS },
   reviews: { title: "Reviews", filters: { all: "All" } },
   notifications: { title: "Notifications", filters: NOTIFICATION_FILTERS },
@@ -175,6 +179,11 @@ const LIVE_STYLE: Record<string, string> = {
   done: "bg-accent-50 text-accent-700",
   stopped: "bg-primary-100 text-primary-500",
   expired: "bg-primary-100 text-primary-500",
+};
+const CLAIM_STYLE: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  revoked: "bg-hot-500/10 text-hot-600",
+  rejected: "bg-primary-100 text-primary-500",
 };
 const sportName = (s: string | null) => (s ? s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
 
@@ -414,6 +423,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
               <tr key={t.id}>
                 <td className="px-4 py-3">
                   <Link href={turfPath(t)} className="text-primary-900 hover:text-accent-600">{t.name}</Link>
+                  {t.claimed && <Badge className="ml-1.5 bg-accent-50 text-accent-700">Claimed</Badge>}
                   <div className="text-[12px] text-primary-400 max-w-[280px] truncate">{t.address}</div>
                 </td>
                 <td className="px-4 py-3 text-primary-700">{t.city && isCity(t.city) ? labelFor(t.city) : "-"}</td>
@@ -427,6 +437,102 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
               </tr>
             ))}
           </Table>
+        ),
+      };
+    }
+
+    case "claimed": {
+      const res = await getAdminClaims();
+      if (!res.ok) return failedView(res.reason, "the claims");
+      const { claims, offSite } = res.data;
+      const f = filter as ClaimedFilter;
+      const turfs = claimedTurfs(claims, f);
+      const n = claimCounts(claims);
+      const empty: Record<ClaimedFilter, string> = {
+        all: "No turf is claimed right now. Owners claim theirs at tapturf.in/my.",
+        waiting: "No claims waiting for approval.",
+        ended: "No revoked or rejected claims.",
+        every: "No claims yet. Owners claim their turf at tapturf.in/my.",
+      };
+      return {
+        count: turfs.length,
+        node: (
+          <>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
+              <p className="text-sm text-primary-500">
+                {n.turfs} turf{n.turfs === 1 ? "" : "s"} claimed now · {n.people} {n.people === 1 ? "person" : "people"} managing · {n.waiting} waiting for approval · {n.ended} revoked or rejected
+              </p>
+              {/* Approve, reject, revoke and restore stay in one place: the panel on the admin home. */}
+              <Link href="/admin#owner-claims" className="text-xs font-semibold text-accent-600 hover:text-accent-700">
+                Approve, reject or revoke in myTapturf owners
+              </Link>
+            </div>
+            {turfs.length === 0 ? (
+              <div className="rounded-2xl bg-white border border-primary-200">
+                <p className="px-5 py-10 text-center text-sm text-primary-400">{empty[f]}</p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {turfs.map((t) => (
+                  <li key={t.turfId} className="rounded-2xl bg-white border border-primary-200 p-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <Link href={turfPath({ id: t.turfId, slug: t.slug })} target="_blank" className="font-semibold text-primary-900 hover:text-accent-600">
+                        {t.name} <ExternalLink className="inline w-3.5 h-3.5 text-primary-400" />
+                      </Link>
+                      <span className="text-[12px] text-primary-500 tabular-nums">
+                        {t.managing} managing{t.waiting > 0 && <span className="text-amber-700"> · {t.waiting} waiting</span>}
+                      </span>
+                    </div>
+                    <p className="text-[13px] text-primary-500">
+                      {t.place ?? "-"}
+                      {offSite?.has(t.turfId) && <Badge className="ml-1.5 bg-hot-500/10 text-hot-600">not on the site</Badge>}
+                    </p>
+                    <ul className="mt-3 divide-y divide-primary-100 border-t border-primary-100">
+                      {t.claims.map((c) => {
+                        const a = c.account;
+                        const how = howVerified(c);
+                        return (
+                          <li key={c.userKey} className="py-2.5 text-[13px] space-y-0.5">
+                            <p className="text-primary-900">
+                              <span className="font-semibold">{a?.name ?? c.storedName ?? "No name"}</span>
+                              {a?.username && (
+                                <Link href={`/u/${a.username}`} className="ml-1.5 text-accent-700 hover:underline">
+                                  @{a.username}
+                                </Link>
+                              )}
+                              <Badge className="ml-1.5 bg-primary-100 text-primary-700">{c.role ?? "role not given"}</Badge>
+                              {c.status !== "active" && <Badge className={`ml-1.5 ${CLAIM_STYLE[c.status]}`}>{c.status === "pending" ? "waiting" : c.status}</Badge>}
+                              {c.siteOwner && <Badge className="ml-1.5 bg-accent-50 text-accent-700">TapTurf (you)</Badge>}
+                            </p>
+                            <p className="text-primary-700">
+                              {how.text}
+                              {how.phone && (
+                                <>
+                                  {" · "}
+                                  <a href={`tel:+91${how.phone}`} className="hover:text-accent-600 tabular-nums">{phoneLabel(how.phone)}</a>
+                                </>
+                              )}
+                            </p>
+                            <p className="text-primary-500">
+                              {claimWhen(c)}
+                              {" · "}
+                              {a ? (
+                                <a href={`/admin?person=${a.id}#people`} className="font-semibold text-accent-700 hover:underline whitespace-nowrap">
+                                  Open in people list
+                                </a>
+                              ) : (
+                                <span className="text-amber-800">No TapTurf account for this sign-in ({keyLabel(c.userKey)})</span>
+                              )}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         ),
       };
     }

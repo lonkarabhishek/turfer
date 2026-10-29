@@ -98,8 +98,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <SignupWindowsSection />
       </AdminSection>
 
-      {/* myTapturf claims (read in the browser, after the page) */}
-      <section className="mb-8 rounded-2xl bg-white border border-primary-200 p-5">
+      {/* myTapturf claims (read in the browser, after the page); /admin/claimed links here for the actions. */}
+      <section id="owner-claims" className="mb-8 rounded-2xl bg-white border border-primary-200 p-5 scroll-mt-20">
         <h2 className="font-semibold text-primary-900 mb-1">myTapturf owners</h2>
         <p className="text-[13px] text-primary-500 mb-4">Owners whose number is on the listing get in at once; approve the rest here.</p>
         <OwnerClaims />

@@ -3,6 +3,7 @@ import {
   activeTurfCount,
   activeUserNumbers,
   bookingNumbers,
+  claimedTurfCount,
   gameNumbers,
   gamesByCitySection,
   getContactClickStats,
@@ -118,11 +119,13 @@ export async function ContactsSection() {
 
 /** People, games and turfs: the top-line tiles. */
 export async function HeadlineSection() {
-  const [people, games, turfs] = await Promise.all([peopleNumbers(), gameNumbers(), activeTurfCount()]);
+  const [people, games, turfs, claimed] = await Promise.all([peopleNumbers(), gameNumbers(), activeTurfCount(), claimedTurfCount()]);
   return (
     <section className="mb-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      {/* Five tiles: 1 + 2 + 2 on a phone, 3 + 2 on a tablet, one row on a wide screen. */}
+      <div className="grid grid-cols-2 md:grid-cols-6 xl:grid-cols-5 gap-3 md:gap-4">
         <StatTile
+          className="col-span-2 xl:col-span-1"
           label="Unique people"
           href="/admin/users"
           value={valueOf(people, (p) => p.uniquePeople)}
@@ -130,6 +133,7 @@ export async function HeadlineSection() {
           tone="accent"
         />
         <StatTile
+          className="md:col-span-2 xl:col-span-1"
           label="Total users"
           href="/admin/users"
           value={valueOf(people, (p) => p.totalUsers)}
@@ -137,10 +141,18 @@ export async function HeadlineSection() {
             p.unfinishedSignups > 0 ? `Raw row count, with ${p.unfinishedSignups} Google sign-up${p.unfinishedSignups === 1 ? "" : "s"} that didn't finish` : "Raw row count",
           )}
         />
-        <StatTile label="Total games" href="/admin/games" value={valueOf(games, (g) => g.totalGames)} sub={subOf(games, (g) => `+${g.games7d} this week`)} />
-        <StatTile label="Active turfs" href="/admin/turfs" value={valueOf(turfs, (n) => n)} sub={turfs.ok ? undefined : reasonText(turfs.reason)} />
+        <StatTile className="md:col-span-2 xl:col-span-1" label="Total games" href="/admin/games" value={valueOf(games, (g) => g.totalGames)} sub={subOf(games, (g) => `+${g.games7d} this week`)} />
+        <StatTile className="md:col-span-3 xl:col-span-1" label="Active turfs" href="/admin/turfs" value={valueOf(turfs, (n) => n)} sub={turfs.ok ? undefined : reasonText(turfs.reason)} />
+        {/* Turfs an owner manages on myTapturf now (turfs.claimed, a count); who manages each is on /admin/claimed. */}
+        <StatTile
+          className="md:col-span-3 xl:col-span-1"
+          label="Claimed turfs"
+          href="/admin/claimed"
+          value={valueOf(claimed, (n) => n)}
+          sub={subOf(claimed, (n) => (n === 0 ? "None yet. Owners claim theirs at /my" : turfs.ok ? `of ${turfs.data} active turfs` : "Managed on myTapturf"))}
+        />
       </div>
-      <SomeFailed count={failures(people, games, turfs)} className="mt-2" />
+      <SomeFailed count={failures(people, games, turfs, claimed)} className="mt-2" />
     </section>
   );
 }

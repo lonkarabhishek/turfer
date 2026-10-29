@@ -8,6 +8,7 @@ export function StatTile({
   tone = "default",
   href,
   compact = false,
+  className = "",
 }: {
   label: string;
   value: string | number;
@@ -17,6 +18,8 @@ export function StatTile({
   href?: string;
   /** Smaller value text, for words (a name) rather than a number. */
   compact?: boolean;
+  /** Placement in its grid (column spans). */
+  className?: string;
 }) {
   const bg =
     tone === "accent"
@@ -36,11 +39,11 @@ export function StatTile({
       {sub && <p className={`text-xs mt-2 font-medium ${subColor}`}>{sub}</p>}
     </>
   );
-  if (!href) return <div className={`rounded-2xl p-5 ${bg}`}>{inner}</div>;
+  if (!href) return <div className={`rounded-2xl p-5 ${bg} ${className}`}>{inner}</div>;
   return (
     <Link
       href={href}
-      className={`group block rounded-2xl p-5 ${bg} transition-shadow hover:shadow-card-hover focus-neon`}
+      className={`group block rounded-2xl p-5 ${bg} transition-shadow hover:shadow-card-hover focus-neon ${className}`}
     >
       {inner}
     </Link>

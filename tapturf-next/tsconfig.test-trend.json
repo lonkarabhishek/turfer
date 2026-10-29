@@ -20,6 +20,7 @@
     "lib/admin/trend.test.ts",
     "lib/admin/people.test.ts",
     "lib/admin/claims.test.ts",
+    "lib/admin/claimed.test.ts",
     "lib/admin/links.test.ts",
     "lib/admin/section.test.ts",
     "lib/admin/home.test.ts",
