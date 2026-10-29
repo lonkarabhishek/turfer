@@ -325,12 +325,6 @@ export default async function TurfDetailPage({
         <div className="mt-10 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-12">
           {/* Left content */}
           <div>
-            {/* What Owner-managed means, first on a claimed turf's page. The
-                old "Managed by <owner_name>" heading is gone: on an unclaimed
-                page it said someone managed a turf that asks "Is this your
-                turf?" further down. */}
-            {claimed && <OwnerPanel managers={managers} priceNote={priceNote} className="mb-7" />}
-
             {/* Description */}
             {description && (
               <div className="section-divider">
@@ -405,10 +399,17 @@ export default async function TurfDetailPage({
             {/* The owner's lines come last, after the map and the reviews
                 players came for. An unclaimed turf: the invite for its owner
                 (ClaimHint under the sport chips jumps here). A claimed turf:
-                one line for the owner of another turf, and no "request
-                access" link (its owner adds people). */}
+                what Owner-managed means and who runs it (the badge under the
+                name jumps here; last, as the owner asked on 29 Oct), then one
+                line for the owner of another turf, and no "request access"
+                link (its owner adds people). */}
             {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} />}
-            {claimed && <OwnerInvite managers={managers} />}
+            {claimed && (
+              <>
+                <OwnerPanel managers={managers} priceNote={priceNote} className="mt-10" />
+                <OwnerInvite />
+              </>
+            )}
           </div>
 
           {/* Right sidebar — sticky booking card */}

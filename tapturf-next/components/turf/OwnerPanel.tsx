@@ -6,13 +6,13 @@ import { ownerPriceSetOn, type OwnerPriceNote } from "@/lib/turfPage/owner";
 import { OwnerMedallion } from "./OwnerMark";
 
 /**
- * What "Owner-managed" means, at the top of a claimed turf's page: who
+ * What "Owner-managed" means, at the end of a claimed turf's page: who
  * runs it ("Managed by @a and @b", each with their tick; no such line
- * when nobody can be named, so the heading stands alone), how TapTurf
- * checked them, and, when the prices are theirs, when they set them.
- * #managed-by is where the
- * badge under the name jumps to, and myTapturf's "See it" link too.
- * Says plainly that it is about who keeps the page, not a rating.
+ * when nobody can be named, so the heading stands alone), that TapTurf
+ * checked them (not how), and, when the prices are theirs, when they
+ * set them. #managed-by is where the badge under the name jumps to, and
+ * myTapturf's "See it" link too. Says plainly that it is about who
+ * keeps the page, not a rating.
  */
 export function OwnerPanel({ managers, priceNote, className = "" }: { managers: TurfManagers; priceNote: OwnerPriceNote | null; className?: string }) {
   const parts = managedByParts(managers);
@@ -36,9 +36,7 @@ export function OwnerPanel({ managers, priceNote, className = "" }: { managers: 
         The owner runs this page on TapTurf and can change its prices, hours and numbers.
       </p>
       <ul className="mt-4 rounded-xl border border-accent-100 bg-white divide-y divide-accent-100">
-        <Fact icon={<ShieldCheck className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="Checked by TapTurf">
-          With a code to the turf&rsquo;s listed number, or by our team.
-        </Fact>
+        <Fact icon={<ShieldCheck className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="Checked by TapTurf" />
         {priceNote && (
           <Fact icon={<IndianRupee className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="Prices from the owner">
             {setOn}
@@ -83,32 +81,24 @@ function Fact({ icon, title, children }: { icon: React.ReactNode; title: string;
 }
 
 /**
- * The foot of a claimed turf's page: "Managed by @a and @b" again (no
- * such line when nobody can be named), then, for the owner of another
- * turf, that claiming theirs is free. Not a request to manage this one
- * (its owner adds people on myTapturf). The invite is kept out of search
- * snippets (a div: Google honours data-nosnippet on span, div and section only).
+ * The last line of a claimed turf's page, under OwnerPanel, for the
+ * owner of another turf: claiming theirs is free. Not a request to
+ * manage this one (its owner adds people on myTapturf). Kept out of
+ * search snippets (a div: Google honours data-nosnippet on span, div and
+ * section only).
  */
-export function OwnerInvite({ managers }: { managers: TurfManagers }) {
-  const parts = managedByParts(managers);
+export function OwnerInvite() {
   return (
-    <div className="section-divider text-[14px] text-primary-500">
-      {parts && (
-        <p className="mb-1 leading-relaxed">
-          Managed by <ManagedByNames parts={parts} />
-        </p>
-      )}
-      <div data-nosnippet>
-        Run a turf too?{" "}
-        <Link
-          href="/my"
-          prefetch={false}
-          className="inline-flex min-h-11 items-center gap-1 align-middle font-semibold text-accent-800 hover:underline underline-offset-2"
-        >
-          Claim yours, free
-          <ArrowRight className="w-3.5 h-3.5" aria-hidden />
-        </Link>
-      </div>
+    <div data-nosnippet className="mt-4 text-[14px] text-primary-500">
+      Run a turf too?{" "}
+      <Link
+        href="/my"
+        prefetch={false}
+        className="inline-flex min-h-11 items-center gap-1 align-middle font-semibold text-accent-800 hover:underline underline-offset-2"
+      >
+        Claim yours, free
+        <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+      </Link>
     </div>
   );
 }
