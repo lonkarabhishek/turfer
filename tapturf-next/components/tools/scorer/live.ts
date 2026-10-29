@@ -32,10 +32,19 @@ import { loadLinks, saveLink } from "./links";
  * The decisions are the pure functions below (live.test.ts);
  * createLiveSync runs them against injected I/O, and useLiveSync wires
  * that to fetch, localStorage and the page events.
+ *
+ * Every send and the code carry this device's sign-in, read fresh for
+ * each (lib/live/gate.ts checks it). A "login" answer is tried once more
+ * with a fresh token; if it stands, scoring goes on here and the link
+ * stays on, but sending waits until the scorer logs in again (the page
+ * comes back from the login, or resume()). A stop needs only the secret.
  */
 
 /** Why a link is not live, or why the last try to change it failed. Shown in the share sheet. closed: gone after 2 hours without an update. */
-export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "closed" | "bad" | "not_off";
+export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "closed" | "bad" | "login" | "not_off";
+
+/** This device's sign-in for a send: a token, signed out, or can't tell right now (the shape of lib/account/client.ts TokenCheck). */
+export type LiveToken = { token: string } | { none: true } | { unknown: true };
 
 /** The server takes one write per link every 500 ms; a send sooner after the last answer comes back slow. */
 const MIN_GAP_MS = 600;
@@ -91,7 +100,7 @@ export function retryDelay(fails: number): number {
 /** A write's answer: ok, a LiveError, or network when the request never got one. idle: a gone for a link closed after 2 hours without an update. */
 export type Reply = { r: "ok" | LiveError | "network"; rev?: number; idle?: true };
 
-const ERRORS = new Set<string>(["stale", "slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "unavailable"] satisfies LiveError[]);
+const ERRORS = new Set<string>(["stale", "slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "login", "unavailable"] satisfies LiveError[]);
 
 /** Read a PUT or DELETE answer. Anything that is not ours (a proxy's page, a 5xx without a body) counts as unavailable. */
 export function readReply(status: number, body: unknown): Reply {
@@ -107,7 +116,7 @@ export function readReply(status: number, body: unknown): Reply {
 export function readNew(status: number, body: unknown): { code: string } | { fault: LiveFault } {
   const b = (body && typeof body === "object" ? body : {}) as { code?: unknown; error?: unknown };
   if (status === 200 && typeof b.code === "string" && LIVE_CODE_RE.test(b.code)) return { code: b.code };
-  return { fault: b.error === "limit" ? "limit" : "unavailable" };
+  return { fault: b.error === "limit" ? "limit" : b.error === "login" ? "login" : "unavailable" };
 }
 
 /** What to do after an answer. wait: ms before the next try (0: when the throttle allows). */
@@ -145,6 +154,10 @@ export function handleResult(link: LiveLinkRecord, sent: number, reply: Reply, f
       return { ...step, link: { ...link, on: false, stopped: reply.r }, fault: reply.r };
     case "bad":
       return { ...step, fault: "bad", halt: true };
+    case "login":
+      // Nothing was written, after a second try with a fresh token. The link stays on and every ball is kept here:
+      // sending waits for the scorer to log in again.
+      return { ...step, fault: "login", halt: true };
     case "busy":
       // The site-wide cap on new links, not this network's doing: retry like a 5xx, and say why.
       return { ...step, wait: retryDelay(fails), fails: fails + 1, fault: "busy" };
@@ -278,8 +291,10 @@ export type LiveIo = {
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (t: unknown) => void;
   online: () => boolean;
-  /** Rejects on a network error or timeout. */
-  request: (method: "POST" | "PUT" | "DELETE", url: string, body: string | null, keepalive: boolean) => Promise<{ status: number; body: unknown }>;
+  /** Rejects on a network error or timeout. token: this device's sign-in, sent as Authorization: Bearer (null: none). */
+  request: (method: "POST" | "PUT" | "DELETE", url: string, body: string | null, keepalive: boolean, token?: string | null) => Promise<{ status: number; body: unknown }>;
+  /** This device's sign-in, read fresh for each mint and send. Left out: none (no sign-in is sent). */
+  token?: () => Promise<LiveToken>;
   links: () => Record<string, LiveLinkRecord>;
   saveLink: (id: string, rec: LiveLinkRecord | null) => void;
   /** The match as stored now. */
@@ -337,13 +352,47 @@ export function createLiveSync(io: LiveIo) {
     r.timer = null;
   };
 
-  const call = async (method: "PUT" | "DELETE", code: string, body: string, keepalive: boolean): Promise<Reply> => {
+  const call = async (method: "PUT" | "DELETE", code: string, body: string, keepalive: boolean, token: string | null = null): Promise<Reply> => {
     try {
-      const res = await io.request(method, `/api/live/${code}`, body, keepalive);
+      const res = await io.request(method, `/api/live/${code}`, body, keepalive, token);
       return readReply(res.status, res.body);
     } catch {
       return { r: "network" };
     }
+  };
+
+  /** The last token a send carried: a flush on pagehide has no time to ask for one. */
+  let lastToken: string | null = null;
+  const freshToken = async (): Promise<LiveToken> => {
+    let t: LiveToken;
+    try {
+      t = io.token ? await io.token() : { none: true };
+    } catch {
+      t = { unknown: true };
+    }
+    if ("token" in t) lastToken = t.token;
+    else if ("none" in t) lastToken = null;
+    return t;
+  };
+
+  /**
+   * A PUT with this device's sign-in. A login answer is tried once more
+   * with a token read again (the old one may have run out on the way);
+   * signed out, or on pagehide, there is nothing better to send. A flush
+   * takes the last token as it is, so it leaves before the page is
+   * frozen; without io.token nothing is awaited either, so the request
+   * goes out in this tick.
+   */
+  const sendPut = async (code: string, body: string, keepalive: boolean, unloading: boolean): Promise<Reply> => {
+    const first: LiveToken = !io.token ? { none: true } : keepalive && lastToken ? { token: lastToken } : unloading ? { none: true } : await freshToken();
+    if ("unknown" in first) return { r: "unavailable" };
+    const reply = await call("PUT", code, body, keepalive, "token" in first ? first.token : null);
+    if (reply.r !== "login" || unloading || !("token" in first)) return reply;
+    // Past the route's gap between two writes to one link, which counts the refused one: sooner would come back slow.
+    await new Promise<void>((resolve) => io.setTimer(resolve, MIN_GAP_MS));
+    const again = await freshToken();
+    if ("unknown" in again) return { r: "unavailable" };
+    return "token" in again ? call("PUT", code, body, keepalive, again.token) : reply;
   };
 
   /** Send the link's latest rev if it has one, now or once the throttle, gap or backoff allows. now: a lifecycle event, skip the throttle and backoff. */
@@ -367,7 +416,7 @@ export function createLiveSync(io: LiveIo) {
     if (match) put(id, link, putBody(link, match), false);
   };
 
-  const put = (id: string, link: LiveLinkRecord, body: string, keepalive: boolean) => {
+  const put = (id: string, link: LiveLinkRecord, body: string, keepalive: boolean, unloading = false) => {
     const r = run(id);
     const own = !r.busy;
     const shape = r.shape;
@@ -378,7 +427,7 @@ export function createLiveSync(io: LiveIo) {
     }
     if (keepalive) keepaliveOut = true;
     io.emit();
-    const out = call("PUT", link.code, body, keepalive).then((reply) => {
+    const out = sendPut(link.code, body, keepalive, unloading).then((reply) => {
       if (keepalive) keepaliveOut = false;
       if (own) {
         r.busy = false;
@@ -447,7 +496,7 @@ export function createLiveSync(io: LiveIo) {
     const body = putBody(link, match);
     if (!keepaliveAllowed({ link, inFlightRev: r.inFlightRev, busy: keepaliveOut, bytes: byteLength(body), unloading })) return;
     cancel(r);
-    put(id, link, body, true);
+    put(id, link, body, true, unloading);
   };
 
   const api = {
@@ -478,12 +527,17 @@ export function createLiveSync(io: LiveIo) {
       io.emit();
       let fault: LiveFault | null = null;
       try {
-        const res = await io.request("POST", "/api/live/new", null, false);
-        const got = readNew(res.status, res.body);
-        if ("code" in got) {
-          const t = io.now();
-          io.saveLink(id, { code: got.code, secret: io.secret(), on: true, rev: nextRev(0, t), sentRev: 0, createdAt: t });
-        } else fault = got.fault;
+        // The code needs the sign-in too. One that can't be read now is not "logged out": try again.
+        const t: LiveToken = io.token ? await freshToken() : { none: true };
+        if ("unknown" in t) fault = io.online() ? "unavailable" : "offline";
+        else {
+          const res = await io.request("POST", "/api/live/new", null, false, "token" in t ? t.token : null);
+          const got = readNew(res.status, res.body);
+          if ("code" in got) {
+            const at = io.now();
+            io.saveLink(id, { code: got.code, secret: io.secret(), on: true, rev: nextRev(0, at), sentRev: 0, createdAt: at });
+          } else fault = got.fault;
+        }
       } catch {
         fault = "offline";
       }
@@ -523,6 +577,15 @@ export function createLiveSync(io: LiveIo) {
       io.emit();
       if (!done) pump(id);
       return done;
+    },
+
+    /** Logged in again (or back from the login): a link waiting for that sends at once. Nothing else that stopped sending starts again. */
+    resume(id: string) {
+      const r = run(id);
+      if (r.fault !== "login") return;
+      Object.assign(r, { halted: false, fault: null, fails: 0, retryAt: 0 });
+      pump(id, true);
+      io.emit();
     },
 
     /** The same link for the next match: followers move over. false if from has no live link. */
@@ -608,13 +671,16 @@ const browserIo: Omit<LiveIo, "emit" | "match"> = {
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
   online: () => navigator.onLine !== false,
-  request: async (method, url, body, keepalive) => {
+  request: async (method, url, body, keepalive, token) => {
+    const headers: Record<string, string> = {};
+    if (body !== null) headers["Content-Type"] = "application/json";
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(url, {
       method,
       body,
       keepalive,
       cache: "no-store",
-      headers: body === null ? undefined : { "Content-Type": "application/json" },
+      headers,
       signal: timeoutSignal(LIVE_SEND_TIMEOUT_MS),
     });
     return { status: res.status, body: await res.json().catch(() => null) };
@@ -629,10 +695,11 @@ const browserIo: Omit<LiveIo, "emit" | "match"> = {
  * scorer's loadMatch, or the Live Scoreboard's board loader (which
  * stamps sentAt). Passed in, so neither tool's bundle loads the other's
  * engine. It runs right before each PUT body is
- * built, retries and keepalive flushes included.
+ * built, retries and keepalive flushes included. token reads this
+ * device's sign-in (the tools pass liveToken, ./liveToken.ts).
  */
-export function browserIoFor(load: (id: string) => unknown): Omit<LiveIo, "emit"> {
-  return { ...browserIo, match: load };
+export function browserIoFor(load: (id: string) => unknown, token?: () => Promise<LiveToken>): Omit<LiveIo, "emit"> {
+  return { ...browserIo, match: load, token };
 }
 
 const NO_LINKS: LiveSnapshot = { links: {}, net: {}, at: 0 };
@@ -641,17 +708,19 @@ const NO_LINKS: LiveSnapshot = { links: {}, net: {}, at: 0 };
  * Live links for LiveScorer and LiveScoreboard, which stay mounted while
  * the scorer opens and closes. Off (enabled false): no listeners and no
  * requests. opts.load reads a match by id for sending (the cricket
- * scorer's loadMatch, or the board loader); it is read once, at mount, so an inline opts object does
- * not rebuild the sync on every render.
+ * scorer's loadMatch, or the board loader), opts.token this device's
+ * sign-in for each send; both are read once, at mount, so an inline opts
+ * object does not rebuild the sync on every render.
  */
-export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unknown }) {
+export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unknown; token?: () => Promise<LiveToken> }) {
   const [snap, setSnap] = useState<LiveSnapshot>(NO_LINKS);
   const ref = useRef<LiveSync | null>(null);
   const [load] = useState(() => opts.load);
+  const [token] = useState(() => opts.token);
 
   useEffect(() => {
     if (!enabled) return;
-    const sync: LiveSync = createLiveSync({ ...browserIoFor(load), emit: () => setSnap(sync.snapshot()) });
+    const sync: LiveSync = createLiveSync({ ...browserIoFor(load, token), emit: () => setSnap(sync.snapshot()) });
     ref.current = sync;
     const wake = () => sync.wake();
     const onVisibility = () => (document.visibilityState === "hidden" ? sync.flushAll(false) : sync.wake());
@@ -677,7 +746,7 @@ export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unkn
       sync.dispose();
       ref.current = null;
     };
-  }, [enabled, load]);
+  }, [enabled, load, token]);
 
   // A link closes LIVE_IDLE_CLOSE_MS after the server last took a write, with no answer to say so: show it then (idleAt).
   useEffect(() => {
@@ -698,6 +767,8 @@ export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unkn
     changed: (id: string, view: LiveShape) => ref.current?.changed(id, view),
     start: async (id: string): Promise<LiveFault | null> => (ref.current ? ref.current.start(id) : "unavailable"),
     stop: async (id: string): Promise<boolean> => (ref.current ? ref.current.stop(id) : false),
+    /** Logged in again: a link that waits for that sends at once. */
+    resume: (id: string) => ref.current?.resume(id),
     move: (from: string, to: string): boolean => ref.current?.move(from, to) ?? false,
     flush: (id: string) => ref.current?.flush(id),
     remove: (id: string) => ref.current?.remove(id),

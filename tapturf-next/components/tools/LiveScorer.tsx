@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ImageIcon, Link2, Play, Plus, Trash2 } from "lucide-react";
+import { Check, ImageIcon, Link2, LogIn, Play, Plus, Trash2 } from "lucide-react";
 import { derive, toScorecard, type Match, type MatchView } from "@/lib/cricket/scoring";
 import { trackTool } from "@/lib/analytics/tools";
 import { START_CODE_WAIT_MS, within } from "@/lib/tools/usage";
@@ -17,6 +17,7 @@ import { canKeepLink, linkUrl, readReminder, shortUrl, useLiveSync, type LiveInf
 import { useWatchers } from "@/components/live/useWatchers";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
+import { liveToken } from "./scorer/liveToken";
 
 /** A live match touched within this long is reopened straight into scoring on reload. */
 const RESUME_MS = 12 * 60 * 60 * 1000;
@@ -53,7 +54,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const [prefill, setPrefill] = useState({ venue: "", live: false });
   /** The link last copied from the page card: one turned on since shows "Copy link" again. */
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  const live = useLiveSync(liveLinks, { load: loadMatch });
+  const live = useLiveSync(liveLinks, { load: loadMatch, token: liveToken });
   const auth = useAuth();
   /** Back from the live link login (?live=1): the match whose link to turn on once auth has settled. */
   const loginAsk = useRef<string | null>(null);
@@ -168,11 +169,22 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
     live.changed(m.id, view);
   };
 
+  const loginForLink = (id: string) => {
+    trackTool("tool_action", TOOL, { action: "live_link_login" });
+    // Looks signed in here, but the server turned that sign-in down: the login page must not bounce straight back.
+    askLiveLogin("cricket", id, undefined, !!auth.user);
+  };
+
   const startLink = async (id: string) => {
     // Sharing needs a login (Google first, then phone); scoring does not. The match is saved, so the trip loses nothing.
-    if (!auth.user) {
-      trackTool("tool_action", TOOL, { action: "live_link_login" });
-      askLiveLogin("cricket", id);
+    // The server asking for one again (fault login) goes the same way.
+    if (!auth.user || live.info(id).fault === "login") {
+      loginForLink(id);
+      return;
+    }
+    // Already on (back from logging in again): it sends what waited.
+    if (live.info(id).on) {
+      live.resume(id);
       return;
     }
     const fault = await live.start(id);
@@ -186,7 +198,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   /** inPlay: the match is not finished (LiveInfo's closed). */
   const liveFor = (id: string, inPlay: boolean): ShareLive => {
     const info = live.info(id, inPlay);
-    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user };
+    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user || info.fault === "login", onLogin: () => loginForLink(id) };
   };
 
   const onChange = (m: Match) => {
@@ -282,6 +294,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const cardLink = liveLinks && match ? live.info(match.id, inPlay) : null;
   const cardUrl = cardLink ? urlOf(cardLink) : null;
   const copied = cardUrl !== null && copiedUrl === cardUrl;
+  const cardPaused = cardLink?.fault === "login";
   const keepFrom = view && canKeepLink(cardLink?.link, now) ? `${view.setup.teamA} vs ${view.setup.teamB}` : null;
 
   const copyLink = async (url: string) => {
@@ -306,14 +319,21 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
           {inPlay && view.innings.length > 1 && <p className="text-[14px] text-white/70">{view.innings[0].summary}</p>}
           {cardUrl && (
             <div className="mt-3 flex items-center gap-2 rounded-2xl bg-white/10 pl-3 pr-1 py-1">
-              <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" aria-hidden />
+              {/* Paused while the server wants a login again (fault login): followers see the score up to here until then. */}
+              <span className={`w-2 h-2 rounded-full shrink-0 ${cardPaused ? "bg-amber-400" : "bg-green-400"}`} aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-bold">Live link on</span>
+                <span className="block text-[14px] font-bold">{cardPaused ? "Live link paused, log in again" : "Live link on"}</span>
                 <span className="block text-[12px] text-white/70 truncate">{shortUrl(cardUrl)}</span>
               </span>
-              <button type="button" onClick={() => copyLink(cardUrl)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-white/15 text-[14px] font-bold hover:bg-white/25">
-                {copied ? <Check className="w-4 h-4" aria-hidden /> : <Link2 className="w-4 h-4" aria-hidden />} {copied ? "Copied" : "Copy link"}
-              </button>
+              {cardPaused ? (
+                <button type="button" onClick={() => loginForLink(match.id)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-amber-300 text-amber-950 text-[14px] font-bold hover:bg-amber-200">
+                  <LogIn className="w-4 h-4" aria-hidden /> Log in
+                </button>
+              ) : (
+                <button type="button" onClick={() => copyLink(cardUrl)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-white/15 text-[14px] font-bold hover:bg-white/25">
+                  {copied ? <Check className="w-4 h-4" aria-hidden /> : <Link2 className="w-4 h-4" aria-hidden />} {copied ? "Copied" : "Copy link"}
+                </button>
+              )}
               <span className="sr-only" aria-live="polite">
                 {copied ? "Link copied" : ""}
               </span>

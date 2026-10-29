@@ -46,6 +46,8 @@ function LoginInner() {
   // From a live score the heading and the line under it change. live: turning on a link; follow: keeping up with one.
   const via = params?.get("via");
   const live = via === "live" || via === "follow";
+  // A live link whose sign-in the server no longer takes (components/tools/scorer/liveLogin.ts): log in again, even if this device looks signed in.
+  const again = via === "live" && params?.get("again") === "1";
 
   const [googleBusy, setGoogleBusy] = useState(false);
   // One Google start at a time: a second tap would write a new verifier over the first.
@@ -62,11 +64,12 @@ function LoginInner() {
 
   // Already signed in? Bounce back to `next` immediately. Not with an account message: it is
   // about the Google account just tried, and a phone login kept on this device must not hide it.
+  // Nor when asked to log in again: that sign-in is the one the server turned down.
   useEffect(() => {
-    if (!authLoading && user && !accountWhy) {
+    if (!authLoading && user && !accountWhy && !again) {
       router.replace(safeNext(nextParam));
     }
-  }, [authLoading, user, accountWhy, nextParam, router]);
+  }, [authLoading, user, accountWhy, again, nextParam, router]);
 
   /** "Log in with your phone number": to the phone form, keyboard up. */
   const focusPhone = () => {
@@ -200,12 +203,14 @@ function LoginInner() {
 
         {/* Title */}
         <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-[0.95] mb-2">
-          {via === "follow" ? "Log in to follow the live score" : live ? "Log in to share a live link" : "Sign in"}
+          {via === "follow" ? "Log in to follow the live score" : again ? "Log in again to keep your live link going" : live ? "Log in to share a live link" : "Sign in"}
         </h1>
         <p className="text-primary-600 text-[15px] mb-8">
           {via === "follow"
             ? "Free, and quick with Google or your phone. You come straight back to the score."
-            : live
+            : again
+              ? "Your match is saved on this phone. Log in and you come straight back to it, and the link catches up."
+              : live
               ? "Your match stays saved on this phone. You log in once; friends log in on their own phones to follow."
               : "Book turfs. Host games. Find a squad."}
         </p>

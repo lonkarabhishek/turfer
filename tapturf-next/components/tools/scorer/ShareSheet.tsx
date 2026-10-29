@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Link2, Loader2, MessageCircle, Radio, Share2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2, LogIn, MessageCircle, Radio, Share2, X } from "lucide-react";
 import { shortUrl, type LiveFault, type LiveInfo } from "./live";
 import { Sheet } from "./ui";
 
@@ -22,6 +22,8 @@ export type ShareLive = {
   onStop: () => void;
   /** Logged out: Turn on live link goes to the login first. */
   loginFirst?: boolean;
+  /** The server asked for a login again (fault login): off to it, back to this match, and the link carries on. */
+  onLogin?: () => void;
 };
 
 /** What the link carries, in the sport's own words. */
@@ -47,6 +49,7 @@ export const LIVE_FAULT: Record<LiveFault, string> = {
   gone: "This live link was turned off or has expired. Turn on a new one to keep sharing.",
   closed: "This live link closed after 2 hours without an update. Start a new link to share again.",
   bad: "The live link could not take this update. Turn it off and on again.",
+  login: "Log in again to keep your live link updating. Your match is saved here, so nothing is lost.",
   not_off: "Could not turn it off. Check your internet and try again.",
 };
 
@@ -55,6 +58,8 @@ export function faultText(info: LiveInfo): string | null {
   // Still on: the server took writes for this link and keeps showing them, so it stays until turned off.
   if (info.on && info.fault === "limit") return "This live link has reached its limit. Turn it off, then turn on a new one to keep sharing.";
   if (info.on && info.fault === "too_big") return "This match is too long to share live now. Friends see the score up to here until you turn the link off.";
+  // Not on: the server would not give a link, so there is nothing to keep updating yet.
+  if (!info.on && info.fault === "login") return "Log in again to turn on the live link. Your match is saved here.";
   return LIVE_FAULT[info.fault];
 }
 
@@ -77,6 +82,30 @@ export function PrivacyNote() {
         Privacy
       </a>
     </p>
+  );
+}
+
+/**
+ * Over the scoring pad while the server wants a login again (fault
+ * login): scoring goes on, the link waits. Once per screen; the LIVE pill
+ * and the share sheet still say it after it is closed. behind: a toast
+ * has the spot for now. inline: in the footer's own flow, taking room
+ * rather than covering what is above it (the racquet halves, tap zones to
+ * their bottom edge); it stays put while a toast floats above it.
+ */
+export function LiveLoginNote({ live, behind = false, inline = false }: { live?: ShareLive; behind?: boolean; inline?: boolean }) {
+  const [closed, setClosed] = useState(false);
+  if (!live || live.info.fault !== "login" || !live.onLogin || closed || (behind && !inline)) return null;
+  return (
+    <div role="status" className={`${inline ? "mb-2" : "absolute left-3 right-3 bottom-full mb-2 z-10 shadow-elevated"} rounded-2xl pl-4 pr-2 py-2 min-h-14 flex items-center gap-2 bg-amber-300 text-amber-950`}>
+      <span className="flex-1 min-w-0 text-[14px] font-semibold leading-snug">{live.info.on ? "Live link paused. Log in again to keep it updating." : "Log in again to turn on the live link."}</span>
+      <button type="button" onClick={live.onLogin} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-amber-950 text-white text-[14px] font-bold">
+        <LogIn className="w-4 h-4" aria-hidden /> Log in
+      </button>
+      <button type="button" onClick={() => setClosed(true)} aria-label="Dismiss" className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full hover:bg-amber-950/10">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
   );
 }
 
@@ -162,7 +191,7 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
         <button type="button" onClick={live.onStart} className="press-tight mt-3 w-full inline-flex items-center justify-center gap-2 h-14 rounded-full bg-primary-900 text-white text-[17px] font-bold hover:bg-primary-800">
           <Radio className="w-5 h-5" aria-hidden /> {live.loginFirst ? "Log in and turn on live link" : "Turn on live link"}
         </button>
-        {live.loginFirst && <p className="mt-2 text-[13px] leading-snug text-primary-500">Log in with Google or your phone to share. Your match is saved on this phone.</p>}
+        {live.loginFirst && info.fault !== "login" && <p className="mt-2 text-[13px] leading-snug text-primary-500">Log in with Google or your phone to share. Your match is saved on this phone.</p>}
         <PrivacyNote />
       </section>
     );
@@ -201,6 +230,11 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
         <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${status ? status.dot : "bg-red-500"}`} aria-hidden />
         <span className={status ? "text-primary-700" : "font-semibold text-red-700"}>{status ? status.text : (fault ?? "Live link stopped.")}</span>
       </p>
+      {info.fault === "login" && live.onLogin && (
+        <button type="button" onClick={live.onLogin} className="press-tight mt-2 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full bg-primary-900 text-white text-[15px] font-bold hover:bg-primary-800">
+          <LogIn className="w-4 h-4" aria-hidden /> Log in again
+        </button>
+      )}
       {info.fault === "not_off" && (
         <p role="alert" className="mt-2 text-[14px] font-semibold leading-snug text-red-700">
           {fault}

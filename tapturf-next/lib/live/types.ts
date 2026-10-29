@@ -11,7 +11,9 @@
  * kind "board"); lib/live/match.ts sanitizeLive reads either. Followers
  * open /live/<code> and poll GET /api/live/<code>, which Vercel's CDN
  * and the Next data cache answer, so the database sees about one read
- * per write however many people follow.
+ * per write however many people follow. The code and every send carry
+ * the scorer's sign-in (Authorization: Bearer), which the server checks
+ * (lib/live/gate.ts); a stop needs only the secret.
  */
 
 /** 8 random base36 characters, then 4 that tag them with the server key, so made-up codes are refused without a lookup. */
@@ -77,7 +79,7 @@ export type LiveGetResponse = {
   updatedAt: string | null;
 };
 
-/** POST /api/live/new response. */
+/** POST /api/live/new response: login (401) without a sign-in the server verifies, limit (429), unavailable (503). */
 export type LiveNewResponse = { code: string } | { error: LiveError };
 
 /** PUT /api/live/<code> body. match is the scorer's whole Match, or Board with sentAt set at send. */
@@ -100,9 +102,11 @@ export type LiveStopBody = { secret: string };
  * busy (503)      too many new links site-wide this hour (not this network's doing): back off and retry, keep the link on.
  * too_big (413)   the match is too long to share live: stop, say so.
  * bad (400)       malformed request: stop, report.
- * unavailable (503) not configured, a wrong write key or the database is down: back off and retry.
+ * login (401)     no sign-in, or one that is not valid now or opens no account; nothing was written: get a fresh
+ *                 token and try once more, then keep scoring here, stop sending and ask to log in again.
+ * unavailable (503) not configured, a wrong write key, the database is down or sign-ins cannot be checked right now: back off and retry.
  */
-export type LiveError = "stale" | "slow" | "forbidden" | "gone" | "limit" | "busy" | "too_big" | "bad" | "unavailable";
+export type LiveError = "stale" | "slow" | "forbidden" | "gone" | "limit" | "busy" | "too_big" | "bad" | "login" | "unavailable";
 
 export type LivePutResponse = { ok: true; rev: number } | { error: LiveError; rev?: number; idle?: true };
 

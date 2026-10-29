@@ -6,6 +6,10 @@
  * browser, so nothing typed is lost. The ask is kept in sessionStorage,
  * which survives the trip to Google and back in the same tab. Shared by
  * the Live Cricket Scorer and the Live Scoreboard; no engine imports.
+ * The same trip when the server asks for a login again (a link already
+ * on, its sign-in no longer accepted): again tells /login to show the
+ * login even though this device still looks signed in, and back here the
+ * link sends what waited.
  */
 
 const KEY = "tapturf_live_login_v1";
@@ -15,8 +19,8 @@ const PARAM = "live";
 
 type Ask = { tool: "cricket" | "board"; id: string; at: number };
 
-/** Off to the login, remembering which match's link to turn on after. */
-export function askLiveLogin(tool: Ask["tool"], id: string, now = Date.now()) {
+/** Off to the login, remembering which match's link to turn on (or carry on) after. */
+export function askLiveLogin(tool: Ask["tool"], id: string, now = Date.now(), again = false) {
   try {
     sessionStorage.setItem(KEY, JSON.stringify({ tool, id, at: now } satisfies Ask));
   } catch {
@@ -24,7 +28,7 @@ export function askLiveLogin(tool: Ask["tool"], id: string, now = Date.now()) {
   }
   const url = new URL(window.location.href);
   url.searchParams.set(PARAM, "1");
-  window.location.href = `/login?next=${encodeURIComponent(url.pathname + url.search)}&via=live`;
+  window.location.href = `/login?next=${encodeURIComponent(url.pathname + url.search)}&via=live${again ? "&again=1" : ""}`;
 }
 
 /** Whether this page load is the return from that login, and the query without the marker. */

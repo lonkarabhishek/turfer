@@ -7,6 +7,7 @@ import { trackTool, type ToolEvent } from "@/lib/analytics/tools";
 import { buildBall, chipText, keyHint, plainRuns, runAllowed, smartUndo, stamp, tapClock, vibrate, wallClock, type NbSource } from "./logic";
 import { BallChip } from "./ui";
 import { BatterSheet, BowlerSheet, ConfirmSheet, MoreSheet, OpenersSheet, PlayerSheet, SettingsSheet, ShareSheet, WicketSheet, type MoreAction, type ShareLive } from "./Sheets";
+import { LiveLoginNote } from "./ShareSheet";
 import type { PanelActions } from "./Tabs";
 import { MatchTabs, ScoreHeader, type MatchTab } from "./MatchHeader";
 import { pillTone, type LiveInfo } from "./live";
@@ -58,6 +59,8 @@ function pillLabel(info: LiveInfo): string {
   if (info.state === "synced") return "Live link on, all balls sent";
   if (info.state === "sending") return "Live link on, sending";
   if (info.state === "offline") return "Live link on, offline";
+  // Never turned on (the server would not give a link) is not paused.
+  if (info.fault === "login") return info.on ? "Live link paused, log in again" : "Live link off, log in again";
   return "Live link stopped";
 }
 
@@ -398,7 +401,7 @@ export function ScoringScreen({
 
         {/* Tap pad */}
         <footer className="relative bg-white border-t border-primary-200 px-3 pt-2 lg:col-start-1 lg:row-start-2 lg:self-start lg:rounded-3xl lg:border" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
-          {toast && (
+          {toast ? (
             <div role={toast.tone === "error" ? "alert" : "status"} className={`absolute left-3 right-3 bottom-full mb-2 rounded-2xl px-4 py-3 shadow-elevated flex items-center gap-3 text-[14px] font-semibold ${toast.tone === "error" ? "bg-red-600 text-white" : toast.tone === "warn" ? "bg-amber-300 text-amber-950" : "bg-primary-900 text-white"}`}>
               <span className="flex-1 min-w-0">{toast.text}</span>
               {toast.redo && redo.length > 0 && (
@@ -410,7 +413,8 @@ export function ScoringScreen({
                 <X className="w-4 h-4" />
               </button>
             </div>
-          )}
+          ) : null}
+          <LiveLoginNote live={live} behind={!!toast} />
           <Pad
             view={view}
             armed={armed}

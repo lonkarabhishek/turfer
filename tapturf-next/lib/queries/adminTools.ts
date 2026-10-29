@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { ownerRead } from "@/lib/admin/db";
 import { readAllPages, rowsOf, type Reason, type Section } from "@/lib/admin/section";
+import { toAdminLiveLink, type AdminLiveLink } from "@/lib/admin/live";
 import { summarizeToolUsage, type CountedTool, type LiveRow, type ToolUsage, type UseRow } from "@/lib/tools/usage";
 import type { ToolActivityRow, ToolCountRow, ToolUserRow, WhoFilter } from "@/lib/tools/users";
 import { liveStatusAt } from "@/lib/live/types";
@@ -60,20 +61,7 @@ export const getToolUsage = cache(async (): Promise<ToolUsage> => {
   return summarizeToolUsage(liveRows, useRows);
 });
 
-/** One live scoreboard link, as admin_live_links returns it. */
-export type AdminLiveLink = {
-  code: string;
-  status: string;
-  sport: string | null;
-  team_a: string | null;
-  team_b: string | null;
-  title: string | null;
-  venue: string | null;
-  events: number;
-  writes: number;
-  created_at: string;
-  updated_at: string;
-};
+export type { AdminLiveLink };
 
 export const LIVE_FILTERS = {
   all: "All links",
@@ -93,11 +81,40 @@ export function adminLiveStatus(l: Pick<AdminLiveLink, "status" | "updated_at">,
   return liveStatusAt(l.status, Date.parse(l.updated_at), now);
 }
 
-/** Every live scoreboard link, newest first (admin_live_links, owner only); or why it can't be read. */
+/**
+ * Live links newest first, with who started each (admin_live_links2,
+ * owner only), every one or the first `limit`, leaving out links with
+ * fewer than `minWrites` writes. Before 20261029_live_link_starts.sql is
+ * applied that read is not there: the links come from admin_live_links,
+ * every starter "Not recorded", filtered here from a few more rows.
+ */
+async function readLiveLinks(limit: number | null, minWrites = 0): Promise<Section<AdminLiveLink[]>> {
+  const read = (fn: string, args: Record<string, unknown>, n: number | null) =>
+    ownerRead(fn, async ({ supabase, token }, signal): Promise<Record<string, unknown>[]> =>
+      n === null
+        ? readAllPages<Record<string, unknown>>((from, to) => supabase.rpc(fn, { p_firebase_token: token, ...args }).range(from, to).abortSignal(signal), fn)
+        : rowsOf<Record<string, unknown>>(await supabase.rpc(fn, { p_firebase_token: token, ...args }).range(0, n - 1).abortSignal(signal), fn),
+    );
+  let s = await read("admin_live_links2", minWrites ? { p_min_writes: minWrites } : {}, limit);
+  if (!s.ok && s.reason === "not_set_up") s = await read("admin_live_links", {}, limit === null || !minWrites ? limit : limit + 20);
+  if (!s.ok) return s;
+  const links = s.data.map(toAdminLiveLink).filter((l) => l.writes >= minWrites);
+  return { ok: true, data: limit === null ? links : links.slice(0, limit) };
+}
+
+/** Every live scoreboard link, newest first, with its starter; or why it can't be read. */
 export async function getAdminLiveLinks(filter: LiveFilter = "all", now = Date.now()): Promise<Section<AdminLiveLink[]>> {
-  const s = await ownerRead("admin_live_links", ({ supabase, token }, signal) =>
-    readAllPages<AdminLiveLink>((from, to) => supabase.rpc("admin_live_links", { p_firebase_token: token }).range(from, to).abortSignal(signal), "admin_live_links"),
-  );
+  const s = await readLiveLinks(null);
   if (!s.ok || filter === "all") return s;
   return { ok: true, data: s.data.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : adminLiveStatus(r, now) === filter)) };
 }
+
+/**
+ * The newest live link that went live and who started it, for the admin
+ * home (null: none yet). A stop marker (turned off before its first send,
+ * no write, no starter) never stands in for it.
+ */
+export const getLatestLiveLink = cache(async (): Promise<Section<AdminLiveLink | null>> => {
+  const s = await readLiveLinks(1, 1);
+  return s.ok ? { ok: true, data: s.data[0] ?? null } : s;
+});
