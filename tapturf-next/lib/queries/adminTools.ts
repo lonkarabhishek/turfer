@@ -3,6 +3,7 @@ import { ownerRead } from "@/lib/admin/db";
 import { readAllPages, rowsOf, type Reason, type Section } from "@/lib/admin/section";
 import { summarizeToolUsage, type CountedTool, type LiveRow, type ToolUsage, type UseRow } from "@/lib/tools/usage";
 import type { ToolActivityRow, ToolCountRow, ToolUserRow, WhoFilter } from "@/lib/tools/users";
+import { liveStatusAt } from "@/lib/live/types";
 
 export type { ToolUsage };
 
@@ -77,16 +78,26 @@ export type AdminLiveLink = {
 export const LIVE_FILTERS = {
   all: "All links",
   live: "Live now",
+  closed: "Closed (idle)",
   done: "Finished",
   stopped: "Stopped or expired",
 } as const;
 export type LiveFilter = keyof typeof LIVE_FILTERS;
 
+/**
+ * A link's status as the admin shows it (liveStatusAt): a live one with no
+ * update for 2 hours is "closed", not live, though the database still says
+ * live (20261029_live_idle_close.sql works it out the same way).
+ */
+export function adminLiveStatus(l: Pick<AdminLiveLink, "status" | "updated_at">, now: number): string {
+  return liveStatusAt(l.status, Date.parse(l.updated_at), now);
+}
+
 /** Every live scoreboard link, newest first (admin_live_links, owner only); or why it can't be read. */
-export async function getAdminLiveLinks(filter: LiveFilter = "all"): Promise<Section<AdminLiveLink[]>> {
+export async function getAdminLiveLinks(filter: LiveFilter = "all", now = Date.now()): Promise<Section<AdminLiveLink[]>> {
   const s = await ownerRead("admin_live_links", ({ supabase, token }, signal) =>
     readAllPages<AdminLiveLink>((from, to) => supabase.rpc("admin_live_links", { p_firebase_token: token }).range(from, to).abortSignal(signal), "admin_live_links"),
   );
   if (!s.ok || filter === "all") return s;
-  return { ok: true, data: s.data.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : r.status === filter)) };
+  return { ok: true, data: s.data.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : adminLiveStatus(r, now) === filter)) };
 }

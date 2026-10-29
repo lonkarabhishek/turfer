@@ -1,4 +1,4 @@
-import { LIVE_CODE_RE, LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
+import { LIVE_CODE_RE, LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_IDLE_CLOSE_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
 import type { Board, BoardView } from "../../lib/board/types";
 
 /**
@@ -21,8 +21,12 @@ export const WAIT_SLOW_POLL_MS = 60_000;
 export const FAIL_BACKOFF_MS = [6_000, 12_000, 30_000] as const;
 /** The live dot goes after this long without an update. */
 export const FRESH_MS = 2 * 60_000;
-/** A live match this quiet is called stopped and polled only when the page is looked at again. */
-export const QUIET_MS = 3 * 60 * 60_000;
+/**
+ * A live match this quiet is closed (LIVE_IDLE_CLOSE_MS, the server's rule:
+ * it takes no more updates): called stopped, with when, and polled only when
+ * the page is looked at again.
+ */
+export const QUIET_MS = LIVE_IDLE_CLOSE_MS;
 
 const STATUSES: readonly FollowStatus[] = ["waiting", "live", "done", "stopped", "expired"];
 const FINAL: readonly FollowStatus[] = ["stopped", "expired"];
@@ -74,7 +78,7 @@ export function nextPoll(status: FollowStatus, age: number | null, waited: numbe
       // The last ball is often undone, so a finished match is watched a while.
       return age !== null && age >= LIVE_DONE_POLL_FOR_MS ? null : LIVE_DONE_POLL_MS;
     case "live":
-      return age !== null && age > QUIET_MS ? null : LIVE_POLL_MS;
+      return age !== null && age >= QUIET_MS ? null : LIVE_POLL_MS;
   }
 }
 
@@ -91,6 +95,28 @@ export function span(ms: number): string {
 
 export function ago(ms: number): string {
   return ms < 10_000 ? "just now" : `${span(ms)} ago`;
+}
+
+/** India is UTC+5:30 all year (no daylight saving). */
+const IST_MS = 330 * 60_000;
+const DAY_MS = 86_400_000;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/**
+ * When at was, in India, as seen at now (both ms by the server's clock):
+ * "at 7:41 pm" today, "yesterday at 7:41 pm", else "on Mon 27 Oct at
+ * 7:41 pm". The same on the server and in any browser, whatever its time
+ * zone, so the server render and hydration agree.
+ */
+export function istWhen(at: number, now: number): string {
+  const d = new Date(at + IST_MS);
+  const h = d.getUTCHours();
+  const time = `${((h + 11) % 12) + 1}:${String(d.getUTCMinutes()).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+  const days = Math.floor((now + IST_MS) / DAY_MS) - Math.floor((at + IST_MS) / DAY_MS);
+  if (days <= 0) return `at ${time}`;
+  if (days === 1) return `yesterday at ${time}`;
+  return `on ${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} at ${time}`;
 }
 
 /** A gap in a live match where no update is due: the innings break, or before the first ball of an innings. */
@@ -161,20 +187,23 @@ export type Freshness = { tone: "live" | "paused" | "quiet" | "stopped" | "done"
  * The line under the score for a live or finished match. age is by the
  * server's clock; pause is the planned gap in words (pauseText,
  * boardPause), or null. In a pause the scorer has nothing to send, so a
- * quiet spell there is not called offline; past QUIET_MS it is called
- * stopped all the same.
+ * quiet spell there is not called offline. At QUIET_MS the link is closed
+ * and called stopped all the same, at the time of its last update
+ * (updatedAt, ms by the server's clock) when given. A finished match keeps
+ * its result line however old.
  */
-export function freshness(status: Extract<LiveStatus, "live" | "done">, age: number, pause: string | null = null): Freshness {
+export function freshness(status: Extract<LiveStatus, "live" | "done">, age: number, pause: string | null = null, updatedAt: number | null = null): Freshness {
   if (status === "done") return { tone: "done", text: `Final score. Last update ${ago(age)}.` };
   if (age < FRESH_MS) return { tone: "live", text: `Updated ${ago(age)}` };
-  if (age <= QUIET_MS && pause) return { tone: "paused", text: `${pause} Last update ${ago(age)}.` };
-  if (age <= QUIET_MS) return { tone: "quiet", text: `No update for ${span(age)}. The scorer may be offline.` };
-  return { tone: "stopped", text: `This match stopped updating. Last update ${ago(age)}.` };
+  if (age < QUIET_MS && pause) return { tone: "paused", text: `${pause} Last update ${ago(age)}.` };
+  if (age < QUIET_MS) return { tone: "quiet", text: `No update for ${span(age)}. The scorer may be offline.` };
+  const when = updatedAt === null ? `${span(age)} ago` : istWhen(updatedAt, updatedAt + age);
+  return { tone: "stopped", text: `Stopped updating ${when}. This is the last score.` };
 }
 
-/** The LIVE badge: while updates keep coming, or while a running clock explains why none do (hold). */
+/** The LIVE badge: while updates keep coming, or while a running clock explains why none do (hold), until the link closes. */
 export function liveBadgeOn(age: number, hold: boolean): boolean {
-  return age < FRESH_MS || (hold && age <= QUIET_MS);
+  return age < FRESH_MS || (hold && age < QUIET_MS);
 }
 
 /* ------------------------------------------------------------------ */

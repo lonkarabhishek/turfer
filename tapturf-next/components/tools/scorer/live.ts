@@ -4,6 +4,7 @@ import type { MatchView } from "../../../lib/cricket/scoring";
 import { BOARD_SPORTS, type BoardShape, type BoardSport } from "../../../lib/board/types";
 import {
   LIVE_CODE_RE,
+  LIVE_IDLE_CLOSE_MS,
   LIVE_KEEPALIVE_MAX_BYTES,
   LIVE_LINKS_KEY,
   LIVE_RETRY_MS,
@@ -33,12 +34,15 @@ import { loadLinks, saveLink } from "./links";
  * that to fetch, localStorage and the page events.
  */
 
-/** Why a link is not live, or why the last try to change it failed. Shown in the share sheet. */
-export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "bad" | "not_off";
+/** Why a link is not live, or why the last try to change it failed. Shown in the share sheet. closed: gone after 2 hours without an update. */
+export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "closed" | "bad" | "not_off";
 
 /** The server takes one write per link every 500 ms; a send sooner after the last answer comes back slow. */
 const MIN_GAP_MS = 600;
-/** Offer a link to the next match only within a day: the server takes writes for 36 hours from its first. */
+/**
+ * Offer a link to the next match only within a day: the server takes writes
+ * for 36 hours from its first, and none after LIVE_IDLE_CLOSE_MS without one.
+ */
 const KEEP_LINK_MS = 24 * 60 * 60 * 1000;
 
 /* ------------------------------------------------------------------ */
@@ -79,16 +83,17 @@ export function retryDelay(fails: number): number {
   return LIVE_RETRY_MS[Math.min(Math.max(0, fails), LIVE_RETRY_MS.length - 1)];
 }
 
-/** A write's answer: ok, a LiveError, or network when the request never got one. */
-export type Reply = { r: "ok" | LiveError | "network"; rev?: number };
+/** A write's answer: ok, a LiveError, or network when the request never got one. idle: a gone for a link closed after 2 hours without an update. */
+export type Reply = { r: "ok" | LiveError | "network"; rev?: number; idle?: true };
 
 const ERRORS = new Set<string>(["stale", "slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "unavailable"] satisfies LiveError[]);
 
 /** Read a PUT or DELETE answer. Anything that is not ours (a proxy's page, a 5xx without a body) counts as unavailable. */
 export function readReply(status: number, body: unknown): Reply {
-  const b = (body && typeof body === "object" ? body : {}) as { ok?: unknown; error?: unknown; rev?: unknown };
+  const b = (body && typeof body === "object" ? body : {}) as { ok?: unknown; error?: unknown; rev?: unknown; idle?: unknown };
   const rev = typeof b.rev === "number" && Number.isSafeInteger(b.rev) && b.rev >= 0 ? b.rev : undefined;
   if (status >= 200 && status < 300 && b.ok === true) return { r: "ok", rev };
+  if (b.error === "gone" && b.idle === true) return { r: "gone", rev, idle: true };
   if (typeof b.error === "string" && ERRORS.has(b.error)) return { r: b.error as LiveError, rev };
   return { r: "unavailable" };
 }
@@ -123,8 +128,11 @@ export function handleResult(link: LiveLinkRecord, sent: number, reply: Reply, f
     case "slow":
       return { ...step, wait: LIVE_SEND_EVERY_MS / 2, fails };
     case "forbidden":
-    case "gone":
-      return { ...step, link: { ...link, on: false, stopped: reply.r }, fault: reply.r };
+    case "gone": {
+      // Closed after 2 hours without an update: said so, and the scorer turns on a new link as for any gone.
+      const why = reply.r === "gone" && reply.idle ? "closed" : reply.r;
+      return { ...step, link: { ...link, on: false, stopped: why }, fault: why };
+    }
     case "limit":
     case "too_big":
       // Once the server has taken a write it keeps showing it: stay on, so the link can still be turned off, but stop sending.
@@ -180,9 +188,18 @@ export function pillTone(info: LiveInfo): "green" | "amber" | "red" | null {
   return info.state === "error" ? "red" : null;
 }
 
-/** Whether Setup offers to move this link to the next match. */
+/**
+ * Whether the link has gone LIVE_IDLE_CLOSE_MS without an accepted write, by
+ * this phone's clock: sentRev is the time of the last edit the server took
+ * (nextRev). A hint only; the server's gone (idle) is what turns it off.
+ */
+export function idleHere(link: LiveLinkRecord, now: number): boolean {
+  return link.sentRev > 0 && now - link.sentRev >= LIVE_IDLE_CLOSE_MS;
+}
+
+/** Whether Setup offers to move this link to the next match: not once it has closed for want of updates. */
 export function canKeepLink(link: LiveLinkRecord | null | undefined, now: number): boolean {
-  return sendable(link) && now - link.createdAt < KEEP_LINK_MS;
+  return sendable(link) && now - link.createdAt < KEEP_LINK_MS && !idleHere(link, now);
 }
 
 export function makeSecret(bytes: Uint8Array): string {

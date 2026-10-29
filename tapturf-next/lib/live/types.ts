@@ -41,7 +41,30 @@ export const LIVE_DONE_POLL_FOR_MS = 30 * 60_000;
 /** A follower poll is given up after this long. */
 export const LIVE_POLL_TIMEOUT_MS = 8_000;
 
+/**
+ * A live or finished link whose last accepted update is this old or more
+ * is closed: the server takes no more writes (live_match_put answers gone
+ * with idle, supabase/migrations/20261029_live_idle_close.sql, which has
+ * the same 2 hours), followers keep its last score, and the scorer can
+ * turn on a new link. Worked out from updated_at, never stored.
+ */
+export const LIVE_IDLE_CLOSE_MS = 2 * 60 * 60_000;
+
 export type LiveStatus = "live" | "done" | "stopped" | "expired";
+
+/** Whether a link has closed for want of updates: live or done, last updated LIVE_IDLE_CLOSE_MS or more before now, both by one clock (ms). */
+export function liveIdleClosed(status: string, updatedAt: number | null, now: number): boolean {
+  return (status === "live" || status === "done") && updatedAt !== null && Number.isFinite(updatedAt) && now - updatedAt >= LIVE_IDLE_CLOSE_MS;
+}
+
+/**
+ * A link's status as it stands at now, for the admin's list: a live link
+ * closed for want of updates is "closed", which the database never stores
+ * (it still says live). A finished one stays "done", its result kept.
+ */
+export function liveStatusAt(status: string, updatedAt: number | null, now: number): string {
+  return status === "live" && liveIdleClosed(status, updatedAt, now) ? "closed" : status;
+}
 
 /** GET /api/live/<code> body (200). match is sanitised (a Match or a Board); null once stopped or expired. */
 export type LiveGetResponse = {
@@ -69,7 +92,8 @@ export type LiveStopBody = { secret: string };
  * stale (409)     carries the server's rev; set rev = serverRev + 1 and resend the latest local match.
  * slow (429)      retry after LIVE_SEND_EVERY_MS / 2.
  * forbidden (403) this browser's secret is not the link's: turn the link off locally, offer a new one.
- * gone (410)      the link was turned off or expired: turn it off locally.
+ * gone (410)      the link was turned off or expired: turn it off locally. With idle: true it closed
+ *                 after LIVE_IDLE_CLOSE_MS without an update, and the scorer is told so.
  * limit (429)     too many new links from this network (8 an hour, 30 a day), or this link has hit its write cap: stop, say so.
  * busy (503)      too many new links site-wide this hour (not this network's doing): back off and retry, keep the link on.
  * too_big (413)   the match is too long to share live: stop, say so.
@@ -78,7 +102,7 @@ export type LiveStopBody = { secret: string };
  */
 export type LiveError = "stale" | "slow" | "forbidden" | "gone" | "limit" | "busy" | "too_big" | "bad" | "unavailable";
 
-export type LivePutResponse = { ok: true; rev: number } | { error: LiveError; rev?: number };
+export type LivePutResponse = { ok: true; rev: number } | { error: LiveError; rev?: number; idle?: true };
 
 /**
  * The scorer's record of a link, per match id ("m..." cricket, "b..."
@@ -98,8 +122,8 @@ export type LiveLinkRecord = {
   rev: number;
   /** The last rev the server accepted. rev > sentRev means there is something to send. */
   sentRev: number;
-  /** Why the link stopped, for the share sheet. */
-  stopped?: "off" | "gone" | "forbidden" | "limit" | "too_big";
+  /** Why the link stopped, for the share sheet. closed: gone after LIVE_IDLE_CLOSE_MS without an update. */
+  stopped?: "off" | "gone" | "closed" | "forbidden" | "limit" | "too_big";
   createdAt: number;
 };
 

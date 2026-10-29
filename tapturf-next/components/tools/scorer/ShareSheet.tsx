@@ -45,6 +45,7 @@ export const LIVE_FAULT: Record<LiveFault, string> = {
   too_big: "This match is too long to share live.",
   forbidden: "This link was made in another browser, so it cannot be updated here. Turn on a new live link.",
   gone: "This live link was turned off or has expired. Turn on a new one to keep sharing.",
+  closed: "This live link closed after 2 hours without an update. Start a new link to share again.",
   bad: "The live link could not take this update. Turn it off and on again.",
   not_off: "Could not turn it off. Check your internet and try again.",
 };

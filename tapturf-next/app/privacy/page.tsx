@@ -326,7 +326,8 @@ const SECTIONS: LegalSection[] = [
         token, which identifies you to our server, the city you picked and whether you picked it or let your
         location find it (for the city note described under &ldquo;Your city&rdquo;), that one summary when
         you create an account, the random tag with each use of a free tool, and a match while its live link is on. Clearing site data in your browser removes all of it. A live link that was
-        on then stops updating and is cleared 30 days after its last update, or sooner if you email us.
+        on then stops updating, as any live link does after 2 hours without a new score, and is cleared 30 days
+        after its last update, or sooner if you email us.
       </p>
     ),
   },
@@ -349,7 +350,8 @@ const SECTIONS: LegalSection[] = [
           with a browser&rsquo;s random tag are not tied to any account.
         </li>
         <li>
-          A live score is cleared when you turn its link off, or 30 days after its last update. The
+          A live link stops updating after 2 hours without a new score; people with the link then see the last
+          score. A live score is cleared when you turn its link off, or 30 days after its last update. The
           one-way hash of the network address is kept for 2 days to stop misuse.
         </li>
         <li>Emails you send us are kept as long as needed to deal with your request.</li>

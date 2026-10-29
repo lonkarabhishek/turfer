@@ -85,7 +85,7 @@ function Freshness({ status, updatedAt, pause, serverNow, frozenAt }: { status: 
   const ticking = useServerNow(serverNow, 5_000, updatedAt);
   const now = frozenAt ?? ticking;
   const age = Math.max(0, now - updatedAt);
-  const f = freshness(status, age, pause(now));
+  const f = freshness(status, age, pause(now), updatedAt);
   if (frozenAt !== null && f.tone === "live") return null;
   if (frozenAt !== null && f.tone === "done") return <p className="text-[13px] text-primary-500">Last update {ago(age)}.</p>;
   if (f.tone === "quiet" || f.tone === "stopped") {
@@ -272,7 +272,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
         return boardPause(boardView, t === null ? null : clockMs(boardView, t));
       }
     : () => (view ? pauseText(pauseOf(view)) : null);
-  // Logged out and quiet for hours when the score came in: the card stops promising updates.
+  // Logged out and closed (2 hours without an update) when the score came in: the card stops promising updates.
   const stopped = frozenAt !== null && updatedAt !== null && status === "live" && freshness(status, Math.max(0, frozenAt - updatedAt), pause(frozenAt)).tone === "stopped";
   // By the team names: the LIVE pill while live, and the eye count. Nothing in the slot when neither shows.
   const liveBadge = status === "live" && updatedAt !== null ? <LiveBadge updatedAt={updatedAt} serverNow={serverNow} pause={pause} frozenAt={frozenAt} /> : null;
@@ -326,10 +326,10 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
 
 /**
  * In the tabs' place for a follower who is not logged in. The score is
- * free; keeping up with it takes a login. stopped: no update for hours, so
- * nothing promises it will update (the line under the score says it
- * stopped). Beside the score on a wide screen, under it on a phone:
- * nothing here says above.
+ * free; keeping up with it takes a login. stopped: the link closed after 2
+ * hours without an update, so nothing promises it will update (the line
+ * under the score says when it stopped). Beside the score on a wide
+ * screen, under it on a phone: nothing here says above.
  */
 function LoginCard({ code, done, stopped, cricket, className }: { code: string; done: boolean; stopped: boolean; cricket: boolean; className: string }) {
   const href = followLoginHref(code);
@@ -357,7 +357,7 @@ const STATES: Record<"waiting" | "stopped" | "expired" | "unavailable", { title:
   waiting: { title: "Waiting for the scorer's first update", body: "The score shows here as soon as it comes in. No need to refresh." },
   unavailable: { title: "Score will be back in a moment", body: "We could not get the score just now. This page keeps trying by itself." },
   stopped: { title: "The scorer turned this live link off", body: "If the match is still on, ask the scorer for a new link." },
-  expired: { title: "This live link has expired", body: "Live links close 30 days after the last update." },
+  expired: { title: "This live link has expired", body: "A live score is cleared 30 days after its last update." },
 };
 
 function StateCard({ state }: { state: keyof typeof STATES }) {
