@@ -189,6 +189,50 @@ export function firstImageUrl(value: string | null | undefined): string | null {
 }
 
 /**
+ * Drops the photos the AI cover pass flagged (image_review rows with
+ * usable: false: logos, screenshots, blur) from a turf's cleaned images
+ * and cover. They stay in the row but never reach a card, gallery or
+ * share image. Nothing is dropped when every photo was flagged, and the
+ * cover goes only when another photo is left. `rawCover` is the stored
+ * cover before cleaning (the review names stored URLs).
+ */
+export function filterReviewedPhotos(
+  images: string[],
+  cover: string | null,
+  review: unknown,
+  rawCover?: string | null,
+): { images: string[]; cover: string | null } {
+  if (!Array.isArray(review)) return { images, cover };
+  const bad = new Set(
+    (review as { url?: unknown; usable?: unknown }[])
+      .filter((r) => r && r.usable === false && typeof r.url === "string")
+      .map((r) => r.url as string),
+  );
+  if (!bad.size) return { images, cover };
+  const kept = images.filter((u) => !bad.has(u));
+  return {
+    images: kept.length ? kept : images,
+    cover: cover && kept.length && (bad.has(cover) || (rawCover != null && bad.has(rawCover))) ? null : cover,
+  };
+}
+
+/**
+ * Up to `max` photos of a turf row as stored (cover_image, images,
+ * image_review), cleaned the way turf pages clean them, best first: for
+ * game pages and game cards, which read the turf row themselves.
+ */
+export function usableTurfPhotos(
+  raw: { cover_image?: string | null; images?: unknown; image_review?: unknown } | null | undefined,
+  max: number,
+): string[] {
+  if (!raw) return [];
+  const images = convertImageUrls(Array.isArray(raw.images) ? (raw.images as string[]) : []);
+  const cover = firstImageUrl(raw.cover_image);
+  const kept = filterReviewedPhotos(images, cover, raw.image_review, raw.cover_image);
+  return turfPhotos({ cover_image: kept.cover, images: kept.images }).slice(0, Math.max(0, max));
+}
+
+/**
  * Gets a valid image URL, converting Google Drive links
  */
 export function getValidImageUrl(url: string | undefined | null): string {

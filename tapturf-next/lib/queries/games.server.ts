@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
-import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
+import { cardGame, filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
 /**
@@ -24,7 +24,7 @@ export async function getAvailableGamesServer(): Promise<Game[]> {
   if (turfIds.length > 0) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
+      .select('id, slug, name, address, area, city, lat, lng, "Gmap Embed link", cover_image, images, image_review')
       .in("id", turfIds);
     if (turfs) {
       const map = Object.fromEntries(turfs.map((t) => [t.id, { ...t, name: cleanVenueName(t.name) }]));
@@ -71,5 +71,5 @@ export async function getGameByIdServer(gameId: string): Promise<Game | null> {
  */
 export const getOpenGamesCached = cache(async (): Promise<{ games: Game[]; at: number }> => {
   const at = Date.now();
-  return { games: sortGamesByDateTime(filterNonExpiredGames(await getAvailableGamesServer(), at)), at };
+  return { games: sortGamesByDateTime(filterNonExpiredGames(await getAvailableGamesServer(), at)).map(cardGame), at };
 });

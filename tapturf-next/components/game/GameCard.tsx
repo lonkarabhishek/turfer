@@ -1,168 +1,152 @@
 "use client";
 
 import Link from "next/link";
-import { MapPin, Clock, Users, User, Zap } from "lucide-react";
+import { CalendarClock, CircleCheck, MapPin, Users } from "lucide-react";
 import type { Game } from "@/types/game";
-import { formatDate, formatTimeSlot, capitalizeSkillLevel } from "@/lib/utils/game";
+import { formatGameDay, formatPrice, formatTimeRange, gamePlace, getGameStatus, skillInfo, spotsInfo, turfInfo } from "@/lib/utils/game";
+import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
+import { Avatar } from "./detail/Avatar";
+import { GamePhoto } from "./detail/GamePhoto";
+import { LevelMeter } from "./detail/GameFacts";
+import { SportGlyph } from "./detail/SportArt";
 
-export function GameCard({ game, hideVenue = false, cityLabel, now }: {
+const chip = "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-semibold whitespace-nowrap";
+const photoChip = "photo-chip inline-flex items-center gap-1.5 h-8 px-3 rounded-full shadow-soft text-[13px] font-semibold whitespace-nowrap";
+
+/**
+ * A game in a list: the turf's photo (or its sport drawing) with the
+ * sport on it, when, where, who hosts, the skill level and whether the
+ * turf is booked, then players and price. One link, one card. On a turf's
+ * own page (hideVenue) there is no photo and no venue: the time leads.
+ */
+export function GameCard({ game, hideVenue = false, cityLabel, now, eager = false }: {
   game: Game;
-  /** On a turf's own page the venue is obvious; show the game title instead. */
+  /** On a turf's own page the venue is obvious: no photo, no venue. */
   hideVenue?: boolean;
-  /** When set (lists that span cities), the location line reads "{area}, {city}". */
+  /** Lists that span cities pass the city label for turfs with no city on record. */
   cityLabel?: string;
   /** "Today"/"Tomorrow" relative to this instant. Server-rendered lists pass the render time until hydration. */
   now?: number;
+  /** The first cards in a list load their photo at once; the rest lazily. */
+  eager?: boolean;
 }) {
-  const area = game.turfs?.address?.split(",")[0]?.trim() || null;
-  const placeLine = cityLabel ? [area, cityLabel].filter(Boolean).join(", ") : game.turfs?.address;
-  const spotsLeft = game.max_players - game.current_players;
-  const fillPercent = (game.current_players / game.max_players) * 100;
-  const isFull = spotsLeft <= 0;
-  const isTight = spotsLeft > 0 && spotsLeft <= 2;
+  // `now` is undefined after hydration: the helpers then read the clock themselves.
+  const day = formatGameDay(game.date, now);
+  const range = formatTimeRange(game.start_time, game.end_time);
+  const spots = spotsInfo(game.current_players, game.max_players, false);
+  const full = spots.open === 0;
+  const live = getGameStatus(game, now) === "live";
+  const skill = skillInfo(game.skill_level);
+  const turf = turfInfo(game.turf_booked);
+  const price = formatPrice(game.price_per_player);
+  const sportName = sportLabel(game.sport);
+  const place = gamePlace(game.turfs) || cityLabel || "";
+
+  const when = (
+    <>
+      <span className="whitespace-nowrap">{day.title}</span> · <span className="whitespace-nowrap">{range}</span>
+    </>
+  );
 
   return (
     <Link
       href={`/game/${game.id}`}
-      className="block group rounded-2xl focus-neon"
+      className="group block card-lift overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-soft hover:shadow-card-hover"
     >
-      <article
-        className={`card-lift relative overflow-hidden rounded-2xl border bg-white ${
-          isFull
-            ? "border-primary-200 opacity-70"
-            : "border-primary-200 hover:border-accent-500 hover:shadow-card-hover"
-        }`}
-      >
-        {/* Left accent bar */}
-        <div
-          className={`absolute left-0 top-0 bottom-0 w-1 ${
-            isFull
-              ? "bg-primary-200"
-              : isTight
-              ? "bg-hot-500"
-              : "bg-accent-500"
-          }`}
-          aria-hidden
-        />
-
-        <div className="p-4 pl-5 sm:p-5 sm:pl-6">
-          {/* Top row: Sport pill + Spots badge */}
-          <div className="flex items-start justify-between mb-3 gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-                <Zap className="w-3 h-3" strokeWidth={2.75} />
-                {game.sport}
-              </span>
-              {game.skill_level && game.skill_level !== "all" && (
-                <span className="text-[10px] font-semibold text-primary-600 bg-primary-100 border border-primary-200 px-2 py-1 rounded-full">
-                  {capitalizeSkillLevel(game.skill_level)}
-                </span>
-              )}
-            </div>
-            <span
-              className={`text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
-                isFull
-                  ? "bg-primary-100 text-primary-400"
-                  : isTight
-                  ? "bg-hot-500/10 text-hot-600 border border-hot-500/40"
-                  : "bg-accent-50 text-accent-700 border border-accent-500/40"
-              }`}
-            >
-              {isFull ? "Full" : `${spotsLeft} left`}
+      {!hideVenue && (
+        <GamePhoto
+          photos={game.turfs?.photos}
+          family={sportFamily(game.sport)}
+          eager={eager}
+          className="relative h-28"
+          imgClassName="object-[center_60%]"
+        >
+          <div className="absolute left-3 top-3 right-3 flex flex-wrap gap-2">
+            <span className={`${photoChip} bg-white/95 text-primary-900`}>
+              <SportGlyph sport={game.sport} className="w-4 h-4 text-accent-700" />
+              {sportName}
             </span>
+            {full ? (
+              <span className={`${photoChip} bg-primary-900 text-white`}>
+                <Users className="w-4 h-4" aria-hidden />
+                Full
+              </span>
+            ) : live ? (
+              <span className={`${photoChip} bg-white/95 text-primary-900`}>
+                <span className="pulse-live size-2 rounded-full bg-hot-500" aria-hidden />
+                Happening now
+              </span>
+            ) : null}
           </div>
+        </GamePhoto>
+      )}
 
-          {/* Turf name & address (or just the game title on a turf page) */}
-          {hideVenue ? (
-            game.title ? (
-              <h3 className="mb-3 text-[16px] font-semibold text-primary-900 group-hover:text-accent-600 transition-colors leading-snug truncate">
-                {game.title}
-              </h3>
-            ) : null
-          ) : (
-          <div className="mb-3">
-            <h3 className="font-display text-lg sm:text-xl text-primary-800 group-hover:text-accent-600 transition-colors leading-tight">
-              {game.turfs?.name || game.title}
+      <div className="p-4">
+        {hideVenue ? (
+          <h3 className="text-[16px] font-semibold text-accent-800 leading-snug">{when}</h3>
+        ) : (
+          <>
+            <p className="text-[14px] font-semibold text-accent-800 leading-snug">{when}</p>
+            <h3 className="mt-1 text-[18px] font-bold text-primary-900 leading-snug line-clamp-2 [overflow-wrap:anywhere] group-hover:text-accent-800 transition-colors">
+              {game.turfs?.name || `${sportName} game`}
             </h3>
-            {placeLine && (
-              <p className="flex items-center gap-1 text-xs text-primary-500 mt-1">
-                <MapPin className="w-3 h-3 flex-shrink-0 text-primary-400" />
-                <span className="truncate">{placeLine}</span>
+            {place && (
+              <p className="mt-1 flex items-center gap-1 text-[14px] text-primary-500 min-w-0">
+                <MapPin className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                <span className="truncate">{place}</span>
               </p>
             )}
-          </div>
+          </>
+        )}
+
+        <p className="mt-2 flex items-center gap-2 min-w-0 text-[13px] text-primary-700">
+          <Avatar src={game.host_profile_image_url} name={game.host_name} className="size-5 text-[10px]" />
+          <span className="truncate">Hosted by {game.host_name || "a TapTurf player"}</span>
+          <VerifiedTickFor id={game.creator_id} className="-ml-1" />
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {hideVenue && (
+            <span className={`${chip} bg-primary-50 border border-primary-200 text-primary-900`}>
+              <SportGlyph sport={game.sport} className="w-4 h-4 text-accent-700" />
+              {sportName}
+            </span>
           )}
-
-          {/* Date + time chips */}
-          <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center text-[11px] font-semibold text-accent-700 bg-accent-50 border border-accent-500/30 px-2.5 py-1.5 rounded-lg">
-              {formatDate(game.date, now)}
+          <span className={`${chip} bg-primary-50 border border-primary-200 text-primary-900`}>
+            <LevelMeter meter={skill.meter} />
+            <span className="sr-only">Skill level: </span>
+            {skill.chip}
+          </span>
+          {turf.booked ? (
+            <span className={`${chip} bg-accent-50 border border-accent-200 text-accent-800`}>
+              <CircleCheck className="w-4 h-4" aria-hidden />
+              {turf.title}
             </span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-primary-700 bg-primary-100 border border-primary-200 px-2.5 py-1.5 rounded-lg">
-              <Clock className="w-3 h-3 text-primary-500" />
-              {formatTimeSlot(game.start_time, game.end_time)}
+          ) : (
+            <span className={`${chip} bg-amber-50 border border-amber-200 text-amber-900`}>
+              <CalendarClock className="w-4 h-4" aria-hidden />
+              {turf.title}
             </span>
-          </div>
-
-          {/* Players progress bar */}
-          <div className="mb-3">
-            <div className="flex items-center justify-between text-[11px] mb-1.5">
-              <span className="flex items-center gap-1 text-primary-500 font-semibold">
-                <Users className="w-3 h-3 text-primary-400" />
-                <span className="tabular text-primary-800">{game.current_players}/{game.max_players}</span>
-              </span>
-              <span className="font-mono tabular text-primary-400 text-[10px]">
-                {Math.round(fillPercent)}%
-              </span>
-            </div>
-            <div className="w-full h-1.5 bg-primary-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  isFull
-                    ? "bg-primary-300"
-                    : isTight
-                    ? "bg-hot-500"
-                    : "bg-accent-500"
-                }`}
-                style={{ width: `${Math.min(fillPercent, 100)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Bottom row: Host + Price */}
-          <div className="flex items-center justify-between pt-3 border-t border-primary-200">
-            <div className="flex items-center gap-2 min-w-0">
-              {game.host_profile_image_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={game.host_profile_image_url}
-                  alt=""
-                  className="w-7 h-7 rounded-full object-cover ring-1 ring-primary-200"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-accent-100 border border-accent-500/40 flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-accent-600" />
-                </div>
-              )}
-              <span className="text-xs text-primary-600 truncate">{game.host_name}</span>
-              <VerifiedTickFor id={game.creator_id} className="-ml-1" />
-            </div>
-
-            {game.price_per_player > 0 ? (
-              <span className="font-display text-xl text-primary-800 tabular tracking-tight">
-                ₹{game.price_per_player}
-                <span className="text-[10px] font-mono text-primary-500 ml-1">/pp</span>
-              </span>
-            ) : (
-              <span className="text-[10px] font-bold text-accent-700 bg-accent-50 border border-accent-500/40 px-2 py-1 rounded-full">
-                Free
-              </span>
-            )}
-          </div>
+          )}
         </div>
-      </article>
+
+        <div className="mt-3 border-t border-primary-100 pt-3 flex items-center justify-between gap-3">
+          <p className="flex items-center gap-1.5 text-[14px] text-primary-700 min-w-0">
+            <Users className="w-4 h-4 text-primary-500 shrink-0" aria-hidden />
+            <span className="truncate tabular">
+              {full ? `Full · ${game.current_players} of ${game.max_players}` : `${spots.title} · ${spots.open} open`}
+            </span>
+          </p>
+          {price === "Free" ? (
+            <span className="shrink-0 h-7 px-3 inline-flex items-center rounded-full bg-accent-50 text-accent-800 text-[13px] font-semibold">Free</span>
+          ) : (
+            <span className="shrink-0 text-[14px] text-primary-500 whitespace-nowrap">
+              <span className="text-[17px] font-bold text-primary-900 tabular">{price}</span> / player
+            </span>
+          )}
+        </div>
+      </div>
     </Link>
   );
 }

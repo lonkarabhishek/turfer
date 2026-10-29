@@ -786,3 +786,29 @@ html[data-city-pending] main:has(#city-line) > :not(#city-line):not(:has(#city-l
    until the listing has read the URL (it then drops the mark and dims them
    itself until the right ones arrive). */
 html[data-tt-list="wait"] #tt-turf-grid { opacity: .45; pointer-events: none; }
+
+/* ─── Game pages (components/game/detail, GameCard) ─────────
+   The hero photo fades in over its drawing once it has loaded (at once
+   under reduced motion); the buttons on the photo get a ring with a white
+   gap so it shows on any photo; the skill meter is three bars, rising
+   from beginners to advanced, three equal ones for all levels. */
+.game-photo { opacity: 0; transition: opacity 200ms ease-out; }
+.game-photo[data-ready] { opacity: 1; }
+.photo-btn:focus-visible { outline: 2px solid #15803D; outline-offset: 2px; box-shadow: 0 0 0 2px #fff; }
+.level-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.level-meter > i { width: 4px; border-radius: 2px; background: #D1D5DB; }
+.level-meter > i:nth-child(1) { height: 6px; }
+.level-meter > i:nth-child(2) { height: 10px; }
+.level-meter > i:nth-child(3) { height: 14px; }
+.level-meter > i[data-on] { background: #15803D; }
+.level-meter[data-all] > i { height: 10px; }
+@media (prefers-reduced-motion: reduce) { .game-photo { transition: none; opacity: 1; } }
+@media (prefers-contrast: more) {
+  .photo-chip { background: #fff; border: 1px solid #1D1D1F; }
+  .level-meter > i { background: #6E6E73; } .level-meter > i[data-on] { background: #052E16; }
+}
+@media (forced-colors: active) {
+  .photo-chip { border: 1px solid CanvasText; }
+  .level-meter > i { forced-color-adjust: none; background: GrayText; }
+  .level-meter > i[data-on] { background: CanvasText; }
+}

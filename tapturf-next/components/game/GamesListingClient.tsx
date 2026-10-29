@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { GameCard } from "./GameCard";
-import { filterNonExpiredGames } from "@/lib/utils/game";
+import { filterNonExpiredGames, skillInfo } from "@/lib/utils/game";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { CityLine } from "@/components/city/CityLine";
 import { guessCityFromAddress, labelFor, type CityScope } from "@/lib/city";
@@ -99,7 +99,7 @@ export function GamesListingClient({
         <Link
           href={user ? "/game/create" : "#"}
           onClick={handleHostClick}
-          className="hidden sm:inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-5 py-3 rounded-full shadow-neon transition-all focus-neon"
+          className="hidden sm:inline-flex items-center gap-2 h-12 bg-accent-600 hover:bg-accent-700 text-white text-[15px] font-semibold px-5 rounded-full shadow-soft transition-colors focus-neon"
         >
           <Plus className="w-4 h-4" strokeWidth={2.75} />
           Host game
@@ -119,10 +119,11 @@ export function GamesListingClient({
         />
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full transition-colors ${
-            showFilters ? "bg-accent-500 text-white shadow-neon" : "text-primary-500 hover:bg-primary-100"
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 size-11 grid place-items-center rounded-full transition-colors ${
+            showFilters ? "bg-primary-900 text-white" : "text-primary-500 hover:bg-primary-100"
           }`}
-          aria-label="Toggle filters"
+          aria-label="Skill level filter"
+          aria-expanded={showFilters}
         >
           <SlidersHorizontal className="w-4 h-4" />
         </button>
@@ -134,10 +135,11 @@ export function GamesListingClient({
           <button
             key={s}
             onClick={() => setSport(s)}
-            className={`flex-shrink-0 px-4 py-2 min-h-[40px] rounded-full text-xs font-bold border-2 transition-all focus-neon ${
+            aria-pressed={sport === s}
+            className={`flex-shrink-0 h-11 px-4 rounded-full text-[14px] font-semibold border transition-colors focus-neon ${
               sport === s
-                ? "bg-accent-500 text-white border-accent-500 shadow-neon"
-                : "bg-white text-primary-700 border-primary-200 hover:border-accent-500"
+                ? "bg-primary-900 text-white border-primary-900"
+                : "bg-white text-primary-800 border-primary-200 hover:border-primary-400"
             }`}
           >
             {s}
@@ -156,13 +158,14 @@ export function GamesListingClient({
               <button
                 key={level}
                 onClick={() => setSkillLevel(level)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-colors ${
+                aria-pressed={skillLevel === level}
+                className={`h-11 px-4 rounded-full text-[14px] font-semibold border transition-colors ${
                   skillLevel === level
-                    ? "bg-accent-500 text-white border-accent-500"
-                    : "bg-white text-primary-600 border-primary-200 hover:border-accent-500"
+                    ? "bg-primary-900 text-white border-primary-900"
+                    : "bg-white text-primary-800 border-primary-200 hover:border-primary-400"
                 }`}
               >
-                {level === "all" ? "Anyone" : level.charAt(0).toUpperCase() + level.slice(1)}
+                {level === "all" ? "Anyone" : skillInfo(level).chip}
               </button>
             ))}
           </div>
@@ -206,7 +209,7 @@ export function GamesListingClient({
             <Link
               href={user ? "/game/create" : "#"}
               onClick={handleHostClick}
-              className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-6 py-3 rounded-full shadow-neon transition-all focus-neon"
+              className="inline-flex items-center gap-2 h-12 bg-accent-600 hover:bg-accent-700 text-white text-[15px] font-semibold px-6 rounded-full shadow-soft transition-colors focus-neon"
             >
               <Zap className="w-4 h-4" strokeWidth={2.75} />
               Host a game
@@ -215,15 +218,15 @@ export function GamesListingClient({
         )
       ) : (
         <>
-          <p className="text-[11px] font-semibold text-primary-500 mb-4 mt-4">
+          <h2 className="text-[13px] font-semibold text-primary-500 mb-4 mt-4">
             {cityLabel
               ? `${filteredGames.length} open game${filteredGames.length !== 1 ? "s" : ""} in ${cityLabel}`
               : `${filteredGames.length} open game${filteredGames.length !== 1 ? "s" : ""} across India`}{" "}
             · Sorted by kickoff
-          </p>
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredGames.map((game) => (
-              <GameCard key={game.id} game={game} now={now} cityLabel={cityLabel ? undefined : cityLabelOf(game)} />
+            {filteredGames.map((game, i) => (
+              <GameCard key={game.id} game={game} now={now} cityLabel={cityLabel ? undefined : cityLabelOf(game)} eager={i < 2} />
             ))}
           </div>
         </>
@@ -250,7 +253,7 @@ export function GamesListingClient({
         <Link
           href={user ? "/game/create" : "#"}
           onClick={handleHostClick}
-          className="inline-flex items-center gap-2 bg-accent-500 text-white text-sm font-bold px-6 py-3 rounded-full shadow-neon"
+          className="inline-flex items-center gap-2 h-12 bg-accent-600 hover:bg-accent-700 text-white text-[15px] font-semibold px-6 rounded-full shadow-soft"
         >
           <Plus className="w-4 h-4" strokeWidth={2.75} />
           Host game
