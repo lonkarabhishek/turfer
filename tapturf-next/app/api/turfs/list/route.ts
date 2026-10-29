@@ -47,12 +47,14 @@ export async function GET(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400, headers: BAD_HEADERS });
   const { query, offset, limit } = parsed.req;
   const { seen } = parsed;
+  // A sport chip: each row carries its venue's sport bands, so the card shows
+  // (and the price sorts use) only that sport's price (lib/utils/cardSport.ts).
+  // Without a chip the rows, and the answer, are as before. Read alongside
+  // the rows; it never throws.
+  const bands = query.sport ? getSportBands() : null;
   try {
     const { v, stale, turfs, trending } = await listInputs(query.city);
-    // A sport chip: each row carries its venue's sport bands, so the card shows
-    // (and the price sorts use) only that sport's price (lib/utils/cardSport.ts).
-    // Without a chip the rows, and the answer, are as before.
-    const rows = query.sport ? listWithSportBands(turfs, await getSportBands()) : turfs;
+    const rows = bands ? listWithSportBands(turfs, await bands) : turfs;
     const page = pageOf(rows, query, trending, offset, limit, v);
     const behind = (seen.v != null && page.v < seen.v) || (seen.t != null && page.t !== seen.t);
     return NextResponse.json(page, { headers: behind ? BEHIND_HEADERS : stale ? STALE_HEADERS : HEADERS });

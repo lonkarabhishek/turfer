@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { toBands } from "@/lib/queries/turfs";
+import { cacheKeyed, toBands } from "@/lib/queries/turfs";
 import { readSportBandRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
 import { sportBandMap, type SportBandMap } from "@/lib/utils/cardSport";
@@ -30,27 +30,33 @@ async function readSportBands(): Promise<SportBandMap> {
  * band the data team changed is fine (the turf page itself is current). A
  * warm instance keeps it an hour in memory, and concurrent renders share
  * one read. A failed read gives the last copy, or null: the cards then
- * decide without bands, as before bands were read (sportPrice).
- * Never throws.
+ * decide without bands, as before bands were read (sportPrice). For a
+ * minute after one the instance answers that way without reading again:
+ * the /turfs chips ask on every request, and each read of a database that
+ * is down waits out the guard's timeout and counts toward its breaker,
+ * which then refuses every other read too. Never throws.
+ *
+ * Keyed by name (cacheKeyed), so the pages, the list route and the entry
+ * the build wrote are one entry.
  */
-const getSportBandsCached = unstable_cache(readSportBands, ["sport-bands-v1"], { revalidate: 86400 });
+const getSportBandsCached = unstable_cache(cacheKeyed("sport-bands", readSportBands), ["sport-bands-v1"], { revalidate: 86400 });
 const MEMO_MS = 3_600_000;
+const RETRY_MS = 60_000;
 let memo: { at: number; bands: SportBandMap } | null = null;
 let pending: Promise<SportBandMap | null> | null = null;
-let failLoggedAt = -Infinity;
+let failedAt = -Infinity;
 
 export function getSportBands(): Promise<SportBandMap | null> {
   if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.bands);
+  if (Date.now() - failedAt < RETRY_MS) return Promise.resolve(memo?.bands ?? null);
   pending ??= getSportBandsCached()
     .then((bands) => {
       memo = { at: Date.now(), bands };
       return bands;
     })
     .catch((e) => {
-      if (Date.now() - failLoggedAt >= 30_000) {
-        failLoggedAt = Date.now();
-        console.warn("getSportBands: read failed", e instanceof Error ? e.message : e);
-      }
+      failedAt = Date.now();
+      console.warn("getSportBands: read failed", e instanceof Error ? e.message : e);
       return memo?.bands ?? null;
     })
     .finally(() => {

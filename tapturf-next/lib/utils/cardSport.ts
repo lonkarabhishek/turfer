@@ -1,5 +1,5 @@
-import type { PriceBand, SportBands, Turf } from "../../types/turf";
-import { getMinimumPrice, positivePrice, priceUnitSuffix, realPriceSummary, summarisePrice, type PriceSummary } from "./prices";
+import type { PriceBand, SportBandKind, SportBands, Turf } from "../../types/turf";
+import { getMinimumPrice, hasRealPrices, positivePrice, priceUnitSuffix, realPriceSummary, summarisePrice, type PriceSummary } from "./prices";
 import { SPORT_PAGES, type SportPage } from "../sports";
 
 /**
@@ -114,13 +114,13 @@ export function pricesAreForSport(labels: readonly string[], sport: CardSport): 
  * football (lib/ai/ask.ts). A band with no format, or any other, names
  * no sport and is left out.
  */
-const BAND_KINDS: readonly { kind: keyof SportBands; re: RegExp; labels: readonly string[] }[] = [
+const BAND_KINDS: readonly { kind: SportBandKind; re: RegExp; labels: readonly string[] }[] = [
   { kind: "box-cricket", re: /^\s*box\s*cricket\b/i, labels: ["Box Cricket"] },
   { kind: "football", re: /^\s*\d+\s*-?\s*a\s*-?\s*side\b/i, labels: ["Football", "Futsal"] },
 ];
 
 /** The sport kind a band's format names, or null. */
-export function bandKind(format: string | null | undefined): keyof SportBands | null {
+export function bandKind(format: string | null | undefined): SportBandKind | null {
   if (typeof format !== "string") return null;
   return BAND_KINDS.find((k) => k.re.test(format))?.kind ?? null;
 }
@@ -131,7 +131,7 @@ export function bandKind(format: string | null | undefined): keyof SportBands | 
  * Pricing table shows (lib/queries/turfs.ts toBands).
  */
 export function sportBandsOf(bands: readonly Pick<PriceBand, "format" | "price_per_hour">[] | null | undefined): SportBands | null {
-  const out: { [K in keyof SportBands]: [number, number] } = {};
+  const out: { [K in SportBandKind]?: [number, number] } = {};
   for (const b of bands ?? []) {
     const kind = bandKind(b?.format);
     const p = positivePrice(b?.price_per_hour);
@@ -147,18 +147,18 @@ export type SportBandMap = Record<string, SportBands>;
 
 /**
  * Each venue's sport bands (sportBandsOf), for the venues that have any
- * (lib/queries/sportBands.ts). None for a venue whose owner confirmed its
- * prices on myTapturf: the owner's own prices win over the bands, as on
- * the turf page (showsPriceBands), so its card decides without them.
+ * (lib/queries/sportBands.ts). A venue whose owner confirmed its prices on
+ * myTapturf keeps them, marked owner: the turf page shows its bands unless
+ * it lists prices of its own (showsPriceBands, ownerSetPrices), and so does
+ * its card (sportPrice).
  */
 export function sportBandMap(
   rows: readonly { id: string; pricing_bands: readonly Pick<PriceBand, "format" | "price_per_hour">[] | null; price_owner_confirmed: boolean | null }[],
 ): SportBandMap {
   const out: SportBandMap = {};
   for (const r of rows) {
-    if (r.price_owner_confirmed === true) continue;
     const bands = sportBandsOf(r.pricing_bands);
-    if (bands) out[r.id] = bands;
+    if (bands) out[r.id] = r.price_owner_confirmed === true ? { ...bands, owner: true } : bands;
   }
   return out;
 }
@@ -211,27 +211,27 @@ export function isTurfSport(sport: CardSport): boolean {
 
 /**
  * Which price a card on a list filtered to one sport shows:
- * - "card": its own, unchanged. The venue's bands give the sport exactly
- *   that range; or they name no sport and, at a turf sport, the price
- *   shows as before (isTurfSport), at any other sport (courts, tables,
- *   pools, nets) only when the venue lists no other sport.
+ * - "card": its own, unchanged. The venue lists no sport but the selected
+ *   one (pricesAreForSport), so whatever it lists is that sport's, bands
+ *   or not; or the bands give the sport exactly that range; or they name
+ *   no sport and the sport is a turf sport (isTurfSport), whose price
+ *   shows as before.
  * - "band": the range the bands give the sport, which is not the card's
  *   (its number is, at least partly, another sport's): what the data says
  *   this sport costs there.
- * - "none": the bands name only other sports, or none at a court sport's
- *   multi-sport venue. The card reads "Prices not listed yet".
+ * - "none": the bands name only other sports, or none at a court, table,
+ *   pool or nets sport. The card reads "Prices not listed yet".
  * The slot columns, the numbers players reported and the research notes
- * name no sport; only pricing_bands do (turf.sport_bands).
+ * name no sport; only pricing_bands do (turf.sport_bands). An owner's own
+ * listed prices win over the bands, as on the turf page (ownerSetPrices).
  */
 export type SportPrice = { from: "card" } | { from: "band"; min: number; max: number } | { from: "none" };
 
-export function sportPrice(
-  turf: Pick<Turf, "sports" | "sport_bands">,
-  price: Pick<PriceSummary, "min" | "max">,
-  sport: CardSport,
-): SportPrice {
-  const range = sportBandRange(turf.sport_bands, sport);
-  if (range === undefined) return isTurfSport(sport) || pricesAreForSport(turf.sports, sport) ? { from: "card" } : { from: "none" };
+export function sportPrice(turf: Turf, price: Pick<PriceSummary, "min" | "max">, sport: CardSport): SportPrice {
+  if (pricesAreForSport(turf.sports, sport)) return { from: "card" };
+  const bands = turf.sport_bands?.owner && hasRealPrices(turf) ? null : turf.sport_bands;
+  const range = sportBandRange(bands, sport);
+  if (range === undefined) return isTurfSport(sport) ? { from: "card" } : { from: "none" };
   if (range === null) return { from: "none" };
   const [min, max] = range;
   return price.min === min && price.max === max ? { from: "card" } : { from: "band", min, max };
