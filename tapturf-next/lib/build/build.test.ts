@@ -471,7 +471,7 @@ test("step: every dataset, one request at a time, the turf pages it could read, 
 });
 
 test("step: without a usable snapshot (stale, a column missing, none) it records the table's rows, as the row store would read them", async () => {
-  for (const meta of [{ age_s: 20_000 }, { cols: CARD_COLUMNS.replace(", claimed", "") }, null]) {
+  for (const meta of [{ age_s: 20_000 }, { cols: CARD_COLUMNS.replace(", claimed", "") }, { v: 0 }, null]) {
     const r = await step({ meta: () => (meta === null ? null : { v: 7, n: 1200, parts: 3, cols: CARD_COLUMNS, age_s: 30, ...meta }) });
     try {
       assert.equal(r.list.parts, null);

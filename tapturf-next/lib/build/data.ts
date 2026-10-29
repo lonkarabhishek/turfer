@@ -91,6 +91,12 @@ type Store = { dir: string; manifest: Manifest; parsed: Map<DatasetName, unknown
 // On globalThis: the page and route-handler bundles in one worker share one parse.
 const shared = globalThis as typeof globalThis & { __tapturfBuildData?: Store };
 
+// turbopackIgnore: the folder is named at run time. Without it Turbopack's
+// file tracing read join(dir, `${name}.json`) as "any .json file" and put
+// package-lock.json, package.json and every tsconfig into each function
+// (about 315 KB and 25 files a function on 29 Oct).
+const readJson = (dir: string, file: string): unknown => JSON.parse(readFileSync(/* turbopackIgnore: true */ join(/* turbopackIgnore: true */ dir, file), "utf8"));
+
 /**
  * The step's answer for `name`, while `next build` prerenders from its
  * folder; undefined while serving, without the folder, or when the step
@@ -102,7 +108,7 @@ export function buildData<K extends DatasetName>(name: K): BuildDatasets[K] | un
   if (!dir) return undefined;
   let store = shared.__tapturfBuildData;
   if (!store || store.dir !== dir) {
-    const manifest = JSON.parse(readFileSync(join(dir, MANIFEST), "utf8")) as Manifest;
+    const manifest = readJson(dir, MANIFEST) as Manifest;
     const problem = manifestProblem(manifest, process.env.NEXT_PUBLIC_SUPABASE_URL, Date.now());
     if (problem) throw new Error(`build data: ${problem}. Run the build with npm run build, or TAPTURF_BUILD_DATA=off.`);
     store = shared.__tapturfBuildData = { dir, manifest, parsed: new Map() };
@@ -110,7 +116,7 @@ export function buildData<K extends DatasetName>(name: K): BuildDatasets[K] | un
   if (!store.parsed.has(name)) {
     let value: unknown;
     if (store.manifest.datasets[name]) {
-      value = JSON.parse(readFileSync(join(dir, datasetFile(name)), "utf8"));
+      value = readJson(dir, datasetFile(name));
       if (!value || typeof value !== "object") throw new Error(`build data: ${datasetFile(name)} is not an object`);
     }
     store.parsed.set(name, value);

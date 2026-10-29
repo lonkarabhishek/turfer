@@ -136,11 +136,12 @@ export function createGuardedFetch(opts: GuardOptions = {}): typeof fetch {
  * scripts/build.ts counts the notes for its summary. With
  * TAPTURF_BUILD_DATA_STRICT=1 (test builds and measurements) the read also
  * fails, and so does the build. Undefined when not building from files.
+ * (turbopackIgnore: the folder is named at run time; see lib/build/data.ts.)
  */
 export function buildTripwire(
   env: Record<string, string | undefined>,
   log: (msg: string) => void = (msg) => console.warn(msg),
-  note: (dir: string, path: string) => void = (dir, path) => appendFileSync(join(dir, TRIPWIRE_FILE), `${path}\n`),
+  note: (dir: string, path: string) => void = (dir, path) => appendFileSync(/* turbopackIgnore: true */ join(/* turbopackIgnore: true */ dir, TRIPWIRE_FILE), `${path}\n`),
 ): ((url: string) => void) | undefined {
   const dir = buildDataDir(env);
   if (!dir) return undefined;

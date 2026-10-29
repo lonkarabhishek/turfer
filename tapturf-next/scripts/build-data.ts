@@ -249,17 +249,10 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
   let turfPages: BuildDatasets["turf-pages"] | null = null;
   let skipped = 0;
   let turfRetries = 0;
-  let turfWaitedMs = 0;
   if (env.VERCEL_ENV === "production") {
     const pagesCtx = begin(TURF_PAGES_MS, 1);
     const keys = topTurfKeys(listRows(list), PRERENDERED_TURF_PAGES);
-    const res = await readEach(keys, (k) => readTurfPage(pagesCtx.db, k), {
-      concurrency: TURF_PAGE_READS,
-      maxTries: TURF_PAGE_TRIES,
-      deadline: pagesCtx.deadline,
-      now,
-      sleep: (ms) => ((turfWaitedMs += ms), sleep(ms)),
-    });
+    const res = await readEach(keys, (k) => readTurfPage(pagesCtx.db, k), { concurrency: TURF_PAGE_READS, maxTries: TURF_PAGE_TRIES, deadline: pagesCtx.deadline, now, sleep });
     if (res.failingAtEnd) {
       throw new StepFailed(`build data: the database stopped answering while turf pages were read (the last tries all failed); ${REDEPLOY}`);
     }
@@ -305,7 +298,7 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
 
   const sum = (k: keyof PatientStats) => all.reduce((s, x) => s + x[k], 0);
   const bytes = Object.values(datasets).reduce((s, d) => s + (d?.bytes ?? 0), 0);
-  const summary: StepSummary = { requests: sum("requests"), retries: sum("retries") + turfRetries, waitedMs: sum("waitedMs") + turfWaitedMs, bytes, ms: now() - t0, turfPages: turfPages?.keys.length ?? 0, skipped, moved };
+  const summary: StepSummary = { requests: sum("requests"), retries: sum("retries") + turfRetries, waitedMs: sum("waitedMs"), bytes, ms: now() - t0, turfPages: turfPages?.keys.length ?? 0, skipped, moved };
   const rows = listRows(list).length;
   const source = list.parts ? `v${list.meta!.v}, ${rows} rows in ${list.parts.length} parts` : `table (${unusable(list.meta, CARD_COLUMNS)}), ${rows} rows`;
   console.log(
