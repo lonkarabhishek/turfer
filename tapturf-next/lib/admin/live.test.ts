@@ -38,10 +38,18 @@ test("a starter recorded well after the link began says so (a later signed-in wr
 });
 
 test("the admin home's line under the latest link", () => {
+  // base was last updated at 15:00; 20 minutes on it still takes updates.
+  const soon = Date.parse("2026-10-29T15:20:00.000Z");
   const recorded = toAdminLiveLink({ ...base, starter_id: ID, starter_name: "Asha Patil", starter_username: "asha_p", starter_method: "google", started_at: base.created_at });
-  assert.equal(latestLinkSub(recorded, "2 hr ago"), "Cricket · live now · started 2 hr ago · @asha_p · Google");
+  assert.equal(latestLinkSub(recorded, "2 hr ago", soon), "Cricket · live now · started 2 hr ago · @asha_p · Google");
   const board = toAdminLiveLink({ ...base, sport: "table-tennis", status: "done", starter_id: ID, starter_name: "Ravi", starter_username: null, starter_method: "phone" });
-  assert.equal(latestLinkSub(board, "1 day ago"), "Table tennis · finished · started 1 day ago · Phone");
+  assert.equal(latestLinkSub(board, "1 day ago", soon), "Table tennis · finished · started 1 day ago · Phone");
   const older = toAdminLiveLink({ ...base, sport: null, status: "stopped" });
-  assert.equal(latestLinkSub(older, "3 days ago"), "stopped · started 3 days ago");
+  assert.equal(latestLinkSub(older, "3 days ago", soon), "stopped · started 3 days ago");
+  // No update for 2 hours: closed, as /admin/live and the live count have it, though the database still says live.
+  const idle = Date.parse("2026-10-29T17:00:00.000Z");
+  assert.equal(latestLinkSub(recorded, "3 hr ago", idle - 1), "Cricket · live now · started 3 hr ago · @asha_p · Google");
+  assert.equal(latestLinkSub(recorded, "3 hr ago", idle), "Cricket · closed (idle) · started 3 hr ago · @asha_p · Google");
+  assert.equal(latestLinkSub(board, "1 day ago", idle), "Table tennis · finished · started 1 day ago · Phone", "a finished one keeps its result");
+  assert.equal(latestLinkSub(toAdminLiveLink({ ...base, updated_at: "" }), "3 hr ago", idle), "Cricket · live now · started 3 hr ago", "no update time: as stored");
 });

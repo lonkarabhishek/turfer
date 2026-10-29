@@ -7,6 +7,8 @@
  * sign-ins. Pure; relative imports only (npm run test:live).
  */
 
+import { liveStatusAt } from "../live/types";
+
 export type LiveStarter = {
   /** The account, for the admin's people list (/admin?person=<id>#people). */
   id: string;
@@ -79,10 +81,15 @@ export function recordedLater(link: Pick<AdminLiveLink, "created_at" | "starter"
   return Number.isFinite(a) && Number.isFinite(b) && b - a > LATER_MS;
 }
 
-/** The line under the latest link's name on the admin home: what it is, how it stands, and how it was signed in. */
-export function latestLinkSub(link: AdminLiveLink, ago: string): string {
+/**
+ * The line under the latest link's name on the admin home: what it is, how
+ * it stands at now (as /admin/live has it: a live link with no update for 2
+ * hours is closed, which the database never stores), and how it was signed in.
+ */
+export function latestLinkSub(link: AdminLiveLink, ago: string, now: number): string {
   const what = link.sport ? (link.sport === "cricket" ? "Cricket" : link.sport.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())) : null;
-  const state = link.status === "live" ? "live now" : link.status === "done" ? "finished" : link.status;
+  const status = liveStatusAt(link.status, Date.parse(link.updated_at), now);
+  const state = status === "live" ? "live now" : status === "closed" ? "closed (idle)" : status === "done" ? "finished" : status;
   const who = link.starter ? [link.starter.username ? `@${link.starter.username}` : null, methodLabel(link.starter.method)].filter(Boolean).join(" · ") : null;
   return [what, state, `started ${ago}`, who].filter(Boolean).join(" · ");
 }

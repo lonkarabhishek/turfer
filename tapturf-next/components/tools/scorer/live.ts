@@ -210,6 +210,19 @@ export function liveInfo(link: LiveLinkRecord | null, net: LiveNet | undefined, 
   return { link, on: sendable(link), state: syncState(link, net), fault: net?.fault ?? refused, mode, closed: false };
 }
 
+/**
+ * What Start (or Turn on) live link does, read from the LiveInfo the share
+ * sheet shows (with the match's inPlay): signed out, or the server wants a
+ * login again, off to the login; on and still taking updates, nothing to
+ * start (resume() sends what waited for a login); anything else, a link
+ * closed by this phone's clock too, start(), which turns a closed link off
+ * before the new one.
+ */
+export function startStep(info: LiveInfo, signedIn: boolean): "login" | "on" | "start" {
+  if (!signedIn || info.fault === "login") return "login";
+  return info.on ? "on" : "start";
+}
+
 /** The dot on the scorer's LIVE pill, or null for no pill. */
 export function pillTone(info: LiveInfo): "green" | "amber" | "red" | null {
   if (info.mode === "starting") return "amber";
@@ -552,6 +565,8 @@ export function createLiveSync(io: LiveIo) {
       const r = run(id);
       if (!sendable(linkOf(id)) && !closedLink(linkOf(id))) return true;
       if (r.mode) return false;
+      // Waiting for a login: a stop that does not get through lets the next send ask for it again (below).
+      const paused = r.fault === "login";
       r.mode = "stopping";
       r.fault = null;
       r.removed = false;
@@ -573,7 +588,7 @@ export function createLiveSync(io: LiveIo) {
         if (done) io.saveLink(id, r.removed ? null : { ...cur, on: false, stopped: "off" });
         else if (!r.removed) io.saveLink(id, { ...cur, on: true, stopped: before.stopped });
       }
-      Object.assign(r, done ? { mode: null, fault: null, halted: false, offline: false, fails: 0 } : { mode: null, fault: "not_off" });
+      Object.assign(r, done ? { mode: null, fault: null, halted: false, offline: false, fails: 0 } : { mode: null, fault: "not_off", ...(paused ? { halted: false } : {}) });
       io.emit();
       if (!done) pump(id);
       return done;

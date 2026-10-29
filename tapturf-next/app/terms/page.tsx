@@ -5,7 +5,7 @@ import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-10-21";
+const UPDATED = "2026-10-29";
 const PAGE_URL = "https://www.tapturf.in/terms";
 
 export const metadata: Metadata = {

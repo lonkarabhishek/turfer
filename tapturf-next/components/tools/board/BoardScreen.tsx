@@ -56,8 +56,8 @@ function pillLabel(info: LiveInfo): string {
   if (info.state === "synced") return "Live link on, up to date";
   if (info.state === "sending") return "Live link on, sending";
   if (info.state === "offline") return "Live link on, offline";
-  // Never turned on (the server would not give a link) is not paused.
-  if (info.fault === "login") return info.on ? "Live link paused, log in again" : "Live link off, log in again";
+  // Never turned on (the server would not give a link) is not paused; closed after 2 hours, the login is for a new link.
+  if (info.fault === "login") return info.closed ? "Live link closed, log in for a new one" : info.on ? "Live link paused, log in again" : "Live link off, log in again";
   return "Live link stopped";
 }
 

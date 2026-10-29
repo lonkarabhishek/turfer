@@ -2,9 +2,10 @@
  * When the privacy policy last changed (app/privacy/page.tsx, the
  * sitemap). A change to what we collect or share also bumps
  * PRIVACY_NOTICE, which signed-in people see once (PolicyNotice): a new
- * id, or nobody who dismissed the last one is told.
+ * id, named for that change's date, or nobody who dismissed the last one
+ * is told. A later change that needs no notice moves only this date.
  */
-export const PRIVACY_UPDATED = "2026-10-28";
+export const PRIVACY_UPDATED = "2026-10-29";
 
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {

@@ -50,6 +50,11 @@
 -- 20261026_tool_uses.sql (99bd9503730f558ac41aa9fe426e1edf) with the
 -- status case. Written without the destructive SQL keywords. Safe to run
 -- again. Check: scripts/sql-tests/live_idle_close.check.mjs.
+--
+-- Apply it after the app deploy (and after 20261029_live_link_starts.sql,
+-- which goes before it): the app from before reads gone with idle as a
+-- plain gone and turns the link off on the phone, while followers still
+-- see its last score and it can no longer be turned off from there.
 
 -- Send the whole match. Returns {r, rev}; rev is set for 'ok' (the
 -- stored rev) and 'stale' (the server's rev, so the scorer can go past

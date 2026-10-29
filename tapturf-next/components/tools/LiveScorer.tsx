@@ -13,7 +13,7 @@ import { ScoringScreen, TOOL } from "./scorer/ScoringScreen";
 import type { ShareLive } from "./scorer/Sheets";
 import { deleteMatch, loadIndex, loadMatch, metaOf, saveMatch, setCurrent, type MatchMeta, type ScorerIndex } from "./scorer/storage";
 import { writeHandoff } from "./scorer/handoff";
-import { canKeepLink, linkUrl, readReminder, shortUrl, useLiveSync, type LiveInfo } from "./scorer/live";
+import { canKeepLink, linkUrl, readReminder, shortUrl, startStep, useLiveSync, type LiveInfo } from "./scorer/live";
 import { useWatchers } from "@/components/live/useWatchers";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
@@ -169,21 +169,30 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
     live.changed(m.id, view);
   };
 
+  /** Whether the saved match is still being played: liveFor's inPlay, for a link closed by this phone's clock. */
+  const inPlayOf = (id: string) => {
+    const m = loadMatch(id);
+    return !!m && derive(m).status === "live";
+  };
+
   const loginForLink = (id: string) => {
     trackTool("tool_action", TOOL, { action: "live_link_login" });
     // Looks signed in here, but the server turned that sign-in down: the login page must not bounce straight back.
-    askLiveLogin("cricket", id, undefined, !!auth.user);
+    // A link closed after 2 hours does not catch up: that login is for a new one.
+    askLiveLogin("cricket", id, undefined, !!auth.user, live.info(id, inPlayOf(id)).closed);
   };
 
   const startLink = async (id: string) => {
     // Sharing needs a login (Google first, then phone); scoring does not. The match is saved, so the trip loses nothing.
-    // The server asking for one again (fault login) goes the same way.
-    if (!auth.user || live.info(id).fault === "login") {
+    // The server asking for one again (fault login) goes the same way. Read as the sheet shows it: a link this phone's
+    // clock has closed is not on, and start() turns it off before the new one.
+    const step = startStep(live.info(id, inPlayOf(id)), !!auth.user);
+    if (step === "login") {
       loginForLink(id);
       return;
     }
-    // Already on (back from logging in again): it sends what waited.
-    if (live.info(id).on) {
+    // Already on and taking updates: it sends what waited.
+    if (step === "on") {
       live.resume(id);
       return;
     }

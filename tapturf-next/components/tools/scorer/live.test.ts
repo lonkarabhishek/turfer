@@ -21,6 +21,7 @@ import {
   sendWait,
   shapeOf,
   shortUrl,
+  startStep,
   syncState,
   type LiveIo,
   type LiveNet,
@@ -1018,6 +1019,11 @@ test("live link login: the ask survives the trip and is read once, by its own to
   askLiveLogin("cricket", "m9", 1_000, true);
   assert.equal(went, `/login?next=${encodeURIComponent("/tools/live-scoreboard?tab=2&live=1")}&via=live&again=1`);
   assert.equal(takeLiveAsk("cricket", 2_000), "m9");
+  // ...for a link that closed after 2 hours: the login page says a new link starts, not that this one catches up.
+  askLiveLogin("cricket", "m9", 1_000, true, true);
+  assert.equal(went, `/login?next=${encodeURIComponent("/tools/live-scoreboard?tab=2&live=1")}&via=live&again=1&closed=1`);
+  askLiveLogin("cricket", "m9", 1_000, false, true);
+  assert.equal(went, `/login?next=${encodeURIComponent("/tools/live-scoreboard?tab=2&live=1")}&via=live`, "only with again");
 });
 
 /* ------------------------------------------------------------------ */
@@ -1145,6 +1151,84 @@ test("engine: a mint without an accepted sign-in says login and saves nothing; o
   const u = rig({ matches: { m1: { n: 1 } }, token: tokens({ unknown: true }).get });
   assert.equal(await u.sync.start("m1"), "unavailable");
   assert.equal(u.calls.length, 0);
+});
+
+test("engine: a turn-off that fails on a link waiting for a login says so, and the next send asks for the login again", async () => {
+  const tk = tokens({ token: "turned-down" });
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 1 } }, token: tk.get });
+  t.edit("m1", 1);
+  await tickOver();
+  await fail(t.calls[0], 401, LOGIN);
+  await t.advance(600);
+  await tickOver();
+  await fail(t.calls[1], 401, LOGIN);
+  assert.equal(t.sync.snapshot().net.m1.fault, "login");
+  const off = t.sync.stop("m1");
+  await tickOver();
+  assert.deepEqual([t.calls[2]?.method, t.calls[2]?.token], ["DELETE", null]);
+  await drop(t.calls[2]);
+  assert.equal(await off, false);
+  let info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.on, info.fault], [true, "not_off"], "the turn-off that did not get through");
+  // Not stuck on that: what waited goes again, and a login that still stands is asked for again.
+  await t.advance(LIVE_SEND_EVERY_MS);
+  await tickOver();
+  assert.deepEqual([t.calls.length, t.calls[3]?.method, t.calls[3]?.body?.match?.n], [4, "PUT", 1]);
+  await fail(t.calls[3], 401, LOGIN);
+  await t.advance(600);
+  await tickOver();
+  await fail(t.calls[4], 401, LOGIN);
+  info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.on, info.fault], [true, "login"], "the Log in prompts are back");
+  // And a login then sends (past the gap after the last answer).
+  tk.set({ token: "new-login" });
+  t.sync.resume("m1");
+  await t.advance(600);
+  await tickOver();
+  assert.deepEqual([t.calls.length, t.calls[5]?.token], [6, "new-login"]);
+  await ok(t.calls[5]);
+  assert.equal(liveInfo(t.links.m1, t.sync.snapshot().net.m1).state, "synced");
+});
+
+test("Start a new link on a link this phone's clock has closed: the tap starts one, the old link turned off first", async () => {
+  // Nothing unsent, and 2 hours and a minute since the server's last ok: no answer has said closed yet.
+  const t = rig({ links: { m1: link({ rev: T0, sentRev: T0, okAt: T0 }) }, matches: { m1: { n: 1 } }, token: tokens({ token: "t1" }).get });
+  await t.advance(LIVE_IDLE_CLOSE_MS + 60_000);
+  const snap = t.sync.snapshot();
+  const sheet = liveInfo(snap.links.m1, snap.net.m1, { now: snap.at, inPlay: true });
+  assert.deepEqual([sheet.on, sheet.closed], [false, true], "the sheet shows it closed, with Start a new link");
+  assert.equal(startStep(sheet, true), "start");
+  // Read without the match's inPlay the link looks on, and the tap did nothing.
+  assert.equal(startStep(liveInfo(snap.links.m1, snap.net.m1), true), "on");
+  // A finished match's link is not closed by the clock (its result is still worth sharing): nothing to start.
+  assert.equal(startStep(liveInfo(snap.links.m1, snap.net.m1, { now: snap.at, inPlay: false }), true), "on");
+  const started = t.sync.start("m1");
+  await tickOver();
+  assert.deepEqual([t.calls[0]?.method, t.calls[0]?.url], ["DELETE", `/api/live/${CODE}`], "the old link's last score is cleared first");
+  await ok(t.calls[0]);
+  await tickOver();
+  assert.deepEqual([t.calls[1]?.method, t.calls[1]?.url, t.calls[1]?.token], ["POST", "/api/live/new", "t1"]);
+  await fail(t.calls[1], 200, { code: CODE2 });
+  assert.equal(await started, null);
+  await tickOver();
+  assert.deepEqual([t.calls[2]?.method, t.calls[2]?.url], ["PUT", `/api/live/${CODE2}`]);
+  await ok(t.calls[2]);
+  const after = t.sync.snapshot();
+  assert.deepEqual([after.links.m1.code, liveInfo(after.links.m1, after.net.m1, { now: after.at, inPlay: true }).state], [CODE2, "synced"]);
+});
+
+test("what Start live link does: the login, nothing for a link that is on, else a start", () => {
+  const now = T0 + 60_000;
+  const at = (l: LiveLinkRecord | null, n?: LiveNet) => liveInfo(l, n, { now, inPlay: true });
+  assert.equal(startStep(at(null), false), "login", "signed out");
+  assert.equal(startStep(at(link({ sentRev: T0 }), net({ fault: "login", halted: true })), true), "login", "the server wants a login again");
+  assert.equal(startStep(at(link({ sentRev: T0, okAt: T0 - LIVE_IDLE_CLOSE_MS }), net({ fault: "login", halted: true })), true), "login", "closed by the clock, and a login wanted");
+  assert.equal(startStep(at(link({ sentRev: T0, okAt: T0 })), true), "on");
+  assert.equal(startStep(at(null), true), "start");
+  assert.equal(startStep(at(link({ on: false, stopped: "off" })), true), "start");
+  assert.equal(startStep(at(link({ on: false, stopped: "gone" })), true), "start");
+  assert.equal(startStep(at(link({ sentRev: T0, stopped: "closed" })), true), "start", "closed by the server");
+  assert.equal(startStep(at(link({ sentRev: T0, okAt: T0 - LIVE_IDLE_CLOSE_MS })), true), "start", "closed by the clock");
 });
 
 test("engine: a stop needs no sign-in", async () => {

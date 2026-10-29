@@ -8,7 +8,8 @@ const privacyPage = fs.readFileSync(path.join(process.cwd(), "app/privacy/page.t
 
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
   assert.notEqual(PRIVACY_NOTICE.id, PRIVACY_NOTICE.earlier.id);
-  assert.ok(PRIVACY_NOTICE.id.startsWith(PRIVACY_UPDATED), "named for the policy's date");
+  assert.match(PRIVACY_NOTICE.id, /^\d{4}-\d{2}-\d{2}-/, "named for the date of its change");
+  assert.ok(PRIVACY_NOTICE.id.slice(0, 10) <= PRIVACY_UPDATED, "a change the policy's date already covers");
 });
 
 test("policy notice: says what changed and links to where the policy says it", () => {

@@ -43,6 +43,15 @@
 -- (a running link with an old code goes on with its secret alone, as it
 -- would right after the deploy).
 --
+-- Apply it before the app deploy all the same: the app it follows
+-- (d3e9312) calls none of it, and then the first write of every link
+-- started after the deploy records its starter, so a link with one keeps
+-- going while sign-ins cannot be checked, and the grace for links from
+-- before the deploy holds, from the first minute. Without it a link
+-- started in between stays "Not recorded" or is recorded late, and the
+-- route waits RECORD_RETRY_MS (lib/live/server.ts) before trying again.
+-- 20261029_live_idle_close.sql goes after the app deploy.
+--
 -- Erasing an account: user_id has no foreign key, like the other private
 -- per-user tables (private.tool_use_log, private.user_cities). On an
 -- erasure request clear this table's rows for the account's id by hand

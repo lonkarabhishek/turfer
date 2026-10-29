@@ -41,6 +41,8 @@ const valueOf = <T,>(s: Section<T>, f: (d: T) => string | number): string | numb
 const subOf = <T,>(s: Section<T>, f: (d: T) => string | undefined): string | undefined => (s.ok ? f(s.data) : reasonText(s.reason));
 const failures = (...sections: Section<unknown>[]) => sections.filter((s) => !s.ok).length;
 
+const readTime = () => Date.now();
+
 function timeAgo(iso: string): string {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (mins < 1) return "just now";
@@ -189,6 +191,7 @@ export async function LoginsSection() {
 /** Live scoreboard links and the tools' counted uses (counted since 26 Oct 2026, lib/tools/usage.ts). */
 export async function ToolsSection() {
   const [{ live, uses }, latest] = await Promise.all([getToolUsage(), getLatestLiveLink()]);
+  const now = readTime();
   const n = (r: Record<string, number> | undefined, ...keys: string[]) => keys.reduce((s, k) => s + (r?.[k] ?? 0), 0);
   const since = uses?.since ? `Counted since ${dayLabel(uses.since)}` : "Counting from today";
   const scorecards = n(uses?.started, "live_scorer", "live_scoreboard");
@@ -219,7 +222,7 @@ export async function ToolsSection() {
             href="/admin/live"
             compact
             value={latest.ok ? (latest.data ? starterName(latest.data.starter) : DASH) : DASH}
-            sub={latest.ok ? (latest.data ? latestLinkSub(latest.data, timeAgo(latest.data.created_at)) : "No live links yet") : reasonText(latest.reason)}
+            sub={latest.ok ? (latest.data ? latestLinkSub(latest.data, timeAgo(latest.data.created_at), now) : "No live links yet") : reasonText(latest.reason)}
           />
         </div>
       </section>

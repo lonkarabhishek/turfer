@@ -9,7 +9,8 @@
  * The same trip when the server asks for a login again (a link already
  * on, its sign-in no longer accepted): again tells /login to show the
  * login even though this device still looks signed in, and back here the
- * link sends what waited.
+ * link sends what waited; closed tells it the link closed after 2 hours
+ * without an update, so back here a new one starts instead.
  */
 
 const KEY = "tapturf_live_login_v1";
@@ -20,7 +21,7 @@ const PARAM = "live";
 type Ask = { tool: "cricket" | "board"; id: string; at: number };
 
 /** Off to the login, remembering which match's link to turn on (or carry on) after. */
-export function askLiveLogin(tool: Ask["tool"], id: string, now = Date.now(), again = false) {
+export function askLiveLogin(tool: Ask["tool"], id: string, now = Date.now(), again = false, closed = false) {
   try {
     sessionStorage.setItem(KEY, JSON.stringify({ tool, id, at: now } satisfies Ask));
   } catch {
@@ -28,7 +29,7 @@ export function askLiveLogin(tool: Ask["tool"], id: string, now = Date.now(), ag
   }
   const url = new URL(window.location.href);
   url.searchParams.set(PARAM, "1");
-  window.location.href = `/login?next=${encodeURIComponent(url.pathname + url.search)}&via=live${again ? "&again=1" : ""}`;
+  window.location.href = `/login?next=${encodeURIComponent(url.pathname + url.search)}&via=live${again ? `&again=1${closed ? "&closed=1" : ""}` : ""}`;
 }
 
 /** Whether this page load is the return from that login, and the query without the marker. */

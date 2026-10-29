@@ -48,6 +48,8 @@ function LoginInner() {
   const live = via === "live" || via === "follow";
   // A live link whose sign-in the server no longer takes (components/tools/scorer/liveLogin.ts): log in again, even if this device looks signed in.
   const again = via === "live" && params?.get("again") === "1";
+  // ...for a link that closed after 2 hours without an update: back on the page a new link starts, nothing catches up.
+  const againClosed = again && params?.get("closed") === "1";
 
   const [googleBusy, setGoogleBusy] = useState(false);
   // One Google start at a time: a second tap would write a new verifier over the first.
@@ -203,12 +205,14 @@ function LoginInner() {
 
         {/* Title */}
         <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-[0.95] mb-2">
-          {via === "follow" ? "Log in to follow the live score" : again ? "Log in again to keep your live link going" : live ? "Log in to share a live link" : "Sign in"}
+          {via === "follow" ? "Log in to follow the live score" : againClosed ? "Log in again to start a new live link" : again ? "Log in again to keep your live link going" : live ? "Log in to share a live link" : "Sign in"}
         </h1>
         <p className="text-primary-600 text-[15px] mb-8">
           {via === "follow"
             ? "Free, and quick with Google or your phone. You come straight back to the score."
-            : again
+            : againClosed
+              ? "Your match is saved on this phone. Log in and you come straight back to it with a new link."
+              : again
               ? "Your match is saved on this phone. Log in and you come straight back to it, and the link catches up."
               : live
               ? "Your match stays saved on this phone. You log in once; friends log in on their own phones to follow."

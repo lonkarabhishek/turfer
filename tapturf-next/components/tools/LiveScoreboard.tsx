@@ -17,7 +17,7 @@ import { Setup, type SetupLive } from "./board/Setup";
 import { BoardScreen, TOOL } from "./board/BoardScreen";
 import { deleteBoard, loadBoard, loadIndex, metaOf, saveBoard, savePrefs, setCurrent, type BoardIndex, type BoardMeta, type BoardPrefs } from "./board/storage";
 import type { ShareLive } from "./scorer/ShareSheet";
-import { canKeepLink, linkUrl, readReminder, shortUrl, useLiveSync, type LiveInfo } from "./scorer/live";
+import { canKeepLink, linkUrl, readReminder, shortUrl, startStep, useLiveSync, type LiveInfo } from "./scorer/live";
 
 /** A live board touched within this long is reopened straight into scoring on reload. */
 const RESUME_MS = 12 * 60 * 60 * 1000;
@@ -178,21 +178,30 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
     live.changed(b.id, boardShape(view));
   };
 
+  /** Whether the saved board is still being played: liveFor's inPlay, for a link closed by this phone's clock. */
+  const inPlayOf = (id: string) => {
+    const b = loadBoard(id);
+    return !!b && deriveBoard(b).status === "live";
+  };
+
   const loginForLink = (id: string) => {
     trackTool("tool_action", TOOL, { action: "live_link_login" });
     // Looks signed in here, but the server turned that sign-in down: the login page must not bounce straight back.
-    askLiveLogin("board", id, undefined, !!auth.user);
+    // A link closed after 2 hours does not catch up: that login is for a new one.
+    askLiveLogin("board", id, undefined, !!auth.user, live.info(id, inPlayOf(id)).closed);
   };
 
   const startLink = async (id: string) => {
     // Sharing needs a login (Google first, then phone); scoring does not. The board is saved, so the trip loses nothing.
-    // The server asking for one again (fault login) goes the same way.
-    if (!auth.user || live.info(id).fault === "login") {
+    // The server asking for one again (fault login) goes the same way. Read as the sheet shows it: a link this phone's
+    // clock has closed is not on, and start() turns it off before the new one.
+    const step = startStep(live.info(id, inPlayOf(id)), !!auth.user);
+    if (step === "login") {
       loginForLink(id);
       return;
     }
-    // Already on (back from logging in again): it sends what waited.
-    if (live.info(id).on) {
+    // Already on and taking updates: it sends what waited.
+    if (step === "on") {
       live.resume(id);
       return;
     }
