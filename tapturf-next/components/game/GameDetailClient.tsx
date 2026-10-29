@@ -26,6 +26,7 @@ import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { GameHero, type HeroChip } from "./detail/GameHero";
 import { GameTitle } from "./detail/GameTitle";
@@ -415,6 +416,19 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
 
             {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
             {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />}
+
+            {/* Last and quiet, as on live score links: a game that is spam,
+                fake or unsafe comes to us by email. Not for its own host. */}
+            {!isHost && (
+              <p className="text-center text-[12px] text-primary-500">
+                <a
+                  href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Report game ${gameId}`)}&body=${encodeURIComponent(`Game: https://www.tapturf.in/game/${gameId}\n\nWhat's wrong with it?\n`)}`}
+                  className="inline-flex min-h-11 items-center underline underline-offset-2 hover:text-primary-800"
+                >
+                  Report this game
+                </a>
+              </p>
+            )}
           </div>
         </div>
 
