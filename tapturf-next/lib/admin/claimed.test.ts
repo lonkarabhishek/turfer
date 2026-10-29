@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { claimCounts, claimTime, claimWhen, claimedTurfs, claimsAnswer, howVerified, phoneLabel, placeOf } from "./claimed";
+import { CLAIMS_CAP, claimCounts, claimTime, claimWhen, claimedTurfs, claimsAnswer, claimsCut, howVerified, phoneLabel, placeOf } from "./claimed";
 import { toClaims } from "./claims";
 import { ReadFailed } from "./section";
 
@@ -82,6 +82,14 @@ test("the counts over the list", () => {
   assert.deepEqual(claimCounts([]), { turfs: 0, people: 0, waiting: 0, ended: 0 });
 });
 
+test("a full answer from admin_owner_claims may leave older claims out", () => {
+  assert.equal(claimsCut(claims), false);
+  const full = toClaims(Array.from({ length: CLAIMS_CAP }, (_, i) => row({ turf_id: `t${i}` })));
+  assert.equal(full.length, CLAIMS_CAP);
+  assert.equal(claimsCut(full), true);
+  assert.equal(claimsCut(full.slice(1)), false);
+});
+
 test("how each claim got in, and the number it proved", () => {
   const by = (key: string) => claims.find((c) => c.userKey === key)!;
   assert.deepEqual(howVerified(by("e:dee@x.in")), { text: "Code to the listed number", phone: "9800000001" });
@@ -100,7 +108,12 @@ test("when: claimed, then approved, verified, revoked or turned down (India time
   assert.equal(claimWhen(by("e:new@x.in")), "Claimed 29 Oct 2026, 21:30");
   assert.equal(claimWhen(toClaims([row({ status: "revoked" })])[0]), "Claimed 24 Oct 2026, 11:26 · revoked 24 Oct 2026, 12:03");
   assert.equal(claimWhen(toClaims([row({ status: "rejected" })])[0]), "Claimed 24 Oct 2026, 11:26 · turned down 24 Oct 2026, 12:03");
-  assert.equal(claimWhen(toClaims([row({ via: "phone_match", verified_phone: "9800000001" })])[0]), "Claimed 24 Oct 2026, 11:26 · verified 24 Oct 2026, 12:03", "a pending claim proved with a code later");
+  assert.equal(claimWhen(toClaims([row({ via: "phone_match", verified_phone: "9800000001" })])[0]), "Claimed 24 Oct 2026, 11:26 · verified or restored by TapTurf 24 Oct 2026, 12:03", "a pending claim proved with a code later");
+  // TapTurf restoring a revoked listed-number claim keeps its via and verified_phone: the row reads the same, and must not say only "verified".
+  assert.equal(
+    claimWhen(toClaims([row({ via: "phone_match", verified_phone: "9800000001", created_at: "2026-10-20T05:00:00Z", decided_at: "2026-10-29T06:00:00Z" })])[0]),
+    "Claimed 20 Oct 2026, 10:30 · verified or restored by TapTurf 29 Oct 2026, 11:30",
+  );
   assert.equal(claimWhen(toClaims([row({ created_at: null })])[0]), "Claimed (time not recorded) · approved 24 Oct 2026, 12:03");
 });
 

@@ -41,7 +41,7 @@ import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 import { turfPath } from "@/lib/utils/turfPath";
 import { LIVE_FILTERS, getAdminLiveLinks, type LiveFilter } from "@/lib/queries/adminTools";
 import { getAdminClaims } from "@/lib/queries/adminClaims";
-import { CLAIMED_FILTERS, claimCounts, claimWhen, claimedTurfs, howVerified, phoneLabel, type ClaimedFilter } from "@/lib/admin/claimed";
+import { CLAIMED_FILTERS, CLAIMS_CAP, claimCounts, claimWhen, claimedTurfs, claimsCut, howVerified, phoneLabel, type ClaimedFilter } from "@/lib/admin/claimed";
 import { keyLabel } from "@/lib/admin/claims";
 import { SectionError } from "@/components/admin/SectionStatus";
 import type { Reason } from "@/lib/admin/section";
@@ -467,6 +467,11 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
                 Approve, reject or revoke in myTapturf owners
               </Link>
             </div>
+            {claimsCut(claims) && (
+              <p className="text-[13px] text-amber-800 mb-3">
+                Showing the newest {CLAIMS_CAP} claims (waiting ones first). Older claims may be missing here, so these numbers may be low.
+              </p>
+            )}
             {turfs.length === 0 ? (
               <div className="rounded-2xl bg-white border border-primary-200">
                 <p className="px-5 py-10 text-center text-sm text-primary-400">{empty[f]}</p>

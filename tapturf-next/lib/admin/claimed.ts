@@ -92,6 +92,14 @@ export function claimedTurfs(claims: readonly AdminClaim[], filter: ClaimedFilte
   return out.sort((a, b) => byNewest(a.latest, b.latest) || a.name.localeCompare(b.name));
 }
 
+/**
+ * admin_owner_claims answers with 200 claims at most, waiting ones first and
+ * then the newest; at that many, older claims may be left out (and the counts
+ * over the list may be low), so the list says so.
+ */
+export const CLAIMS_CAP = 200;
+export const claimsCut = (claims: readonly AdminClaim[]) => claims.length >= CLAIMS_CAP;
+
 export type ClaimCounts = { turfs: number; people: number; waiting: number; ended: number };
 
 /** The line over the list: turfs claimed now, the people managing them, claims waiting, claims revoked or turned down. */
@@ -125,12 +133,14 @@ export const phoneLabel = (p10: string) => `+91 ${p10.replace(/^(\d{5})(\d{5})$/
 /**
  * When a claim was made and what happened to it since, in India time:
  * "Claimed 24 Oct 2026, 11:26 · approved 24 Oct 2026, 12:03". A
- * listed-number match is decided as it is made ("in at once").
+ * listed-number match is decided as it is made ("in at once"). One that
+ * went active later was either proved later (a code, a match) or revoked and
+ * restored by TapTurf, which keeps its via; the row can't tell which.
  */
 export function claimWhen(c: AdminClaim): string {
   const made = c.createdAt !== null ? `Claimed ${istDateTime(c.createdAt)}` : "Claimed (time not recorded)";
   if (c.status === "pending" || c.decidedAt === null) return made;
   if (c.status === "active" && c.via === "phone_match" && c.createdAt !== null && Math.abs(c.decidedAt - c.createdAt) < 60_000) return `${made}, in at once`;
-  const verb = c.status === "active" ? (c.via === "phone_match" ? "verified" : "approved") : c.status === "revoked" ? "revoked" : "turned down";
+  const verb = c.status === "active" ? (c.via === "phone_match" ? "verified or restored by TapTurf" : "approved") : c.status === "revoked" ? "revoked" : "turned down";
   return `${made} · ${verb} ${istDateTime(c.decidedAt)}`;
 }
