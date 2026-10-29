@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { createRowStore, type ListMeta, type ListPart, type LogLevel, type RowStore, type RowsRead } from "@/lib/cache/rowStore";
 import { createPartReader, dbTag } from "@/lib/cache/partRoute";
-import { convertImageUrls, firstImageUrl } from "@/lib/utils/images";
+import { convertImageUrls, filterReviewedPhotos, firstImageUrl } from "@/lib/utils/images";
 import { cleanPriceMentions, cleanVenueName } from "@/lib/utils/bookingApps";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { forCard } from "@/lib/utils/cardTurf";
@@ -66,23 +66,16 @@ export function transformTurf(raw: any): Turf {
   // booking apps' photos (playo.gumlet.io, cdn.district.in…) and
   // duplicates, and normalizes Google / Drive links. firstImageUrl does
   // the same for the cover, so an app's cover is no cover.
-  let images = convertImageUrls(rawImages);
-  let cover = firstImageUrl(raw.cover_image);
   // Photos the cover pass flagged (logos, screenshots, blur) stay in the
   // row but never reach a card or gallery, the cover included (2 turfs
-  // on 28 Oct), so a share card never shows one either.
-  if (Array.isArray(raw.image_review)) {
-    const bad = new Set(
-      (raw.image_review as { url?: string; usable?: boolean }[])
-        .filter((r) => r && r.usable === false && typeof r.url === "string")
-        .map((r) => r.url as string),
-    );
-    if (bad.size) {
-      const kept = images.filter((u) => !bad.has(u));
-      if (kept.length) images = kept;
-      if (cover && kept.length && (bad.has(cover) || bad.has(raw.cover_image))) cover = null;
-    }
-  }
+  // on 28 Oct), so a share card never shows one either. Game pages and
+  // cards use the same filter (usableTurfPhotos).
+  const { images, cover } = filterReviewedPhotos(
+    convertImageUrls(rawImages),
+    firstImageUrl(raw.cover_image),
+    raw.image_review,
+    raw.cover_image,
+  );
 
   // Parse contact_info - can be string or object
   let contactInfo = raw.contact_info;

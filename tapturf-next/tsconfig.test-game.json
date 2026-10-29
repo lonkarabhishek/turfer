@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/game",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": ["node"],
+    "paths": { "@/*": ["./*"] }
+  },
+  "files": ["lib/utils/game.test.ts", "lib/utils/sport.test.ts", "lib/utils/gameState.test.ts"]
+}

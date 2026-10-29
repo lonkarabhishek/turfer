@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
+import { usableTurfPhotos } from "@/lib/utils/images";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
 // ── Game CRUD ──────────────────────────────────────────
@@ -78,17 +79,43 @@ export async function getGameById(gameId: string) {
 
   if (error || !data) return { data: null, error: error?.message || "Game not found" };
 
-  // Fetch turf info separately
+  // Fetch turf info separately. The photo columns ride on this same
+  // read; the page gets up to 3 cleaned photos, never the raw arrays.
   if (data.turf_id) {
     const { data: turf } = await supabase
       .from("turfs")
-      .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
+      .select('id, slug, name, address, area, city, lat, lng, "Gmap Embed link", cover_image, images, image_review')
       .eq("id", data.turf_id)
       .single();
-    if (turf) (data as Record<string, unknown>).turfs = { ...turf, name: cleanVenueName(turf.name) };
+    if (turf) {
+      const { cover_image, images, image_review, ...rest } = turf;
+      (data as Record<string, unknown>).turfs = {
+        ...rest,
+        name: cleanVenueName(turf.name),
+        photos: usableTurfPhotos({ cover_image, images, image_review }, 3),
+      };
+    }
   }
 
   return { data: data as Game, error: null };
+}
+
+/**
+ * The signed-in player's latest request for this game ({ id, status }),
+ * so a reload still says "Request sent" or "Request declined". Read only
+ * for someone who is neither the host nor already playing.
+ */
+export async function getMyRequestForGame(gameId: string, userId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("game_requests")
+    .select("id,status")
+    .eq("game_id", gameId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const row = Array.isArray(data) ? data[0] : null;
+  return { data: (row as { id: string; status: GameRequest["status"] } | undefined) ?? null, error: error?.message || null };
 }
 
 export async function getUserGames(userId: string) {

@@ -17,7 +17,7 @@ export function GameDistance({
 }: {
   lat: number | null | undefined;
   lng: number | null | undefined;
-  /** "light" = white text for the dark hero card. */
+  /** "light" = white text on a dark surface; "dark" on white (the game page). */
   tone?: "light" | "dark";
 }) {
   const [km, setKm] = useState<number | null>(null);
@@ -73,7 +73,7 @@ export function GameDistance({
   if (km != null) {
     return (
       <span className="inline-flex items-center gap-2 flex-wrap">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold ${pill}`}>
+        <span className={`inline-flex items-center gap-1.5 h-11 rounded-full px-4 text-[14px] font-semibold ${pill}`}>
           <Navigation className="w-3.5 h-3.5 fill-current" />
           {formatDistance(km)} away
         </span>
@@ -81,7 +81,7 @@ export function GameDistance({
           href={directions}
           target="_blank"
           rel="noopener noreferrer"
-          className={`inline-flex items-center rounded-full px-3 py-1.5 text-[13px] font-semibold ${pill}`}
+          className={`inline-flex items-center h-11 rounded-full px-4 text-[14px] font-semibold ${pill}`}
         >
           Directions
         </a>
@@ -94,7 +94,7 @@ export function GameDistance({
       type="button"
       onClick={locate}
       disabled={state === "locating"}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold disabled:opacity-70 ${pill}`}
+      className={`inline-flex items-center gap-1.5 h-11 rounded-full px-4 text-[14px] font-semibold disabled:opacity-70 ${pill}`}
     >
       {state === "locating" ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />

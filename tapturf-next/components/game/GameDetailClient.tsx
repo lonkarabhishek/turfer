@@ -2,32 +2,55 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Clock, Users, Trophy, User, Share2, Check, X, Loader2, Zap, IndianRupee, CalendarDays, Shield, MessageSquare, ChevronRight, Pencil, Save } from "lucide-react";
+import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getGameById, getGameParticipants, getGameRequests, sendJoinRequest, acceptRequest, declineRequest, updateGame } from "@/lib/queries/games";
-import { formatDate, formatTimeSlot, capitalizeSkillLevel, getGameStatus } from "@/lib/utils/game";
+import { getGameById, getGameParticipants, getGameRequests, getMyRequestForGame, sendJoinRequest, acceptRequest, declineRequest, updateGame } from "@/lib/queries/games";
+import {
+  durationLabel,
+  firstName,
+  formatClock,
+  formatGameDay,
+  formatPrice,
+  formatTimeRange,
+  gamePlace,
+  getGameStatus,
+  hostNote,
+  skillInfo,
+  speakTimeRange,
+  spotsInfo,
+  turfInfo,
+} from "@/lib/utils/game";
+import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber } from "@/lib/utils/gameState";
+import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
-import { GameRequestCard } from "./GameRequestCard";
-import { GameDistance } from "./GameDistance";
-import { GameMap } from "./GameMap";
 import { mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { turfPath } from "@/lib/utils/turfPath";
-import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
-import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
+import { GameHero, type HeroChip } from "./detail/GameHero";
+import { GameTitle } from "./detail/GameTitle";
+import { GameRequests } from "./detail/GameRequests";
+import { GameStatusNote } from "./detail/GameStatusNote";
+import { GameFacts } from "./detail/GameFacts";
+import { GameHostCard } from "./detail/GameHostCard";
+import { GameLineup } from "./detail/GameLineup";
+import { GameWhere } from "./detail/GameWhere";
+import { GameCtaBar } from "./detail/GameCtaBar";
+import { GameAside } from "./detail/GameAside";
+import type { CtaModel } from "./detail/GameCta";
+import { GameSkeleton } from "./detail/GameSkeleton";
 
-/** wa.me needs the country code: a bare 10-digit Indian number gets 91 in front. */
-function waNumber(phone: string): string {
-  const d = phone.replace(/[^0-9]/g, "");
-  return d.length === 10 ? `91${d}` : d;
-}
+const field = "w-full min-h-12 border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-accent-600 focus:border-accent-600 bg-primary-50";
+const label = "block text-[14px] font-medium text-primary-700 mb-1";
 
 export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string; liveLinks?: boolean }) {
   const { user, login, confirmedUser } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
   const [participants, setParticipants] = useState<GameParticipant[]>([]);
+  const [participantsLoaded, setParticipantsLoaded] = useState(false);
   const [requests, setRequests] = useState<GameRequest[]>([]);
+  // This viewer's latest request, read on load (pending or declined survives a reload).
+  const [myRequest, setMyRequest] = useState<{ userId: string; id: string; status: GameRequest["status"] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [joinNote, setJoinNote] = useState("");
   const [joining, setJoining] = useState(false);
@@ -48,21 +71,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  const isHost = user && game?.creator_id === user.id;
+  const isHost = !!user && !!game && game.creator_id === user.id;
   const status = game ? getGameStatus(game) : "upcoming";
-
-  useEffect(() => {
-    loadGame();
-  }, [gameId]);
-
-  useEffect(() => {
-    if (game && user && isHost) {
-      loadRequests();
-    }
-    if (game) {
-      loadParticipants();
-    }
-  }, [game, user]);
+  const viewerId = user?.id ?? null;
+  const isParticipant = !!viewerId && participants.some((p) => p.user_id === viewerId);
 
   const loadGame = async () => {
     setLoading(true);
@@ -74,12 +86,64 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const loadParticipants = async () => {
     const { data } = await getGameParticipants(gameId);
     setParticipants(data);
+    setParticipantsLoaded(true);
   };
 
   const loadRequests = async () => {
     const { data } = await getGameRequests(gameId);
     setRequests(data);
   };
+
+  // Another game in the same view (client navigation): back to the skeleton until it arrives.
+  const [loadedFor, setLoadedFor] = useState(gameId);
+  if (loadedFor !== gameId) {
+    setLoadedFor(gameId);
+    setLoading(true);
+  }
+
+  useEffect(() => {
+    let alive = true;
+    getGameById(gameId).then(({ data }) => {
+      if (!alive) return;
+      setGame(data);
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [gameId]);
+
+  // The lineup for everyone, the requests for the host: again whenever the game or the sign-in changes.
+  useEffect(() => {
+    if (!game) return;
+    let alive = true;
+    if (user && isHost) {
+      getGameRequests(gameId).then(({ data }) => {
+        if (alive) setRequests(data);
+      });
+    }
+    getGameParticipants(gameId).then(({ data }) => {
+      if (!alive) return;
+      setParticipants(data);
+      setParticipantsLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [game, user, isHost, gameId]);
+
+  // Pending or declined after a reload: one small read, only for a
+  // signed-in viewer who is neither the host nor already playing.
+  useEffect(() => {
+    if (!viewerId || isHost || !participantsLoaded || isParticipant) return;
+    let alive = true;
+    getMyRequestForGame(gameId, viewerId).then(({ data }) => {
+      if (alive) setMyRequest(data ? { userId: viewerId, ...data } : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [gameId, viewerId, isHost, participantsLoaded, isParticipant]);
 
   const handleJoin = async () => {
     if (!user) { login(); return; }
@@ -123,15 +187,29 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
 
   const handleShare = async () => {
     const url = window.location.href;
-    const text = `Join my ${game?.sport} game on TapTurf!`;
+    const sport = sportLabel(game?.sport);
+    const venue = game?.turfs?.name;
+    const when = game ? [formatGameDay(game.date).title, formatTimeRange(game.start_time, game.end_time).replace(/ /g, " ")] : [];
+    const text = [`${isHost ? `Join my ${sport} game` : `${sport} game`}${venue ? ` at ${venue}` : ""}`, ...when].filter(Boolean).join(", ");
     if (navigator.share) {
-      await navigator.share({ title: text, url });
+      try {
+        await navigator.share({ title: text, text, url });
+      } catch {
+        // Closed the share sheet.
+      }
     } else {
-      await navigator.clipboard.writeText(url);
-      setShared(true);
-      setTimeout(() => setShared(false), 2000);
+      try {
+        await navigator.clipboard.writeText(url);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      } catch {
+        // No clipboard: nothing to say.
+      }
     }
   };
+
+  // The main button and the "Your spot?" chip: sign in first, then the request sheet (as before).
+  const askToJoin = () => (user ? setShowJoinForm(true) : login());
 
   const openEditModal = () => {
     if (!game) return;
@@ -172,30 +250,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     }
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-        {/* Hero skeleton */}
-        <div className="animate-pulse">
-          <div className="w-24 h-6 bg-primary-200 rounded-full mb-6" />
-          <div className="bg-gradient-to-br from-primary-50 to-primary-100/50 rounded-3xl p-6 mb-6">
-            <div className="flex gap-2 mb-4">
-              <div className="w-20 h-7 bg-primary-200/50 rounded-full" />
-              <div className="w-16 h-7 bg-primary-200/30 rounded-full" />
-            </div>
-            <div className="w-3/4 h-8 bg-primary-200/40 rounded mb-2" />
-            <div className="w-1/2 h-5 bg-primary-200/30 rounded mb-4" />
-            <div className="grid grid-cols-3 gap-3">
-              <div className="h-16 bg-white/60 rounded-2xl" />
-              <div className="h-16 bg-white/60 rounded-2xl" />
-              <div className="h-16 bg-white/60 rounded-2xl" />
-            </div>
-          </div>
-          <div className="h-40 bg-primary-100 rounded-2xl" />
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <GameSkeleton />;
 
   if (!game) {
     return (
@@ -213,672 +268,341 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   }
 
   const spotsLeft = game.max_players - game.current_players;
-  const isFull = spotsLeft <= 0;
-  const fillPercent = (game.current_players / game.max_players) * 100;
   const pendingRequests = requests.filter((r) => r.status === "pending");
+  const ended = status === "expired";
+  const mine = myRequest && myRequest.userId === viewerId ? myRequest : null;
+  const cta = ctaState({ isHost, status: game.status, timing: status, isParticipant, joinStatus, myRequest: mine, spotsLeft });
+  const cancelled = cta === "cancelled";
+
+  const sportName = sportLabel(game.sport);
+  const family = sportFamily(game.sport);
+  const day = formatGameDay(game.date);
+  const range = formatTimeRange(game.start_time, game.end_time);
+  const duration = durationLabel(game.start_time, game.end_time);
+  // A cancelled game, like a played one, says who joined and that joining is closed.
+  const spots = spotsInfo(game.current_players, game.max_players, ended || cancelled);
+  const price = formatPrice(game.price_per_player);
+  const free = price === "Free";
+  const hostFirst = firstName(game.host_name);
+  const phone = game.host_phone?.trim() || null;
+  const showNumber = !isHost && canSeeHostNumber({ isHost, isParticipant: isParticipant || mine?.status === "accepted", signedIn: !!user });
+  const venue = game.turfs?.name || `${sportName} game`;
+  const chip: HeroChip = heroChip({ isHost, status: game.status, timing: status, spotsLeft });
+  const note = cta === "cancelled" || cta === "ended" || cta === "full" ? cta : null;
+
+  const model: CtaModel = {
+    state: cta,
+    free,
+    price,
+    day,
+    range,
+    duration: duration ? `${duration.text}${duration.endsNextDay ? " · ends next day" : ""}` : null,
+    startClock: formatClock(game.start_time),
+    endClock: formatClock(game.end_time),
+    spots,
+    current: game.current_players,
+    max: game.max_players,
+    pendingCount: pendingRequests.length,
+    hostFirst,
+    waHref: cta === "accepted" && showNumber && phone ? `https://wa.me/${waNumber(phone)}` : null,
+    onAsk: askToJoin,
+    onEdit: openEditModal,
+    onShare: handleShare,
+    shared,
+  };
+
+  const mapSrc = (() => {
+    const raw = game.turfs?.["Gmap Embed link"] ?? "";
+    const srcMatch = raw.match(/src="([^"]+)"/);
+    return raw ? (srcMatch ? srcMatch[1] : raw) : null;
+  })();
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-      {/* Back link */}
-      <Link href="/games" className="inline-flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-600 mb-5 transition-colors">
-        <ArrowLeft className="w-4 h-4" />
+    <div className="md:max-w-2xl lg:max-w-6xl mx-auto sm:px-6 sm:pt-5 lg:pt-6">
+      <Link
+        href="/games"
+        className="hidden lg:inline-flex h-11 mb-2 items-center gap-1.5 text-[15px] font-medium text-primary-700 hover:text-primary-900"
+      >
+        <ArrowLeft className="w-4 h-4" aria-hidden />
         All games
       </Link>
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* HERO CARD — gradient background with game info */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700 text-white p-6 sm:p-8 mb-6">
-        {/* Decorative circles */}
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+      {/* No items-start: the aside stretches to the row's height, so its card stays in view (sticky) all the way down. */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
+        <div className="min-w-0">
+          <GameHero
+            photos={game.turfs?.photos}
+            family={family}
+            sport={game.sport}
+            sportName={sportName}
+            chip={chip}
+            muted={chip === "ended" || chip === "cancelled"}
+            onShare={handleShare}
+          />
 
-        {/* Badges row */}
-        <div className="relative flex items-center gap-2 mb-4 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-bold px-3 py-1.5 rounded-full border border-white/20">
-            <Trophy className="w-3.5 h-3.5" />
-            {game.sport}
-          </span>
-          {game.skill_level && game.skill_level !== "all" && (
-            <span className="inline-flex items-center gap-1 bg-white/15 text-white/90 text-xs font-medium px-2.5 py-1.5 rounded-full">
-              <Shield className="w-3 h-3" />
-              {capitalizeSkillLevel(game.skill_level)}
-            </span>
-          )}
-          {status === "live" && (
-            <span className="inline-flex items-center gap-1.5 bg-green-400/20 text-green-100 text-xs font-bold px-3 py-1.5 rounded-full border border-green-400/30 animate-pulse">
-              <Zap className="w-3 h-3" />
-              LIVE NOW
-            </span>
-          )}
-          {status === "expired" && (
-            <span className="text-xs font-semibold text-red-200 bg-red-500/30 px-3 py-1.5 rounded-full">
-              Game Ended
-            </span>
-          )}
-        </div>
-
-        {/* Title & address. The turf name links to its turf page. */}
-        <h1 className="relative text-2xl sm:text-3xl font-bold mb-1.5">
-          {game.turfs?.id ? (
-            <Link href={turfPath(game.turfs)} className="hover:underline underline-offset-4 decoration-white/40">
-              {game.turfs.name}
-            </Link>
-          ) : (
-            game.turfs?.name || game.title
-          )}
-        </h1>
-        {game.turfs?.address && (
-          <p className="relative flex items-center gap-1.5 text-sm text-white/80 mb-3">
-            <MapPin className="w-4 h-4 flex-shrink-0" />
-            {game.turfs.address}
-          </p>
-        )}
-        {game.turfs?.id && (
-          <div className="relative flex items-center gap-2 flex-wrap mb-5">
-            <Link
-              href={turfPath(game.turfs)}
-              className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold bg-white text-primary-900 hover:bg-white/90"
-            >
-              View turf
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-            <GameDistance lat={game.turfs.lat} lng={game.turfs.lng} />
+          <div className="relative -mt-5 sm:mt-5 rounded-t-[24px] sm:rounded-none bg-white px-4 sm:px-0 pt-4 sm:pt-0 pb-1">
+            <GameTitle
+              venue={venue}
+              sportName={sportName}
+              place={gamePlace(game.turfs)}
+              hostName={game.host_name}
+              hostPhoto={game.host_profile_image_url}
+              hostId={game.creator_id}
+              isHost={isHost}
+            />
           </div>
-        )}
 
-        {/* Quick stats row */}
-        <div className="relative grid grid-cols-3 gap-3">
-          <div className="bg-white/15 backdrop-blur-sm rounded-2xl p-3 text-center border border-white/10">
-            <CalendarDays className="w-4 h-4 mx-auto mb-1 text-white/70" />
-            <p className="text-xs text-white/70">Date</p>
-            <p className="text-sm font-bold">{formatDate(game.date)}</p>
-          </div>
-          <div className="bg-white/15 backdrop-blur-sm rounded-2xl p-3 text-center border border-white/10">
-            <Clock className="w-4 h-4 mx-auto mb-1 text-white/70" />
-            <p className="text-xs text-white/70">Time</p>
-            <p className="text-sm font-bold">{formatTimeSlot(game.start_time, game.end_time)}</p>
-          </div>
-          <div className="bg-white/15 backdrop-blur-sm rounded-2xl p-3 text-center border border-white/10">
-            <IndianRupee className="w-4 h-4 mx-auto mb-1 text-white/70" />
-            <p className="text-xs text-white/70">Cost</p>
-            <p className="text-sm font-bold">{game.price_per_player > 0 ? `₹${game.price_per_player}` : "Free"}</p>
-          </div>
-        </div>
-      </div>
+          <div className="px-4 sm:px-0 mt-3 space-y-6">
+            {isHost && requests.length > 0 && (
+              <GameRequests pending={pendingRequests} error={acceptError} onAccept={handleAccept} onDecline={handleDecline} />
+            )}
 
-      {/* Main content grid */}
-      <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8">
-        {/* Left column */}
-        <div>
+            {note && !isHost && <GameStatusNote kind={note} taken={spots.line} />}
 
-          {/* ═══════════════════════════════════════════════════════ */}
-          {/* HOST REQUESTS SECTION — prominent at top for hosts */}
-          {/* ═══════════════════════════════════════════════════════ */}
-          {isHost && pendingRequests.length > 0 && (
-            <div className="mb-6 bg-gradient-to-r from-accent-50 to-orange-50 border-2 border-accent-200 rounded-2xl p-5 animate-fade-in">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-accent-500 rounded-full flex items-center justify-center">
-                  <MessageSquare className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-primary-800">
-                    Join Requests
-                  </h3>
-                  <p className="text-xs text-primary-500">{pendingRequests.length} pending request{pendingRequests.length !== 1 ? "s" : ""}</p>
-                </div>
-                <span className="ml-auto inline-flex items-center justify-center w-7 h-7 bg-accent-500 text-white text-sm font-bold rounded-full animate-pulse">
-                  {pendingRequests.length}
-                </span>
-              </div>
-              {acceptError && (
-                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
-                  {acceptError}
-                </div>
-              )}
-              <div className="space-y-3">
-                {pendingRequests.map((req) => (
-                  <GameRequestCard
-                    key={req.id}
-                    request={req}
-                    onAccept={() => handleAccept(req.id)}
-                    onDecline={() => handleDecline(req.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+            <GameFacts
+              day={day}
+              past={ended}
+              range={range}
+              spokenRange={speakTimeRange(game.start_time, game.end_time)}
+              length={model.duration}
+              price={{ free, label: price }}
+              spots={spots}
+              skill={skillInfo(game.skill_level)}
+              turf={turfInfo(game.turf_booked)}
+            />
 
-          {isHost && pendingRequests.length === 0 && requests.length > 0 && (
-            <div className="mb-6 bg-primary-50 rounded-2xl p-4 flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <Check className="w-4 h-4 text-green-600" />
-              </div>
-              <p className="text-sm text-primary-500">All join requests have been handled!</p>
-            </div>
-          )}
+            <GameHostCard
+              hostName={game.host_name}
+              hostFirst={hostFirst}
+              hostPhoto={game.host_profile_image_url}
+              hostId={game.creator_id}
+              note={hostNote(game)}
+              isHost={isHost}
+              phone={phone}
+              showNumber={showNumber}
+              closed={ended || cancelled}
+            />
 
-          {/* ═══════════════════════════════════════════════════════ */}
-          {/* PLAYERS PROGRESS */}
-          {/* ═══════════════════════════════════════════════════════ */}
-          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-semibold text-primary-800 flex items-center gap-2">
-                <Users className="w-4.5 h-4.5 text-primary-500" />
-                Players
-              </h3>
-              <span className={`text-sm font-bold ${isFull ? "text-accent-500" : spotsLeft <= 2 ? "text-orange-500" : "text-primary-600"}`}>
-                {isFull ? "Full" : `${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left`}
-              </span>
-            </div>
+            <GameLineup
+              participants={participants}
+              creatorId={game.creator_id}
+              viewerId={viewerId}
+              current={game.current_players}
+              max={game.max_players}
+              spots={spots}
+              ended={ended}
+              cancelled={cancelled}
+              closed={ended || cancelled || spotsLeft <= 0}
+              isHost={isHost}
+              canAsk={canRequest(cta)}
+              onAsk={askToJoin}
+              onShare={handleShare}
+              shared={shared}
+            />
 
-            {/* Progress bar */}
-            <div className="relative w-full h-3 bg-primary-100 rounded-full overflow-hidden mb-3">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  isFull ? "bg-gradient-to-r from-accent-400 to-accent-500" :
-                  spotsLeft <= 2 ? "bg-gradient-to-r from-orange-400 to-orange-500" :
-                  "bg-gradient-to-r from-primary-400 to-primary-500"
-                }`}
-                style={{ width: `${Math.min(fillPercent, 100)}%` }}
+            {game.turfs?.id && (
+              <GameWhere
+                href={turfPath(game.turfs)}
+                name={game.turfs.name}
+                address={game.turfs.address}
+                photos={game.turfs.photos}
+                family={family}
+                lat={game.turfs.lat}
+                lng={game.turfs.lng}
+                mapSrc={mapSrc}
+                mapHref={mapsSearchUrl({ lat: game.turfs.lat, lng: game.turfs.lng, name: game.turfs.name, address: game.turfs.address })}
               />
-            </div>
-            <p className="text-xs text-primary-500 mb-4">{game.current_players} of {game.max_players} players joined</p>
-
-            {/* Participant avatars */}
-            <div className="flex flex-wrap gap-2">
-              {participants.map((p) => (
-                <div key={p.user_id} className="flex items-center gap-2 bg-primary-50 border border-primary-100 rounded-full px-3 py-1.5">
-                  {p.profile_image_url ? (
-                    <img src={p.profile_image_url} alt="" className="w-6 h-6 rounded-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-primary-200 flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-primary-700" />
-                    </div>
-                  )}
-                  <span className="text-sm font-medium text-primary-800">{p.name || "Player"}</span>
-                  <VerifiedTickFor id={p.user_id} className="-ml-1" />
-                </div>
-              ))}
-              {participants.length === 0 && (
-                <p className="text-sm text-primary-400">No confirmed players yet</p>
-              )}
-            </div>
-          </div>
-
-          {/* ═══════════════════════════════════════════════════════ */}
-          {/* LOCATION — where the game happens (was near the bottom) */}
-          {/* ═══════════════════════════════════════════════════════ */}
-          {game.turfs?.id && (() => {
-            const raw = game.turfs["Gmap Embed link"] ?? "";
-            const srcMatch = raw.match(/src="([^"]+)"/);
-            const mapSrc = raw ? (srcMatch ? srcMatch[1] : raw) : null;
-            return (
-              <div className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5">
-                <div className="p-5 pb-3">
-                  <h3 className="text-base font-semibold text-primary-800 flex items-center gap-2">
-                    <MapPin className="w-4.5 h-4.5 text-accent-600" />
-                    Where
-                  </h3>
-                  {game.turfs?.address && (
-                    <p className="text-sm text-primary-500 mt-1">{game.turfs.address}</p>
-                  )}
-                </div>
-                <Link
-                  href={turfPath(game.turfs)}
-                  className="flex items-center gap-3 px-5 py-3 border-t border-primary-100 hover:bg-primary-50 transition-colors"
-                >
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[15px] font-semibold text-primary-900 truncate">{game.turfs.name}</span>
-                    <span className="block text-[13px] text-primary-500">Photos, prices, reviews and other games here</span>
-                  </span>
-                  <ChevronRight className="w-5 h-5 text-primary-300 shrink-0" />
-                </Link>
-                {mapSrc && (
-                  <GameMap
-                    src={mapSrc}
-                    openHref={mapsSearchUrl({ lat: game.turfs.lat, lng: game.turfs.lng, name: game.turfs.name, address: game.turfs.address })}
-                  />
-                )}
-              </div>
-            );
-          })()}
-
-          {/* ═══════════════════════════════════════════════════════ */}
-          {/* HOSTED BY — contact info (was middle) */}
-          {/* ═══════════════════════════════════════════════════════ */}
-          <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
-            <h3 className="text-base font-semibold text-primary-800 mb-3">Hosted by</h3>
-            <div className="flex items-center gap-3">
-              {game.host_profile_image_url ? (
-                <img src={game.host_profile_image_url} alt="" className="w-12 h-12 rounded-full object-cover ring-2 ring-primary-100" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-accent-500 flex items-center justify-center ring-2 ring-primary-100">
-                  <User className="w-6 h-6 text-white" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="flex items-center gap-1 min-w-0 text-sm font-semibold text-primary-800">
-                  <span className="truncate">{game.host_name}</span>
-                  <VerifiedTickFor id={game.creator_id} />
-                </p>
-                {/* The host's number is for players, not for anyone who finds
-                    the page: shown only after sign-in. */}
-                {game.host_phone && user ? (
-                  <a href={`tel:${game.host_phone}`} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                    {game.host_phone}
-                  </a>
-                ) : game.host_phone ? (
-                  <p className="text-xs text-primary-400">Sign in to see the host&apos;s number</p>
-                ) : null}
-              </div>
-              {game.host_phone && (user ? (
-                <a
-                  href={`https://wa.me/${waNumber(game.host_phone)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1fb855] text-white text-xs font-bold px-3 py-2 rounded-full transition-colors shrink-0"
-                >
-                  WhatsApp
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={login}
-                  className="flex items-center gap-1.5 bg-primary-900 hover:bg-primary-800 text-white text-xs font-bold px-3 py-2 rounded-full transition-colors shrink-0"
-                >
-                  Sign in to contact
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Notes from host — short + useful, keep visible */}
-          {game.notes && (
-            <div className="bg-accent-50 border border-accent-500/30 rounded-2xl p-5 mb-5">
-              <h3 className="text-base font-semibold text-primary-800 mb-2">A note from your host</h3>
-              <p className="text-sm text-primary-700 leading-relaxed">{game.notes}</p>
-            </div>
-          )}
-
-          {/* ═══════════════════════════════════════════════════════ */}
-          {/* SECONDARY: About + full details grid                    */}
-          {/* ═══════════════════════════════════════════════════════ */}
-          {game.description && (
-            <div className="bg-white border border-primary-200 rounded-2xl p-5 mb-5">
-              <h3 className="text-base font-semibold text-primary-800 mb-2">About this game</h3>
-              <p className="text-sm text-primary-500 leading-relaxed">{game.description}</p>
-            </div>
-          )}
-
-          <details className="bg-white border border-primary-200 rounded-2xl overflow-hidden mb-5 group">
-            <summary className="p-5 cursor-pointer flex items-center justify-between text-base font-semibold text-primary-800 list-none">
-              <span>All details</span>
-              <span className="text-xs font-mono text-primary-500 group-open:hidden">Show</span>
-              <span className="text-xs font-mono text-primary-500 hidden group-open:inline">Hide</span>
-            </summary>
-            <div className="p-5 pt-0 grid grid-cols-2 gap-3">
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Sport</p>
-                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
-                  <Trophy className="w-3.5 h-3.5 text-accent-600" />
-                  {game.sport}
-                </p>
-              </div>
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Skill level</p>
-                <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-accent-600" />
-                  {capitalizeSkillLevel(game.skill_level)}
-                </p>
-              </div>
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Cost per person</p>
-                <p className="text-sm font-semibold text-primary-800">
-                  {game.price_per_player > 0 ? `₹${game.price_per_player}` : "Free"}
-                </p>
-              </div>
-              <div className="bg-primary-50 rounded-xl p-3">
-                <p className="text-xs text-primary-500 mb-0.5">Turf booked</p>
-                <p className={`text-sm font-semibold ${game.turf_booked ? "text-accent-600" : "text-hot-600"}`}>
-                  {game.turf_booked ? "✓ Confirmed" : "Not yet"}
-                </p>
-              </div>
-            </div>
-          </details>
-
-          {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
-          {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />}
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* RIGHT COLUMN — Desktop sticky CTA card */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        <div className="hidden lg:block">
-          <div className="sticky top-24 space-y-4">
-            <div className="border border-primary-200 rounded-2xl p-6 shadow-elevated bg-white">
-              <div className="text-center mb-5">
-                <p className="text-3xl font-bold text-primary-800">
-                  {game.price_per_player > 0 ? (
-                    <>₹{game.price_per_player}<span className="text-sm font-normal text-primary-500"> /person</span></>
-                  ) : (
-                    <span className="text-primary-600">Free</span>
-                  )}
-                </p>
-              </div>
-
-              <div className="space-y-3 mb-5">
-                <div className="flex justify-between text-sm">
-                  <span className="text-primary-500">Date</span>
-                  <span className="font-medium text-primary-800">{formatDate(game.date)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-primary-500">Time</span>
-                  <span className="font-medium text-primary-800">{formatTimeSlot(game.start_time, game.end_time)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-primary-500">Skill</span>
-                  <span className="font-medium text-primary-800">{capitalizeSkillLevel(game.skill_level)}</span>
-                </div>
-              </div>
-
-              {/* Players bar */}
-              <div className="mb-5">
-                <div className="flex items-center justify-between text-sm mb-1.5">
-                  <span className="text-primary-500">Spots</span>
-                  <span className={`font-bold ${isFull ? "text-accent-500" : "text-primary-600"}`}>
-                    {isFull ? "Full" : `${spotsLeft} left`}
-                  </span>
-                </div>
-                <div className="w-full h-2.5 bg-primary-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${isFull ? "bg-accent-500" : "bg-primary-500"}`}
-                    style={{ width: `${Math.min(fillPercent, 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-primary-400 mt-1 text-center">
-                  {game.current_players}/{game.max_players} players
-                </p>
-              </div>
-
-              {/* CTA */}
-              {renderJoinButton()}
-
-              <button
-                onClick={handleShare}
-                className="w-full mt-3 flex items-center justify-center gap-2 border border-primary-200 rounded-xl py-2.5 text-sm font-medium text-primary-500 hover:bg-primary-50 hover:border-primary-300 transition-all"
-              >
-                <Share2 className="w-4 h-4" />
-                {shared ? "Link copied!" : "Share"}
-              </button>
-            </div>
-
-            {/* Desktop host requests panel */}
-            {isHost && pendingRequests.length > 0 && (
-              <div className="border-2 border-accent-200 rounded-2xl p-5 bg-accent-50/50">
-                <p className="text-sm font-bold text-primary-800 mb-3 flex items-center gap-2">
-                  <span className="w-5 h-5 bg-accent-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                    {pendingRequests.length}
-                  </span>
-                  Pending Requests
-                </p>
-                {acceptError && (
-                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
-                    {acceptError}
-                  </div>
-                )}
-                <div className="space-y-2">
-                  {pendingRequests.slice(0, 3).map((req) => (
-                    <GameRequestCard
-                      key={req.id}
-                      request={req}
-                      onAccept={() => handleAccept(req.id)}
-                      onDecline={() => handleDecline(req.id)}
-                      compact
-                    />
-                  ))}
-                  {pendingRequests.length > 3 && (
-                    <p className="text-xs text-accent-600 font-medium text-center pt-1">
-                      +{pendingRequests.length - 3} more
-                    </p>
-                  )}
-                </div>
-              </div>
             )}
+
+            {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
+            {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />}
           </div>
         </div>
+
+        <GameAside m={model} />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* MOBILE FIXED BOTTOM CTA — positioned above MobileNav */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <div
-        ref={liftCookieBanner}
-        className="fixed left-0 right-0 bg-white border-t border-primary-200 p-3 lg:hidden z-30"
-        style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
-      >
-        <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
-          <div className="min-w-0">
-            <p className="text-lg font-bold text-primary-800">
-              {game.price_per_player > 0 ? (
-                <>₹{game.price_per_player}<span className="text-xs font-normal text-primary-500">/person</span></>
-              ) : (
-                <span className="text-primary-600">Free</span>
-              )}
-            </p>
-            <p className="text-xs text-primary-500 truncate">
-              {formatDate(game.date)} · {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left` : "Full"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {isHost && (
-              <button
-                onClick={openEditModal}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-primary-200 bg-primary-50 rounded-xl hover:bg-primary-100 transition-colors"
-              >
-                <Pencil className="w-4 h-4 text-primary-600" />
-              </button>
-            )}
-            <button
-              onClick={handleShare}
-              className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors"
-            >
-              <Share2 className="w-4 h-4 text-primary-500" />
-            </button>
-            {renderMobileJoinButton()}
-          </div>
+      <GameCtaBar m={model} />
+
+      {/* Room for the bar (and, on phones, the bottom nav) under the page. */}
+      <div className="h-32 md:h-24 lg:hidden" />
+
+      {shared && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="lg:hidden fixed inset-x-0 z-40 flex justify-center pointer-events-none bottom-[calc(8.5rem+env(safe-area-inset-bottom))] md:bottom-24"
+        >
+          <span className="rounded-full bg-primary-900 text-white text-[14px] font-semibold px-4 py-2 shadow-elevated">Link copied</span>
         </div>
-      </div>
+      )}
 
-      {/* Mobile bottom spacer (CTA bar + MobileNav) */}
-      <div className="h-32 lg:hidden" />
-
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* JOIN FORM MODAL */}
-      {/* ═══════════════════════════════════════════════════════ */}
       {/* Both sheets sit in what the phone shows (ViewportOverlay): above the keys while the note or a field is typed. */}
       {showJoinForm && (
         <ViewportOverlay className="z-50 flex items-end md:items-center justify-center">
           <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={() => setShowJoinForm(false)} />
-          <div role="dialog" aria-modal="true" aria-label="Request to join" className="relative w-full md:max-w-md max-h-[calc(var(--vv-h,100dvh)*0.92)] overflow-y-auto overscroll-contain bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-primary-800">Request to Join</h3>
-              <button onClick={() => setShowJoinForm(false)} className="p-1 rounded-full hover:bg-primary-100">
-                <X className="w-5 h-5 text-primary-500" />
+          <div role="dialog" aria-modal="true" aria-labelledby="join-h" className="relative w-full md:max-w-md max-h-[calc(var(--vv-h,100dvh)*0.92)] overflow-y-auto overscroll-contain bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
+            <div className="flex items-center justify-between mb-3">
+              <h2 id="join-h" className="text-[20px] font-bold text-primary-900">Request to join</h2>
+              <button onClick={() => setShowJoinForm(false)} aria-label="Close" className="size-11 -mr-2 grid place-items-center rounded-full hover:bg-primary-100">
+                <X className="w-5 h-5 text-primary-700" aria-hidden />
               </button>
             </div>
 
-            <p className="text-sm text-primary-500 mb-4">
-              Send a request to <span className="font-medium text-primary-700">{game.host_name}</span> to join this game.
+            <p className="text-[15px] text-primary-700 mb-4 leading-relaxed">
+              {hostFirst === "the host" ? "The host" : hostFirst} will see your request and can accept or decline it. You&apos;ll get a notification either way.
             </p>
 
+            <label htmlFor="join-note" className="sr-only">Note for {hostFirst}</label>
             <textarea
+              id="join-note"
               value={joinNote}
               onChange={(e) => setJoinNote(e.target.value)}
-              placeholder="Add a note to the host (optional)"
+              placeholder={`Add a note for ${hostFirst === "the host" ? "the host" : hostFirst} (optional)`}
               rows={3}
-              className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
+              className={`${field} resize-none`}
             />
 
             <button
               onClick={handleJoin}
               disabled={joining}
-              className="w-full mt-4 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full mt-4 h-12 rounded-full bg-accent-600 hover:bg-accent-700 text-white text-[16px] font-semibold disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {joining ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sending...
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                  Sending…
                 </>
               ) : (
                 <>
-                  <MessageSquare className="w-4 h-4" />
-                  Send Join Request
+                  <Send className="w-4 h-4" aria-hidden />
+                  Send request
                 </>
               )}
             </button>
 
             {joinStatus === "error" && (
-              <p className="text-sm text-accent-500 text-center mt-3">
-                Could not send request. You may have already requested.
+              <p role="alert" className="text-[14px] text-hot-600 text-center mt-3">
+                Couldn&apos;t send your request. You may have asked already.
               </p>
             )}
           </div>
         </ViewportOverlay>
       )}
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* EDIT GAME MODAL */}
-      {/* ═══════════════════════════════════════════════════════ */}
       {showEditModal && (
         <ViewportOverlay className="z-50 flex items-end md:items-center justify-center">
           <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={() => setShowEditModal(false)} />
-          <div role="dialog" aria-modal="true" aria-label="Edit game" className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[calc(var(--vv-h,100dvh)*0.85)] overflow-y-auto overscroll-contain">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-primary-800 flex items-center gap-2">
-                <Pencil className="w-4.5 h-4.5 text-primary-500" />
-                Edit Game
-              </h3>
-              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-full hover:bg-primary-100">
-                <X className="w-5 h-5 text-primary-500" />
+          <div role="dialog" aria-modal="true" aria-labelledby="edit-h" className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up max-h-[calc(var(--vv-h,100dvh)*0.85)] overflow-y-auto overscroll-contain">
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="edit-h" className="text-[20px] font-bold text-primary-900 flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-primary-500" aria-hidden />
+                Edit game
+              </h2>
+              <button onClick={() => setShowEditModal(false)} aria-label="Close" className="size-11 -mr-2 grid place-items-center rounded-full hover:bg-primary-100">
+                <X className="w-5 h-5 text-primary-700" aria-hidden />
               </button>
             </div>
 
             <div className="space-y-4">
-              {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-primary-700 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={editData.date}
-                  onChange={(e) => setEditData({ ...editData, date: e.target.value })}
-                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
-                />
+                <label htmlFor="edit-date" className={label}>Date</label>
+                <input id="edit-date" type="date" value={editData.date} onChange={(e) => setEditData({ ...editData, date: e.target.value })} className={field} />
               </div>
 
-              {/* Time row */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-primary-700 mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    value={editData.start_time}
-                    onChange={(e) => setEditData({ ...editData, start_time: e.target.value })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
-                  />
+                  <label htmlFor="edit-start" className={label}>Start time</label>
+                  <input id="edit-start" type="time" value={editData.start_time} onChange={(e) => setEditData({ ...editData, start_time: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-primary-700 mb-1">End Time</label>
-                  <input
-                    type="time"
-                    value={editData.end_time}
-                    onChange={(e) => setEditData({ ...editData, end_time: e.target.value })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
-                  />
+                  <label htmlFor="edit-end" className={label}>End time</label>
+                  <input id="edit-end" type="time" value={editData.end_time} onChange={(e) => setEditData({ ...editData, end_time: e.target.value })} className={field} />
                 </div>
               </div>
 
-              {/* Players & Price */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-primary-700 mb-1">Max Players</label>
+                  <label htmlFor="edit-max" className={label}>Max players</label>
                   <input
+                    id="edit-max"
                     type="number"
                     min={game?.current_players || 1}
                     value={editData.max_players}
                     onChange={(e) => setEditData({ ...editData, max_players: parseInt(e.target.value) || 0 })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                    className={field}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-primary-700 mb-1">Price/Person (₹)</label>
+                  <label htmlFor="edit-price" className={label}>Price per player (₹)</label>
                   <input
+                    id="edit-price"
                     type="number"
                     min={0}
                     value={editData.price_per_player}
                     onChange={(e) => setEditData({ ...editData, price_per_player: parseInt(e.target.value) || 0 })}
-                    className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
+                    className={field}
                   />
                 </div>
               </div>
 
-              {/* Skill Level */}
               <div>
-                <label className="block text-sm font-medium text-primary-700 mb-1">Skill Level</label>
-                <select
-                  value={editData.skill_level}
-                  onChange={(e) => setEditData({ ...editData, skill_level: e.target.value })}
-                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-primary-50"
-                >
-                  <option value="all">All Levels</option>
-                  <option value="beginner">Beginner</option>
+                <label htmlFor="edit-skill" className={label}>Skill level</label>
+                <select id="edit-skill" value={editData.skill_level} onChange={(e) => setEditData({ ...editData, skill_level: e.target.value })} className={field}>
+                  <option value="all">All levels</option>
+                  <option value="beginner">Beginners</option>
                   <option value="intermediate">Intermediate</option>
                   <option value="advanced">Advanced</option>
                 </select>
               </div>
 
-              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-primary-700 mb-1">Description</label>
+                <label htmlFor="edit-note" className={label}>Note for players</label>
                 <textarea
+                  id="edit-note"
                   value={editData.description}
                   onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-                  placeholder="Describe the game..."
+                  aria-describedby="edit-note-hint"
+                  placeholder="Ball type, format, what to bring…"
                   rows={3}
-                  className="w-full border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none bg-primary-50"
+                  className={`${field} resize-none`}
                 />
+                <p id="edit-note-hint" className="mt-1 text-[13px] text-primary-500">Shown on the game page</p>
               </div>
 
-              {/* Turf Booked */}
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex items-center gap-3 min-h-11 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={editData.turf_booked}
                   onChange={(e) => setEditData({ ...editData, turf_booked: e.target.checked })}
-                  className="w-5 h-5 rounded border-primary-300 text-primary-500 focus:ring-primary-500"
+                  aria-describedby="edit-booked-hint"
+                  className="size-5 rounded border-primary-300 accent-accent-600"
                 />
-                <span className="text-sm font-medium text-primary-700">Turf booked / confirmed</span>
+                <span>
+                  <span className="block text-[15px] font-medium text-primary-900">Turf booked</span>
+                  <span id="edit-booked-hint" className="block text-[13px] text-primary-500">Players see this on the game page</span>
+                </span>
               </label>
             </div>
 
             {saveError && (
-              <p className="text-sm text-accent-500 text-center mt-3">{saveError}</p>
+              <p role="alert" className="text-[14px] text-hot-600 text-center mt-3">{saveError}</p>
             )}
 
             <button
               onClick={handleSaveEdit}
               disabled={saving}
-              className="w-full mt-5 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full mt-5 h-12 rounded-full bg-primary-900 hover:bg-primary-800 text-white text-[16px] font-semibold disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {saving ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                  Saving…
                 </>
               ) : (
                 <>
-                  <Save className="w-4 h-4" />
-                  Save Changes
+                  <Save className="w-4 h-4" aria-hidden />
+                  Save changes
                 </>
               )}
             </button>
@@ -887,77 +611,4 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       )}
     </div>
   );
-
-  function renderJoinButton() {
-    if (isHost) {
-      return (
-        <div className="space-y-2">
-          <button
-            onClick={openEditModal}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white py-3 rounded-xl font-semibold text-sm hover:from-primary-600 hover:to-primary-700 transition-all"
-          >
-            <Pencil className="w-4 h-4" />
-            Edit Game
-          </button>
-          {pendingRequests.length > 0 && (
-            <p className="text-xs text-accent-600 font-medium text-center">
-              {pendingRequests.length} pending request{pendingRequests.length !== 1 ? "s" : ""}
-            </p>
-          )}
-        </div>
-      );
-    }
-    if (status === "expired") {
-      return <button disabled className="w-full bg-primary-100 text-primary-400 py-3 rounded-xl font-semibold text-sm cursor-not-allowed">Game Ended</button>;
-    }
-    if (isFull) {
-      return <button disabled className="w-full bg-primary-100 text-primary-400 py-3 rounded-xl font-semibold text-sm cursor-not-allowed">Game Full</button>;
-    }
-    if (joinStatus === "sent") {
-      return (
-        <button disabled className="w-full bg-green-50 text-green-700 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border border-green-200">
-          <Check className="w-4 h-4" /> Request Sent!
-        </button>
-      );
-    }
-    return (
-      <button
-        onClick={() => user ? setShowJoinForm(true) : login()}
-        className="w-full bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-600 hover:to-accent-700 text-white py-3.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-accent-500/25 flex items-center justify-center gap-2"
-      >
-        <Zap className="w-4 h-4" />
-        Request to Join
-      </button>
-    );
-  }
-
-  function renderMobileJoinButton() {
-    if (isHost) {
-      return (
-        <Link href="/dashboard" className="relative bg-gradient-to-r from-primary-500 to-primary-600 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-1.5">
-          Manage
-          {pendingRequests.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-accent-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-              {pendingRequests.length}
-            </span>
-          )}
-        </Link>
-      );
-    }
-    if (status === "expired" || isFull) {
-      return <button disabled className="bg-primary-100 text-primary-400 px-5 py-3 rounded-xl text-sm font-semibold">{isFull ? "Full" : "Ended"}</button>;
-    }
-    if (joinStatus === "sent") {
-      return <span className="text-sm font-semibold text-green-600 flex items-center gap-1"><Check className="w-4 h-4" />Sent!</span>;
-    }
-    return (
-      <button
-        onClick={() => user ? setShowJoinForm(true) : login()}
-        className="bg-gradient-to-r from-accent-500 to-accent-600 text-white px-5 py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent-500/25 flex items-center gap-1.5"
-      >
-        <Zap className="w-4 h-4" />
-        Join Game
-      </button>
-    );
-  }
 }
