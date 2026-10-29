@@ -370,7 +370,8 @@ export function keywordFilters(query: string, opts: { turfs?: readonly Turf[]; p
         turf_names: here ? [] : [name],
         question: raw,
         summary: `Question about ${here ? opts.pageTurf : name}`.slice(0, 120),
-        reply: "Let me check.",
+        // Over the answer card, which comes in the same response.
+        reply: `Here's what I found about ${here ? opts.pageTurf : name}.`,
       };
     };
     const asked = said != null ? question(said) : null;

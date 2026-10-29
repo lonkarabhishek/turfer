@@ -391,7 +391,8 @@ function aboutThisTurf(query: string, ctx: QuickContext): AskFilters | null {
     city: knownCity(ctx.city),
     question: query.trim(),
     summary: `What players say about ${ctx.turf}`.slice(0, 120),
-    reply: "Let me check.",
+    // Over the answer card, which comes in the same response: not "Let me check."
+    reply: `Here's what people say about ${ctx.turf}.`,
     followups: ["Does it have parking", "What time does it open"],
   };
 }
