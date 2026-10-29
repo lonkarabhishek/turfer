@@ -39,7 +39,7 @@ import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
 import { turfPath } from "@/lib/utils/turfPath";
-import { LIVE_FILTERS, getAdminLiveLinks, type LiveFilter } from "@/lib/queries/adminTools";
+import { LIVE_FILTERS, adminLiveStatus, getAdminLiveLinks, type AdminLiveLink, type LiveFilter } from "@/lib/queries/adminTools";
 import { getAdminClaims } from "@/lib/queries/adminClaims";
 import { CLAIMED_FILTERS, CLAIMS_CAP, claimCounts, claimWhen, claimedTurfs, claimsCut, howVerified, phoneLabel, type ClaimedFilter } from "@/lib/admin/claimed";
 import { keyLabel } from "@/lib/admin/claims";
@@ -176,6 +176,7 @@ export default async function AdminDetailPage({
 
 const LIVE_STYLE: Record<string, string> = {
   live: "bg-amber-100 text-amber-800",
+  closed: "bg-primary-100 text-primary-700",
   done: "bg-accent-50 text-accent-700",
   stopped: "bg-primary-100 text-primary-500",
   expired: "bg-primary-100 text-primary-500",
@@ -185,6 +186,12 @@ const CLAIM_STYLE: Record<string, string> = {
   revoked: "bg-hot-500/10 text-hot-600",
   rejected: "bg-primary-100 text-primary-500",
 };
+
+/** A live link with no update for 2 hours is closed (adminLiveStatus): it keeps its last score but takes no more. */
+function LiveStatus({ link, now }: { link: AdminLiveLink; now: number }) {
+  const s = adminLiveStatus(link, now);
+  return <Badge className={LIVE_STYLE[s] ?? "bg-primary-100 text-primary-500"}>{s === "closed" ? "Closed (idle)" : s}</Badge>;
+}
 const sportName = (s: string | null) => (s ? s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : null);
 
 /** A view whose rows couldn't be read: why, and a retry (never "Nothing here"). */
@@ -193,7 +200,8 @@ const failedView = (reason: Reason, what: string) => ({ count: null, node: <Sect
 async function renderView(v: View, filter: string): Promise<{ count: number | null; node: React.ReactNode }> {
   switch (v) {
     case "live": {
-      const res = await getAdminLiveLinks(filter as LiveFilter);
+      const now = Date.now();
+      const res = await getAdminLiveLinks(filter as LiveFilter, now);
       if (!res.ok) return failedView(res.reason, "the links");
       const links = res.data;
       return {
@@ -212,7 +220,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
                   {l.team_a || l.team_b ? `${l.team_a || "?"} vs ${l.team_b || "?"}` : <span className="text-primary-400">{l.status === "stopped" || l.status === "expired" ? "Cleared when it ended" : "-"}</span>}
                 </td>
                 <td className="px-4 py-3 text-primary-600">{[l.title, l.venue].filter(Boolean).join(" · ") || <span className="text-primary-400">-</span>}</td>
-                <td className="px-4 py-3"><Badge className={LIVE_STYLE[l.status] ?? "bg-primary-100 text-primary-500"}>{l.status}</Badge></td>
+                <td className="px-4 py-3"><LiveStatus link={l} now={now} /></td>
                 <td className="px-4 py-3 tabular-nums" title={l.events ? `${l.events} events in the match` : undefined}>{l.writes}</td>
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(l.created_at)}</td>
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(l.updated_at)}</td>

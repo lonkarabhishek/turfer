@@ -183,8 +183,9 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
     if (await live.stop(id)) trackTool("tool_action", TOOL, { action: "live_link_off" });
   };
 
-  const liveFor = (id: string): ShareLive => {
-    const info = live.info(id);
+  /** inPlay: the match is not finished (LiveInfo's closed). */
+  const liveFor = (id: string, inPlay: boolean): ShareLive => {
+    const info = live.info(id, inPlay);
     return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user };
   };
 
@@ -243,8 +244,9 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   }, [hydrated, auth.loading]);
 
   const remove = (meta: MatchMeta) => {
-    // Live or done: once the match is gone nothing here could turn its link off.
-    const stopsLink = liveLinks && live.info(meta.id).on;
+    // Live, done or closed: once the match is gone nothing here could turn its link off.
+    const linkNow = live.info(meta.id);
+    const stopsLink = liveLinks && (linkNow.on || linkNow.closed);
     if (!window.confirm(`Delete ${meta.teamA} vs ${meta.teamB}? This cannot be undone.${stopsLink ? " Its live link turns off too." : ""}`)) return;
     live.remove(meta.id);
     setIndex(deleteMatch(meta.id));
@@ -277,7 +279,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const inPlay = view?.status === "live";
   // The match in progress has its own card above; finished ones stay listed so they can be deleted.
   const others = index.list.filter((m) => !(inPlay && m.id === match?.id));
-  const cardLink = liveLinks && match ? live.info(match.id) : null;
+  const cardLink = liveLinks && match ? live.info(match.id, inPlay) : null;
   const cardUrl = cardLink ? urlOf(cardLink) : null;
   const copied = cardUrl !== null && copiedUrl === cardUrl;
   const keepFrom = view && canKeepLink(cardLink?.link, now) ? `${view.setup.teamA} vs ${view.setup.teamB}` : null;
@@ -373,7 +375,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
       <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
 
-      {open && match && <ScoringScreen key={match.id} match={match} onChange={onChange} onExit={closeScorer} onNewMatch={newMatch} onResultCard={resultCard} live={liveLinks ? liveFor(match.id) : undefined} watchers={watchers} />}
+      {open && match && <ScoringScreen key={match.id} match={match} onChange={onChange} onExit={closeScorer} onNewMatch={newMatch} onResultCard={resultCard} live={liveLinks ? liveFor(match.id, inPlay) : undefined} watchers={watchers} />}
     </div>
   );
 }

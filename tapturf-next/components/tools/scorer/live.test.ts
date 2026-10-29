@@ -2,12 +2,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Match } from "../../../lib/cricket/scoring";
-import { LIVE_KEEPALIVE_MAX_BYTES, LIVE_RETRY_MS, LIVE_SEND_EVERY_MS, type LiveLinkRecord } from "../../../lib/live/types";
+import { LIVE_IDLE_CLOSE_MS, LIVE_KEEPALIVE_MAX_BYTES, LIVE_LINKS_KEY, LIVE_RETRY_MS, LIVE_SEND_EVERY_MS, type LiveLinkRecord } from "../../../lib/live/types";
 import {
   browserIoFor,
   canKeepLink,
   createLiveSync,
   handleResult,
+  idleHere,
   keepaliveAllowed,
   liveInfo,
   makeSecret,
@@ -25,6 +26,7 @@ import {
   type LiveNet,
 } from "./live";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./liveLogin";
+import { loadLinks, saveLink } from "./links";
 import { MAX_SAVED, loadMatch, saveMatch, type MatchMeta } from "./storage";
 
 const T0 = 1_760_000_000_000;
@@ -79,6 +81,11 @@ test("answers are read by their body; anything else is unavailable", () => {
   assert.equal(readReply(400, { error: "nope" }).r, "unavailable");
   assert.equal(readReply(200, { ok: "yes" }).r, "unavailable");
   assert.equal(readReply(409, { error: "stale", rev: -1 }).rev, undefined);
+  // gone with idle: the link closed after 2 hours without an update (20261029_live_idle_close.sql).
+  assert.deepEqual(readReply(410, { error: "gone", idle: true }), { r: "gone", rev: undefined, idle: true });
+  assert.deepEqual(readReply(410, { error: "gone" }), { r: "gone", rev: undefined });
+  assert.deepEqual(readReply(410, { error: "gone", idle: "yes" }), { r: "gone", rev: undefined }, "only a true idle");
+  assert.deepEqual(readReply(403, { error: "forbidden", idle: true }), { r: "forbidden", rev: undefined }, "idle only with gone");
 
   assert.deepEqual(readNew(200, { code: CODE }), { code: CODE });
   assert.deepEqual(readNew(200, { code: "SHORT" }), { fault: "unavailable" });
@@ -115,6 +122,11 @@ test("handleResult follows the LiveError table", () => {
     assert.equal(s.link.stopped, r);
     assert.equal(s.fault, r);
   }
+  // Closed after 2 hours without an update: the server still shows its last score, so the link stays on, to be turned off, and says so.
+  const closed = handleResult(l, T0 + 10, { r: "gone", idle: true }, 0, true);
+  assert.deepEqual([closed.link.on, closed.link.stopped, closed.fault, closed.halt, closed.wait], [true, "closed", "closed", false, 0]);
+  assert.deepEqual([closed.link.code, closed.link.secret], [l.code, l.secret], "its secret is kept: it is the only way to clear it");
+  assert.equal(closed.link.rev, l.rev, "the match itself is untouched: scoring carries on here");
 
   // limit and too_big: off here only while the server has nothing; once it has taken a write, stay on (to be turned off) and halt.
   for (const r of ["limit", "too_big"] as const) {
@@ -166,6 +178,23 @@ test("sync state, info and the pill", () => {
 
   const refused = liveInfo(link({ on: false, stopped: "too_big" }), undefined);
   assert.deepEqual([refused.on, refused.state, refused.fault], [false, "error", "too_big"]);
+  // After a reload the stored reason still says the link closed after 2 hours, and that it can still be turned off.
+  const shut = liveInfo(link({ rev: T0, sentRev: T0, stopped: "closed" }), undefined);
+  assert.deepEqual([shut.on, shut.closed, shut.state, shut.fault, pillTone(shut)], [false, true, "error", "closed", "red"]);
+  assert.equal(syncState(link({ rev: T0, sentRev: T0, stopped: "closed" }), undefined), "error", "not synced: it takes no more updates");
+  assert.equal(liveInfo(link({ stopped: "closed" }), net({ fault: "not_off" })).fault, "not_off", "a turn-off that did not get through says so");
+  assert.equal(liveInfo(link(), undefined).closed, false);
+
+  // By this phone's clock, 2 hours after the server's last ok: closed while the match is in play, not once it is finished.
+  const quiet = link({ rev: T0, sentRev: T0, okAt: T0 + 2000 });
+  const at = (now: number, inPlay: boolean) => liveInfo(quiet, undefined, { now, inPlay });
+  assert.deepEqual([at(T0 + 2000 + LIVE_IDLE_CLOSE_MS - 1, true).closed, at(T0 + 2000 + LIVE_IDLE_CLOSE_MS - 1, true).state], [false, "synced"]);
+  const late = at(T0 + 2000 + LIVE_IDLE_CLOSE_MS, true);
+  assert.deepEqual([late.on, late.closed, late.state, late.fault, pillTone(late)], [false, true, "error", "closed", "red"]);
+  const final = at(T0 + 2000 + LIVE_IDLE_CLOSE_MS, false);
+  assert.deepEqual([final.on, final.closed, final.state, final.fault], [true, false, "synced", null], "a finished match's result is still worth sharing");
+  assert.equal(liveInfo(link({ sentRev: 0 }), undefined, { now: T0 + 10 * LIVE_IDLE_CLOSE_MS, inPlay: true }).closed, false, "nothing taken yet: not closed");
+  assert.equal(liveInfo(link({ sentRev: T0, stopped: "off" }), undefined, { now: T0 + 10 * LIVE_IDLE_CLOSE_MS, inPlay: true }).closed, false, "being turned off");
   assert.equal(liveInfo(link({ on: false, stopped: "off" }), undefined).fault, null);
   assert.equal(liveInfo(link(), undefined).on, true);
 
@@ -181,7 +210,18 @@ test("keep the same link only while it can still take writes", () => {
   assert.equal(canKeepLink(link(), T0 + 3_600_000), true);
   assert.equal(canKeepLink(link(), T0 + 25 * 3_600_000), false);
   assert.equal(canKeepLink(link({ on: false, stopped: "off" }), T0), false);
+  assert.equal(canKeepLink(link({ stopped: "closed" }), T0), false);
   assert.equal(canKeepLink(null, T0), false);
+  // Not once 2 hours have passed since the server last took a write (a record without okAt: sentRev, that edit's time): it is closed.
+  const last = link({ rev: T0 + 60_000, sentRev: T0 + 60_000 });
+  assert.equal(canKeepLink(last, T0 + 60_000 + LIVE_IDLE_CLOSE_MS - 1), true);
+  assert.equal(canKeepLink(last, T0 + 60_000 + LIVE_IDLE_CLOSE_MS), false);
+  assert.equal(idleHere(last, T0 + 60_000 + LIVE_IDLE_CLOSE_MS), true);
+  assert.equal(idleHere(link({ sentRev: 0 }), T0 + 10 * LIVE_IDLE_CLOSE_MS), false, "nothing taken yet: not closed for want of updates");
+  // okAt, when the server said ok, wins: an edit made offline and sent later is when the server's 2 hours start.
+  const sentLate = link({ rev: T0 + 60_000, sentRev: T0 + 60_000, okAt: T0 + 3_600_000 });
+  assert.equal(idleHere(sentLate, T0 + 60_000 + LIVE_IDLE_CLOSE_MS), false);
+  assert.equal(idleHere(sentLate, T0 + 3_600_000 + LIVE_IDLE_CLOSE_MS), true);
 });
 
 test("a game reminder's venue and from=game are read, and left out of the query", () => {
@@ -474,6 +514,166 @@ test("engine: gone turns the link off here and stops sending", async () => {
   await t.advance(60_000);
   assert.equal(t.calls.length, 1);
   assert.equal(t.sync.snapshot().net.m1.fault, "gone");
+});
+
+/** A link whose last write the server took at T0 - 1, now closed: the rig's clock past 2 hours, and a write answered gone (idle). */
+async function closedRig() {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) }, matches: { m1: { n: 0 } } });
+  await t.advance(LIVE_IDLE_CLOSE_MS);
+  t.edit("m1", 1);
+  await fail(t.calls[0], 410, { error: "gone", idle: true });
+  return t;
+}
+
+test("engine: gone with idle stops sending and says it closed; the link stays, to be turned off or replaced", async () => {
+  const t = await closedRig();
+  assert.deepEqual([t.links.m1.on, t.links.m1.stopped, t.links.m1.code, t.links.m1.secret], [true, "closed", CODE, SECRET]);
+  const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.on, info.closed, info.state, info.fault, pillTone(info)], [false, true, "error", "closed", "red"]);
+  // Scoring carries on here; nothing more goes to the closed link, and it is not offered to the next match.
+  t.edit("m1", 2);
+  t.sync.wake();
+  t.sync.flushAll(true);
+  await t.advance(60_000);
+  assert.equal(t.calls.length, 1);
+  assert.equal(t.sync.move("m1", "m2"), false);
+  assert.equal(canKeepLink(t.links.m1, T0), false);
+  // Start a new link: the closed one is turned off first (its secret is the only way to clear its last score),
+  // then a new code carries the latest match, and the reason clears.
+  const started = t.sync.start("m1");
+  await tickOver();
+  assert.deepEqual([t.calls[1]?.method, t.calls[1]?.url, t.calls[1]?.body], ["DELETE", `/api/live/${CODE}`, { secret: SECRET }]);
+  await ok(t.calls[1]);
+  await fail(t.calls[2], 200, { code: CODE2 });
+  assert.equal(t.calls[2].url, "/api/live/new");
+  assert.equal(await started, null);
+  assert.deepEqual([t.links.m1.code, t.links.m1.on, t.links.m1.stopped], [CODE2, true, undefined]);
+  assert.equal(t.calls[3].method, "PUT");
+  assert.equal(t.calls[3].url, `/api/live/${CODE2}`);
+  assert.equal(t.calls[3].body?.match?.n, 2);
+  await ok(t.calls[3]);
+  const after = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([after.state, after.fault, after.closed], ["synced", null, false]);
+});
+
+test("engine: a closed link still turns off, which clears its last score", async () => {
+  const t = await closedRig();
+  const off = t.sync.stop("m1");
+  await tickOver();
+  assert.deepEqual([t.calls[1]?.method, t.calls[1]?.url, t.calls[1]?.body], ["DELETE", `/api/live/${CODE}`, { secret: SECRET }]);
+  await ok(t.calls[1]);
+  assert.equal(await off, true);
+  const info = liveInfo(t.links.m1, t.sync.snapshot().net.m1);
+  assert.deepEqual([info.link?.on, info.link?.stopped, info.state, info.fault, info.closed, pillTone(info)], [false, "off", "off", null, false, null]);
+
+  // Not through: still closed, secret and all, to try again.
+  const t2 = await closedRig();
+  const off2 = t2.sync.stop("m1");
+  await tickOver();
+  await drop(t2.calls[1]);
+  assert.equal(await off2, false);
+  assert.deepEqual([t2.links.m1.on, t2.links.m1.stopped, t2.links.m1.secret], [true, "closed", SECRET]);
+  const shown = liveInfo(t2.links.m1, t2.sync.snapshot().net.m1);
+  assert.deepEqual([shown.closed, shown.fault], [true, "not_off"]);
+  await t2.advance(60_000);
+  assert.equal(t2.calls.length, 2, "no PUT after a failed turn-off of a closed link");
+});
+
+test("engine: deleting a match with a closed link sends the DELETE, and drops the record once the server has it", async () => {
+  const t = await closedRig();
+  t.sync.remove("m1");
+  assert.deepEqual([t.links.m1.on, t.links.m1.stopped], [true, "off"], "kept until the server has the stop");
+  await tickOver();
+  assert.deepEqual([t.calls[1]?.method, t.calls[1]?.keepalive, t.calls[1]?.body], ["DELETE", true, { secret: SECRET }]);
+  await drop(t.calls[1]);
+  assert.ok(t.links.m1, "network error: still kept");
+  t.sync.wake();
+  await tickOver();
+  assert.equal(t.calls[2]?.method, "DELETE", "tried again on wake");
+  await ok(t.calls[2]);
+  assert.equal(t.links.m1, undefined);
+});
+
+test("engine: a new link for a closed one waits for the old one to turn off, and keeps it if that fails", async () => {
+  const t = await closedRig();
+  const started = t.sync.start("m1");
+  await tickOver();
+  assert.equal(t.calls[1]?.method, "DELETE");
+  await fail(t.calls[1], 503, { error: "unavailable" });
+  assert.equal(await started, "not_off");
+  assert.equal(t.calls.length, 2, "no new code while the old link still shows its score");
+  assert.deepEqual([t.links.m1.code, t.links.m1.on, t.links.m1.stopped, t.links.m1.secret], [CODE, true, "closed", SECRET]);
+});
+
+test("engine: a PUT out while turning off comes back gone (idle): the DELETE still goes", async () => {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  await t.advance(LIVE_IDLE_CLOSE_MS);
+  t.edit("m1", 1);
+  const off = t.sync.stop("m1");
+  await fail(t.calls[0], 410, { error: "gone", idle: true });
+  await tickOver();
+  assert.deepEqual([t.calls[1]?.method, t.calls[1]?.body], ["DELETE", { secret: SECRET }], "the server still shows its last score");
+  await ok(t.calls[1]);
+  assert.equal(await off, true);
+  assert.deepEqual([t.links.m1.on, t.links.m1.stopped], [false, "off"]);
+
+  // The same during a delete of the match (finishStop).
+  const t2 = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  await t2.advance(LIVE_IDLE_CLOSE_MS);
+  t2.edit("m1", 1);
+  t2.sync.remove("m1");
+  await fail(t2.calls[0], 410, { error: "gone", idle: true });
+  await tickOver();
+  assert.equal(t2.calls[1]?.method, "DELETE");
+  await ok(t2.calls[1]);
+  assert.equal(t2.links.m1, undefined);
+});
+
+test("engine: an ok notes when the server took it (okAt), and the clock's closed follows it", async () => {
+  const t = rig({ links: { m1: link({ rev: T0 - 1, sentRev: T0 - 1 }) } });
+  t.edit("m1", 1);
+  await t.advance(5000);
+  await ok(t.calls[0]);
+  assert.equal(t.links.m1.okAt, T0 + 5000);
+  const snap = (dt: number) => liveInfo(t.links.m1, t.sync.snapshot().net.m1, { now: T0 + 5000 + dt, inPlay: true });
+  assert.equal(snap(LIVE_IDLE_CLOSE_MS - 1).closed, false);
+  assert.equal(snap(LIVE_IDLE_CLOSE_MS).closed, true);
+  assert.equal(t.sync.snapshot().at, T0 + 5000, "the snapshot says when it was taken");
+  // The clock's closed is a hint: the next edit still goes, and an ok puts the link back.
+  await t.advance(LIVE_IDLE_CLOSE_MS);
+  t.edit("m1", 2);
+  assert.equal(t.calls[1]?.method, "PUT");
+  await ok(t.calls[1]);
+  assert.equal(liveInfo(t.links.m1, t.sync.snapshot().net.m1, { now: t.sync.snapshot().at, inPlay: true }).closed, false);
+  // Start a new link while it is closed by the clock only: the old one is turned off first, as for one the server closed.
+  await t.advance(LIVE_IDLE_CLOSE_MS);
+  const started = t.sync.start("m1");
+  await tickOver();
+  assert.equal(t.calls[2]?.method, "DELETE");
+  await ok(t.calls[2]);
+  assert.equal(t.calls[3]?.url, "/api/live/new");
+  await fail(t.calls[3], 200, { code: CODE2 });
+  assert.equal(await started, null);
+  assert.equal(t.links.m1.code, CODE2);
+  // A link that is not closed is left alone.
+  assert.equal(await t.sync.start("m1"), null);
+  assert.equal(t.calls.filter((c) => c.method === "POST").length, 1);
+});
+
+test("a link closed after 2 hours is remembered as closed across visits", () => {
+  const store = new Map<string, string>();
+  const ls = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+  Object.defineProperty(globalThis, "localStorage", { value: ls, configurable: true });
+  try {
+    saveLink("m1", link({ stopped: "closed", okAt: T0 + 5 }));
+    assert.deepEqual([loadLinks().links.m1.on, loadLinks().links.m1.stopped, loadLinks().links.m1.okAt], [true, "closed", T0 + 5]);
+    store.set(LIVE_LINKS_KEY, JSON.stringify({ v: 1, links: { m3: { ...link(), okAt: "soon" } } }));
+    assert.equal(loadLinks().links.m3.okAt, undefined, "a broken okAt is dropped, the link kept");
+    store.set(LIVE_LINKS_KEY, JSON.stringify({ v: 1, links: { m2: { ...link({ on: false }), stopped: "napping" } } }));
+    assert.equal(loadLinks().links.m2.stopped, undefined, "an unknown reason is dropped");
+  } finally {
+    Reflect.deleteProperty(globalThis, "localStorage");
+  }
 });
 
 test("engine: bad halts sending for the visit", async () => {

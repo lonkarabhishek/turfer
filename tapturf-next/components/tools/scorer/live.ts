@@ -4,6 +4,7 @@ import type { MatchView } from "../../../lib/cricket/scoring";
 import { BOARD_SPORTS, type BoardShape, type BoardSport } from "../../../lib/board/types";
 import {
   LIVE_CODE_RE,
+  LIVE_IDLE_CLOSE_MS,
   LIVE_KEEPALIVE_MAX_BYTES,
   LIVE_LINKS_KEY,
   LIVE_RETRY_MS,
@@ -33,12 +34,15 @@ import { loadLinks, saveLink } from "./links";
  * that to fetch, localStorage and the page events.
  */
 
-/** Why a link is not live, or why the last try to change it failed. Shown in the share sheet. */
-export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "bad" | "not_off";
+/** Why a link is not live, or why the last try to change it failed. Shown in the share sheet. closed: gone after 2 hours without an update. */
+export type LiveFault = "offline" | "unavailable" | "busy" | "limit" | "too_big" | "forbidden" | "gone" | "closed" | "bad" | "not_off";
 
 /** The server takes one write per link every 500 ms; a send sooner after the last answer comes back slow. */
 const MIN_GAP_MS = 600;
-/** Offer a link to the next match only within a day: the server takes writes for 36 hours from its first. */
+/**
+ * Offer a link to the next match only within a day: the server takes writes
+ * for 36 hours from its first, and none after LIVE_IDLE_CLOSE_MS without one.
+ */
 const KEEP_LINK_MS = 24 * 60 * 60 * 1000;
 
 /* ------------------------------------------------------------------ */
@@ -63,6 +67,11 @@ export function sendable(link: LiveLinkRecord | null | undefined): link is LiveL
   return !!link && link.on && !link.stopped;
 }
 
+/** Closed after 2 hours without an update (gone with idle): the server still shows its last score, so it stays on, to be turned off. Nothing more is sent. */
+export function closedLink(link: LiveLinkRecord | null | undefined): link is LiveLinkRecord {
+  return !!link && link.on && link.stopped === "closed";
+}
+
 /**
  * How long to wait before the next send; 0 sends now. A send goes on
  * the leading edge, then at most once per LIVE_SEND_EVERY_MS from the
@@ -79,16 +88,17 @@ export function retryDelay(fails: number): number {
   return LIVE_RETRY_MS[Math.min(Math.max(0, fails), LIVE_RETRY_MS.length - 1)];
 }
 
-/** A write's answer: ok, a LiveError, or network when the request never got one. */
-export type Reply = { r: "ok" | LiveError | "network"; rev?: number };
+/** A write's answer: ok, a LiveError, or network when the request never got one. idle: a gone for a link closed after 2 hours without an update. */
+export type Reply = { r: "ok" | LiveError | "network"; rev?: number; idle?: true };
 
 const ERRORS = new Set<string>(["stale", "slow", "forbidden", "gone", "limit", "busy", "too_big", "bad", "unavailable"] satisfies LiveError[]);
 
 /** Read a PUT or DELETE answer. Anything that is not ours (a proxy's page, a 5xx without a body) counts as unavailable. */
 export function readReply(status: number, body: unknown): Reply {
-  const b = (body && typeof body === "object" ? body : {}) as { ok?: unknown; error?: unknown; rev?: unknown };
+  const b = (body && typeof body === "object" ? body : {}) as { ok?: unknown; error?: unknown; rev?: unknown; idle?: unknown };
   const rev = typeof b.rev === "number" && Number.isSafeInteger(b.rev) && b.rev >= 0 ? b.rev : undefined;
   if (status >= 200 && status < 300 && b.ok === true) return { r: "ok", rev };
+  if (b.error === "gone" && b.idle === true) return { r: "gone", rev, idle: true };
   if (typeof b.error === "string" && ERRORS.has(b.error)) return { r: b.error as LiveError, rev };
   return { r: "unavailable" };
 }
@@ -124,6 +134,9 @@ export function handleResult(link: LiveLinkRecord, sent: number, reply: Reply, f
       return { ...step, wait: LIVE_SEND_EVERY_MS / 2, fails };
     case "forbidden":
     case "gone":
+      // Closed after 2 hours without an update: the server keeps its last score until the link is turned off (which
+      // clears it), so it stays on for that, as for limit below. Nothing more is sent; the scorer can start a new one.
+      if (reply.r === "gone" && reply.idle) return { ...step, link: { ...link, stopped: "closed" }, fault: "closed" };
       return { ...step, link: { ...link, on: false, stopped: reply.r }, fault: reply.r };
     case "limit":
     case "too_big":
@@ -159,17 +172,29 @@ export type LiveNet = { offline: boolean; halted: boolean; fault: LiveFault | nu
 
 export function syncState(link: LiveLinkRecord | null, net: LiveNet | undefined): LiveSyncState {
   if (!link || link.stopped === "off") return net?.fault && net.fault !== "not_off" ? "error" : "off";
-  if (!link.on || net?.halted) return "error";
+  // On but stopped: closed (closedLink).
+  if (!link.on || link.stopped || net?.halted) return "error";
   if (link.rev <= link.sentRev) return "synced";
   return net?.offline ? "offline" : "sending";
 }
 
-/** Everything the UI shows about one match's link. on: followers get this match's updates. */
-export type LiveInfo = { link: LiveLinkRecord | null; on: boolean; state: LiveSyncState; fault: LiveFault | null; mode: LiveNet["mode"] };
+/**
+ * Everything the UI shows about one match's link. on: followers get this
+ * match's updates. closed: they do not, but still see its last score: it
+ * closed after 2 hours without an update (closedLink), or by this phone's
+ * clock has (idleHere) while the match is in play. It can be turned off,
+ * or a new link started. A finished match's link is not shown closed by
+ * the clock: its result is still worth sharing.
+ */
+export type LiveInfo = { link: LiveLinkRecord | null; on: boolean; state: LiveSyncState; fault: LiveFault | null; mode: LiveNet["mode"]; closed: boolean };
 
-export function liveInfo(link: LiveLinkRecord | null, net: LiveNet | undefined): LiveInfo {
+/** hint: the time now and whether the match is in play, for the clock's closed. Without it only the server's answer counts. */
+export function liveInfo(link: LiveLinkRecord | null, net: LiveNet | undefined, hint?: { now: number; inPlay: boolean }): LiveInfo {
   const refused = link && !link.on && link.stopped && link.stopped !== "off" ? link.stopped : null;
-  return { link, on: sendable(link), state: syncState(link, net), fault: net?.fault ?? refused, mode: net?.mode ?? null };
+  const mode = net?.mode ?? null;
+  // The clock's closed only changes what is shown: the next edit is still sent, and an ok puts the link back.
+  if (closedLink(link) || (link && hint?.inPlay && idleHere(link, hint.now))) return { link, on: false, state: "error", fault: net?.fault ?? "closed", mode, closed: true };
+  return { link, on: sendable(link), state: syncState(link, net), fault: net?.fault ?? refused, mode, closed: false };
 }
 
 /** The dot on the scorer's LIVE pill, or null for no pill. */
@@ -180,9 +205,25 @@ export function pillTone(info: LiveInfo): "green" | "amber" | "red" | null {
   return info.state === "error" ? "red" : null;
 }
 
-/** Whether Setup offers to move this link to the next match. */
+/**
+ * When a link that is on goes LIVE_IDLE_CLOSE_MS without an accepted
+ * write, by this phone's clock: from okAt, when the server last said ok
+ * (on a record from before okAt, sentRev: the time of the last edit it
+ * took). null while nothing has been taken. A hint only; the server's
+ * gone (idle) is what closes it.
+ */
+export function idleAt(link: LiveLinkRecord): number | null {
+  return sendable(link) && link.sentRev > 0 ? (link.okAt ?? link.sentRev) + LIVE_IDLE_CLOSE_MS : null;
+}
+
+export function idleHere(link: LiveLinkRecord, now: number): boolean {
+  const at = idleAt(link);
+  return at !== null && now >= at;
+}
+
+/** Whether Setup offers to move this link to the next match: not once it has closed for want of updates. */
 export function canKeepLink(link: LiveLinkRecord | null | undefined, now: number): boolean {
-  return sendable(link) && now - link.createdAt < KEEP_LINK_MS;
+  return sendable(link) && now - link.createdAt < KEEP_LINK_MS && !idleHere(link, now);
 }
 
 export function makeSecret(bytes: Uint8Array): string {
@@ -248,7 +289,8 @@ export type LiveIo = {
   emit: () => void;
 };
 
-export type LiveSnapshot = { links: Record<string, LiveLinkRecord>; net: Record<string, LiveNet> };
+/** at: io.now() when it was taken, for liveInfo's hint. */
+export type LiveSnapshot = { links: Record<string, LiveLinkRecord>; net: Record<string, LiveNet>; at: number };
 
 type Run = LiveNet & {
   /** The page's own send is out. A flush may go alongside it. */
@@ -356,13 +398,16 @@ export function createLiveSync(io: LiveIo) {
     // Turned off (here or in another tab), moved to another match or replaced while the send was out: the answer is
     // not this link's. A link turned on again meanwhile has its first send waiting for this one to finish.
     if (!link || link.code !== sent.code || link.secret !== sent.secret || link.stopped === "off") {
-      // A stop on its way, and the server says the link is off or not ours already: nothing left to tell it.
-      if (link && pendingStop(link) && link.code === sent.code && (reply.r === "gone" || reply.r === "forbidden")) io.saveLink(id, { ...link, on: false });
+      // A stop on its way, and the server says the link is off or not ours already: nothing left to tell it. Not when
+      // it closed after 2 hours (idle): the server still shows its last score, which the stop clears.
+      if (link && pendingStop(link) && link.code === sent.code && ((reply.r === "gone" && !reply.idle) || reply.r === "forbidden")) io.saveLink(id, { ...link, on: false });
       io.emit();
       pump(id);
       return;
     }
     const step = handleResult(link, sent.rev, reply, r.fails, io.online());
+    // The server closes the link LIVE_IDLE_CLOSE_MS after the last write it took: when that was, by this clock (idleAt).
+    if (reply.r === "ok") step.link = { ...step.link, okAt: io.now() };
     if (step.link !== link) io.saveLink(id, step.link);
     if (step.link.sentRev >= sent.rev) r.sentShape = shape;
     r.fails = step.fails;
@@ -405,7 +450,7 @@ export function createLiveSync(io: LiveIo) {
     put(id, link, body, true);
   };
 
-  return {
+  const api = {
     /** A local edit to this match, already saved. */
     changed(id: string, view: LiveShape) {
       const r = run(id);
@@ -417,10 +462,17 @@ export function createLiveSync(io: LiveIo) {
       io.emit();
     },
 
-    /** Get a code, make the secret, send. Resolves to why it failed, or null. */
+    /**
+     * Get a code, make the secret, send. Resolves to why it failed, or null.
+     * A closed link (closedLink, or idleHere) is turned off first: the
+     * server still shows its last score, and only its secret can clear it.
+     */
     async start(id: string): Promise<LiveFault | null> {
       const r = run(id);
-      if (r.mode || sendable(linkOf(id))) return null;
+      const old = linkOf(id);
+      if (r.mode || (sendable(old) && !idleHere(old, io.now()))) return null;
+      if ((closedLink(old) || sendable(old)) && !(await api.stop(id))) return "not_off";
+      if (r.mode) return null;
       r.mode = "starting";
       r.fault = null;
       io.emit();
@@ -441,10 +493,10 @@ export function createLiveSync(io: LiveIo) {
       return fault;
     },
 
-    /** Turn the link off. Resolves false if the server could not be told; the link then stays on. */
+    /** Turn the link off, a closed one too. Resolves false if the server could not be told; the link then stays as it was. */
     async stop(id: string): Promise<boolean> {
       const r = run(id);
-      if (!sendable(linkOf(id))) return true;
+      if (!sendable(linkOf(id)) && !closedLink(linkOf(id))) return true;
       if (r.mode) return false;
       r.mode = "stopping";
       r.fault = null;
@@ -465,7 +517,7 @@ export function createLiveSync(io: LiveIo) {
       if (link && cur?.code === link.code) {
         // The match was deleted meanwhile: its record goes with it. Not through: back on, as it was, to try again.
         if (done) io.saveLink(id, r.removed ? null : { ...cur, on: false, stopped: "off" });
-        else if (!r.removed) io.saveLink(id, { ...cur, on: true, stopped: undefined });
+        else if (!r.removed) io.saveLink(id, { ...cur, on: true, stopped: before.stopped });
       }
       Object.assign(r, done ? { mode: null, fault: null, halted: false, offline: false, fails: 0 } : { mode: null, fault: "not_off" });
       io.emit();
@@ -495,9 +547,10 @@ export function createLiveSync(io: LiveIo) {
       const link = linkOf(id);
       if (!link) return;
       // Off already: nothing to stop. A stop already on its way is left for finishStop, or for stop() (which then drops the record).
+      // On, closed ones too (they still show their last score): the stop goes now.
       if (!link.on) io.saveLink(id, null);
       else if (link.stopped === "off") run(id).removed = true;
-      else if (!link.stopped) {
+      else {
         io.saveLink(id, { ...link, stopped: "off" });
         void finishStop(id, true);
       }
@@ -526,7 +579,7 @@ export function createLiveSync(io: LiveIo) {
     snapshot(): LiveSnapshot {
       const net: Record<string, LiveNet> = {};
       for (const [id, r] of runs) net[id] = { offline: r.offline, halted: r.halted, fault: r.fault, mode: r.mode };
-      return { links: io.links(), net };
+      return { links: io.links(), net, at: io.now() };
     },
 
     /** Stop scheduling. Answers still out are written to storage when they land. */
@@ -535,6 +588,7 @@ export function createLiveSync(io: LiveIo) {
       for (const r of runs.values()) cancel(r);
     },
   };
+  return api;
 }
 
 /* ------------------------------------------------------------------ */
@@ -581,7 +635,7 @@ export function browserIoFor(load: (id: string) => unknown): Omit<LiveIo, "emit"
   return { ...browserIo, match: load };
 }
 
-const NO_LINKS: LiveSnapshot = { links: {}, net: {} };
+const NO_LINKS: LiveSnapshot = { links: {}, net: {}, at: 0 };
 
 /**
  * Live links for LiveScorer and LiveScoreboard, which stay mounted while
@@ -625,8 +679,21 @@ export function useLiveSync(enabled: boolean, opts: { load: (id: string) => unkn
     };
   }, [enabled, load]);
 
+  // A link closes LIVE_IDLE_CLOSE_MS after the server last took a write, with no answer to say so: show it then (idleAt).
+  useEffect(() => {
+    const due = Object.values(snap.links)
+      .map(idleAt)
+      .filter((t): t is number => t !== null && t > snap.at);
+    if (!due.length) return;
+    const t = setTimeout(() => {
+      if (ref.current) setSnap(ref.current.snapshot());
+    }, Math.min(...due) - snap.at);
+    return () => clearTimeout(t);
+  }, [snap]);
+
   return {
-    info: (id: string): LiveInfo => liveInfo(snap.links[id] ?? null, snap.net[id]),
+    /** inPlay: the match is not finished, so a link closed by this phone's clock shows closed (liveInfo). */
+    info: (id: string, inPlay = false): LiveInfo => liveInfo(snap.links[id] ?? null, snap.net[id], { now: snap.at, inPlay }),
     /** Call from persist(), after the match is saved: a MatchView, or boardShape(view) for a board. */
     changed: (id: string, view: LiveShape) => ref.current?.changed(id, view),
     start: async (id: string): Promise<LiveFault | null> => (ref.current ? ref.current.start(id) : "unavailable"),

@@ -4,9 +4,9 @@ import { LIVE_CODE_RE, LIVE_LINKS_KEY, LIVE_SECRET_RE, type LiveLinkRecord, type
 /* Live link records: shared by the cricket scorer and the scoreboard */
 /* ------------------------------------------------------------------ */
 
-/** Plenty for a season of match days. Past it the oldest go; their links stop taking writes 36 hours in anyway. */
+/** Plenty for a season of match days. Past it the oldest go; their links stop taking writes 36 hours in, or 2 hours after the last, anyway. */
 const MAX_LINKS = 40;
-const STOPPED = new Set<LiveLinkRecord["stopped"]>(["off", "gone", "forbidden", "limit", "too_big"]);
+const STOPPED = new Set<LiveLinkRecord["stopped"]>(["off", "gone", "closed", "forbidden", "limit", "too_big"]);
 const LINK_ID = /^[a-z0-9]{1,24}$/i;
 
 /** A stored record rebuilt field by field, or null if it does not look like one. */
@@ -16,6 +16,7 @@ function readLink(x: unknown): LiveLinkRecord | null {
   if (typeof l.code !== "string" || !LIVE_CODE_RE.test(l.code) || typeof l.secret !== "string" || !LIVE_SECRET_RE.test(l.secret)) return null;
   if (typeof l.on !== "boolean" || !Number.isSafeInteger(l.rev) || !Number.isSafeInteger(l.sentRev) || typeof l.createdAt !== "number" || !Number.isFinite(l.createdAt)) return null;
   const rec: LiveLinkRecord = { code: l.code, secret: l.secret, on: l.on, rev: l.rev as number, sentRev: l.sentRev as number, createdAt: l.createdAt };
+  if (typeof l.okAt === "number" && Number.isFinite(l.okAt)) rec.okAt = l.okAt;
   if (l.stopped && STOPPED.has(l.stopped)) rec.stopped = l.stopped;
   return rec;
 }

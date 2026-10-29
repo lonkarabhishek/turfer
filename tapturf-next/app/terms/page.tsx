@@ -125,8 +125,9 @@ const SECTIONS: LegalSection[] = [
           You own what you post. By posting a review, correction, note, photo or live score you give us
           permission to show it on TapTurf, to edit it for length or clarity, and to keep showing it after you
           leave, with your name attached. A live score (from the Live Cricket Scorer or the Live Scoreboard) is
-          different: it is shown only to people who have its link, until you turn the link off or it expires
-          30 days after its last update. Email us if you want something removed.
+          different: it stops updating after 2 hours without a new score, and it is shown only to people who
+          have its link, until you turn the link off or it expires 30 days after its last update. Email us if
+          you want something removed.
         </p>
         <p>Keep it honest and fair:</p>
         <ul>

@@ -19,6 +19,7 @@ import {
   followLoginHref,
   freshness,
   isNewer,
+  istWhen,
   joinClock,
   liveBadgeOn,
   nextPoll,
@@ -33,7 +34,7 @@ import {
   startPolling,
   type Seen,
 } from "./follow";
-import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_POLL_MS, type LiveGetResponse } from "../../lib/live/types";
+import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_IDLE_CLOSE_MS, LIVE_POLL_MS, liveIdleClosed, liveStatusAt, type LiveGetResponse } from "../../lib/live/types";
 import { apply, check, derive, newMatch, type Match, type MatchEvent } from "../../lib/cricket/scoring";
 import { applyBoard, checkBoard, clockMs, deriveBoard, newBoard, undoBoard } from "../../lib/board/index";
 import type { Board, BoardEvent } from "../../lib/board/types";
@@ -90,7 +91,9 @@ test("polls fast while live, slower once done, and stop only when the link is of
   assert.equal(nextPoll("live", 10_000, 0), LIVE_POLL_MS);
   assert.equal(nextPoll("live", null, 0), LIVE_POLL_MS);
   assert.equal(nextPoll("live", NaN, 0), LIVE_POLL_MS);
-  assert.equal(nextPoll("live", QUIET_MS, 0), LIVE_POLL_MS);
+  assert.equal(nextPoll("live", QUIET_MS - 1, 0), LIVE_POLL_MS);
+  // Closed at 2 hours, as the server has it: polled only when looked at again.
+  assert.equal(nextPoll("live", QUIET_MS, 0), null);
   assert.equal(nextPoll("live", QUIET_MS + 1, 0), null);
 
   assert.equal(nextPoll("done", 0, 0), LIVE_DONE_POLL_MS);
@@ -120,14 +123,70 @@ test("ages read in plain words", () => {
   assert.equal(ago(25_000), "25 s ago");
 });
 
-test("the live line turns amber after 2 min and gives up after 3 hours", () => {
+test("the live line turns amber after 2 min and says stopped once the link closes at 2 hours", () => {
   assert.deepEqual(freshness("live", 20_000), { tone: "live", text: "Updated 20 s ago" });
   assert.equal(freshness("live", FRESH_MS - 1).tone, "live");
   assert.deepEqual(freshness("live", 6 * MIN), { tone: "quiet", text: "No update for 6 min. The scorer may be offline." });
-  assert.equal(freshness("live", QUIET_MS).tone, "quiet");
+  assert.deepEqual(freshness("live", QUIET_MS - 1), { tone: "quiet", text: "No update for 1 hour. The scorer may be offline." });
+  assert.equal(freshness("live", QUIET_MS).tone, "stopped");
   assert.equal(freshness("live", QUIET_MS + MIN).tone, "stopped");
-  assert.match(freshness("live", QUIET_MS + MIN).text, /^This match stopped updating/);
+  // With the update's time, when it stopped, in India: 13:41 UTC is 7:11 pm IST.
+  const at = Date.parse("2026-10-29T13:41:00Z");
+  assert.deepEqual(freshness("live", QUIET_MS, null, at), { tone: "stopped", text: "Stopped updating at 7:11 pm. This is the last score." });
+  assert.equal(freshness("live", QUIET_MS + MIN).text, "Stopped updating 2 hours ago. This is the last score.");
+  // A finished match keeps its result line, however old: it is closed too, and nothing about it changes.
   assert.equal(freshness("done", 12 * MIN).text, "Final score. Last update 12 min ago.");
+  assert.deepEqual(freshness("done", 5 * QUIET_MS, null, at), { tone: "done", text: "Final score. Last update 10 hours ago." });
+});
+
+test("the follower and the server close a link at the same 2 hours", () => {
+  assert.equal(QUIET_MS, LIVE_IDLE_CLOSE_MS);
+  assert.equal(LIVE_IDLE_CLOSE_MS, 2 * 60 * MIN);
+  const t = Date.parse("2026-10-29T12:00:00Z");
+  assert.equal(liveIdleClosed("live", t, t + LIVE_IDLE_CLOSE_MS - 1), false);
+  assert.equal(liveIdleClosed("live", t, t + LIVE_IDLE_CLOSE_MS), true);
+  assert.equal(liveIdleClosed("done", t, t + LIVE_IDLE_CLOSE_MS), true, "finished links take no more updates either");
+  for (const s of ["stopped", "expired", "waiting"]) assert.equal(liveIdleClosed(s, t, t + 10 * LIVE_IDLE_CLOSE_MS), false, s);
+  assert.equal(liveIdleClosed("live", null, t), false);
+  assert.equal(liveIdleClosed("live", NaN, t), false);
+  // The admin's list: a live link closed this way reads closed (not live now); finished ones keep done.
+  assert.equal(liveStatusAt("live", t, t + LIVE_IDLE_CLOSE_MS - 1), "live");
+  assert.equal(liveStatusAt("live", t, t + LIVE_IDLE_CLOSE_MS), "closed");
+  assert.equal(liveStatusAt("done", t, t + LIVE_IDLE_CLOSE_MS), "done");
+  assert.equal(liveStatusAt("stopped", t, t + LIVE_IDLE_CLOSE_MS), "stopped");
+  assert.equal(liveStatusAt("live", NaN, t), "live", "an unreadable time is left as it is");
+  // The badge goes when the link closes, a running clock or not.
+  assert.equal(liveBadgeOn(QUIET_MS - 1, true), true);
+  assert.equal(liveBadgeOn(QUIET_MS, true), false);
+  assert.equal(liveBadgeOn(QUIET_MS - 1, false), false);
+});
+
+test("when a link stopped reads in India's time, today, yesterday or with its day", () => {
+  const ist = (s: string) => Date.parse(`${s}+05:30`);
+  // The owner's example: 7:41 pm, seen later that evening.
+  assert.equal(istWhen(ist("2026-10-29T19:41:00"), ist("2026-10-29T22:05:00")), "at 7:41 pm");
+  assert.equal(istWhen(ist("2026-10-29T00:05:00"), ist("2026-10-29T03:00:00")), "at 12:05 am");
+  assert.equal(istWhen(ist("2026-10-29T12:00:59"), ist("2026-10-29T14:00:00")), "at 12:00 pm");
+  assert.equal(istWhen(ist("2026-10-29T09:07:00"), ist("2026-10-29T11:07:00")), "at 9:07 am");
+  // Midnight in India, not in UTC: 11:50 pm IST is 18:20 UTC the same day.
+  assert.equal(istWhen(ist("2026-10-28T23:50:00"), ist("2026-10-29T01:50:00")), "yesterday at 11:50 pm");
+  assert.equal(istWhen(ist("2026-10-28T19:41:00"), ist("2026-10-29T08:00:00")), "yesterday at 7:41 pm");
+  assert.equal(istWhen(ist("2026-10-27T19:41:00"), ist("2026-10-29T08:00:00")), "on Tue 27 Oct at 7:41 pm");
+  assert.equal(istWhen(ist("2026-09-30T06:30:00"), ist("2026-10-29T08:00:00")), "on Wed 30 Sep at 6:30 am");
+  // UTC's date is not India's: 20:00 UTC on the 28th is 1:30 am IST on the 29th, today.
+  assert.equal(istWhen(Date.parse("2026-10-28T20:00:00Z"), ist("2026-10-29T04:00:00")), "at 1:30 am");
+  // The machine's time zone does not matter: the server render and a phone anywhere agree.
+  const tz = process.env.TZ;
+  try {
+    for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata", "Pacific/Kiritimati"]) {
+      process.env.TZ = zone;
+      assert.equal(istWhen(ist("2026-10-28T23:50:00"), ist("2026-10-29T01:50:00")), "yesterday at 11:50 pm", zone);
+      assert.equal(freshness("live", QUIET_MS, null, ist("2026-10-29T19:41:00")).text, "Stopped updating at 7:41 pm. This is the last score.", zone);
+    }
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
 });
 
 test("an innings break or a match before its first ball is not called offline", () => {
@@ -137,9 +196,9 @@ test("an innings break or a match before its first ball is not called offline", 
   assert.deepEqual(freshness("live", 6 * MIN, start), { tone: "paused", text: "Waiting for the first ball. Last update 6 min ago." });
   // Fresh is fresh, paused or not.
   assert.deepEqual(freshness("live", 20_000, brk), { tone: "live", text: "Updated 20 s ago" });
-  assert.equal(freshness("live", QUIET_MS, brk).tone, "paused");
-  // A pause that lasts 3 hours is called stopped all the same.
-  assert.equal(freshness("live", QUIET_MS + MIN, brk).tone, "stopped");
+  assert.equal(freshness("live", QUIET_MS - 1, brk).tone, "paused");
+  // A pause that lasts 2 hours is called stopped all the same: the link has closed.
+  assert.equal(freshness("live", QUIET_MS, brk).tone, "stopped");
   assert.equal(freshness("live", QUIET_MS + MIN, start).tone, "stopped");
   // With balls bowled, a quiet scorer may be offline.
   assert.equal(pauseText(null), null);
@@ -301,6 +360,8 @@ test("no copy uses a dash as punctuation", () => {
     freshness("live", 6 * MIN, pauseText("start")),
     freshness("live", 6 * MIN, "Half time."),
     freshness("live", QUIET_MS * 2),
+    freshness("live", QUIET_MS * 2, null, T0),
+    freshness("live", QUIET_MS * 20, null, T0),
     freshness("done", MIN),
   ].map((f) => f.text);
   for (const l of lines) assert.doesNotMatch(l, /[\u2013\u2014]/);
@@ -565,7 +626,7 @@ describe("polling", () => {
     h.poller.stop();
   });
 
-  test("a live match quiet for 3 hours is polled only when looked at", async () => {
+  test("a live match quiet for 2 hours is polled only when looked at", async () => {
     const h = harness({ status: "live", rev: 2, updatedAt: T0 - QUIET_MS - 1 }, [live(2, T0 - QUIET_MS - 1)]);
     await advance(60_000);
     assert.equal(h.polls, 0);
@@ -574,6 +635,20 @@ describe("polling", () => {
     assert.equal(h.polls, 1);
     await advance(60_000);
     assert.equal(h.polls, 1);
+    h.poller.stop();
+  });
+
+  test("a live match that closes while open stops being polled at 2 hours", async () => {
+    const at = T0 - QUIET_MS + 60_000;
+    const h = harness({ status: "live", rev: 2, updatedAt: at }, [live(2, at)]);
+    await advance(54_000);
+    assert.equal(h.polls, 54_000 / LIVE_POLL_MS);
+    const n = h.polls;
+    await advance(10 * 60_000);
+    assert.equal(h.polls, n + 1, "the poll past 2 hours is the last");
+    h.poller.wake();
+    await advance(1_000);
+    assert.equal(h.polls, n + 2, "looked at again: once");
     h.poller.stop();
   });
 

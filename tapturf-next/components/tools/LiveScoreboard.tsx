@@ -192,8 +192,9 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
     if (await live.stop(id)) trackTool("tool_action", TOOL, { action: "live_link_off" });
   };
 
-  const liveFor = (id: string): ShareLive => {
-    const info = live.info(id);
+  /** inPlay: the match is not finished (LiveInfo's closed). */
+  const liveFor = (id: string, inPlay: boolean): ShareLive => {
+    const info = live.info(id, inPlay);
     return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user };
   };
 
@@ -253,8 +254,9 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   }, [hydrated, auth.loading]);
 
   const remove = (meta: BoardMeta) => {
-    // Live or done: once the match is gone nothing here could turn its link off.
-    const stopsLink = liveLinks && live.info(meta.id).on;
+    // Live, done or closed: once the match is gone nothing here could turn its link off.
+    const linkNow = live.info(meta.id);
+    const stopsLink = liveLinks && (linkNow.on || linkNow.closed);
     if (!window.confirm(`Delete ${meta.teamA} vs ${meta.teamB}? This cannot be undone.${stopsLink ? " Its live link turns off too." : ""}`)) return;
     live.remove(meta.id);
     setIndex(deleteBoard(meta.id));
@@ -274,7 +276,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   const inPlay = view?.status === "live";
   // The match in progress has its own card above; finished ones stay listed so they can be deleted.
   const others = index.list.filter((m) => !(inPlay && m.id === board?.id));
-  const cardLink = liveLinks && board ? live.info(board.id) : null;
+  const cardLink = liveLinks && board ? live.info(board.id, inPlay) : null;
   const cardUrl = cardLink ? urlOf(cardLink) : null;
   const copied = cardUrl !== null && copiedUrl === cardUrl;
   const keepFrom = view && canKeepLink(cardLink?.link, now) ? `${view.teams.a.name} vs ${view.teams.b.name}` : null;
@@ -369,7 +371,7 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
 
       <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
 
-      {open && board && <BoardScreen key={board.id} board={board} onChange={onChange} onExit={closeScorer} onNewMatch={newMatch} live={liveLinks ? liveFor(board.id) : undefined} watchers={watchers} />}
+      {open && board && <BoardScreen key={board.id} board={board} onChange={onChange} onExit={closeScorer} onNewMatch={newMatch} live={liveLinks ? liveFor(board.id, inPlay) : undefined} watchers={watchers} />}
     </div>
   );
 }

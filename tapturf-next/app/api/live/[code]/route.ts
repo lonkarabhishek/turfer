@@ -48,7 +48,7 @@ const LIVE_HEADERS = {
 // Codes that fail the tag check never become valid: keep the 404 a day.
 const NOT_FOUND_HEADERS = { "Cache-Control": "public, max-age=0, s-maxage=86400", "X-Robots-Tag": "noindex" };
 
-function reply(r: "ok" | LiveError, extra: { rev?: number } = {}) {
+function reply(r: "ok" | LiveError, extra: { rev?: number; idle?: true } = {}) {
   const body = r === "ok" ? { ok: true, ...extra } : { error: r, ...extra };
   return NextResponse.json(body, { status: liveHttpStatus(r), headers: NO_STORE });
 }
@@ -113,7 +113,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     console.warn("live: put failed", code, e);
     return reply("unavailable");
   }
-  const out = (data && typeof data === "object" ? data : {}) as { r?: unknown; rev?: unknown };
+  const out = (data && typeof data === "object" ? data : {}) as { r?: unknown; rev?: unknown; idle?: unknown };
   const r = liveResult(out.r);
   // unavailable here is a wrong write key or an answer we do not know;
   // busy is the site-wide cap on new links. Both are worth a look.
@@ -124,6 +124,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     purgeLive(code);
     return reply("ok", { rev: rev ?? body.rev });
   }
+  // Closed after 2 hours without an update (20261029_live_idle_close.sql): the scorer is told why.
+  if (r === "gone" && out.idle === true) return reply(r, { idle: true });
   return reply(r, r === "stale" && rev !== undefined ? { rev } : {});
 }
 
