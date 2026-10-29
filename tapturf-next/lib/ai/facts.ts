@@ -7,7 +7,7 @@ import { googleMapsUrl, priceFigures, publicLink, scrubBookingApps } from "../ut
 import { ASPECT_ORDER, aspectShort } from "../reviews/catalog";
 import { barWords, pickChips } from "../reviews/insights";
 import { playersSayOf } from "../reviews/playersSay";
-import type { AspectCount, PlayAgainCounts } from "../reviews/types";
+import type { AspectCount, Aspects, PlayAgainCounts } from "../reviews/types";
 import type { Turf } from "../../types/turf";
 
 /**
@@ -22,9 +22,13 @@ import type { Turf } from "../../types/turf";
  * - google: the venue's Google rating and count, and whether the page links
  *   to the Google reviews.
  * - players_say: TapTurf's summary of a few written reviews (Google's or
- *   TapTurf's, per its sources), as the page's "What players say" shows it;
- *   google_reviews: the Google review texts TapTurf holds, apart from the
- *   players' own.
+ *   TapTurf's, per its sources), as the page's "What players say" shows it,
+ *   and only while the live reports still back it (lib/reviews/playersSay.ts
+ *   backedBy); google_reviews: the Google review texts TapTurf holds, apart
+ *   from the players' own.
+ * - google_reviewers_reported_prices: the figures Google reviewers wrote,
+ *   apart from reported_prices_unverified (a listing's rate grid and other
+ *   pages), which are nobody's words.
  */
 
 /** Everything the model may say about a venue. */
@@ -38,6 +42,8 @@ export type FactsReview = {
   source?: string | null;
   /** turf_page sends live rows only, without a status; a row whose status isn't live is never read. */
   status?: string | null;
+  /** A TapTurf report's scorecard: with 2 or more rated parts it counts as written for the summary (writtenEnough). */
+  aspects?: Aspects | null;
 };
 
 /** What turf_page holds about the venue's reviews (lib/queries/turfPage.ts). */
@@ -55,10 +61,15 @@ export type FactsReviews = {
 const TAPTURF_TIPS = 5;
 const GOOGLE_TEXTS = 3;
 
-/** One line of review text, without any booking app; null when too short to say anything (as the summary pass reads them). */
-function reviewText(comment: string | null | undefined, max: number): string | null {
+/**
+ * One line of review text, without any booking app; null when shorter
+ * than min. A TapTurf player's tip counts from its first letter, as the
+ * page shows any ("Nice turf"); a Google text from 11, as the summary pass
+ * reads them.
+ */
+function reviewText(comment: string | null | undefined, max: number, min = 11): string | null {
   const s = scrubBookingApps(comment)?.replace(/\s+/g, " ").trim();
-  return s && s.length > 10 ? s.slice(0, max) : null;
+  return s && s.length >= min ? s.slice(0, max) : null;
 }
 
 /** "1,442" as the page writes Google's count (GoogleCard). */
@@ -84,7 +95,7 @@ function tapturfReports(t: Turf, r: FactsReviews, rows: readonly FactsReview[]):
     });
   if (parts.length) out.scorecard = parts;
   const tips = own.flatMap((x) => {
-    const text = reviewText(x.comment, 240);
+    const text = reviewText(x.comment, 240, 1);
     return text ? [{ stars: x.rating, text }] : [];
   });
   if (tips.length) out.recent = tips.slice(0, TAPTURF_TIPS);
@@ -115,12 +126,21 @@ export function buildFacts(t: Turf, r: FactsReviews = {}): TurfFacts {
   // from ("booking-app listing: …"), and the sheet names no booking app.
   // priceFigures reads ₹-marked amounts and bare ones said as a price
   // ("Rates are 1000 per hour", "800/-"), as most Google quotes are.
-  const reported = [...new Set((t.price_mentions ?? []).flatMap((m) => (m.price_inr ? [`₹${m.price_inr}`] : priceFigures(m.text))))].slice(0, 4);
+  // What a Google reviewer wrote ("900 per hour charged. (Google review, 3
+  // years ago)") apart from the rest (a listing's rate grid, a club's fee
+  // page): only the first are what people say.
+  const figures = (ms: NonNullable<Turf["price_mentions"]>) =>
+    [...new Set(ms.flatMap((m) => (m.price_inr ? [`₹${m.price_inr}`] : priceFigures(m.text))))].slice(0, 4);
+  const byReviewer = (m: NonNullable<Turf["price_mentions"]>[number]) => /\bgoogle review\b/i.test(m.text ?? "");
+  const mentions = t.price_mentions ?? [];
+  const reviewerPrices = figures(mentions.filter(byReviewer));
+  const reported = figures(mentions.filter((m) => !byReviewer(m)));
 
   // Live rows only, whatever the caller read; the players' own apart from Google's.
   const rows = (r.reviews ?? []).filter((x) => x.status == null || x.status === "live");
   const rating = Number(t.rating) || 0;
-  const said = playersSayOf(t.review_summary);
+  // The summary only while the live reports back it: a removed report's words never come back (when the rows are known).
+  const said = playersSayOf(t.review_summary, r.reviews ? rows : undefined);
   const googleTexts = rows
     .filter((x) => x.source === "google")
     .flatMap((x) => {
@@ -160,6 +180,7 @@ export function buildFacts(t: Turf, r: FactsReviews = {}): TurfFacts {
     google_reviews: googleTexts,
     rates: Object.keys(rates).length ? rates : null,
     reported_prices_unverified: reported.length ? reported : null,
+    google_reviewers_reported_prices: reviewerPrices.length ? reviewerPrices : null,
     hours,
     floodlights: t.has_floodlights === true ? "yes" : null,
     covered: t.is_covered === true ? "yes" : null,

@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildFacts, hasReviewText, type FactsReviews } from "./facts";
-import { googleReviewsLink, isReviewsAsk, reviewsAnswer, reviewsSubject } from "./reviewsAnswer";
+import { asksMore, claimsUnwritten, googleReviewsLink, isReviewsAsk, pickAnswer, reviewsAnswer, reviewsSubject } from "./reviewsAnswer";
+import { backedBy, playersSayOf, PAGE_REVIEWS, type PlayersSay } from "../reviews/playersSay";
 import { ANSWER_SYSTEM, COMPARE_SYSTEM } from "./answerRules";
 import type { Turf } from "../../types/turf";
 
@@ -88,11 +89,16 @@ test("the sheet reads live reviews only, and keeps TapTurf players' apart from G
       { rating: 3, source: "google", comment: "Google says the turf is small but clean" },
       { rating: 1, source: "google", comment: "Removed Google row never read", status: "removed" },
       { rating: 4, source: null, comment: "short" },
+      { rating: 2, source: "google", comment: "too small" },
     ],
     stats: { count: 2, average: 4.5 },
   });
   const tt = f.tapturf_reports as { players: number; average_stars: string; recent: { stars: number; text: string }[] };
-  assert.deepEqual(tt.recent, [{ stars: 5, text: "Lights and pitch are good, staff helpful" }]);
+  // A player's short tip is a tip (the page shows it); a Google text that short is not read.
+  assert.deepEqual(tt.recent, [
+    { stars: 5, text: "Lights and pitch are good, staff helpful" },
+    { stars: 4, text: "short" },
+  ]);
   assert.deepEqual(f.google_reviews, [{ stars: 3, text: "Google says the turf is small but clean" }]);
   assert.equal(tt.players, 2);
   assert.equal(tt.average_stars, "4.5");
@@ -187,7 +193,7 @@ test("the plain answer: nothing at all", () => {
 test("the plain answer: TapTurf players first, then Google, then the summary as whose it is", () => {
   assert.equal(
     reviewsAnswer(buildFacts(turfGround, turfGroundReviews)).answer,
-    "3 players on TapTurf rate The Turf Ground 5.0. What TapTurf players like: good turf size, well maintained equipment and good grass condition. It is rated 4.6 on Google from 437 reviews.",
+    "3 players on TapTurf rate The Turf Ground 5.0. TapTurf players like good turf size, well maintained equipment and good grass condition (summed up from 3 written reviews). It is rated 4.6 on Google from 437 reviews.",
   );
   // One report, stars only: said as one player's, and nothing written yet.
   assert.equal(
@@ -219,7 +225,7 @@ test("the plain answer: TapTurf players first, then Google, then the summary as 
   // Google's summary: what its reviewers like, and complain about.
   assert.equal(
     reviewsAnswer(buildFacts(reboot)).answer,
-    "Reboot Sports Arena is rated 4.1 on Google from 1,442 reviews. What Google reviewers like: well maintained badminton courts, good lighting and friendly staff. Common complaints: two courts have hard rubber surface and hard to find court at peak hours.",
+    "Reboot Sports Arena is rated 4.1 on Google from 1,442 reviews. Google reviewers like well maintained badminton courts, good lighting and friendly staff; some mention two courts have hard rubber surface and hard to find court at peak hours (summed up from 5 written reviews).",
   );
 });
 
@@ -347,4 +353,232 @@ test("the answer prompt says whose words are whose, in order, and never fills a 
   assert.ok(!ANSWER_SYSTEM.includes('"TapTurf lists...", "reviewers mention..."'));
   assert.ok(COMPARE_SYSTEM.includes('"No written reviews yet" when the sheet has none of those three'));
   assert.ok(COMPARE_SYSTEM.includes("TapTurf players' first when tapturf_reports has them"));
+});
+
+// ── Review round 2 (29 Oct): each finding's case, failing before its fix ──
+
+const dnSummary: PlayersSay = {
+  summary: "Reviewers describe the venue positively, with one calling it pretty good. Another praises the pitch and says the lights were nice and professional.",
+  likes: ["great pitch", "nice lights", "professional lighting"],
+  gripes: [],
+  based_on: 2,
+  sources: ["TapTurf"],
+};
+const dn = turf({ name: "DN Parande Football And Cricket Turf", rating: 5, total_reviews: 261, external_review_url: MAPS, review_summary: dnSummary });
+
+test("F1: a TapTurf summary the live reports no longer back is never said", () => {
+  // Both reports live, as in production: the summary stands.
+  const both = buildFacts(dn, {
+    reviews: [
+      { rating: 5, source: null, comment: "Pretty good" },
+      { rating: 5, source: null, comment: "Pitch was great, lights were nice and professional" },
+    ],
+    stats: { count: 2, average: 5 },
+  });
+  assert.equal((both.players_say as Record<string, unknown>).from, "TapTurf reviews");
+  // The second player removes theirs (turf_page then sends the one live row): its words go with it.
+  const one = buildFacts(dn, { reviews: [{ rating: 5, source: null, comment: "Pretty good" }], stats: { count: 1, average: 5 } });
+  assert.ok(!("players_say" in one), JSON.stringify(one.players_say));
+  const said = reviewsAnswer(one).answer;
+  assert.ok(!/great pitch|lights/i.test(said), said);
+  assert.equal(said, '1 player on TapTurf gave DN Parande Football And Cricket Turf 5 stars and wrote: "Pretty good." It is rated 5.0 on Google from 261 reviews.');
+  // A row the caller read that isn't live counts as gone too.
+  const hidden = buildFacts(dn, {
+    reviews: [
+      { rating: 5, source: null, comment: "Pretty good" },
+      { rating: 5, source: null, comment: "Pitch was great, lights were nice and professional", status: "hidden" },
+    ],
+  });
+  assert.ok(!("players_say" in hidden));
+  // Every report removed: no summary, nothing written, and the model is not asked to read one.
+  const none = buildFacts(turfGround, { reviews: [], stats: { count: 0, average: 0 } });
+  assert.ok(!("players_say" in none));
+  assert.equal(hasReviewText(none), false);
+  // A report with 2 rated parts and no tip counts, as the summary pass counts it.
+  const tapped = buildFacts(dn, {
+    reviews: [
+      { rating: 5, source: null, comment: "Pretty good" },
+      { rating: 4, source: null, comment: null, aspects: { pitch: { score: 1 }, lights: { score: 1 } } },
+    ],
+  });
+  assert.ok("players_say" in tapped);
+  // Google's own summary is not a player's to withdraw; without the rows (a listing check) it stays as stored.
+  assert.ok("players_say" in buildFacts(reboot, { reviews: [] }));
+  assert.ok("players_say" in buildFacts(dn));
+  // turf_page's latest 20 can't show them all: one of the players' own still live is enough.
+  const many = Array.from({ length: PAGE_REVIEWS - 1 }, () => ({ rating: 4, source: "google", comment: "A Google review long enough to count" }));
+  const big: PlayersSay = { ...dnSummary, based_on: 30, sources: ["Google", "TapTurf"] };
+  assert.equal(backedBy(big, [{ rating: 5, source: null, comment: "Pitch was great, lights were nice" }, ...many]), true);
+  assert.equal(backedBy(big, many.concat(many.slice(0, 1))), false);
+  // The page reads it the same way.
+  assert.equal(playersSayOf(dnSummary, [{ rating: 5, comment: "Pretty good" }]), null);
+  assert.ok(playersSayOf(dnSummary, [{ rating: 5, comment: "Pretty good" }, { rating: 5, comment: "Pitch was great, lights were nice and professional" }]));
+});
+
+test("F2: a short TapTurf tip is written, as the page shows it", () => {
+  for (const tip of ["Nice turf", "Good turf!", "Ok"]) {
+    const f = buildFacts(turf({ name: "T12 Sports Turf", total_reviews: 41, external_review_url: MAPS }), { reviews: [{ rating: 4, source: null, comment: tip }], stats: { count: 1, average: 4 } });
+    assert.equal(hasReviewText(f), true, tip);
+    const a = reviewsAnswer(f).answer;
+    assert.ok(a.includes(`wrote: "${/[.!?]$/.test(tip) ? tip : `${tip}.`}"`), a);
+    assert.ok(!/No written reviews/.test(a), a);
+  }
+  // Only booking-app words, or blank: nothing written.
+  assert.equal(hasReviewText(buildFacts(turf(), { reviews: [{ rating: 4, source: null, comment: "   " }], stats: { count: 1, average: 4 } })), false);
+});
+
+const play = () => ({ turf: { rating: 4.5, external_review_url: MAPS }, facts: buildFacts(turf()) });
+const MADE_UP = "Reviewers mention PLaY Arena in Kasavanahalli is rated 4.5 from 40312 Google reviews. TapTurf lists it at ₹3000 an hour.";
+const PLAY_PLAIN = "PLaY Arena is rated 4.5 on Google from 40,312 reviews. No written reviews on TapTurf yet: read them on Google, or rate it on TapTurf after you play.";
+
+test("F3: other ways of asking what people think are review questions", async () => {
+  for (const q of ["Do people like it?", "What do players like about it?", "What do people complain about?", "Any complaints?", "Do players recommend it?", "Are players happy with it?", "how good is it", "pros and cons?"]) {
+    assert.equal(isReviewsAsk(q), true, q);
+    assert.equal(reviewsSubject(q), "it", q);
+  }
+  assert.equal(reviewsSubject("do people like Hotfut Bavdhan"), "Hotfut Bavdhan");
+  assert.equal(reviewsSubject("complaints about Hotfut Bavdhan"), "Hotfut Bavdhan");
+  // Not about what people say: a complaint to make, or the venue's own advice.
+  for (const q of ["how do I file a complaint", "I want to complain", "do they recommend booking in advance", "how good is the parking"]) assert.equal(isReviewsAsk(q), false, q);
+  // On PLaY Arena's page (nothing written), "Do people like it?" is the plain answer with the link, and the model is never asked.
+  let called = 0;
+  const model = async () => (called++, { answer: MADE_UP, covered: true });
+  const r = await pickAnswer("Do people like it?", play(), model);
+  assert.equal(r.path, "plain");
+  assert.equal(called, 0);
+  assert.equal(r.answer?.answer, PLAY_PLAIN);
+  assert.equal(r.answer?.link?.href, MAPS);
+  // A phrasing nobody listed: the model's "reviewers mention" with nothing written is replaced, with the link.
+  const odd = await pickAnswer("tell me about this place", play(), model);
+  assert.equal(odd.aboutReviews, false);
+  assert.equal(odd.path, "plain-backstop");
+  assert.equal(odd.answer?.answer, PLAY_PLAIN);
+  assert.equal(odd.answer?.link?.href, MAPS);
+  assert.equal(claimsUnwritten(MADE_UP, play().facts), true);
+  assert.equal(claimsUnwritten("Players say the turf is great.", play().facts), true);
+  // Honest answers stand, and so does a reviewer's note when the sheet has one.
+  assert.equal(claimsUnwritten(PLAY_PLAIN, play().facts), false);
+  assert.equal(claimsUnwritten("Yes, TapTurf lists parking at PLaY Arena.", play().facts), false);
+  assert.equal(claimsUnwritten("Yes, players will find parking on site, TapTurf lists.", play().facts), false);
+  assert.equal(claimsUnwritten("Reviewers note it is larger than most.", buildFacts(turf({ good_to_know: "Larger than most turfs." }))), false);
+  assert.equal(claimsUnwritten("Google reviewers like the courts.", buildFacts(reboot)), false);
+});
+
+test("F4: the summary's gripes are what some mention, and from how many written reviews", () => {
+  const wow = turf({
+    name: "WOW Sports And Fitness",
+    rating: 4.2,
+    total_reviews: 673,
+    review_summary: { summary: "Reviewers are divided.", likes: ["good badminton courts", "new football turf", "open well equipped gym"], gripes: ["rude fee collecting staff", "mosquito breeding during rains"], based_on: 5, sources: ["Google"] },
+  });
+  const a = reviewsAnswer(buildFacts(wow)).answer;
+  assert.ok(!/common complaints/i.test(a), a);
+  assert.equal(
+    a,
+    "WOW Sports And Fitness is rated 4.2 on Google from 673 reviews. Google reviewers like good badminton courts, new football turf and open well equipped gym; some mention rude fee collecting staff and mosquito breeding during rains (summed up from 5 written reviews).",
+  );
+  // Gripes alone.
+  const gripes = buildFacts(turf({ name: "X", review_summary: { summary: "", likes: [], gripes: ["dirty court"], based_on: 2, sources: ["Google"] } }));
+  assert.ok(reviewsAnswer(gripes).answer.endsWith("Some Google reviewers mention dirty court (summed up from 2 written reviews)."), reviewsAnswer(gripes).answer);
+});
+
+test("F5: never an empty answer", () => {
+  // A players' summary with no reports and no Google rating (a sheet built without the rows).
+  const f = buildFacts(turfGround, {});
+  delete f.google;
+  delete f.tapturf_reports;
+  const a = reviewsAnswer(f);
+  assert.ok(a.answer.length > 0);
+  assert.equal(a.answer, "TapTurf players like good turf size, well maintained equipment and good grass condition (summed up from 3 written reviews).");
+  // With Google's rating it is not dropped either.
+  const g = reviewsAnswer({ ...f, google: { rating: "4.6", reviews: "437" } }).answer;
+  assert.ok(g.includes("TapTurf players like good turf size"), g);
+  // A summary with nothing left to say: the plain "no reviews yet", not "".
+  assert.equal(reviewsAnswer({ name: "Y", players_say: { from: "TapTurf reviews" } }).answer, "TapTurf has no ratings or reviews for Y yet. Played there? Rate it on TapTurf after you play.");
+});
+
+test("F6: one review is a review; both sources are said in lower case mid-sentence", () => {
+  assert.equal(
+    reviewsAnswer(buildFacts(turf({ name: "Jai Hanuman Turf", rating: 5, total_reviews: 1 }))).answer,
+    "Jai Hanuman Turf is rated 5.0 on Google from 1 review. No written reviews on TapTurf yet: read them on Google, or rate it on TapTurf after you play.",
+  );
+  const mixed = reviewsAnswer(buildFacts(turf({ ...reboot, review_summary: { ...reboot.review_summary!, gripes: [], sources: ["Google", "TapTurf"] } }))).answer;
+  assert.ok(mixed.includes(". Reviewers on Google and TapTurf like well maintained badminton courts"), mixed);
+  const gripesOnly = reviewsAnswer(buildFacts(turf({ ...reboot, review_summary: { ...reboot.review_summary!, likes: [], sources: ["Google", "TapTurf"] } }))).answer;
+  assert.ok(gripesOnly.includes("Some reviewers on Google and TapTurf mention"), gripesOnly);
+});
+
+test("F7: a question that also asks for a price, a time or a facility goes to the model", async () => {
+  for (const q of ["price and reviews", "timings and reviews?", "price and rating", "parking and reviews", "What's the price and rating?", "Does it have parking? Reviews?"]) {
+    assert.equal(isReviewsAsk(q), true, q);
+    assert.equal(asksMore(q), true, q);
+    let called = 0;
+    const r = await pickAnswer(q, play(), async () => (called++, { answer: "PLaY Arena is rated 4.5 on Google from 40,312 reviews and TapTurf lists it at ₹3000 an hour. No written reviews on TapTurf yet.", covered: true }));
+    assert.equal(r.path, "model", q);
+    assert.equal(called, 1, q);
+    assert.ok(r.answer?.answer.includes("₹3000"), q);
+    assert.equal(r.answer?.link?.href, MAPS, q);
+  }
+  // Without the model: the plain answer, and the route says the page has the prices (more).
+  const det = await pickAnswer("price and reviews", play(), null);
+  assert.equal(det.path, "plain");
+  assert.equal(det.more, true);
+  // A plain review question is unchanged.
+  assert.equal(asksMore("What do players say about it?"), false);
+  assert.ok(ANSWER_SYSTEM.includes("unless the question also asks for them"));
+});
+
+test("F8: shoes, studs, players and booking ahead that are recommended, or a FIFA rating, are not reviews", () => {
+  for (const q of ["How many players are recommended?", "Is advance booking recommended?", "What shoes are recommended here?", "Is it rated for night matches?", "are studs recommended", "is it recommended to book in advance", "is the turf FIFA rated"])
+    assert.equal(isReviewsAsk(q), false, q);
+  for (const q of ["is it recommended", "Is this turf recommended?", "would you recommend it", "how is it rated", "is it rated 4 on google"]) assert.equal(isReviewsAsk(q), true, q);
+  assert.equal(reviewsSubject("is it recommended"), "it");
+  assert.equal(reviewsSubject("how is it rated"), "it");
+});
+
+test("F9: what people say about the price goes to the model, with the prices Google reviewers wrote apart", async () => {
+  for (const q of ["what do people say about the price", "what do people say about the rates", "what do people say about the timings"]) {
+    assert.equal(asksMore(q), true, q);
+    const r = await pickAnswer(q, play(), async () => ({ answer: "TapTurf lists ₹3000 an hour.", covered: true }));
+    assert.equal(r.path, "model", q);
+  }
+  const f = buildFacts(
+    turf({
+      price_mentions: [
+        { text: "They charge 1000-1200 per hour for the full turf. (Google review, 2 years ago)", source_url: "https://www.google.com/maps/place/Sportz+Pride" },
+        { text: "live booking grid (hourly): cheapest turf court hourly morning ₹1800", source_url: null },
+      ],
+    }),
+  );
+  assert.deepEqual(f.google_reviewers_reported_prices, ["₹1,200"]);
+  assert.deepEqual(f.reported_prices_unverified, ["₹1,800"]);
+  assert.ok(ANSWER_SYSTEM.includes("google_reviewers_reported_prices are figures Google reviewers wrote"));
+  assert.ok(ANSWER_SYSTEM.includes("reported_prices_unverified come from other listings, never call them anyone's words"));
+});
+
+test("F10: Hinglish and short ways of asking how it is", () => {
+  for (const q of ["turf kaise hai", "kaise hai", "kaisa hai ye turf", "acha hai kya", "how good is this turf", "any good?", "good turf?", "reviews kaise hai", "ye turf kaisa hai", "is it a good turf"]) {
+    assert.equal(reviewsSubject(q), "it", q);
+    assert.equal(isReviewsAsk(q), true, q);
+  }
+  // "acha hai" alone is "OK, good", not a question; a facility stays a facility.
+  for (const q of ["acha hai", "parking kaise hai", "how good is the pitch"]) assert.notEqual(reviewsSubject(q), "it", q);
+});
+
+test("F11: the model failing on a review question gives the plain answer; other questions fail as before", async () => {
+  const sheet = { turf: { rating: 4.1, external_review_url: "https://maps.google.com/?cid=12292351290359652478" }, facts: buildFacts(reboot) };
+  const overloaded = async (): Promise<null> => {
+    throw Object.assign(new Error("529 overloaded_error"), { status: 529 });
+  };
+  let logged = 0;
+  const r = await pickAnswer("What do players say about it?", sheet, overloaded, () => logged++);
+  assert.equal(r.path, "plain-fallback");
+  assert.equal(logged, 1);
+  assert.ok(r.answer?.answer.startsWith("Reboot Sports Arena is rated 4.1 on Google from 1,442 reviews. Google reviewers like"), r.answer?.answer);
+  assert.equal(r.answer?.link?.label, "Read Google reviews");
+  // Null from the model: the same.
+  assert.equal((await pickAnswer("What do players say about it?", sheet, async () => null)).path, "plain-fallback");
+  // Another question: the error goes to the route's handler, as before.
+  await assert.rejects(pickAnswer("does it have parking", sheet, overloaded), /529/);
+  assert.equal((await pickAnswer("does it have parking", sheet, async () => null)).answer, null);
 });

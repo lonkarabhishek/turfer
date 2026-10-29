@@ -80,7 +80,8 @@ export const AnswerOut = z.object({
 });
 export type AnswerOut = z.infer<typeof AnswerOut>;
 
-export async function answerQuestion(question: string, sheet: TurfFacts, usage?: AskUsage): Promise<AnswerOut | null> {
+/** opts.deadline (ms since 1970): every try ends by it (structured), for a question with a plain answer to fall back on. */
+export async function answerQuestion(question: string, sheet: TurfFacts, usage?: AskUsage, opts?: { deadline?: number }): Promise<AnswerOut | null> {
   const out = await structured(
     AnswerOut,
     {
@@ -91,6 +92,8 @@ export async function answerQuestion(question: string, sheet: TurfFacts, usage?:
     },
     "answer",
     usage,
+    undefined,
+    opts?.deadline ? { deadline: opts.deadline } : undefined,
   );
   // A question that names an app ("is it on Playo?") must not get it named back.
   const answer = out ? scrubBookingApps(out.answer) : null;

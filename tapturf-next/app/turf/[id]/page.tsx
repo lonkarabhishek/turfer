@@ -153,8 +153,9 @@ export default async function TurfDetailPage({
   const accessNotes = scrubBookingApps(turf.access_notes);
   // "Read them on Google" goes to Google Maps only.
   const googleReviewUrl = googleMapsUrl(turf.external_review_url);
-  // "What players say" is made from reviews, which can name an app (Ask reads it the same way).
-  const playersSay = playersSayOf(turf.review_summary);
+  // "What players say" is made from reviews, which can name an app (Ask reads it the same way),
+  // and is shown only while the live reports back it: a removed report's words never stay.
+  const playersSay = playersSayOf(turf.review_summary, page.reviews);
   const hoursLine = dailyHoursSummary(turf.opening_hours, {
     start_time: turf.start_time,
     end_time: turf.end_time,

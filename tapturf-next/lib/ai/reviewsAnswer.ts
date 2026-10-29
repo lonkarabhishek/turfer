@@ -10,11 +10,12 @@ import { hasReviewText, type TurfFacts } from "./facts";
  * nothing for the model to read, and it used to fill the gap ("Reviewers
  * mention PLaY Arena is rated 4.5..."). Whose words are whose is always
  * said: TapTurf players first, then Google's rating, then the summary of
- * the written reviews as its sources' reviewers. Pure, relative imports.
+ * the written reviews as its sources' reviewers. pickAnswer is the route's
+ * whole choice between this answer and the model's. Pure, relative imports.
  */
 
-/** Words that make "it" this venue (the page's, or the card shown last). */
-const THIS = /^(?:it|here|this|that|this one|that one|(?:this|that|the) (?:turf|place|ground|venue|court|arena|box|cage|club|field))$/i;
+/** Words that make "it" this venue (the page's, or the card shown last): "this turf", "turf", "ye turf". */
+const THIS = /^(?:it|here|this|that|this one|that one|turf|ground|place|venue|(?:this|that|the|ye|yeh|is) (?:turf|place|ground|venue|court|arena|box|cage|club|field))$/i;
 
 /** A facility, a price or a time: "how is the parking" is about the parking, not what people say overall. */
 const FACET =
@@ -34,21 +35,31 @@ const NOT_ONE = new RegExp(
     String.raw`\b(?:near me|nearby|near by|around me|close by|closest|nearest)\b`,
     String.raw`\b(?:above|over|more than|at least|atleast|min|minimum) \d`,
     String.raw`\b\d(?:\.\d)? ?\+? ?(?:stars?|rated)\b`,
-    String.raw`\b(?:how (?:do|can|to|should) (?:i |we )?|can i |can we |let me |i want to |i wanna |want to |i'd like to |i would like to |i will |i'll )(?:rate|review|write|leave|give|post|add|submit|edit|delete|remove)\b`,
-    String.raw`\b(?:my|our) (?:review|rating|report)\b`,
+    String.raw`\b(?:how (?:do|can|to|should) (?:i |we )?|can i |can we |let me |i want to |i wanna |want to |i'd like to |i would like to |i will |i'll )(?:rate|review|write|leave|give|post|add|submit|edit|delete|remove|complain|report|file)\b`,
+    String.raw`\b(?:my|our) (?:review|rating|report|complaint)\b`,
+    String.raw`\b(?:file|lodge|raise|register|make) a complaint\b`,
   ].join("|"),
   "i",
 );
 
 const WHO = String.raw`(?:people|players|other players|others|users|customers|reviewers|guys|ppl|folks|they|everyone|players on tapturf)`;
+/** The same without "they" and "everyone": "do they recommend booking ahead" asks the venue, not its players. */
+const PEOPLE = String.raw`(?:people|players|other players|others|users|customers|reviewers|guys|ppl|folks|players on tapturf)`;
 
-/** What people say, in so many words. */
+/**
+ * What people say, in so many words. Not bare "rated" or "recommended":
+ * "is it rated for night matches", "what shoes are recommended" ask
+ * something else.
+ */
 const TOPIC = new RegExp(
   [
     String.raw`\bwhat (?:do|did|does|are|is|would) ${WHO} (?:say|saying|think|thinking|feel|write|writing|said)\b`,
     String.raw`\bhow (?:do|did) ${WHO} (?:find|rate|like)\b`,
-    String.raw`\b(?:reviews?|ratings?|rated|feedback|opinions?|testimonials?|reputation)\b`,
-    String.raw`\b(?:worth it|worth going|worth the money|worth a visit|worth playing|recommended)\b`,
+    String.raw`\b(?:do|did|does|would|will) ${PEOPLE} (?:like|love|hate|dislike|enjoy|recommend|complain)\b`,
+    String.raw`\b(?:are|were|r) ${PEOPLE} (?:happy|satisfied|unhappy|disappointed) with\b`,
+    String.raw`\b(?:reviews?|ratings?|feedback|opinions?|testimonials?|reputation|complaints?)\b`,
+    String.raw`\brated (?:\d|on google)`,
+    String.raw`\b(?:worth it|worth going|worth the money|worth a visit|worth playing|pros and cons)\b`,
     String.raw`\blog (?:kya|kaisa) (?:kehte|kahte|bolte|bol rahe|keh rahe|sochte)\b`,
   ].join("|"),
   "i",
@@ -58,6 +69,19 @@ type Shape = { re: RegExp; overall?: boolean };
 // The venue is the captured part; none captured means the one on screen ("reviews?").
 const SHAPES: Shape[] = [
   { re: new RegExp(String.raw`^what (?:do|did|does|are|is|would) ${WHO} (?:say|saying|think|thinking|feel|write|writing|said)(?: (?:about|of|on|regarding|for) (.+?))?$`, "i") },
+  // "What do players like about it?", "What do people complain about?"
+  { re: new RegExp(String.raw`^what (?:do|did|does) ${PEOPLE} (?:like|love|hate|dislike|enjoy|complain)(?: about| of)?(?: (?:about|at|in|of|with) (.+?))?$`, "i") },
+  // "Do people like it?", "would players recommend Hotfut Bavdhan"
+  { re: new RegExp(String.raw`^(?:do|did|does|would|will) ${PEOPLE} (?:like|love|hate|dislike|enjoy|recommend|rate)(?: playing)?(?: (?:at|in))? (.+?)$`, "i") },
+  // "Are players happy with it?"
+  { re: new RegExp(String.raw`^(?:are|were|r) ${PEOPLE} (?:happy|satisfied|unhappy|disappointed) with (.+?)$`, "i") },
+  // "Any complaints?", "complaints about Hotfut"
+  { re: /^(?:(?:any|are there any|what are the|what are|main|common) )?complaints?(?: (?:about|with|at|for|of) (.+?))?$/i },
+  // "pros and cons?", "pros and cons of Hotfut"
+  { re: /^(?:what are )?(?:the )?(?:pros and cons|good and bad)(?: (?:of|for|at|about) (.+?))?$/i },
+  // "how is it rated", "how well rated is Hotfut": before the plain "how is it".
+  { re: /^how (?:is|'s|well is|highly is) (.+?) rated(?: on google)?$/i },
+  { re: /^how (?:well|highly) rated is (.+?)$/i },
   {
     re: /^(?:(?:what|how) (?:are|is|were|r)|what's|whats|show(?: me)?|any|read|see|check|get|give me|tell me)? ?(?:the |its |it's )?(?:google |tapturf |players'? )?(?:reviews?|ratings?|feedback|opinions?)(?: like)?(?: (?:of|for|on|about|at) (.+?))?(?: like)?$/i,
   },
@@ -68,12 +92,23 @@ const SHAPES: Shape[] = [
   { re: /^(.+?) (?:ke|ka|ki|che|cha|chi|chya) (?:reviews?|ratings?|feedback)(?: (?:kaise|kaisa|kaisi|kya|kasa|kashe|kase))?(?: (?:hai|hain|he|aahe|ahe))?$/i },
   // What it is like overall: never a question about one facility ("how is the parking").
   { re: /^how(?:'s| is| was| r| are) (.+?)(?: overall| for playing| to play)?$/i, overall: true },
+  { re: /^how good is (.+?)$/i, overall: true },
+  // "any good?", "good turf?", "is it a good turf": the venue on screen.
+  { re: /^(?:(?:is|was) (?:it|this|that)(?: (?:turf|place|ground|venue))? )?any good$/i, overall: true },
+  { re: /^(?:(?:is|was) (?:it|this|that) )?(?:a )?(?:good|nice|decent) (?:turf|place|ground|venue)(?: or not)?$/i, overall: true },
   {
-    re: /^(?:is|was|r|are) (.+?) (?:good|any good|nice|decent|great|ok|okay|bad|worth it|worth going|worth the money|worth a visit|recommended|reliable|legit|well rated|rated well|highly rated)(?: or not| overall| place| turf| ground| venue| one| enough)?$/i,
+    re: /^(?:is|was|r|are) (.+?) (?:good|any good|nice|decent|great|ok|okay|bad|worth it|worth going|worth the money|worth a visit|reliable|legit|well rated|rated well|highly rated)(?: or not| overall| place| turf| ground| venue| one| enough)?$/i,
     overall: true,
   },
-  { re: /^(?:(.+?) )?(?:kaisa|kaisi|kesa|kesi|kasa|kashi) (?:hai|he|h|aahe|ahe)(?: kya)?$/i, overall: true },
+  // Recommended: the venue itself ("is it recommended"), never shoes, studs or booking ahead.
+  { re: /^(?:is|was) (it|this|that|this one|this (?:place|turf|ground|venue)) recommended(?: or not)?$/i, overall: true },
+  {
+    re: /^(?:(.+?) )?(?:kaisa|kaisi|kaise|kese|kesa|kesi|kasa|kashi) (?:hai|hain|he|h|aahe|ahe)(?: (?:ye|yeh|is|this)(?: turf| ground| place| venue)?)?(?: kya)?$/i,
+    overall: true,
+  },
   { re: /^(.+?) (?:accha|acha|achha|achcha|badhiya|theek|thik|mast|changla|chaangla) (?:hai|he|h|aahe|ahe)(?: kya| ka)?$/i, overall: true },
+  // With no venue said it must be a question ("acha hai kya"); "acha hai" alone is "OK, good".
+  { re: /^(?:accha|acha|achha|achcha|badhiya|theek|thik|mast|changla|chaangla) (?:hai|he|h|aahe|ahe) (?:kya|ka)$/i, overall: true },
 ];
 
 const tidy = (q: string) =>
@@ -97,7 +132,11 @@ export function reviewsSubject(q: string): string | null {
   for (const { re, overall } of SHAPES) {
     const m = re.exec(raw);
     if (!m) continue;
-    const said = (m[1] ?? "").trim().replace(/^(?:about|of) /i, "");
+    // "reviews kaise hai": the reviews of the venue on screen.
+    const said = (m[1] ?? "")
+      .trim()
+      .replace(/^(?:about|of) /i, "")
+      .replace(/^(?:the |its |it's )?(?:reviews?|ratings?)$/i, "");
     if (!said || THIS.test(said)) return "it";
     if (FACET.test(said)) {
       // How one part is ("how is the parking"): not what people say overall.
@@ -120,6 +159,15 @@ export function isReviewsAsk(q: string): boolean {
   return reviewsSubject(raw) != null || TOPIC.test(raw);
 }
 
+/**
+ * Also asks for a price, a time or a facility ("price and reviews", "what
+ * do people say about the price"): the model answers that, never the plain
+ * answer, which names none of them.
+ */
+export function asksMore(q: string): boolean {
+  return FACET.test(tidy(q));
+}
+
 type Reports = {
   players: number;
   average_stars: string;
@@ -130,12 +178,15 @@ type Reports = {
 type Google = { rating: string; reviews?: string; reviews_link?: string };
 type Said = { from: string; written_reviews?: number; summary?: string; likes?: string[]; gripes?: string[] };
 
-/** "Google reviews" gives "Google reviewers", "TapTurf reviews" gives "TapTurf players". */
+/** "Google reviews" gives "Google reviewers", "TapTurf reviews" gives "TapTurf players"; both, "reviewers on Google and TapTurf". */
 function whose(from: string): string {
   const google = /google/i.test(from);
   const tapturf = /tapturf/i.test(from);
-  return google && tapturf ? "Reviewers on Google and TapTurf" : tapturf ? "TapTurf players" : "Google reviewers";
+  return google && tapturf ? "reviewers on Google and TapTurf" : tapturf ? "TapTurf players" : "Google reviewers";
 }
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const plural = (n: number | string, one: string) => `${n} ${one}${String(n) === "1" ? "" : "s"}`;
 
 /** A tip, quoted short and ending as a sentence: cut at a word, never mid-word. */
 function quote(text: string, max = 120): string {
@@ -147,14 +198,21 @@ function quote(text: string, max = 120): string {
   return `"${/[.!?…]$/.test(s) ? s : `${s}.`}"`;
 }
 
-/** What the summary's reviewers like and complain about, or its two sentences when it has no lists. */
+/**
+ * What the summary's reviewers like and what some mention, and how many
+ * written reviews it sums up (never all of Google's count), or its two
+ * sentences when it has no lists.
+ */
 function saidLines(s: Said): string[] {
   const who = whose(s.from);
-  const out: string[] = [];
-  if (s.likes?.length) out.push(`What ${who} like: ${listWords(s.likes)}.`);
-  if (s.gripes?.length) out.push(`Common complaints: ${listWords(s.gripes)}.`);
-  if (!out.length && s.summary) out.push(`TapTurf's summary of ${s.written_reviews ? `${s.written_reviews} written ` : ""}${s.from}: ${s.summary}`);
-  return out;
+  const of = s.written_reviews ? ` (summed up from ${plural(s.written_reviews, "written review")})` : "";
+  const likes = s.likes?.length ? listWords(s.likes) : null;
+  const gripes = s.gripes?.length ? listWords(s.gripes) : null;
+  if (likes && gripes) return [`${cap(who)} like ${likes}; some mention ${gripes}${of}.`];
+  if (likes) return [`${cap(who)} like ${likes}${of}.`];
+  if (gripes) return [`Some ${who} mention ${gripes}${of}.`];
+  if (s.summary) return [`TapTurf's summary of ${s.written_reviews ? `${s.written_reviews} written ` : ""}${s.from}: ${s.summary}`];
+  return [];
 }
 
 /**
@@ -193,27 +251,100 @@ export function reviewsAnswer(f: TurfFacts): { answer: string; covered: boolean 
   }
   if (g) {
     const who = tt ? "It is" : `${name} is`;
-    out.push(g.reviews ? `${who} rated ${g.rating} on Google from ${g.reviews} reviews.` : `${who} rated ${g.rating} on Google.`);
+    out.push(g.reviews ? `${who} rated ${g.rating} on Google from ${plural(g.reviews, "review")}.` : `${who} rated ${g.rating} on Google.`);
   }
+  // The players' summary without their reports (a sheet built without the rows): still said as theirs.
+  if (ownSaid && !tt) out.push(...saidLines(ownSaid));
   if (otherSaid) out.push(...saidLines(otherSaid));
   else {
     const texts = f.google_reviews as { text: string }[] | undefined;
     if (texts?.length) out.push(`One Google reviewer wrote: ${quote(texts[0].text)}`);
   }
 
+  const none = `TapTurf has no ratings or reviews for ${name} yet. Played there? Rate it on TapTurf after you play.`;
   if (!hasReviewText(f)) {
-    if (!tt && !g) return { answer: `TapTurf has no ratings or reviews for ${name} yet. Played there? Rate it on TapTurf after you play.`, covered: true };
+    if (!tt && !g) return { answer: none, covered: true };
     out.push(
       g?.reviews_link === "yes"
         ? "No written reviews on TapTurf yet: read them on Google, or rate it on TapTurf after you play."
         : "No written reviews on TapTurf yet. Played there? Rate it on TapTurf after you play.",
     );
   }
-  return { answer: out.join(" "), covered: true };
+  // Never an empty answer card.
+  return { answer: out.length ? out.join(" ") : none, covered: true };
 }
 
 /** "Read Google reviews" under a reviews answer: the venue's Google Maps page, as the turf page links it, when it has a Google rating. */
 export function googleReviewsLink(t: { rating?: number | string | null; external_review_url?: string | null }): { label: string; href: string } | null {
   const href = Number(t.rating) > 0 ? googleMapsUrl(t.external_review_url) : null;
   return href ? { label: "Read Google reviews", href } : null;
+}
+
+/** An answer about the venue, as the route shows it: with the Google reviews link under one about what people say. */
+export type Answered = { answer: string; covered: boolean; link?: { label: string; href: string } };
+
+/**
+ * How the answer was made: plain (from the sheet, no model), model,
+ * plain-fallback (the model failed or gave nothing on a review question),
+ * plain-backstop (the model said what people say with nothing written to
+ * back it), none (no sheet, or no model for a question that needs one).
+ */
+export type AnswerPath = "plain" | "model" | "plain-fallback" | "plain-backstop" | "none";
+
+/**
+ * Says what people said, liked or complained of: never right with no word
+ * of theirs in the sheet. Not "find" or "feel", which also say what a
+ * player will find there ("players will find parking on site").
+ */
+const CLAIM =
+  /\b(?:reviewers?|players?|people|customers|users|visitors|guests|others)\b[^.]{0,24}?\b(?:say|says|said|saying|mention|mentions|mentioned|like|likes|liked|love|loves|loved|praise|praises|praised|complain|complains|complained|report|reports|reported|note|notes|noted|found|describe|describes|described|felt|appreciate|appreciates|appreciated|recommend|recommends|recommended)\b|\baccording to (?:reviews|reviewers|players|people)\b/i;
+
+/** Any word of what people say: tips, the summary, Google texts, a reviewer's note (good_to_know) or a price a Google reviewer gave. */
+function anyWords(f: TurfFacts): boolean {
+  return hasReviewText(f) || !!f.good_to_know || !!f.google_reviewers_reported_prices;
+}
+
+/** The model's answer says what people said when the sheet holds nothing they said (29 Oct: "Reviewers mention PLaY Arena is rated 4.5..."). */
+export function claimsUnwritten(answer: string, f: TurfFacts): boolean {
+  return !anyWords(f) && CLAIM.test(answer);
+}
+
+/**
+ * The answer to a question about one venue (app/api/ask/route.ts, the
+ * question branch). What people say of it, with nothing written to read
+ * or no model, is the plain answer; a question that also asks for a
+ * price, a time or a facility goes to the model when there is one. When
+ * the model fails on a review question (null, an overload, a timeout),
+ * the plain answer; on any other question the error is the caller's, as
+ * before. When the model says what people said with no word of theirs in
+ * the sheet, the plain answer instead. The Google reviews link goes under
+ * any answer about what people say.
+ */
+export async function pickAnswer(
+  asked: string,
+  sheet: { turf: { rating?: number | string | null; external_review_url?: string | null }; facts: TurfFacts } | null,
+  model: ((question: string, facts: TurfFacts) => Promise<{ answer: string; covered: boolean } | null>) | null,
+  onModelError?: (e: unknown) => void,
+): Promise<{ answer: Answered | null; path: AnswerPath; aboutReviews: boolean; more: boolean }> {
+  const aboutReviews = isReviewsAsk(asked);
+  const more = aboutReviews && asksMore(asked);
+  if (!sheet) return { answer: null, path: "none", aboutReviews, more };
+  const link = googleReviewsLink(sheet.turf);
+  const plain = (path: AnswerPath) => {
+    const a = reviewsAnswer(sheet.facts);
+    return { answer: link ? { ...a, link } : a, path, aboutReviews, more };
+  };
+  if (aboutReviews && (!model || (!more && !hasReviewText(sheet.facts)))) return plain("plain");
+  if (!model) return { answer: null, path: "none", aboutReviews, more };
+  let said: { answer: string; covered: boolean } | null;
+  try {
+    said = await model(asked, sheet.facts);
+  } catch (e) {
+    if (!aboutReviews) throw e;
+    onModelError?.(e);
+    return plain("plain-fallback");
+  }
+  if (!said) return aboutReviews ? plain("plain-fallback") : { answer: null, path: "model", aboutReviews, more };
+  if (claimsUnwritten(said.answer, sheet.facts)) return plain("plain-backstop");
+  return { answer: aboutReviews && link ? { ...said, link } : said, path: "model", aboutReviews, more };
 }
