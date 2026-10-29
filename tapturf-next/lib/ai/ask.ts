@@ -8,6 +8,7 @@ import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { haversineKm, type Coords } from "@/lib/utils/location";
 import { dropOrder, relaxSteps } from "./relax";
+import { reviewsSubject } from "./reviewsAnswer";
 import type { Turf } from "@/types/turf";
 
 /**
@@ -70,7 +71,7 @@ export function isAskConfigured(): boolean {
 }
 
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
-export const ROUTER_VERSION = 8;
+export const ROUTER_VERSION = 9;
 
 /**
  * Stable system prompt (cacheable): cities, sports, and the areas we
@@ -98,7 +99,7 @@ Intents:
 - find_turf: looking for a venue, ground, turf, court or cage to play at. The default when unsure.
 - find_game: looking for a match, game or squad to join ("games near me", "football match this weekend", "anyone playing").
 - compare: two or more venue names with "vs", "or", "compare", "which is better".
-- question: a question about one named venue ("does X have parking", "what time does Y open", "how much is Z").
+- question: a question about one named venue ("does X have parking", "what time does Y open", "how much is Z"), including what people say about it ("what do players say about X", "X reviews", "is X any good"). Which venues are best reviewed ("best reviewed turfs in Pune") is find_turf.
 - create_game: wants to host, organise or set up their own game, or needs players for it ("host box cricket Saturday 7pm at X", "need 4 players for my match", "create a game", "mujhe game banana hai").
 - tool: wants one of TapTurf's free tools, or asks for something one of them does. Set tool to the matching one:
   cricket-nrr-calculator: net run rate, NRR, run rate maths ("how to calculate NRR", "our NRR after 63 in 6 overs vs 54").
@@ -343,20 +344,24 @@ export function keywordFilters(query: string, opts: { turfs?: readonly Turf[]; p
       const names = sides as string[];
       return { ...blank, intent: "compare", city: null, sport: null, free_text: null, turf_names: names, summary: `${names[0]} vs ${names[1]}`.slice(0, 120), reply: "Let me put those two side by side." };
     }
-    for (const shape of QUESTION_SHAPES) {
-      const m = shape.exec(raw);
-      if (!m) continue;
-      let name = m[1].trim();
+    // The venue part of a common question shape, else of a question about
+    // what people say of one ("what do players say about it", "Hotfut Bavdhan reviews").
+    const shaped = QUESTION_SHAPES.map((shape) => shape.exec(raw)?.[1]).find((m) => m != null);
+    // What people say of a venue named by its whole name: "Kothrud reviews" and "football turf reviews" stay searches.
+    const reviewed = shaped == null ? reviewsSubject(raw) : null;
+    const said = shaped ?? (reviewed && (THIS_VENUE.test(reviewed) || NTH_SHOWN.test(reviewed) || wholeVenueName(turfs, reviewed)) ? reviewed : null);
+    const question = (words: string): AskFilters | null => {
+      let name = words.trim();
       const nth = NTH_SHOWN.exec(name);
       if (nth) {
         const k = nth[1].toLowerCase();
         const pick = opts.shown?.[k === "last" ? opts.shown.length - 1 : NTH[k]];
-        if (!pick) break;
+        if (!pick) return null;
         name = pick;
       }
       const here = !nth && THIS_VENUE.test(name) && !!opts.pageTurf;
       // A venue's own name: "does Andheri have box cricket" is a search in Andheri.
-      if (!here && !nth && !namesVenue(turfs, name)) break;
+      if (!here && !nth && !namesVenue(turfs, name)) return null;
       return {
         ...blank,
         intent: "question",
@@ -365,9 +370,12 @@ export function keywordFilters(query: string, opts: { turfs?: readonly Turf[]; p
         turf_names: here ? [] : [name],
         question: raw,
         summary: `Question about ${here ? opts.pageTurf : name}`.slice(0, 120),
-        reply: "Let me check.",
+        // Over the answer card, which comes in the same response.
+        reply: `Here's what I found about ${here ? opts.pageTurf : name}.`,
       };
-    }
+    };
+    const asked = said != null ? question(said) : null;
+    if (asked) return asked;
   }
   // Labels, ids and other names on word boundaries ("goal" is not Goa).
   const cityId = cityInText(query);
@@ -434,7 +442,7 @@ export function areasFromTurfs(turfs: Turf[]): Record<string, string[]> {
   return res;
 }
 
-import { areaElsewhere, cityNamed, closestNames, findNamedVenues, nameIn, namedInSearch, namesVenue, namesWhich, norm, placedAt, readsAsName, resolveTurfNames, type VenueMatch } from "./names";
+import { areaElsewhere, cityNamed, closestNames, findNamedVenues, nameIn, namedInSearch, namesVenue, namesWhich, norm, placedAt, readsAsName, resolveTurfNames, wholeVenueName, type VenueMatch } from "./names";
 export { cityNamed, findNamedVenues, nameIn, norm, resolveTurfNames };
 
 function hasNeed(t: Turf, need: Need): boolean {

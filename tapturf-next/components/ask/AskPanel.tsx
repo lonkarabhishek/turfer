@@ -8,7 +8,7 @@ import { AskResultBody } from "./AskResults";
 import { AskSkeleton, AskThinking, type CardsKind } from "./AskThinking";
 import { TypingReply, prefersReducedMotion } from "./TypingReply";
 import { articleWelcome } from "./blogUi";
-import { askChips } from "@/lib/ask/chips";
+import { askChips, openingChips } from "@/lib/ask/chips";
 import { SUMMARY_CHIP } from "@/lib/ask/blog";
 import { getCityPref } from "@/lib/city";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
@@ -99,7 +99,8 @@ export function AskPanel() {
   // (an answer to a question about it doesn't count; no mode is an old summary).
   const blog = pageContext.blog ?? null;
   const offerSummary = !!blog && !turns.some((t) => t.res?.blog?.slug === blog.slug && t.res.blog.mode !== "answer");
-  const next = last?.res?.followups?.length ? last.res.followups : fresh ? welcome : [];
+  // On a turf page the chat opens with what players say about it.
+  const next = last?.res?.followups?.length ? last.res.followups : fresh ? openingChips(welcome, !!where) : [];
   const chips = offerSummary && !fresh ? [SUMMARY_CHIP, ...next.filter((c) => c !== SUMMARY_CHIP)] : next;
   // Signed out with no free answers left: Try again would be refused, so the sign-in card stands in.
   const gated = !signedIn && freeLeft === 0;
@@ -275,7 +276,7 @@ function Welcome({ where, article, chips, onPick }: { where: string | null; arti
       </h2>
       <p className="mt-1.5 text-[15px] leading-snug text-primary-500">
         {where
-          ? "Prices, timings, facilities, or how it compares with another turf."
+          ? "What players say, prices, timings, facilities, or how it compares with another turf."
           : article
             ? articleWelcome(!!article.charts)
             : "Turfs, open games, prices and comparisons. Hinglish chalega."}

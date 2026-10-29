@@ -27,6 +27,8 @@ import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
 import { answerQuestion, compareTurfs, loadFacts } from "@/lib/ai/compare";
+import { isReviewsAsk, pickAnswer } from "@/lib/ai/reviewsAnswer";
+import { REVIEWS_CHIP } from "@/lib/ask/chips";
 import type { Turf } from "@/types/turf";
 import { toolBySlug, toolPath } from "@/lib/tools/registry";
 import { getHomeDataShared } from "@/lib/home/data";
@@ -455,18 +457,37 @@ export async function GET(req: Request) {
         const lead = away && home ? noneIn(hit.whole ? place(hit.turf).name : cap(nameIn(turfs, typed) ?? typed), home) : null;
         // Which venue this is, when it isn't in the player's city or the name is shared.
         const which = venueLine(place(hit.turf), lead ? home : label(prefCity), hit.others.map((t) => labelFor(t.city ?? "")));
-        if (!canCallClaude) {
-          // No answer without the model, but the venue's card has its hours, prices and facilities.
-          const reply = lead
-            ? `${lead} ${which} Its page has the timings, prices and facilities.`
-            : `Here is ${place(hit.turf).name}. Its page has the timings, prices and facilities.${which ? ` ${which}` : ""}`;
-          body = { ...base, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: null };
+        const asked = filters.question ?? q;
+        // "What do players say about it?": TapTurf players' reports, then Google's rating and reviews.
+        const aboutReviews = isReviewsAsk(asked);
+        // After any other question about the page's venue, what players say is the next chip.
+        const followups =
+          page.turf?.id === hit.turf.id && !aboutReviews
+            ? [REVIEWS_CHIP, ...base.followups.filter((f) => f.toLowerCase() !== REVIEWS_CHIP.toLowerCase())].slice(0, 3)
+            : base.followups;
+        const sheet = canCallClaude || aboutReviews ? await loadFacts(hit.turf.id) : null;
+        // What people say is said from the sheet without the model when there is no model, or
+        // nothing written to read (the model used to dress the numbers up as "reviewers mention...");
+        // it falls back to that when the model fails, and replaces a model answer that says what
+        // people said with nothing of theirs to read (lib/ai/reviewsAnswer.ts pickAnswer).
+        // A review question has an answer ready, so the model gets 10 s, not the client's 20 s twice.
+        const picked = await pickAnswer(
+          asked,
+          sheet,
+          canCallClaude ? (question, facts) => answerQuestion(question, facts, usage, aboutReviews ? { deadline: Date.now() + 10_000 } : undefined) : null,
+          (e) => console.error("ask: answer failed, plain reviews answer", e),
+        );
+        // The venue's card has its hours, prices and facilities: said when there is no answer, and
+        // under the plain reviews answer to a question that also asked for one ("price and reviews").
+        const cardReply = lead
+          ? `${lead} ${which} Its page has the timings, prices and facilities.`
+          : `Here is ${place(hit.turf).name}. Its page has the timings, prices and facilities.${which ? ` ${which}` : ""}`;
+        if (!canCallClaude && !picked.answer) {
+          body = { ...base, followups, reply: cardReply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: null };
           break;
         }
-        const sheet = await loadFacts(hit.turf.id);
-        const out = sheet ? await answerQuestion(filters.question ?? q, sheet.facts, usage) : null;
-        const reply = lead ? `${lead} ${which}` : which ? `${filters.reply} ${which}` : filters.reply;
-        body = { ...base, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: out };
+        const reply = picked.more && picked.path !== "model" ? cardReply : lead ? `${lead} ${which}` : which ? `${filters.reply} ${which}` : filters.reply;
+        body = { ...base, followups, reply, relaxed: [], total: 1, missing: [], turfs: [card(hit.turf)], answer: picked.answer };
         break;
       }
       case "tool": {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useAsk } from "./AskProvider";
 import { BlogAnswerCard } from "./BlogAnswer";
-import { ArrowRight, Clock, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
+import { ArrowRight, Clock, ExternalLink, LocateFixed, Loader2, MapPin, Star, Users } from "lucide-react";
+import { googleMapsUrl } from "@/lib/utils/bookingApps";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import { OwnerMark } from "@/components/turf/OwnerMark";
 import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
@@ -268,7 +269,7 @@ export function AskResultBody({
 
       {res.intent === "question" && (
         <>
-          {res.answer && <p className="text-[15px] text-primary-900 leading-relaxed rounded-2xl bg-accent-50 px-4 py-3 mb-3">{res.answer.answer}</p>}
+          {res.answer && <AnswerCard answer={res.answer} />}
           {turfs.length > 0 && (
             <Row>
               {turfs.map((t) => (
@@ -277,6 +278,26 @@ export function AskResultBody({
             </Row>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/** The answer about one venue; under one about what people say, a link to its Google reviews (Google Maps only, as the turf page links them). */
+function AnswerCard({ answer }: { answer: NonNullable<AskResponse["answer"]> }) {
+  const href = answer.link ? googleMapsUrl(answer.link.href) : null;
+  return (
+    <div className="rounded-2xl bg-accent-50 px-4 py-3 mb-3">
+      <p className="text-[15px] text-primary-900 leading-relaxed">{answer.answer}</p>
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1.5 inline-flex items-center gap-1 min-h-8 text-[13px] font-semibold text-accent-700 hover:text-accent-800 cursor-pointer"
+        >
+          {answer.link?.label ?? "Read Google reviews"} <ExternalLink className="w-3.5 h-3.5" aria-hidden />
+        </a>
       )}
     </div>
   );

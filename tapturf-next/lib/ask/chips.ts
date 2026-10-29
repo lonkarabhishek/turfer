@@ -35,6 +35,18 @@ export function askChips(city: ChipCity | null, openGames: number): string[] {
   ];
 }
 
+/** On a turf page, Ask opens with this, and offers it after another question about that turf. */
+export const REVIEWS_CHIP = "What do players say about it?";
+
+/**
+ * The chips an empty chat opens with: on a turf page, what players say
+ * about it first, then the city's, six at most so the grid stays even.
+ */
+export function openingChips(chips: readonly string[], onTurf: boolean): string[] {
+  if (!onTurf) return [...chips];
+  return [REVIEWS_CHIP, ...chips.filter((c) => c.toLowerCase() !== REVIEWS_CHIP.toLowerCase())].slice(0, 6);
+}
+
 /** "Pratigrham Sports Space & Academy – Champions Arena" -> "Pratigrham Sports Space". Null when still too long for a chip. */
 export function chipName(name: string): string | null {
   const head = name.split(/\s[-–|]\s|[(,]/)[0].trim();
