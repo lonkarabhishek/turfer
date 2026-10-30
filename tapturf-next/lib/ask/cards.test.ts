@@ -5,6 +5,7 @@ import { asksPrice, cardPrices, compareTable, dayType, hostPreview, hostVenueWor
 import { cardPriceOf, visualsToDraw } from "./visuals";
 import { sportBandMap, sportBandTimeMap } from "../utils/cardSport";
 import { summarisePrice } from "../utils/prices";
+import { applyAskFilters, type AskFilters } from "../ai/ask";
 import type { PriceBand, Turf } from "../../types/turf";
 
 // Rows shaped like production's (30 Oct 2026, Pune and Bangalore). Every
@@ -67,6 +68,9 @@ const reading = (over: Partial<Reading> = {}): Reading => ({
   wants_nearby: false,
   ...over,
 });
+
+// A search as Ask reads it (lib/ai/ask.ts AskFilters), for applyAskFilters.
+const READING: AskFilters = { intent: "find_turf", tool: null, city: null, sport: null, areas: [], turf_names: [], question: null, max_price_per_hour: null, min_rating: null, time: null, when: null, skill: null, open_24x7: false, wants_nearby: false, players: null, needs: [], sort: "rating", free_text: null, summary: "", reply: "", followups: [] };
 
 // Friday 30 Oct 2026, 6 pm in India.
 const FRIDAY = new Date("2026-10-30T12:30:00Z");
@@ -280,20 +284,21 @@ test("late night and no time read the card's own lowest rate; a rate per slot is
   assert.deepEqual(c.off, [{ id: "sl", why: "₹1500/90-min slot" }]);
 });
 
+// Rows as listed on 30 Oct (SELECT only), with their bands as the route gives them (sportBandMap, withSportBands).
+const band = (format: string, lo: number, hi: number): PriceBand[] => [
+  { band: "morning", days: "all", format, price_per_hour: lo },
+  { band: "evening", days: "all", format, price_per_hour: hi },
+];
+const nSports = turf({ id: "ns", name: "N Sports Arena", city: "hyderabad", morning_price: 1200, afternoon_price: 1200, evening_price: 1800, weekend_morning_price: 1300, weekend_afternoon_price: 1300, weekend_evening_price: 2200, pricing_bands: [...band("box cricket (7-a-side)", 1200, 2200), ...band("5-a-side", 3000, 4000)] });
+const swingZone = turf({ id: "sz", name: "Swing Zone", city: "hyderabad", sports: ["Box Cricket", "Football", "Volleyball"], morning_price: 400, afternoon_price: 400, evening_price: 600, pricing_bands: band("box cricket (6-a-side)", 400, 900) });
+const kanade = turf({ id: "ks", name: "Kanade Sports Club", morning_price: 300, afternoon_price: 300, evening_price: 700, weekend_evening_price: 900, pricing_bands: [...band("6-a-side", 300, 900), ...band("9-a-side", 500, 1600)] });
+const jignasa = turf({ id: "jg", name: "Jignasa Sports Venue", morning_price: 299, afternoon_price: null, evening_price: 299, pricing_bands: [...band("box cricket (Small)", 299, 299), ...band("3-a-side", 299, 299)] });
+const dee = turf({ id: "dee", name: "DEE SPORTS HONGASANDRA", sports: ["Box Cricket", "Football", "Badminton", "Swimming"], morning_price: 1300, afternoon_price: 1300, evening_price: 1300 });
+const courts = turf({ id: "bc", name: "Shuttle Courts", sports: ["Badminton"], morning_price: 450, afternoon_price: 450, evening_price: 450 });
+const all = [nSports, swingZone, kanade, jignasa, dee, courts, powerplay, unpriced];
+const bands = sportBandMap(all.map((t) => ({ id: t.id, pricing_bands: t.pricing_bands ?? null, price_owner_confirmed: null })));
+
 test("with a sport, a search's cards show the price the chart reads; without one, their own", () => {
-  // Rows as listed on 30 Oct (SELECT only), with their bands as the route gives them (sportBandMap, withSportBands).
-  const band = (format: string, lo: number, hi: number): PriceBand[] => [
-    { band: "morning", days: "all", format, price_per_hour: lo },
-    { band: "evening", days: "all", format, price_per_hour: hi },
-  ];
-  const nSports = turf({ id: "ns", name: "N Sports Arena", city: "hyderabad", morning_price: 1200, afternoon_price: 1200, evening_price: 1800, weekend_morning_price: 1300, weekend_afternoon_price: 1300, weekend_evening_price: 2200, pricing_bands: [...band("box cricket (7-a-side)", 1200, 2200), ...band("5-a-side", 3000, 4000)] });
-  const swingZone = turf({ id: "sz", name: "Swing Zone", city: "hyderabad", sports: ["Box Cricket", "Football", "Volleyball"], morning_price: 400, afternoon_price: 400, evening_price: 600, pricing_bands: band("box cricket (6-a-side)", 400, 900) });
-  const kanade = turf({ id: "ks", name: "Kanade Sports Club", morning_price: 300, afternoon_price: 300, evening_price: 700, weekend_evening_price: 900, pricing_bands: [...band("6-a-side", 300, 900), ...band("9-a-side", 500, 1600)] });
-  const jignasa = turf({ id: "jg", name: "Jignasa Sports Venue", morning_price: 299, afternoon_price: null, evening_price: 299, pricing_bands: [...band("box cricket (Small)", 299, 299), ...band("3-a-side", 299, 299)] });
-  const dee = turf({ id: "dee", name: "DEE SPORTS HONGASANDRA", sports: ["Box Cricket", "Football", "Badminton", "Swimming"], morning_price: 1300, afternoon_price: 1300, evening_price: 1300 });
-  const courts = turf({ id: "bc", name: "Shuttle Courts", sports: ["Badminton"], morning_price: 450, afternoon_price: 450, evening_price: 450 });
-  const all = [nSports, swingZone, kanade, jignasa, dee, courts, powerplay, unpriced];
-  const bands = sportBandMap(all.map((t) => ({ id: t.id, pricing_bands: t.pricing_bands ?? null, price_owner_confirmed: null })));
   const rows = all.map((t) => (bands[t.id] ? { ...t, pricing_bands: null, sport_bands: bands[t.id] } : t));
   // Football: the band's range where it isn't the card's own; null where the bands name only another sport. The rest send nothing.
   assert.deepEqual(cardPrices(rows, "football"), {
@@ -324,6 +329,38 @@ test("with a sport, a search's cards show the price the chart reads; without one
     for (const o of chart.off.filter((x) => /^No .* rate listed$|^Prices not listed yet$/.test(x.why)))
       assert.equal(shown(rows.find((t) => t.id === o.id)!).label, "Prices not listed yet", `${sport} ${o.id}`);
   }
+});
+
+test("with a sport, the budget and cheapest first read the price the cards show; without one, their own", () => {
+  const times = sportBandTimeMap(all.map((t) => ({ id: t.id, pricing_bands: t.pricing_bands ?? null })));
+  // null: a caller without the bands.
+  const find = (over: Partial<AskFilters>, sportPrices: { bands: typeof bands | null; times: typeof times | null } | null = { bands, times }) =>
+    applyAskFilters(all, { ...READING, ...over }, { sportPrices: sportPrices ?? undefined });
+  // As the route sends them (cardPrices) and TurfMiniCard reads them.
+  const shown = (r: { turfs: Turf[]; sport: string | null }) => {
+    const rows = r.turfs.map((t) => (bands[t.id] ? { ...t, sport_bands: bands[t.id] } : t));
+    const sent = cardPrices(rows, r.sport) ?? {};
+    return rows.map((t) => (t.id in sent ? (sent[t.id]?.label ?? "Prices not listed yet") : summarisePrice(t).label));
+  };
+  // Football under ₹1,500, cheapest first: N Sports Arena's football band is ₹3,000 to ₹4,000 and Swing
+  // Zone lists only box cricket, so neither sits under the budget, and the cards read up from the cheapest.
+  const football = find({ sport: "football", max_price_per_hour: 1500, sort: "price_low" });
+  assert.deepEqual(football.relaxed, []);
+  assert.deepEqual(shown(football), ["₹299/hr", "₹300 – ₹1600/hr", "₹350/hr", "₹1300/hr"]);
+  // A caller without the bands (the games' fallback), as before: the slot columns, whichever sport they are for.
+  assert.deepEqual(find({ sport: "football", max_price_per_hour: 1500, sort: "price_low" }, null).turfs.map((t) => t.id), ["jg", "ks", "pp", "sz", "ns", "dee"]);
+  // Cheapest first with no budget: a card with no rate for the sport comes after every listed one.
+  assert.deepEqual(find({ sport: "football", sort: "price_low" }).turfs.map((t) => t.id), ["jg", "ks", "pp", "dee", "ns", "sz", "sc"]);
+  // In the evening: the sport's evening band where the bands list one (Kanade's football evenings are ₹900 and ₹1,600).
+  assert.deepEqual(find({ sport: "football", max_price_per_hour: 800, sort: "price_low", time: "evening" }).turfs.map((t) => t.id), ["jg", "pp"]);
+  assert.deepEqual(find({ sport: "football", max_price_per_hour: 800, sort: "price_low", time: "evening" }, { bands, times: null }).turfs.map((t) => t.id), ["jg", "ks", "pp"]);
+  // Badminton under ₹500: only the courts list a badminton rate; Powerplay Park's ₹350 is its turf's.
+  const badminton = find({ sport: "badminton", max_price_per_hour: 500, sort: "price_low" });
+  assert.deepEqual(badminton.relaxed, []);
+  assert.deepEqual(shown(badminton), ["₹450/hr"]);
+  // No sport: each venue's own rates, bands or not, exactly as before.
+  for (const over of [{ max_price_per_hour: 1500, sort: "price_low" }, { sort: "price_low", time: "evening", max_price_per_hour: 800 }] as Partial<AskFilters>[])
+    assert.deepEqual(find(over), find(over, null));
 });
 
 // ── Map ────────────────────────────────────────────────────────────

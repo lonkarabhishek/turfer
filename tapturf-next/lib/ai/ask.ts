@@ -1,12 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { CITIES, CITY_ALIASES, CITY_IDS, cityInText, cityInfo, type CityId } from "@/lib/city";
-import { SPORT_PAGES, turfPlaysSport, sportBySlug } from "@/lib/sports";
-import { areaFor } from "@/lib/utils/area";
-import { getMinimumPrice } from "@/lib/utils/prices";
-import { compareTopRated } from "@/lib/utils/ranking";
-import { haversineKm, type Coords } from "@/lib/utils/location";
+// Relative, so npm run test:ask runs applyAskFilters (lib/ai/relax.test.ts).
+import { CITIES, CITY_ALIASES, CITY_IDS, cityInText, cityInfo, type CityId } from "../city";
+import { SPORT_PAGES, turfPlaysSport, sportBySlug } from "../sports";
+import { areaFor } from "../utils/area";
+import { getMinimumPrice, summarisePrice } from "../utils/prices";
+import { sportBandTimeRange, sportMinimumPrice, sportPrice, type CardSport, type SportBandMap, type SportBandTimeMap } from "../utils/cardSport";
+import { compareTopRated } from "../utils/ranking";
+import { haversineKm, type Coords } from "../utils/location";
 import { dropOrder, nearbyLabel, relaxNearby, relaxSteps } from "./relax";
 import { reviewsSubject } from "./reviewsAnswer";
 import type { Turf } from "@/types/turf";
@@ -507,12 +509,22 @@ export type AskResult = {
  * and give way before the name does. `askedCity`: the city the
  * player's words name (cityNamed), when the caller knows it: a reading's
  * city that the words don't name (the page's) then gives way to an area
- * it doesn't have ("Begur" on the Nashik page is Bangalore's Begur).
+ * it doesn't have ("Begur" on the Nashik page is Bangalore's Begur), and
+ * to "near me" with the visitor's location. `sportPrices`: the venues'
+ * sport bands (getSportBands, getSportBandTimes), when the cards show the
+ * price for the sport asked (the route's cardPrices): the budget and
+ * cheapest first then read that price too.
  */
 export function applyAskFilters(
   all: Turf[],
   f: AskFilters,
-  opts: { prefCity?: CityId | null; loc?: Coords | null; limit?: number; askedCity?: CityId | null } = {},
+  opts: {
+    prefCity?: CityId | null;
+    loc?: Coords | null;
+    limit?: number;
+    askedCity?: CityId | null;
+    sportPrices?: { bands: SportBandMap | null; times: SportBandTimeMap | null };
+  } = {},
 ): AskResult {
   const limit = opts.limit ?? 12;
   const sport = f.sport ? sportBySlug(f.sport) : undefined;
@@ -568,6 +580,12 @@ export function applyAskFilters(
   // other cities' addresses, but on the Nashik page it is Nashik's.
   if (!named && explicitCity && opts.askedCity !== undefined && opts.askedCity !== explicitCity && areas.length && areaElsewhere(all, f.areas, explicitCity))
     explicitCity = null;
+  // Near me with the visitor's location: within a radius of them
+  // (relaxNearby). Only a city the player named bounds it; the page's (the
+  // quick reading's city for "near me") gives way, as their own city does:
+  // from Baner on a Mumbai page, Pune turfs 1 km away, not Mumbai's at 85.
+  const near = !named && f.wants_nearby && opts.loc ? opts.loc : null;
+  if (near && explicitCity && opts.askedCity !== undefined && opts.askedCity !== explicitCity) explicitCity = null;
   // "Near me" with no location shared yet stays in the visitor's city
   // (the Use my location card shows) rather than listing all of India.
   const scopeCity = named
@@ -607,12 +625,44 @@ export function applyAskFilters(
     const home = opts.prefCity;
     steps.push({ key: "area_city", keep: (t) => t.city === home });
   }
+  // With a sport, the budget and cheapest first read the price its card
+  // shows for it (cardPrice with the venue's sport bands, as the route's
+  // cardPrices), so no card sits under "Under ₹1,500" at football's band
+  // of ₹3,000 to ₹4,000 (N Sports Arena, Hyderabad, 30 Oct), or ahead of
+  // listed rates with none for the sport. A venue with the narrow sport is
+  // priced for it, any other for the wider one, as its card is
+  // (AskResult.sport). Without a sport or the bands, or for a named venue
+  // (its card shows its own price): its own rates, as before.
+  const priced = !named && sport && opts.sportPrices ? opts.sportPrices : null;
+  const forSport = new Map<Turf, { row: Turf; rule: CardSport }>();
+  const shownFor = (t: Turf) => {
+    let s = forSport.get(t);
+    if (!s) {
+      const bands = priced?.bands?.[t.id];
+      const page = widerSport && !turfPlaysSport(t.sports, sport!) ? widerSport : sport!;
+      s = { row: bands ? { ...t, sport_bands: bands } : t, rule: { labels: page.labels } };
+      forSport.set(t, s);
+    }
+    return s;
+  };
   if (f.max_price_per_hour != null) {
     const max = f.max_price_per_hour;
+    const evening = f.time === "evening" || f.time === "late_night";
+    const own = (t: Turf) => (evening ? (t.evening_price ?? getMinimumPrice(t)) : getMinimumPrice(t));
+    // The sport's band, at evening's where the bands list one (weekday, as evening_price is).
+    const forTheSport = (t: Turf) => {
+      const { row, rule } = shownFor(t);
+      const summary = summarisePrice(row);
+      if (summary.kind !== "real") return null;
+      const p = sportPrice(row, summary, rule);
+      if (p.from === "card") return own(t);
+      if (p.from === "none") return null;
+      return (evening ? sportBandTimeRange(priced!.times?.[t.id], rule, "evening", "weekday")?.[0] : null) ?? p.min;
+    };
     steps.push({
       key: "price",
       keep: (t) => {
-        const p = f.time === "evening" || f.time === "late_night" ? (t.evening_price ?? getMinimumPrice(t)) : getMinimumPrice(t);
+        const p = priced ? forTheSport(t) : own(t);
         return p != null && p > 0 && p <= max;
       },
     });
@@ -636,9 +686,8 @@ export function applyAskFilters(
   const order = dropOrder(f.needs.map((n) => `need:${n}`), !!named);
   // Near me with the visitor's location: within a radius of them, widened
   // only while too few match, never all of India (relaxNearby). A city the
-  // player named bounds the search already: a visitor far from it gets the
-  // city, as before.
-  const near = !named && f.wants_nearby && opts.loc ? opts.loc : null;
+  // player named bounds it too: a visitor far from every match in it gets
+  // the city, as before.
   let { matched, relaxed } = near
     ? relaxNearby(pool, steps, order, (t) => (t.lat != null && t.lng != null ? haversineKm(near, { lat: Number(t.lat), lng: Number(t.lng) }) : null))
     : relaxSteps(pool, steps, order);
@@ -653,6 +702,13 @@ export function applyAskFilters(
   });
 
   const sort = f.sort === "nearby" && !opts.loc ? "rating" : f.sort;
+  // Cheapest first: the low end of the price the card shows (sportMinimumPrice, as the sport pages order), worked out once a card.
+  const lows = new Map<Turf, number | null>();
+  const lowest = (t: Turf): number | null => {
+    if (!priced) return getMinimumPrice(t);
+    if (!lows.has(t)) lows.set(t, sportMinimumPrice(shownFor(t).row, shownFor(t).rule));
+    return lows.get(t) ?? null;
+  };
   // A named venue: the closest match first ("Mundhwa Turf Ground" before
   // the other turfs in Mundhwa, the exact "Prime Turf" before Prime Turf
   // Zone), then the order asked for. Near me with a location: nearest first.
@@ -672,8 +728,8 @@ export function applyAskFilters(
         if (b.km == null) return -1;
         return a.km - b.km;
       case "price_low": {
-        const ap = getMinimumPrice(a.t);
-        const bp = getMinimumPrice(b.t);
+        const ap = lowest(a.t);
+        const bp = lowest(b.t);
         if (ap == null && bp == null) return compareTopRated(a.t, b.t);
         if (ap == null) return 1;
         if (bp == null) return -1;
