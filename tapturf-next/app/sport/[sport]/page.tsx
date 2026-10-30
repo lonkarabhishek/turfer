@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LocateFixed } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { getSportBands } from "@/lib/queries/sportBands";
 import { SportTurfList } from "@/components/sport/SportTurfList";
@@ -13,6 +13,7 @@ import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { plural } from "@/lib/home/format";
 import { pricedCount, sportDescription, sportTitle } from "@/lib/seo/listingMeta";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { courtNearMeLink } from "@/lib/near/courtNearMe";
 
 export const revalidate = 3600;
 
@@ -111,6 +112,8 @@ export default async function SportPage({
   const [turfs, bands] = await Promise.all([turfsFor(info), getSportBands()]);
   const perCity = citiesFor(turfs, info);
   const place = placeFor(perCity);
+  // Badminton, pickleball and tennis: their near-me page, while they have venues.
+  const nearMe = courtNearMeLink(info.slug, turfs.length);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -145,6 +148,12 @@ export default async function SportPage({
           </div>
         </div>
         <p className="text-[16px] text-primary-600 mt-4 max-w-2xl leading-relaxed">{info.blurb}</p>
+        {nearMe && (
+          <Link href={nearMe.href} className="mt-3 inline-flex items-center gap-1.5 text-[15px] font-semibold text-accent-600 hover:text-accent-700">
+            <LocateFixed className="w-4 h-4" strokeWidth={2.25} />
+            {nearMe.text}
+          </Link>
+        )}
 
         {/* By city: the "<sport> turfs/courts in <city>" pages. */}
         {perCity.length > 0 && (

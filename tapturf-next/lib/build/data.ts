@@ -48,9 +48,9 @@ export type BuildDatasets = {
   /** turfFactsFrom() of the facts read: ids and keys only, never a number. */
   "turf-facts": TurfFacts | Failed;
   /**
-   * Production only (the sport pages prerender there): readSportBandRows
-   * as read; the pages shape them as they shape their own read
-   * (lib/queries/sportBands.ts).
+   * Every build (the court near-me pages prerender in previews too, the
+   * sport pages in production): readSportBandRows as read; the pages shape
+   * them as they shape their own read (lib/queries/sportBands.ts).
    */
   "sport-bands": SportBandRow[] | Failed;
   sitemap: { turfs: SitemapTurf[]; games: SitemapGame[] };
