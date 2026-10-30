@@ -14,6 +14,9 @@ import {
   type CityFacts,
   allTurfsDescription,
   nearMeDescription,
+  courtNearMeDescription,
+  courtNearMeKeywords,
+  courtNearMeTitle,
 } from "./listingMeta";
 import { bannedCopy, DEFAULT_OG_IMAGE, SEO_TEMPLATE_DATE } from "./defaults";
 import { listingReach, reachOf, turfFactsFrom, type TurfFactRow } from "./turfFacts";
@@ -243,6 +246,58 @@ test("/turfs and /turf-near-me descriptions: within 155, en-IN digits, no 'sorte
     "Tap Use my location to sort 3,662 football and box cricket turfs by distance, or browse Hyderabad, Bangalore, Pune and 171 more cities. No booking fee.",
   );
   assert.ok(near.length <= 155);
+});
+
+test("court near-me pages: the approved titles and descriptions, from the venues' own counts", () => {
+  // Production on 29 Oct: venues that list the sport, cities most venues first (ties by city size).
+  const cities = (top: [string, number][], total: number) => [
+    ...top.map(([label, count]) => ({ label, count })),
+    ...Array.from({ length: total - top.length }, (_, i) => ({ label: `C${i}`, count: 1 })),
+  ];
+  const badminton = { sport: sport("badminton"), count: 252, priced: 0, cities: cities([["Bangalore", 55], ["Pune", 38], ["Hyderabad", 31]], 46) };
+  const pickleball = { sport: sport("pickleball"), count: 303, priced: 0, cities: cities([["Hyderabad", 53], ["Bangalore", 53], ["Delhi", 23]], 52) };
+  const tennis = { sport: sport("tennis"), count: 29, priced: 0, cities: cities([["Hyderabad", 5], ["Bangalore", 5], ["Chennai", 3]], 14) };
+  assert.equal(courtNearMeTitle(badminton), "Badminton Courts Near Me: 252 Courts in 46 Cities | TapTurf");
+  assert.equal(
+    courtNearMeDescription(badminton),
+    "252 badminton courts in Bangalore, Pune, Hyderabad and 43 more cities. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.",
+  );
+  assert.equal(courtNearMeTitle(pickleball), "Pickleball Courts Near Me: 303 Courts in 52 Cities | TapTurf");
+  assert.equal(
+    courtNearMeDescription(pickleball),
+    "303 pickleball courts in Hyderabad, Bangalore, Delhi and 49 more cities. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.",
+  );
+  assert.equal(courtNearMeTitle(tennis), "Tennis Courts Near Me: 29 Courts in 14 Cities | TapTurf");
+  assert.equal(
+    courtNearMeDescription(tennis),
+    "29 tennis courts in Hyderabad, Bangalore, Chennai and 11 more cities. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.",
+  );
+  for (const f of [badminton, pickleball, tennis]) clean(courtNearMeTitle(f), courtNearMeDescription(f));
+  assert.equal(
+    courtNearMeKeywords(badminton),
+    "badminton court near me, badminton courts near me, badminton near me, badminton court bangalore, badminton court pune, badminton court hyderabad, badminton court c0, badminton court c1, badminton court c2, badminton court c3, badminton court c4",
+  );
+});
+
+test("court near-me pages: few venues or cities read right, long names step down, nothing when empty", () => {
+  const one = { sport: sport("tennis"), count: 1, priced: 0, cities: [{ label: "Pune", count: 1 }] };
+  assert.equal(courtNearMeTitle(one), "Tennis Courts Near Me: 1 Court in Pune | TapTurf");
+  assert.equal(courtNearMeDescription(one), "1 tennis court in Pune. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.");
+  const three = { sport: sport("pickleball"), count: 7, priced: 0, cities: [{ label: "Pune", count: 4 }, { label: "Nashik", count: 2 }, { label: "Nagpur", count: 1 }] };
+  assert.equal(courtNearMeTitle(three), "Pickleball Courts Near Me: 7 Courts in Pune, Nashik & Nagpur");
+  assert.equal(courtNearMeDescription(three), "7 pickleball courts in Pune, Nashik and Nagpur. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.");
+  const long = { sport: sport("badminton"), count: 1234, priced: 0, cities: [{ label: "Thiruvananthapuram", count: 900 }, { label: "Tiruchirappalli", count: 300 }, { label: "Sambhajinagar", count: 34 }] };
+  assert.equal(courtNearMeTitle(long), "Badminton Courts Near Me: 1,234 Courts | TapTurf");
+  const wide = { ...long, cities: [...long.cities, { label: "Visakhapatnam", count: 1 }] };
+  assert.equal(
+    courtNearMeDescription(wide),
+    "1,234 badminton courts in Thiruvananthapuram and 3 more cities. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.",
+  );
+  for (const f of [one, three, long, wide]) clean(courtNearMeTitle(f), courtNearMeDescription(f));
+  const none = { sport: sport("badminton"), count: 0, priced: 0, cities: [] };
+  assert.equal(courtNearMeTitle(none), "Badminton Courts Near Me | TapTurf");
+  assert.equal(courtNearMeDescription(none), "Indoor badminton courts with proper flooring and lighting. Call or WhatsApp the venue, no booking fee.");
+  clean(courtNearMeTitle(none), courtNearMeDescription(none));
 });
 
 test("game dates carry India's offset; a game past midnight ends the next day", () => {

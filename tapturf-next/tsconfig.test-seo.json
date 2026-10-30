@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/seo/turfMeta.test.ts", "lib/seo/listingMeta.test.ts", "lib/seo/blogMeta.test.ts", "lib/utils/seo.test.ts"]
+  "files": ["lib/seo/turfMeta.test.ts", "lib/seo/listingMeta.test.ts", "lib/seo/blogMeta.test.ts", "lib/utils/seo.test.ts", "lib/near/courtNearMe.test.ts"]
 }

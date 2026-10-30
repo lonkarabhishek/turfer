@@ -27,7 +27,7 @@
     "test:reviews": "tsc -p tsconfig.test-reviews.json && node --test .test-out/reviews/lib/reviews/reviews.test.js .test-out/reviews/lib/reviews/routes.test.js",
     "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js",
     "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js",
-    "test:seo": "tsc -p tsconfig.test-seo.json && node --test .test-out/seo/lib/seo/turfMeta.test.js .test-out/seo/lib/seo/listingMeta.test.js .test-out/seo/lib/seo/blogMeta.test.js .test-out/seo/lib/utils/seo.test.js",
+    "test:seo": "tsc -p tsconfig.test-seo.json && node --test .test-out/seo/lib/seo/turfMeta.test.js .test-out/seo/lib/seo/listingMeta.test.js .test-out/seo/lib/seo/blogMeta.test.js .test-out/seo/lib/utils/seo.test.js .test-out/seo/lib/near/courtNearMe.test.js",
     "test:consent": "tsc -p tsconfig.test-consent.json && node --test .test-out/consent/lib/consent.test.js .test-out/consent/lib/analytics/consentGates.test.js .test-out/consent/lib/policy.test.js",
     "test:list": "tsc -p tsconfig.test-list.json && node --test .test-out/list/lib/turfList/query.test.js .test-out/list/lib/turfList/client.test.js",
     "test:build": "tsc -p tsconfig.test-build.json && node --test .test-out/build/lib/build/build.test.js"

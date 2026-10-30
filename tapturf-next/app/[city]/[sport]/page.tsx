@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LocateFixed } from "lucide-react";
 import { getAllActiveTurfs, turfRowsStale } from "@/lib/queries/turfs";
 import { cityPointsOf, isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
@@ -20,6 +20,7 @@ import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
 import { getSportBands } from "@/lib/queries/sportBands";
+import { courtNearMeLink } from "@/lib/near/courtNearMe";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
@@ -140,6 +141,8 @@ export default async function CitySportPage({
     return href ? [{ ...c, href }] : [];
   });
   const otherSports = citySportLinks(cityId, data.cityTurfs).filter((sp) => sp.slug !== s.slug);
+  // Badminton, pickleball and tennis: their near-me page, under the other cities.
+  const nearMe = courtNearMeLink(s.slug, turfs.length);
 
   const jsonLd = [
     {
@@ -281,6 +284,12 @@ export default async function CitySportPage({
               </Link>
             ))}
           </div>
+          {nearMe && (
+            <Link href={nearMe.href} className="mt-3 inline-flex items-center gap-1.5 text-[15px] font-semibold text-accent-600 hover:text-accent-700">
+              <LocateFixed className="w-4 h-4" strokeWidth={2.25} />
+              {nearMe.text}
+            </Link>
+          )}
         </div>
         {otherSports.length > 0 && (
           <div>

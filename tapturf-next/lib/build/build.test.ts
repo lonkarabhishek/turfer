@@ -723,16 +723,27 @@ test("buildData: sport bands the step could not read come back as failed, never 
   }
 });
 
-test("step: previews record no turf pages", async () => {
-  let bandReads = 0;
-  const r = await step({ override: (_p, u) => void (u.searchParams.get("select") === "id,pricing_bands,price_owner_confirmed" && bandReads++) }, { VERCEL_ENV: "preview" });
-  try {
-    assert.equal(r.manifest.datasets["turf-pages"], undefined);
-    assert.ok(!r.s.calls.includes("rpc/turf_page"));
-    // Previews prerender no sport page either: no bands read, none recorded.
-    assert.equal(r.manifest.datasets["sport-bands"], undefined);
-    assert.equal(bandReads, 0);
-  } finally {
-    r.cleanup();
+test("step: previews record no turf pages, and the sport bands as every build does", async () => {
+  for (const env of [{ VERCEL_ENV: "preview" }, { VERCEL_ENV: "" }]) {
+    let bandReads = 0;
+    const lines: string[] = [];
+    const log = console.log;
+    console.log = (m: string) => void lines.push(m);
+    try {
+      const r = await step({ override: (_p, u) => void (u.searchParams.get("select") === "id,pricing_bands,price_owner_confirmed" && bandReads++) }, env);
+      try {
+        assert.equal(r.manifest.datasets["turf-pages"], undefined);
+        assert.ok(!r.s.calls.includes("rpc/turf_page"));
+        // The court near-me pages prerender in previews and local builds too, and read the bands.
+        assert.ok(r.manifest.datasets["sport-bands"]);
+        assert.deepEqual(r.read("sport-bands"), r.s.bands);
+        assert.equal(bandReads, 1);
+        assert.match(lines.join("\n"), /; sport bands of 2 turfs; turf pages none \(not production\); /);
+      } finally {
+        r.cleanup();
+      }
+    } finally {
+      console.log = log;
+    }
   }
 });

@@ -1,7 +1,8 @@
 /**
  * Titles and descriptions for the listing pages (home, /<city>,
- * /<city>/<sport>, /sport/<sport>), filled from live counts: how many
- * venues, which sports, where most of them are, how many list prices.
+ * /<city>/<sport>, /sport/<sport>, the near-me pages), filled from live
+ * counts: how many venues, which sports, where most of them are, how
+ * many list prices.
  * Same rules as the turf pages (lib/seo/turfMeta.ts): 60 characters and
  * about 580px for a title, 155 characters for a description, no booking
  * claims, nothing that is not on the page.
@@ -296,6 +297,48 @@ export function nearMeDescription(total: number, labels: string[], cityCount: nu
     ),
     fits,
   );
+}
+
+// ── /<sport>-courts-near-me (badminton, pickleball, tennis) ──
+
+/** "Badminton Courts Near Me: 252 Courts in 46 Cities | TapTurf" ("in Pune & Nashik" for three cities or fewer). */
+export function courtNearMeTitle(f: Pick<SportFacts, "sport" | "count" | "cities">): string {
+  const head = `${sportVenues(f.sport, { title: true })} Near Me`;
+  if (f.count <= 0) return withBrand(head);
+  const n = f.cities.length;
+  const names = f.cities.map((c) => c.label);
+  const where = n > 3 ? `in ${inr(n)} Cities` : n === 0 ? null : `in ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} & ${names.at(-1)}`}`;
+  const venues = `${inr(f.count)} ${cap(venueWord(f.sport, f.count))}`;
+  return firstFitting([where && withBrand(`${head}: ${venues} ${where}`), withBrand(`${head}: ${venues}`), withBrand(head)], titleFits);
+}
+
+/**
+ * "252 badminton courts in Bangalore, Pune, Hyderabad and 43 more cities.
+ * Tap Use my location to see the closest first. Call or WhatsApp, no
+ * booking fee." Cities most venues first; sorting starts at the button,
+ * so the snippet says so.
+ */
+export function courtNearMeDescription(f: Pick<SportFacts, "sport" | "count" | "cities">): string {
+  if (f.count <= 0) return firstFitting([`${f.sport.blurb} Call or WhatsApp the venue, no booking fee.`, f.sport.blurb], fits);
+  const head = `${inr(f.count)} ${f.sport.name.toLowerCase()} ${venueWord(f.sport, f.count)}`;
+  const labels = f.cities.map((c) => c.label);
+  const where = (k: number) => (f.cities.length === 0 ? "in India" : `in ${citiesLine(labels, f.cities.length, k)}`);
+  return firstFitting(
+    [3, 2, 1, 0].map((k) => `${head} ${where(k)}. Tap Use my location to see the closest first. Call or WhatsApp, no booking fee.`),
+    fits,
+  );
+}
+
+/** The sport pages' keywords pattern: the sport near me, then its top 8 cities. */
+export function courtNearMeKeywords(f: Pick<SportFacts, "sport" | "cities">): string {
+  const lower = f.sport.name.toLowerCase();
+  const word = venueWord(f.sport, 1);
+  return [
+    `${lower} ${word} near me`,
+    `${lower} ${venueWord(f.sport)} near me`,
+    `${lower} near me`,
+    ...f.cities.slice(0, 8).map((c) => `${lower} ${word} ${c.label.toLowerCase()}`),
+  ].join(", ");
 }
 
 // ── home ──
