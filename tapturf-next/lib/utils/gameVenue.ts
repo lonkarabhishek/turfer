@@ -56,11 +56,27 @@ export function gameSportPage(sport: string | null | undefined): SportPage | und
   return best?.page;
 }
 
+/** A cricket match, box or not: what a turf must list to host one. */
+const CRICKET_MATCH = new Set(["cricket", "box cricket"]);
+
 /**
- * Other turfs near the game's current one that list its sport (exactly,
- * as turfPlaysSport reads a turf's sports), nearest first, within
- * NEARBY_MAX_KM. Nothing when the current turf has no coordinates or the
- * sport has no page: no list is better than a wrong one.
+ * Whether a turf can take the game: it lists the game's sport, exactly as
+ * turfPlaysSport reads it. A cricket game, box or not, can move to a turf
+ * listed under either name, since hosts and turfs use the two
+ * interchangeably (7 of the 10 Box Cricket games on 30 Oct were at turfs
+ * listed only as "Cricket"); practice nets alone (Cricket Nets, Bowling
+ * Machine) do not host a match.
+ */
+export function venueHostsSport(turfSports: readonly string[], sport: SportPage): boolean {
+  if (sport.slug === "cricket" || sport.slug === "box-cricket") return turfSports.some((s) => CRICKET_MATCH.has(s.trim().toLowerCase()));
+  return turfPlaysSport([...turfSports], sport);
+}
+
+/**
+ * Other turfs near the game's current one that can take it
+ * (venueHostsSport), nearest first, within NEARBY_MAX_KM. Nothing when
+ * the current turf has no coordinates or the sport has no page: no list
+ * is better than a wrong one.
  */
 export function nearbyVenues(
   origin: { id?: string | null; lat?: number | null; lng?: number | null } | null | undefined,
@@ -74,7 +90,7 @@ export function nearbyVenues(
   const out: VenueOption[] = [];
   for (const r of rows) {
     if (!r.id || r.id === origin.id || seen.has(r.id) || r.is_active === false || !r.name?.trim()) continue;
-    if (r.lat == null || r.lng == null || !turfPlaysSport([...(r.sports ?? [])], sport)) continue;
+    if (r.lat == null || r.lng == null || !venueHostsSport(r.sports ?? [], sport)) continue;
     const km = haversineKm(from, { lat: Number(r.lat), lng: Number(r.lng) });
     if (!Number.isFinite(km) || km > NEARBY_MAX_KM) continue;
     seen.add(r.id);

@@ -5,6 +5,7 @@ import { haversineKm } from "@/lib/utils/location";
 import { forCard } from "@/lib/utils/cardTurf";
 import { sportBySlug, turfPlaysSport } from "@/lib/sports";
 import { nearestAny, nearSportParam } from "@/lib/near/courtNearMe";
+import { venueHostsSport } from "@/lib/utils/gameVenue";
 
 // Nearest turfs to a point, for /turf-near-me. Sorting happens here so
 // the page doesn't ship every turf to the phone. The location is used
@@ -17,7 +18,8 @@ import { nearestAny, nearSportParam } from "@/lib/near/courtNearMe";
 // answer is exactly as before.
 //
 // ?plays=<any sport page slug> (a host moving a game, its edit sheet):
-// only venues that list that sport, nearest first, plain cards.
+// only venues that can take a game of that sport (venueHostsSport: a
+// cricket game, box or not, either name), nearest first, plain cards.
 
 const MAX_LIMIT = 24;
 
@@ -38,7 +40,7 @@ export async function GET(req: Request) {
 
   const me = { lat, lng };
   const ranked = (await getNearTurfs())
-    .filter((turf) => !plays || turfPlaysSport(turf.sports, plays))
+    .filter((turf) => !plays || venueHostsSport(turf.sports, plays))
     .map((turf) => ({ turf, km: haversineKm(me, { lat: Number(turf.lat), lng: Number(turf.lng) }) }))
     .filter((r) => r.turf.lat != null && r.turf.lng != null && Number.isFinite(r.km))
     .sort((a, b) => a.km - b.km);

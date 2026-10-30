@@ -123,3 +123,18 @@ test("venue: everyone playing and everyone waiting hears once, never the host", 
   );
   assert.deepEqual(got, ["p1", "p2", "r1"]);
 });
+
+test("venue: a cricket game, box or not, can move to a turf listed under either name, never to nets alone", () => {
+  const rows = [
+    row("box", 0.01, ["Box Cricket"]),
+    row("cricket", 0.02, ["Cricket", "Football"]),
+    row("nets", 0.005, ["Cricket Nets", "Bowling Machine"]),
+    row("football", 0.003, ["Football"]),
+  ];
+  for (const slug of ["cricket", "box-cricket"]) {
+    assert.deepEqual(nearbyVenues(here, rows, sportBySlug(slug)).map((v) => v.id), ["box", "cricket"], slug);
+  }
+  // Every other sport still matches exactly.
+  assert.deepEqual(nearbyVenues(here, rows, sportBySlug("football")).map((v) => v.id), ["football", "cricket"]);
+});
+
