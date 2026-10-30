@@ -8,6 +8,7 @@ import { getUserLocation, type Coords } from "@/lib/utils/location";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { BlogAnswer } from "@/lib/ask/blogTypes";
+import type { AskVisuals } from "@/lib/ask/visuals";
 
 export type AskResponse = {
   query: string;
@@ -45,7 +46,10 @@ export type AskResponse = {
   rows?: { label: string; place?: string; count: number }[];
   games?: (Game & { distanceKm?: number })[];
   missing?: string[];
-  compare?: { verdict: string; rows: { label: string; values: string[] }[]; best_for: string[]; caveats: string | null } | null;
+  /** The model's words about a comparison. rows: replies saved before 30 Oct, whose table it wrote; the table is now visuals.compare. */
+  compare?: { verdict: string; rows?: { label: string; values: string[] }[]; best_for: string[]; caveats: string | null } | null;
+  /** The pictures under the reply, picked from the reading and filled from our rows (lib/ask/cards.ts); drawn after visualsToDraw. */
+  visuals?: AskVisuals;
   /** link: under an answer about what people say, the venue's Google reviews ("Read Google reviews"). */
   answer?: { answer: string; covered: boolean; link?: { label: string; href: string } } | null;
   /** For create_game: the sentence to draft the wizard from. */

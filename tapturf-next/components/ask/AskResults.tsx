@@ -18,10 +18,13 @@ import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { AskResponse } from "./AskProvider";
 import { turfPath } from "@/lib/utils/turfPath";
+import { visualsToDraw } from "@/lib/ask/visuals";
+import { CompareTableView, HostCardView, PriceChartView, ResultsMapView } from "./AskVisuals";
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
-export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distanceKm?: number }; priority?: boolean }) {
+/** n: the card's number on the answer's map, shown before its name. */
+export function TurfMiniCard({ turf, priority = false, n }: { turf: Turf & { distanceKm?: number }; priority?: boolean; n?: number }) {
   const img = turfPhotos(turf)[0] ?? null;
   const price = summarisePrice(turf);
   const area = areaFor(turf);
@@ -53,6 +56,11 @@ export function TurfMiniCard({ turf, priority = false }: { turf: Turf & { distan
       </div>
       <div className="p-3">
         <p className="flex min-w-0 items-center gap-1 text-[14px] font-semibold text-primary-900 leading-tight group-hover:text-accent-700 transition-colors">
+          {n != null && (
+            <span aria-hidden className="mr-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-600 px-1 text-[11px] font-bold tabular-nums text-white">
+              {n}
+            </span>
+          )}
           <span className="truncate">{turf.name}</span>
           {turf.claimed && (
             <>
@@ -198,6 +206,10 @@ export function AskResultBody({
 }) {
   const turfs = res.turfs ?? [];
   const games = res.games ?? [];
+  // The pictures the server picked for this answer; none on a reply saved before them.
+  const drawn = visualsToDraw(res.visuals);
+  const v = res.visuals;
+  const numbered = drawn.includes("map");
 
   return (
     <div className="mt-2.5">
@@ -216,7 +228,7 @@ export function AskResultBody({
         </button>
       )}
 
-      {res.intent === "create_game" && res.draft && <CreateGameCard draft={res.draft} />}
+      {res.intent === "create_game" && (drawn.includes("host") && v?.host ? <HostCardView host={v.host} draft={res.draft} /> : res.draft && <CreateGameCard draft={res.draft} />)}
       {res.intent === "tool" && res.tool && <ToolCard tool={res.tool} />}
 
       {res.intent === "find_turf" && turfs.length > 0 && (
@@ -226,11 +238,22 @@ export function AskResultBody({
           ) : (
             <Row>
               {turfs.map((t, i) => (
-                <TurfMiniCard key={t.id} turf={t} priority={i < 2} />
+                <TurfMiniCard key={t.id} turf={t} priority={i < 2} n={numbered ? i + 1 : undefined} />
               ))}
             </Row>
           )}
           {res.total > turfs.length && <MoreLink href={moreLink(res)} label={`See all ${res.total}`} />}
+          {drawn.map((k) =>
+            k === "prices" && v?.prices ? (
+              <div key={k} className="mt-5">
+                <PriceChartView chart={v.prices} turfs={turfs} />
+              </div>
+            ) : k === "map" && v?.map ? (
+              <div key={k} className="mt-5">
+                <ResultsMapView map={v.map} turfs={turfs} />
+              </div>
+            ) : null,
+          )}
         </>
       )}
 
@@ -264,7 +287,21 @@ export function AskResultBody({
           </>
         ))}
 
-      {res.intent === "compare" && <CompareBlock res={res} />}
+      {res.intent === "compare" &&
+        (drawn.includes("compare") && v?.compare ? (
+          <>
+            <CompareTableView res={res} table={v.compare} />
+            <div className="mt-3">
+              <Row>
+                {turfs.map((t) => (
+                  <TurfMiniCard key={t.id} turf={t} />
+                ))}
+              </Row>
+            </div>
+          </>
+        ) : (
+          <CompareBlock res={res} />
+        ))}
       {res.intent === "blog" && res.blog && <BlogAnswerCard blog={res.blog} />}
 
       {res.intent === "question" && (
@@ -303,9 +340,10 @@ function AnswerCard({ answer }: { answer: NonNullable<AskResponse["answer"]> }) 
   );
 }
 
+/** A comparison saved before 30 Oct, whose table the model wrote (rows), as it showed then; or the cards alone. */
 function CompareBlock({ res }: { res: AskResponse }) {
   const turfs = res.turfs ?? [];
-  const c = res.compare;
+  const c = res.compare?.rows?.length ? { ...res.compare, rows: res.compare.rows } : null;
   if (turfs.length < 2) {
     return turfs.length ? (
       <Row>

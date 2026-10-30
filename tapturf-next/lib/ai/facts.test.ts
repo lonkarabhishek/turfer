@@ -351,8 +351,10 @@ test("the answer prompt says whose words are whose, in order, and never fills a 
     assert.ok(ANSWER_SYSTEM.includes(rule), rule);
   // The old example that taught "reviewers mention" for everything is gone.
   assert.ok(!ANSWER_SYSTEM.includes('"TapTurf lists...", "reviewers mention..."'));
-  assert.ok(COMPARE_SYSTEM.includes('"No written reviews yet" when the sheet has none of those three'));
+  assert.ok(COMPARE_SYSTEM.includes("Nothing about what reviewers say when the sheet has none of those three"));
   assert.ok(COMPARE_SYSTEM.includes("TapTurf players' first when tapturf_reports has them"));
+  // The table's values come from the rows (lib/ask/cards.ts), so the prompt asks for no rows.
+  assert.ok(!COMPARE_SYSTEM.includes("rows:"));
 });
 
 // ── Review round 2 (29 Oct): each finding's case, failing before its fix ──

@@ -38,10 +38,14 @@ export async function loadFacts(id: string): Promise<{ turf: Turf; facts: TurfFa
   };
 }
 
+/**
+ * The model's words only. The table under them (prices, ratings, hours,
+ * facilities) is built from the rows (lib/ask/cards.ts compareTable), so
+ * it never says a number the model wrote.
+ */
 export const CompareOut = z.object({
   /** One or two sentences: which suits whom. */
   verdict: z.string(),
-  rows: z.array(z.object({ label: z.string(), values: z.array(z.string()) })),
   /** One short phrase per venue, same order as the input. */
   best_for: z.array(z.string()),
   caveats: z.string().nullable(),
@@ -53,7 +57,7 @@ export async function compareTurfs(sheets: TurfFacts[], usage?: AskUsage): Promi
     CompareOut,
     {
       model: COMPARE_MODEL,
-      max_tokens: 1200,
+      max_tokens: 600,
       system: [{ type: "text", text: COMPARE_SYSTEM, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: `Fact sheets, in order:\n${JSON.stringify(sheets)}` }],
     },
@@ -66,7 +70,6 @@ export async function compareTurfs(sheets: TurfFacts[], usage?: AskUsage): Promi
   if (!verdict) return null;
   return {
     verdict,
-    rows: out.rows.map((r) => ({ label: r.label, values: r.values.map((v) => scrubBookingApps(v) ?? "Not listed") })),
     best_for: out.best_for.map((b) => scrubBookingApps(b) ?? ""),
     caveats: scrubBookingApps(out.caveats),
   };
