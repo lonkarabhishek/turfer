@@ -61,9 +61,12 @@ import { post as howToDoACricketTossOnline } from "./posts/how-to-do-a-cricket-t
 import { post as turfsInTathawadePune } from "./posts/turfs-in-tathawade-pune";
 // 2026-10-29: tool how-to, cricket scorecard maker.
 import { post as howToMakeACricketScorecardOnline } from "./posts/how-to-make-a-cricket-scorecard-online";
+// 2026-10-30: tool how-to, cricket team generator.
+import { post as howToSplitCricketTeamsFairly } from "./posts/how-to-split-cricket-teams-fairly";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  howToSplitCricketTeamsFairly,
   howToMakeACricketScorecardOnline,
   turfsInTathawadePune,
   howToDoACricketTossOnline,
