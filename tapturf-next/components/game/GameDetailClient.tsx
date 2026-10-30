@@ -74,6 +74,8 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   });
   // The venue the host is moving the game to, until Save changes (null: it stays).
   const [newVenue, setNewVenue] = useState<VenueOption | null>(null);
+  // The sheet's "Turf booked" when that venue was picked: what Undo puts back.
+  const [bookedBeforePick, setBookedBeforePick] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -235,10 +237,15 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   };
 
   // A booking was for the old turf: a new venue starts as not booked and
-  // the sheet asks; Undo puts the game's own answer back.
+  // the sheet asks; Undo puts back what the sheet said before the pick.
   const pickVenue = (v: VenueOption | null) => {
     setNewVenue(v);
-    if (game?.turf_booked) setEditData((d) => ({ ...d, turf_booked: v ? false : game.turf_booked }));
+    if (v) {
+      setBookedBeforePick(editData.turf_booked);
+      if (editData.turf_booked) setEditData((d) => ({ ...d, turf_booked: false }));
+    } else if (bookedBeforePick) {
+      setEditData((d) => ({ ...d, turf_booked: true }));
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -246,7 +253,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     setSaving(true);
     setSaveError("");
     const moved = newVenue && newVenue.id !== game.turf_id ? newVenue : null;
-    const { error } = await updateGame(game.id, user.id, {
+    const { data: saved, error } = await updateGame(game.id, user.id, {
       date: editData.date,
       start_time: editData.start_time,
       end_time: editData.end_time,
@@ -257,7 +264,8 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       skill_level: editData.skill_level,
       ...(moved ? { turf_id: moved.id } : {}),
     });
-    if (!error && moved) await notifyVenueMove(game, moved, game.turf_id);
+    // The saved row: a date changed in the same save is the one players are told.
+    if (!error && saved && moved) await notifyVenueMove(saved, moved, game.turf_id);
     setSaving(false);
     if (error) {
       setSaveError(error);
@@ -535,13 +543,13 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
 
             <div className="space-y-4">
               {/* Moving a game that is over or cancelled tells nobody anything useful. */}
-              {!ended && !cancelled && (
+              {!ended && game.status !== "cancelled" && game.status !== "completed" && (
                 <GameVenueField
                   current={game.turfs}
                   sport={game.sport}
                   picked={newVenue}
                   onPick={pickVenue}
-                  wasBooked={game.turf_booked}
+                  wasBooked={bookedBeforePick}
                   booked={editData.turf_booked}
                   onBooked={(b) => setEditData({ ...editData, turf_booked: b })}
                 />

@@ -98,10 +98,17 @@ export function venueLine(t: Pick<VenueOption, "name" | "area" | "city" | "addre
 
 /**
  * Why the picked venue cannot be saved, or null when it can. `active` is
- * the turf as the save read it just now (null: not found or not listed).
+ * the turf as the save read it just now (null: not found or not listed);
+ * `unread`: that read failed, so the pick may be fine and is not called unlisted.
  */
-export function venueProblem(pick: { id?: string | null } | null | undefined, current: string | null | undefined, active: { id: string } | null): string | null {
+export function venueProblem(
+  pick: { id?: string | null } | null | undefined,
+  current: string | null | undefined,
+  active: { id: string } | null,
+  unread = false,
+): string | null {
   if (!pick?.id || pick.id === current) return null;
+  if (unread) return "Couldn't check that venue. Check your connection and try again.";
   if (!active || active.id !== pick.id) return "That venue isn't listed on TapTurf any more. Pick another one.";
   return null;
 }

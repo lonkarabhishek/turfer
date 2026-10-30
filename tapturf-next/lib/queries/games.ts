@@ -225,8 +225,8 @@ export async function updateGame(gameId: string, userId: string, updates: {
   const supabase = createClient();
   if (updates.turf_id) {
     // Read again at save time: the sheet's list can be minutes old.
-    const { data: turf } = await supabase.from("turfs").select("id").eq("id", updates.turf_id).eq("is_active", true).maybeSingle();
-    const problem = venueProblem({ id: updates.turf_id }, null, turf);
+    const { data: turf, error: readError } = await supabase.from("turfs").select("id").eq("id", updates.turf_id).eq("is_active", true).maybeSingle();
+    const problem = venueProblem({ id: updates.turf_id }, null, turf, !!readError);
     if (problem) return { data: null, error: problem };
   }
   const { data, error } = await supabase

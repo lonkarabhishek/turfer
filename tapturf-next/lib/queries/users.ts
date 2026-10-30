@@ -6,7 +6,7 @@ export async function searchTurfs(query?: string) {
   const supabase = createClient();
   let q = supabase
     .from("turfs")
-    .select("id, name, address")
+    .select("id, name, address, area, city")
     .eq("is_active", true)
     .order("name", { ascending: true })
     .limit(20);
@@ -27,17 +27,18 @@ export async function searchTurfs(query?: string) {
 /**
  * The active turfs nearest a point that list one sport (its page slug),
  * nearest first, from the near-me route's list (no database read per
- * call). For the host's "Change venue": [] when it cannot be read.
+ * call). For the host's "Change venue": null when it cannot be read
+ * (the sheet says so; [] would read as "none nearby").
  */
-export async function nearbyTurfsForSport(lat: number, lng: number, sport: string, limit = 12): Promise<VenueRow[]> {
+export async function nearbyTurfsForSport(lat: number, lng: number, sport: string, limit = 12): Promise<VenueRow[] | null> {
   try {
     const q = new URLSearchParams({ lat: String(lat), lng: String(lng), plays: sport, limit: String(limit) });
     const res = await fetch(`/api/turfs/near?${q}`);
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const body = (await res.json()) as { turfs?: VenueRow[] };
-    return Array.isArray(body.turfs) ? body.turfs : [];
+    return Array.isArray(body.turfs) ? body.turfs : null;
   } catch {
-    return [];
+    return null;
   }
 }
 

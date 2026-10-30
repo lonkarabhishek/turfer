@@ -8,7 +8,7 @@ import { gamePlace } from "@/lib/utils/game";
 import { NEARBY_MAX_KM, gameSportPage, nearbyVenues, venueDistance, venueLine, type VenueOption } from "@/lib/utils/gameVenue";
 
 type Current = { id: string; name: string; area?: string | null; city?: string | null; address?: string | null; lat?: number | null; lng?: number | null };
-type Hit = { id: string; name: string; address: string };
+type Hit = { id: string; name: string; address: string; area?: string | null; city?: string | null };
 
 /**
  * While typing, the search row sits at the top of the sheet, so the
@@ -42,7 +42,7 @@ export function GameVenueField({
   /** The staged new venue; null keeps the current one. */
   picked: VenueOption | null;
   onPick: (v: VenueOption | null) => void;
-  /** The game was marked booked at its current turf: the new one is asked about, not assumed. */
+  /** The sheet said booked (at the current turf) when the venue was picked: the new one is asked about, not assumed. */
   wasBooked: boolean;
   booked: boolean;
   onBooked: (b: boolean) => void;
@@ -52,6 +52,8 @@ export function GameVenueField({
   // The last answer and the words it was for: a list for older words is not shown.
   const [found, setFound] = useState<{ q: string; hits: Hit[] } | null>(null);
   const [nearby, setNearby] = useState<VenueOption[] | null>(null);
+  // The nearby list could not be read: said so (not "none within 25 km"), with Try again.
+  const [nearbyFailed, setNearbyFailed] = useState(false);
   const page = gameSportPage(sport);
   const lat = current?.lat;
   const lng = current?.lng;
@@ -72,17 +74,19 @@ export function GameVenueField({
     };
   }, [q]);
 
-  // The nearby list, once, the first time the panel opens.
+  // The nearby list, once, the first time the panel opens (again after Try again).
   useEffect(() => {
-    if (!open || nearby || !page || lat == null || lng == null) return;
+    if (!open || nearby || nearbyFailed || !page || lat == null || lng == null) return;
     let alive = true;
     nearbyTurfsForSport(Number(lat), Number(lng), page.slug).then((rows) => {
-      if (alive) setNearby(nearbyVenues({ id: currentId, lat, lng }, rows, page));
+      if (!alive) return;
+      if (rows) setNearby(nearbyVenues({ id: currentId, lat, lng }, rows, page));
+      else setNearbyFailed(true);
     });
     return () => {
       alive = false;
     };
-  }, [open, nearby, page, lat, lng, currentId]);
+  }, [open, nearby, nearbyFailed, page, lat, lng, currentId]);
 
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -201,7 +205,7 @@ export function GameVenueField({
                 <ul className="max-h-64 overflow-y-auto overscroll-contain">
                   {hits.map((t) => (
                     <li key={t.id} className="border-b border-primary-100 last:border-0">
-                      <button type="button" onClick={() => choose({ id: t.id, name: t.name, address: t.address })} className="w-full text-left px-4 py-3 min-h-12 hover:bg-accent-50">
+                      <button type="button" onClick={() => choose({ id: t.id, name: t.name, area: t.area, city: t.city, address: t.address })} className="w-full text-left px-4 py-3 min-h-12 hover:bg-accent-50">
                         <span className="block text-[15px] font-semibold text-primary-900 leading-snug [overflow-wrap:anywhere]">{t.name}</span>
                         {t.address && <span className="text-[13px] text-primary-500 leading-snug line-clamp-1">{t.address}</span>}
                       </button>
@@ -215,7 +219,18 @@ export function GameVenueField({
               <p className="px-4 pt-3 text-[13px] font-semibold text-primary-700 [overflow-wrap:anywhere]">
                 {sportVenues(page)} near {current.name}
               </p>
-              {nearby === null ? (
+              {nearbyFailed ? (
+                <div className="px-4 py-2 flex items-center gap-3">
+                  <p className="flex-1 min-w-0 text-[14px] text-primary-500 leading-snug">Couldn&apos;t load nearby turfs. Search by name above.</p>
+                  <button
+                    type="button"
+                    onClick={() => setNearbyFailed(false)}
+                    className="shrink-0 -mr-2 min-h-11 px-3 rounded-full text-[15px] font-semibold text-accent-700 hover:bg-accent-50"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : nearby === null ? (
                 <p className="px-4 py-3 text-[14px] text-primary-500 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
                   Finding the nearest ones…

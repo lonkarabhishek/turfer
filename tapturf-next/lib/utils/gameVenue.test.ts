@@ -84,6 +84,9 @@ test("venue: the save takes only a listed turf, and no change is no problem", ()
   assert.equal(venueProblem({ id: "t1" }, "t0", { id: "t1" }), null);
   assert.match(venueProblem({ id: "t1" }, "t0", null) ?? "", /isn't listed/);
   assert.match(venueProblem({ id: "t1" }, "t0", { id: "t2" }) ?? "", /isn't listed/);
+  // The read failed: not called unlisted (the host would drop a good pick).
+  assert.match(venueProblem({ id: "t1" }, "t0", null, true) ?? "", /Couldn't check/);
+  assert.equal(venueProblem({ id: "t0" }, "t0", null, true), null);
 });
 
 test("venue: the players' note says who moved which game where, with the date itself", () => {
@@ -94,6 +97,15 @@ test("venue: the players' note says who moved which game where, with the date it
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   assert.ok(!/today|tomorrow/i.test(venueMoveNotice({ host_name: "Asha", sport: "cricket", date: today }, { name: "X Arena" }).message));
   assert.equal(venueMoveNotice({ host_name: "Player", sport: "5v5 football", date: null }, { name: "Arena Seven", city: "pune" }).message, "Your host moved 5v5 Football to Arena Seven, Pune");
+});
+
+test("venue: a date and a venue changed in one save: the note has the saved date and the turf's area", () => {
+  // The edit sheet passes the row updateGame saved, so the new date is the one told.
+  const before = { host_name: "Asha Rao", sport: "Football", date: "2026-11-01" };
+  const saved = { ...before, date: "2026-11-07" };
+  const greenbox = { name: "Greenbox", area: "Range Hills", city: "pune", address: "Gate 2, Range Hills Rd, Pune" };
+  assert.equal(venueMoveNotice(saved, greenbox).message, "Asha moved Football on Sat 7 Nov to Greenbox, Range Hills");
+  assert.ok(!venueMoveNotice(saved, greenbox).message.includes("1 Nov"));
 });
 
 test("venue: everyone playing and everyone waiting hears once, never the host", () => {
