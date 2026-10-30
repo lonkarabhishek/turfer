@@ -21,7 +21,9 @@ import {
   type AskTurn,
 } from "@/lib/ai/ask";
 import { quickAnswer } from "@/lib/ai/quick";
-import { placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
+import { namesVenue, placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
+import { asksPrice, compareTable, hostPreview, hostVenueWords, priceChart, resultsMap, saysHere, visualsFor, type AskVisuals } from "@/lib/ask/cards";
+import { getSportBands, getSportBandTimes, withSportBands } from "@/lib/queries/sportBands";
 import { cap, citiesLine, closestRow, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
@@ -425,13 +427,25 @@ export async function GET(req: Request) {
         // Venues in other cities are compared all the same; say where they are.
         const where = citiesLine(found.map((r) => place(r.turf)), label(prefCity));
         const reply = where ? `${filters.reply} ${where}` : filters.reply;
-        if (found.length < 2 || !canCallClaude) {
+        if (found.length < 2) {
           body = { ...base, reply, relaxed: [], total: found.length, missing, turfs: found.map((r) => card(r.turf)), compare: null };
           break;
         }
+        // The table is built from the venues' own rows (the read the model's
+        // sheets come from), so it shows without the model too; the model
+        // adds the verdict, what each is best for and the caveats.
         const sheets = (await Promise.all(found.map((r) => loadFacts(r.turf.id)))).filter((s) => s) as { turf: Turf; facts: Record<string, unknown> }[];
-        const out = await compareTurfs(sheets.map((s) => s.facts), usage);
-        body = { ...base, reply, relaxed: [], total: sheets.length, missing, turfs: sheets.map((s) => card(s.turf)), compare: out };
+        const out = canCallClaude && sheets.length >= 2 ? await compareTurfs(sheets.map((s) => s.facts), usage) : null;
+        const reports = sheets.map((s) => {
+          const r = s.facts.tapturf_reports as { players?: number; average_stars?: string } | undefined;
+          return r?.players && r.average_stars ? { players: r.players, average: r.average_stars } : null;
+        });
+        const table = compareTable(sheets.map((s) => s.turf), { sport: filters.sport, loc, reports });
+        const show = visualsFor(filters, { compared: sheets.length });
+        // rows: [] for a tab opened before 30 Oct, whose chat maps compare.rows: it then
+        // shows the verdict and "Best for" over the cards. Drop after a release or two.
+        const compare = out ? { ...out, rows: [] } : null;
+        body = { ...base, reply, relaxed: [], total: sheets.length, missing, turfs: sheets.map((s) => card(s.turf)), compare, ...(show.length ? { visuals: { show, compare: table } satisfies AskVisuals } : {}) };
         break;
       }
       case "question": {
@@ -496,10 +510,17 @@ export async function GET(req: Request) {
         body = { ...base, relaxed: [], total: 1, tool: { slug: def.slug, name: def.name, tagline: def.tagline, href: toolPath(def.slug) } };
         break;
       }
-      case "create_game":
-        // The wizard drafts the game from the same sentence. One card shown.
-        body = { ...base, relaxed: [], total: 1, draft: q };
+      case "create_game": {
+        // The wizard drafts the game from the same sentence. One card shown:
+        // what the reading says of the game, and the venue when it names
+        // one we list (or "here" on a venue's page), picked in the wizard.
+        // Only a venue's own name picks one: a wrong venue in the wizard is worse than none.
+        const words = filters.turf_names[0] ?? hostVenueWords(q);
+        const [hit] = words && (namesVenue(turfs, words) || words === page.name) ? resolveWithPage(turfs, [words], prefer, page) : [];
+        const at = hit?.turf ?? (page.turf && saysHere(q) ? page.turf : null);
+        body = { ...base, relaxed: [], total: 1, draft: q, visuals: { show: visualsFor(filters, {}), host: hostPreview(filters, at, q) } satisfies AskVisuals };
         break;
+      }
       case "other": {
         // Unclear or off-topic: offer what Ask can do, for this city.
         body = { ...base, relaxed: [], total: 0 };
@@ -582,6 +603,18 @@ export async function GET(req: Request) {
         // "Near me" before the location is shared: the visitor's city, best rated, until it is.
         else if (filters.wants_nearby && !loc && stayedIn && isCity(stayedIn))
           body.reply = `These are the top rated in ${labelFor(stayedIn)}. Share your location to see the nearest first.`;
+        // Pictures from the same cards: each one's price at the time asked
+        // (with the sport's bands, and by time when a time was asked: cached
+        // reads, when a sport was asked) and where they are. The budget was
+        // dropped when nothing fit it.
+        const asked = { ...filters, sport: r.sport, max_price_per_hour: r.relaxed.includes("price") ? null : filters.max_price_per_hour };
+        const banded = asksPrice(asked) && !!asked.sport;
+        const [bands, times] = banded ? await Promise.all([getSportBands(), asked.time && asked.time !== "late_night" ? getSportBandTimes() : null]) : [null, null];
+        const chart = asksPrice(asked) ? priceChart(bands ? r.turfs.map((t) => withSportBands(t, bands)) : r.turfs, asked, new Date(), times) : null;
+        const map = resultsMap(r.turfs.map((t) => ({ id: t.id, lat: t.lat, lng: t.lng, area: areaFor(t) })), loc);
+        const show = visualsFor(asked, { priced: chart?.bars.length ?? 0, map: !!map });
+        if (show.length)
+          body.visuals = { show, ...(chart && show.includes("prices") ? { prices: chart } : {}), ...(map && show.includes("map") ? { map } : {}) } satisfies AskVisuals;
       }
     }
   } catch (e) {
@@ -604,6 +637,8 @@ export async function GET(req: Request) {
     filters: {
       ...filters,
       shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12),
+      // _vis: the pictures the answer showed (lib/ask/cards.ts), for tuning.
+      ...(body.visuals ? { _vis: (body.visuals as AskVisuals).show } : {}),
       _src: via,
       _t: ms,
       ...(usage.calls ? { _usage: usage } : {}),

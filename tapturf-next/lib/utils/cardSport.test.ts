@@ -10,6 +10,9 @@ import {
   sportBandMap,
   sportBandRange,
   sportBandsOf,
+  sportBandTimeMap,
+  sportBandTimeRange,
+  sportBandTimesOf,
   sportLineParts,
   sportMinimumPrice,
   sportPrice,
@@ -449,6 +452,38 @@ test("sportBandMap: an owner-confirmed venue with no prices of its own shows its
   }
   // Unfiltered, as before.
   assert.deepEqual(cardPrice(card), summarisePrice(card));
+});
+
+test("sportBandTimesOf: each sport's range by time band and day type; all days count for both", () => {
+  // Sprintplay (Bangalore, 30 Oct): 6-a-side ₹1,000 on weekdays and ₹1,400 at weekends; box cricket cheaper in the day.
+  const at = (format: string | null, b: PriceBand["band"], days: PriceBand["days"], price_per_hour: number): PriceBand => ({ band: b, days, format, price_per_hour });
+  const bands = [
+    at("6-a-side", "evening", "weekday", 1000),
+    at("6-a-side", "evening", "weekend", 1400),
+    at("7-a-side", "evening", "all", 1600),
+    at("box cricket (Large)", "day", "weekday", 800),
+    // No sport named, or no price: left out, as in sportBandsOf.
+    at(null, "evening", "all", 500),
+    at("5-a-side", "morning", "all", 0),
+  ];
+  const times = sportBandTimesOf(bands);
+  assert.deepEqual(times, {
+    football: { evening: { weekday: [1000, 1600], weekend: [1400, 1600] } },
+    futsal: { evening: { weekday: [1000, 1000], weekend: [1400, 1400] } },
+    "box-cricket": { day: { weekday: [800, 800] } },
+  });
+  assert.equal(sportBandTimesOf([at(null, "evening", "all", 500)]), null);
+  assert.equal(sportBandTimesOf(null), null);
+  // A sport's range at a time: every kind its filter matches, as sportBandRange; none listed then is null.
+  assert.deepEqual(sportBandTimeRange(times, page("football"), "evening", "weekday"), [1000, 1600]);
+  assert.deepEqual(sportBandTimeRange(times, page("futsal"), "evening", "weekend"), [1400, 1400]);
+  assert.deepEqual(sportBandTimeRange(times, page("box-cricket"), "day", "weekday"), [800, 800]);
+  assert.equal(sportBandTimeRange(times, page("box-cricket"), "day", "weekend"), null);
+  assert.equal(sportBandTimeRange(times, page("football"), "morning", "weekday"), null);
+  assert.equal(sportBandTimeRange(times, page("badminton"), "evening", "weekday"), null);
+  assert.equal(sportBandTimeRange(undefined, page("football"), "evening", "weekday"), null);
+  // The map keeps only venues whose bands name a sport.
+  assert.deepEqual(Object.keys(sportBandTimeMap([{ id: "sp", pricing_bands: bands }, { id: "plain", pricing_bands: [at(null, "day", "all", 900)] }, { id: "none", pricing_bands: null }])), ["sp"]);
 });
 
 test("P2 case 5: unfiltered, every card is exactly as before, bands or not", () => {

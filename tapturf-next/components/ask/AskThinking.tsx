@@ -304,38 +304,58 @@ function GameBone({ i }: { i: number }) {
   );
 }
 
-/** Filter chips and a row of cards for a search, or the verdict and table for a comparison. */
-export function AskSkeleton({ kind, className = "" }: { kind: CardsKind; className?: string }) {
+/**
+ * Filter chips and a row of cards for a search, or the verdict and table
+ * for a comparison. verdict: the model's verdict (and its "Best for" row)
+ * is coming; false once a reply came without one.
+ */
+export function AskSkeleton({ kind, verdict = true, className = "" }: { kind: CardsKind; verdict?: boolean; className?: string }) {
   if (kind === "compare") {
+    const cell = (c: number, cls: string) => `flex-1 min-w-0 px-3 ${cls} ${c ? "border-l border-primary-100" : ""}`;
     return (
       <div data-skel className={`mt-2.5 ${className}`} aria-hidden>
-        <div className="rounded-2xl bg-primary-50 px-4 py-3 mb-3" style={delay(0)}>
-          {["w-[94%]", "w-[86%]", "w-[48%]"].map((wd) => (
-            <div key={wd} className="h-[24.4px] flex items-center"><Bar className={`h-3 ${wd}`} /></div>
-          ))}
-        </div>
-        {/* The header, the 6 to 9 rows the server asks for (values wrap to two lines on phones), then Best for. */}
-        <div className="rounded-2xl border border-primary-100 bg-white overflow-hidden" style={delay(1)}>
-          <div className="h-9 px-3 flex items-center gap-4 bg-primary-50">
-            <span className="w-14" />
-            <Bar className="h-2.5 flex-1" />
-            <Bar className="h-2.5 flex-1" />
+        {verdict && (
+          <div className="rounded-2xl bg-primary-50 px-4 py-3 mb-3" style={delay(0)}>
+            {["w-[94%]", "w-[86%]", "w-[48%]"].map((wd) => (
+              <div key={wd} className="h-[24.4px] flex items-center"><Bar className={`h-3 ${wd}`} /></div>
+            ))}
           </div>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((r) => (
-            <div key={r} className="h-14 px-3 pt-3 flex items-start gap-4 border-t border-primary-100">
-              <Bar className="h-2.5 w-14" />
-              {[0, 1].map((c) => (
-                <span key={c} className="flex-1 space-y-2">
-                  <Bar className="h-2.5 w-full" />
-                  <Bar className="h-2.5 w-[60%]" />
-                </span>
-              ))}
+        )}
+        {/* As CompareTableView draws it: the venues' names, then each row's label over its values (price, rating,
+            hours, sports, facilities, and Best for with a verdict; values wrap to two lines on phones), then the
+            Call and WhatsApp pills. */}
+        <div className="rounded-2xl border border-primary-100 bg-white overflow-hidden" style={delay(1)}>
+          <div className="flex bg-primary-50">
+            {[0, 1].map((c) => (
+              <div key={c} className={cell(c, "pt-3.5 pb-3 space-y-2.5")}>
+                <Bar className="h-3 w-[78%]" />
+                <Bar className="h-2.5 w-[46%]" />
+              </div>
+            ))}
+          </div>
+          {Array.from({ length: verdict ? 6 : 5 }, (_, r) => (
+            <div key={r} className="border-t border-primary-100">
+              <div className="px-3 pt-3.5 pb-2"><Bar className="h-2 w-16" /></div>
+              <div className="flex">
+                {[0, 1].map((c) => (
+                  <div key={c} className={cell(c, "pb-3 space-y-2")}>
+                    <Bar className="h-2.5 w-full" />
+                    <Bar className="h-2.5 w-[60%]" />
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
-          <div className="h-10 px-3 flex items-center gap-4 border-t border-primary-100 bg-primary-50/60">
-            <Bar className="h-2.5 w-14" />
-            <Bar className="h-2.5 flex-1" />
-            <Bar className="h-2.5 flex-1" />
+          <div className="border-t border-primary-100">
+            <div className="px-3 pt-3.5 pb-2"><Bar className="h-2 w-14" /></div>
+            <div className="flex">
+              {[0, 1].map((c) => (
+                <div key={c} className={cell(c, "pb-3 space-y-1.5")}>
+                  <Bar className="h-9 w-full" />
+                  <Bar className="h-9 w-full" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

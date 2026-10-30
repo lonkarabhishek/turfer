@@ -3,19 +3,27 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { cacheKeyed, toBands } from "@/lib/queries/turfs";
 import { readSportBandRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
-import { sportBandMap, type SportBandMap } from "@/lib/utils/cardSport";
+import { sportBandMap, sportBandTimeMap, type SportBandMap, type SportBandTimeMap } from "@/lib/utils/cardSport";
 import type { Turf } from "@/types/turf";
 
-export type { SportBandMap };
+export type { SportBandMap, SportBandTimeMap };
 
 // While building: the rows the build-data step read with this same query,
 // or its note that the read failed (a failed read here, no read of our own).
-async function readSportBands(): Promise<SportBandMap> {
+async function readBandRows() {
   const built = buildData("sport-bands");
   if (isFailed(built)) throw new Error("the build-data step could not read them");
   const rows = built ?? (await readSportBandRows(createReadOnlyClient()));
   // The same checked bands as the turf page's Pricing table.
-  return sportBandMap(rows.map((r) => ({ ...r, pricing_bands: toBands(r.pricing_bands) })));
+  return rows.map((r) => ({ ...r, pricing_bands: toBands(r.pricing_bands) }));
+}
+
+async function readSportBands(): Promise<SportBandMap> {
+  return sportBandMap(await readBandRows());
+}
+
+async function readSportBandTimes(): Promise<SportBandTimeMap> {
+  return sportBandTimeMap(await readBandRows());
 }
 
 /**
@@ -39,30 +47,43 @@ async function readSportBands(): Promise<SportBandMap> {
  * Keyed by name (cacheKeyed), so the pages, the list route and the entry
  * the build wrote are one entry.
  */
-const getSportBandsCached = unstable_cache(cacheKeyed("sport-bands", readSportBands), ["sport-bands-v1"], { revalidate: 86400 });
-const MEMO_MS = 3_600_000;
-const RETRY_MS = 60_000;
-let memo: { at: number; bands: SportBandMap } | null = null;
-let pending: Promise<SportBandMap | null> | null = null;
-let failedAt = -Infinity;
+export const getSportBands = memoised("getSportBands", unstable_cache(cacheKeyed("sport-bands", readSportBands), ["sport-bands-v1"], { revalidate: 86400 }));
 
-export function getSportBands(): Promise<SportBandMap | null> {
-  if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.bands);
-  if (Date.now() - failedAt < RETRY_MS) return Promise.resolve(memo?.bands ?? null);
-  pending ??= getSportBandsCached()
-    .then((bands) => {
-      memo = { at: Date.now(), bands };
-      return bands;
-    })
-    .catch((e) => {
-      failedAt = Date.now();
-      console.warn("getSportBands: read failed", e instanceof Error ? e.message : e);
-      return memo?.bands ?? null;
-    })
-    .finally(() => {
-      pending = null;
-    });
-  return pending;
+/**
+ * The same bands by time band and day type (cardSport.ts sportBandTimesOf),
+ * for Ask's price-by-time chart: a venue whose card shows the range its
+ * bands give a sport is charted at that sport's band for the time asked.
+ * Its own entry and its own read (once a day), so the sport pages and the
+ * list route, which never need it, keep reading the small one. Kept, and
+ * failing, as getSportBands.
+ */
+export const getSportBandTimes = memoised("getSportBandTimes", unstable_cache(cacheKeyed("sport-band-times", readSportBandTimes), ["sport-band-times-v1"], { revalidate: 86400 }));
+
+/** A cached read kept in memory and shared, as getSportBands says. Never throws. */
+function memoised<T>(name: string, cached: () => Promise<T>): () => Promise<T | null> {
+  const MEMO_MS = 3_600_000;
+  const RETRY_MS = 60_000;
+  let memo: { at: number; value: T } | null = null;
+  let pending: Promise<T | null> | null = null;
+  let failedAt = -Infinity;
+  return () => {
+    if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.value);
+    if (Date.now() - failedAt < RETRY_MS) return Promise.resolve(memo?.value ?? null);
+    pending ??= cached()
+      .then((value) => {
+        memo = { at: Date.now(), value };
+        return value;
+      })
+      .catch((e) => {
+        failedAt = Date.now();
+        console.warn(`${name}: read failed`, e instanceof Error ? e.message : e);
+        return memo?.value ?? null;
+      })
+      .finally(() => {
+        pending = null;
+      });
+    return pending;
+  };
 }
 
 /** A card row with its venue's sport bands, when it has any (the row itself is never changed). */

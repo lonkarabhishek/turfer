@@ -10,6 +10,7 @@ import { TypingReply, prefersReducedMotion } from "./TypingReply";
 import { articleWelcome } from "./blogUi";
 import { askChips, openingChips } from "@/lib/ask/chips";
 import { SUMMARY_CHIP } from "@/lib/ask/blog";
+import { visualsToDraw } from "@/lib/ask/visuals";
 import { getCityPref } from "@/lib/city";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
@@ -354,7 +355,7 @@ function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: (
 
 /** The card layout a reply shows first under its text, when placeholders can stand in for it. */
 function cardsOf(res: AskResponse): CardsKind | null {
-  if (res.intent === "compare") return res.compare && (res.turfs?.length ?? 0) >= 2 ? "compare" : null;
+  if (res.intent === "compare") return (res.compare || visualsToDraw(res.visuals).includes("compare")) && (res.turfs?.length ?? 0) >= 2 ? "compare" : null;
   if (res.intent === "find_game" && res.games?.length) return "game";
   if ((res.intent === "find_turf" || res.intent === "find_game") && res.turfs?.length) return "turf";
   return null;
@@ -462,7 +463,7 @@ function TurnView({
                 className={`absolute inset-x-0 -top-2.5 pointer-events-none ${typing && !shown ? "" : "ask-ghost-out"}`}
                 onAnimationEnd={(e) => e.target === e.currentTarget && setGone(true)}
               >
-                <AskSkeleton kind={ghost} />
+                <AskSkeleton kind={ghost} verdict={!!turn.res.compare?.verdict} />
               </div>
             )}
           </div>
