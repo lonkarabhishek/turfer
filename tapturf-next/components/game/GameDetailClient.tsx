@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getGameById, getGameParticipants, getGameRequests, getMyRequestForGame, sendJoinRequest, acceptRequest, declineRequest, updateGame } from "@/lib/queries/games";
+import { getGameById, getGameParticipants, getGameRequests, getMyRequestForGame, sendJoinRequest, acceptRequest, declineRequest, updateGame, notifyVenueMove } from "@/lib/queries/games";
 import {
   durationLabel,
   firstName,
@@ -23,6 +23,7 @@ import {
 import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber } from "@/lib/utils/gameState";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import { gameShareText } from "@/lib/utils/gameShare";
+import type { VenueOption } from "@/lib/utils/gameVenue";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
@@ -38,6 +39,7 @@ import { GameHostCard } from "./detail/GameHostCard";
 import { GameLineup } from "./detail/GameLineup";
 import { GameWhere } from "./detail/GameWhere";
 import { GameCtaBar } from "./detail/GameCtaBar";
+import { GameVenueField } from "./detail/GameVenueField";
 import { GameAside } from "./detail/GameAside";
 import type { CtaModel } from "./detail/GameCta";
 import { GameSkeleton } from "./detail/GameSkeleton";
@@ -70,6 +72,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     turf_booked: false,
     skill_level: "all",
   });
+  // The venue the host is moving the game to, until Save changes (null: it stays).
+  const [newVenue, setNewVenue] = useState<VenueOption | null>(null);
+  // The sheet's "Turf booked" when that venue was picked: what Undo puts back.
+  const [bookedBeforePick, setBookedBeforePick] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -225,15 +231,29 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       turf_booked: game.turf_booked,
       skill_level: game.skill_level || "all",
     });
+    setNewVenue(null);
     setSaveError("");
     setShowEditModal(true);
+  };
+
+  // A booking was for the old turf: a new venue starts as not booked and
+  // the sheet asks; Undo puts back what the sheet said before the pick.
+  const pickVenue = (v: VenueOption | null) => {
+    setNewVenue(v);
+    if (v) {
+      setBookedBeforePick(editData.turf_booked);
+      if (editData.turf_booked) setEditData((d) => ({ ...d, turf_booked: false }));
+    } else if (bookedBeforePick) {
+      setEditData((d) => ({ ...d, turf_booked: true }));
+    }
   };
 
   const handleSaveEdit = async () => {
     if (!game || !user) return;
     setSaving(true);
     setSaveError("");
-    const { error } = await updateGame(game.id, user.id, {
+    const moved = newVenue && newVenue.id !== game.turf_id ? newVenue : null;
+    const { data: saved, error } = await updateGame(game.id, user.id, {
       date: editData.date,
       start_time: editData.start_time,
       end_time: editData.end_time,
@@ -242,7 +262,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       description: editData.description || undefined,
       turf_booked: editData.turf_booked,
       skill_level: editData.skill_level,
+      ...(moved ? { turf_id: moved.id } : {}),
     });
+    // The saved row: a date changed in the same save is the one players are told.
+    if (!error && saved && moved) await notifyVenueMove(saved, moved, game.turf_id);
     setSaving(false);
     if (error) {
       setSaveError(error);
@@ -519,6 +542,19 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
             </div>
 
             <div className="space-y-4">
+              {/* Moving a game that is over or cancelled tells nobody anything useful. */}
+              {!ended && game.status !== "cancelled" && game.status !== "completed" && (
+                <GameVenueField
+                  current={game.turfs}
+                  sport={game.sport}
+                  picked={newVenue}
+                  onPick={pickVenue}
+                  wasBooked={bookedBeforePick}
+                  booked={editData.turf_booked}
+                  onBooked={(b) => setEditData({ ...editData, turf_booked: b })}
+                />
+              )}
+
               <div>
                 <label htmlFor="edit-date" className={label}>Date</label>
                 <input id="edit-date" type="date" value={editData.date} onChange={(e) => setEditData({ ...editData, date: e.target.value })} className={field} />
