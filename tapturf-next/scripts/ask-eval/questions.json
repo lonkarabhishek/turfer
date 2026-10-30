@@ -1,0 +1,68 @@
+{
+  "about": "Router v10's eval set (lib/ai/ask.ts AskFiltersV10). One GET /api/ask per question with the x-ask-eval header (eval-howto in the stage notes; grade.mjs grades the saved replies). `expect`: the reading's fields that must match, read from the reply's memo (the filters it sends back for follow-ups) and its intent; v10's fields are snake_case as in the schema. `facts`: what the answer must respect, checked by grade.mjs against the reply's cards, games and words, and against truth.json (the claimed set, players' reports and stars, the owner's prices as the turf page shows them, read SELECT-only from the database, and each turf's hours, added by hours-truth.mjs) when one is given. `city`: the visitor's city (?city=); `lat`/`lng`: their location; `ctx`: the page they are on.",
+  "questions": [
+    { "id": "claimed-pune", "q": "show me verified turfs in Pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "zero_copy_if_none:claimed", "no_booking_claim", "count_honest"] },
+    { "id": "claimed-near", "q": "verified turfs near me", "city": "pune", "lat": 18.559, "lng": 73.7868, "expect": { "intent": "find_turf", "claimed": true, "wants_nearby": true }, "facts": ["cards_claimed", "truth_claimed", "no_booking_claim", "count_honest"] },
+    { "id": "claimed-hyderabad", "q": "claimed turfs in hyderabad", "city": "hyderabad", "expect": { "intent": "find_turf", "city": "hyderabad", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "zero_copy_if_none:claimed", "count_honest"] },
+    { "id": "claimed-any", "q": "which turfs are claimed by owners", "city": "pune", "expect": { "intent": "find_turf", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "count_honest"] },
+    { "id": "claimed-sport", "q": "tapturf verified box cricket in bangalore", "city": "bangalore", "expect": { "intent": "find_turf", "city": "bangalore", "sport": "box-cricket", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "cards_sport:Box Cricket"] },
+    { "id": "claimed-dehradun", "q": "owner managed turfs in dehradun", "city": "dehradun", "expect": { "intent": "find_turf", "city": "dehradun", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "zero_copy_if_none:claimed"] },
+    { "id": "claimed-hinglish", "q": "pune me verified turf dikhao", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "zero_copy_if_none:claimed", "no_booking_claim"] },
+    { "id": "claimed-typo", "q": "verifed turfs in nashik", "city": "nashik", "expect": { "intent": "find_turf", "city": "nashik", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "zero_copy_if_none:claimed"] },
+    { "id": "claimed-udaipur", "q": "claimed turf udaipur", "city": "udaipur", "expect": { "intent": "find_turf", "city": "udaipur", "claimed": true }, "facts": ["cards_claimed", "truth_claimed"] },
+    { "id": "claimed-official", "q": "any official turfs in mumbai run by the owner", "city": "mumbai", "expect": { "intent": "find_turf", "city": "mumbai", "claimed": true }, "facts": ["cards_claimed", "truth_claimed", "zero_copy_if_none:claimed"] },
+    { "id": "means-verified", "q": "what does verified mean", "city": "pune", "expect": { "intent": "other", "claimed": false }, "facts": ["reply_matches:owner", "reply_not:\\b(best|better|top|safest|recommended)\\b", "no_booking_claim"] },
+    { "id": "means-claimed", "q": "what is a claimed turf on tapturf", "city": "pune", "expect": { "intent": "other" }, "facts": ["reply_matches:owner", "no_booking_claim"] },
+    { "id": "is-verified", "q": "is Dribble Den verified?", "city": "bangalore", "expect": { "intent": "question", "turf_names": ["Dribble Den"] }, "facts": ["answer_truth_claimed:Dribble Den", "no_booking_claim"] },
+    { "id": "means-tick", "q": "what is the blue tick next to names", "city": "pune", "expect": { "intent": "other", "claimed": false }, "facts": ["reply_matches:phone|email", "no_booking_claim"] },
+
+    { "id": "owner-prices-blr", "q": "turfs with owner prices in bangalore", "city": "bangalore", "expect": { "intent": "find_turf", "city": "bangalore", "owner_prices": true }, "facts": ["truth_owner_prices", "zero_copy_if_none:owner_prices", "count_honest"] },
+    { "id": "owner-prices-any", "q": "which turfs have prices set by the owner", "city": "pune", "expect": { "intent": "find_turf", "owner_prices": true }, "facts": ["truth_owner_prices", "zero_copy_if_none:owner_prices", "count_honest"] },
+    { "id": "owner-prices-pune", "q": "owner confirmed rates football pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "sport": "football", "owner_prices": true }, "facts": ["truth_owner_prices", "zero_copy_if_none:owner_prices"] },
+
+    { "id": "photos-hyd", "q": "turfs with photos in Hyderabad", "city": "hyderabad", "expect": { "intent": "find_turf", "city": "hyderabad", "with_photos": true }, "facts": ["cards_photos", "cards_city:hyderabad"] },
+    { "id": "photos-kothrud", "q": "box cricket in kothrud with pics", "city": "pune", "expect": { "intent": "find_turf", "sport": "box-cricket", "areas": ["Kothrud"], "with_photos": true }, "facts": ["cards_photos"] },
+    { "id": "photos-near", "q": "football turf with pictures near me", "city": "pune", "lat": 18.559, "lng": 73.7868, "expect": { "intent": "find_turf", "sport": "football", "wants_nearby": true, "with_photos": true }, "facts": ["cards_photos", "cards_within_km:100"] },
+
+    { "id": "reviews-any", "q": "which turfs have player reviews", "city": "pune", "expect": { "intent": "find_turf", "player_reviews": true }, "facts": ["truth_reports", "count_honest"] },
+    { "id": "reviews-nashik", "q": "turfs in nashik reviewed by players", "city": "nashik", "expect": { "intent": "find_turf", "city": "nashik", "player_reviews": true }, "facts": ["truth_reports", "zero_copy_if_none:player_reviews"] },
+    { "id": "reviews-hinglish", "q": "tapturf player ratings wale turf pune me", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "player_reviews": true }, "facts": ["truth_reports"] },
+    { "id": "reviews-google", "q": "most reviewed turfs in pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "sort": "reviews", "player_reviews": false }, "facts": ["cards_city:pune"] },
+    { "id": "reviews-best", "q": "best rated turfs by players in nashik", "city": "nashik", "expect": { "intent": "find_turf", "city": "nashik", "player_reviews": true, "sort": "rating" }, "facts": ["truth_reports", "cards_by_player_stars"] },
+
+    { "id": "open-now", "q": "turfs open now in pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "open_at": "now" }, "facts": ["cards_city:pune", "count_honest"] },
+    { "id": "open-now-hinglish", "q": "abhi khula turf hai kya kothrud me", "city": "pune", "expect": { "intent": "find_turf", "areas": ["Kothrud"], "open_at": "now" }, "facts": ["no_booking_claim"] },
+    { "id": "open-6am", "q": "box cricket open at 6am in Kothrud", "city": "pune", "expect": { "intent": "find_turf", "sport": "box-cricket", "areas": ["Kothrud"], "open_at": "06:00" }, "facts": ["cards_sport:Box Cricket"] },
+    { "id": "open-930pm", "q": "football turf open at 9:30 pm tomorrow", "city": "pune", "expect": { "intent": "find_turf", "sport": "football", "when": "tomorrow", "open_at": "21:30" }, "facts": ["cards_sport:Football"] },
+    { "id": "open-kal-subah", "q": "kal subah 6 baje khula turf kothrud me", "city": "pune", "expect": { "intent": "find_turf", "areas": ["Kothrud"], "when": "tomorrow", "open_at": "06:00" }, "facts": ["no_booking_claim"] },
+    { "id": "open-24x7", "q": "24x7 turfs in nashik", "city": "nashik", "expect": { "intent": "find_turf", "city": "nashik", "open_24x7": true, "open_at": null }, "facts": ["cards_city:nashik"] },
+    { "id": "open-midnight", "q": "turf open after midnight in hyderabad", "city": "hyderabad", "expect": { "intent": "find_turf", "city": "hyderabad", "open_24x7": true }, "facts": ["cards_city:hyderabad"] },
+    { "id": "open-5am-sunday", "q": "which turfs are open at 5am on sunday in pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "open_at": "sun 05:00" }, "facts": ["cards_city:pune", "cards_open_at:sun 05:00"] },
+    { "id": "open-6am-monday", "q": "football turf open at 6 am on monday in pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune", "sport": "football", "open_at": "mon 06:00" }, "facts": ["cards_sport:Football", "cards_open_at:mon 06:00"] },
+    { "id": "page-open-now", "q": "open now?", "city": "bangalore", "ctx": { "turf": "Dribble Den", "city": "bangalore" }, "expect": { "intent": "question", "turf_names": ["Dribble Den"], "open_at": null }, "facts": ["no_booking_claim"] },
+
+    { "id": "games-free-football", "q": "free football games this weekend", "city": "pune", "expect": { "intent": "find_game", "sport": "football", "when": "weekend", "free_to_join": true }, "facts": ["games_free", "no_booking_claim", "games_reply_honest"] },
+    { "id": "games-free-tomorrow", "q": "any free games tomorrow in pune", "city": "pune", "expect": { "intent": "find_game", "city": "pune", "when": "tomorrow", "free_to_join": true }, "facts": ["games_free", "games_reply_honest"] },
+    { "id": "games-spots", "q": "games with spots left tomorrow", "city": "pune", "expect": { "intent": "find_game", "when": "tomorrow", "players": 1 }, "facts": ["games_spots:1"] },
+    { "id": "games-3-spots", "q": "need 3 spots in a football game this weekend", "city": "pune", "expect": { "intent": "find_game", "sport": "football", "when": "weekend", "players": 3 }, "facts": ["games_spots:3"] },
+    { "id": "games-beginner", "q": "beginner badminton games", "city": "pune", "expect": { "intent": "find_game", "sport": "badminton", "skill": "beginner" }, "facts": ["games_skill:beginner"] },
+    { "id": "games-booked", "q": "turf booked games in pune", "city": "pune", "expect": { "intent": "find_game", "city": "pune", "turf_booked": true }, "facts": ["games_booked", "games_reply_honest", "no_booking_claim"] },
+    { "id": "games-booked-host", "q": "games where the host already booked the turf", "city": "pune", "expect": { "intent": "find_game", "turf_booked": true }, "facts": ["games_booked", "no_booking_claim"] },
+    { "id": "games-free-aaj", "q": "free box cricket match aaj raat", "city": "pune", "expect": { "intent": "find_game", "sport": "box-cricket", "when": "today", "free_to_join": true }, "facts": ["games_free"] },
+    { "id": "games-koi-free", "q": "koi free game hai kal", "city": "pune", "expect": { "intent": "find_game", "when": "tomorrow", "free_to_join": true }, "facts": ["games_free"] },
+    { "id": "games-2-spots-near", "q": "intermediate football games near me with 2 spots", "city": "pune", "lat": 18.559, "lng": 73.7868, "expect": { "intent": "find_game", "sport": "football", "skill": "intermediate", "wants_nearby": true, "players": 2 }, "facts": ["games_spots:2", "games_skill:intermediate"] },
+
+    { "id": "keep-box-kothrud", "q": "box cricket in Kothrud", "city": "pune", "expect": { "intent": "find_turf", "sport": "box-cricket", "areas": ["Kothrud"], "claimed": false, "open_at": null }, "facts": ["cards_sport:Box Cricket"] },
+    { "id": "keep-cheapest-hyd", "q": "cheapest football turf in hyderabad tonight", "city": "hyderabad", "expect": { "intent": "find_turf", "city": "hyderabad", "sport": "football", "sort": "price_low", "claimed": false, "open_at": null }, "facts": ["cards_city:hyderabad"] },
+    { "id": "keep-parking", "q": "turfs in Kothrud with parking", "city": "pune", "expect": { "intent": "find_turf", "areas": ["Kothrud"], "needs": ["parking"], "with_photos": false }, "facts": [] },
+    { "id": "keep-compare", "q": "compare Dribble Den and Sprintplay Sports Arena", "city": "bangalore", "expect": { "intent": "compare" }, "facts": ["no_booking_claim"] },
+    { "id": "keep-question", "q": "does Dribble Den have parking", "city": "bangalore", "expect": { "intent": "question", "turf_names": ["Dribble Den"] }, "facts": ["no_booking_claim"] },
+    { "id": "keep-hi", "q": "hi", "city": "pune", "expect": { "intent": "other" }, "facts": ["no_booking_claim"] },
+    { "id": "keep-booking-app", "q": "Hudle pe Baner me football turf?", "city": "pune", "expect": { "intent": "find_turf", "sport": "football", "areas": ["Baner"] }, "facts": ["no_booking_claim"] },
+    { "id": "keep-book-tapturf", "q": "can I book a turf on tapturf", "city": "pune", "expect": {}, "facts": ["no_booking_claim"] },
+
+    { "id": "mix-claimed-photos", "q": "claimed turfs with photos in bangalore", "city": "bangalore", "expect": { "intent": "find_turf", "city": "bangalore", "claimed": true, "with_photos": true }, "facts": ["cards_claimed", "cards_photos", "truth_claimed"] },
+    { "id": "mix-claimed-open-near", "q": "verified turfs open now near me", "city": "pune", "lat": 18.559, "lng": 73.7868, "expect": { "intent": "find_turf", "claimed": true, "open_at": "now", "wants_nearby": true }, "facts": ["cards_claimed", "truth_claimed", "count_honest"] },
+    { "id": "mix-free-verified-games", "q": "free games at verified turfs", "city": "pune", "expect": { "intent": "find_game", "free_to_join": true, "claimed": true }, "facts": ["games_free", "no_booking_claim", "reply_matches:can't be filtered by claimed turfs|^No free games"] }
+  ]
+}

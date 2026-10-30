@@ -125,10 +125,15 @@ export function nearbyLabel(key: string): string | null {
  * for other turfs. The visitor's city goes first, then the sport and
  * area the player gave, then the reading's city, then the city the
  * player named ("asked_city").
+ *
+ * Router v10's filters (`extraKeys`: claimed, owner_prices, with_photos,
+ * player_reviews, open_at) are never dropped for a search: claimed
+ * turfs asked for are never other turfs shown as if they were. For a
+ * named venue they go first after the rating, as softer than its name.
  */
-export function dropOrder(needKeys: readonly string[], named: boolean): string[] {
+export function dropOrder(needKeys: readonly string[], named: boolean, extraKeys: readonly string[] = []): string[] {
   return named
-    ? ["rating", ...needKeys, "open_24x7", "price", "pref_city", "narrow_sport", "sport", "area", "city", "asked_city"]
+    ? ["rating", ...extraKeys, ...needKeys, "open_24x7", "price", "pref_city", "narrow_sport", "sport", "area", "city", "asked_city"]
     : ["text", "rating", ...needKeys, "open_24x7", "price", "area_city", "area", "narrow_sport", "pref_city"];
 }
 
@@ -183,6 +188,130 @@ export function widenedReply(i: WidenedReplyInput): string | null {
     );
   }
   return out.length ? out.join(" ") : null;
+}
+
+// ── Router v10: what TapTurf holds, said from the rows ──────────────
+
+/** Router v10's turf filters a search asked for; `open` as openAtWords says it ("open now"). */
+export type ExtrasAsked = { claimed?: boolean; owner_prices?: boolean; with_photos?: boolean; player_reviews?: boolean; open?: string | null };
+
+/** "claimed football turfs with photos and player reviews open now": what was asked for, `kind` being "turfs" or "badminton courts". */
+export function extrasPhrase(kind: string, a: ExtrasAsked): string {
+  const withs = [a.with_photos && "photos", a.player_reviews && "player reviews", a.owner_prices && "prices from the owner"].filter((x): x is string => !!x);
+  return `${a.claimed ? "claimed " : ""}${kind}${withs.length ? ` with ${listJoin(withs)}` : ""}${a.open ? ` ${a.open}` : ""}`;
+}
+
+export type NoneYetInput = {
+  /** extrasPhrase(): "claimed football turfs". */
+  what: string;
+  /** Where the search was ("in Nashik", "in Kothrud", "within 100 km of you"), or "" for anywhere. */
+  where: string;
+  /** Hours were asked for (open_at): said as their listed hours, which is all we know. */
+  byHours: boolean;
+  /**
+   * The ones anywhere else (applyAskFilters' elsewhere): how many, and
+   * the cities of the cards in their order. Null when not looked for
+   * (photos and hours alone).
+   */
+  elsewhere: { total: number; cities: readonly string[] } | null;
+};
+
+/**
+ * Router v10's reply when nothing in the place is what was asked for,
+ * made from the rows only, never the model's line, and with no count but
+ * the rows': "No claimed turfs in Nashik yet. The 3 on TapTurf are in
+ * Bangalore, Dehradun and Udaipur." / "No claimed football turfs on
+ * TapTurf yet." / "No turfs open at 3:00 AM in Pune by their listed hours."
+ */
+export function noneYetReply(i: NoneYetInput): string {
+  const tail = i.byHours ? " by their listed hours" : " yet";
+  if (i.elsewhere && i.elsewhere.total === 0) return `No ${i.what} on TapTurf${tail}.`;
+  const lead = `No ${i.what}${i.where ? ` ${i.where}` : " on TapTurf"}${tail}.`;
+  if (!i.elsewhere) return lead;
+  const n = i.elsewhere.total;
+  const cities = [...new Set(i.elsewhere.cities)];
+  return `${lead} ${n === 1 ? "The one" : `The ${n.toLocaleString("en-IN")}`} on TapTurf ${n === 1 ? "is" : "are"} in ${cityList(cities)}.`;
+}
+
+/** The heading over the cards from elsewhere: "Claimed turfs" in "Bangalore" or "other cities". */
+export function elsewhereRow(what: string, cities: readonly string[], count: number): CardRow {
+  const set = [...new Set(cities)];
+  return { label: cap(what), place: set.length === 1 ? set[0] : "other cities", count };
+}
+
+const UNAVAILABLE: Record<string, string> = { owner_prices: "the owner's prices", player_reviews: "player reviews", open_at: "opening hours" };
+
+/** A v10 filter whose read failed: "I couldn't check player reviews just now, so these aren't filtered by them." */
+export function unavailableLine(keys: readonly string[]): string | null {
+  const words = keys.map((k) => UNAVAILABLE[k]).filter((w): w is string => !!w);
+  if (!words.length) return null;
+  return `I couldn't check ${listJoin(words)} just now, so these aren't filtered by them.`;
+}
+
+/** A game search as a reply says it. at: "this weekend", "tomorrow" or ""; where: "in Pune", "near you" or "". */
+export type GameAsk = { free: boolean; booked: boolean; spots: number | null; skill: string | null; sport: string | null; at: string; where: string };
+
+/** "free beginner football games with the turf booked and 2 spots left". */
+function gameWords(a: Pick<GameAsk, "free" | "booked" | "spots" | "skill" | "sport">): string {
+  const withs = [a.booked && "the turf booked", a.spots && (a.spots === 1 ? "a spot left" : `${a.spots} spots left`)].filter((x): x is string => !!x);
+  const what = [a.free && "free", a.skill, a.sport].filter(Boolean).join(" ");
+  return `${what ? `${what} ` : "open "}games${withs.length ? ` with ${listJoin(withs)}` : ""}`;
+}
+
+const askedGame = (a: GameAsk) => `${gameWords(a)}${a.at ? ` ${a.at}` : ""}${a.where ? ` ${a.where}` : ""}`;
+
+/**
+ * Router v10, no game matches at all: "No free football games this
+ * weekend in Pune yet." Then hosting one, at the turfs shown when there
+ * are some: players call or WhatsApp the turf for a slot, never book
+ * through TapTurf.
+ */
+export function gamesNoneReply(a: GameAsk, turfsShown: boolean): string {
+  return `No ${askedGame(a)} yet. ${turfsShown ? "Host one at a turf below: call or WhatsApp the turf for a slot, and players nearby can join." : "Host one and players nearby can join."}`;
+}
+
+/**
+ * Router v10, games found only after widening (applyGameFilters' relaxed:
+ * when, skill, pref_city, sport, price): what was asked for, then what
+ * the cards still are. "No free football games this weekend in Pune yet.
+ * Here are other free games this weekend in Pune." Null when nothing the
+ * reply says was dropped.
+ */
+export function gamesWidenedReply(a: GameAsk, relaxed: readonly string[]): string | null {
+  if (!relaxed.some((k) => ["when", "skill", "pref_city", "sport"].includes(k))) return null;
+  const kept: GameAsk = {
+    ...a,
+    sport: relaxed.includes("sport") ? null : a.sport,
+    skill: relaxed.includes("skill") ? null : a.skill,
+    at: relaxed.includes("when") ? "" : a.at,
+    where: relaxed.includes("pref_city") ? "" : a.where,
+  };
+  const words = askedGame(kept);
+  return `No ${askedGame(a)} yet. Here are other ${words.startsWith("open ") ? words.slice(5) : words}.`;
+}
+
+/** Router v10, games found as asked: "Here are free games this weekend in Pune." */
+export function gamesFoundReply(a: GameAsk): string {
+  return `Here are ${askedGame(a)}.`;
+}
+
+const GAME_UNFILTERED: Record<string, string> = {
+  claimed: "claimed turfs",
+  owner_prices: "the owner's prices",
+  with_photos: "photos",
+  player_reviews: "player reviews",
+  open_at: "opening hours",
+};
+
+/**
+ * Router v10's turf filters asked of a game search, which no game is
+ * picked by: "Games can't be filtered by claimed turfs yet, so these are
+ * at any turf." Null when none of them was asked.
+ */
+export function gamesExtrasLine(keys: readonly string[]): string | null {
+  const words = keys.map((k) => GAME_UNFILTERED[k]).filter((w): w is string => !!w);
+  if (!words.length) return null;
+  return `Games can't be filtered by ${listJoin(words)} yet, so these are at any turf.`;
 }
 
 // ── A named venue: say which city it is in ──────────────────────────

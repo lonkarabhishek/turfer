@@ -19,6 +19,7 @@ import type { Game } from "@/types/game";
 import type { AskResponse } from "./AskProvider";
 import { turfPath } from "@/lib/utils/turfPath";
 import { cardPriceOf, visualsToDraw } from "@/lib/ask/visuals";
+import { openAtWords } from "@/lib/ai/openAt";
 import { CompareTableView, HostCardView, PriceChartView, ResultsMapView } from "./AskVisuals";
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
@@ -70,7 +71,9 @@ export function TurfMiniCard({
         )}
       </div>
       <div className="p-3">
-        <p className="flex min-w-0 items-center gap-1 text-[14px] font-semibold text-primary-900 leading-tight group-hover:text-accent-700 transition-colors">
+        {/* relative: the claimed mark's sr-only words stay in the card. Placed by the chat's
+            thread instead, a claimed card off the end of a row made the thread scroll sideways. */}
+        <p className="relative flex min-w-0 items-center gap-1 text-[14px] font-semibold text-primary-900 leading-tight group-hover:text-accent-700 transition-colors">
           {n != null && (
             <span aria-hidden className="mr-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-600 px-1 text-[11px] font-bold tabular-nums text-white">
               {n}
@@ -196,7 +199,21 @@ export function FilterChips({ res }: { res: AskResponse }) {
   if (f.time && res.intent === "find_turf") out.push({ morning: "Morning", afternoon: "Afternoon", evening: "Evening", late_night: "Late night" }[f.time] ?? f.time);
   if (f.open24x7) out.push("Open 24 hours");
   for (const n of f.needs) out.push(n.replace("_", " ").replace(/^\w/, (c) => c.toUpperCase()));
-  if (f.players) out.push(`${f.players} players`);
+  // Router v10's (none on a v9 answer), each only where it was applied: a game
+  // search's players are the spots it needs; the turf ones are no game's, nor the game ones a turf's.
+  const game = res.intent === "find_game";
+  if (f.players) out.push(res.router === 10 && game ? `${f.players}+ spot${f.players === 1 ? "" : "s"} left` : `${f.players} players`);
+  if (!game) {
+    if (f.claimed) out.push("Claimed");
+    if (f.ownerPrices) out.push("Owner's prices");
+    if (f.withPhotos) out.push("With photos");
+    if (f.playerReviews) out.push("Player reviews");
+    const open = openAtWords(f.openAt);
+    if (open) out.push(open.replace(/^\w/, (c) => c.toUpperCase()));
+  } else {
+    if (f.freeToJoin) out.push("Free");
+    if (f.turfBooked) out.push("Turf booked");
+  }
   if (!out.length) return null;
   return (
     <div className="flex flex-wrap gap-1.5 mb-2.5">

@@ -24,9 +24,10 @@ export type { TurfFacts };
  * page makes: the row, its live reviews (players' own first), and the
  * TapTurf report stats, scorecard counts and play-again answers. Null when
  * the read fails (logged) or the turf is gone, so that venue is skipped
- * rather than failing the whole comparison.
+ * rather than failing the whole comparison. `v10`: with router v10's
+ * lines (claimed, the owner's prices, photos; buildFacts).
  */
-export async function loadFacts(id: string): Promise<{ turf: Turf; facts: TurfFacts } | null> {
+export async function loadFacts(id: string, v10 = false): Promise<{ turf: Turf; facts: TurfFacts } | null> {
   const page = await loadTurfPage(id).catch((e) => {
     console.warn("compare: turf read failed", id, e);
     return null;
@@ -34,7 +35,7 @@ export async function loadFacts(id: string): Promise<{ turf: Turf; facts: TurfFa
   if (!page) return null;
   return {
     turf: page.turf,
-    facts: buildFacts(page.turf, { reviews: page.reviews, stats: page.reviewStats, aspects: page.reviewAspects, playAgain: page.playAgain }),
+    facts: buildFacts(page.turf, { reviews: page.reviews, stats: page.reviewStats, aspects: page.reviewAspects, playAgain: page.playAgain }, v10 ? { claimed: page.claimed } : undefined),
   };
 }
 

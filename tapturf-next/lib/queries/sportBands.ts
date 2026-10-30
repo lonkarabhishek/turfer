@@ -59,8 +59,8 @@ export const getSportBands = memoised("getSportBands", unstable_cache(cacheKeyed
  */
 export const getSportBandTimes = memoised("getSportBandTimes", unstable_cache(cacheKeyed("sport-band-times", readSportBandTimes), ["sport-band-times-v1"], { revalidate: 86400 }));
 
-/** A cached read kept in memory and shared, as getSportBands says. Never throws. */
-function memoised<T>(name: string, cached: () => Promise<T>): () => Promise<T | null> {
+/** A cached read kept in memory and shared, as getSportBands says. Never throws. Also lib/queries/askFacts.ts. */
+export function memoised<T>(name: string, cached: () => Promise<T>): () => Promise<T | null> {
   const MEMO_MS = 3_600_000;
   const RETRY_MS = 60_000;
   let memo: { at: number; value: T } | null = null;

@@ -5,12 +5,14 @@ import { z } from "zod";
 import { CITIES, CITY_ALIASES, CITY_IDS, cityInText, cityInfo, type CityId } from "../city";
 import { SPORT_PAGES, turfPlaysSport, sportBySlug } from "../sports";
 import { areaFor } from "../utils/area";
-import { getMinimumPrice, summarisePrice } from "../utils/prices";
+import { getMinimumPrice, hasRealPrices, summarisePrice } from "../utils/prices";
 import { sportBandTimeRange, sportMinimumPrice, sportPrice, type CardSport, type SportBandMap, type SportBandTimeMap } from "../utils/cardSport";
 import { compareTopRated } from "../utils/ranking";
 import { haversineKm, type Coords } from "../utils/location";
 import { dropOrder, nearbyLabel, relaxNearby, relaxSteps } from "./relax";
 import { reviewsSubject } from "./reviewsAnswer";
+import { normalOpenAt, openAtAny, openAtSlots, type Week } from "./openAt";
+import type { RouterVersion } from "./routerVersion";
 import type { Turf } from "@/types/turf";
 
 /**
@@ -63,8 +65,49 @@ export const AskFilters = z.object({
 });
 export type AskFilters = z.infer<typeof AskFilters>;
 
+/**
+ * Router v10's reading (off by default, lib/ai/routerVersion.ts): v9's,
+ * plus what TapTurf holds that v9 could not ask for. Each is applied to
+ * our own rows (applyAskFilters, applyGameFilters), never only said. The
+ * new fields sit before summary and reply, so the model decides them first.
+ */
+export const AskFiltersV10 = AskFilters.omit({ summary: true, reply: true, followups: true }).extend({
+  /** Only Claimed turfs: the owner runs the page (an active claim), shown as "TapTurf verified". */
+  claimed: z.boolean(),
+  /** Only turfs whose page shows the owner's prices: claimed, and the owner confirmed real prices on myTapturf (ownerPriceNote). */
+  owner_prices: z.boolean(),
+  /** Only turfs with at least one usable photo. */
+  with_photos: z.boolean(),
+  /** Only turfs with TapTurf players' own live reports. */
+  player_reviews: z.boolean(),
+  /** "now"; "HH:MM" (24-hour) on the day `when` says; or "sun HH:MM" on a weekday named: open then by the turf's listed hours. */
+  open_at: z.string().nullable(),
+  /** Games: free to join (₹0 a player). */
+  free_to_join: z.boolean(),
+  /** Games: the host has booked the turf already. */
+  turf_booked: z.boolean(),
+  summary: z.string(),
+  reply: z.string(),
+  followups: z.array(z.string()),
+});
+export type AskFiltersV10 = z.infer<typeof AskFiltersV10>;
+
+/** v10's fields alone. */
+export type AskExtras = Pick<AskFiltersV10, "claimed" | "owner_prices" | "with_photos" | "player_reviews" | "open_at" | "free_to_join" | "turf_booked">;
+export const EXTRA_KEYS = ["claimed", "owner_prices", "with_photos", "player_reviews", "open_at", "free_to_join", "turf_booked"] as const satisfies readonly (keyof AskExtras)[];
+/** v10's fields when nothing is asked of them: what every v9 reading means. */
+export const NO_EXTRAS: AskExtras = { claimed: false, owner_prices: false, with_photos: false, player_reviews: false, open_at: null, free_to_join: false, turf_booked: false };
+/** A reading of either version: v9's has none of v10's fields. */
+export type AskReading = AskFilters & Partial<AskExtras>;
+
+/** v10's turf filters a reading asks for, in the order a reply says them. */
+export type TurfExtra = "claimed" | "owner_prices" | "with_photos" | "player_reviews" | "open_at";
+export function turfExtrasAsked(f: AskReading): TurfExtra[] {
+  return (["claimed", "owner_prices", "with_photos", "player_reviews", "open_at"] as const).filter((k) => !!f[k]);
+}
+
 /** A previous exchange, sent back so follow-ups can build on it. */
-export type AskTurn = { user: string; reply: string; filters: Partial<AskFilters> & { top?: string[] } };
+export type AskTurn = { user: string; reply: string; filters: Partial<AskReading> & { top?: string[] } };
 /** What the player is looking at when they ask (a turf page, a city page). turfId: that venue's row, as two can share a name in one city. */
 export type AskContext = { turf?: string | null; turfId?: string | null; city?: CityId | null };
 
@@ -75,14 +118,40 @@ export function isAskConfigured(): boolean {
 /** Bump when systemPrompt() or AskFilters changes: cached readings (lib/ai/parseCache.ts) are keyed by it. */
 export const ROUTER_VERSION = 9;
 
+// Router v10's words, put into v9's prompt at fixed places (systemPrompt):
+// with v10 off the prompt is v9's, byte for byte.
+const V10_OTHER = ` Also a question about what TapTurf's marks mean ("what does verified mean", "what is a claimed turf", "what is the blue tick"): answer it in reply from What TapTurf knows below.`;
+const V10_KNOWS = `What TapTurf knows besides sports, places, prices and facilities (each is a filter in the rules below):
+- Claimed turfs: the venue's owner runs its TapTurf page, an active claim TapTurf checked. The page shows a "Claimed" pill and a "TapTurf verified" stamp, so "verified", "TapTurf verified", "claimed", "owner managed", "run by the owner" and "official page" all mean this one set. It says who keeps the page up to date, never that the venue is better, and nothing is booked through TapTurf: players call or WhatsApp the turf. The blue tick next to a person's name is something else: that player proved their phone and email. It is no turf filter.
+- Prices from the owner: the owner of a claimed turf set its prices on TapTurf. Other prices come from the venue's listings or what players and Google reviewers reported, and can be out of date.
+- Photos: venues with at least one usable photo on TapTurf.
+- Player reviews: TapTurf players' own reports on a venue's page (stars, would play again, tips), apart from its Google rating and review count. Plain "reviews", "rating", "best reviewed" and "popular" mean Google's.
+- Hours: each venue's opening hours by day, when listed, and which are open 24 hours.
+- Games: sport, date and time, spots left, price per player (some are free), skill level, the venue, and whether the host has already booked the turf.
+`;
+const V10_RULES = `- claimed: true for verified, TapTurf verified, claimed, owner managed or run by the owner ("verified turfs in Pune", "claimed wale turf dikhao"). Else false.
+- owner_prices: true for prices set by the owner ("owner prices", "rates from the owner"). Else false.
+- with_photos: true when the player wants venues with photos or pictures. Else false.
+- player_reviews: true for TapTurf players' own reviews or reports ("reviewed by players", "player reviews", "turfs players rated"). Else false: Google's reviews alone stay false.
+- open_at: "now" for open now, open right now, abhi khula; "HH:MM", 24-hour, for open at a clock time ("open at 6am" is "06:00", "open at 9:30 pm" is "21:30"), on the day in when (today when null). A weekday named goes first as mon, tue, wed, thu, fri, sat or sun: that day's hours ("open at 5am on Sunday" is "sun 05:00", "Monday 7 pm" is "mon 19:00"). Else null. "Open late" and "24 hours" stay open_24x7.
+- claimed, owner_prices, with_photos, player_reviews and open_at filter venues, for find_turf only: no game is picked by them. When a game search asks for one anyway ("free games at verified turfs" is claimed and free_to_join), set it as asked: the box says games aren't filtered by it.
+- free_to_join: for games, true for free games, no fee, ₹0. Else false.
+- turf_booked: for games, true when the player wants games whose host has already booked the turf. Else false.
+- For find_game, players is how many spots they need: "spots left" or "space for one more" is 1, "we are 4" is 4.`;
+const V10_SORT = " With player_reviews, reviews means the most TapTurf player reports first, and rating the best stars from TapTurf players first.";
+const V10_REPLY = `- Never say how many venues or games match, or that none do: the box counts them from our rows and says so. For a find_turf search with claimed, owner_prices, with_photos, player_reviews or open_at, say what you are about to show ("Here are claimed turfs in Pune, best rated first."). For a question about what TapTurf's marks mean, answer it in one or two sentences from What TapTurf knows.`;
+
 /**
  * Stable system prompt (cacheable): cities, sports, and the areas we
  * know. Cities and their other names come from the curated lib/city.ts
  * (every live city since 26 Oct), never the live list: it changes only
  * on a deploy, with no counts and no order that moves, so the cached
  * prefix holds. The city enum in AskFilters is built the same way.
+ * `version` 10 adds router v10's words at fixed places; 9 is the prompt
+ * ROUTER_VERSION 9 has always read, unchanged.
  */
-function systemPrompt(areasByCity: Record<string, string[]>): string {
+export function systemPrompt(areasByCity: Record<string, string[]>, version: RouterVersion = 9): string {
+  const v10 = version === 10;
   const cities = CITIES.map((c) => `${c.id} (${c.label})`).join(", ");
   const otherNames = Object.entries(CITY_ALIASES)
     .map(([alias, id]) => `"${alias}" is ${id}`)
@@ -112,7 +181,7 @@ Intents:
   cricket-tournament-scorer: a points table, standings, series score, tournament or league tracking ("points table for our tri-series", "track my tournament").
   cricket-team-generator: splitting players into teams, random teams, balanced teams ("divide 10 players into 2 teams", "team banao").
   For a question about the rules of NRR or a toss, still use tool: the tool page explains it.
-- other: greetings, small talk, thanks, or anything not about sports venues or games.
+- other: greetings, small talk, thanks, or anything not about sports venues or games.${v10 ? V10_OTHER : ""}
 
 Page context: the message may say what the player is looking at right now (a venue page or a city page). Then "this turf", "this place", "here", "it" mean that venue: put its name in turf_names for question and compare, and use its city when none is stated. But when the player names another venue, or an area listed under a different city and not under the page's, leave city null unless they state one: we look venues up in every city, and players ask about venues in other cities.
 
@@ -123,7 +192,7 @@ Sports (slug = labels): ${sports}. "Turf cricket", "cricket turf", "cage cricket
 
 Known areas by city:
 ${areas}
-
+${v10 ? `\n${V10_KNOWS}` : ""}
 Rules:
 - turf_names: venue names exactly as typed, one per entry, for compare, question, and a find_turf that names a venue ("Prime Turf Marol", "kage turf bro" gives "kage turf", "DN Parande Football And Cricket Turf"). Leave out words around the name (near me, bro, a city). Empty otherwise.
 - question: the player's question in their words, for question intent. Else null.
@@ -136,12 +205,12 @@ Rules:
 - skill: for games, only if the player says beginner, intermediate, advanced, pro, casual (casual = beginner).
 - open_24x7: true for "24 hours", "all night", "open late", "after midnight".
 - needs: only features the player asks for. "lights" or "night match" means floodlights. "rain" or "indoor" means covered. "equipment", "kit", "bat and ball provided" means equipment.
-- players: the number of people, if given.
-- sort: price_low when the player cares about cost, reviews for "popular", nearby when wants_nearby, else rating.
+- players: the number of people, if given.${v10 ? `\n${V10_RULES}` : ""}
+- sort: price_low when the player cares about cost, reviews for "popular", nearby when wants_nearby, else rating.${v10 ? V10_SORT : ""}
 - free_text: for find_turf, the venue name when one is named (as in turf_names), else words you could not map ("rooftop"). Else null. A message that is only a venue's name ("Dribble den", "Praxis") is find_turf with that name, never other.
 - summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a 3 to 6 word label like "Just saying hi".
 - followups: two or three things the player might say next, each under 6 words, as they would type them ("Only 24 hours", "Cheaper ones", "Compare the top two", "Any games there this weekend"). For a greeting: three example asks. Never repeat the current message.
-- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For a named venue, say you are looking it up ("Let me find Prime Turf Marol."), never a city you guessed for it. For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For tool: one line saying which free tool does it and that it needs no sign-in ("TapTurf has a free NRR calculator for exactly this. It reads overs the cricket way, so 5.3 is five overs and three balls."); when the message includes numbers you may give the answer in the reply too, but only if you are sure of the maths. For other: when the player is clearly after cricket admin we do not have a tool for, say so and offer the nearest tool. For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.
+- reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For a named venue, say you are looking it up ("Let me find Prime Turf Marol."), never a city you guessed for it. For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For tool: one line saying which free tool does it and that it needs no sign-in ("TapTurf has a free NRR calculator for exactly this. It reads overs the cricket way, so 5.3 is five overs and three balls."); when the message includes numbers you may give the answer in the reply too, but only if you are sure of the maths. For other: when the player is clearly after cricket admin we do not have a tool for, say so and offer the nearest tool. For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.${v10 ? `\n${V10_REPLY}` : ""}
 - Never name, recommend or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow, Turfwala, TIDA Sports, Sporloc and the like) in reply, summary or followups, not even when the player names one ("Hudle pe Baner me football turf?" gets "Here are football turfs in Baner."), and never say a venue is booked online or through an app: TapTurf lists venues itself.`;
 }
 
@@ -267,11 +336,15 @@ function parseJsonObject(text: string): unknown {
   return undefined;
 }
 
-export type AskParse = { filters: AskFilters; usage: AskUsage };
+export type AskParse = { filters: AskReading; usage: AskUsage };
+
+/** The reading's schema for a router version. */
+export const readingSchema = (version: RouterVersion) => (version === 10 ? AskFiltersV10 : AskFilters);
 
 /**
  * Sentence to intent and filters. Throws on API failure; returns null
  * when the model declined. The tokens spent go into `usage` either way.
+ * `version` 10 reads with router v10's schema and prompt.
  */
 export async function parseAsk(
   query: string,
@@ -279,6 +352,7 @@ export async function parseAsk(
   history: AskTurn[] = [],
   ctx: AskContext = {},
   usage: AskUsage = newUsage(),
+  version: RouterVersion = 9,
 ): Promise<AskParse | null> {
   const parts: string[] = [];
   if (ctx.turf || ctx.city) {
@@ -295,18 +369,20 @@ export async function parseAsk(
     );
   }
   const context = parts.length ? `${parts.join("\n\n")}\n\nNow the player says: ${query}` : query;
-  const filters = await structured(
-    AskFilters,
+  const filters: AskReading | null = await structured(
+    readingSchema(version),
     {
       model: ROUTER_MODEL,
       max_tokens: 600,
-      system: [{ type: "text", text: systemPrompt(areasByCity), cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: systemPrompt(areasByCity, version), cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: context }],
     },
     "router",
     usage,
   );
-  return filters ? { filters, usage } : null;
+  if (!filters) return null;
+  // open_at as "now" or "HH:MM" whatever the model wrote ("6am"); a time we can't read asks for none.
+  return { filters: version === 10 ? { ...filters, open_at: normalOpenAt(filters.open_at) } : filters, usage };
 }
 
 // The commonest question shapes, for the keyword reading: the venue is the part in the middle.
@@ -418,6 +494,30 @@ export function keywordFilters(query: string, opts: { turfs?: readonly Turf[]; p
   };
 }
 
+/**
+ * Router v10's fields from plain keywords, beside keywordFilters when the
+ * model is unavailable. Turf filters for a turf search, game ones for a
+ * game search; "Free parking" asks for no free game.
+ */
+export function keywordExtras(query: string, intent: AskFilters["intent"]): AskExtras {
+  const q = query.toLowerCase().replace(/\s+/g, " ");
+  const game = intent === "find_game";
+  const turf = intent === "find_turf";
+  const clock = /\bopens? (?:at|by|from) (\d{1,2}(?:[:.]\d{2})? ?(?:am|pm))\b/.exec(q)?.[1] ?? /\bopens? (?:at|by|from) (\d{1,2}[:.]\d{2})\b/.exec(q)?.[1] ?? null;
+  // One weekday named with the time: that day's hours ("sun 05:00"), not either day of the weekend.
+  const days = [...new Set([...q.matchAll(/\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b/g)].map((m) => m[0]))];
+  const at = normalOpenAt(clock && days.length === 1 ? `${days[0]} ${clock}` : clock);
+  return {
+    claimed: turf && /\b(?:claimed|verified|owner[- ]?(?:managed|run)|run by (?:the|its) owner)\b/.test(q),
+    owner_prices: turf && /\bowner'?s? (?:set |listed |confirmed )?(?:prices?|rates?)\b|\b(?:prices?|rates?) (?:set )?(?:by|from) (?:the|its) owner\b/.test(q),
+    with_photos: turf && /\b(?:photos?|pics?|pictures?|images?)\b/.test(q),
+    player_reviews: turf && /\bplayers?'? (?:reviews?|reports?|ratings?)\b|\b(?:reviewed|rated) by (?:tapturf )?players\b|\btapturf (?:reviews?|reports?)\b/.test(q),
+    open_at: !turf ? null : /\bopen (?:right )?now\b|\babhi (?:khula|khule|open)\b/.test(q) ? "now" : at,
+    free_to_join: game && /\bfree\b/.test(q) && !/\bfree (?:parking|wifi|water)\b/.test(q),
+    turf_booked: game && /\b(?:turf|ground|venue|court) (?:is |already )?booked\b|\bbooked (?:turf|ground|venue|court)\b/.test(q),
+  };
+}
+
 const areasMemo = new WeakMap<Turf[], Record<string, string[]>>();
 
 /**
@@ -494,7 +594,36 @@ export type AskResult = {
    * Not for words of a search ("rooftop turf"): only a venue's name.
    */
   closest: { city: CityId; turfs: Turf[] } | null;
+  /** Router v10: its filters asked for that a failed read left out (said in the reply). Only with a v10 filter. */
+  unavailable?: TurfExtra[];
+  /** Router v10: the cities of every match, in card order (city ids), so a reply can say where they all are. */
+  cities?: string[];
+  /**
+   * Router v10: nothing in the place is a claimed, owner-priced or
+   * player-reviewed turf as asked; these are the ones elsewhere (the
+   * sport kept), nearest or best rated first, how many there are, and
+   * the cities of them all in that order.
+   */
+  elsewhere?: { turfs: (Turf & { distanceKm?: number })[]; total: number; cities: string[] } | null;
 };
+
+/**
+ * Router v10's data that the turf rows leave out (lib/queries/askFacts.ts),
+ * each null when its read failed: every turf's week of hours
+ * (lib/ai/openAt.ts), the turfs whose owner confirmed their prices
+ * (price_owner_confirmed; applyAskFilters adds the rest of the page's
+ * rule), how many live reports TapTurf players left on each, and their
+ * average stars (turfs with a rated report only).
+ */
+export type AskTurfFacts = {
+  hours: ReadonlyMap<string, Week> | null;
+  ownerPrices: ReadonlySet<string> | null;
+  reports: ReadonlyMap<string, number> | null;
+  stars: ReadonlyMap<string, number> | null;
+};
+
+/** At least one usable photo: the rows keep only those (transformTurf), and Ask's keep the cover or the first. */
+export const hasPhoto = (t: Turf) => !!t.cover_image || (t.images?.length ?? 0) > 0;
 
 /**
  * Apply the filters to our rows. Hard filters first; when nothing
@@ -513,17 +642,20 @@ export type AskResult = {
  * to "near me" with the visitor's location. `sportPrices`: the venues'
  * sport bands (getSportBands, getSportBandTimes), when the cards show the
  * price for the sport asked (the route's cardPrices): the budget and
- * cheapest first then read that price too.
+ * cheapest first then read that price too. `facts` and `now`: router
+ * v10's data and the clock its open_at reads (a v9 reading uses neither).
  */
 export function applyAskFilters(
   all: Turf[],
-  f: AskFilters,
+  f: AskReading,
   opts: {
     prefCity?: CityId | null;
     loc?: Coords | null;
     limit?: number;
     askedCity?: CityId | null;
     sportPrices?: { bands: SportBandMap | null; times: SportBandTimeMap | null };
+    facts?: AskTurfFacts | null;
+    now?: Date;
   } = {},
 ): AskResult {
   const limit = opts.limit ?? 12;
@@ -676,6 +808,35 @@ export function applyAskFilters(
   }
   if (f.open_24x7 || f.time === "late_night") steps.push({ key: "open_24x7", keep: (t) => t.is_24x7 === true });
   for (const need of f.needs) steps.push({ key: `need:${need}`, keep: (t) => hasNeed(t, need) });
+  // Router v10: what TapTurf holds of each venue beyond the row's
+  // facilities. Never dropped to find something (dropOrder), so claimed
+  // turfs asked for are never other turfs shown as if they were. A read
+  // that failed leaves its filter out, and the reply says so (unavailable).
+  const asked = turfExtrasAsked(f);
+  const unavailable: TurfExtra[] = [];
+  const extra = (key: TurfExtra, keep: ((t: Turf) => boolean) | null) => {
+    if (keep) steps.push({ key, keep });
+    else unavailable.push(key);
+  };
+  if (f.claimed) extra("claimed", (t) => t.claimed === true);
+  if (f.owner_prices) {
+    // The turf page's rule (ownerPriceNote): claimed, and the owner confirmed real prices. Dribble Den
+    // (30 Oct) is confirmed with no slot price, so its page shows the listing's bands, not the owner's.
+    const set = opts.facts?.ownerPrices;
+    extra("owner_prices", set ? (t) => set.has(t.id) && t.claimed === true && hasRealPrices(t) : null);
+  }
+  if (f.with_photos) extra("with_photos", hasPhoto);
+  if (f.player_reviews) {
+    const reports = opts.facts?.reports;
+    extra("player_reviews", reports ? (t) => (reports.get(t.id) ?? 0) > 0 : null);
+  }
+  const slots = openAtSlots(f.open_at, f.when, opts.now ?? new Date());
+  if (slots) {
+    const hours = opts.facts?.hours;
+    // Open all day by its own row, as its page says; otherwise by its listed hours, never by a guess.
+    extra("open_at", hours ? (t) => openAtAny(hours.get(t.id), slots, t.is_24x7 === true) : null);
+  }
+  const extraKeys = steps.filter((s) => (asked as string[]).includes(s.key)).map((s) => s.key);
   if (freeWords.length)
     steps.push({
       key: "text",
@@ -686,7 +847,7 @@ export function applyAskFilters(
     });
 
   // Softest first (dropOrder in lib/ai/relax.ts).
-  const order = dropOrder(f.needs.map((n) => `need:${n}`), !!named);
+  const order = dropOrder(f.needs.map((n) => `need:${n}`), !!named, extraKeys);
   // Near me with the visitor's location: within a radius of them, widened
   // only while too few match, never all of India (relaxNearby). A city the
   // player named bounds it too: a visitor far from every match in it gets
@@ -738,9 +899,18 @@ export function applyAskFilters(
         if (bp == null) return -1;
         return ap - bp || compareTopRated(a.t, b.t);
       }
-      case "reviews":
+      case "reviews": {
+        // Router v10, players' reviews asked: most TapTurf reports first, then the usual order.
+        const reports = f.player_reviews ? opts.facts?.reports : null;
+        if (reports) return (reports.get(b.t.id) ?? 0) - (reports.get(a.t.id) ?? 0) || compareTopRated(a.t, b.t);
         return b.t.total_reviews - a.t.total_reviews;
+      }
       default: {
+        // Router v10, players' reviews asked: their best stars first, then the most reports, then the usual order.
+        const stars = f.player_reviews ? opts.facts?.stars : null;
+        const reports = f.player_reviews ? opts.facts?.reports : null;
+        if (stars && reports)
+          return (stars.get(b.t.id) ?? 0) - (stars.get(a.t.id) ?? 0) || (reports.get(b.t.id) ?? 0) - (reports.get(a.t.id) ?? 0) || compareTopRated(a.t, b.t);
         // Evening searches: lit grounds first, then the usual rating order.
         if (f.time === "evening") {
           const la = a.t.has_floodlights === true ? 1 : 0;
@@ -774,7 +944,25 @@ export function applyAskFilters(
         ? { city: home, turfs: closestNames(all, missing, home, [], 3, { every: true, keep: (t) => kept.every((s) => s.keep(t)) }) }
         : null;
   const shownCities = new Set(matched.map((t) => t.city));
+  // Router v10: no claimed, owner-priced or player-reviewed turf as asked
+  // in the place. The ones anywhere with the same v10 filters and sport,
+  // so the reply can say where they are rather than show other turfs.
+  let elsewhere: AskResult["elsewhere"] = null;
+  if (!named && !matched.length && extraKeys.some((k) => k === "claimed" || k === "owner_prices" || k === "player_reviews")) {
+    const keep = steps.filter((s) => extraKeys.includes(s.key) || s.key === "sport");
+    const far = all
+      .filter((t) => keep.every((s) => s.keep(t)))
+      .map((t) => ({ t, km: opts.loc && t.lat != null && t.lng != null ? haversineKm(opts.loc, { lat: Number(t.lat), lng: Number(t.lng) }) : undefined }))
+      // Nearest first with the visitor's location (no location listed last), else best rated.
+      .sort((a, b) => (a.km != null && b.km != null ? a.km - b.km : a.km != null ? -1 : b.km != null ? 1 : compareTopRated(a.t, b.t)));
+    elsewhere = {
+      turfs: far.slice(0, limit).map(({ t, km }) => (km != null && Number.isFinite(km) ? { ...t, distanceKm: km } : t)),
+      total: far.length,
+      cities: [...new Set(far.map(({ t }) => t.city ?? ""))].filter(Boolean),
+    };
+  }
   return {
+    ...(asked.length ? { unavailable, elsewhere, cities: [...new Set(withDist.map(({ t }) => t.city ?? ""))].filter(Boolean) } : {}),
     turfs: withDist.slice(0, limit).map(({ t, km }) => (km != null ? { ...t, distanceKm: km } : t)),
     total: withDist.length,
     relaxed,
@@ -808,6 +996,12 @@ export function relaxedLabel(key: string): string {
       when: "the date",
       skill: "the skill level",
       sport: "the sport",
+      // Router v10's, dropped only for a venue named.
+      claimed: "claimed",
+      owner_prices: "the owner's prices",
+      with_photos: "photos",
+      player_reviews: "player reviews",
+      open_at: "the opening time",
     } as Record<string, string>
   )[key] ?? key;
 }

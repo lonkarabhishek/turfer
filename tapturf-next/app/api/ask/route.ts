@@ -10,22 +10,52 @@ import {
   applyAskFilters,
   areasFromTurfs,
   cityNamed,
+  EXTRA_KEYS,
   isAskConfigured,
+  keywordExtras,
   keywordFilters,
   nameIn,
   newUsage,
+  NO_EXTRAS,
   parseAsk,
+  readingSchema,
   relaxedLabel,
   SPORT_FALLBACK,
+  turfExtrasAsked,
   type AskContext,
+  type AskReading,
   type AskTurn,
 } from "@/lib/ai/ask";
-import { quickAnswer } from "@/lib/ai/quick";
+import { quickAnswer, venues } from "@/lib/ai/quick";
+import { EVAL_HEADER, loggedShownIds, routerChoice, type RouterVersion } from "@/lib/ai/routerVersion";
+import { normalOpenAt, openAtWords } from "@/lib/ai/openAt";
+import { getAskTurfFacts } from "@/lib/queries/askFacts";
+import { sportBySlug } from "@/lib/sports";
 import { namesVenue, placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
 import { asksPrice, cardPrices, cardSportOf, compareTable, hostPreview, hostVenueWords, priceChart, resultsMap, saysHere, visualsFor, type AskVisuals } from "@/lib/ask/cards";
 import { getSportBands, getSportBandTimes, withSportBands } from "@/lib/queries/sportBands";
 import { sportMinimumPrice } from "@/lib/utils/cardSport";
-import { cap, citiesLine, closestRow, NEARBY_KM, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
+import {
+  cap,
+  citiesLine,
+  closestRow,
+  elsewhereRow,
+  extrasPhrase,
+  gamesExtrasLine,
+  gamesFoundReply,
+  gamesNoneReply,
+  gamesWidenedReply,
+  NEARBY_KM,
+  noneIn,
+  noneYetReply,
+  nowhereReply,
+  unavailableLine,
+  venueLine,
+  venueReply,
+  venueRows,
+  widenedReply,
+  type GameAsk,
+} from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
@@ -100,7 +130,7 @@ type Db = ReturnType<typeof createReadOnlyClient>;
  * the chips: never shown (lib/utils/bookingApps.ts). What is left when
  * the scrub takes all of it is the box's plain line for the intent.
  */
-function withoutBookingApps(f: AskFilters): AskFilters {
+function withoutBookingApps<F extends AskFilters>(f: F): F {
   if (!mentionsBookingApp(f.reply) && !mentionsBookingApp(f.summary) && !f.followups.some(mentionsBookingApp)) return f;
   const game = f.intent === "find_game";
   const reply = mentionsBookingApp(f.reply)
@@ -131,8 +161,11 @@ function logFinish(supabase: Db, id: number | null, row: Finish): void {
 const timingOf = (ms: Record<string, number>, via: Via) =>
   ["budget", "turfs", ...(ms.blog != null ? ["blog"] : []), "parse", "handler", "total"].map((k) => `${k};dur=${ms[k] ?? 0}${k === "parse" ? `;desc="${via}"` : ""}`).join(", ");
 
-/** Last three turns from the client, trimmed so a hostile client can't pad the prompt. */
-function parseHistory(raw: string | null): AskTurn[] {
+/** Router v10's fields a follow-up keeps ("only claimed ones", "and free ones?"), and players, the spots a game search needs. */
+const HISTORY_V10 = [...EXTRA_KEYS, "players"];
+
+/** Last three turns from the client, trimmed so a hostile client can't pad the prompt. `version` 10 keeps v10's fields too. */
+function parseHistory(raw: string | null, version: RouterVersion): AskTurn[] {
   if (!raw) return [];
   try {
     const arr = JSON.parse(raw);
@@ -141,8 +174,16 @@ function parseHistory(raw: string | null): AskTurn[] {
       if (!h || typeof h.user !== "string") return [];
       const f = (h.filters && typeof h.filters === "object" ? h.filters : {}) as Record<string, unknown>;
       const keep: Record<string, unknown> = {};
-      for (const k of ["intent", "tool", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort", "free_text"]) {
+      for (const k of ["intent", "tool", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort", "free_text", ...(version === 10 ? HISTORY_V10 : [])]) {
         if (f[k] != null && f[k] !== false && !(Array.isArray(f[k]) && (f[k] as unknown[]).length === 0)) keep[k] = f[k];
+      }
+      if (version === 10) {
+        // "now", "HH:MM" or "sun HH:MM" (normalOpenAt), and a count: nothing else reaches the prompt.
+        const at = typeof keep.open_at === "string" ? normalOpenAt(keep.open_at.slice(0, 20)) : null;
+        if (at) keep.open_at = at;
+        else delete keep.open_at;
+        if (typeof keep.players !== "number") delete keep.players;
+        for (const k of EXTRA_KEYS) if (k !== "open_at" && k in keep && keep[k] !== true) delete keep[k];
       }
       // A venue named earlier stays in the conversation ("is it open late?"); trimmed like the rest.
       if (typeof keep.free_text === "string") keep.free_text = keep.free_text.slice(0, 80);
@@ -164,7 +205,10 @@ export async function GET(req: Request) {
   const lat = Number(searchParams.get("lat") || NaN);
   const lng = Number(searchParams.get("lng") || NaN);
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
-  const history = parseHistory(searchParams.get("h"));
+  // Router v10 only when switched on, or for an eval request with the key (lib/ai/routerVersion.ts).
+  const choice = routerChoice(process.env, req.headers.get(EVAL_HEADER));
+  const version = choice.version;
+  const history = parseHistory(searchParams.get("h"), version);
   const { blog: blogSlug, ...ctx } = parseContext(searchParams.get("ctx"));
   // Signed-in players send their account id; visitors a browser id and
   // get three answers a day before sign-in. Phone users have no server
@@ -301,10 +345,12 @@ export async function GET(req: Request) {
   const askedCity = cityNamed(turfs, q);
   // The venues the last answer showed, for "compare the top two" and "the second one".
   const lastTop = [...history].reverse().find((h) => h.filters.top?.length)?.filters.top ?? [];
-  let filters: AskFilters = keywordFilters(q, { turfs, pageTurf: ctx.turf, shown: lastTop });
+  let filters: AskReading = keywordFilters(q, { turfs, pageTurf: ctx.turf, shown: lastTop });
+  // Router v10 without the model: its fields from keywords too.
+  if (version === 10) filters = { ...filters, ...keywordExtras(q, filters.intent) };
   let via: Via = "keywords";
-  const quick = fresh ? quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }) : null;
-  const quickOk = quick ? AskFilters.safeParse(quick) : null;
+  const quick = fresh ? quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }, version) : null;
+  const quickOk = quick ? readingSchema(version).safeParse(quick) : null;
   if (quickOk && !quickOk.success) console.error("ask: ready answer failed the schema", q, quickOk.error.issues.slice(0, 3));
   if (quickOk?.success) {
     filters = quickOk.data;
@@ -312,12 +358,12 @@ export async function GET(req: Request) {
   } else if (isAskConfigured() && !skipModel) {
     try {
       if (fresh) {
-        const got = await parseFresh(q, areas, ctx);
+        const got = await parseFresh(q, areas, ctx, version);
         filters = got.filters;
         via = got.cached ? "cache" : "claude";
         if (got.usage) addUsage(usage, got.usage);
       } else {
-        const parsed = await parseAsk(q, areas, history, ctx, usage);
+        const parsed = await parseAsk(q, areas, history, ctx, usage, version);
         if (parsed) {
           filters = parsed.filters;
           via = "claude";
@@ -352,6 +398,8 @@ export async function GET(req: Request) {
     source,
     /** Which path read the sentence: quick, cache, claude or keywords. */
     via,
+    /** Router v10 read it (lib/ai/routerVersion.ts); absent for v9. */
+    ...(version === 10 ? { router: 10 } : {}),
     filters: {
       city: filters.city,
       sport: filters.sport,
@@ -365,6 +413,18 @@ export async function GET(req: Request) {
       needs: filters.needs,
       players: filters.players,
       sort: filters.sort,
+      // Router v10's, for the chips and for grading (scripts/ask-eval); v9's answers have none.
+      ...(version === 10
+        ? {
+            claimed: !!filters.claimed,
+            ownerPrices: !!filters.owner_prices,
+            withPhotos: !!filters.with_photos,
+            playerReviews: !!filters.player_reviews,
+            openAt: filters.open_at ?? null,
+            freeToJoin: !!filters.free_to_join,
+            turfBooked: !!filters.turf_booked,
+          }
+        : {}),
     },
     needsLocation: filters.wants_nearby && !loc,
     /** Free answers left today for a signed-out visitor; null when signed in. */
@@ -386,6 +446,8 @@ export async function GET(req: Request) {
       sort: filters.sort,
       // The venue the player named, set below when one was found, so "is it open late?" keeps it.
       free_text: null as string | null,
+      // Router v10's, so "only free ones" builds on them (parseHistory keeps them under v10 only).
+      ...(version === 10 ? { ...Object.fromEntries(EXTRA_KEYS.map((k) => [k, filters[k] ?? NO_EXTRAS[k]])), players: filters.players } : {}),
     },
   };
   let body: Record<string, unknown> = { ...base, relaxed: [], total: 0 };
@@ -402,18 +464,42 @@ export async function GET(req: Request) {
   try {
     switch (filters.intent) {
       case "find_game": {
-        const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10 });
+        const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10, version });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, games: r.games };
         // The budget was dropped to find any game: no "Under ₹X" chip over games that cost more.
         if (r.relaxed.includes("price")) body.filters = { ...base.filters, maxPrice: null };
         // No open game yet: show turfs for the same sport and place, so
         // the player can book one and host the game instead of hitting a wall.
         if (r.games.length === 0) {
-          const t = applyAskFilters(turfs, { ...filters, intent: "find_turf", when: null, time: null }, { prefCity, loc, limit: 3 });
+          // Router v10's turf filters are no game's: the turfs to host at are any of the sport and place.
+          const t = applyAskFilters(turfs, { ...filters, intent: "find_turf", when: null, time: null, ...(version === 10 ? NO_EXTRAS : {}) }, { prefCity, loc, limit: 3 });
           if (t.turfs.length) {
             body.turfs = t.turfs.map(card);
             body.reply = "No open games match that yet. Book one of these turfs and host it, players nearby can join.";
           }
+        }
+        // Router v10: what was asked for said from the rows, never the model's
+        // line over games that aren't it, and hosting said as calling the turf.
+        if (version === 10) {
+          const gameCity = filters.city ?? (!filters.wants_nearby ? prefCity : null);
+          const ask: GameAsk = {
+            free: !!filters.free_to_join,
+            booked: !!filters.turf_booked,
+            spots: filters.players != null && filters.players > 0 ? filters.players : null,
+            skill: filters.skill,
+            sport: sportBySlug(filters.sport ?? "")?.name.toLowerCase() ?? null,
+            at: filters.when ? { today: "today", tomorrow: "tomorrow", weekend: "this weekend", this_week: "this week" }[filters.when] : "",
+            where: gameCity && isCity(gameCity) ? `in ${labelFor(gameCity)}` : filters.wants_nearby ? "near you" : "",
+          };
+          const said = r.games.length === 0 ? gamesNoneReply(ask, !!body.turfs) : gamesWidenedReply(ask, r.relaxed);
+          if (said) body.reply = said;
+          // Turf filters asked of games ("free games at verified turfs"): no game is picked by
+          // them, so the reply says so, never the model's "at verified turfs".
+          const turfOnly = turfExtrasAsked(filters);
+          if (turfOnly.length && r.games.length > 0) body.reply = `${said ?? gamesFoundReply(ask)} ${gamesExtrasLine(turfOnly)}`;
+          // The chips follow the games shown: no "Football" chip over the free badminton game shown instead.
+          if (r.games.length > 0)
+            for (const k of ["sport", "when", "skill"] as const) if (r.relaxed.includes(k)) body.filters = { ...(body.filters as typeof base.filters), [k]: null };
         }
         break;
       }
@@ -435,7 +521,7 @@ export async function GET(req: Request) {
         // The table is built from the venues' own rows (the read the model's
         // sheets come from), so it shows without the model too; the model
         // adds the verdict, what each is best for and the caveats.
-        const sheets = (await Promise.all(found.map((r) => loadFacts(r.turf.id)))).filter((s) => s) as { turf: Turf; facts: Record<string, unknown> }[];
+        const sheets = (await Promise.all(found.map((r) => loadFacts(r.turf.id, version === 10)))).filter((s) => s) as { turf: Turf; facts: Record<string, unknown> }[];
         const out = canCallClaude && sheets.length >= 2 ? await compareTurfs(sheets.map((s) => s.facts), usage) : null;
         const reports = sheets.map((s) => {
           const r = s.facts.tapturf_reports as { players?: number; average_stars?: string } | undefined;
@@ -480,7 +566,7 @@ export async function GET(req: Request) {
           page.turf?.id === hit.turf.id && !aboutReviews
             ? [REVIEWS_CHIP, ...base.followups.filter((f) => f.toLowerCase() !== REVIEWS_CHIP.toLowerCase())].slice(0, 3)
             : base.followups;
-        const sheet = canCallClaude || aboutReviews ? await loadFacts(hit.turf.id) : null;
+        const sheet = canCallClaude || aboutReviews ? await loadFacts(hit.turf.id, version === 10) : null;
         // What people say is said from the sheet without the model when there is no model, or
         // nothing written to read (the model used to dress the numbers up as "reviewers mention...");
         // it falls back to that when the model fails, and replaces a model answer that says what
@@ -529,11 +615,17 @@ export async function GET(req: Request) {
         break;
       }
       default: {
+        // Router v10's filters the turf rows can't answer read their own data
+        // meanwhile (lib/queries/askFacts.ts): hours and the owner's prices, players' reports.
+        const extras = version === 10 ? turfExtrasAsked(filters) : [];
+        const needHours = extras.includes("open_at") || extras.includes("owner_prices");
+        const factsLoad = needHours || extras.includes("player_reviews") ? getAskTurfFacts({ hours: needHours, reports: extras.includes("player_reviews") }) : null;
         // With a sport, the cards show its price (cardPrices, below), and the
         // budget and cheapest first read the same (applyAskFilters): the
         // sport's bands, and by time when a time was asked (cached reads).
         const [bands, times] = filters.sport ? await Promise.all([getSportBands(), filters.time ? getSportBandTimes() : null]) : [null, null];
-        const r = applyAskFilters(turfs, filters, { prefCity, loc, limit: 12, askedCity, sportPrices: { bands, times } });
+        const facts = factsLoad ? await factsLoad : null;
+        const r = applyAskFilters(turfs, filters, { prefCity, loc, limit: 12, askedCity, sportPrices: { bands, times }, facts });
         body = { ...base, relaxed: r.relaxed.map(relaxedLabel), total: r.total, turfs: r.turfs.map(card) };
         // The chip and the "more" link follow the cards: cricket when no
         // practice nets were listed in the place (Nashik on 26 Oct).
@@ -582,6 +674,39 @@ export async function GET(req: Request) {
           body.reply = nowhereReply(typedName, home, r.closest.turfs.map((t) => place(t).name));
           break;
         }
+        // Router v10: nothing in the place is what was asked for (claimed, the
+        // owner's prices, photos, players' reviews, open then), or the claimed,
+        // owner-priced or reviewed ones are all outside the visitor's city.
+        // Said from the rows, never the model's line, with the rows' count;
+        // the ones elsewhere are the cards, under a heading of their own.
+        const lost = unavailableLine(r.unavailable ?? []);
+        // What was asked for, as a reply says it, without the filters a failed read left out (`left`).
+        const phrase = (left: readonly string[]) =>
+          extrasPhrase(venues(r.sport ? sportBySlug(r.sport) : undefined), {
+            claimed: !!filters.claimed,
+            owner_prices: !!filters.owner_prices && !left.includes("owner_prices"),
+            with_photos: !!filters.with_photos,
+            player_reviews: !!filters.player_reviews && !left.includes("player_reviews"),
+            open: left.includes("open_at") ? null : openAtWords(filters.open_at, filters.when),
+          });
+        if (extras.length) {
+          const what = phrase([]);
+          const proof = extras.some((k) => k === "claimed" || k === "owner_prices" || k === "player_reviews");
+          const homeGone = proof && r.total > 0 && r.relaxed.includes("pref_city") && isCity(prefCity) ? prefCity : null;
+          if (r.total === 0 || homeGone) {
+            const cityWords = (ids: readonly string[]) => ids.map((c) => (isCity(c) ? labelFor(c) : c));
+            const inCity = homeGone ?? (r.city && isCity(r.city) ? r.city : null);
+            const where = inCity ? `in ${labelFor(inCity)}` : filters.wants_nearby && loc ? `within ${NEARBY_KM[NEARBY_KM.length - 1]} km of you` : "";
+            const others = homeGone ? { turfs: r.turfs, total: r.total, cities: r.cities ?? [] } : (r.elsewhere ?? null);
+            body.reply = noneYetReply({ what, where, byHours: extras.includes("open_at"), elsewhere: others ? { total: others.total, cities: cityWords(others.cities) } : null });
+            if (lost) body.reply = `${body.reply} ${lost}`;
+            body.relaxed = [];
+            body.turfs = (others?.turfs ?? []).map(card);
+            body.total = others?.total ?? 0;
+            if (others?.turfs.length) body.rows = [elsewhereRow(what, cityWords(others.cities), others.turfs.length)];
+            break;
+          }
+        }
         // The budget survives a widened area (relaxSteps), so a dropped
         // budget means no matching turf lists a rate within it (most list
         // none: Gota had 3 box cricket turfs on 26 Oct, none priced). No
@@ -621,6 +746,16 @@ export async function GET(req: Request) {
           body.reply = `These are the top rated in ${labelFor(stayedIn)}. Share your location to see the nearest first.`;
         // Near me found nothing within the last radius (applyAskFilters): not "Here are the turfs near you".
         else if (filters.wants_nearby && loc && r.total === 0) body.reply = `Nothing that matches is listed within ${NEARBY_KM[NEARBY_KM.length - 1]} km of you yet.`;
+        // Router v10: a filter whose read failed is said, and its chip goes. The
+        // reading's own line would promise it ("Here are turfs with player
+        // reviews"): what the cards are instead, then why.
+        if (lost) {
+          const chip: Record<string, [string, null | false]> = { owner_prices: ["ownerPrices", false], player_reviews: ["playerReviews", false], open_at: ["openAt", null] };
+          const plain = !widened && !filters.wants_nearby && r.total > 0;
+          const lead = plain ? `Here are ${phrase(r.unavailable ?? [])}${stayedIn && isCity(stayedIn) ? ` in ${labelFor(stayedIn)}` : ""}.` : body.reply;
+          body.reply = `${lead} ${lost}`;
+          body.filters = { ...(body.filters as typeof base.filters), ...Object.fromEntries((r.unavailable ?? []).flatMap((k) => (chip[k] ? [chip[k]] : []))) };
+        }
         const chart = asksPrice(asked) ? priceChart(rows, asked, new Date(), times) : null;
         const map = resultsMap(r.turfs.map((t) => ({ id: t.id, lat: t.lat, lng: t.lng, area: areaFor(t) })), loc);
         const show = visualsFor(asked, { priced: chart?.bars.length ?? 0, map: !!map });
@@ -647,9 +782,13 @@ export async function GET(req: Request) {
     // _src, _t (stage ms) and _usage (tokens across every model call) are for tuning.
     filters: {
       ...filters,
-      shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12),
+      // None for an eval ask (loggedShownIds): the eval set is no player's, and owners see the count.
+      shown_ids: loggedShownIds(((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter((id): id is string => !!id).slice(0, 12), choice),
       // _vis: the pictures the answer showed (lib/ask/cards.ts), for tuning.
       ...(body.visuals ? { _vis: (body.visuals as AskVisuals).show } : {}),
+      // _router: the reading was router v10's (its fields are in the filters above); _eval: an eval ask (scripts/ask-eval).
+      ...(version === 10 ? { _router: 10 } : {}),
+      ...(choice.eval ? { _eval: true } : {}),
       _src: via,
       _t: ms,
       ...(usage.calls ? { _usage: usage } : {}),

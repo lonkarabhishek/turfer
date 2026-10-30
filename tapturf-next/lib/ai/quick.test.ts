@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { quickAnswer, type QuickContext } from "./quick";
 import { askChips } from "../ask/chips";
-import type { AskFilters } from "./ask";
+import { AskFiltersV10, EXTRA_KEYS, NO_EXTRAS, type AskFilters, type AskReading } from "./ask";
 import type { Turf } from "../../types/turf";
 
 // Areas and venue names as areasFromTurfs() and the turfs table give them (October 2026).
@@ -352,4 +352,171 @@ test("hostile input stays fast", () => {
   const t0 = performance.now();
   for (const q of [`host a game ${"11 ".repeat(48)}x`, `${"box cricket ".repeat(13)}x`, `${"a vs ".repeat(30)}b`, `compare ${"a and ".repeat(25)}b`]) ask(q.slice(0, 160));
   assert.ok(performance.now() - t0 < 200, "matching should take milliseconds");
+});
+
+// ── Router v10 (lib/ai/routerVersion.ts): off unless switched on ──────
+
+const ask10 = (q: string, ctx: QuickContext = {}) => quickAnswer(q, data, ctx, 10);
+
+/** A v10 ready answer: well formed as any, and a whole AskFiltersV10. */
+function hit10(q: string, ctx: QuickContext = {}): AskReading {
+  const f = ask10(q, ctx);
+  assert.ok(f, `expected a v10 ready answer for "${q}"`);
+  wellFormed(q, f);
+  const ok = AskFiltersV10.safeParse(f);
+  assert.ok(ok.success, `${q}: not a v10 reading`);
+  for (const s of [f.reply, f.summary, ...f.followups]) assert.ok(!/\bbook(?:ed|ing)? (?:on|through|via) tapturf|\bbook (?:it|now|online)\b/i.test(s), `${q}: booking claim in "${s}"`);
+  return f;
+}
+
+// What players ask that v9's keyword path left to the model (the site owner's "verified or claimed turfs").
+const V10_ASKS = [
+  "show me verified turfs in Pune",
+  "claimed turfs near me",
+  "owner managed box cricket in Kothrud",
+  "turfs with photos in Hyderabad",
+  "which turfs have player reviews",
+  "turfs open now in Pune",
+  "box cricket open at 6am in Kothrud",
+  "football turf open at 9:30 pm tomorrow in Pune",
+  "turfs with owner prices in Bengaluru",
+  "free football games this weekend",
+  "games with spots left tomorrow",
+  "turf booked games in Pune",
+  "2 spots left football games",
+  "what does verified mean",
+  "what is the blue tick",
+];
+
+test("v10: claimed and TapTurf verified turfs are one filter, in a city, an area or near me", () => {
+  let f = hit10("show me verified turfs in Pune");
+  assert.deepEqual([f.intent, f.city, f.claimed, f.with_photos, f.player_reviews], ["find_turf", "pune", true, false, false]);
+  assert.equal(f.reply, "Here are claimed turfs in Pune, best rated first.");
+  assert.ok(f.followups.includes("What does verified mean"));
+  f = hit10("claimed turfs near me");
+  assert.deepEqual([f.claimed, f.wants_nearby, f.sort, f.city], [true, true, "nearby", null]);
+  f = hit10("owner managed box cricket in Kothrud");
+  assert.deepEqual([f.claimed, f.sport, f.areas, f.city], [true, "box-cricket", ["Kothrud"], "pune"]);
+  // On a city page "claimed turfs" needs no place of its own.
+  assert.equal(hit10("claimed turfs", { city: "nashik" }).city, "nashik");
+  assert.equal(hit10("verified turfs").claimed, true);
+});
+
+test("v10: photos, players' reviews and the owner's prices", () => {
+  let f = hit10("turfs with photos in Hyderabad");
+  assert.deepEqual([f.with_photos, f.city, f.claimed], [true, "hyderabad", false]);
+  assert.equal(f.reply, "Here are turfs with photos in Hyderabad, best rated first.");
+  f = hit10("which turfs have player reviews");
+  assert.deepEqual([f.player_reviews, f.sort], [true, "reviews"]);
+  assert.equal(f.reply, "Here are turfs with player reviews, most player reviews first.");
+  f = hit10("football turfs reviewed by players in pune");
+  assert.deepEqual([f.player_reviews, f.sport, f.city], [true, "football", "pune"]);
+  // Google's "most reviewed" stays Google's.
+  f = hit10("most reviewed turfs in pune");
+  assert.deepEqual([f.player_reviews, f.sort], [false, "reviews"]);
+  f = hit10("turfs with owner prices in Bengaluru");
+  assert.deepEqual([f.owner_prices, f.city], [true, "bangalore"]);
+});
+
+test("v10: open now and open at a time, on the day asked; 24x7 as before", () => {
+  let f = hit10("turfs open now in Pune");
+  assert.deepEqual([f.open_at, f.city, f.open_24x7], ["now", "pune", false]);
+  assert.equal(f.reply, "Here are turfs open now in Pune, best rated first.");
+  f = hit10("box cricket open at 6am in Kothrud");
+  assert.deepEqual([f.open_at, f.sport, f.areas], ["06:00", "box-cricket", ["Kothrud"]]);
+  f = hit10("football turf open at 9:30 pm tomorrow in Pune");
+  assert.deepEqual([f.open_at, f.when], ["21:30", "tomorrow"]);
+  assert.match(f.reply, /open at 9:30 PM in Pune for tomorrow/);
+  assert.equal(hit10("turfs opens at 18 30 in pune").open_at, "18:30");
+  // A bare hour is no time: left to the model.
+  assert.equal(ask10("turfs open at 6 in pune"), null);
+  f = hit10("24x7 turfs in pune");
+  assert.deepEqual([f.open_24x7, f.open_at], [true, null]);
+  // A weekday named is that day's hours ("sun 05:00"), not either day of the weekend.
+  f = hit10("which turfs are open at 5am on sunday in pune");
+  assert.deepEqual([f.open_at, f.when, f.city], ["sun 05:00", null, "pune"]);
+  assert.equal(f.reply, "Here are turfs open at 5:00 AM on Sunday in Pune, best rated first.");
+  assert.equal(hit10("box cricket open at 7pm this saturday in Kothrud").open_at, "sat 19:00");
+  f = hit10("turfs open at 6am this weekend in pune");
+  assert.deepEqual([f.open_at, f.when], ["06:00", "weekend"]);
+  // Both days, or now: the weekend as before.
+  f = hit10("turfs open now on sunday in pune");
+  assert.deepEqual([f.open_at, f.when], ["now", "weekend"]);
+});
+
+test("v10 on a venue's page: its words alone are about that venue, for the model as under v9", () => {
+  const page: QuickContext = { turf: "Dribble Den", city: "bangalore" };
+  for (const q of ["open now?", "photos", "verified", "is it verified", "player reviews", "open at 6am", "open at 6am tomorrow", "owner prices"]) {
+    assert.equal(ask(q, page), null, `v9 leaves "${q}" to the model`);
+    assert.equal(ask10(q, page), null, `v10 must too: "${q}"`);
+  }
+  // A search said as one still reads: venue words, a sport, a place or near me.
+  assert.equal(hit10("verified turfs", page).claimed, true);
+  assert.equal(hit10("football turfs open now", page).open_at, "now");
+  assert.equal(hit10("photos of turfs in pune", page).city, "pune");
+  assert.equal(hit10("open now near me", page).wants_nearby, true);
+  // Off a venue page the same words are a search, as before.
+  assert.equal(hit10("open now", { city: "bangalore" }).open_at, "now");
+});
+
+test("v10: free games, spots left and the turf booked; skill as before", () => {
+  let f = hit10("free football games this weekend");
+  assert.deepEqual([f.intent, f.free_to_join, f.sport, f.when], ["find_game", true, "football", "weekend"]);
+  assert.equal(f.reply, "Here are free football games this weekend, soonest first.");
+  f = hit10("games with spots left tomorrow");
+  assert.deepEqual([f.intent, f.players, f.when], ["find_game", 1, "tomorrow"]);
+  assert.equal(f.reply, "Here are open games with a spot left tomorrow, soonest first.");
+  f = hit10("2 spots left football games");
+  assert.deepEqual([f.players, f.sport], [2, "football"]);
+  f = hit10("turf booked games in Pune");
+  assert.deepEqual([f.turf_booked, f.city], [true, "pune"]);
+  assert.equal(f.reply, "Here are open games with the turf booked in Pune, soonest first.");
+  f = hit10("beginner badminton games");
+  assert.deepEqual([f.skill, f.sport, f.free_to_join, f.players], ["beginner", "badminton", false, null]);
+  // Game words without a game, and turf words with one: the model decides.
+  assert.equal(ask10("free parking turfs in pune"), null);
+  assert.equal(ask10("spots left in pune"), null);
+  assert.equal(ask10("claimed football games"), null);
+});
+
+test("v10: what the marks mean, in the page's own words", () => {
+  const f = hit10("what does verified mean");
+  assert.equal(f.intent, "other");
+  assert.match(f.reply, /owner runs its TapTurf page/);
+  assert.match(f.reply, /isn't a rating/);
+  assert.match(f.reply, /call or WhatsApp the turf/);
+  assert.equal(hit10("What is a claimed turf?").reply, f.reply);
+  assert.match(hit10("what is the blue tick").reply, /phone number and an email/);
+});
+
+test("v10 is off by default: v9 reads none of its words, and every question v9 reads is read the same", () => {
+  for (const q of V10_ASKS) assert.equal(ask(q), null, `v9 must leave "${q}" to the model, as it did`);
+  const cities = [
+    { label: "Pune", area: "Kothrud", boxCricket: true, pair: ["Hotfut Kharadi", "Kanade Sports Club"] as [string, string] },
+    { label: "Nashik", area: null, boxCricket: false, pair: ["Hindu Gymkhana", "Vedant Sports Academy"] as [string, string] },
+    { label: "Hyderabad", area: "Gachibowli", boxCricket: true, pair: null },
+  ];
+  const asks = [
+    ...cities.flatMap((c) => [0, 4].flatMap((g) => askChips(c, g))),
+    ...askChips(null, 4),
+    "box cricket near me", "cheap football turf in Kothrud", "turfs open late in pune", "turfs open 24 hours in pune", "football turfs with lights in pune",
+    "open turfs in pune", "covered badminton courts in Hyderabad", "box cricket under 1000 in Kothrud", "football games this weekend", "beginner games near me",
+    "most reviewed turfs in Pune", "best rated turfs in nashik", "hi", "thanks", "toss karo", "Hindu Gymkhana vs Vedant Sports Academy", "host a game saturday 7pm",
+    "sasta box cricket kothrud me", "aaj raat football", "turfs with parking and washroom in pune", "turfs at midnight in pune", "turfs open at midnight in pune",
+    "football turfs in pune on sunday", "box cricket this saturday", "football games on sunday", "turfs in Kothrud this sunday evening",
+  ];
+  let read = 0;
+  for (const q of asks) {
+    for (const ctx of [{}, { prefCity: "pune" as const }, { city: "nashik" as const }]) {
+      const v9 = ask(q, ctx);
+      const v10 = ask10(q, ctx);
+      if (!v9) continue;
+      read++;
+      assert.ok(v10, `v10 must still read "${q}"`);
+      const rest = Object.fromEntries(Object.entries(v10).filter(([k]) => !(EXTRA_KEYS as readonly string[]).includes(k)));
+      assert.deepEqual(rest, v9, `"${q}" read differently under v10`);
+      assert.deepEqual(Object.fromEntries(EXTRA_KEYS.map((k) => [k, v10[k]])), NO_EXTRAS, `"${q}" gained a v10 filter`);
+    }
+  }
+  assert.ok(read > 60, `only ${read} readings compared`);
 });
