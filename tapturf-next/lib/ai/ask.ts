@@ -584,8 +584,10 @@ export function applyAskFilters(
   // (relaxNearby). Only a city the player named bounds it; the page's (the
   // quick reading's city for "near me") gives way, as their own city does:
   // from Baner on a Mumbai page, Pune turfs 1 km away, not Mumbai's at 85.
+  // Its chip and list stay when every card is in it all the same (AskResult.city).
   const near = !named && f.wants_nearby && opts.loc ? opts.loc : null;
-  if (near && explicitCity && opts.askedCity !== undefined && opts.askedCity !== explicitCity) explicitCity = null;
+  const gaveWay = near && explicitCity && opts.askedCity !== undefined && opts.askedCity !== explicitCity ? explicitCity : null;
+  if (gaveWay) explicitCity = null;
   // "Near me" with no location shared yet stays in the visitor's city
   // (the Use my location card shows) rather than listing all of India.
   const scopeCity = named
@@ -631,8 +633,9 @@ export function applyAskFilters(
   // of ₹3,000 to ₹4,000 (N Sports Arena, Hyderabad, 30 Oct), or ahead of
   // listed rates with none for the sport. A venue with the narrow sport is
   // priced for it, any other for the wider one, as its card is
-  // (AskResult.sport). Without a sport or the bands, or for a named venue
-  // (its card shows its own price): its own rates, as before.
+  // (AskResult.sport). Without a sport, for a caller that passes no
+  // sportPrices (the games' fallback turfs), or for a named venue (its
+  // card shows its own price): its own rates, as before.
   const priced = !named && sport && opts.sportPrices ? opts.sportPrices : null;
   const forSport = new Map<Turf, { row: Turf; rule: CardSport }>();
   const shownFor = (t: Turf) => {
@@ -780,7 +783,9 @@ export function applyAskFilters(
       ? shownCities.size === 1
         ? ([...shownCities][0] ?? null)
         : null
-      : (explicitCity ?? (steps.some((s) => s.key === "area_city") && !relaxed.includes("area_city") ? (opts.prefCity ?? null) : null)),
+      : (explicitCity ??
+        (gaveWay && matched.length > 0 && matched.every((t) => t.city === gaveWay) ? gaveWay : null) ??
+        (steps.some((s) => s.key === "area_city") && !relaxed.includes("area_city") ? (opts.prefCity ?? null) : null)),
     venue: named ? { label: named.label, askedCity, whole: pool.some(whole) } : null,
     closest,
   };

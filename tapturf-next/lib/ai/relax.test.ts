@@ -440,6 +440,10 @@ test("near me on another city's page: the visitor's location wins over the page'
   assert.ok(page.turfs.every((t) => t.city === "pune" && t.distanceKm! <= 25));
   // No city chip, nor the next turn's city, for cards that aren't the page's.
   assert.equal(page.city, null);
+  // On their own city's page the cards are its, so its chip and list stay.
+  const own = applyAskFilters(turfs, { ...f, city: "pune" }, { prefCity: "pune", loc: BANER_AT, askedCity: null });
+  assert.deepEqual(own.turfs.map((t) => t.name), page.turfs.map((t) => t.name));
+  assert.equal(own.city, "pune");
   // "Near me in Mumbai": a city the player named keeps them there.
   const named = applyAskFilters(turfs, f, { prefCity: "pune", loc: BANER_AT, askedCity: "mumbai" });
   assert.equal(named.city, "mumbai");
