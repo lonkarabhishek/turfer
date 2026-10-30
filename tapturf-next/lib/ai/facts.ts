@@ -3,6 +3,7 @@ import { labelFor } from "../city";
 import { getPhone, getWhatsAppPhone } from "../utils/seo";
 import { normaliseOpeningHours, formatSpan } from "../utils/hours";
 import { priceUnitSuffix } from "../utils/prices";
+import { ownerPriceNote } from "../turfPage/owner";
 import { googleMapsUrl, priceFigures, publicLink, scrubBookingApps } from "../utils/bookingApps";
 import { ASPECT_ORDER, aspectShort } from "../reviews/catalog";
 import { barWords, pickChips } from "../reviews/insights";
@@ -168,7 +169,8 @@ export function buildFacts(t: Turf, r: FactsReviews = {}, v10?: { claimed: boole
           claimed: v10.claimed
             ? "yes: the owner runs this page on TapTurf (the Claimed pill and TapTurf verified stamp); TapTurf checked the claim"
             : "no: no owner runs this page on TapTurf yet",
-          prices_from_owner: t.price_owner_confirmed === true ? "yes: the owner set these prices on TapTurf" : null,
+          // Only when the page says "From the owner" (ownerPriceNote: claimed, with the owner's real prices).
+          prices_from_owner: ownerPriceNote(t, v10.claimed, Date.now()) ? "yes: the owner set these prices on TapTurf" : null,
           photos_on_tapturf: new Set([...(t.cover_image ? [t.cover_image] : []), ...(t.images ?? [])]).size,
         }
       : {}),

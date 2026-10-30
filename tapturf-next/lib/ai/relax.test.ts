@@ -6,6 +6,8 @@ import {
   dropOrder,
   elsewhereRow,
   extrasPhrase,
+  gamesExtrasLine,
+  gamesFoundReply,
   gamesNoneReply,
   gamesWidenedReply,
   NEARBY_KM,
@@ -509,6 +511,7 @@ const V10_FACTS: AskTurfFacts = {
   })),
   ownerPrices: new Set([byV10("Dribble Den").id]),
   reports: new Map([[byV10("The Turf Ground").id, 2], [byV10("T12 Sports Turf").id, 1], [byV10("Kage Multisport Turf").id, 1]]),
+  stars: new Map([[byV10("The Turf Ground").id, 5], [byV10("T12 Sports Turf").id, 4], [byV10("Kage Multisport Turf").id, 4]]),
 };
 const search10 = (over: Partial<Parameters<typeof applyAskFilters>[1]>) => ({ ...quickAnswer("turfs in pune", { areas: {}, turfs: V10_TURFS }, {}, 10)!, city: null, ...over });
 const shown10 = (r: { turfs: Turf[] }) => r.turfs.map((t) => t.name);
@@ -552,16 +555,51 @@ test("v10: photos, players' reviews (most first) and the owner's prices, each fr
   // Anywhere: Nashik's too, sorted by the players' count, not Google's (Kage has 302 on Google), then as usual.
   r = applyAskFilters(V10_TURFS, search10({ player_reviews: true, sort: "reviews" }), { facts: V10_FACTS });
   assert.deepEqual(shown10(r), ["The Turf Ground", "T12 Sports Turf", "Kage Multisport Turf"]);
-  r = applyAskFilters(V10_TURFS, search10({ owner_prices: true }), { facts: V10_FACTS });
-  assert.deepEqual(shown10(r), ["Dribble Den"]);
+  // The owner's prices as the turf page shows them (ownerPriceNote): Dribble Den's owner confirmed
+  // its prices but it has no slot price (30 Oct), so its page shows the listing's bands: none anywhere.
+  r = applyAskFilters(V10_TURFS, search10({ owner_prices: true, city: "bangalore" }), { facts: V10_FACTS });
+  assert.deepEqual([shown10(r), r.elsewhere?.total], [[], 0]);
+  const priced = V10_TURFS.map((t) => (t.name === "Dribble Den" ? ({ ...t, morning_price: 1300, evening_price: 2500 } as Turf) : t));
+  assert.deepEqual(shown10(applyAskFilters(priced, search10({ owner_prices: true }), { facts: V10_FACTS })), ["Dribble Den"]);
+  // A claim that ended keeps the owner's prices, but the page no longer calls them the owner's.
+  const ended = priced.map((t) => (t.name === "Dribble Den" ? ({ ...t, claimed: false } as Turf) : t));
+  assert.deepEqual(shown10(applyAskFilters(ended, search10({ owner_prices: true }), { facts: V10_FACTS })), []);
+  // Confirmed in the hours read is needed too: prices on a claimed turf alone are no owner's.
+  assert.deepEqual(shown10(applyAskFilters(priced, search10({ owner_prices: true }), { facts: { ...V10_FACTS, ownerPrices: new Set() } })), []);
   // A read that failed leaves its filter out, and says so; nothing is hidden for it.
   r = applyAskFilters(V10_TURFS, search10({ player_reviews: true, city: "pune" }), { facts: { ...V10_FACTS, reports: null } });
   assert.deepEqual(r.unavailable, ["player_reviews"]);
   assert.equal(r.total, 4);
-  r = applyAskFilters(V10_TURFS, search10({ owner_prices: true, open_at: "now" }), { facts: { hours: null, ownerPrices: null, reports: null }, now: FRI_0630 });
+  r = applyAskFilters(V10_TURFS, search10({ owner_prices: true, open_at: "now" }), { facts: { hours: null, ownerPrices: null, reports: null, stars: null }, now: FRI_0630 });
   assert.deepEqual(r.unavailable, ["owner_prices", "open_at"]);
   // No facts at all (v9's callers): the same.
   assert.deepEqual(applyAskFilters(V10_TURFS, search10({ player_reviews: true })).unavailable, ["player_reviews"]);
+});
+
+test("v10: best rated by players is the players' own stars, not Google's rating or the count of reports", () => {
+  // Nashik's live player reports on 30 Oct (SELECT only): [Google rating, players' stars, reports].
+  const nashik: [string, number, number, number][] = [
+    ["Green Square Turf", 5, 4, 1],
+    ["The Royal MultiSports Turf", 5, 5, 1],
+    ["The Cricket Crest Multisports Turf", 4.5, 5, 1],
+    ["Kridadham Premium Multisport Club", 5, 5, 2],
+    ["Kage Multisport Turf", 4.3, 4, 1],
+    ["No Reports Arena", 5, 0, 0],
+  ];
+  const rows = nashik.map(([name, rating], i) => ({ ...V10_TURFS[0], id: `nk-${i}`, name, city: "nashik", rating, total_reviews: 100, claimed: false }) as Turf);
+  const facts: AskTurfFacts = {
+    hours: new Map(),
+    ownerPrices: new Set(),
+    reports: new Map(nashik.flatMap(([, , , n], i) => (n ? [[`nk-${i}`, n] as const] : []))),
+    stars: new Map(nashik.flatMap(([, , s, n], i) => (n ? [[`nk-${i}`, s] as const] : []))),
+  };
+  const best = applyAskFilters(rows, search10({ player_reviews: true, city: "nashik", sort: "rating" }), { facts });
+  assert.deepEqual(shown10(best), ["Kridadham Premium Multisport Club", "The Royal MultiSports Turf", "The Cricket Crest Multisports Turf", "Green Square Turf", "Kage Multisport Turf"]);
+  // Most reviewed by players: the count first.
+  assert.equal(shown10(applyAskFilters(rows, search10({ player_reviews: true, city: "nashik", sort: "reviews" }), { facts }))[0], "Kridadham Premium Multisport Club");
+  // Without player_reviews, the usual Google order: the players' stars are not read.
+  const plain = applyAskFilters(rows, search10({ city: "nashik", sort: "rating" }), { facts });
+  assert.notDeepEqual(shown10(plain).slice(0, 4), shown10(best).slice(0, 4));
 });
 
 test("v10: open now and open at a time read each turf's listed hours, past midnight too", () => {
@@ -574,6 +612,17 @@ test("v10: open now and open at a time read each turf's listed hours, past midni
   // At the weekend at 5:30 AM: only the one open all day.
   r = applyAskFilters(V10_TURFS, search10({ open_at: "05:30", when: "weekend", city: "pune" }), { facts: V10_FACTS, now: FRI_0630 });
   assert.deepEqual(shown10(r), ["Night Owls Arena"]);
+  // A weekday named is that day's hours, not either day of the weekend (T12 Sports Turf on 30 Oct:
+  // Saturday 5 AM–11 PM, Sunday 8 AM–10 PM), whatever when says.
+  const t12 = V10_TURFS.map((t) => (t.name === "T12 Sports Turf" ? ({ ...t, opening_hours: { Saturday: "5 AM–11 PM", Sunday: "8 AM–10 PM" } } as Turf) : t));
+  const t12Facts = { ...V10_FACTS, hours: new Map(t12.flatMap((t) => (weekOf(t) ? [[t.id, weekOf(t)!] as const] : []))) };
+  const at = (open_at: string, when: Parameters<typeof search10>[0]["when"] = null) =>
+    shown10(applyAskFilters(t12, search10({ open_at, when, city: "pune" }), { facts: t12Facts, now: FRI_0630 })).sort();
+  assert.deepEqual(at("05:00", "weekend"), ["Night Owls Arena", "T12 Sports Turf"], "the weekend: either day");
+  assert.deepEqual(at("sun 05:00"), ["Night Owls Arena"], "Sunday 5 AM: T12 opens at 8");
+  assert.deepEqual(at("sun 05:00", "weekend"), ["Night Owls Arena"]);
+  assert.deepEqual(at("sat 05:00"), ["Night Owls Arena", "T12 Sports Turf"]);
+  assert.deepEqual(at("sun 09:00"), ["Hotfut SB Road", "Night Owls Arena", "T12 Sports Turf", "The Turf Ground"]);
   // 3 AM in Nashik: none, and the open time is never dropped to find one.
   r = applyAskFilters(V10_TURFS, search10({ open_at: "03:00", city: "nashik" }), { facts: V10_FACTS, now: FRI_0630 });
   assert.equal(r.total, 0);
@@ -653,4 +702,10 @@ test("v10 game replies: what was asked for, hosting by calling the turf, no book
   assert.equal(gamesWidenedReply({ ...ask, free: false, sport: null }, ["when"]), "No open games this weekend in Pune yet. Here are other games in Pune.");
   assert.equal(gamesWidenedReply(ask, []), null);
   assert.equal(gamesWidenedReply(ask, ["price"]), null);
+  // Turf filters asked of games ("free games at verified turfs"): said as not applied, never as done.
+  assert.equal(gamesFoundReply({ ...ask, sport: null, at: "", where: "" }), "Here are free games.");
+  assert.equal(gamesExtrasLine(["claimed"]), "Games can't be filtered by claimed turfs yet, so these are at any turf.");
+  assert.equal(gamesExtrasLine(["claimed", "with_photos"]), "Games can't be filtered by claimed turfs and photos yet, so these are at any turf.");
+  assert.equal(gamesExtrasLine([]), null);
+  assert.equal(gamesExtrasLine(["free_to_join"]), null);
 });

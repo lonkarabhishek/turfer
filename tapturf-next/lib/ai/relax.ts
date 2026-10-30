@@ -290,6 +290,30 @@ export function gamesWidenedReply(a: GameAsk, relaxed: readonly string[]): strin
   return `No ${askedGame(a)} yet. Here are other ${words.startsWith("open ") ? words.slice(5) : words}.`;
 }
 
+/** Router v10, games found as asked: "Here are free games this weekend in Pune." */
+export function gamesFoundReply(a: GameAsk): string {
+  return `Here are ${askedGame(a)}.`;
+}
+
+const GAME_UNFILTERED: Record<string, string> = {
+  claimed: "claimed turfs",
+  owner_prices: "the owner's prices",
+  with_photos: "photos",
+  player_reviews: "player reviews",
+  open_at: "opening hours",
+};
+
+/**
+ * Router v10's turf filters asked of a game search, which no game is
+ * picked by: "Games can't be filtered by claimed turfs yet, so these are
+ * at any turf." Null when none of them was asked.
+ */
+export function gamesExtrasLine(keys: readonly string[]): string | null {
+  const words = keys.map((k) => GAME_UNFILTERED[k]).filter((w): w is string => !!w);
+  if (!words.length) return null;
+  return `Games can't be filtered by ${listJoin(words)} yet, so these are at any turf.`;
+}
+
 // ── A named venue: say which city it is in ──────────────────────────
 
 /** A venue as a reply names it: city as a label ("Pune"), area if known. */

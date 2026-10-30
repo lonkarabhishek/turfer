@@ -3,7 +3,7 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/paged";
 import { cacheKeyed } from "@/lib/queries/turfs";
 import { memoised } from "@/lib/queries/sportBands";
-import { askTurfFacts, hoursCopyFrom, reportsCopyFrom, type HourRow, type HoursCopy, type ReportRow } from "@/lib/ai/askFacts";
+import { askTurfFacts, hoursCopyFrom, reportsCopyFrom, type HourRow, type HoursCopy, type ReportRow, type ReportsCopy } from "@/lib/ai/askFacts";
 import type { AskTurfFacts } from "@/lib/ai/ask";
 
 /**
@@ -13,9 +13,9 @@ import type { AskTurfFacts } from "@/lib/ai/ask";
  * as are photos: neither needs a read here.
  *
  * Two anon reads of public rows, no database change: every active turf's
- * hours and whether its owner set its prices (3,756 turfs on 30 Oct), and
- * the live TapTurf player reports (reviews_public_read: live rows only;
- * 13 on 30 Oct), ids only. Only the Ask route reads them, and only for a
+ * hours and whether its owner confirmed its prices (3,756 turfs on 30 Oct),
+ * and the live TapTurf player reports (reviews_public_read: live rows only;
+ * 13 on 30 Oct), ids and stars only. Only the Ask route reads them, and only for a
  * v10 reading that asks: no page renders them, so the build reads nothing
  * new (CLAUDE.md, Build & Run).
  *
@@ -40,12 +40,12 @@ async function readHours(): Promise<HoursCopy> {
   return hoursCopyFrom(rows);
 }
 
-async function readReports(): Promise<Record<string, number>> {
+async function readReports(): Promise<ReportsCopy> {
   const rows = await fetchAllRows<ReportRow>(
     (from, to) =>
       createReadOnlyClient()
         .from("reviews")
-        .select("id, turf_id")
+        .select("id, turf_id, rating")
         .is("source", null)
         .eq("status", "live")
         .order("id")
@@ -55,9 +55,10 @@ async function readReports(): Promise<Record<string, number>> {
 }
 
 const getAskHours = memoised("getAskHours", unstable_cache(cacheKeyed("ask-hours", readHours), ["ask-hours-v1"], { revalidate: 86400 }));
-const getPlayerReports = memoised("getPlayerReports", unstable_cache(cacheKeyed("ask-player-reports", readReports), ["ask-player-reports-v1"], { revalidate: 3600 }));
+// v2: each turf's reports with their stars (v1 kept a count alone).
+const getPlayerReports = memoised("getPlayerReports", unstable_cache(cacheKeyed("ask-player-reports", readReports), ["ask-player-reports-v2"], { revalidate: 3600 }));
 
-/** The parts a reading needs: hours (open_at) and owner prices come from one read, players' reports from the other. */
+/** The parts a reading needs: hours (open_at) and owner prices come from one read, players' reports and stars from the other. */
 export async function getAskTurfFacts(need: { hours: boolean; reports: boolean }): Promise<AskTurfFacts> {
   const [hours, reports] = await Promise.all([need.hours ? getAskHours() : null, need.reports ? getPlayerReports() : null]);
   return askTurfFacts(hours, reports);

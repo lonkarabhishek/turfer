@@ -600,3 +600,13 @@ test("router v10's sheet says whether the page is claimed, the owner's prices an
   assert.ok(!("prices_from_owner" in plain));
   assert.equal(plain.photos_on_tapturf, 0);
 });
+
+test("router v10's sheet says the owner's prices only when the page does: claimed, confirmed, with real prices", () => {
+  // Dribble Den on 30 Oct: claimed and confirmed, but no slot price, so its page shows the listing's bands.
+  const noSlots = turf({ price_owner_confirmed: true, morning_price: null, afternoon_price: null, evening_price: null });
+  assert.ok(!("prices_from_owner" in buildFacts(noSlots, {}, { claimed: true })));
+  // A claim that ended keeps the owner's prices, but the page no longer says they are the owner's.
+  assert.ok(!("prices_from_owner" in buildFacts(turf({ price_owner_confirmed: true }), {}, { claimed: false })));
+  assert.ok(!("prices_from_owner" in buildFacts(turf({ price_owner_confirmed: null }), {}, { claimed: true })));
+  assert.equal(buildFacts(turf({ price_owner_confirmed: true }), {}, { claimed: true }).prices_from_owner, "yes: the owner set these prices on TapTurf");
+});

@@ -432,6 +432,31 @@ test("v10: open now and open at a time, on the day asked; 24x7 as before", () =>
   assert.equal(ask10("turfs open at 6 in pune"), null);
   f = hit10("24x7 turfs in pune");
   assert.deepEqual([f.open_24x7, f.open_at], [true, null]);
+  // A weekday named is that day's hours ("sun 05:00"), not either day of the weekend.
+  f = hit10("which turfs are open at 5am on sunday in pune");
+  assert.deepEqual([f.open_at, f.when, f.city], ["sun 05:00", null, "pune"]);
+  assert.equal(f.reply, "Here are turfs open at 5:00 AM on Sunday in Pune, best rated first.");
+  assert.equal(hit10("box cricket open at 7pm this saturday in Kothrud").open_at, "sat 19:00");
+  f = hit10("turfs open at 6am this weekend in pune");
+  assert.deepEqual([f.open_at, f.when], ["06:00", "weekend"]);
+  // Both days, or now: the weekend as before.
+  f = hit10("turfs open now on sunday in pune");
+  assert.deepEqual([f.open_at, f.when], ["now", "weekend"]);
+});
+
+test("v10 on a venue's page: its words alone are about that venue, for the model as under v9", () => {
+  const page: QuickContext = { turf: "Dribble Den", city: "bangalore" };
+  for (const q of ["open now?", "photos", "verified", "is it verified", "player reviews", "open at 6am", "open at 6am tomorrow", "owner prices"]) {
+    assert.equal(ask(q, page), null, `v9 leaves "${q}" to the model`);
+    assert.equal(ask10(q, page), null, `v10 must too: "${q}"`);
+  }
+  // A search said as one still reads: venue words, a sport, a place or near me.
+  assert.equal(hit10("verified turfs", page).claimed, true);
+  assert.equal(hit10("football turfs open now", page).open_at, "now");
+  assert.equal(hit10("photos of turfs in pune", page).city, "pune");
+  assert.equal(hit10("open now near me", page).wants_nearby, true);
+  // Off a venue page the same words are a search, as before.
+  assert.equal(hit10("open now", { city: "bangalore" }).open_at, "now");
 });
 
 test("v10: free games, spots left and the turf booked; skill as before", () => {
@@ -478,6 +503,7 @@ test("v10 is off by default: v9 reads none of its words, and every question v9 r
     "open turfs in pune", "covered badminton courts in Hyderabad", "box cricket under 1000 in Kothrud", "football games this weekend", "beginner games near me",
     "most reviewed turfs in Pune", "best rated turfs in nashik", "hi", "thanks", "toss karo", "Hindu Gymkhana vs Vedant Sports Academy", "host a game saturday 7pm",
     "sasta box cricket kothrud me", "aaj raat football", "turfs with parking and washroom in pune", "turfs at midnight in pune", "turfs open at midnight in pune",
+    "football turfs in pune on sunday", "box cricket this saturday", "football games on sunday", "turfs in Kothrud this sunday evening",
   ];
   let read = 0;
   for (const q of asks) {

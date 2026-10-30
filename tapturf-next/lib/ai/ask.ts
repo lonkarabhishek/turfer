@@ -5,7 +5,7 @@ import { z } from "zod";
 import { CITIES, CITY_ALIASES, CITY_IDS, cityInText, cityInfo, type CityId } from "../city";
 import { SPORT_PAGES, turfPlaysSport, sportBySlug } from "../sports";
 import { areaFor } from "../utils/area";
-import { getMinimumPrice, summarisePrice } from "../utils/prices";
+import { getMinimumPrice, hasRealPrices, summarisePrice } from "../utils/prices";
 import { sportBandTimeRange, sportMinimumPrice, sportPrice, type CardSport, type SportBandMap, type SportBandTimeMap } from "../utils/cardSport";
 import { compareTopRated } from "../utils/ranking";
 import { haversineKm, type Coords } from "../utils/location";
@@ -74,13 +74,13 @@ export type AskFilters = z.infer<typeof AskFilters>;
 export const AskFiltersV10 = AskFilters.omit({ summary: true, reply: true, followups: true }).extend({
   /** Only Claimed turfs: the owner runs the page (an active claim), shown as "TapTurf verified". */
   claimed: z.boolean(),
-  /** Only turfs whose prices the owner set on myTapturf (price_owner_confirmed). */
+  /** Only turfs whose page shows the owner's prices: claimed, and the owner confirmed real prices on myTapturf (ownerPriceNote). */
   owner_prices: z.boolean(),
   /** Only turfs with at least one usable photo. */
   with_photos: z.boolean(),
   /** Only turfs with TapTurf players' own live reports. */
   player_reviews: z.boolean(),
-  /** "now", or "HH:MM" (24-hour) on the day `when` says: open then by the turf's listed hours. */
+  /** "now"; "HH:MM" (24-hour) on the day `when` says; or "sun HH:MM" on a weekday named: open then by the turf's listed hours. */
   open_at: z.string().nullable(),
   /** Games: free to join (₹0 a player). */
   free_to_join: z.boolean(),
@@ -133,12 +133,13 @@ const V10_RULES = `- claimed: true for verified, TapTurf verified, claimed, owne
 - owner_prices: true for prices set by the owner ("owner prices", "rates from the owner"). Else false.
 - with_photos: true when the player wants venues with photos or pictures. Else false.
 - player_reviews: true for TapTurf players' own reviews or reports ("reviewed by players", "player reviews", "turfs players rated"). Else false: Google's reviews alone stay false.
-- open_at: "now" for open now, open right now, abhi khula; "HH:MM", 24-hour, for open at a clock time ("open at 6am" is "06:00", "open at 9:30 pm" is "21:30"), on the day in when (today when null). Else null. "Open late" and "24 hours" stay open_24x7.
+- open_at: "now" for open now, open right now, abhi khula; "HH:MM", 24-hour, for open at a clock time ("open at 6am" is "06:00", "open at 9:30 pm" is "21:30"), on the day in when (today when null). A weekday named goes first as mon, tue, wed, thu, fri, sat or sun: that day's hours ("open at 5am on Sunday" is "sun 05:00", "Monday 7 pm" is "mon 19:00"). Else null. "Open late" and "24 hours" stay open_24x7.
+- claimed, owner_prices, with_photos, player_reviews and open_at filter venues, for find_turf only: no game is picked by them. When a game search asks for one anyway ("free games at verified turfs" is claimed and free_to_join), set it as asked: the box says games aren't filtered by it.
 - free_to_join: for games, true for free games, no fee, ₹0. Else false.
 - turf_booked: for games, true when the player wants games whose host has already booked the turf. Else false.
 - For find_game, players is how many spots they need: "spots left" or "space for one more" is 1, "we are 4" is 4.`;
-const V10_SORT = " With player_reviews, reviews means the most TapTurf player reports first.";
-const V10_REPLY = `- Never say how many venues or games match, or that none do: the box counts them from our rows and says so. For a claimed, owner_prices, with_photos, player_reviews or open_at search, say what you are about to show ("Here are claimed turfs in Pune, best rated first."). For a question about what TapTurf's marks mean, answer it in one or two sentences from What TapTurf knows.`;
+const V10_SORT = " With player_reviews, reviews means the most TapTurf player reports first, and rating the best stars from TapTurf players first.";
+const V10_REPLY = `- Never say how many venues or games match, or that none do: the box counts them from our rows and says so. For a find_turf search with claimed, owner_prices, with_photos, player_reviews or open_at, say what you are about to show ("Here are claimed turfs in Pune, best rated first."). For a question about what TapTurf's marks mean, answer it in one or two sentences from What TapTurf knows.`;
 
 /**
  * Stable system prompt (cacheable): cities, sports, and the areas we
@@ -503,12 +504,15 @@ export function keywordExtras(query: string, intent: AskFilters["intent"]): AskE
   const game = intent === "find_game";
   const turf = intent === "find_turf";
   const clock = /\bopens? (?:at|by|from) (\d{1,2}(?:[:.]\d{2})? ?(?:am|pm))\b/.exec(q)?.[1] ?? /\bopens? (?:at|by|from) (\d{1,2}[:.]\d{2})\b/.exec(q)?.[1] ?? null;
+  // One weekday named with the time: that day's hours ("sun 05:00"), not either day of the weekend.
+  const days = [...new Set([...q.matchAll(/\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b/g)].map((m) => m[0]))];
+  const at = normalOpenAt(clock && days.length === 1 ? `${days[0]} ${clock}` : clock);
   return {
     claimed: turf && /\b(?:claimed|verified|owner[- ]?(?:managed|run)|run by (?:the|its) owner)\b/.test(q),
     owner_prices: turf && /\bowner'?s? (?:set |listed |confirmed )?(?:prices?|rates?)\b|\b(?:prices?|rates?) (?:set )?(?:by|from) (?:the|its) owner\b/.test(q),
     with_photos: turf && /\b(?:photos?|pics?|pictures?|images?)\b/.test(q),
     player_reviews: turf && /\bplayers?'? (?:reviews?|reports?|ratings?)\b|\b(?:reviewed|rated) by (?:tapturf )?players\b|\btapturf (?:reviews?|reports?)\b/.test(q),
-    open_at: !turf ? null : /\bopen (?:right )?now\b|\babhi (?:khula|khule|open)\b/.test(q) ? "now" : normalOpenAt(clock),
+    open_at: !turf ? null : /\bopen (?:right )?now\b|\babhi (?:khula|khule|open)\b/.test(q) ? "now" : at,
     free_to_join: game && /\bfree\b/.test(q) && !/\bfree (?:parking|wifi|water)\b/.test(q),
     turf_booked: game && /\b(?:turf|ground|venue|court) (?:is |already )?booked\b|\bbooked (?:turf|ground|venue|court)\b/.test(q),
   };
@@ -606,13 +610,16 @@ export type AskResult = {
 /**
  * Router v10's data that the turf rows leave out (lib/queries/askFacts.ts),
  * each null when its read failed: every turf's week of hours
- * (lib/ai/openAt.ts), the turfs whose owner set their prices, and how many
- * live reports TapTurf players left on each.
+ * (lib/ai/openAt.ts), the turfs whose owner confirmed their prices
+ * (price_owner_confirmed; applyAskFilters adds the rest of the page's
+ * rule), how many live reports TapTurf players left on each, and their
+ * average stars (turfs with a rated report only).
  */
 export type AskTurfFacts = {
   hours: ReadonlyMap<string, Week> | null;
   ownerPrices: ReadonlySet<string> | null;
   reports: ReadonlyMap<string, number> | null;
+  stars: ReadonlyMap<string, number> | null;
 };
 
 /** At least one usable photo: the rows keep only those (transformTurf), and Ask's keep the cover or the first. */
@@ -813,8 +820,10 @@ export function applyAskFilters(
   };
   if (f.claimed) extra("claimed", (t) => t.claimed === true);
   if (f.owner_prices) {
+    // The turf page's rule (ownerPriceNote): claimed, and the owner confirmed real prices. Dribble Den
+    // (30 Oct) is confirmed with no slot price, so its page shows the listing's bands, not the owner's.
     const set = opts.facts?.ownerPrices;
-    extra("owner_prices", set ? (t) => set.has(t.id) : null);
+    extra("owner_prices", set ? (t) => set.has(t.id) && t.claimed === true && hasRealPrices(t) : null);
   }
   if (f.with_photos) extra("with_photos", hasPhoto);
   if (f.player_reviews) {
@@ -897,6 +906,11 @@ export function applyAskFilters(
         return b.t.total_reviews - a.t.total_reviews;
       }
       default: {
+        // Router v10, players' reviews asked: their best stars first, then the most reports, then the usual order.
+        const stars = f.player_reviews ? opts.facts?.stars : null;
+        const reports = f.player_reviews ? opts.facts?.reports : null;
+        if (stars && reports)
+          return (stars.get(b.t.id) ?? 0) - (stars.get(a.t.id) ?? 0) || (reports.get(b.t.id) ?? 0) - (reports.get(a.t.id) ?? 0) || compareTopRated(a.t, b.t);
         // Evening searches: lit grounds first, then the usual rating order.
         if (f.time === "evening") {
           const la = a.t.has_floodlights === true ? 1 : 0;

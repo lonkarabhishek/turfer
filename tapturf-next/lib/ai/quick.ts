@@ -3,7 +3,7 @@ import { sportBySlug, type SportPage } from "../sports";
 import { areaFor } from "../utils/area";
 import { norm, resolveTurfNames } from "./names";
 import { reviewsSubject } from "./reviewsAnswer";
-import { normalOpenAt, openAtWords } from "./openAt";
+import { normalOpenAt, onDay, openAtWords } from "./openAt";
 import type { Turf } from "../../types/turf";
 import type { AskExtras, AskFilters, AskReading, Need } from "./ask";
 import type { RouterVersion } from "./routerVersion";
@@ -44,7 +44,7 @@ type Slot =
   | { k: "city"; id: CityId; label: string; alias?: boolean }
   | { k: "area"; name: string; cities: string[] }
   | { k: "clash" }
-  | { k: "time"; time?: AskFilters["time"]; when?: AskFilters["when"] }
+  | { k: "time"; time?: AskFilters["time"]; when?: AskFilters["when"]; day?: number }
   | { k: "cheap"; cheapest: boolean }
   | { k: "budget" }
   | { k: "o24" }
@@ -91,7 +91,10 @@ add({ k: "near", hi: true }, "mere paas", "paas me", "paas mein", "mere paas me"
 add({ k: "time", time: "evening", when: "today" }, "tonight", "today night", "today evening", "this evening");
 add({ k: "time", when: "today" }, "today");
 add({ k: "time", when: "tomorrow" }, "tomorrow");
-add({ k: "time", when: "weekend" }, "weekend", "this weekend", "the weekend", "saturday", "sunday", "this saturday", "this sunday");
+add({ k: "time", when: "weekend" }, "weekend", "this weekend", "the weekend");
+// The weekend too; the day (5 Saturday, 6 Sunday) is only router v10's open_at's ("open at 5am on sunday").
+add({ k: "time", when: "weekend", day: 5 }, "saturday", "this saturday");
+add({ k: "time", when: "weekend", day: 6 }, "sunday", "this sunday");
 add({ k: "time", when: "this_week" }, "this week");
 add({ k: "time", time: "morning" }, "morning", "in the morning");
 add({ k: "time", time: "afternoon" }, "afternoon", "in the afternoon");
@@ -644,7 +647,13 @@ function findAnswer(query: string, data: QuickData, ctx: QuickContext, v10 = fal
   const booked = of("booked").length > 0;
   if (opens.length > 1 || spots.length > 1) return null;
   const turfExtras = claimed || ownerPrices || photos || reviewed || opens.length > 0;
-  const x: AskExtras = { claimed, owner_prices: ownerPrices, with_photos: photos, player_reviews: reviewed, open_at: opens[0] ?? null, free_to_join: free, turf_booked: booked };
+  // On a venue page, "open now?", "photos" or "verified" alone are about that venue: the model reads them, as under v9.
+  if (v10 && ctx.turf && turfExtras && !sport && !place && !near && !of("venue").length) return null;
+  // "Open at 5am on sunday": Sunday's hours, not either day of the weekend; the day is open_at's, not when's.
+  const days = [...new Set(times.map((t) => t.day).filter((d) => d != null))];
+  const openDay = days.length === 1 && opens.length === 1 && opens[0] !== "now" ? days[0] : null;
+  const openAt = onDay(opens[0] ?? null, openDay);
+  const x: AskExtras = { claimed, owner_prices: ownerPrices, with_photos: photos, player_reviews: reviewed, open_at: openAt, free_to_join: free, turf_booked: booked };
   const out = (r: AskFilters): AskReading => (v10 ? { ...r, ...x } : r);
 
   const f = blank();
@@ -652,7 +661,7 @@ function findAnswer(query: string, data: QuickData, ctx: QuickContext, v10 = fal
   f.sport = sport?.slug ?? null;
   f.areas = area ? [area.name] : [];
   f.wants_nearby = near;
-  f.when = when[0] ?? null;
+  f.when = openDay != null ? null : (when[0] ?? null);
   f.time = time[0] ?? null;
   const at = atWords(f.when, f.time);
   const where = place ? ` in ${place}` : near ? " close to you" : "";
@@ -700,8 +709,8 @@ function findAnswer(query: string, data: QuickData, ctx: QuickContext, v10 = fal
     ...(reviewed ? ["player reviews"] : []),
     ...(ownerPrices ? ["prices from the owner"] : []),
   ];
-  // The day is said apart ("for tomorrow"), as for any search.
-  const opening = opens[0] ? openAtWords(opens[0]) : null;
+  // The day is said apart ("for tomorrow"), as for any search; a weekday named is open_at's ("on Sunday").
+  const opening = openAt ? openAtWords(openAt) : null;
   const withs = `${o24 ? " open 24 hours" : ""}${opening ? ` ${opening}` : ""}${extras.length ? ` with ${extras.join(" and ")}` : ""}`;
   const budget = max != null ? ` under ${rupees(max)} an hour` : "";
   const lead = got.max == null && max != null ? "cheap " : cheapest && max == null ? "cheapest " : "";

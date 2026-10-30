@@ -2,9 +2,10 @@ import { formatClock, normaliseOpeningHours, type DayName } from "../utils/hours
 import type { OpeningHours } from "../../types/turf";
 
 /**
- * "Open now", "open at 6am tomorrow": router v10's open_at, read against
- * each venue's hours as its page shows them (normaliseOpeningHours). Pure,
- * relative imports only, so npm run test:ask runs it.
+ * "Open now", "open at 6am tomorrow", "open at 5am on Sunday": router
+ * v10's open_at, read against each venue's hours as its page shows them
+ * (normaliseOpeningHours). Pure, relative imports only, so npm run
+ * test:ask runs it.
  *
  * A venue's week is kept small for the cache (lib/queries/askFacts.ts):
  * Monday first, each day's spans in minutes from midnight, a span that
@@ -94,6 +95,26 @@ export function parseClock(s: string): number | null {
   return h * 60 + min;
 }
 
+/** open_at's day ("sun 05:00"), Monday first as a Week. */
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
+/** "sun", "Sunday", "tues", "thurs": 0 Monday .. 6 Sunday, or null. */
+function weekdayOf(s: string): number | null {
+  const m = /^(?:(mon)(?:day)?|(tue)(?:s|sday)?|(wed)(?:nesday)?|(thu)(?:r|rs|rsday)?|(fri)(?:day)?|(sat)(?:urday)?|(sun)(?:day)?)\.?$/i.exec(s.trim());
+  return m ? m.slice(1).findIndex((g) => g != null) : null;
+}
+
+/** open_at as read: "now", or a minute of the day and the weekday named before it ("sun 05:00"; day null: the day `when` says). */
+function readOpenAt(raw: string | null | undefined): "now" | { day: number | null; minute: number } | null {
+  if (!raw) return null;
+  if (/^\s*now\s*$/i.test(raw)) return "now";
+  const named = /^\s*([a-z]+\.?)\s+(.+)$/i.exec(raw);
+  const day = named ? weekdayOf(named[1]) : null;
+  if (named && day == null) return null;
+  const minute = parseClock(named ? named[2] : raw);
+  return minute == null ? null : { day, minute };
+}
+
 /** India's weekday (0 Monday .. 6 Sunday) and minute of the day at `now`. */
 export function istNow(now: Date): { day: number; minute: number } {
   const ist = new Date(now.getTime() + 330 * 60_000);
@@ -103,16 +124,18 @@ export function istNow(now: Date): { day: number; minute: number } {
 export type OpenSlot = { day: number; minute: number };
 
 /**
- * The moments open_at asks about: now, or the time on the day `when`
- * says (today when none; Saturday or Sunday for the weekend; any day this
- * week). Null when open_at is no time we read.
+ * The moments open_at asks about: now, or the time on the weekday it
+ * names ("sun 05:00": Sunday, whatever `when` says), else on the day
+ * `when` says (today when none; Saturday or Sunday for the weekend; any
+ * day this week). Null when open_at is no time we read.
  */
 export function openAtSlots(openAt: string | null | undefined, when: string | null | undefined, now: Date): OpenSlot[] | null {
-  if (!openAt) return null;
+  const read = readOpenAt(openAt);
+  if (!read) return null;
   const at = istNow(now);
-  if (/^\s*now\s*$/i.test(openAt)) return [at];
-  const minute = parseClock(openAt);
-  if (minute == null) return null;
+  if (read === "now") return [at];
+  const { day, minute } = read;
+  if (day != null) return [{ day, minute }];
   const days =
     when === "tomorrow" ? [(at.day + 1) % 7] : when === "weekend" ? [5, 6] : when === "this_week" ? [0, 1, 2, 3, 4, 5, 6] : [at.day];
   return days.map((day) => ({ day, minute }));
@@ -125,21 +148,29 @@ export function openAtAny(week: Week | null | undefined, slots: readonly OpenSlo
   return slots.some((s) => isOpenAt(week, s.day, s.minute) === true);
 }
 
-/** open_at as a reply says it: "open now", "open at 6:00 AM", "open at 6:00 AM tomorrow". Null when it is no time we read. */
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/** open_at as a reply says it: "open now", "open at 6:00 AM", "open at 6:00 AM tomorrow", "open at 5:00 AM on Sunday". Null when it is no time we read. */
 export function openAtWords(openAt: string | null | undefined, when?: string | null): string | null {
-  if (!openAt) return null;
-  if (/^\s*now\s*$/i.test(openAt)) return "open now";
-  const m = parseClock(openAt);
-  if (m == null) return null;
-  const clock = formatClock(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
-  const day = when === "tomorrow" ? " tomorrow" : when === "weekend" ? " at the weekend" : when === "this_week" ? " this week" : "";
+  const read = readOpenAt(openAt);
+  if (!read) return null;
+  if (read === "now") return "open now";
+  const clock = formatClock(hhmm(read.minute));
+  const day =
+    read.day != null ? ` on ${DAYS[read.day]}` : when === "tomorrow" ? " tomorrow" : when === "weekend" ? " at the weekend" : when === "this_week" ? " this week" : "";
   return `open at ${clock}${day}`;
 }
 
-/** open_at as the reading stores it: "now" or "HH:MM", from what a player or the model wrote; null otherwise. */
+/** open_at as the reading stores it: "now", "HH:MM", or "sun HH:MM" for a weekday named, from what a player or the model wrote; null otherwise. */
 export function normalOpenAt(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  if (/^\s*now\s*$/i.test(raw)) return "now";
-  const m = parseClock(raw);
-  return m == null ? null : `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const read = readOpenAt(raw);
+  if (!read) return null;
+  if (read === "now") return "now";
+  return `${read.day != null ? `${DAY_KEYS[read.day]} ` : ""}${hhmm(read.minute)}`;
+}
+
+/** "sun 05:00" from the weekday (0 Monday .. 6 Sunday) and an open_at of "HH:MM"; anything else as it was. */
+export function onDay(openAt: string | null, day: number | null): string | null {
+  if (day == null || !openAt || !/^\d{2}:\d{2}$/.test(openAt)) return openAt;
+  return `${DAY_KEYS[day]} ${openAt}`;
 }

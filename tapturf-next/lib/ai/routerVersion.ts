@@ -22,10 +22,28 @@ function sameSecret(a: string, b: string): boolean {
   return timingSafeEqual(x, y);
 }
 
-/** `env`: process.env (ASK_ROUTER_VERSION, ASK_EVAL_KEY); `evalHeader`: the request's x-ask-eval. */
-export function routerVersion(env: Readonly<Record<string, string | undefined>>, evalHeader: string | null | undefined): RouterVersion {
-  if ((env.ASK_ROUTER_VERSION ?? "").trim() === "10") return 10;
+/**
+ * The version, and whether the request is an eval ask (its x-ask-eval is
+ * the key, whatever ASK_ROUTER_VERSION says). `env`: process.env
+ * (ASK_ROUTER_VERSION, ASK_EVAL_KEY); `evalHeader`: the request's x-ask-eval.
+ */
+export function routerChoice(env: Readonly<Record<string, string | undefined>>, evalHeader: string | null | undefined): { version: RouterVersion; eval: boolean } {
   const key = (env.ASK_EVAL_KEY ?? "").trim();
-  if (!key || !evalHeader) return 9;
-  return sameSecret(key, evalHeader.trim()) ? 10 : 9;
+  const isEval = !!key && !!evalHeader && sameSecret(key, evalHeader.trim());
+  return { version: isEval || (env.ASK_ROUTER_VERSION ?? "").trim() === "10" ? 10 : 9, eval: isEval };
+}
+
+/** The version alone (routerChoice). */
+export function routerVersion(env: Readonly<Record<string, string | undefined>>, evalHeader: string | null | undefined): RouterVersion {
+  return routerChoice(env, evalHeader).version;
+}
+
+/**
+ * The turfs an ask's log row says it showed (ask_queries.filters.shown_ids).
+ * None for an eval ask: owner_dashboard counts shown_ids for myTapturf's
+ * "Shown in Ask TapTurf", and the eval set's answers are no player's. The
+ * row is marked _eval instead (the route), so admin readers can leave it out.
+ */
+export function loggedShownIds(ids: readonly string[], choice: { eval: boolean }): string[] {
+  return choice.eval ? [] : [...ids];
 }

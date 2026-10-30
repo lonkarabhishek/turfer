@@ -27,8 +27,8 @@ import {
   type AskTurn,
 } from "@/lib/ai/ask";
 import { quickAnswer, venues } from "@/lib/ai/quick";
-import { EVAL_HEADER, routerVersion, type RouterVersion } from "@/lib/ai/routerVersion";
-import { openAtWords } from "@/lib/ai/openAt";
+import { EVAL_HEADER, loggedShownIds, routerChoice, type RouterVersion } from "@/lib/ai/routerVersion";
+import { normalOpenAt, openAtWords } from "@/lib/ai/openAt";
 import { getAskTurfFacts } from "@/lib/queries/askFacts";
 import { sportBySlug } from "@/lib/sports";
 import { namesVenue, placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
@@ -41,6 +41,8 @@ import {
   closestRow,
   elsewhereRow,
   extrasPhrase,
+  gamesExtrasLine,
+  gamesFoundReply,
   gamesNoneReply,
   gamesWidenedReply,
   NEARBY_KM,
@@ -176,8 +178,9 @@ function parseHistory(raw: string | null, version: RouterVersion): AskTurn[] {
         if (f[k] != null && f[k] !== false && !(Array.isArray(f[k]) && (f[k] as unknown[]).length === 0)) keep[k] = f[k];
       }
       if (version === 10) {
-        // "now" or "HH:MM", and a count: nothing longer reaches the prompt.
-        if (typeof keep.open_at === "string") keep.open_at = keep.open_at.slice(0, 8);
+        // "now", "HH:MM" or "sun HH:MM" (normalOpenAt), and a count: nothing else reaches the prompt.
+        const at = typeof keep.open_at === "string" ? normalOpenAt(keep.open_at.slice(0, 20)) : null;
+        if (at) keep.open_at = at;
         else delete keep.open_at;
         if (typeof keep.players !== "number") delete keep.players;
         for (const k of EXTRA_KEYS) if (k !== "open_at" && k in keep && keep[k] !== true) delete keep[k];
@@ -203,7 +206,8 @@ export async function GET(req: Request) {
   const lng = Number(searchParams.get("lng") || NaN);
   const loc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
   // Router v10 only when switched on, or for an eval request with the key (lib/ai/routerVersion.ts).
-  const version = routerVersion(process.env, req.headers.get(EVAL_HEADER));
+  const choice = routerChoice(process.env, req.headers.get(EVAL_HEADER));
+  const version = choice.version;
   const history = parseHistory(searchParams.get("h"), version);
   const { blog: blogSlug, ...ctx } = parseContext(searchParams.get("ctx"));
   // Signed-in players send their account id; visitors a browser id and
@@ -489,6 +493,10 @@ export async function GET(req: Request) {
           };
           const said = r.games.length === 0 ? gamesNoneReply(ask, !!body.turfs) : gamesWidenedReply(ask, r.relaxed);
           if (said) body.reply = said;
+          // Turf filters asked of games ("free games at verified turfs"): no game is picked by
+          // them, so the reply says so, never the model's "at verified turfs".
+          const turfOnly = turfExtrasAsked(filters);
+          if (turfOnly.length && r.games.length > 0) body.reply = `${said ?? gamesFoundReply(ask)} ${gamesExtrasLine(turfOnly)}`;
           // The chips follow the games shown: no "Football" chip over the free badminton game shown instead.
           if (r.games.length > 0)
             for (const k of ["sport", "when", "skill"] as const) if (r.relaxed.includes(k)) body.filters = { ...(body.filters as typeof base.filters), [k]: null };
@@ -774,11 +782,13 @@ export async function GET(req: Request) {
     // _src, _t (stage ms) and _usage (tokens across every model call) are for tuning.
     filters: {
       ...filters,
-      shown_ids: ((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter(Boolean).slice(0, 12),
+      // None for an eval ask (loggedShownIds): the eval set is no player's, and owners see the count.
+      shown_ids: loggedShownIds(((body.turfs as { id?: string }[] | undefined) ?? []).map((t) => t.id).filter((id): id is string => !!id).slice(0, 12), choice),
       // _vis: the pictures the answer showed (lib/ask/cards.ts), for tuning.
       ...(body.visuals ? { _vis: (body.visuals as AskVisuals).show } : {}),
-      // _router: the reading was router v10's (its fields are in the filters above).
+      // _router: the reading was router v10's (its fields are in the filters above); _eval: an eval ask (scripts/ask-eval).
       ...(version === 10 ? { _router: 10 } : {}),
+      ...(choice.eval ? { _eval: true } : {}),
       _src: via,
       _t: ms,
       ...(usage.calls ? { _usage: usage } : {}),
