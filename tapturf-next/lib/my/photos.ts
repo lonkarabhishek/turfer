@@ -46,7 +46,7 @@ export function canEncodeWebp(): Promise<boolean> {
 }
 
 /** The decoded photo (maybe already shrunk), and its size as taken. */
-export type Decoded ={ src: CanvasImageSource; w: number; h: number; origW: number; origH: number; done: () => void };
+export type Decoded = { src: CanvasImageSource; w: number; h: number; origW: number; origH: number; done: () => void };
 
 /** Safari and every iOS browser (all WebKit): createImageBitmap may ignore the camera's rotation there, an <img> never does. */
 function webkitOnly(): boolean {

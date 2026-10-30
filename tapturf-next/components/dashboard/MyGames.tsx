@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Plus, Trophy, Clock, Users, Calendar } from "lucide-react";
 import { formatDate, formatTimeSlot, getGameStatus } from "@/lib/utils/game";
+import { Avatar } from "@/components/game/detail/Avatar";
 import type { Game } from "@/types/game";
 
 export type GamesView = "created" | "joined";
@@ -14,7 +15,8 @@ export type GamesView = "created" | "joined";
  * thing they actually opened the app to check — with past games
  * collapsed underneath. The lists come from the Me tab (useMeData), so
  * its header numbers and this tab agree; those numbers can pick Hosted
- * or Joined.
+ * or Joined. A hosted game says how many players wait for an answer; a
+ * joined one shows its host.
  */
 export function MyGames({
   createdGames,
@@ -22,12 +24,15 @@ export function MyGames({
   loading,
   view,
   onView: setView,
+  waiting,
 }: {
   createdGames: Game[];
   joinedGames: Game[];
   loading: boolean;
   view: GamesView;
   onView: (v: GamesView) => void;
+  /** Pending requests per hosted game. */
+  waiting: Map<string, number>;
 }) {
 
   const games = view === "created" ? createdGames : joinedGames;
@@ -96,7 +101,7 @@ export function MyGames({
                 </p>
               </div>
               <div className="space-y-3">
-                {upcoming.map((g) => <GameRow key={g.id} game={g} highlight />)}
+                {upcoming.map((g) => <GameRow key={g.id} game={g} highlight host={view === "joined"} waiting={view === "created" ? waiting.get(g.id) ?? 0 : 0} />)}
               </div>
             </section>
           )}
@@ -108,7 +113,7 @@ export function MyGames({
                 Past · {past.length}
               </p>
               <div className="space-y-3 opacity-80">
-                {past.map((g) => <GameRow key={g.id} game={g} />)}
+                {past.map((g) => <GameRow key={g.id} game={g} host={view === "joined"} />)}
               </div>
             </section>
           )}
@@ -119,7 +124,7 @@ export function MyGames({
 }
 
 /** Compact game row — big touch target, plenty of white space. */
-function GameRow({ game, highlight = false }: { game: Game; highlight?: boolean }) {
+function GameRow({ game, highlight = false, host = false, waiting = 0 }: { game: Game; highlight?: boolean; host?: boolean; waiting?: number }) {
   const status = getGameStatus(game);
   return (
     <Link href={`/game/${game.id}`} className="block group focus-neon rounded-2xl">
@@ -177,6 +182,23 @@ function GameRow({ game, highlight = false }: { game: Game; highlight?: boolean 
               <span className="tabular">{game.current_players}/{game.max_players}</span>
             </span>
           </div>
+
+          {(host || waiting > 0) && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              {host && (
+                <span className="flex items-center gap-1.5 min-w-0 text-[12px] text-primary-600">
+                  <Avatar src={game.host_profile_image_url} name={game.host_name} size={20} />
+                  <span className="truncate">Hosted by {game.host_name || "a TapTurf player"}</span>
+                </span>
+              )}
+              {waiting > 0 && (
+                <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full bg-hot-500/10 text-hot-600 text-[12px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-hot-500" aria-hidden />
+                  {waiting} {waiting === 1 ? "player wants" : "players want"} to join
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Link>

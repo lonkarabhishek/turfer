@@ -83,7 +83,8 @@ const NOBODY = "99999999-9999-4999-8999-999999999999";
 const GPHOTO = "https://lh3.googleusercontent.com/a/ACg8ocKx_Ravi-photo=s96-c";
 await q(`insert into public.users (id, name, phone) values ($1, 'Asha', '+919800000001')`, [A]);
 await q(`insert into public.users (id, name, email, profile_image_url) values ($1, 'Ravi', 'ravi@x.in', $2)`, [B, GPHOTO]);
-const G1 = (await one(`insert into public.games (creator_id, host_name, host_profile_image_url, date) values ($1, 'Asha', '', '2026-11-01') returning id`, [A])).id;
+// Asha's games: one with '' for no photo (as the app writes), one older with null.
+await q(`insert into public.games (creator_id, host_name, host_profile_image_url, date) values ($1, 'Asha', '', '2026-11-01')`, [A]);
 const G2 = (await one(`insert into public.games (creator_id, host_name, host_profile_image_url, date) values ($1, 'Asha', null, '2026-09-01') returning id`, [A])).id;
 const GR = (await one(`insert into public.games (creator_id, host_name, host_profile_image_url, date) values ($1, 'Ravi', $2, '2026-11-02') returning id`, [B, GPHOTO])).id;
 await q(`insert into public.game_requests (game_id, user_id, requester_name, requester_avatar, status) values ($1, $2, 'Asha', null, 'pending'), ($3, $2, 'Asha', null, 'accepted')`, [GR, A, G2]);

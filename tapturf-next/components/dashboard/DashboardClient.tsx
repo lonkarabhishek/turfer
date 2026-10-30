@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Gamepad2, Bell, User, LogOut, Inbox, Loader2, Camera, MapPin, Store, ChevronRight, AtSign } from "lucide-react";
@@ -84,7 +84,10 @@ export function DashboardClient() {
 
 function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (k: TabKey) => void; onLogout: () => Promise<void> }) {
   const data = useMeData(user.id);
-  const [view, setView] = useState<GamesView>("created");
+  // Hosted first, unless they host nothing yet and play in someone's game; their own pick wins.
+  const [picked, setPicked] = useState<GamesView | null>(null);
+  const view: GamesView = picked ?? (!data.loading && data.created.length === 0 && data.joined.length > 0 ? "joined" : "created");
+  const setView = setPicked;
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoNote, setPhotoNote] = useState("");
   const city = useCityChoice();
@@ -104,6 +107,13 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
     await onLogout();
     window.location.href = "/";
   };
+
+  // Players waiting for an answer, per hosted game (the Games tab's rows say so).
+  const waiting = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of data.incoming) m.set(r.game_id, (m.get(r.game_id) ?? 0) + 1);
+    return m;
+  }, [data.incoming]);
 
   const counts: Record<TabKey, number | null> = {
     games: data.loading ? null : data.upcoming,
@@ -231,32 +241,51 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
         <div className="mt-5 lg:mt-0 min-w-0">
           <NotificationsPrompt />
 
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-5 -mx-4 px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Your sections">
+          {/* Four sections: a row of tiles on a phone (each count in view), pills on a wide screen. */}
+          <div
+            className="grid grid-cols-4 gap-1 p-1 mb-5 rounded-2xl bg-primary-100/70 sm:flex sm:gap-2 sm:p-0 sm:bg-transparent"
+            role="tablist"
+            aria-label="Your sections"
+          >
             {TABS.map(({ key, label, icon: Icon }) => {
               const active = tab === key;
               const n = counts[key];
+              const badge = n ? (n > 99 ? "99+" : String(n)) : null;
+              const tone = active
+                ? "bg-white/25 text-white"
+                : key === "notifications" || (key === "requests" && data.incoming.length > 0)
+                  ? "bg-hot-500 text-white"
+                  : "bg-primary-200 text-primary-800";
               return (
                 <button
                   key={key}
                   role="tab"
                   aria-selected={active}
                   onClick={() => pick(key)}
-                  className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-full text-[13px] font-bold whitespace-nowrap border-2 transition-all focus-neon ${
-                    active ? "bg-accent-500 text-white border-accent-500 shadow-neon" : "text-primary-700 bg-white border-primary-200 hover:border-accent-500"
+                  className={`relative flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 min-h-[58px] sm:min-h-[44px] px-1 sm:px-4 rounded-xl sm:rounded-full text-[12px] sm:text-[13px] font-bold whitespace-nowrap sm:border-2 transition-all focus-neon ${
+                    active
+                      ? "bg-accent-500 text-white sm:border-accent-500 shadow-neon"
+                      : "text-primary-700 hover:bg-white/70 sm:bg-white sm:border-primary-200 sm:hover:border-accent-500"
                   }`}
                 >
-                  <Icon className="w-4 h-4" strokeWidth={active ? 2.5 : 2} aria-hidden />
+                  <span className="relative">
+                    <Icon className="w-5 h-5 sm:w-4 sm:h-4" strokeWidth={active ? 2.5 : 2} aria-hidden />
+                    {badge && (
+                      <span className={`sm:hidden absolute -top-2 left-3 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] leading-[18px] text-center tabular-nums ${tone}`} aria-hidden>
+                        {badge}
+                      </span>
+                    )}
+                  </span>
                   {label}
-                  {!!n && (
-                    <span
-                      className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] leading-5 tabular-nums ${
-                        active ? "bg-white/25 text-white" : key === "notifications" ? "bg-hot-500 text-white" : "bg-primary-100 text-primary-700"
-                      }`}
-                    >
-                      <span className="sr-only">, </span>
-                      {n > 99 ? "99+" : n}
-                      <span className="sr-only">{key === "notifications" ? " unread" : key === "requests" ? " pending" : " upcoming"}</span>
-                    </span>
+                  {badge && (
+                    <>
+                      <span className={`hidden sm:inline-block min-w-[20px] h-5 px-1.5 rounded-full text-[11px] leading-5 text-center tabular-nums ${tone}`} aria-hidden>
+                        {badge}
+                      </span>
+                      <span className="sr-only">
+                        , {badge} {key === "notifications" ? "unread" : key === "requests" ? "pending" : "upcoming"}
+                      </span>
+                    </>
                   )}
                 </button>
               );
@@ -264,8 +293,20 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
           </div>
 
           <div role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
-            {tab === "games" && <MyGames createdGames={data.created} joinedGames={data.joined} loading={data.loading} view={view} onView={setView} />}
-            {tab === "requests" && <MyRequests userId={user.id} requests={data.requests} loading={data.loading} reloadRequests={data.reloadRequests} />}
+            {tab === "games" && (
+              <MyGames createdGames={data.created} joinedGames={data.joined} loading={data.loading} view={view} onView={setView} waiting={waiting} />
+            )}
+            {tab === "requests" && (
+              <MyRequests
+                userId={user.id}
+                requests={data.requests}
+                requestGames={data.requestGames}
+                incoming={data.incoming}
+                hosted={data.created}
+                loading={data.loading}
+                reloadRequests={data.reloadRequests}
+              />
+            )}
             {tab === "notifications" && <NotificationsList userId={user.id} onUnread={data.setUnread} />}
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
           </div>
