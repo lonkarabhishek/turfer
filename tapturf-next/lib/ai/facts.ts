@@ -102,7 +102,12 @@ function tapturfReports(t: Turf, r: FactsReviews, rows: readonly FactsReview[]):
   return out;
 }
 
-export function buildFacts(t: Turf, r: FactsReviews = {}): TurfFacts {
+/**
+ * `v10`: router v10's lines too (lib/ai/routerVersion.ts): whether the
+ * page is Claimed (turf_page's claimed), whether the owner set the prices,
+ * and how many photos it shows. Without it the sheet is v9's, key for key.
+ */
+export function buildFacts(t: Turf, r: FactsReviews = {}, v10?: { claimed: boolean }): TurfFacts {
   const unit = priceUnitSuffix(t, { short: true });
   const rates: Record<string, string> = {};
   const add = (k: string, v: number | null) => {
@@ -157,6 +162,16 @@ export function buildFacts(t: Turf, r: FactsReviews = {}): TurfFacts {
     city: t.city ? labelFor(t.city as never) : null,
     address: scrubBookingApps(t.address),
     sports: t.sports,
+    // Said as the page says it (components/turf/OwnerPanel.tsx): who keeps the page, never a rating.
+    ...(v10
+      ? {
+          claimed: v10.claimed
+            ? "yes: the owner runs this page on TapTurf (the Claimed pill and TapTurf verified stamp); TapTurf checked the claim"
+            : "no: no owner runs this page on TapTurf yet",
+          prices_from_owner: t.price_owner_confirmed === true ? "yes: the owner set these prices on TapTurf" : null,
+          photos_on_tapturf: new Set([...(t.cover_image ? [t.cover_image] : []), ...(t.images ?? [])]).size,
+        }
+      : {}),
     tapturf_reports: tapturfReports(t, r, rows),
     // The rating with or without a count (a score alone is still one, as the page shows it);
     // reviews_link: the page links "Read them on Google" (Google Maps only).

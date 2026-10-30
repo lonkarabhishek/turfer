@@ -584,3 +584,19 @@ test("F11: the model failing on a review question gives the plain answer; other 
   await assert.rejects(pickAnswer("does it have parking", sheet, overloaded), /529/);
   assert.equal((await pickAnswer("does it have parking", sheet, async () => null)).answer, null);
 });
+
+test("router v10's sheet says whether the page is claimed, the owner's prices and its photos; v9's has none of it", () => {
+  const t = turf({ cover_image: "https://img.example/a.jpg", images: ["https://img.example/a.jpg", "https://img.example/b.jpg"], price_owner_confirmed: true });
+  const v9 = buildFacts(t, {});
+  for (const k of ["claimed", "prices_from_owner", "photos_on_tapturf"]) assert.ok(!(k in v9), k);
+  const v10 = buildFacts(t, {}, { claimed: true });
+  assert.match(String(v10.claimed), /^yes: the owner runs this page on TapTurf \(the Claimed pill and TapTurf verified stamp\)/);
+  assert.equal(v10.prices_from_owner, "yes: the owner set these prices on TapTurf");
+  assert.equal(v10.photos_on_tapturf, 2);
+  // Everything else is v9's, key for key.
+  assert.deepEqual(Object.fromEntries(Object.entries(v10).filter(([k]) => !["claimed", "prices_from_owner", "photos_on_tapturf"].includes(k))), v9);
+  const plain = buildFacts(turf(), {}, { claimed: false });
+  assert.equal(plain.claimed, "no: no owner runs this page on TapTurf yet");
+  assert.ok(!("prices_from_owner" in plain));
+  assert.equal(plain.photos_on_tapturf, 0);
+});

@@ -1,9 +1,34 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { citiesLine, closestRow, dropOrder, NEARBY_KM, NEARBY_MIN, nearbyLabel, noneIn, nowhereReply, relaxNearby, relaxSteps, venueLine, venueReply, venueRows, widenedReply, type RelaxStep } from "./relax";
+import {
+  citiesLine,
+  closestRow,
+  dropOrder,
+  elsewhereRow,
+  extrasPhrase,
+  gamesNoneReply,
+  gamesWidenedReply,
+  NEARBY_KM,
+  NEARBY_MIN,
+  nearbyLabel,
+  noneIn,
+  noneYetReply,
+  nowhereReply,
+  relaxNearby,
+  relaxSteps,
+  unavailableLine,
+  venueLine,
+  venueReply,
+  venueRows,
+  widenedReply,
+  type RelaxStep,
+} from "./relax";
 import { haversineKm } from "../utils/location";
-import { applyAskFilters } from "./ask";
+import { applyAskFilters, NO_EXTRAS, type AskTurfFacts } from "./ask";
 import { quickAnswer } from "./quick";
+import { weekOf } from "./openAt";
+import { applyGameFilters } from "./gameFilters";
+import type { Game } from "../../types/game";
 import type { Turf } from "../../types/turf";
 
 type Row = { name: string; sport: string[]; area: string; city: string; price: number | null };
@@ -450,4 +475,182 @@ test("near me on another city's page: the visitor's location wins over the page'
   assert.ok(named.turfs.length > 0 && named.turfs.every((t) => t.city === "mumbai"));
   // A caller that doesn't know what the player named (the games' fallback turfs): the reading's city, as before.
   assert.ok(applyAskFilters(turfs, f, { prefCity: "pune", loc: BANER_AT }).turfs.every((t) => t.city === "mumbai"));
+});
+
+// ── Router v10: what TapTurf holds of each venue, applied to the rows ──
+
+// Shaped like production on 30 Oct (SELECT only): three claimed turfs in all
+// of India (Dehradun, Bangalore, Udaipur), Dribble Den the one with the
+// owner's prices, player reports on ten turfs (these two in Pune, one in Nashik).
+type V10Row = { name: string; city: string; sports: string[]; rating: number; reviews: number; lat: number; lng: number; claimed?: boolean; cover?: boolean; is24?: boolean; hours?: Turf["opening_hours"]; start?: string; end?: string };
+const V10_ROWS: V10Row[] = [
+  { name: "Arena Seven", city: "dehradun", sports: ["Box Cricket", "Football"], rating: 5, reviews: 42, lat: 30.2991, lng: 77.9902, claimed: true, cover: true, hours: { daily: "6 AM–10 PM" } },
+  { name: "Dribble Den", city: "bangalore", sports: ["Box Cricket", "Football"], rating: 5, reviews: 22, lat: 12.8685, lng: 77.6214, claimed: true, cover: true, start: "05:00:00", end: "23:30:00" },
+  { name: "Turfit Udaipur", city: "udaipur", sports: ["Football"], rating: 4.6, reviews: 69, lat: 24.614, lng: 73.7106, claimed: true, cover: true, start: "06:00:00", end: "23:00:00" },
+  { name: "The Turf Ground", city: "pune", sports: ["Football", "Box Cricket"], rating: 4.6, reviews: 437, lat: 18.5022, lng: 73.7936, cover: true, hours: { daily: "6 AM–2 AM" } },
+  { name: "T12 Sports Turf", city: "pune", sports: ["Box Cricket", "Football", "Cricket Nets"], rating: 4.5, reviews: 41, lat: 18.6679, lng: 73.8102, hours: { Friday: "5 AM–11 PM" } },
+  { name: "Hotfut SB Road", city: "pune", sports: ["Box Cricket", "Football", "Badminton"], rating: 4.7, reviews: 16, lat: 18.5265, lng: 73.83, hours: { daily: "7 AM–10 PM" } },
+  { name: "Night Owls Arena", city: "pune", sports: ["Football"], rating: 4.0, reviews: 30, lat: 18.55, lng: 73.78, is24: true },
+  { name: "Kage Multisport Turf", city: "nashik", sports: ["Cricket", "Football"], rating: 4.3, reviews: 302, lat: 19.943, lng: 73.7778, cover: true, hours: { daily: "7 AM–10 PM" } },
+];
+const V10_TURFS = V10_ROWS.map(
+  (r, i) =>
+    ({
+      id: `v10-${i}`, slug: `v10-${i}`, name: r.name, city: r.city, area: null, address: "", sports: r.sports, amenities: [], images: [], cover_image: r.cover ? `https://img.example/${i}.jpg` : null,
+      rating: r.rating, total_reviews: r.reviews, lat: r.lat, lng: r.lng, claimed: r.claimed === true, is_24x7: r.is24 ?? null,
+      opening_hours: r.hours ?? null, start_time: r.start ?? null, end_time: r.end ?? null,
+    }) as unknown as Turf,
+);
+const byV10 = (n: string) => V10_TURFS.find((t) => t.name === n)!;
+const V10_FACTS: AskTurfFacts = {
+  hours: new Map(V10_TURFS.flatMap((t) => {
+    const w = weekOf(t);
+    return w ? [[t.id, w] as const] : [];
+  })),
+  ownerPrices: new Set([byV10("Dribble Den").id]),
+  reports: new Map([[byV10("The Turf Ground").id, 2], [byV10("T12 Sports Turf").id, 1], [byV10("Kage Multisport Turf").id, 1]]),
+};
+const search10 = (over: Partial<Parameters<typeof applyAskFilters>[1]>) => ({ ...quickAnswer("turfs in pune", { areas: {}, turfs: V10_TURFS }, {}, 10)!, city: null, ...over });
+const shown10 = (r: { turfs: Turf[] }) => r.turfs.map((t) => t.name);
+// Friday 30 Oct 2026, 6:30 AM in India.
+const FRI_0630 = new Date("2026-10-30T01:00:00Z");
+
+test("v10: claimed turfs are only the turfs with an active claim, never others shown as if they were", () => {
+  // "Claimed turfs in Pune": Pune has none; the three elsewhere, best rated first, with their cities.
+  let r = applyAskFilters(V10_TURFS, search10({ claimed: true, city: "pune" }), { facts: V10_FACTS });
+  assert.equal(r.total, 0);
+  assert.deepEqual(r.turfs, []);
+  assert.equal(r.elsewhere!.total, 3);
+  assert.deepEqual(r.elsewhere!.turfs.map((t) => t.name).sort(), ["Arena Seven", "Dribble Den", "Turfit Udaipur"]);
+  assert.ok(r.elsewhere!.turfs.every((t) => t.claimed === true));
+  assert.deepEqual([...r.elsewhere!.cities].sort(), ["bangalore", "dehradun", "udaipur"]);
+  // In a city that has one: that one.
+  r = applyAskFilters(V10_TURFS, search10({ claimed: true, city: "bangalore" }), { facts: V10_FACTS });
+  assert.deepEqual(shown10(r), ["Dribble Den"]);
+  assert.equal(r.elsewhere, null);
+  // From a Pune visitor, no city said: the visitor's city gives way, never the claim.
+  r = applyAskFilters(V10_TURFS, search10({ claimed: true }), { prefCity: "pune", facts: V10_FACTS });
+  assert.deepEqual(r.relaxed, ["pref_city"]);
+  assert.equal(r.total, 3);
+  assert.ok(r.turfs.every((t) => t.claimed === true));
+  assert.equal(r.cities!.length, 3);
+  // The sport stays: box cricket's elsewhere has no football-only Turfit.
+  r = applyAskFilters(V10_TURFS, search10({ claimed: true, city: "pune", sport: "box-cricket" }), { facts: V10_FACTS });
+  assert.deepEqual(r.elsewhere!.turfs.map((t) => t.name).sort(), ["Arena Seven", "Dribble Den"]);
+  // Near me from Baner: none within 100 km, so the ones elsewhere, nearest first.
+  r = applyAskFilters(V10_TURFS, search10({ claimed: true, wants_nearby: true, sort: "nearby" }), { loc: BANER_AT, facts: V10_FACTS });
+  assert.equal(r.total, 0);
+  const km = r.elsewhere!.turfs.map((t) => (t as Turf & { distanceKm: number }).distanceKm);
+  assert.ok(km.length === 3 && km.every((d, i) => i === 0 || d >= km[i - 1]));
+});
+
+test("v10: photos, players' reviews (most first) and the owner's prices, each from its own data", () => {
+  let r = applyAskFilters(V10_TURFS, search10({ with_photos: true, city: "pune" }), { facts: V10_FACTS });
+  assert.deepEqual(shown10(r), ["The Turf Ground"]);
+  r = applyAskFilters(V10_TURFS, search10({ player_reviews: true, city: "pune", sort: "reviews" }), { facts: V10_FACTS });
+  assert.deepEqual(shown10(r), ["The Turf Ground", "T12 Sports Turf"]);
+  // Anywhere: Nashik's too, sorted by the players' count, not Google's (Kage has 302 on Google), then as usual.
+  r = applyAskFilters(V10_TURFS, search10({ player_reviews: true, sort: "reviews" }), { facts: V10_FACTS });
+  assert.deepEqual(shown10(r), ["The Turf Ground", "T12 Sports Turf", "Kage Multisport Turf"]);
+  r = applyAskFilters(V10_TURFS, search10({ owner_prices: true }), { facts: V10_FACTS });
+  assert.deepEqual(shown10(r), ["Dribble Den"]);
+  // A read that failed leaves its filter out, and says so; nothing is hidden for it.
+  r = applyAskFilters(V10_TURFS, search10({ player_reviews: true, city: "pune" }), { facts: { ...V10_FACTS, reports: null } });
+  assert.deepEqual(r.unavailable, ["player_reviews"]);
+  assert.equal(r.total, 4);
+  r = applyAskFilters(V10_TURFS, search10({ owner_prices: true, open_at: "now" }), { facts: { hours: null, ownerPrices: null, reports: null }, now: FRI_0630 });
+  assert.deepEqual(r.unavailable, ["owner_prices", "open_at"]);
+  // No facts at all (v9's callers): the same.
+  assert.deepEqual(applyAskFilters(V10_TURFS, search10({ player_reviews: true })).unavailable, ["player_reviews"]);
+});
+
+test("v10: open now and open at a time read each turf's listed hours, past midnight too", () => {
+  // 6:30 AM Friday: 6 AM–2 AM and Friday's 5 AM–11 PM are open, 24x7 by its row; 7 AM is not yet.
+  let r = applyAskFilters(V10_TURFS, search10({ open_at: "now", city: "pune" }), { facts: V10_FACTS, now: FRI_0630 });
+  assert.deepEqual(shown10(r).sort(), ["Night Owls Arena", "T12 Sports Turf", "The Turf Ground"]);
+  // 1:30 AM: Thursday's 6 AM–2 AM runs into it; T12 lists only Friday, so it isn't known open.
+  r = applyAskFilters(V10_TURFS, search10({ open_at: "01:30", city: "pune" }), { facts: V10_FACTS, now: FRI_0630 });
+  assert.deepEqual(shown10(r), ["The Turf Ground", "Night Owls Arena"]);
+  // At the weekend at 5:30 AM: only the one open all day.
+  r = applyAskFilters(V10_TURFS, search10({ open_at: "05:30", when: "weekend", city: "pune" }), { facts: V10_FACTS, now: FRI_0630 });
+  assert.deepEqual(shown10(r), ["Night Owls Arena"]);
+  // 3 AM in Nashik: none, and the open time is never dropped to find one.
+  r = applyAskFilters(V10_TURFS, search10({ open_at: "03:00", city: "nashik" }), { facts: V10_FACTS, now: FRI_0630 });
+  assert.equal(r.total, 0);
+  assert.equal(r.elsewhere, null);
+});
+
+test("v10: a named venue is never hidden by them, and a v9 reading is as it was", () => {
+  const r = applyAskFilters(V10_TURFS, search10({ turf_names: ["The Turf Ground"], claimed: true }), { facts: V10_FACTS });
+  assert.deepEqual(shown10(r), ["The Turf Ground"]);
+  assert.ok(r.relaxed.includes("claimed"));
+  assert.ok(dropOrder([], true, ["claimed"]).indexOf("claimed") === 1 && !dropOrder([], false, ["claimed"]).includes("claimed"));
+  assert.deepEqual(dropOrder(["need:parking"], false, ["claimed"]), dropOrder(["need:parking"], false));
+  // v9's reading has no v10 field, and its result no v10 key.
+  const v9 = quickAnswer("turfs in pune", { areas: {}, turfs: V10_TURFS })!;
+  const out = applyAskFilters(V10_TURFS, v9, { facts: V10_FACTS });
+  for (const k of ["unavailable", "elsewhere", "cities"]) assert.ok(!(k in out), k);
+  assert.deepEqual(applyAskFilters(V10_TURFS, { ...v9, ...NO_EXTRAS }, {}), applyAskFilters(V10_TURFS, v9, {}));
+});
+
+test("v10 replies: none yet in the place, from the rows' own counts and cities", () => {
+  assert.equal(extrasPhrase("football turfs", { claimed: true, with_photos: true, player_reviews: true, open: "open now" }), "claimed football turfs with photos and player reviews open now");
+  assert.equal(extrasPhrase("turfs", { owner_prices: true }), "turfs with prices from the owner");
+  assert.equal(
+    noneYetReply({ what: "claimed turfs", where: "in Nashik", byHours: false, elsewhere: { total: 3, cities: ["Bangalore", "Dehradun", "Udaipur"] } }),
+    "No claimed turfs in Nashik yet. The 3 on TapTurf are in Bangalore, Dehradun and Udaipur.",
+  );
+  assert.equal(noneYetReply({ what: "claimed turfs", where: "in Pune", byHours: false, elsewhere: { total: 1, cities: ["Bangalore"] } }), "No claimed turfs in Pune yet. The one on TapTurf is in Bangalore.");
+  assert.equal(noneYetReply({ what: "claimed tennis courts", where: "in Pune", byHours: false, elsewhere: { total: 0, cities: [] } }), "No claimed tennis courts on TapTurf yet.");
+  assert.equal(noneYetReply({ what: "turfs open at 3:00 AM", where: "in Nashik", byHours: true, elsewhere: null }), "No turfs open at 3:00 AM in Nashik by their listed hours.");
+  assert.equal(noneYetReply({ what: "turfs with photos", where: "", byHours: false, elsewhere: null }), "No turfs with photos on TapTurf yet.");
+  assert.equal(
+    noneYetReply({ what: "claimed turfs", where: "within 100 km of you", byHours: false, elsewhere: { total: 7, cities: ["Mumbai", "Pune", "Nashik", "Goa", "Surat"] } }),
+    "No claimed turfs within 100 km of you yet. The 7 on TapTurf are in Mumbai, Pune, Nashik and 2 more cities.",
+  );
+  assert.deepEqual(elsewhereRow("claimed turfs", ["Bangalore", "Udaipur"], 2), { label: "Claimed turfs", place: "other cities", count: 2 });
+  assert.deepEqual(elsewhereRow("claimed turfs", ["Bangalore", "Bangalore"], 2).place, "Bangalore");
+  assert.equal(unavailableLine(["player_reviews"]), "I couldn't check player reviews just now, so these aren't filtered by them.");
+  assert.equal(unavailableLine(["owner_prices", "open_at"]), "I couldn't check the owner's prices and opening hours just now, so these aren't filtered by them.");
+  assert.equal(unavailableLine([]), null);
+});
+
+test("v10 games: free to join, the turf booked and spots left are never dropped; v9 ignores them", () => {
+  const g = (id: string, sport: string, price: string, max: number, cur: number, booked: boolean) =>
+    ({ id, sport, price_per_player: price, max_players: max, current_players: cur, turf_booked: booked, date: "2099-01-01", start_time: "19:00:00", end_time: "20:00:00", skill_level: "all", status: "open", turfs: { city: "pune" } }) as unknown as Game;
+  const games = [g("free-football", "Football", "0.00", 14, 9, false), g("paid-booked", "Football", "120.00", 12, 11, true), g("free-full", "Box Cricket", "0.00", 12, 12, false)];
+  const read = (over: Record<string, unknown>) => ({ ...quickAnswer("football games", { areas: {}, turfs: [] }, {}, 10)!, sport: null, ...over });
+  const ids = (r: { games: Game[] }) => r.games.map((x) => x.id);
+  assert.deepEqual(ids(applyGameFilters(games, read({ free_to_join: true }), { version: 10 })), ["free-football", "free-full"]);
+  assert.deepEqual(ids(applyGameFilters(games, read({ free_to_join: true, players: 1 }), { version: 10 })), ["free-football"]);
+  assert.deepEqual(ids(applyGameFilters(games, read({ turf_booked: true }), { version: 10 })), ["paid-booked"]);
+  assert.deepEqual(ids(applyGameFilters(games, read({ players: 3 }), { version: 10 })), ["free-football"]);
+  // The sport gives way (v9's widening); free and the spots never do.
+  const r = applyGameFilters(games, read({ free_to_join: true, players: 1, sport: "box-cricket" }), { version: 10 });
+  assert.deepEqual([ids(r), r.relaxed], [["free-football"], ["sport"]]);
+  // What the widening made possible again comes back (relaxSteps): free badminton in Pune is other free
+  // games in Pune; v9 drops the city on the way and keeps it dropped.
+  const away = [...games, { ...g("free-mumbai", "Football", "0.00", 10, 2, false), turfs: { city: "mumbai" } } as unknown as Game];
+  const v10 = applyGameFilters(away, read({ free_to_join: true, sport: "badminton", city: null }), { version: 10, prefCity: "pune" });
+  assert.deepEqual([ids(v10), v10.relaxed], [["free-football", "free-full"], ["sport"]]);
+  const v9 = applyGameFilters(away, read({ sport: "badminton", city: null }), { prefCity: "pune" });
+  assert.deepEqual(v9.relaxed, ["pref_city", "sport"]);
+  assert.deepEqual(ids(applyGameFilters(games, read({ free_to_join: true, turf_booked: true }), { version: 10 })), []);
+  // v9: players is the people, not spots, and v10's fields are not read.
+  assert.equal(applyGameFilters(games, read({ free_to_join: true, turf_booked: true, players: 3 })).total, 3);
+});
+
+test("v10 game replies: what was asked for, hosting by calling the turf, no booking through TapTurf", () => {
+  const ask = { free: true, booked: false, spots: null, skill: null, sport: "football", at: "this weekend", where: "in Pune" };
+  const none = gamesNoneReply(ask, true);
+  assert.equal(none, "No free football games this weekend in Pune yet. Host one at a turf below: call or WhatsApp the turf for a slot, and players nearby can join.");
+  assert.ok(!/\bbook\b/i.test(none) && !/\bbook\b/i.test(gamesNoneReply(ask, false)));
+  assert.equal(gamesNoneReply({ ...ask, free: false, sport: null, booked: true, spots: 2 }, false), "No open games with the turf booked and 2 spots left this weekend in Pune yet. Host one and players nearby can join.");
+  // What the cards still are: what was not widened.
+  assert.equal(gamesWidenedReply(ask, ["sport"]), "No free football games this weekend in Pune yet. Here are other free games this weekend in Pune.");
+  assert.equal(gamesWidenedReply(ask, ["when"]), "No free football games this weekend in Pune yet. Here are other free football games in Pune.");
+  assert.equal(gamesWidenedReply(ask, ["sport", "when", "pref_city"]), "No free football games this weekend in Pune yet. Here are other free games.");
+  assert.equal(gamesWidenedReply({ ...ask, free: false, sport: null }, ["when"]), "No open games this weekend in Pune yet. Here are other games in Pune.");
+  assert.equal(gamesWidenedReply(ask, []), null);
+  assert.equal(gamesWidenedReply(ask, ["price"]), null);
 });

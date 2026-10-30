@@ -3,8 +3,10 @@ import { sportBySlug, type SportPage } from "../sports";
 import { areaFor } from "../utils/area";
 import { norm, resolveTurfNames } from "./names";
 import { reviewsSubject } from "./reviewsAnswer";
+import { normalOpenAt, openAtWords } from "./openAt";
 import type { Turf } from "../../types/turf";
-import type { AskFilters, Need } from "./ask";
+import type { AskExtras, AskFilters, AskReading, Need } from "./ask";
+import type { RouterVersion } from "./routerVersion";
 
 /**
  * Ready answers for Ask TapTurf: the chips we offer (lib/ask/chips.ts)
@@ -50,7 +52,16 @@ type Slot =
   | { k: "games" }
   | { k: "skill"; skill: NonNullable<AskFilters["skill"]> }
   | { k: "popular" }
-  | { k: "fill" };
+  | { k: "fill" }
+  // Router v10's (V10_VOCAB): claimed, the owner's prices, photos, players' reviews, open at, free, spots, turf booked.
+  | { k: "claimed" }
+  | { k: "owner_prices" }
+  | { k: "photos" }
+  | { k: "player_reviews" }
+  | { k: "open"; at: string }
+  | { k: "free" }
+  | { k: "spots"; n: number }
+  | { k: "booked" };
 
 /** A slot, and whether the words are Hinglish (the reply then is too). */
 type Entry = Slot & { hi?: boolean };
@@ -126,6 +137,64 @@ add(
   "chahiye", "thoda", "wala", "wale", "wali", "khelna", "khelna hai", "khelne", "ke liye", "ka", "ke", "ki", "hoon", "hu",
 );
 
+/**
+ * Router v10's words, read only with v10 on. Every phrase has a word v9's
+ * VOCAB doesn't know ("photos", "now", "booked"), so no question v9 reads
+ * here is read any other way (quick.test.ts checks).
+ */
+const V10_VOCAB = new Map<string, Entry>();
+const addV10 = (e: Entry, ...phrases: string[]) => phrases.forEach((p) => V10_VOCAB.set(p, e));
+addV10({ k: "claimed" }, "claimed", "verified", "tapturf verified", "owner managed", "owner run", "managed by owner", "managed by the owner", "managed by their owners", "run by owner", "run by the owner", "run by their owners");
+addV10(
+  { k: "owner_prices" },
+  "owner prices", "owner price", "owners prices", "owner rates", "owner set prices", "owner listed prices", "owner confirmed prices",
+  "prices from the owner", "prices from owner", "prices set by the owner", "prices set by owner", "rates from the owner",
+);
+addV10({ k: "photos" }, "photos", "photo", "pics", "pictures", "images");
+addV10(
+  { k: "player_reviews" },
+  "player reviews", "players reviews", "player review", "player reports", "players reports", "player ratings", "reviewed by players", "rated by players",
+  "reviews from players", "tapturf reviews", "tapturf player reviews",
+);
+addV10({ k: "open", at: "now" }, "open now", "open right now", "opened now", "open today now");
+addV10({ k: "free" }, "free", "free to join", "no fee", "free entry");
+addV10({ k: "spots", n: 1 }, "spots left", "spot left", "slots left", "slot left", "open spots", "open slots", "spots available", "spots", "space left");
+addV10({ k: "booked" }, "turf booked", "turf already booked", "booked turf", "ground booked", "booked ground", "court booked", "booked court", "turf is booked");
+addV10({ k: "fill" }, "have", "has", "that", "that have", "which have");
+
+/** "open at 6am", "opens at 6:30 pm", "open by 18 30": the time and how many words it took, under v10. */
+function openAtWordsAt(ws: string[], i: number): { at: string; len: number } | null {
+  if (!["open", "opens"].includes(ws[i]) || !["at", "by", "from"].includes(ws[i + 1] ?? "")) return null;
+  const parts: string[] = [];
+  let j = i + 2;
+  const h = /^(\d{1,2})(am|pm)?$/.exec(ws[j] ?? "");
+  if (!h) return null;
+  parts.push(h[1]);
+  j++;
+  let mer = h[2] ?? null;
+  if (!mer) {
+    const m = /^(\d{2})(am|pm)?$/.exec(ws[j] ?? "");
+    if (m) {
+      parts.push(`:${m[1]}`);
+      mer = m[2] ?? null;
+      j++;
+    }
+  }
+  if (!mer && (ws[j] === "am" || ws[j] === "pm")) {
+    mer = ws[j];
+    j++;
+  }
+  const at = normalOpenAt(`${parts.join("")}${mer ? ` ${mer}` : ""}`);
+  return at ? { at, len: j - i } : null;
+}
+
+/** "2 spots left", "3 spots": a count of spots, under v10. */
+function spotsAt(ws: string[], i: number): { n: number; len: number } | null {
+  const n = /^\d{1,2}$/.test(ws[i]) ? Number(ws[i]) : null;
+  if (!n || !["spots", "spot", "slots", "slot"].includes(ws[i + 1] ?? "")) return null;
+  return { n, len: ["left", "available"].includes(ws[i + 2] ?? "") ? 3 : 2 };
+}
+
 const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
 const CITY_WORDS = new Map<string, Slot>();
@@ -178,16 +247,25 @@ function words(q: string): string[] {
 
 const MAX_PHRASE = 6;
 
-/** Every word read as a slot, or null when any word is not understood. */
-function read(ws: string[], places: Map<string, Slot>): { slots: Entry[]; max: number | null } | null {
+/** Every word read as a slot, or null when any word is not understood. `v10`: router v10's words too. */
+function read(ws: string[], places: Map<string, Slot>, v10 = false): { slots: Entry[]; max: number | null } | null {
   const slots: Entry[] = [];
   let max: number | null = null;
   for (let i = 0; i < ws.length; ) {
+    if (v10) {
+      const open = openAtWordsAt(ws, i);
+      const spots = open ? null : spotsAt(ws, i);
+      if (open || spots) {
+        slots.push(open ? { k: "open", at: open.at } : { k: "spots", n: spots!.n });
+        i += open ? open.len : spots!.len;
+        continue;
+      }
+    }
     let hit: Entry | undefined;
     let len = 0;
     for (let n = Math.min(MAX_PHRASE, ws.length - i); n >= 1 && !hit; n--) {
       const key = ws.slice(i, i + n).join(" ");
-      hit = VOCAB.get(key) ?? places.get(key);
+      hit = VOCAB.get(key) ?? (v10 ? V10_VOCAB.get(key) : undefined) ?? places.get(key);
       len = n;
     }
     if (!hit || hit.k === "clash") return null;
@@ -340,6 +418,32 @@ const NEXT_TOOLS: Partial<Record<ToolSlug, ToolSlug[]>> = {
   "live-scoreboard": ["cricket-team-generator", "cricket-live-scorer"],
 };
 
+/**
+ * Router v10: what TapTurf's marks mean, said the way the turf page says
+ * it (components/turf/OwnerPanel.tsx, components/account/VerifiedTick.tsx).
+ */
+const CLAIMED_MEANS =
+  "A Claimed turf, marked TapTurf verified, is one whose owner runs its TapTurf page: TapTurf checked the claim, and the owner can change its prices, hours and numbers. It isn't a rating. Players still call or WhatsApp the turf to play.";
+const TICK_MEANS = "The blue tick next to a player's name means they confirmed both a phone number and an email on TapTurf. It's about the person, not a turf.";
+const MARKS: [string[], string, string, string[]][] = [
+  [
+    [
+      "what does verified mean", "what is verified", "what is tapturf verified", "what does tapturf verified mean", "what is a verified turf", "what are verified turfs",
+      "what does claimed mean", "what is claimed", "what is a claimed turf", "what are claimed turfs", "what does the green shield mean", "what is the green shield",
+      "verified meaning", "claimed meaning", "what does claimed turf mean", "what does verified turf mean",
+    ],
+    "What Claimed and TapTurf verified mean",
+    CLAIMED_MEANS,
+    ["Show claimed turfs", "Claimed turfs near me"],
+  ],
+  [
+    ["what is the blue tick", "what does the blue tick mean", "what is blue tick", "what does blue tick mean", "blue tick meaning"],
+    "What the blue tick means",
+    TICK_MEANS,
+    ["What does verified mean", "Show claimed turfs"],
+  ],
+];
+
 const COMPARE_ANY = new Set(["compare two turfs", "compare two venues", "compare two grounds", "compare 2 turfs", "compare 2 venues", "compare turfs", "compare venues"]);
 
 /** "Host a game Saturday 7pm": the host words, then only days, times and sports. */
@@ -349,7 +453,12 @@ const HOST_WORDS = new Set(
 );
 const hostTail = (tail: string) => tail.split(" ").every((w) => HOST_WORDS.has(w) || /^\d{1,2}(?:[ap]m)?$/.test(w));
 
-function smallTalk(key: string, query: string, ctx: QuickContext): AskFilters | null {
+function smallTalk(key: string, query: string, ctx: QuickContext, v10 = false): AskFilters | null {
+  if (v10) {
+    for (const [phrases, summary, reply, followups] of MARKS) {
+      if (phrases.includes(key)) return { ...blank(), intent: "other", city: knownCity(ctx.city), summary, reply, followups };
+    }
+  }
   for (const [phrases, summary, reply] of SMALL_TALK) {
     if (!phrases.includes(key)) continue;
     // No follow-ups: the route offers this city's own chips instead.
@@ -458,8 +567,8 @@ function forWords(when: AskFilters["when"], time: AskFilters["time"]): string {
   return at ? ` for ${at}` : "";
 }
 
-/** "box cricket turfs", "badminton courts", "turfs"; singular for Hinglish. */
-function venues(sport: SportPage | undefined, plural = true): string {
+/** "box cricket turfs", "badminton courts", "turfs"; singular for Hinglish. Also the route's router v10 replies. */
+export function venues(sport: SportPage | undefined, plural = true): string {
   if (!sport) return plural ? "turfs" : "turf";
   if (sport.slug === "cricket") return plural ? "cricket grounds and nets" : "cricket ground";
   return `${sport.name.toLowerCase()} ${sport.venue}${plural ? "s" : ""}`;
@@ -482,8 +591,8 @@ function venueCalled(query: string, turfs: Turf[], city: string | null): Turf | 
   return turfs.find((t) => t.city === city && (norm(t.name) === q || norm(t.name).startsWith(`${q} `))) ?? null;
 }
 
-function findAnswer(query: string, data: QuickData, ctx: QuickContext): AskFilters | null {
-  const got = read(words(query), placesFor(data.areas));
+function findAnswer(query: string, data: QuickData, ctx: QuickContext, v10 = false): AskReading | null {
+  const got = read(words(query), placesFor(data.areas), v10);
   if (!got) return null;
   const { slots } = got;
   const of = <K extends Slot["k"]>(k: K) => slots.filter((s): s is Extract<Entry, { k: K }> => s.k === k);
@@ -524,6 +633,19 @@ function findAnswer(query: string, data: QuickData, ctx: QuickContext): AskFilte
   // "Cheap" alone means ₹800 an hour; "cheapest" only sorts.
   const max = got.max ?? (cheap.some((c) => !c.cheapest) ? 800 : null);
   const priceLow = max != null || cheapest;
+  // Router v10's (none without it): turf ones for a turf search, game ones for games.
+  const claimed = of("claimed").length > 0;
+  const ownerPrices = of("owner_prices").length > 0;
+  const photos = of("photos").length > 0;
+  const reviewed = of("player_reviews").length > 0;
+  const opens = [...new Set(of("open").map((o) => o.at))];
+  const spots = [...new Set(of("spots").map((s) => s.n))];
+  const free = of("free").length > 0;
+  const booked = of("booked").length > 0;
+  if (opens.length > 1 || spots.length > 1) return null;
+  const turfExtras = claimed || ownerPrices || photos || reviewed || opens.length > 0;
+  const x: AskExtras = { claimed, owner_prices: ownerPrices, with_photos: photos, player_reviews: reviewed, open_at: opens[0] ?? null, free_to_join: free, turf_booked: booked };
+  const out = (r: AskFilters): AskReading => (v10 ? { ...r, ...x } : r);
 
   const f = blank();
   f.city = place ? knownCity(city) : knownCity(ctx.city);
@@ -537,66 +659,89 @@ function findAnswer(query: string, data: QuickData, ctx: QuickContext): AskFilte
 
   if (of("games").length) {
     // Games: sport, city or near me, when, skill. Budgets, features and areas are for turfs.
-    if (hi || area || needs.length || cheap.length || max != null || o24 || popular || of("venue").length || skills.length > 1) return null;
+    if (hi || area || needs.length || cheap.length || max != null || o24 || popular || of("venue").length || skills.length > 1 || turfExtras) return null;
     f.intent = "find_game";
     f.skill = skills[0] ?? null;
     f.sort = near ? "nearby" : "rating";
-    const what = `${sport ? sport.name.toLowerCase() : "open"}${f.skill ? ` ${f.skill}` : ""} games`;
+    // v10: free ones, how many spots are needed, the host's turf booked.
+    f.players = spots[0] ?? null;
+    const withs = [booked && "the turf booked", f.players && (f.players === 1 ? "a spot left" : `${f.players} spots left`)].filter(Boolean).join(" and ");
+    const what = `${free ? `free${sport ? ` ${sport.name.toLowerCase()}` : ""}` : sport ? sport.name.toLowerCase() : "open"}${f.skill ? ` ${f.skill}` : ""} games${withs ? ` with ${withs}` : ""}`;
     f.summary = cap(`${what}${place ? ` in ${place}` : near ? " near you" : ""}${at ? ` ${at}` : ""}.`);
     f.reply = `Here are ${what}${where}${at ? ` ${at}` : ""}, ${near ? "nearest" : "soonest"} first.`;
     f.followups = [f.skill ? "Only evening games" : "Beginner friendly ones", f.when === "weekend" ? "Any games today" : "Only this weekend", "Host a game"];
-    return f;
+    return out(f);
   }
-  // A turf search needs a sport or a place to go on.
-  if (skills.length || (!sport && !place && !near)) return null;
+  // Free, spots and booked are about games; without a game word, Claude decides.
+  if (free || spots.length || booked) return null;
+  // A turf search needs a sport or a place to go on (or, with v10, something TapTurf holds of the venue).
+  if (skills.length || (!sport && !place && !near && !turfExtras)) return null;
 
   f.max_price_per_hour = max;
   f.open_24x7 = o24;
   f.needs = needs;
-  f.sort = priceLow ? "price_low" : popular ? "reviews" : near ? "nearby" : "rating";
+  // v10: most TapTurf player reports first, when those are asked for.
+  f.sort = priceLow ? "price_low" : popular || reviewed ? "reviews" : near ? "nearby" : "rating";
   // "Begur Turf", "Mundhwa Turf Ground": an area and venue words that
   // are also a venue's own name. Kept as the name, so that venue comes
   // first (applyAskFilters), not just the area's best rated.
-  const named = area && of("venue").length && !got.max && !needs.length ? venueCalled(query, data.turfs, city) : null;
+  const named = area && of("venue").length && !got.max && !needs.length && !turfExtras ? venueCalled(query, data.turfs, city) : null;
   if (named) {
     f.free_text = query.trim().replace(/[?.!]+$/, "");
     f.summary = cap(`${named.name}.`);
     f.reply = `Here is ${named.name} in ${area!.name}, ${labelFor(named.city ?? "")}.`;
     f.followups = ["Cheaper ones", "Only 24 hours", "Any games there this weekend"];
-    return f;
+    return out(f);
   }
-  const kind = `${needs.includes("covered") ? "covered " : ""}${venues(sport)}`;
-  const extras = needs.filter((n) => n !== "covered").map((n) => NEED_WORDS[n]);
-  const withs = `${o24 ? " open 24 hours" : ""}${extras.length ? ` with ${extras.join(" and ")}` : ""}`;
+  const kind = `${claimed ? "claimed " : ""}${needs.includes("covered") ? "covered " : ""}${venues(sport)}`;
+  const extras = [
+    ...needs.filter((n) => n !== "covered").map((n) => NEED_WORDS[n]),
+    ...(photos ? ["photos"] : []),
+    ...(reviewed ? ["player reviews"] : []),
+    ...(ownerPrices ? ["prices from the owner"] : []),
+  ];
+  // The day is said apart ("for tomorrow"), as for any search.
+  const opening = opens[0] ? openAtWords(opens[0]) : null;
+  const withs = `${o24 ? " open 24 hours" : ""}${opening ? ` ${opening}` : ""}${extras.length ? ` with ${extras.join(" and ")}` : ""}`;
   const budget = max != null ? ` under ${rupees(max)} an hour` : "";
   const lead = got.max == null && max != null ? "cheap " : cheapest && max == null ? "cheapest " : "";
   f.summary = cap(`${lead}${kind}${withs}${place ? ` in ${place}` : near ? " near you" : ""}${budget}${at ? ` ${at}` : ""}.`);
 
   if (hi) {
     // Hinglish replies for the simple shapes; anything richer goes to Claude.
-    if (needs.length || o24 || got.max != null || popular || (f.time && f.time !== "evening") || f.when === "weekend" || f.when === "this_week") return null;
+    if (needs.length || o24 || got.max != null || popular || turfExtras || (f.time && f.time !== "evening") || f.when === "weekend" || f.when === "this_week") return null;
     const timeHi = f.when === "today" ? (f.time ? " aaj raat ke liye" : " aaj ke liye") : f.when === "tomorrow" ? " kal ke liye" : f.time ? " raat ke liye" : "";
     const sortHi = priceLow ? "sabse kam daam wale pehle" : near ? "sabse paas wale pehle" : "sabse achhi rating wale pehle";
     f.reply = cap(`${place ? `${place} me` : near ? "Aapke paas" : ""}${timeHi} ${priceLow ? "saste " : ""}${venues(sport, false)} ye rahe, ${sortHi}.`.trim());
     f.followups = [priceLow ? "Best rating wale" : "Aur saste wale", "24 ghante khule wale", "Weekend pe koi game hai"];
-    return f;
+    return out(f);
   }
   const order =
-    f.sort === "price_low" ? "cheapest first" : f.sort === "reviews" ? "most reviewed first" : f.sort === "nearby" ? "nearest first" : f.time === "evening" ? "lit grounds first" : "best rated first";
+    f.sort === "price_low" ? "cheapest first" : f.sort === "reviews" ? (reviewed ? "most player reviews first" : "most reviewed first") : f.sort === "nearby" ? "nearest first" : f.time === "evening" ? "lit grounds first" : "best rated first";
   f.reply = `Here are ${kind}${withs}${where}${budget}${forWords(f.when, f.time)}, ${order}.`;
   f.followups = [priceLow ? "Best rated ones" : "Cheaper ones", o24 ? "With floodlights" : "Only 24 hours", "Any games there this weekend"];
   if (o24 && needs.includes("floodlights")) f.followups[1] = "Compare the top two";
-  return f;
+  // What the mark means is the next thing to ask about claimed turfs.
+  if (claimed) f.followups[1] = "What does verified mean";
+  return out(f);
 }
+
+/** Router v10's fields of an answer that asks for none of them. */
+const NO_V10: AskExtras = { claimed: false, owner_prices: false, with_photos: false, player_reviews: false, open_at: null, free_to_join: false, turf_booked: false };
 
 /**
  * Filters and a reply for a fresh question, or null to ask Claude.
  * `query` is the player's text as the route trimmed it (at most 160 chars).
+ * `version` 10: router v10's words too (V10_VOCAB, MARKS), and the answer
+ * has v10's fields; 9 reads exactly what it always has.
  */
-export function quickAnswer(query: string, data: QuickData, ctx: QuickContext = {}): AskFilters | null {
+export function quickAnswer(query: string, data: QuickData, ctx: QuickContext = {}, version: RouterVersion = 9): AskReading | null {
   // Devanagari, emoji and other scripts go to Claude.
   if (/[^\x20-\x7E₹’‘]/.test(query)) return null;
   const ws = words(query);
   if (!ws.length || ws.length > 16) return null;
-  return smallTalk(ws.join(" "), query, ctx) ?? aboutThisTurf(query, ctx) ?? compareNames(query, data, ctx) ?? findAnswer(query, data, ctx);
+  const v10 = version === 10;
+  const said = smallTalk(ws.join(" "), query, ctx, v10) ?? aboutThisTurf(query, ctx) ?? compareNames(query, data, ctx);
+  if (said) return v10 ? { ...said, ...NO_V10 } : said;
+  return findAnswer(query, data, ctx, v10);
 }

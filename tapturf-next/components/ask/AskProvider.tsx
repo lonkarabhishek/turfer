@@ -17,6 +17,8 @@ export type AskResponse = {
   reply: string;
   followups: string[];
   source: "claude" | "keywords";
+  /** 10: router v10 read it (its filters below); absent for v9. */
+  router?: number;
   filters: {
     city: string | null;
     sport: string | null;
@@ -30,6 +32,15 @@ export type AskResponse = {
     needs: string[];
     players: number | null;
     sort: string;
+    // Router v10's (lib/ai/ask.ts AskFiltersV10); none on a v9 answer.
+    claimed?: boolean;
+    ownerPrices?: boolean;
+    withPhotos?: boolean;
+    playerReviews?: boolean;
+    /** "now" or "HH:MM". */
+    openAt?: string | null;
+    freeToJoin?: boolean;
+    turfBooked?: boolean;
   };
   memo: Record<string, unknown>;
   needsLocation: boolean;

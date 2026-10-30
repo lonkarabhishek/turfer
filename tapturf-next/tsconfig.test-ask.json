@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/ai/quick.test.ts", "lib/ai/relax.test.ts", "lib/ai/facts.test.ts", "lib/ask/chips.test.ts", "lib/ask/cards.test.ts", "lib/ask/project.test.ts", "lib/ask/blog.test.ts", "lib/ask/blogArticle.test.ts", "lib/ask/svgSanitize.test.ts", "lib/ask/artToken.test.ts", "lib/ask/webLinks.test.ts", "components/ask/blogUi.test.ts"]
+  "files": ["lib/ai/quick.test.ts", "lib/ai/relax.test.ts", "lib/ai/facts.test.ts", "lib/ai/router10.test.ts","lib/ask/chips.test.ts", "lib/ask/cards.test.ts", "lib/ask/project.test.ts", "lib/ask/blog.test.ts", "lib/ask/blogArticle.test.ts", "lib/ask/svgSanitize.test.ts", "lib/ask/artToken.test.ts", "lib/ask/webLinks.test.ts", "components/ask/blogUi.test.ts"]
 }
