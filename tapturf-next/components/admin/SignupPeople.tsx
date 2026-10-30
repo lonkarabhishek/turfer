@@ -27,6 +27,7 @@ import {
   type RecordedCity,
 } from "@/lib/admin/people";
 import { NameWithTick, VerifiedTick } from "@/components/account/VerifiedTick";
+import { UserAvatar } from "@/components/account/UserAvatar";
 
 /**
  * Who signed up in the stretch the chart shows (and the city picked in
@@ -344,19 +345,7 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
 }
 
 function Avatar({ p }: { p: Person }) {
-  const [broken, setBroken] = useState(false);
-  const letter = initial(p);
-  if (p.avatar && !broken) {
-    return (
-      /* eslint-disable-next-line @next/next/no-img-element */
-      <img src={p.avatar} alt="" referrerPolicy="no-referrer" loading="lazy" onError={() => setBroken(true)} className="shrink-0 w-9 h-9 rounded-full object-cover bg-primary-100" />
-    );
-  }
-  return (
-    <span aria-hidden className="shrink-0 w-9 h-9 rounded-full bg-primary-100 text-primary-700 inline-flex items-center justify-center text-[14px] font-semibold">
-      {letter}
-    </span>
-  );
+  return <UserAvatar src={p.avatar} name={p.name ?? p.username ?? initial(p)} size={36} />;
 }
 
 /** users.email (Google's, or an old account's), else the Google account added from the profile, else the email a phone account typed, or what they answered. */

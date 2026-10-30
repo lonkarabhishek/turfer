@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { Search, User, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, searchPlayers } from "@/lib/account/client";
 import type { PlayerHit } from "@/lib/account/types";
 import type { Tag } from "@/lib/account/tag";
 import { USERNAME_RE } from "@/lib/account/tag";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
+import { UserAvatar } from "@/components/account/UserAvatar";
 
 /**
  * Pick a TapTurf profile to tag on a player: recently tagged profiles
@@ -40,14 +41,8 @@ export function rememberTagged(p: PlayerHit) {
   }
 }
 
-function Avatar({ photo }: { photo: string | null }) {
-  return photo ? (
-    <img src={photo} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
-  ) : (
-    <span className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center shrink-0" aria-hidden>
-      <User className="w-4 h-4 text-primary-400" />
-    </span>
-  );
+function Avatar({ photo, name }: { photo: string | null; name: string }) {
+  return <UserAvatar src={photo} name={name} size={36} />;
 }
 
 /** The tag a player has now, with Remove. */
@@ -134,7 +129,7 @@ export function PlayerSearch({ onPick, exclude = [] }: { onPick: (p: PlayerHit) 
                 onClick={() => pick(p)}
                 className="press-tight h-11 pl-1.5 pr-3 rounded-full border-2 border-accent-200 bg-white inline-flex items-center gap-2 text-[14px] font-semibold text-primary-800 hover:border-accent-400"
               >
-                <Avatar photo={p.photo} />
+                <Avatar photo={p.photo} name={p.name} />
                 <span className="truncate max-w-[9rem]">{p.name}</span>
                 <span className="text-[12px] text-primary-500">@{p.u}</span>
               </button>
@@ -187,7 +182,7 @@ export function PlayerSearch({ onPick, exclude = [] }: { onPick: (p: PlayerHit) 
                 {current.players.map((p) => (
                   <li key={p.u}>
                     <button type="button" onClick={() => pick(p)} className="w-full min-h-14 px-3 py-2 flex items-center gap-3 text-left hover:bg-primary-50">
-                      <Avatar photo={p.photo} />
+                      <Avatar photo={p.photo} name={p.name} />
                       <span className="min-w-0">
                         <span className="flex items-center gap-1 min-w-0 text-[15px] font-semibold text-primary-900">
                           <span className="truncate">{p.name}</span>

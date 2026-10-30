@@ -1,10 +1,11 @@
 "use client";
 
-import { BadgeCheck, ChevronUp, ExternalLink, User } from "lucide-react";
+import { BadgeCheck, ChevronUp, ExternalLink } from "lucide-react";
 import { playAgainWords, SHOW_GAME_BADGE, starWord } from "@/lib/reviews/catalog";
 import type { ReviewWithUser } from "@/types/review";
 import { monthYear, playedLine, ReportChips, StarsShown } from "./ui";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
+import { UserAvatar } from "@/components/account/UserAvatar";
 
 /**
  * One review on the turf page. A TapTurf report reads as its stars and
@@ -44,14 +45,7 @@ export function ReviewRow({
   return (
     <div className="rounded-2xl border border-primary-100 bg-white p-4">
       <div className="flex items-center gap-3">
-        {r.user_avatar ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={r.user_avatar} alt="" className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center">
-            <User className="w-4 h-4 text-primary-500" />
-          </div>
-        )}
+        <UserAvatar src={r.user_avatar} name={google ? r.author_name || "Google user" : r.user_name || "TapTurf player"} size={36} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-primary-800 flex items-center gap-1.5 min-w-0">
             <span className="truncate">{google ? r.author_name || "Google user" : r.user_name || "TapTurf player"}</span>

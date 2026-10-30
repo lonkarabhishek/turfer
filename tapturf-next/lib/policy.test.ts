@@ -13,13 +13,20 @@ test("policy notice: a new id, so people who dismissed the last one see it", () 
 });
 
 test("policy notice: says what changed and links to where the policy says it", () => {
-  assert.match(PRIVACY_NOTICE.text, /Managed by @your-username/);
-  assert.match(PRIVACY_NOTICE.text, /Let others find and tag me/, "and how to turn it off");
-  assert.match(PRIVACY_NOTICE.text, /name, number and email never show/);
+  assert.match(PRIVACY_NOTICE.text, /profile photo or pick a sports avatar/);
+  assert.match(PRIVACY_NOTICE.text, /Your picture is public/, "who sees it");
+  assert.match(PRIVACY_NOTICE.text, /checked automatically/);
+  assert.match(PRIVACY_NOTICE.text, /remove yours any time/, "and how to take it off");
   assert.ok(privacyPage.includes(`id="${PRIVACY_NOTICE.anchor}"`), `the policy has #${PRIVACY_NOTICE.anchor}`);
-  // The paragraph it links to says the same.
+  // The paragraph it links to says the same, and how to remove it.
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
-  assert.match(privacyPage.slice(at, privacyPage.indexOf("</p>", at)), /Managed by @your-username/);
+  const paragraph = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
+  assert.match(paragraph, /Your picture is public/);
+  assert.match(paragraph, /checked automatically/);
+  assert.match(paragraph, /choose Remove/);
+  // The notice it replaced still reaches whoever missed it, with the one before that.
+  assert.match(PRIVACY_NOTICE.earlier.text, /Managed by @your-username/);
+  assert.match(PRIVACY_NOTICE.earlier.text, /quick game report/);
 });
 
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {

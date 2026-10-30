@@ -18,6 +18,7 @@ import { guessCityFromAddress } from "@/lib/city";
 import type { CityLineProps } from "@/lib/cityLine";
 import type { HomeScope } from "@/lib/home/select";
 import { CityLine } from "@/components/city/CityLine";
+import { UserAvatar } from "@/components/account/UserAvatar";
 import {
   filterNonExpiredGames,
   sortGamesByDateTime,
@@ -214,16 +215,7 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
         {/* ─── Profile / logout chip ────────────────────────── */}
         <div className="mt-8 mb-10 flex items-center justify-between border-t border-primary-200 pt-5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-accent-500 flex items-center justify-center shrink-0">
-              {user.profile_image_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={user.profile_image_url} alt="" className="w-full h-full rounded-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <span className="text-white font-bold text-sm">
-                  {firstName.charAt(0).toUpperCase()}
-                </span>
-              )}
-            </div>
+            <UserAvatar src={user.profile_image_url} name={user.name} size={36} />
             <div className="min-w-0">
               <p className="text-[14px] font-semibold text-primary-800 leading-none">{user.name}</p>
               <p className="text-[11px] text-primary-500 mt-0.5 truncate">{user.phone || user.email}</p>

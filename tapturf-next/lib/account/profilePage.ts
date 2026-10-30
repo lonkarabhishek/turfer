@@ -17,3 +17,17 @@ export function refreshTickPage(p: AccountProfile): void {
     console.warn("account: profile page refresh failed", e);
   }
 }
+
+/**
+ * After a change to what the public profile page shows (the photo): it is
+ * cached for a minute, so it is refreshed now. Only for a page that is
+ * shown (a username, tagging on). Never throws.
+ */
+export function refreshProfilePage(p: AccountProfile): void {
+  if (!p.username || !p.taggable) return;
+  try {
+    revalidatePath(`/u/${p.username}`);
+  } catch (e) {
+    console.warn("account: profile page refresh failed", e);
+  }
+}

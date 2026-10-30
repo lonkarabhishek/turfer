@@ -1,29 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Clock, Check, X, Trash2, ChevronRight, MessageSquare, Gamepad2 } from "lucide-react";
-import { getMyRequests, cancelMyRequest } from "@/lib/queries/games";
+import { cancelMyRequest } from "@/lib/queries/games";
 import type { GameRequest } from "@/types/game";
 
-export function MyRequests({ userId }: { userId: string }) {
-  const [requests, setRequests] = useState<GameRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadRequests();
-  }, [userId]);
-
-  const loadRequests = async () => {
-    setLoading(true);
-    const { data } = await getMyRequests(userId);
-    setRequests(data);
-    setLoading(false);
-  };
-
+/** The requests this person sent to join games. The list comes from the Me tab (useMeData), which counts the pending ones. */
+export function MyRequests({ userId, requests, loading, reloadRequests }: { userId: string; requests: GameRequest[]; loading: boolean; reloadRequests: () => Promise<void> }) {
   const handleCancel = async (requestId: string) => {
     await cancelMyRequest(requestId, userId);
-    await loadRequests();
+    await reloadRequests();
   };
 
   if (loading) {

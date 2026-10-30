@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, MapPin, Gamepad2, PlusCircle, User } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { UserAvatar } from "@/components/account/UserAvatar";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
@@ -19,6 +20,9 @@ const NAV_ITEMS = [
  * (Add to Home Screen) the nav clears the home indicator instead
  * of stretching under it. layout viewport uses viewportFit "cover"
  * so the env() value is populated even in standalone mode.
+ * Signed in, "Me" is the person's own picture (photo, avatar or
+ * initials), ringed in green on their page; the User icon is only for
+ * signed out.
  */
 export function MobileNav() {
   const pathname = usePathname();
@@ -37,17 +41,28 @@ export function MobileNav() {
             (href !== "/" && pathname.startsWith(href)) ||
             (href === "/turfs" && pathname.startsWith("/turf/"));
 
+          const me = href === "/dashboard" && user;
           const inner = (
             <span
               className={`flex flex-col items-center justify-center gap-0.5 h-full w-full ${
                 isActive ? "text-accent-500" : "text-primary-400"
               }`}
             >
-              <Icon
-                className="w-6 h-6"
-                strokeWidth={isActive ? 2.25 : 1.75}
-              />
-              <span className="text-[10px] font-medium">
+              {me ? (
+                <UserAvatar
+                  src={user.profile_image_url}
+                  name={user.name}
+                  size={24}
+                  eager
+                  className={isActive ? "ring-2 ring-accent-500 ring-offset-2 ring-offset-white" : "ring-1 ring-primary-200"}
+                />
+              ) : (
+                <Icon
+                  className="w-6 h-6"
+                  strokeWidth={isActive ? 2.25 : 1.75}
+                />
+              )}
+              <span className={`text-[10px] ${me && isActive ? "font-semibold" : "font-medium"}`}>
                 {label}
               </span>
             </span>

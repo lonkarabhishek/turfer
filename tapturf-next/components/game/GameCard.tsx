@@ -104,7 +104,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
         )}
 
         <p className="mt-2 flex items-center gap-2 min-w-0 text-[13px] text-primary-700">
-          <Avatar src={game.host_profile_image_url} name={game.host_name} className="size-5 text-[10px]" />
+          <Avatar src={game.host_profile_image_url} name={game.host_name} size={20} />
           <span className="truncate">Hosted by {game.host_name || "a TapTurf player"}</span>
           <VerifiedTickFor id={game.creator_id} className="-ml-1" />
         </p>

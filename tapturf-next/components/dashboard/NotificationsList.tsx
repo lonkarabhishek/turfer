@@ -23,20 +23,26 @@ function gameIdOf(notif: Notification): string | null {
   return typeof v === "string" ? v : null;
 }
 
-export function NotificationsList({ userId }: { userId: string }) {
+/** onUnread: how many are unread, after each load and change (the Me tab's Alerts count). */
+export function NotificationsList({ userId, onUnread }: { userId: string; onUnread?: (n: number) => void }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadNotifications();
+    let alive = true;
+    void getUserNotifications(userId).then(({ data }) => {
+      if (!alive) return;
+      setNotifications(data);
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
   }, [userId]);
 
-  const loadNotifications = async () => {
-    setLoading(true);
-    const { data } = await getUserNotifications(userId);
-    setNotifications(data);
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (!loading) onUnread?.(notifications.filter((n) => !n.is_read).length);
+  }, [notifications, loading, onUnread]);
 
   const handleMarkRead = async (id: string) => {
     await markAsRead(id);

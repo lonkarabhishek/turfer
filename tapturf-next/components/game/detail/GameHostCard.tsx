@@ -40,7 +40,7 @@ export function GameHostCard({
   return (
     <section aria-labelledby="host-h" className="rounded-3xl border border-primary-200 bg-white p-5 shadow-soft">
       <div className="flex items-center gap-3 min-w-0">
-        <Avatar src={hostPhoto} name={hostName} className="size-12 text-[18px]" />
+        <Avatar src={hostPhoto} name={hostName} size={48} />
         <div className="min-w-0">
           <h2 id="host-h" className="text-[13px] font-normal text-primary-500 leading-tight">
             {isHost ? "You're the host" : "Your host"}

@@ -37,7 +37,7 @@ export function GameTitle({
         </p>
       )}
       <p className="mt-2 flex items-center gap-2 text-[14px] text-primary-700 min-w-0">
-        <Avatar src={hostPhoto} name={hostName} className="size-6 text-[11px]" />
+        <Avatar src={hostPhoto} name={hostName} size={24} />
         <span className="min-w-0 truncate">
           Hosted by <span className="font-semibold text-primary-900">{isHost ? "you" : hostName || "a TapTurf player"}</span>
         </span>

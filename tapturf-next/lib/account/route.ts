@@ -28,6 +28,8 @@ export const STATUS: Record<AccountError, number> = {
   proof: 422,
   reauth: 403,
   stale: 403,
+  refused: 422,
+  unchecked: 503,
 };
 
 export function accountReply(body: object, error?: AccountError): NextResponse {

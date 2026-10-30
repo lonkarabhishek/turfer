@@ -1,38 +1,34 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { Plus, Trophy, Clock, Users, Calendar } from "lucide-react";
-import { getUserGames, getUserJoinedGames } from "@/lib/queries/games";
 import { formatDate, formatTimeSlot, getGameStatus } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
-type View = "created" | "joined";
+export type GamesView = "created" | "joined";
 
 /**
  * "Games" tab in the dashboard.
  * Always leads with the user's UPCOMING games (soonest first) — the
  * thing they actually opened the app to check — with past games
- * collapsed underneath.
+ * collapsed underneath. The lists come from the Me tab (useMeData), so
+ * its header numbers and this tab agree; those numbers can pick Hosted
+ * or Joined.
  */
-export function MyGames({ userId }: { userId: string }) {
-  const [createdGames, setCreatedGames] = useState<Game[]>([]);
-  const [joinedGames, setJoinedGames] = useState<Game[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>("created");
-
-  useEffect(() => {
-    const load = async () => {
-      const [created, joined] = await Promise.all([
-        getUserGames(userId),
-        getUserJoinedGames(userId),
-      ]);
-      setCreatedGames(created.data);
-      setJoinedGames(joined.data);
-      setLoading(false);
-    };
-    load();
-  }, [userId]);
+export function MyGames({
+  createdGames,
+  joinedGames,
+  loading,
+  view,
+  onView: setView,
+}: {
+  createdGames: Game[];
+  joinedGames: Game[];
+  loading: boolean;
+  view: GamesView;
+  onView: (v: GamesView) => void;
+}) {
 
   const games = view === "created" ? createdGames : joinedGames;
 
@@ -73,6 +69,7 @@ export function MyGames({ userId }: { userId: string }) {
           return (
             <button
               key={k}
+              aria-pressed={active}
               onClick={() => setView(k)}
               className={`text-[13px] font-bold px-4 py-2 rounded-full border-2 transition-all focus-neon ${
                 active
@@ -186,7 +183,7 @@ function GameRow({ game, highlight = false }: { game: Game; highlight?: boolean 
   );
 }
 
-function EmptyState({ view }: { view: View }) {
+function EmptyState({ view }: { view: GamesView }) {
   return (
     <div className="text-center py-14">
       <div className="w-14 h-14 bg-accent-50 border border-accent-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">

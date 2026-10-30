@@ -310,7 +310,19 @@ export async function getGameRequests(gameId: string) {
     .eq("game_id", gameId)
     .order("created_at", { ascending: false });
 
-  return { data: (data as GameRequest[]) || [], error: error?.message || null };
+  if (error || !data || data.length === 0) return { data: (data as GameRequest[]) || [], error: error?.message || null };
+
+  // Each player's picture as it is now (a request keeps a copy from when it was sent, and older ones have none).
+  const userIds = [...new Set(data.map((r) => r.user_id).filter(Boolean))];
+  const { data: users } = await supabase.from("users").select("id, profile_image_url").in("id", userIds);
+  if (users) {
+    const photos = new Map(users.map((u) => [u.id, u.profile_image_url as string | null]));
+    data.forEach((r: Record<string, unknown>) => {
+      if (photos.has(r.user_id as string)) r.requester_avatar = photos.get(r.user_id as string) ?? undefined;
+    });
+  }
+
+  return { data: data as GameRequest[], error: null };
 }
 
 export async function getMyRequests(userId: string) {
