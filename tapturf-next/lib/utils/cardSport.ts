@@ -191,6 +191,64 @@ export function sportBandRange(bands: SportBands | null | undefined, sport: Card
   return lo <= hi ? [lo, hi] : null;
 }
 
+/** A time band the bands price (the turf page's Pricing table: morning 5 am to 12 pm, day 12 to 5 pm, evening 5 to 9 pm, night after 9 pm). */
+export type BandTime = PriceBand["band"];
+type DayRanges = { weekday?: readonly [number, number]; weekend?: readonly [number, number] };
+
+/** Each sport's per-hour range by time band and day type: { football: { evening: { weekday: [999, 999], weekend: [999, 999] } } }. */
+export type SportBandTimes = Partial<Record<SportBandKind, Partial<Record<BandTime, DayRanges>>>>;
+
+/**
+ * A venue's sport ranges by time (as sportBandsOf, by time band and day
+ * type), from the same checked bands. A band for all days counts for
+ * both. null when no band names a sport.
+ */
+export function sportBandTimesOf(bands: readonly Pick<PriceBand, "band" | "days" | "format" | "price_per_hour">[] | null | undefined): SportBandTimes | null {
+  const out: { [K in SportBandKind]?: { [B in BandTime]?: { weekday?: [number, number]; weekend?: [number, number] } } } = {};
+  for (const b of bands ?? []) {
+    const p = positivePrice(b?.price_per_hour);
+    const days = b?.days === "all" ? (["weekday", "weekend"] as const) : b?.days === "weekday" || b?.days === "weekend" ? [b.days] : [];
+    if (p == null || !days.length || !["morning", "day", "evening", "night"].includes(b.band)) continue;
+    for (const kind of bandKinds(b.format)) {
+      const at = ((out[kind] ??= {})[b.band] ??= {});
+      for (const d of days) {
+        const r = at[d];
+        at[d] = r ? [Math.min(r[0], p), Math.max(r[1], p)] : [p, p];
+      }
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Venue id -> its sports' ranges by time (sportBandTimesOf). Plain JSON, for the data cache. */
+export type SportBandTimeMap = Record<string, SportBandTimes>;
+
+export function sportBandTimeMap(rows: readonly { id: string; pricing_bands: readonly Pick<PriceBand, "band" | "days" | "format" | "price_per_hour">[] | null }[]): SportBandTimeMap {
+  const out: SportBandTimeMap = {};
+  for (const r of rows) {
+    const times = sportBandTimesOf(r.pricing_bands);
+    if (times) out[r.id] = times;
+  }
+  return out;
+}
+
+/**
+ * The per-hour range a venue's bands give the selected sport at one time
+ * band on one day type (as sportBandRange, at that time), or null when
+ * they list none for it then.
+ */
+export function sportBandTimeRange(times: SportBandTimes | null | undefined, sport: CardSport, band: BandTime, day: "weekday" | "weekend"): readonly [number, number] | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const k of BAND_KINDS) {
+    const r = times?.[k.kind]?.[band]?.[day];
+    if (!r || !k.labels.some((l) => labelRank(l, sport) != null)) continue;
+    lo = Math.min(lo, r[0]);
+    hi = Math.max(hi, r[1]);
+  }
+  return lo <= hi ? [lo, hi] : null;
+}
+
 const norm = (l: string) => l.trim().toLowerCase();
 
 /** The sport page a card's sport is: the page with these labels, or the page that lists the chip. */

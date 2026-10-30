@@ -23,7 +23,7 @@ import {
 import { quickAnswer } from "@/lib/ai/quick";
 import { namesVenue, placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
 import { asksPrice, compareTable, hostPreview, hostVenueWords, priceChart, resultsMap, saysHere, visualsFor, type AskVisuals } from "@/lib/ask/cards";
-import { getSportBands, withSportBands } from "@/lib/queries/sportBands";
+import { getSportBands, getSportBandTimes, withSportBands } from "@/lib/queries/sportBands";
 import { cap, citiesLine, closestRow, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
@@ -442,7 +442,10 @@ export async function GET(req: Request) {
         });
         const table = compareTable(sheets.map((s) => s.turf), { sport: filters.sport, loc, reports });
         const show = visualsFor(filters, { compared: sheets.length });
-        body = { ...base, reply, relaxed: [], total: sheets.length, missing, turfs: sheets.map((s) => card(s.turf)), compare: out, ...(show.length ? { visuals: { show, compare: table } satisfies AskVisuals } : {}) };
+        // rows: [] for a tab opened before 30 Oct, whose chat maps compare.rows: it then
+        // shows the verdict and "Best for" over the cards. Drop after a release or two.
+        const compare = out ? { ...out, rows: [] } : null;
+        body = { ...base, reply, relaxed: [], total: sheets.length, missing, turfs: sheets.map((s) => card(s.turf)), compare, ...(show.length ? { visuals: { show, compare: table } satisfies AskVisuals } : {}) };
         break;
       }
       case "question": {
@@ -601,11 +604,13 @@ export async function GET(req: Request) {
         else if (filters.wants_nearby && !loc && stayedIn && isCity(stayedIn))
           body.reply = `These are the top rated in ${labelFor(stayedIn)}. Share your location to see the nearest first.`;
         // Pictures from the same cards: each one's price at the time asked
-        // (with the sport's bands, a cached read, when a sport was asked)
-        // and where they are. The budget was dropped when nothing fit it.
+        // (with the sport's bands, and by time when a time was asked: cached
+        // reads, when a sport was asked) and where they are. The budget was
+        // dropped when nothing fit it.
         const asked = { ...filters, sport: r.sport, max_price_per_hour: r.relaxed.includes("price") ? null : filters.max_price_per_hour };
-        const bands = asksPrice(asked) && asked.sport ? await getSportBands() : null;
-        const chart = asksPrice(asked) ? priceChart(bands ? r.turfs.map((t) => withSportBands(t, bands)) : r.turfs, asked, new Date()) : null;
+        const banded = asksPrice(asked) && !!asked.sport;
+        const [bands, times] = banded ? await Promise.all([getSportBands(), asked.time && asked.time !== "late_night" ? getSportBandTimes() : null]) : [null, null];
+        const chart = asksPrice(asked) ? priceChart(bands ? r.turfs.map((t) => withSportBands(t, bands)) : r.turfs, asked, new Date(), times) : null;
         const map = resultsMap(r.turfs.map((t) => ({ id: t.id, lat: t.lat, lng: t.lng, area: areaFor(t) })), loc);
         const show = visualsFor(asked, { priced: chart?.bars.length ?? 0, map: !!map });
         if (show.length)

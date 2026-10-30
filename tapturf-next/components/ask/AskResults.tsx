@@ -8,7 +8,7 @@ import { googleMapsUrl } from "@/lib/utils/bookingApps";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import { OwnerMark } from "@/components/turf/OwnerMark";
 import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
-import { summarisePrice } from "@/lib/utils/prices";
+import { summarisePrice, type PriceSummary } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { formatDistance } from "@/lib/utils/location";
 import { formatDate, formatTimeSlot } from "@/lib/utils/game";
@@ -23,10 +23,25 @@ import { CompareTableView, HostCardView, PriceChartView, ResultsMapView } from "
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
-/** n: the card's number on the answer's map, shown before its name. */
-export function TurfMiniCard({ turf, priority = false, n }: { turf: Turf & { distanceKm?: number }; priority?: boolean; n?: number }) {
+/**
+ * n: the card's number on the answer's map, shown before its name.
+ * price: the price the comparison's table shows above the card (the
+ * sport's own when a sport was asked; null when none is listed), so the
+ * two agree; else its own (summarisePrice).
+ */
+export function TurfMiniCard({
+  turf,
+  priority = false,
+  n,
+  price: shown,
+}: {
+  turf: Turf & { distanceKm?: number };
+  priority?: boolean;
+  n?: number;
+  price?: Pick<PriceSummary, "label" | "kind"> | null;
+}) {
   const img = turfPhotos(turf)[0] ?? null;
-  const price = summarisePrice(turf);
+  const price = shown === undefined ? summarisePrice(turf) : (shown ?? { label: "Prices not listed yet", kind: "unknown" });
   const area = areaFor(turf);
   return (
     <Link
@@ -210,6 +225,7 @@ export function AskResultBody({
   const drawn = visualsToDraw(res.visuals);
   const v = res.visuals;
   const numbered = drawn.includes("map");
+  const compared = drawn.includes("compare") ? v?.compare : undefined;
 
   return (
     <div className="mt-2.5">
@@ -288,14 +304,16 @@ export function AskResultBody({
         ))}
 
       {res.intent === "compare" &&
-        (drawn.includes("compare") && v?.compare ? (
+        (compared ? (
           <>
-            <CompareTableView res={res} table={v.compare} />
+            <CompareTableView res={res} table={compared} />
             <div className="mt-3">
               <Row>
-                {turfs.map((t) => (
-                  <TurfMiniCard key={t.id} turf={t} />
-                ))}
+                {turfs.map((t) => {
+                  // The table's price (the sport's own when one was asked), so card and table agree.
+                  const venue = compared.venues.find((c) => c.id === t.id);
+                  return <TurfMiniCard key={t.id} turf={t} price={venue ? venue.price : undefined} />;
+                })}
               </Row>
             </div>
           </>

@@ -1,5 +1,5 @@
 import { haversineKm, type Coords } from "../utils/location";
-import { cardPrice, sportBandMap, sportPrice, type CardSport } from "../utils/cardSport";
+import { cardPrice, sportBandMap, sportBandTimeRange, sportPrice, type CardSport, type SportBandTimeMap } from "../utils/cardSport";
 import { positivePrice, summarisePrice } from "../utils/prices";
 import { formatSpan, normaliseOpeningHours } from "../utils/hours";
 import { areaFor } from "../utils/area";
@@ -108,23 +108,35 @@ export function dayType(when: Reading["when"], now: Date): "weekday" | "weekend"
 
 type PriceColumn = "morning_price" | "afternoon_price" | "evening_price" | "weekend_morning_price" | "weekend_afternoon_price" | "weekend_evening_price";
 
+/** The price bands' time for each time asked (the turf page's Pricing table: Morning, Afternoon 12 to 5 pm, Evening 5 to 9 pm). */
+const BAND_AT = { morning: "morning", afternoon: "day", evening: "evening" } as const;
+
 /**
  * Each shown venue's listed per-hour rate for the time asked, cheapest
  * first. Only a price the site's card would show for the sport counts
  * (cardPrice, sportPrice): a venue whose rates are another sport's, or
  * that lists none, is named under the chart with what its price is
  * instead, never charted. Morning, afternoon and evening read their own
- * column (the weekend one on a weekend, dayType); late night and no time
- * read the card's own lowest listed rate, as no column says them.
- * Reported prices (from reviews) and rates per slot or per person are
- * never charted beside per-hour ones.
+ * column (the weekend one on a weekend, dayType), or, where the card shows
+ * the range a venue's price bands give the sport, that sport's band at the
+ * time (`times`, getSportBandTimes; without them such a venue is named
+ * under the chart with its range). Late night and no time read the card's
+ * own lowest listed rate. Reported prices (from reviews) and rates per
+ * slot or per person are never charted beside per-hour ones.
  */
-export function priceChart(turfs: readonly Turf[], r: Pick<Reading, "sport" | "time" | "when" | "max_price_per_hour">, now: Date): PriceChart {
+export function priceChart(
+  turfs: readonly Turf[],
+  r: Pick<Reading, "sport" | "time" | "when" | "max_price_per_hour">,
+  now: Date,
+  times: SportBandTimeMap | null = null,
+): PriceChart {
   const sport = cardSportOf(r.sport);
   const sportName = r.sport ? (sportBySlug(r.sport)?.name ?? null) : null;
   const day = dayType(r.when, now);
   const timed = r.time && r.time !== "late_night" ? r.time : null;
   const column: PriceColumn | null = timed ? (`${day === "weekend" ? "weekend_" : ""}${timed}_price` as PriceColumn) : null;
+  // "No evening rate listed", "No weekend evening rate listed": the column read.
+  const timeWord = timed ? `${day === "weekend" ? "weekend " : ""}${TIME_WORD[timed]}` : "";
   const bars: PriceChart["bars"] = [];
   const off: PriceChart["off"] = [];
   turfs.forEach((t) => {
@@ -144,17 +156,28 @@ export function priceChart(turfs: readonly Turf[], r: Pick<Reading, "sport" | "t
       return;
     }
     // The slot columns are the sport's only when the card shows them as they are.
-    const own = !sport || sportPrice(t, summarisePrice(t), sport).from === "card";
-    const v = own ? positivePrice(t[column]) : null;
-    if (v != null) bars.push({ id: t.id, value: v, display: rupees(v) });
-    else off.push({ id: t.id, why: `No ${TIME_WORD[timed!]} rate listed (${shown.label})` });
+    if (!sport || sportPrice(t, summarisePrice(t), sport).from === "card") {
+      const v = positivePrice(t[column]);
+      if (v != null) bars.push({ id: t.id, value: v, display: rupees(v) });
+      else off.push({ id: t.id, why: `No ${timeWord} rate listed (${shown.label})` });
+      return;
+    }
+    // Else the card shows the range the venue's bands give the sport: the sport's band at the time.
+    const sportWord = sportName ?? "This sport";
+    if (!times) {
+      off.push({ id: t.id, why: `${sportWord} ${shown.label}; its page has the rate by time` });
+      return;
+    }
+    const band = sportBandTimeRange(times[t.id], sport, BAND_AT[timed!], day);
+    if (band) bars.push({ id: t.id, value: band[0], display: band[0] === band[1] ? rupees(band[0]) : `from ${rupees(band[0])}` });
+    else off.push({ id: t.id, why: `No ${timeWord} ${sportWord.toLowerCase()} rate listed (${shown.label})` });
   });
   const order = new Map(turfs.map((t, i) => [t.id, i]));
   bars.sort((a, b) => a.value - b.value || order.get(a.id)! - order.get(b.id)!);
   const title = timed ? `${cap(TIME_WORD[timed])} rate per hour, ${day === "weekend" ? "weekends" : "weekdays"}` : "Lowest listed rate per hour";
   const note = [
     sportName ? `${sportName}, cheapest first` : "Cheapest first",
-    r.time === "late_night" ? "no late-night rates are listed, so this is each venue's lowest" : null,
+    r.time === "late_night" ? "late-night rates aren't charted here, so this is each venue's lowest listed rate" : null,
     r.max_price_per_hour != null && r.max_price_per_hour > 0 ? `your budget ${rupees(r.max_price_per_hour)}` : null,
   ]
     .filter(Boolean)
@@ -174,9 +197,10 @@ const NEAR_KM = 40;
 const SPAN_KM = 60;
 /** ...that are not all in one spot. */
 const MIN_SPREAD_KM = 0.3;
-/** The width the pins are kept apart for (the narrowest phone's frame, about 290 px). */
-const NOMINAL_PX = 290;
-const PIN_GAP_PX = 26;
+/** The width the pins are kept apart for: the frame on a 320px phone. */
+const NOMINAL_PX = 288;
+/** Each pin's round tap target is this wide (AskVisuals), so pins this far apart never cover a neighbour's disc. */
+const PIN_GAP_PX = 30;
 
 type Point = { id: string; n: number; lat: number; lng: number; area: string | null };
 
@@ -343,7 +367,10 @@ const FACILITIES: [keyof Turf, string][] = [
 /**
  * A venue's hours in one line: "Open 24 hours", "6:00 AM – 10:00 PM", or
  * the most common hours then the days that differ ("6:00 AM – 10:00 PM;
- * Sun 7:00 AM – 10:00 PM"). Null when none are listed.
+ * Sun 7:00 AM – 10:00 PM"). When most days are closed, the open days come
+ * first, then the closed ones ("Tue, Thu 7:00 PM – 9:00 PM; Mon, Wed, Sat,
+ * Sun closed"), not a "Closed" first that reads as shut all week. Null
+ * when none are listed.
  */
 export function hoursLine(t: Pick<Turf, "opening_hours" | "start_time" | "end_time" | "is_24x7">): string | null {
   const rows = normaliseOpeningHours(t.opening_hours, { start_time: t.start_time, end_time: t.end_time, is_24x7: t.is_24x7 });
@@ -357,7 +384,10 @@ export function hoursLine(t: Pick<Turf, "opening_hours" | "start_time" | "end_ti
   const base = [...count].sort((a, b) => b[1] - a[1])[0][0];
   const rest = new Map<string, string[]>();
   for (const s of said) if (s.text !== base) rest.set(s.text, [...(rest.get(s.text) ?? []), s.day]);
-  return [base, ...[...rest].map(([text, days]) => `${days.join(", ")} ${text}`)].join("; ");
+  const others = [...rest].map(([text, days]) => `${days.join(", ")} ${text}`);
+  if (base !== "Closed") return [base, ...others].join("; ");
+  const closed = said.filter((s) => s.text === "Closed").map((s) => s.day);
+  return others.length ? `${others.join("; ")}; ${closed.join(", ")} closed` : "Closed";
 }
 
 /**
@@ -366,10 +396,11 @@ export function hoursLine(t: Pick<Turf, "opening_hours" | "start_time" | "end_ti
  * hours, distance, sports, facilities, the Claimed mark and the page's
  * Call and WhatsApp numbers. `reports`: each venue's TapTurf players'
  * count and average (the fact sheet's tapturf_reports), when it has any.
- * The price is the one its card shows under the table (cardPrice: the
- * sport's own when a sport was asked, summarisePrice otherwise), so the
- * two never disagree; a venue that lists only price bands reads "Not
- * listed" here as on its card, though its page shows the bands
+ * The price is a card's (cardPrice: the sport's own when a sport was
+ * asked, summarisePrice otherwise), and the cards under the table show
+ * this same price (AskResults' compare view hands it to them), so the two
+ * never disagree; a venue that lists only price bands reads "Not listed"
+ * here as on its card, though its page shows the bands
  * (summarisePagePrice; which wins on cards is the owner's call).
  */
 export function compareTable(
@@ -385,7 +416,7 @@ export function compareTable(
     const rep = opts.reports?.[i] ?? null;
     return {
       id: t.id,
-      price: p.kind === "unknown" ? null : p.label,
+      price: p.kind === "unknown" ? null : { label: p.label, kind: p.kind },
       google: rating > 0 ? { rating: rating.toFixed(1), reviews: t.total_reviews > 0 ? t.total_reviews.toLocaleString("en-IN") : null } : null,
       players: rep && rep.players > 0 ? { count: rep.players, average: rep.average } : null,
       hours: hoursLine(t),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useAsk } from "./AskProvider";
@@ -149,7 +149,7 @@ export function PriceChartView({ chart, turfs }: { chart: PriceChart; turfs: rea
             )}
             {off.length > 0 && (
               <div className="mt-2 border-t border-primary-100 pt-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-400">Not on the chart</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-500">Not on the chart</p>
                 <ul role="list" className="mt-1 space-y-1">
                   {off.map((o) => (
                     <li key={o.id} className="text-[12px] leading-snug">
@@ -220,12 +220,14 @@ export function ResultsMapView({ map, turfs }: { map: ResultsMap; turfs: readonl
           const t = byId.get(p.id)!;
           const area = areaFor(t);
           const away = t.distanceKm != null ? `, ${formatDistance(t.distanceKm)} away` : "";
+          // A 30px round target, and pins sit 30px apart or more (lib/ask/cards.ts PIN_GAP_PX), so
+          // none covers a neighbour's disc. On top while hovered or focused, and its name with it.
           return (
             <Link
               key={p.id}
               href={turfPath(t)}
               aria-label={`${p.n}. ${t.name}${area ? `, ${area}` : ""}${away}`}
-              className="group absolute flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full cursor-pointer focus-visible:outline-none"
+              className="group absolute flex h-[30px] w-[30px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full cursor-pointer focus-visible:outline-none hover:z-20 focus-visible:z-20 active:z-20"
               style={{ left: pct(p.x), top: pct(p.y) }}
             >
               <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-accent-600 text-[12px] font-bold tabular-nums text-white ring-2 ring-white shadow-soft transition-transform group-hover:scale-110 group-focus-visible:ring-primary-900">
@@ -260,7 +262,7 @@ export function ResultsMapView({ map, turfs }: { map: ResultsMap; turfs: readonl
 
 // ── Comparison ─────────────────────────────────────────────────────
 
-const NOT_LISTED = <span className="text-primary-400">Not listed</span>;
+const NOT_LISTED = <span className="text-primary-500">Not listed</span>;
 const MAX_SPORTS = 5;
 
 /**
@@ -270,6 +272,8 @@ const MAX_SPORTS = 5;
  * are the model's words, said as a summary.
  */
 export function CompareTableView({ res, table }: { res: AskResponse; table: CompareTable }) {
+  // Every turn stays in the thread, and the same venues can be compared twice: ids of this table's own.
+  const uid = useId();
   const byId = useCards(res.turfs ?? []);
   const venues = table.venues.filter((v) => byId.has(v.id));
   const c = res.compare;
@@ -277,7 +281,8 @@ export function CompareTableView({ res, table }: { res: AskResponse; table: Comp
   const n = venues.length;
   const any = (f: (v: (typeof venues)[number]) => unknown) => venues.some((v) => f(v) != null);
   const rows: { label: string; cell: (v: (typeof venues)[number], i: number) => ReactNode }[] = [
-    { label: "Price", cell: (v) => (v.price ? <span className="font-semibold text-primary-900">{v.price}</span> : NOT_LISTED) },
+    // Styled as the cards style it: a reported price is not a listed one.
+    { label: "Price", cell: (v) => (v.price ? <span className={v.price.kind === "real" ? "font-semibold text-primary-900" : "text-primary-600"}>{v.price.label}</span> : NOT_LISTED) },
     {
       label: "Rating on Google",
       cell: (v) =>
@@ -339,7 +344,7 @@ export function CompareTableView({ res, table }: { res: AskResponse; table: Comp
                   const t = byId.get(v.id)!;
                   const area = areaFor(t);
                   return (
-                    <th key={v.id} id={`cmp-${v.id}`} scope="col" className={`px-3 pt-2.5 pb-2 text-left align-bottom ${i ? "border-l border-primary-100" : ""}`}>
+                    <th key={v.id} id={`${uid}-v${i}`} scope="col" className={`px-3 pt-2.5 pb-2 text-left align-bottom ${i ? "border-l border-primary-100" : ""}`}>
                       <Link href={turfPath(t)} className="font-semibold text-primary-900 leading-snug hover:text-accent-700 cursor-pointer transition-colors">
                         {t.name}
                       </Link>
@@ -358,13 +363,14 @@ export function CompareTableView({ res, table }: { res: AskResponse; table: Comp
             {rows.map((row, r) => (
               <tbody key={row.label}>
                 <tr>
-                  <th id={`cmp-row-${r}-${venues[0].id}`} colSpan={n} scope="colgroup" className="border-t border-primary-100 px-3 pt-2.5 pb-1 text-left text-[11px] font-semibold uppercase tracking-wide text-primary-400">
-                    {row.label}
+                  <th id={`${uid}-r${r}`} colSpan={n} scope="colgroup" className="border-t border-primary-100 px-3 pt-2.5 pb-1 text-left text-[11px] font-semibold uppercase tracking-wide text-primary-500">
+                    {/* The label spans the table; it stays at the box's left edge as three venues scroll under it. */}
+                    <span className="sticky left-3 inline-block">{row.label}</span>
                   </th>
                 </tr>
                 <tr className="align-top">
                   {venues.map((v, i) => (
-                    <td key={v.id} headers={`cmp-${v.id} cmp-row-${r}-${venues[0].id}`} className={`px-3 pb-2.5 leading-snug text-primary-800 break-words ${i ? "border-l border-primary-100" : ""}`}>
+                    <td key={v.id} headers={`${uid}-v${i} ${uid}-r${r}`} className={`px-3 pb-2.5 leading-snug text-primary-800 break-words ${i ? "border-l border-primary-100" : ""}`}>
                       {row.cell(v, i)}
                     </td>
                   ))}

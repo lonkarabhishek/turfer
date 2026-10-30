@@ -52,8 +52,12 @@ export const MAP_ASPECT = 1.6;
 /** One venue's column in the comparison: every value from its row, null where it lists none ("Not listed"). */
 export type CompareVenue = {
   id: string;
-  /** The price as the card shows it for the sport asked, else as the venue's page shows it. */
-  price: string | null;
+  /**
+   * The price as a card shows it: the sport's own when a sport was asked
+   * (cardPrice), else summarisePrice; null when none is listed. The cards
+   * under the table show this same price.
+   */
+  price: { label: string; kind: "real" | "reported" | "reported_text" } | null;
   /** Google's rating and review count, said as Google's. */
   google: { rating: string; reviews: string | null } | null;
   /** TapTurf players' own live reports. */

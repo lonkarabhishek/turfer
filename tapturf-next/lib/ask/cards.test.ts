@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { haversineKm } from "../utils/location";
 import { asksPrice, compareTable, dayType, hostPreview, hostVenueWords, hoursLine, MAP_ASPECT, priceChart, resultsMap, saysHere, visualsFor, type Reading } from "./cards";
 import { visualsToDraw } from "./visuals";
-import type { Turf } from "../../types/turf";
+import { sportBandMap, sportBandTimeMap } from "../utils/cardSport";
+import type { PriceBand, Turf } from "../../types/turf";
 
 // Rows shaped like production's (30 Oct 2026, Pune and Bangalore). Every
 // phone number here is made up (90000 00xxx).
@@ -145,11 +146,14 @@ test("the evening chart: each venue's weekday evening rate, cheapest first, the 
     { id: "sc", why: "Prices not listed yet" },
     { id: "rp", why: "~₹900/hr (reported)" },
   ]);
-  // Saturday: the weekend column; a venue that lists no weekend evening rate is named, not charted at its weekday one.
+  // Saturday: the weekend column; a venue that lists no weekend evening rate is named, not charted at its weekday one,
+  // and the line says it is the weekend rate that isn't listed (its page shows the weekday one).
   const sat = priceChart([gymkhana, paddock, powerplay], reading({ sport: "football", time: "evening", when: "weekend" }), FRIDAY);
   assert.equal(sat.title, "Evening rate per hour, weekends");
   assert.deepEqual(sat.bars.map((b) => [b.id, b.value]), [["hg", 1500], ["pd", 1999]]);
-  assert.deepEqual(sat.off, [{ id: "pp", why: "No evening rate listed (₹350/hr)" }]);
+  assert.deepEqual(sat.off, [{ id: "pp", why: "No weekend evening rate listed (₹350/hr)" }]);
+  // Tomorrow is Saturday in India: the same.
+  assert.deepEqual(priceChart([gymkhana, powerplay], reading({ time: "morning", when: "tomorrow" }), FRIDAY).off, [{ id: "pp", why: "No weekend morning rate listed (₹350/hr)" }]);
   // Ties keep the cards' order.
   const tie = priceChart([turf({ id: "a", evening_price: 900 }), turf({ id: "b", evening_price: 900 })], reading({ time: "evening" }), FRIDAY);
   assert.deepEqual(tie.bars.map((b) => b.id), ["a", "b"]);
@@ -174,19 +178,101 @@ test("a court sport never charts another sport's rate: the card rule decides", (
     evening_price: 700,
     sport_bands: { football: [1300, 1400], "box-cricket": [600, 700] },
   });
+  // Its slot columns are not football's, so they are never charted; without the bands by time, its range is named under the chart.
   const f = priceChart([banded], reading({ sport: "football", time: "evening" }), FRIDAY);
   assert.deepEqual(f.bars, []);
-  assert.deepEqual(f.off, [{ id: "bd", why: "No evening rate listed (₹1300 – ₹1400/hr)" }]);
+  assert.deepEqual(f.off, [{ id: "bd", why: "Football ₹1300 – ₹1400/hr; its page has the rate by time" }]);
+  // Bands by time that list no football evening: said as football's, never as no evening rate at all.
+  const morningOnly = { bd: { football: { morning: { weekday: [1300, 1300] as const } } } };
+  assert.deepEqual(priceChart([banded], reading({ sport: "football", time: "evening" }), FRIDAY, morningOnly).off, [
+    { id: "bd", why: "No evening football rate listed (₹1300 – ₹1400/hr)" },
+  ]);
   // With no time asked, the band range's low end is the sport's lowest listed rate.
   const low = priceChart([banded, hotfut], reading({ sport: "football", sort: "price_low" }), FRIDAY);
   assert.equal(low.title, "Lowest listed rate per hour");
   assert.deepEqual(low.bars.map((b) => [b.id, b.display]), [["hf", "₹550"], ["bd", "from ₹1,300"]]);
 });
 
+test("a venue whose card shows its bands' range for the sport is charted at the sport's band for the time asked", () => {
+  // Bangalore, 30 Oct (SELECT only): each lists box cricket too, and its bands give football another range than its slot columns.
+  const split = (format: string, days: PriceBand["days"], prices: Record<PriceBand["band"], number>) =>
+    Object.entries(prices).map(([band, price_per_hour]) => ({ band, days, format, price_per_hour }) as PriceBand);
+  const allDays = (format: string, prices: Record<PriceBand["band"], number>) => split(format, "all", prices);
+  const hitAndRun = turf({
+    id: "hr",
+    name: "HIT AND RUN",
+    sports: ["Box Cricket", "Football"],
+    morning_price: 799,
+    afternoon_price: 799,
+    evening_price: 999,
+    weekend_morning_price: 799,
+    weekend_afternoon_price: 799,
+    weekend_evening_price: 999,
+    pricing_bands: [...allDays("6-a-side", { morning: 800, day: 800, evening: 999, night: 999 }), ...allDays("box cricket (Medium)", { morning: 799, day: 799, evening: 999, night: 999 })],
+  });
+  const sprintplay = turf({
+    id: "sp",
+    name: "Sprintplay Sports Arena",
+    sports: ["Box Cricket", "Football", "Badminton"],
+    morning_price: 1000,
+    afternoon_price: 800,
+    evening_price: 1000,
+    weekend_morning_price: 1400,
+    weekend_afternoon_price: 1200,
+    weekend_evening_price: 1400,
+    pricing_bands: [
+      ...split("box cricket (Large)", "weekday", { morning: 1000, day: 800, evening: 1000, night: 1000 }),
+      ...split("box cricket (Large)", "weekend", { morning: 1400, day: 1200, evening: 1400, night: 1400 }),
+      ...split("6-a-side", "weekday", { morning: 1000, day: 1000, evening: 1000, night: 1000 }),
+      ...split("6-a-side", "weekend", { morning: 1400, day: 1400, evening: 1400, night: 1400 }),
+    ],
+  });
+  const geetanjali = turf({
+    id: "ge",
+    name: "Geetanjali Olympiad Sports Arena",
+    sports: ["Football", "Badminton", "Skating"],
+    morning_price: 1800,
+    afternoon_price: 1800,
+    evening_price: 1800,
+    weekend_morning_price: 1800,
+    weekend_afternoon_price: 1800,
+    weekend_evening_price: 1800,
+    pricing_bands: [...allDays("5-a-side", { morning: 1800, day: 1800, evening: 1800, night: 1800 }), ...allDays("7-a-side", { morning: 2000, day: 2000, evening: 2000, night: 2000 })],
+  });
+  const rows = [hitAndRun, sprintplay, geetanjali, powerplay];
+  // As the route gives them: the card rows with the sport bands, and the bands by time, read from the same rows.
+  const ranges = sportBandMap(rows.map((t) => ({ id: t.id, pricing_bands: t.pricing_bands ?? null, price_owner_confirmed: null })));
+  const times = sportBandTimeMap(rows.map((t) => ({ id: t.id, pricing_bands: t.pricing_bands ?? null })));
+  const cards = rows.map((t) => (ranges[t.id] ? { ...t, pricing_bands: null, sport_bands: ranges[t.id] } : t));
+  // "Cheapest football turf tonight", a Friday: weekday evening, every venue charted, none named as listing no rate.
+  const tonight = priceChart(cards, reading({ sport: "football", time: "evening", when: "today", sort: "price_low" }), FRIDAY, times);
+  assert.deepEqual(
+    tonight.bars.map((b) => [b.id, b.value, b.display]),
+    [
+      ["pp", 350, "₹350"],
+      ["hr", 999, "₹999"],
+      ["sp", 1000, "₹1,000"],
+      // 5-a-side ₹1,800, 7-a-side ₹2,000 in the evening.
+      ["ge", 1800, "from ₹1,800"],
+    ],
+  );
+  assert.deepEqual(tonight.off, []);
+  // The weekend reads the weekend bands; the afternoon reads the "day" band (12 to 5 pm).
+  const sat = priceChart(cards, reading({ sport: "football", time: "evening", when: "weekend" }), FRIDAY, times);
+  assert.deepEqual(sat.bars.find((b) => b.id === "sp")?.value, 1400);
+  const noon = priceChart(cards, reading({ sport: "football", time: "afternoon" }), FRIDAY, times);
+  assert.deepEqual(noon.bars.find((b) => b.id === "sp")?.value, 1000);
+  // Box cricket: HIT AND RUN's bands give it its card's own range, so its slot columns are box cricket's.
+  const box = priceChart(cards, reading({ sport: "box-cricket", time: "afternoon" }), FRIDAY, times);
+  assert.deepEqual(box.bars.find((b) => b.id === "hr")?.value, 799);
+  assert.deepEqual(box.bars.find((b) => b.id === "sp")?.value, 800);
+});
+
 test("late night and no time read the card's own lowest rate; a rate per slot is never charted beside per-hour ones", () => {
   const late = priceChart([gymkhana, powerplay], reading({ time: "late_night" }), FRIDAY);
   assert.equal(late.title, "Lowest listed rate per hour");
-  assert.match(late.note, /no late-night rates are listed/);
+  // Not "none are listed": most bands list a night rate (after 9 pm), which this chart doesn't read.
+  assert.match(late.note, /late-night rates aren't charted here, so this is each venue's lowest listed rate/);
   assert.deepEqual(late.bars.map((b) => [b.id, b.display]), [["pp", "₹350"], ["hg", "from ₹800"]]);
   const slot = turf({ id: "sl", price_unit: "per_slot", slot_minutes: 90, morning_price: null, afternoon_price: null, evening_price: 1500 });
   const c = priceChart([slot, powerplay], reading({ time: "evening" }), FRIDAY);
@@ -264,17 +350,17 @@ test("the scale bar sits in a corner no pin covers, and no area name sits on it"
   const m = resultsMap(blr, null);
   assert.ok(m);
   assert.notEqual(m.scale.at, "bl");
-  const H = 290 / MAP_ASPECT;
-  const w = Math.max(36, m.scale.w * 290) + 4;
+  const H = 288 / MAP_ASPECT;
+  const w = Math.max(36, m.scale.w * 288) + 4;
   const right = m.scale.at.endsWith("r");
   const top = m.scale.at.startsWith("t");
-  const box = { x0: right ? 290 - 6 - w : 6, x1: right ? 284 : 6 + w, y0: top ? 4 : H - 28, y1: top ? 28 : H - 4 };
+  const box = { x0: right ? 288 - 6 - w : 6, x1: right ? 282 : 6 + w, y0: top ? 4 : H - 28, y1: top ? 28 : H - 4 };
   for (const p of m.pins) {
-    const [x, y] = [p.x * 290, p.y * H];
+    const [x, y] = [p.x * 288, p.y * H];
     assert.ok(x + 13 < box.x0 || x - 13 > box.x1 || y + 13 < box.y0 || y - 13 > box.y1, `pin ${p.n} clear of the scale bar`);
   }
   for (const a of m.areas) {
-    const [x, y] = [a.x * 290, a.y * H];
+    const [x, y] = [a.x * 288, a.y * H];
     assert.ok(!(x > box.x0 && x < box.x1 && y > box.y0 && y < box.y1), `${a.name} clear of the scale bar`);
   }
 });
@@ -284,9 +370,28 @@ test("venues on the same spot are moved apart, and the map says so", () => {
   const m = resultsMap(same, null);
   assert.ok(m);
   assert.ok(m.nudged);
-  const [a, b] = m.pins;
-  assert.ok(Math.hypot((a.x - b.x) * 290, ((a.y - b.y) * 290) / MAP_ASPECT) >= 20);
+  // Every pin a tap target's width (30px) from every other on the 288px frame of a 320px phone, so no target covers a neighbour.
+  const gaps = (pins: { x: number; y: number }[]) => pins.flatMap((p, i) => pins.slice(i + 1).map((q) => Math.hypot((p.x - q.x) * 288, ((p.y - q.y) * 288) / MAP_ASPECT)));
+  assert.ok(Math.min(...gaps(m.pins)) >= 29.5, `${Math.min(...gaps(m.pins))}`);
   assert.equal(resultsMap(PUNE, null)?.nudged, false);
+  // A crowd near the visitor (Baner and around): still a target's width apart, and clear of the dot.
+  const crowd = [
+    place("c1", 18.5504, 73.76565, "Baner"),
+    place("c2", 18.5504, 73.76565, "Baner"),
+    place("c3", 18.5504, 73.76565, "Baner"),
+    place("c4", 18.56106, 73.78902, "Baner"),
+    place("c5", 18.5591, 73.7802, "Baner"),
+    place("c6", 18.5622, 73.7741, "Balewadi"),
+    place("c7", 18.5481, 73.7735, "Baner"),
+    place("c8", 18.5679, 73.7713, "Balewadi"),
+    place("c9", 18.5455, 73.7889, "Aundh"),
+    place("c10", 18.5573, 73.7928, "Aundh"),
+  ];
+  const near = resultsMap(crowd, BANER);
+  assert.ok(near?.me);
+  const me = near.me;
+  assert.ok(Math.min(...gaps(near.pins)) >= 29.5, `${Math.min(...gaps(near.pins))}`);
+  assert.ok(Math.min(...near.pins.map((p) => Math.hypot((p.x - me.x) * 288, ((p.y - me.y) * 288) / MAP_ASPECT))) >= 29.5);
 });
 
 // ── Compare ────────────────────────────────────────────────────────
@@ -344,8 +449,8 @@ test("the comparison's every cell comes from the rows, and what a venue doesn't 
   assert.equal(t.distance, false);
   // A sport asked: the card rule, with each venue's own bands. Hotfut lists one rate for three sports: football's
   // (a turf sport, as its sport pages show it), never badminton's; a venue whose bands give football its own range says that range.
-  assert.equal(compareTable([hotfut, den]).venues[0].price, "₹550/hr");
-  assert.equal(compareTable([hotfut, den], { sport: "football" }).venues[0].price, "₹550/hr");
+  assert.deepEqual(compareTable([hotfut, den]).venues[0].price, { label: "₹550/hr", kind: "real" });
+  assert.deepEqual(compareTable([hotfut, den], { sport: "football" }).venues[0].price, { label: "₹550/hr", kind: "real" });
   assert.equal(compareTable([hotfut, den], { sport: "badminton" }).venues[0].price, null);
   const banded = turf({
     id: "bd",
@@ -357,8 +462,10 @@ test("the comparison's every cell comes from the rows, and what a venue doesn't 
       { band: "morning", days: "weekday", format: "box cricket", price_per_hour: 600 },
     ],
   });
-  assert.equal(compareTable([banded, den], { sport: "football" }).venues[0].price, "₹1400/hr");
-  assert.equal(compareTable([banded, den]).venues[0].price, "₹600 – ₹1200/hr");
+  assert.equal(compareTable([banded, den], { sport: "football" }).venues[0].price?.label, "₹1400/hr");
+  assert.equal(compareTable([banded, den]).venues[0].price?.label, "₹600 – ₹1200/hr");
+  // A reported price is the card's too, and says so (the table styles it as the card does).
+  assert.deepEqual(compareTable([reported, den]).venues[0].price, { label: "~₹900/hr (reported)", kind: "reported" });
   // The visitor's distance, when their place is known; none for a venue without one.
   const near = compareTable([den, score], { loc: { lat: 12.9279, lng: 77.6271 } });
   assert.ok(near.distance);
@@ -372,6 +479,14 @@ test("hours in one line: 24 hours, the same every day, or the days that differ",
   const week = { monday: "6 AM–10 PM", tuesday: "6 AM–10 PM", wednesday: "6 AM–10 PM", thursday: "6 AM–10 PM", friday: "6 AM–10 PM", saturday: "6 AM–10 PM", sunday: "7 AM–10 PM" };
   assert.equal(hoursLine({ opening_hours: week as unknown as Turf["opening_hours"], start_time: null, end_time: null, is_24x7: null }), "6:00 AM – 10:00 PM; Sun 7:00 AM – 10:00 PM");
   assert.equal(hoursLine({ opening_hours: null, start_time: null, end_time: null, is_24x7: null }), null);
+  // Football World (Palava), Mumbai, 30 Oct: closed four days of seven. The open days first, then the closed ones by name.
+  const evenings = { monday: "Closed", tuesday: "7 PM–9 PM", wednesday: "Closed", thursday: "7 PM–9 PM", friday: "6 PM–9:30 PM", saturday: "Closed", sunday: "Closed" };
+  assert.equal(
+    hoursLine({ opening_hours: evenings as unknown as Turf["opening_hours"], start_time: null, end_time: null, is_24x7: null }),
+    "Tue, Thu 7:00 PM – 9:00 PM; Fri 6:00 PM – 9:30 PM; Mon, Wed, Sat, Sun closed",
+  );
+  const sundays = { ...week, sunday: "Closed" };
+  assert.equal(hoursLine({ opening_hours: sundays as unknown as Turf["opening_hours"], start_time: null, end_time: null, is_24x7: null }), "6:00 AM – 10:00 PM; Sun Closed");
 });
 
 // ── Host this game ─────────────────────────────────────────────────

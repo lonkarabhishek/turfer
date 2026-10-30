@@ -463,7 +463,7 @@ function TurnView({
                 className={`absolute inset-x-0 -top-2.5 pointer-events-none ${typing && !shown ? "" : "ask-ghost-out"}`}
                 onAnimationEnd={(e) => e.target === e.currentTarget && setGone(true)}
               >
-                <AskSkeleton kind={ghost} />
+                <AskSkeleton kind={ghost} verdict={!!turn.res.compare?.verdict} />
               </div>
             )}
           </div>
