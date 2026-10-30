@@ -3,7 +3,7 @@ import { getNearTurfs } from "@/lib/queries/turfCache";
 import { getSportBands, withSportBands } from "@/lib/queries/sportBands";
 import { haversineKm } from "@/lib/utils/location";
 import { forCard } from "@/lib/utils/cardTurf";
-import { turfPlaysSport } from "@/lib/sports";
+import { sportBySlug, turfPlaysSport } from "@/lib/sports";
 import { nearestAny, nearSportParam } from "@/lib/near/courtNearMe";
 
 // Nearest turfs to a point, for /turf-near-me. Sorting happens here so
@@ -15,6 +15,9 @@ import { nearestAny, nearSportParam } from "@/lib/near/courtNearMe";
 // price, plus nearestAny, the nearest venue of any sport, which the finder
 // saves the city from (the city /turf-near-me would save). Without it the
 // answer is exactly as before.
+//
+// ?plays=<any sport page slug> (a host moving a game, its edit sheet):
+// only venues that list that sport, nearest first, plain cards.
 
 const MAX_LIMIT = 24;
 
@@ -29,9 +32,13 @@ export async function GET(req: Request) {
   }
   const sport = nearSportParam(searchParams.get("sport"));
   if (sport === null) return NextResponse.json({ error: "unknown sport" }, { status: 400 });
+  const playsParam = searchParams.get("plays");
+  const plays = playsParam ? sportBySlug(playsParam) : undefined;
+  if (playsParam && !plays) return NextResponse.json({ error: "unknown sport" }, { status: 400 });
 
   const me = { lat, lng };
   const ranked = (await getNearTurfs())
+    .filter((turf) => !plays || turfPlaysSport(turf.sports, plays))
     .map((turf) => ({ turf, km: haversineKm(me, { lat: Number(turf.lat), lng: Number(turf.lng) }) }))
     .filter((r) => r.turf.lat != null && r.turf.lng != null && Number.isFinite(r.km))
     .sort((a, b) => a.km - b.km);

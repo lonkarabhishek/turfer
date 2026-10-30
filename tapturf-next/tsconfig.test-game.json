@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/utils/game.test.ts", "lib/utils/sport.test.ts", "lib/utils/gameState.test.ts", "lib/utils/maps.test.ts", "lib/utils/gameShare.test.ts"]
+  "files": ["lib/utils/game.test.ts", "lib/utils/sport.test.ts", "lib/utils/gameState.test.ts", "lib/utils/maps.test.ts", "lib/utils/gameShare.test.ts", "lib/utils/gameVenue.test.ts"]
 }

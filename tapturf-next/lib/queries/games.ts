@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { usableTurfPhotos } from "@/lib/utils/images";
+import { venueMoveNotice, venueMoveRecipients, venueProblem, type VenueOption } from "@/lib/utils/gameVenue";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
 // ── Game CRUD ──────────────────────────────────────────
@@ -218,8 +219,16 @@ export async function updateGame(gameId: string, userId: string, updates: {
   description?: string;
   turf_booked?: boolean;
   skill_level?: string;
+  /** A new venue (the host's "Change venue"): saved only when it is a listed turf. */
+  turf_id?: string;
 }) {
   const supabase = createClient();
+  if (updates.turf_id) {
+    // Read again at save time: the sheet's list can be minutes old.
+    const { data: turf } = await supabase.from("turfs").select("id").eq("id", updates.turf_id).eq("is_active", true).maybeSingle();
+    const problem = venueProblem({ id: updates.turf_id }, null, turf);
+    if (problem) return { data: null, error: problem };
+  }
   const { data, error } = await supabase
     .from("games")
     .update(updates)
@@ -230,6 +239,37 @@ export async function updateGame(gameId: string, userId: string, updates: {
 
   if (error) return { data: null, error: error.message };
   return { data: data as Game, error: null };
+}
+
+/**
+ * The game moved (updateGame saved a new turf_id): a notification for
+ * everyone playing and everyone with a request still waiting, never the
+ * host ("Asha moved Football on Sat 7 Nov to Dribble Den, Begur"). Best
+ * effort: the move is saved either way.
+ */
+export async function notifyVenueMove(
+  game: Pick<Game, "id" | "creator_id" | "host_name" | "sport" | "date">,
+  to: VenueOption,
+  fromTurfId: string | null,
+) {
+  const supabase = createClient();
+  const [{ data: players }, { data: asks }] = await Promise.all([
+    supabase.from("game_participants").select("user_id").eq("game_id", game.id),
+    supabase.from("game_requests").select("user_id, status").eq("game_id", game.id).in("status", ["pending", "accepted"]),
+  ]);
+  const ids = venueMoveRecipients(game.creator_id, players ?? [], asks ?? []);
+  if (ids.length === 0) return { sent: 0, error: null };
+  const { title, message } = venueMoveNotice(game, to);
+  const { error } = await supabase.from("notifications").insert(ids.map((user_id) => ({
+    user_id,
+    type: "game_venue_changed",
+    title,
+    message,
+    metadata: { gameId: game.id, turfId: to.id, fromTurfId },
+    is_read: false,
+  })));
+  if (error) console.error("Venue change notifications failed:", error.message);
+  return { sent: error ? 0 : ids.length, error: error?.message || null };
 }
 
 export async function deleteGame(gameId: string, userId: string) {
