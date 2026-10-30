@@ -6,12 +6,13 @@ import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
+import { quietToken } from "@/lib/account/client";
 import { notify } from "@/lib/notifications/browser";
 import { unreadWait, wakeWait } from "@/lib/notifications/unreadPoll";
 import { HeaderMenu } from "@/components/layout/HeaderMenu";
 
 export function Header() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, signedInWith } = useAuth();
   // Tagged with whose count it is, so signing out shows 0 without a reset.
   const [unreadFor, setUnreadFor] = useState<{ userId: string; n: number } | null>(null);
   const prevUnreadRef = useRef<number | null>(null);
@@ -26,7 +27,9 @@ export function Header() {
   // restart it with an extra check.
   useEffect(() => {
     prevUnreadRef.current = null;
-    if (!userId) return;
+    if (!userId || !signedInWith) return;
+    // Read quietly: a phone sign-in missing on this device never signs anyone out from a poll.
+    const readToken = quietToken(signedInWith);
 
     let alive = true;
     let busy = false;
@@ -44,7 +47,7 @@ export function Header() {
       if (busy || !alive) return;
       busy = true;
       lastAt = Date.now();
-      const { data: nextCount, error } = await getUnreadCount(userId).catch(() => ({ data: 0, error: "network" }));
+      const { data: nextCount, error } = await getUnreadCount(readToken).catch(() => ({ data: 0, error: "network" }));
       busy = false;
       if (!alive) return;
       if (error) {
@@ -86,7 +89,7 @@ export function Header() {
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
     };
-  }, [userId]);
+  }, [userId, signedInWith]);
 
   return (
     <header className="sticky top-0 z-40 material-thin border-b border-primary-100/60">

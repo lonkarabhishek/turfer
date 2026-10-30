@@ -91,12 +91,24 @@ export async function accountRpc(fn: string, args: Record<string, unknown>): Pro
   return call(fn, args);
 }
 
-async function call(fn: string, args: Record<string, unknown>): Promise<Rpc> {
+/**
+ * accountRpc for a function a migration adds after the app ships (the
+ * games routes, lib/games/server.ts): missing while the database doesn't
+ * have it yet (PGRST202, 42883), so the route can do the same itself.
+ */
+export async function accountRpcOrMissing(fn: string, args: Record<string, unknown>): Promise<Rpc | { missing: true }> {
+  return call(fn, args, true);
+}
+
+async function call(fn: string, args: Record<string, unknown>): Promise<Rpc>;
+async function call(fn: string, args: Record<string, unknown>, orMissing: true): Promise<Rpc | { missing: true }>;
+async function call(fn: string, args: Record<string, unknown>, orMissing = false): Promise<Rpc | { missing: true }> {
   const key = accountKey();
   if (!key) return { unavailable: true };
   try {
     const { data, error } = await accountClient().rpc(fn, { p_key: key, ...args });
     if (error) {
+      if (orMissing && missingFunction(error.code)) return { missing: true };
       console.warn(`account: ${fn} failed`, error.message);
       return { unavailable: true };
     }

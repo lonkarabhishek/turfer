@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Check, UserPlus, XCircle } from "lucide-react";
+import { Bell, Check, MapPin, UserPlus, XCircle } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 import type { Notification } from "@/types/notification";
 
@@ -10,6 +12,8 @@ const ICON_MAP: Record<string, typeof Bell> = {
   game_request: UserPlus,
   game_request_accepted: Check,
   game_request_declined: XCircle,
+  game_venue_changed: MapPin,
+  game_cancelled: XCircle,
 };
 
 /**
@@ -24,27 +28,32 @@ function gameIdOf(notif: Notification): string | null {
 }
 
 export function NotificationsList({ userId }: { userId: string }) {
+  const { getToken, signedInWith } = useAuth();
+  // The list is read quietly (never a sign-out); marking read uses getToken.
+  const readToken = quietToken(signedInWith);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Again for another account.
   useEffect(() => {
-    loadNotifications();
-  }, [userId]);
-
-  const loadNotifications = async () => {
-    setLoading(true);
-    const { data } = await getUserNotifications(userId);
-    setNotifications(data);
-    setLoading(false);
-  };
+    let alive = true;
+    getUserNotifications(readToken).then(({ data }) => {
+      if (!alive) return;
+      setNotifications(data);
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId, readToken]);
 
   const handleMarkRead = async (id: string) => {
-    await markAsRead(id);
+    await markAsRead(getToken, id);
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
   };
 
   const handleMarkAllRead = async () => {
-    await markAllAsRead(userId);
+    await markAllAsRead(getToken);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
   };
 

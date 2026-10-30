@@ -47,11 +47,12 @@ export interface GameRequest {
   game_id: string;
   user_id: string;
   note?: string;
-  status: "pending" | "accepted" | "declined";
+  /** withdrawn: the requester took it back (it is kept); no list a player or host sees includes it. */
+  status: "pending" | "accepted" | "declined" | "withdrawn";
   requester_name: string;
-  requester_phone?: string;
   requester_avatar?: string;
   created_at: string;
+  responded_at?: string | null;
 }
 
 export interface GameParticipant {

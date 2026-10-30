@@ -3,26 +3,38 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Clock, Check, X, Trash2, ChevronRight, MessageSquare, Gamepad2 } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { quietToken } from "@/lib/account/client";
 import { getMyRequests, cancelMyRequest } from "@/lib/queries/games";
 import type { GameRequest } from "@/types/game";
 
 export function MyRequests({ userId }: { userId: string }) {
+  const { getToken, signedInWith } = useAuth();
+  // The list is read quietly (never a sign-out); Cancel uses getToken.
+  const readToken = quietToken(signedInWith);
   const [requests, setRequests] = useState<GameRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Again for another account.
   useEffect(() => {
-    loadRequests();
-  }, [userId]);
+    let alive = true;
+    getMyRequests(readToken).then(({ data }) => {
+      if (!alive) return;
+      setRequests(data);
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId, readToken]);
 
   const loadRequests = async () => {
-    setLoading(true);
-    const { data } = await getMyRequests(userId);
+    const { data } = await getMyRequests(readToken);
     setRequests(data);
-    setLoading(false);
   };
 
   const handleCancel = async (requestId: string) => {
-    await cancelMyRequest(requestId, userId);
+    await cancelMyRequest(getToken, requestId);
     await loadRequests();
   };
 

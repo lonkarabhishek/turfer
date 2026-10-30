@@ -25,6 +25,7 @@
     "test:photos": "tsc -p tsconfig.test-photos.json && node --test .test-out/photos/lib/my/photoMath.test.js .test-out/photos/lib/my/photoCheck.test.js",
     "test:my": "tsc -p tsconfig.test-my.json && node --test .test-out/my/lib/my/numbers.test.js",
     "test:reviews": "tsc -p tsconfig.test-reviews.json && node --test .test-out/reviews/lib/reviews/reviews.test.js .test-out/reviews/lib/reviews/routes.test.js",
+    "test:games": "tsc -p tsconfig.test-games.json && node --test .test-out/games/lib/games/payload.test.js .test-out/games/lib/games/routes.test.js",
     "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js",
     "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js",
     "test:seo": "tsc -p tsconfig.test-seo.json && node --test .test-out/seo/lib/seo/turfMeta.test.js .test-out/seo/lib/seo/listingMeta.test.js .test-out/seo/lib/seo/blogMeta.test.js .test-out/seo/lib/utils/seo.test.js .test-out/seo/lib/near/courtNearMe.test.js",
