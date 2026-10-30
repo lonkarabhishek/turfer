@@ -100,7 +100,7 @@ export function MyRequests({
                     </div>
                     <Link
                       href={`/game/${req.game_id}`}
-                      className="shrink-0 inline-flex items-center gap-1 min-h-[40px] px-4 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[13px] font-bold transition-colors focus-neon"
+                      className="shrink-0 inline-flex items-center gap-1 min-h-[44px] px-4 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[13px] font-bold transition-colors focus-neon"
                       aria-label={`Review ${name}'s request`}
                     >
                       Review

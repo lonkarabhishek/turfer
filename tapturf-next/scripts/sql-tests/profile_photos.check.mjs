@@ -3,8 +3,9 @@
 // Supabase's roles, the storage schema and the account helpers, and checks
 // profile photos: the bucket, upload tickets, the storage policies, finish,
 // avatars, the Google photo, Remove, the copies on games and join
-// requests, the files listed for removal, the daily cap, the pause switch
-// and new Google accounts. Never touches a real database.
+// requests, the files listed for removal, the daily cap, the pause switch,
+// new Google accounts and the sweep of files left behind (with stand-ins
+// for pg_net and pg_cron). Never touches a real database.
 // The server key is 'server-key'.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/profile_photos.check.mjs supabase/migrations/20261030_profile_photos.sql supabase/migrations/20261030_profile_photos_policies.sql
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
@@ -22,12 +23,19 @@ const ok = (c, what) => { assert.ok(c, what); passed++; };
 
 await db.exec(`
 create role anon; create role authenticated;
-create schema private; create schema extensions; create schema storage; create schema auth;
+create schema private; create schema extensions; create schema storage; create schema auth; create schema net; create schema cron;
+-- pg_net and pg_cron: posts and jobs kept to look at.
+create table net.posts (id bigserial primary key, url text, headers jsonb, body jsonb, at timestamptz default now());
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds integer default 5000)
+  returns bigint language sql as $$ insert into net.posts (url, headers, body) values (url, headers, body) returning id $$;
+create table cron.jobs (name text primary key, schedule text, command text);
+create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as
+  $$ insert into cron.jobs values (job_name, schedule, command) on conflict (name) do update set schedule = excluded.schedule, command = excluded.command returning 1::bigint $$;
 -- pgcrypto's gen_random_bytes (PGlite has no pgcrypto): bytes from the built-in uuid generator.
 create function extensions.gen_random_bytes(n integer) returns bytea language sql volatile as
   $$ select substring(uuid_send(gen_random_uuid()) || uuid_send(gen_random_uuid()) from 1 for n) $$;
 create table private.app_secrets (name text primary key, value text not null);
-insert into private.app_secrets values ('account', 'server-key');
+insert into private.app_secrets values ('account', 'server-key'), ('revalidate', 'reval-secret');
 create function private.account_key_ok(p_key text) returns boolean language sql stable security definer set search_path = '' as
   $$ select p_key is not null and p_key = (select s.value from private.app_secrets s where s.name = 'account') $$;
 create table private.reports (kind text, detail jsonb);
@@ -65,12 +73,13 @@ eq((await one(`select count(*)::int n from pg_policies where schemaname = 'stora
 eq((await one(`select count(*)::int n from pg_policies where schemaname = 'storage' and tablename = 'objects' and cmd = 'UPDATE'`)).n, 0, "no update policy");
 eq((await one(`select count(*)::int n from pg_constraint where conrelid = 'public.user_photos'::regclass and contype = 'c'`)).n, 0, "no CHECK constraints");
 ok(/lock_timeout = '2s'/.test(sqls[1]), "the policies wait 2 s at most for their lock");
+eq(await q("select name, schedule, command from cron.jobs"), [{ name: "profile-photos-sweep", schedule: "*/15 * * * *", command: "select private.user_photos_tick()" }], "the quarter-hour job, scheduled once");
 
 // Grants: the functions are open to the API (they check the server key), the table and the helpers are not.
 for (const f of ["account_photo_ready(text)", "account_photo_start(text,uuid,text,integer)", "account_photo_drop(text,uuid,uuid,text,jsonb)",
-  "account_photo_finish(text,uuid,uuid,jsonb)", "account_photo_set(text,uuid,text,text)", "account_photo_files_gone(text,uuid,uuid[])", "avatar_object_ok(text,text)"])
+  "account_photo_finish(text,uuid,uuid,jsonb)", "account_photo_set(text,uuid,text,text)", "account_photo_files_gone(text,uuid,uuid[])", "account_photo_sweep_list(text)", "avatar_object_ok(text,text)"])
   eq((await one(`select has_function_privilege('anon', 'public.${f}', 'execute') a`)).a, true, `${f} callable`);
-for (const f of ["user_photos_paused()", "user_photos_expire(uuid)", "user_photo_apply(uuid,text)", "user_photo_files(uuid)", "google_make_account(uuid,text,text,text)"])
+for (const f of ["user_photos_paused()", "user_photos_expire(uuid)", "user_photo_apply(uuid,text)", "user_photo_files(uuid)", "google_make_account(uuid,text,text,text)", "user_photos_tick()"])
   eq((await one(`select has_function_privilege('anon', 'private.${f}', 'execute') a`)).a, false, `private.${f} closed`);
 eq((await one(`select has_table_privilege('anon', 'public.user_photos', 'select') a`)).a, false, "the table is closed");
 eq((await one(`select has_table_privilege('authenticated', 'public.user_photos', 'insert') a`)).a, false, "and closed to writes");
@@ -117,6 +126,7 @@ for (const [what, r] of [
   ["finish", await finish(A, NOBODY, null, "wrong")],
   ["set", await set(A, "preset", "football", "wrong")],
   ["files gone", await rpc("account_photo_files_gone", ["", A, []])],
+  ["sweep list", await rpc("account_photo_sweep_list", ["wrong"])],
 ]) eq(r, { r: "unavailable" }, `${what}: the server key or nothing`);
 eq(await rpc("account_photo_ready", [K]), { r: "ok", paused: false }, "ready, uploads on");
 eq(await userPhoto(A), null, "nothing changed");
@@ -272,5 +282,38 @@ const HELD = "44444444-4444-4444-8444-444444444444";
 await one("select private.google_make_account($1, 'RAVI@x.in', null, null) id", [HELD]);
 eq(await one("select name, email from public.users where id = $1", [HELD]), { name: "RAVI", email: null }, "an email another row holds is left off, as before");
 eq((await one("select count(*)::int n from private.reports where kind = 'google_email_held' and detail ->> 'auth_uid' = $1", [HELD])).n, 1, "and reported");
+
+// The sweep: files a change couldn't remove are tried again, and tickets left unused end.
+const tick = async () => {
+  await q("select private.user_photos_tick()");
+  const r = await q("select url, headers ->> 'x-revalidate-secret' as secret from net.posts order by id");
+  await q("truncate net.posts");
+  return r;
+};
+const sweep = async () => (await rpc("account_photo_sweep_list", [K])).files.map((f) => ({ ...f })).sort((a, b) => a.id.localeCompare(b.id));
+const left = (await q(`select id, user_id, name || '.' || ext as path from public.user_photos
+  where files_gone_at is null and status in ('replaced', 'removed', 'expired') order by id`)).map((r) => ({ id: r.id, user_id: r.user_id, path: r.path }));
+eq(left.map((f) => f.id).sort(), [s2.id, s3.id, s6.id, s7.id].sort(), "Asha's files still to remove (only s1's went)");
+eq(await tick(), [], "nothing to sweep while the route's own removal may still run");
+eq((await rpc("account_photo_sweep_list", [K])).files, [], "nor listed");
+await q("update public.user_photos set ended_at = ended_at - interval '3 minutes' where ended_at is not null");
+const s9 = (await q("select id from public.user_photos where user_id = $1 and status = 'uploading'", [B]))[0].id;
+await ago(s9, 16);
+eq(await tick(), [{ url: "https://www.tapturf.in/api/account/photo/sweep", secret: "reval-secret" }], "a post to the sweep, with the secret");
+eq(await sweep(), left, "the files to remove, with whose they are");
+eq((await photo(s9)).status, "expired", "and the ticket left unused ends");
+for (const f of left) eq(await okObj(f.path, "delete"), true, `the server may remove ${f.path}`);
+eq(await gone(A, left.map((f) => f.id)), { r: "ok", gone: 4 }, "removed and marked gone");
+eq(await sweep(), [], "nothing left once gone; the ticket just ended waits its two minutes");
+await q("update public.user_photos set ended_at = ended_at - interval '3 minutes' where id = $1", [s9]);
+eq(await sweep(), [{ id: s9, user_id: B, path: (await one("select name || '.' || ext as p from public.user_photos where id = $1", [s9])).p }], "then it is listed");
+eq(await tick(), [{ url: "https://www.tapturf.in/api/account/photo/sweep", secret: "reval-secret" }], "and the job asks again");
+await gone(B, [s9]);
+eq(await tick(), [], "nothing to do: no post");
+await q(`insert into public.user_photos (user_id, name, ext, bytes, status, ended_at)
+  select $1, lpad(to_hex(g), 24, 'a'), 'webp', 2000, 'removed', now() - interval '1 hour' from generate_series(1, 55) g`, [NOBODY]);
+eq((await rpc("account_photo_sweep_list", [K])).files.length, 50, "50 at a time");
+await q("update private.app_secrets set name = 'revalidate-off' where name = 'revalidate'");
+eq(await tick(), [], "no secret, no post");
 
 console.log(`profile_photos: ${passed} checks passed`);

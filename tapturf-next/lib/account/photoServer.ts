@@ -68,6 +68,24 @@ export async function photoSet(userId: string, kind: "preset" | "google" | "none
   return changeResult(await accountRpc("account_photo_set", { p_user_id: userId, p_kind: kind, p_value: value }));
 }
 
+export type SweepFile = PhotoFile & { userId: string };
+
+/**
+ * The files still to remove, anyone's (a removal after a change that
+ * failed, a ticket never finished), oldest first, 50 at most. Ends unused
+ * tickets first. { missing } before the migration.
+ */
+export async function photoSweepList(): Promise<{ ok: SweepFile[] } | { missing: true } | Unavailable> {
+  const res = await accountRpcIfThere("account_photo_sweep_list", {});
+  if ("missing" in res || "unavailable" in res) return res;
+  if (res.data.r !== "ok") return { unavailable: true };
+  const files = (Array.isArray(res.data.files) ? res.data.files : [])
+    .map((f) => (f ?? {}) as Record<string, unknown>)
+    .filter((f) => typeof f.id === "string" && typeof f.user_id === "string" && typeof f.path === "string" && /^[0-9a-f]{24}\.(webp|jpg)$/.test(f.path))
+    .map((f) => ({ id: f.id as string, userId: f.user_id as string, path: f.path as string }));
+  return { ok: files };
+}
+
 /** These files were removed from the bucket. Never throws. */
 export async function photoFilesGone(userId: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;

@@ -37,7 +37,8 @@ const PHOTO_WORDS: Record<PictureKind | "none", string> = {
   google: "Your Google photo",
   preset: "A sports avatar",
   other: "Your photo",
-  none: "Your initials. Add a photo or pick an avatar.",
+  // Short (it sits beside the Add photo button on a phone), and it wraps rather than cut.
+  none: "Your initials",
 };
 
 export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPhoto: () => void }) {
@@ -245,15 +246,17 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
             <span className="truncate">{user.name}</span>
             {user.verified && <VerifiedTick />}
           </p>
-          <p className="text-sm text-gray-500 truncate">{PHOTO_WORDS[pictureKind(user.profile_image_url) ?? "none"]}</p>
+          <p className="text-sm leading-snug text-gray-500">{PHOTO_WORDS[pictureKind(user.profile_image_url) ?? "none"]}</p>
         </div>
         <button
           type="button"
           onClick={onEditPhoto}
-          className="shrink-0 inline-flex items-center gap-1.5 min-h-[40px] rounded-full border border-primary-200 bg-white px-4 text-[13px] font-semibold text-primary-800 hover:border-primary-300 focus-neon"
+          aria-label={user.profile_image_url ? "Change photo" : undefined}
+          className="shrink-0 inline-flex items-center gap-1.5 min-h-[44px] rounded-full border border-primary-200 bg-white px-4 text-[13px] font-semibold text-primary-800 hover:border-primary-300 focus-neon"
         >
           <Camera className="w-4 h-4" aria-hidden />
-          {user.profile_image_url ? "Change photo" : "Add photo"}
+          {/* "Change" beside the camera: room for the words on a 320 px phone. */}
+          {user.profile_image_url ? "Change" : "Add photo"}
         </button>
       </div>
 

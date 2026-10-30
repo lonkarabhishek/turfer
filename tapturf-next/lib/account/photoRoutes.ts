@@ -1,7 +1,7 @@
 import type { NextResponse } from "next/server";
 import { googlePhotoToKeep, imageInfo, isPresetId, PHOTO_UPLOAD, stripPhotoDetails, uploadProblem } from "./avatar";
 import type { Identity } from "./identity";
-import { photoDrop, photoFilesGone, photoFinish, photoReady, photoSet, photoStart, type PhotoChangeResult, type PhotoFile } from "./photoServer";
+import { photoDrop, photoFilesGone, photoFinish, photoReady, photoSet, photoStart, photoSweepList, type PhotoChangeResult, type PhotoFile } from "./photoServer";
 import { refreshProfilePage } from "./profilePage";
 import { accountError, accountReply, caller, later } from "./route";
 import { createAccountLimiter, readSmallJson, resolveAccount } from "./server";
@@ -125,6 +125,8 @@ export async function postPhoto(req: Request, deps: PhotoDeps): Promise<NextResp
     return accountError("unavailable");
   }
   const done = await photoFinish(userId, id, verdict.verdict);
+  // Uploaded but not put up: the ticket ends now, so its file is removed with the others.
+  if ("unavailable" in done || ("r" in done && done.r === "missing")) await photoDrop(userId, id, "expired");
   return changed(deps, userId, "r" in done && done.r !== "bad" ? { unavailable: true } : done);
 }
 
@@ -156,4 +158,23 @@ export async function deletePhoto(req: Request, deps: PhotoDeps): Promise<NextRe
   const acc = await account(who.id);
   if ("reply" in acc) return acc.reply;
   return changed(deps, acc.me.id, await photoSet(acc.me.id, "none", null));
+}
+
+export type SweepResult = { ok: true; listed: number; removed: number } | { ok: false; error: "unavailable" };
+
+/**
+ * The quarter-hour job's work (/api/account/photo/sweep): the files a
+ * change listed but couldn't remove (storage slow or down at the time)
+ * and those of tickets never finished, removed and marked gone, as after
+ * a change. Nothing to do before the migration.
+ */
+export async function sweepPhotoFiles(deps: Pick<PhotoDeps, "remove">): Promise<SweepResult> {
+  const list = await photoSweepList();
+  if ("unavailable" in list) return { ok: false, error: "unavailable" };
+  if ("missing" in list || list.ok.length === 0) return { ok: true, listed: 0, removed: 0 };
+  const removed = new Set(await deps.remove(list.ok.map((f) => f.path)));
+  const gone = new Map<string, string[]>();
+  for (const f of list.ok) if (removed.has(f.path)) gone.set(f.userId, [...(gone.get(f.userId) ?? []), f.id]);
+  for (const [userId, ids] of gone) await photoFilesGone(userId, ids);
+  return { ok: true, listed: list.ok.length, removed: removed.size };
 }

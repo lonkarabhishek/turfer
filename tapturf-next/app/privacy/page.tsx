@@ -92,7 +92,8 @@ const SECTIONS: LegalSection[] = [
           kept. We keep the check&rsquo;s answer with your account to look into misuse. Your picture is public:
           it shows on your profile page, in player search, on your reports and on games you host or ask to join.
           To remove it, open the Me tab, tap your picture and choose Remove; it goes from your profile and your
-          games at once, and an uploaded photo&rsquo;s file is deleted from our storage.
+          games at once, and a photo you uploaded on the Me tab is deleted from our storage. A photo you uploaded
+          before 30 October 2026 stays in our storage until you ask us to delete it: email <Email />.
         </p>
         <p>
           <strong>Things you do on TapTurf.</strong> Games you host or ask to join, notes you add to a join
@@ -357,8 +358,9 @@ const SECTIONS: LegalSection[] = [
       <ul>
         <li>Your account and the things you posted stay until you delete them or ask us to.</li>
         <li>
-          Your profile picture stays until you change or remove it. A photo you replace or remove is deleted from
-          our storage; the automatic check&rsquo;s answer for it stays with your account, and goes with it.
+          Your profile picture stays until you change or remove it. A photo uploaded on the Me tab that you
+          replace or remove is deleted from our storage; the automatic check&rsquo;s answer for it stays with your
+          account, and goes with it. One uploaded before 30 October 2026 is deleted when you ask us.
         </li>
         <li>
           When you change your username, the old one stays reserved for you: links to it still reach your

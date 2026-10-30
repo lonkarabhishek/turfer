@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deletePhoto, getPhoto, patchPhoto, postPhoto, type JudgeAnswer, type PhotoDeps } from "./photoRoutes";
+import { deletePhoto, getPhoto, patchPhoto, postPhoto, sweepPhotoFiles, type JudgeAnswer, type PhotoDeps } from "./photoRoutes";
 import { dbProfile, googleSession, installNet, net, phoneToken, req, settle, testEnv } from "./testkit";
 
 testEnv();
@@ -53,6 +53,20 @@ const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
 function webp(side: number, size = 6000): Uint8Array {
   const frame = [0, 0, 0, 0x9d, 0x01, 0x2a, ...le16(side), ...le16(side), ...new Array(size).fill(7)];
   const body = [...ascii("VP8 "), ...le32(frame.length), ...frame];
+  return Uint8Array.from([...ascii("RIFF"), ...le32(4 + body.length), ...ascii("WEBP"), ...body]);
+}
+
+/** A two-frame animated WebP (VP8X, ANIM, two ANMF frames); `flag` false leaves VP8X's animation bit off. */
+function animatedWebp(side: number, flag = true): Uint8Array {
+  const le24 = (n: number) => le32(n).slice(0, 3);
+  const still = [0, 0, 0, 0x9d, 0x01, 0x2a, ...le16(side), ...le16(side), ...new Array(3000).fill(7)];
+  const frame = [0, 0, 0, 0, 0, 0, ...le24(side - 1), ...le24(side - 1), 100, 0, 0, 0, ...ascii("VP8 "), ...le32(still.length), ...still];
+  const body = [
+    ...ascii("VP8X"), ...le32(10), flag ? 0x02 : 0, 0, 0, 0, ...le24(side - 1), ...le24(side - 1),
+    ...ascii("ANIM"), ...le32(6), 255, 255, 255, 255, 0, 0,
+    ...ascii("ANMF"), ...le32(frame.length), ...frame,
+    ...ascii("ANMF"), ...le32(frame.length), ...frame,
+  ];
   return Uint8Array.from([...ascii("RIFF"), ...le32(4 + body.length), ...ascii("WEBP"), ...body]);
 }
 
@@ -171,6 +185,9 @@ test("photo POST: not a photo we keep, before the account or the check is asked"
     [webp(512, 600_000), "too_big"],
     [webp(64), "too_small"],
     [webp(4096), "too_small"],
+    // The check would see one frame; a browser plays them all.
+    [animatedWebp(512), "not_photo"],
+    [animatedWebp(512, false), "not_photo"],
   ] as const) {
     database();
     const { deps, seen } = fakes();
@@ -239,6 +256,7 @@ test("photo POST: ten a day; paused; a failed upload", async () => {
   net.rpc.account_photo_finish = () => ({ r: "missing" });
   res = await postPhoto(upload(webp(512)), fakes().deps);
   assert.deepEqual([res.status, await json(res)], [503, { error: "unavailable" }]);
+  assert.equal(net.calls("account_photo_drop")[0].args.p_outcome, "expired", "uploaded but not finished: its file is listed for removal");
 
   database();
   net.rpc.account_resolve = () => ({ r: "new" });
@@ -297,4 +315,48 @@ test("photo DELETE: back to initials, the old file removed after the reply", asy
   await settle();
   assert.deepEqual(seen.removed, [["fedcba9876543210fedcba98.webp"]], "only a path the bucket uses");
   assert.deepEqual(net.calls("account_photo_files_gone")[0].args.p_ids, ["ph-1"]);
+});
+
+/* ------------------------------------------------------------------ */
+/* The sweep                                                           */
+/* ------------------------------------------------------------------ */
+
+test("photo sweep: files a change couldn't remove are tried again, and marked gone per account", async () => {
+  database();
+  net.rpc.account_photo_sweep_list = () => ({
+    r: "ok",
+    files: [
+      { id: "ph-1", user_id: "acc-1", path: "fedcba9876543210fedcba98.webp" },
+      { id: "ph-7", user_id: "acc-2", path: "aaaaaaaaaaaaaaaaaaaaaaaa.jpg" },
+      { id: "ph-8", user_id: "acc-1", path: "bbbbbbbbbbbbbbbbbbbbbbbb.webp" },
+      { id: "x", user_id: "acc-1", path: "../../etc" },
+    ],
+  });
+  const { deps, seen } = fakes();
+  assert.deepEqual(await sweepPhotoFiles(deps), { ok: true, listed: 3, removed: 3 });
+  assert.deepEqual(seen.removed, [["fedcba9876543210fedcba98.webp", "aaaaaaaaaaaaaaaaaaaaaaaa.jpg", "bbbbbbbbbbbbbbbbbbbbbbbb.webp"]], "only paths the bucket uses");
+  assert.deepEqual(
+    net.calls("account_photo_files_gone").map((c) => [c.args.p_user_id, c.args.p_ids]),
+    [["acc-1", ["ph-1", "ph-8"]], ["acc-2", ["ph-7"]]],
+  );
+
+  // Storage down again: nothing is marked gone, so the next sweep tries again.
+  database();
+  net.rpc.account_photo_sweep_list = () => ({ r: "ok", files: [{ id: "ph-1", user_id: "acc-1", path: "fedcba9876543210fedcba98.webp" }] });
+  const down = fakes();
+  down.deps.remove = async () => [];
+  assert.deepEqual(await sweepPhotoFiles(down.deps), { ok: true, listed: 1, removed: 0 });
+  assert.equal(net.calls("account_photo_files_gone").length, 0);
+
+  // Nothing to do; a database from before photos; a database that is down.
+  database();
+  net.rpc.account_photo_sweep_list = () => ({ r: "ok", files: [] });
+  const idle = fakes();
+  assert.deepEqual(await sweepPhotoFiles(idle.deps), { ok: true, listed: 0, removed: 0 });
+  assert.equal(idle.seen.removed.length, 0);
+  net.rpc.account_photo_sweep_list = () => Response.json({ code: "PGRST202", message: "Could not find the function" }, { status: 404 });
+  assert.deepEqual(await sweepPhotoFiles(idle.deps), { ok: true, listed: 0, removed: 0 });
+  net.rpc.account_photo_sweep_list = () => Response.json({ message: "timeout" }, { status: 500 });
+  assert.deepEqual(await sweepPhotoFiles(idle.deps), { ok: false, error: "unavailable" });
+  assert.equal(idle.seen.removed.length, 0);
 });

@@ -4,11 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getGameLines, getMyRequests, getPendingRequestsFor, getUserGames, getUserJoinedGames, type GameLine } from "@/lib/queries/games";
 import { getUnreadCount } from "@/lib/queries/notifications";
 import { ownerRpc, type OwnerHome } from "@/lib/my/client";
+import { createClient } from "@/lib/supabase/client";
+import type { SignedInWith } from "@/components/auth/AuthProvider";
 import { getGameStatus } from "@/lib/utils/game";
 import type { Game, GameRequest } from "@/types/game";
 
 export type MeData = {
+  /** The games and requests sent, until read. */
   loading: boolean;
+  /** Players waiting for an answer and the requested games' names, read after those (the Requests tab waits for both). */
+  extraLoading: boolean;
   /** Games they host, and games they were accepted into. */
   created: Game[];
   joined: Game[];
@@ -38,7 +43,7 @@ const EMPTY_LINES = new Map<string, GameLine>();
  * so nothing is read twice). Only real numbers from the person's own
  * rows: nothing is shown until it is known.
  */
-export function useMeData(userId: string): MeData {
+export function useMeData(userId: string, signedInWith: SignedInWith | null): MeData {
   const [state, setState] = useState<{ for: string; created: Game[]; joined: Game[]; requests: GameRequest[] } | null>(null);
   // Read after the lists, from them (a query each, only when there is something to name).
   const [extraFor, setExtraFor] = useState<{ for: string; incoming: GameRequest[]; games: Map<string, GameLine> } | null>(null);
@@ -52,21 +57,39 @@ export function useMeData(userId: string): MeData {
       setState({ for: userId, created: c.data, joined: j.data, requests: r.data });
       const hosting = c.data.filter((g) => getGameStatus(g) !== "expired").map((g) => g.id);
       const asked = [...new Set(r.data.map((q) => q.game_id))];
-      void Promise.all([getPendingRequestsFor(hosting), getGameLines(asked)]).then(([inc, lines]) => {
-        if (alive) setExtraFor({ for: userId, incoming: inc.data, games: new Map(lines.data.map((g) => [g.id, g])) });
-      });
+      void Promise.all([getPendingRequestsFor(hosting), getGameLines(asked)])
+        .then(([inc, lines]) => {
+          if (alive) setExtraFor({ for: userId, incoming: inc.data, games: new Map(lines.data.map((g) => [g.id, g])) });
+        })
+        .catch(() => alive && setExtraFor({ for: userId, incoming: [], games: new Map() }));
     });
     void getUnreadCount(userId)
       .then(({ data, error }) => alive && !error && setUnreadFor({ for: userId, n: data }))
       .catch(() => {});
-    // myTapturf's own read of the turfs this sign-in runs (its database function checks who is asking).
-    void ownerRpc<OwnerHome>("owner_home")
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  // myTapturf's own read of the turfs this sign-in runs (its database function checks who is asking).
+  // A Google sign-in rides on its Supabase session, so only a phone sign-in fetches a Firebase token:
+  // someone who never used a phone code never downloads the Firebase SDK here.
+  useEffect(() => {
+    if (!signedInWith) return;
+    let alive = true;
+    const home = async (): Promise<OwnerHome> => {
+      if (signedInWith === "phone") return ownerRpc<OwnerHome>("owner_home");
+      const { data, error } = await createClient().rpc("owner_home", { p_token: null });
+      if (error) throw new Error(error.message);
+      return data as OwnerHome;
+    };
+    void home()
       .then((h) => alive && setTurfsFor({ for: userId, n: h.signed_in ? h.turfs.length : 0 }))
       .catch(() => alive && setTurfsFor({ for: userId, n: null }));
     return () => {
       alive = false;
     };
-  }, [userId]);
+  }, [userId, signedInWith]);
 
   const mine = state && state.for === userId ? state : null;
   const created = useMemo(() => mine?.created ?? [], [mine]);
@@ -91,6 +114,7 @@ export function useMeData(userId: string): MeData {
 
   return {
     loading: !mine,
+    extraLoading: !extra,
     created,
     joined,
     requests,

@@ -45,7 +45,9 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
   // What is being saved: "upload", "google", "remove" or an avatar id.
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [picked, setPicked] = useState<File | null>(null);
+  // The check turned the last photo down: the crop step then leads with another photo.
+  const [refused, setRefused] = useState(false);
+  const [picked, setPicked] = useState<{ file: File; n: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const current = user.profile_image_url ?? null;
@@ -71,6 +73,7 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
   /** One change: the new profile shown everywhere at once, then the sheet closes. */
   const save = async (key: string, send: (token: string) => Promise<Answer<PhotoChangeResponse>>, done: string): Promise<boolean> => {
     setError("");
+    setRefused(false);
     setBusy(key);
     try {
       const tok = await getToken();
@@ -87,6 +90,7 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
         return true;
       }
       setError(photoErrorText(errorOf(a), problemOf(a)));
+      setRefused(errorOf(a) === "refused");
       return false;
     } finally {
       setBusy(null);
@@ -97,23 +101,50 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
   const canUpload = ready && state.upload;
   const google = ready ? state.google : null;
 
+  // The gallery, from the sheet or (after a refusal) from the crop step; each photo gets a fresh crop.
+  const fileInput = (
+    <input
+      ref={fileRef}
+      type="file"
+      accept="image/*"
+      className="sr-only"
+      tabIndex={-1}
+      aria-hidden
+      onChange={(e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (f) {
+          setError("");
+          setRefused(false);
+          setPicked((p) => ({ file: f, n: (p?.n ?? 0) + 1 }));
+        }
+      }}
+    />
+  );
+
   if (picked) {
     return (
       <Sheet labelledBy="photo-crop-title" onClose={() => (busy ? undefined : setPicked(null))} locked={!!busy}>
         <CropStep
-          file={picked}
+          key={picked.n}
+          file={picked.file}
           busy={busy === "upload"}
           error={error}
+          refused={refused}
           onCancel={() => {
             setError("");
+            setRefused(false);
             setPicked(null);
           }}
+          onAvatar={() => setPicked(null)}
+          onPickAnother={() => fileRef.current?.click()}
           onFail={(text) => {
             setError(text);
             setPicked(null);
           }}
           onUse={(blob) => void save("upload", (t) => uploadPhoto(t, blob), "Photo updated")}
         />
+        {fileInput}
       </Sheet>
     );
   }
@@ -172,22 +203,7 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
                   <Upload className="w-4 h-4" aria-hidden />
                   {kind === "upload" ? "Upload a new photo" : "Upload a photo"}
                 </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  tabIndex={-1}
-                  aria-hidden
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) {
-                      setError("");
-                      setPicked(f);
-                    }
-                  }}
-                />
+                {fileInput}
               </>
             )}
             {google && current !== google && (
@@ -277,14 +293,22 @@ function CropStep({
   file,
   busy,
   error,
+  refused,
   onCancel,
+  onAvatar,
+  onPickAnother,
   onFail,
   onUse,
 }: {
   file: File;
   busy: boolean;
   error: string;
+  /** The check turned this photo down: lead with another photo or an avatar; a new crop is still allowed. */
+  refused: boolean;
   onCancel: () => void;
+  /** Back to the sheet's avatars, the reason still showing. */
+  onAvatar: () => void;
+  onPickAnother: () => void;
   onFail: (text: string) => void;
   onUse: (photo: Blob) => void;
 }) {
@@ -485,20 +509,49 @@ function CropStep({
         </p>
       )}
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <button type="button" onClick={onCancel} disabled={working} className="min-h-[48px] rounded-full border border-primary-200 text-[15px] font-semibold text-primary-800 disabled:opacity-50">
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => void use()}
-          disabled={!src || working}
-          className="inline-flex items-center justify-center gap-2 min-h-[48px] rounded-full bg-accent-500 text-white text-[15px] font-semibold disabled:opacity-50 focus-neon"
-        >
-          {working ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Camera className="w-4 h-4" aria-hidden />}
-          Use photo
-        </button>
-      </div>
+      {refused ? (
+        // What the message offers, first; sending this photo again only helps after a new crop.
+        <div className="mt-5 space-y-3">
+          <button
+            type="button"
+            onClick={onPickAnother}
+            disabled={working}
+            className="w-full inline-flex items-center justify-center gap-2 min-h-[48px] rounded-full bg-accent-500 text-white text-[15px] font-semibold disabled:opacity-50 focus-neon"
+          >
+            <Upload className="w-4 h-4" aria-hidden />
+            Pick another photo
+          </button>
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={onAvatar} disabled={working} className="min-h-[44px] rounded-full border border-primary-200 text-[14px] font-semibold text-primary-800 disabled:opacity-50 focus-neon">
+              Pick an avatar
+            </button>
+            <button
+              type="button"
+              onClick={() => void use()}
+              disabled={!src || working}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] rounded-full text-[14px] font-semibold text-primary-700 hover:bg-primary-50 disabled:opacity-50 focus-neon"
+            >
+              {working && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
+              Try this crop
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <button type="button" onClick={onCancel} disabled={working} className="min-h-[48px] rounded-full border border-primary-200 text-[15px] font-semibold text-primary-800 disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void use()}
+            disabled={!src || working}
+            className="inline-flex items-center justify-center gap-2 min-h-[48px] rounded-full bg-accent-500 text-white text-[15px] font-semibold disabled:opacity-50 focus-neon"
+          >
+            {working ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Camera className="w-4 h-4" aria-hidden />}
+            Use photo
+          </button>
+        </div>
+      )}
     </>
   );
 }

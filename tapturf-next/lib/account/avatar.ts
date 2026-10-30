@@ -149,7 +149,12 @@ const u16le = (b: Uint8Array, i: number) => b[i] | (b[i + 1] << 8);
 const u24le = (b: Uint8Array, i: number) => b[i] | (b[i + 1] << 8) | (b[i + 2] << 16);
 const ascii = (b: Uint8Array, i: number, n: number) => String.fromCharCode(...b.subarray(i, i + n));
 
-/** The type and size of a WebP or JPEG from its first bytes; null for anything else. Never trusts the sender's type. */
+/**
+ * The type and size of a WebP or JPEG from its first bytes; null for
+ * anything else, and for an animated WebP (the check sees one frame, a
+ * browser plays them all; our crop never makes one). Never trusts the
+ * sender's type.
+ */
 export function imageInfo(b: Uint8Array): ImageInfo | null {
   if (b.length >= 16 && ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 4) === "WEBP") {
     const chunk = ascii(b, 12, 4);
@@ -160,7 +165,8 @@ export function imageInfo(b: Uint8Array): ImageInfo | null {
       const bits = (b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24)) >>> 0;
       return { type: "webp", w: (bits & 0x3fff) + 1, h: ((bits >>> 14) & 0x3fff) + 1 };
     }
-    if (chunk === "VP8X" && b.length >= 30) return { type: "webp", w: u24le(b, 24) + 1, h: u24le(b, 27) + 1 };
+    // VP8X: bit 1 of its flags says animated.
+    if (chunk === "VP8X" && b.length >= 30 && !(b[20] & 0x02)) return { type: "webp", w: u24le(b, 24) + 1, h: u24le(b, 27) + 1 };
     return null;
   }
   if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
@@ -196,7 +202,7 @@ export function imageInfo(b: Uint8Array): ImageInfo | null {
  * segments (EXIF with the location, XMP) and comments; a WebP's EXIF and
  * XMP chunks. Our own crop never sends them (a canvas leaves them
  * behind); this is for a file sent some other way. null: not a file we
- * can read.
+ * can read, or a WebP with animation frames whatever its flags say.
  */
 export function stripPhotoDetails(b: Uint8Array): Uint8Array | null {
   const info = imageInfo(b);
@@ -228,6 +234,7 @@ export function stripPhotoDetails(b: Uint8Array): Uint8Array | null {
     const size = (b[i + 4] | (b[i + 5] << 8) | (b[i + 6] << 16) | (b[i + 7] << 24)) >>> 0;
     const end = i + 8 + size + (size & 1);
     if (end > b.length + (size & 1)) return null;
+    if (id === "ANIM" || id === "ANMF") return null;
     if (id === "EXIF" || id === "XMP ") removed = true;
     else parts.push(b.subarray(i, Math.min(end, b.length)));
     i = end;

@@ -181,6 +181,21 @@ test("stripPhotoDetails: a camera's EXIF and comments go, the picture stays", ()
   assert.equal(stripPhotoDetails(bytes("hello")), null);
 });
 
+test("an animated WebP is not a photo we keep: the check would see one frame of it", () => {
+  const frame = (w: number, h: number) => ["ANMF", [0, 0, 0, 0, 0, 0, ...le32(w - 1).slice(0, 3), ...le32(h - 1).slice(0, 3), 100, 0, 0, 0, ...vp8(w, h)[1]]] as [string, number[]];
+  const anim: [string, number[]] = ["ANIM", [255, 255, 255, 255, 0, 0]];
+  const flagged = webp([vp8x(256, 256, 0x02), anim, frame(256, 256), frame(256, 256)]);
+  assert.equal(imageInfo(flagged), null, "VP8X says animated");
+  assert.equal(stripPhotoDetails(flagged), null);
+  assert.equal(uploadProblem(imageInfo(flagged), flagged.length), "not_photo");
+  // Frames with the flag left off: the chunks give it away.
+  const unflagged = webp([vp8x(256, 256, 0), anim, frame(256, 256), frame(256, 256)]);
+  assert.equal(stripPhotoDetails(unflagged), null);
+  assert.equal(stripPhotoDetails(webp([vp8x(256, 256, 0), vp8(256, 256), frame(256, 256)])), null, "a still frame, then one more");
+  // Still WebPs with VP8X (alpha, a colour profile) are fine.
+  assert.deepEqual(imageInfo(webp([vp8x(256, 256, 0x10 | 0x20), ["ICCP", [1, 2]], vp8(256, 256)])), { type: "webp", w: 256, h: 256 });
+});
+
 test("uploadProblem: the server's own check of the square", () => {
   assert.equal(uploadProblem({ type: "webp", w: 512, h: 512 }, 60_000), null);
   assert.equal(uploadProblem({ type: "jpeg", w: 96, h: 96 }, 5_000), null);

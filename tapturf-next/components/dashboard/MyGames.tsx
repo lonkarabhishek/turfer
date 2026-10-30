@@ -14,8 +14,8 @@ export type GamesView = "created" | "joined";
  * Always leads with the user's UPCOMING games (soonest first) — the
  * thing they actually opened the app to check — with past games
  * collapsed underneath. The lists come from the Me tab (useMeData), so
- * its header numbers and this tab agree; those numbers can pick Hosted
- * or Joined. A hosted game says how many players wait for an answer; a
+ * its Hosted and Joined numbers and this tab agree, and each opens its
+ * list. A hosted game says how many players wait for an answer; a
  * joined one shows its host.
  */
 export function MyGames({

@@ -30,13 +30,19 @@
 -- 4. private.google_make_account no longer copies the Google photo onto a
 --    new account: a Google sign-up starts with initials, and the Me tab
 --    offers "Use my Google photo". Accounts that have it keep it.
+-- 5. The quarter-hour job (private.user_photos_tick): when a file is still
+--    to remove (the route's removal failed, storage slow or down) or a
+--    ticket was left unused, it asks /api/account/photo/sweep, which
+--    takes them from account_photo_sweep_list, removes the files and
+--    marks them gone, as the owner photo sweep does.
 --
 -- To pause uploads: create or replace private.user_photos_paused() to
 -- return true. Avatars, the Google photo and Remove keep working.
 --
--- Additive: a bucket, a table, new functions, and one function replaced
--- with the same signature. Written without the destructive SQL keywords.
--- Safe to run again. Apply before 20261030_profile_photos_policies.sql.
+-- Additive: a bucket, a table, new functions, a cron job, and one
+-- function replaced with the same signature. Written without the
+-- destructive SQL keywords. Safe to run again. Apply before
+-- 20261030_profile_photos_policies.sql.
 -- The app works before either: the photo routes say photos are not on yet.
 
 set local lock_timeout = '5s';
@@ -365,6 +371,71 @@ end;
 $$;
 revoke all on function public.account_photo_files_gone(text, uuid, uuid[]) from public;
 grant execute on function public.account_photo_files_gone(text, uuid, uuid[]) to anon, authenticated;
+
+-- ── Files left behind, tried again ────────────────────────
+-- The route removes a file once, after its reply. One it couldn't remove
+-- (storage slow or down) stays listed until it is gone. Two minutes'
+-- grace, so the sweep never races the route's own removal.
+
+-- For /api/account/photo/sweep: ends tickets left unused for 15 minutes
+-- (anyone's), then the files still to remove, oldest first, 50 at most.
+create or replace function public.account_photo_sweep_list(p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not private.account_key_ok(p_key) then
+    return jsonb_build_object('r', 'unavailable');
+  end if;
+  update public.user_photos set status = 'expired', ended_at = now()
+   where status = 'uploading' and created_at <= now() - interval '15 minutes';
+  return jsonb_build_object('r', 'ok', 'files', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'user_id', f.user_id, 'path', f.name || '.' || f.ext) order by f.ended_at)
+      from (select p.id, p.user_id, p.name, p.ext, p.ended_at from public.user_photos p
+             where p.files_gone_at is null and p.status in ('replaced', 'removed', 'expired')
+               and p.ended_at <= now() - interval '2 minutes'
+             order by p.ended_at
+             limit 50) f
+  ), '[]'::jsonb));
+end;
+$$;
+revoke all on function public.account_photo_sweep_list(text) from public;
+grant execute on function public.account_photo_sweep_list(text) to anon, authenticated;
+
+-- Every 15 minutes: asks the app to sweep only when there is something to
+-- do, with the secret the cache queue and the owner photo sweep use.
+create or replace function private.user_photos_tick()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_url constant text := 'https://www.tapturf.in/api/account/photo/sweep';
+  v_secret text;
+begin
+  if not exists (
+    select 1 from public.user_photos p
+     where (p.files_gone_at is null and p.status in ('replaced', 'removed', 'expired') and p.ended_at <= now() - interval '2 minutes')
+        or (p.status = 'uploading' and p.created_at <= now() - interval '15 minutes')) then
+    return;
+  end if;
+  v_secret := (select s.value from private.app_secrets s where s.name = 'revalidate');
+  if v_secret is null then
+    return;
+  end if;
+  perform net.http_post(
+    url := v_url,
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-revalidate-secret', v_secret),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+end;
+$$;
+revoke all on function private.user_photos_tick() from public, anon, authenticated;
+select cron.schedule('profile-photos-sweep', '*/15 * * * *', 'select private.user_photos_tick()');
 
 -- ── A new Google account starts without the Google photo ──
 -- Same signature and body as 20261026_account_links.sql, but the photo is

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Gamepad2, Bell, User, LogOut, Inbox, Loader2, Camera, MapPin, Store, ChevronRight, AtSign } from "lucide-react";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { useAuth, type SignedInWith } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { NameWithTick } from "@/components/account/VerifiedTick";
 import { PhotoSheet } from "@/components/account/PhotoSheet";
@@ -41,7 +41,7 @@ function greeting(now = new Date()): string {
  * screen: the card stays put while the section scrolls.
  */
 export function DashboardClient() {
-  const { user, loading, login, logout } = useAuth();
+  const { user, loading, login, logout, signedInWith } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   // The tab is in the address, so a reload, a Back from Google and every return to the profile land on it.
@@ -79,11 +79,23 @@ export function DashboardClient() {
     );
   }
 
-  return <Me user={user} tab={tab} pick={pick} onLogout={logout} />;
+  return <Me user={user} signedInWith={signedInWith} tab={tab} pick={pick} onLogout={logout} />;
 }
 
-function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (k: TabKey) => void; onLogout: () => Promise<void> }) {
-  const data = useMeData(user.id);
+function Me({
+  user,
+  signedInWith,
+  tab,
+  pick,
+  onLogout,
+}: {
+  user: AppUser;
+  signedInWith: SignedInWith | null;
+  tab: TabKey;
+  pick: (k: TabKey) => void;
+  onLogout: () => Promise<void>;
+}) {
+  const data = useMeData(user.id, signedInWith);
   // Hosted first, unless they host nothing yet and play in someone's game; their own pick wins.
   const [picked, setPicked] = useState<GamesView | null>(null);
   const view: GamesView = picked ?? (!data.loading && data.created.length === 0 && data.joined.length > 0 ? "joined" : "created");
@@ -115,9 +127,11 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
     return m;
   }, [data.incoming]);
 
+  // The Requests tab waits for the players waiting on them too, so its list and count never jump.
+  const requestsLoading = data.loading || data.extraLoading;
   const counts: Record<TabKey, number | null> = {
     games: data.loading ? null : data.upcoming,
-    requests: data.loading ? null : data.pending,
+    requests: requestsLoading ? null : data.pending,
     notifications: data.unread,
     profile: null,
   };
@@ -132,6 +146,26 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
       Log out
     </button>
   );
+
+  // For people who run a turf; it arrives after the rest (a read of its own).
+  const turfsLink = (className: string) =>
+    !!data.turfs && (
+      <Link
+        href="/my"
+        className={`items-center gap-3 rounded-2xl border border-primary-200 bg-white px-4 py-3.5 hover:border-accent-500 transition-colors focus-neon ${className}`}
+      >
+        <span className="grid place-items-center w-10 h-10 shrink-0 rounded-xl bg-accent-50 border border-accent-500/30">
+          <Store className="w-5 h-5 text-accent-600" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold text-primary-900">Your turfs</span>
+          <span className="block text-[13px] text-primary-500">
+            {data.turfs} {data.turfs === 1 ? "turf" : "turfs"} on myTapturf
+          </span>
+        </span>
+        <ChevronRight className="w-5 h-5 text-primary-400" aria-hidden />
+      </Link>
+    );
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
@@ -164,17 +198,18 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
               <h1 id="me-name" className="mt-0.5 font-display text-[26px] leading-tight text-primary-900 break-words">
                 <NameWithTick name={user.name || "You"} ticked={user.verified === true} />
               </h1>
-              <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[14px] text-primary-500">
+              {/* Each link a 44 px tap. */}
+              <div className="mt-0.5 flex flex-wrap items-center justify-center gap-x-2 text-[14px] text-primary-500">
                 {user.username ? (
                   user.taggable !== false ? (
-                    <Link href={`/u/${user.username}`} className="font-medium text-primary-600 hover:text-primary-900 underline-offset-2 hover:underline">
+                    <Link href={`/u/${user.username}`} className="inline-flex items-center min-h-[44px] font-medium text-primary-600 hover:text-primary-900 underline-offset-2 hover:underline">
                       @{user.username}
                     </Link>
                   ) : (
                     <span className="font-medium text-primary-600">@{user.username}</span>
                   )
                 ) : (
-                  <Link href="/dashboard?tab=profile#username" className="inline-flex items-center gap-1 font-semibold text-accent-700">
+                  <Link href="/dashboard?tab=profile#username" className="inline-flex items-center gap-1 min-h-[44px] font-semibold text-accent-700">
                     <AtSign className="w-3.5 h-3.5" aria-hidden />
                     Pick a username
                   </Link>
@@ -183,7 +218,7 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
                 <button
                   type="button"
                   onClick={() => openCityPicker("list")}
-                  className="inline-flex items-center gap-1 min-h-[32px] font-medium text-primary-600 hover:text-primary-900"
+                  className="inline-flex items-center gap-1 min-h-[44px] font-medium text-primary-600 hover:text-primary-900"
                   aria-label={city?.kind === "city" ? `City: ${labelFor(city.city)}. Change` : "Pick your city"}
                 >
                   <MapPin className="w-3.5 h-3.5 text-accent-600" aria-hidden />
@@ -196,44 +231,39 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
                 </p>
               )}
 
-              {/* Real numbers from their own games; a dash until they are in. */}
+              {/* Real numbers from their own games; a dash until they are in. Hosted and Joined open their
+                  list; Upcoming counts both lists (each game once), so it is a number, not a link. */}
               <ul className="mt-4 grid grid-cols-3 divide-x divide-primary-100 rounded-2xl bg-primary-50/70 py-3" aria-label="Your games">
                 {(
                   [
                     ["Hosted", data.created.length, () => showGames("created")],
                     ["Joined", data.joined.length, () => showGames("joined")],
-                    ["Upcoming", data.upcoming, () => showGames()],
+                    ["Upcoming", data.upcoming, null],
                   ] as const
-                ).map(([label, n, go]) => (
-                  <li key={label} className="px-1">
-                    <button type="button" onClick={go} className="w-full rounded-xl py-0.5 hover:bg-white/80 focus-neon">
+                ).map(([label, n, go]) => {
+                  const inner = (
+                    <>
                       <span className="block font-display text-[24px] leading-none text-primary-900 tabular-nums">{data.loading ? "–" : n}</span>
                       <span className="mt-1 block text-[12px] font-medium text-primary-500">{label}</span>
-                    </button>
-                  </li>
-                ))}
+                    </>
+                  );
+                  return (
+                    <li key={label} className="px-1">
+                      {go ? (
+                        <button type="button" onClick={go} className="w-full rounded-xl py-0.5 hover:bg-white/80 focus-neon">
+                          {inner}
+                        </button>
+                      ) : (
+                        <div className="py-0.5">{inner}</div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </section>
 
-          {!!data.turfs && (
-            <Link
-              href="/my"
-              className="flex items-center gap-3 rounded-2xl border border-primary-200 bg-white px-4 py-3.5 hover:border-accent-500 transition-colors focus-neon"
-            >
-              <span className="grid place-items-center w-10 h-10 shrink-0 rounded-xl bg-accent-50 border border-accent-500/30">
-                <Store className="w-5 h-5 text-accent-600" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-semibold text-primary-900">Your turfs</span>
-                <span className="block text-[13px] text-primary-500">
-                  {data.turfs} {data.turfs === 1 ? "turf" : "turfs"} on myTapturf
-                </span>
-              </span>
-              <ChevronRight className="w-5 h-5 text-primary-400" aria-hidden />
-            </Link>
-          )}
-
+          {turfsLink("hidden lg:flex")}
           {logoutButton("hidden lg:flex")}
         </aside>
 
@@ -251,8 +281,9 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
               const active = tab === key;
               const n = counts[key];
               const badge = n ? (n > 99 ? "99+" : String(n)) : null;
+              // On the green tile: solid white, so the number reads (accent-700 on white is 7:1).
               const tone = active
-                ? "bg-white/25 text-white"
+                ? "bg-white text-accent-700"
                 : key === "notifications" || (key === "requests" && data.incoming.length > 0)
                   ? "bg-hot-500 text-white"
                   : "bg-primary-200 text-primary-800";
@@ -303,7 +334,7 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
                 requestGames={data.requestGames}
                 incoming={data.incoming}
                 hosted={data.created}
-                loading={data.loading}
+                loading={requestsLoading}
                 reloadRequests={data.reloadRequests}
               />
             )}
@@ -311,7 +342,12 @@ function Me({ user, tab, pick, onLogout }: { user: AppUser; tab: TabKey; pick: (
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
           </div>
 
-          <div className="mt-10 lg:hidden">{logoutButton("flex")}</div>
+          {/* On a phone they come last: nothing above the sections moves when Your turfs arrives, and
+              the bottom space lets Log out scroll clear of the Ask button. */}
+          <div className="mt-10 pb-[4.5rem] md:pb-0 space-y-3 lg:hidden">
+            {turfsLink("flex")}
+            {logoutButton("flex")}
+          </div>
         </div>
       </div>
 
