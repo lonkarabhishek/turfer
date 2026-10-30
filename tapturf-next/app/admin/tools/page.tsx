@@ -7,6 +7,7 @@ import { ago, istDateTime, tickedIds } from "@/lib/admin/people";
 import { getToolUsers } from "@/lib/queries/adminTools";
 import { adminTickRows } from "@/lib/queries/adminUsers";
 import { NameWithTick } from "@/components/account/VerifiedTick";
+import { UserAvatar } from "@/components/account/UserAvatar";
 import { SectionError } from "@/components/admin/SectionStatus";
 import { COUNTED_TOOLS, type CountedTool } from "@/lib/tools/usage";
 import {
@@ -111,14 +112,13 @@ function PersonRow({ p, now, ticked }: { p: ToolPerson; now: number; ticked: Tic
   return (
     <li className="border-t border-primary-100 first:border-t-0 px-4 py-3.5">
       <div className="flex items-start gap-3">
-        <span
-          aria-hidden
-          className={`shrink-0 w-9 h-9 rounded-full inline-flex items-center justify-center text-[14px] font-semibold ${
-            p.userId ? "bg-accent-50 text-accent-700" : "bg-primary-100 text-primary-500"
-          }`}
-        >
-          {p.userId ? (Array.from(whoName(p))[0] ?? "?").toUpperCase() : "G"}
-        </span>
+        {p.userId ? (
+          <UserAvatar name={whoName(p)} size={36} />
+        ) : (
+          <span aria-hidden className="shrink-0 w-9 h-9 rounded-full inline-flex items-center justify-center text-[14px] font-semibold bg-primary-100 text-primary-500">
+            G
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
             <Who p={p} ticked={ticked} />

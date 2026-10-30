@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { User, Bell, RotateCw } from "lucide-react";
+import { Bell, RotateCw } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
@@ -9,6 +9,7 @@ import { getUnreadCount } from "@/lib/queries/notifications";
 import { notify } from "@/lib/notifications/browser";
 import { unreadWait, wakeWait } from "@/lib/notifications/unreadPoll";
 import { HeaderMenu } from "@/components/layout/HeaderMenu";
+import { UserAvatar } from "@/components/account/UserAvatar";
 
 export function Header() {
   const { user, loading, login } = useAuth();
@@ -142,19 +143,7 @@ export function Header() {
                 <span className="text-sm font-medium text-primary-800 max-w-[80px] truncate">
                   {user.name?.split(" ")[0] || "Account"}
                 </span>
-                {user.profile_image_url ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={user.profile_image_url}
-                    alt=""
-                    className="w-7 h-7 rounded-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-accent-500 flex items-center justify-center">
-                    <User className="w-4 h-4 text-white" strokeWidth={2.5} />
-                  </div>
-                )}
+                <UserAvatar src={user.profile_image_url} name={user.name} size={28} eager />
               </Link>
             </div>
           ) : (

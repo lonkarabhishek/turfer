@@ -350,7 +350,56 @@ export async function getGameRequests(gameId: string) {
     .eq("game_id", gameId)
     .order("created_at", { ascending: false });
 
-  return { data: (data as GameRequest[]) || [], error: error?.message || null };
+  if (error || !data || data.length === 0) return { data: (data as GameRequest[]) || [], error: error?.message || null };
+  await withCurrentPhotos(supabase, data);
+  return { data: data as GameRequest[], error: null };
+}
+
+/** Each player's picture as it is now (a request keeps a copy from when it was sent, and older ones have none). */
+async function withCurrentPhotos(supabase: ReturnType<typeof createClient>, rows: Record<string, unknown>[]) {
+  const userIds = [...new Set(rows.map((r) => r.user_id as string).filter(Boolean))];
+  if (userIds.length === 0) return;
+  const { data: users } = await supabase.from("users").select("id, profile_image_url").in("id", userIds);
+  if (!users) return;
+  const photos = new Map(users.map((u) => [u.id, u.profile_image_url as string | null]));
+  rows.forEach((r) => {
+    if (photos.has(r.user_id as string)) r.requester_avatar = photos.get(r.user_id as string) ?? undefined;
+  });
+}
+
+/** Pending requests to join any of these games (the host's own, for the Me tab), newest first. */
+export async function getPendingRequestsFor(gameIds: string[]) {
+  if (gameIds.length === 0) return { data: [] as GameRequest[], error: null };
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("game_requests")
+    .select("id, game_id, user_id, note, status, requester_name, requester_avatar, created_at")
+    .in("game_id", gameIds)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error || !data) return { data: [] as GameRequest[], error: error?.message || null };
+  await withCurrentPhotos(supabase, data);
+  return { data: data as GameRequest[], error: null };
+}
+
+/** A game as a list of requests names it. */
+export type GameLine = Pick<Game, "id" | "creator_id" | "turf_id" | "sport" | "date" | "start_time" | "end_time" | "host_name" | "host_profile_image_url"> & {
+  venue: string | null;
+};
+
+/** These games, for a list that names them (the Me tab's requests sent): sport, time, host and venue. */
+export async function getGameLines(ids: string[]) {
+  if (ids.length === 0) return { data: [] as GameLine[], error: null };
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("games")
+    .select("id, creator_id, turf_id, sport, date, start_time, end_time, host_name, host_profile_image_url")
+    .in("id", ids);
+  if (error || !data) return { data: [] as GameLine[], error: error?.message || null };
+  const turfIds = [...new Set(data.map((g) => g.turf_id).filter(Boolean))];
+  const { data: turfs } = turfIds.length > 0 ? await supabase.from("turfs").select("id, name").in("id", turfIds) : { data: [] };
+  const names = new Map((turfs ?? []).map((t) => [t.id as string, cleanVenueName(t.name as string)]));
+  return { data: data.map((g) => ({ ...g, venue: names.get(g.turf_id) ?? null })) as GameLine[], error: null };
 }
 
 export async function getMyRequests(userId: string) {

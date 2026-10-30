@@ -19,6 +19,12 @@
  *   POST   /api/account/link/google/complete  {}                -> LinkCompleteResponse
  *   POST   /api/account/link/google/remove    { proof? }        -> ProfileResponse
  *   DELETE /api/account/link/google           (no Bearer; same-origin only) -> 204
+ * The profile photo (lib/account/photoRoutes.ts):
+ *   GET    /api/account/photo                 -> PhotoStateResponse
+ *   POST   /api/account/photo  <the image: WebP or JPEG, 512 px square at most, 512 KB at most>
+ *                                              -> PhotoChangeResponse (refused with problem: the check said no)
+ *   PATCH  /api/account/photo  { preset } | { google: true } -> PhotoChangeResponse
+ *   DELETE /api/account/photo                 -> PhotoChangeResponse (back to initials)
  * Adding a number to a Google account (Bearer: the Supabase token of a Google sign-in in the last 10 minutes):
  *   POST   /api/account/phone                 { proof }         -> PhoneSetResponse
  *   DELETE /api/account/phone                                   -> ProfileResponse
@@ -111,7 +117,11 @@ export type AccountError =
   /** Sign in again first: a fresh OTP (phone) or Google in the last 10 minutes. */
   | "reauth"
   /** The OTP sign-in is too old (the database's check). */
-  | "stale";
+  | "stale"
+  /** The photo check said no (a photo upload). */
+  | "refused"
+  /** The photo couldn't be checked right now: nothing was kept. */
+  | "unchecked";
 
 export type MeResponse =
   | { profile: AccountProfile; created?: boolean; fresh?: boolean; error?: AccountError }
@@ -159,3 +169,16 @@ export type UsernameSuggestResponse = { username: string | null } | { error: Acc
 /** A profile people can tag: no ids, phone or email. v: the verified tick (search results only, never kept). */
 export type PlayerHit = { u: string; name: string; photo: string | null; v?: true };
 export type PlayersSearchResponse = { players: PlayerHit[] } | { error: AccountError };
+
+/**
+ * What the photo choices can offer this sign-in. ready: the database has
+ * photos (20261030_profile_photos.sql); upload: uploads are on and can be
+ * checked; google: this Google sign-in's photo, to offer "Use my Google
+ * photo" (null for a phone sign-in).
+ */
+export type PhotoStateResponse = { ready: boolean; upload: boolean; google: string | null } | { error: AccountError };
+
+/** Why a photo was turned down: the file (bad) or what the check saw (refused). */
+export type PhotoProblem = "not_photo" | "too_big" | "too_small" | "sexual" | "violent" | "hateful" | "drugs_or_weapons" | "offensive" | "personal_info" | "other";
+
+export type PhotoChangeResponse = { profile: AccountProfile } | { error: AccountError; problem?: PhotoProblem };

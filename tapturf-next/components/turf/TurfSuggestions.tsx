@@ -20,6 +20,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { UserAvatar } from "@/components/account/UserAvatar";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { normalizeIndianPhone } from "@/lib/utils/phone";
 import { playerPriceRange } from "@/lib/utils/prices";
@@ -574,9 +575,7 @@ function SuggestionItem({ s, isMine }: { s: TurfSuggestion; isMine: boolean }) {
   return (
     <li className={`rounded-2xl border p-4 ${isMine ? "border-accent-200 bg-accent-50/30" : "border-primary-200/80"}`}>
       <div className="flex items-center gap-3">
-        <span className="w-9 h-9 rounded-full bg-accent-100 text-accent-700 flex items-center justify-center text-[15px] font-semibold shrink-0">
-          {s.submitter_name.slice(0, 1).toUpperCase()}
-        </span>
+        <UserAvatar name={s.submitter_name} size={36} />
         <div className="flex-1 min-w-0">
           <p className="text-[15px] font-semibold text-primary-900 truncate">
             {isMine ? "You" : s.submitter_name}

@@ -8,6 +8,8 @@ import type {
   LinkStatusResponse,
   MeResponse,
   PhoneSetResponse,
+  PhotoChangeResponse,
+  PhotoStateResponse,
   PlayersSearchResponse,
   ProfileResponse,
   UsernameCheckResponse,
@@ -188,6 +190,46 @@ export const suggestUsername = (token: string) => call<UsernameSuggestResponse>(
 
 export const searchPlayers = (token: string, q: string) =>
   call<PlayersSearchResponse>(token, `/api/players/search?q=${encodeURIComponent(q)}`);
+
+/* ------------------------------------------------------------------ */
+/* The profile photo                                                   */
+/* ------------------------------------------------------------------ */
+
+/** What the photo choices can offer this sign-in (photos on, uploads on, a Google photo). */
+export const getPhotoState = (token: string) => call<PhotoStateResponse>(token, "/api/account/photo");
+
+/** One of the drawn avatars (lib/account/avatar.ts AVATAR_PRESETS). */
+export const choosePreset = (token: string, preset: string) =>
+  call<PhotoChangeResponse>(token, "/api/account/photo", { method: "PATCH", body: JSON.stringify({ preset }) });
+
+/** This Google sign-in's own photo (the server takes it from the sign-in, not from here). */
+export const chooseGooglePhoto = (token: string) =>
+  call<PhotoChangeResponse>(token, "/api/account/photo", { method: "PATCH", body: JSON.stringify({ google: true }) });
+
+/** No picture: initials again. */
+export const removePhoto = (token: string) => call<PhotoChangeResponse>(token, "/api/account/photo", { method: "DELETE" });
+
+/** Upload a cropped photo (a WebP or JPEG Blob). The check can take a few seconds. */
+export async function uploadPhoto(token: string, photo: Blob): Promise<Answer<PhotoChangeResponse>> {
+  try {
+    const res = await fetch("/api/account/photo", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": photo.type || "application/octet-stream", Authorization: `Bearer ${token}` },
+      body: photo,
+    });
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      /* not JSON: a proxy page */
+    }
+    if (!body || typeof body !== "object") return { status: res.status, body: { error: "unavailable" } };
+    return { status: res.status, body: body as PhotoChangeResponse };
+  } catch {
+    return { status: 0, body: { error: "unavailable" } };
+  }
+}
 
 /** The profile in an answer, if there is one (a failed edit still sends the current one). */
 export function profileOf(a: Answer<MeResponse>): AccountProfile | null {

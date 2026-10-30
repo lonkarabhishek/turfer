@@ -46,7 +46,7 @@ export function canEncodeWebp(): Promise<boolean> {
 }
 
 /** The decoded photo (maybe already shrunk), and its size as taken. */
-type Decoded = { src: CanvasImageSource; w: number; h: number; origW: number; origH: number; done: () => void };
+export type Decoded = { src: CanvasImageSource; w: number; h: number; origW: number; origH: number; done: () => void };
 
 /** Safari and every iOS browser (all WebKit): createImageBitmap may ignore the camera's rotation there, an <img> never does. */
 function webkitOnly(): boolean {
@@ -65,7 +65,8 @@ function measure(url: string): Promise<{ w: number; h: number } | null> {
   });
 }
 
-async function decode(file: Blob): Promise<Decoded> {
+/** The photo upright, 1600 px on its long side at most; call done() after. The profile photo crop uses it too (lib/account/photoCrop.ts). */
+export async function decode(file: Blob): Promise<Decoded> {
   const url = URL.createObjectURL(file);
   let urlInUse = false;
   try {

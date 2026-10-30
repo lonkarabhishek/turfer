@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { User, Save, Phone, Mail, AtSign, Loader2 } from "lucide-react";
+import { Camera, Save, Phone, Mail, AtSign, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "@/components/account/useUsernameCheck";
@@ -12,6 +12,8 @@ import { GoogleLinkActions } from "@/components/account/GoogleLinkActions";
 import { PhoneAddForm } from "@/components/account/PhoneAddForm";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { VerifyCard } from "@/components/account/VerifyCard";
+import { UserAvatar } from "@/components/account/UserAvatar";
+import { pictureKind, type PictureKind } from "@/lib/account/avatar";
 import { PROFILE_PATH, spacedPhone } from "@/lib/account/display";
 import { PHONE_STEP } from "@/lib/account/verified";
 import type { MePatch } from "@/lib/account/client";
@@ -30,7 +32,16 @@ const SAVE_ERROR: Partial<Record<AccountError, string>> = {
   unavailable: "Couldn't reach TapTurf. Check your connection and try again.",
 };
 
-export function ProfileSection({ user }: { user: AppUser }) {
+const PHOTO_WORDS: Record<PictureKind | "none", string> = {
+  upload: "Your photo",
+  google: "Your Google photo",
+  preset: "A sports avatar",
+  other: "Your photo",
+  // Short (it sits beside the Add photo button on a phone), and it wraps rather than cut.
+  none: "Your initials",
+};
+
+export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPhoto: () => void }) {
   const { getToken, applyProfile, refreshUser, signedInWith } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
@@ -227,31 +238,26 @@ export function ProfileSection({ user }: { user: AppUser }) {
 
   return (
     <div className="max-w-md">
-      {/* Avatar */}
+      {/* Photo: the sheet is the Me tab's (the header's camera opens it too) */}
       <div className="flex items-center gap-4 mb-6">
-        {user.profile_image_url ? (
-          <img
-            src={user.profile_image_url}
-            alt=""
-            className="w-16 h-16 rounded-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
-            <User className="w-8 h-8 text-gray-500" />
-          </div>
-        )}
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 min-w-0 text-lg font-semibold text-gray-900">
+        <UserAvatar src={user.profile_image_url} name={user.name} size={64} />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 min-w-0 text-[15px] font-semibold text-gray-900">
             <span className="truncate">{user.name}</span>
             {user.verified && <VerifiedTick />}
           </p>
-          {user.username ? (
-            <p className="text-sm text-gray-500 truncate">@{user.username}</p>
-          ) : (
-            <p className="text-sm text-gray-500 capitalize">{user.role}</p>
-          )}
+          <p className="text-sm leading-snug text-gray-500">{PHOTO_WORDS[pictureKind(user.profile_image_url) ?? "none"]}</p>
         </div>
+        <button
+          type="button"
+          onClick={onEditPhoto}
+          aria-label={user.profile_image_url ? "Change photo" : undefined}
+          className="shrink-0 inline-flex items-center gap-1.5 min-h-[44px] rounded-full border border-primary-200 bg-white px-4 text-[13px] font-semibold text-primary-800 hover:border-primary-300 focus-neon"
+        >
+          <Camera className="w-4 h-4" aria-hidden />
+          {/* "Change" beside the camera: room for the words on a 320 px phone. */}
+          {user.profile_image_url ? "Change" : "Add photo"}
+        </button>
       </div>
 
       <VerifyCard user={user} dirty={dirty} onAddPhone={() => setPhoneSignal((n) => n + 1)} />

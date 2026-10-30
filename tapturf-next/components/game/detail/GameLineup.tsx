@@ -82,7 +82,7 @@ export function GameLineup({
                 key={p.user_id}
                 className={`h-11 max-w-full rounded-full border border-primary-200 bg-white pl-1 pr-3 inline-flex items-center gap-2 ${hide}`}
               >
-                <Avatar src={p.profile_image_url} name={p.name || "Player"} className="size-8 text-[13px]" />
+                <Avatar src={p.profile_image_url} name={p.name || "Player"} size={32} />
                 <span className="min-w-0 truncate text-[15px] text-primary-900">{p.name || "Player"}</span>
                 <VerifiedTickFor id={p.user_id} className="-ml-1" />
                 {host && <span className="text-[12px] font-semibold bg-accent-50 text-accent-800 px-2 rounded-full leading-5">Host</span>}

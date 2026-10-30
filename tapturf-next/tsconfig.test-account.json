@@ -23,6 +23,8 @@
     "lib/account/routes.test.ts",
     "lib/auth/auth.test.ts",
     "lib/account/display.test.ts",
-    "lib/account/toolRoutes.test.ts"
+    "lib/account/toolRoutes.test.ts",
+    "lib/account/avatar.test.ts",
+    "lib/account/photoRoutes.test.ts"
   ]
 }

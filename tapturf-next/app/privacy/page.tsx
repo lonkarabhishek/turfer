@@ -78,7 +78,22 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>When you sign in with Google.</strong> Google shares your name, email address and profile
-          photo with us. We don&rsquo;t receive your Google password or anything else from your Google account.
+          photo with us. We use that photo as your picture only if you choose it (see the next paragraph). We
+          don&rsquo;t receive your Google password or anything else from your Google account.
+        </p>
+        <p id="photo" className="scroll-mt-24">
+          <strong>Your profile picture, if you add one.</strong> Since 30 October 2026 a new account starts with
+          your initials. On the Me tab you can upload a photo, pick one of our drawn sports avatars, or, if you
+          log in with Google, choose your Google photo. Accounts made with Google before then started with their
+          Google photo, which you can change or remove the same way. A photo you upload is cropped and made
+          smaller on your phone, which also leaves out the details your camera adds, such as where it was taken.
+          Before it shows, our server has it checked automatically for anything that must not appear next to a
+          name, such as sexual or violent images or a photo of a document; a photo that fails the check is not
+          kept. We keep the check&rsquo;s answer with your account to look into misuse. Your picture is public:
+          it shows on your profile page, in player search, on your reports and on games you host or ask to join.
+          To remove it, open the Me tab, tap your picture and choose Remove; it goes from your profile and your
+          games at once, and a photo you uploaded on the Me tab is deleted from our storage. A photo you uploaded
+          before 30 October 2026 stays in our storage until you ask us to delete it: email <Email />.
         </p>
         <p>
           <strong>Things you do on TapTurf.</strong> Games you host or ask to join, notes you add to a join
@@ -218,6 +233,10 @@ const SECTIONS: LegalSection[] = [
         <ul>
           <li>Supabase, which hosts our database, handles Google sign-in sessions and counts who is watching a live score.</li>
           <li>Google Firebase, which sends and verifies phone one-time codes.</li>
+          <li>
+            Anthropic, whose AI checks a profile photo you upload before it shows, checks the photos turf owners
+            add, and answers questions in Ask TapTurf.
+          </li>
           <li>Vercel, which hosts the website.</li>
           <li>Google Analytics, for usage statistics, only if you accept cookies (section 5).</li>
           <li>Google Maps, for the maps on turf and game pages, only if you accept cookies or tap &ldquo;Show map&rdquo; (section 5).</li>
@@ -339,6 +358,11 @@ const SECTIONS: LegalSection[] = [
       <ul>
         <li>Your account and the things you posted stay until you delete them or ask us to.</li>
         <li>
+          Your profile picture stays until you change or remove it. A photo uploaded on the Me tab that you
+          replace or remove is deleted from our storage; the automatic check&rsquo;s answer for it stays with your
+          account, and goes with it. One uploaded before 30 October 2026 is deleted when you ask us.
+        </li>
+        <li>
           When you change your username, the old one stays reserved for you: links to it still reach your
           profile and nobody else can take it.
         </li>
@@ -365,8 +389,8 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          You can edit your name, your username and whether others can find and tag you from your dashboard,
-          and leave or cancel games. For anything else,
+          You can edit your name, your username, your profile picture and whether others can find and tag you
+          from the Me tab, and leave or cancel games. For anything else,
           including removing a review or suggestion you posted, email <Email /> from the address or phone
           linked to your account and we will:
         </p>

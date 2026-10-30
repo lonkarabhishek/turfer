@@ -91,6 +91,29 @@ export async function accountRpc(fn: string, args: Record<string, unknown>): Pro
   return call(fn, args);
 }
 
+/**
+ * accountRpc for a function a migration may not have added yet: a
+ * database without it answers { missing: true }, quietly (the photo
+ * routes say photos are not on yet).
+ */
+export async function accountRpcIfThere(fn: string, args: Record<string, unknown>): Promise<Rpc | { missing: true }> {
+  const key = accountKey();
+  if (!key) return { unavailable: true };
+  try {
+    const { data, error } = await accountClient().rpc(fn, { p_key: key, ...args });
+    if (error && missingFunction(error.code)) return { missing: true };
+    if (error) {
+      console.warn(`account: ${fn} failed`, error.message);
+      return { unavailable: true };
+    }
+    if (!data || typeof data !== "object" || (data as { r?: unknown }).r === "unavailable") return { unavailable: true };
+    return { data: data as Record<string, unknown> };
+  } catch (e) {
+    console.warn(`account: ${fn} threw`, e);
+    return { unavailable: true };
+  }
+}
+
 async function call(fn: string, args: Record<string, unknown>): Promise<Rpc> {
   const key = accountKey();
   if (!key) return { unavailable: true };

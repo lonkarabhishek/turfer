@@ -36,7 +36,7 @@ export function GameRequestCard({ request, onAccept, onDecline }: Props) {
 
   const who = (
     <div className="flex items-center gap-3 min-w-0">
-      <Avatar src={request.requester_avatar} name={name} className="size-10 text-[15px]" />
+      <Avatar src={request.requester_avatar} name={name} size={40} />
       <div className="min-w-0">
         <p className="flex items-center gap-1 min-w-0 text-[16px] font-semibold text-primary-900">
           <span className="truncate">{name}</span>

@@ -83,7 +83,7 @@ export type RpcCall = { fn: string; args: Record<string, unknown> };
 /** The fake network. Each test sets what it needs and calls reset() first. */
 export const net = {
   rpcCalls: [] as RpcCall[],
-  /** Answers per RPC name; a missing one answers { r: "ok" }. */
+  /** Answers per RPC name; a missing one answers { r: "ok" }. A Response is sent as it is (an error from PostgREST). */
   rpc: {} as Record<string, (args: Record<string, unknown>) => unknown>,
   /** GoTrue's /user per access token. */
   users: new Map<string, unknown>(),
@@ -136,7 +136,7 @@ export function installNet() {
       const args = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
       net.rpcCalls.push({ fn: m[1], args });
       const answer = net.rpc[m[1]] ? net.rpc[m[1]](args) : { r: "ok" };
-      return Response.json(answer);
+      return answer instanceof Response ? answer : Response.json(answer);
     }
     throw new Error(`unexpected fetch ${url}`);
   }) as typeof fetch;

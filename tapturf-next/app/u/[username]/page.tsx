@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
-import { User } from "lucide-react";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
+import { UserAvatar } from "@/components/account/UserAvatar";
 import { OwnerVerifyNote } from "@/components/account/OwnerVerifyNote";
 
 // A TapTurf player's public profile: username, name, photo, join month
@@ -79,18 +79,7 @@ export default async function PlayerProfilePage({ params }: Props) {
   return (
     <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
       <div className="bg-white rounded-2xl shadow-elevated px-6 py-8 text-center">
-        {photo ? (
-          <img
-            src={photo}
-            alt=""
-            className="w-24 h-24 rounded-full object-cover mx-auto"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="w-24 h-24 rounded-full bg-primary-100 flex items-center justify-center mx-auto" aria-hidden>
-            <User className="w-10 h-10 text-primary-400" />
-          </div>
-        )}
+        <UserAvatar src={photo} name={name} size={96} eager className="mx-auto ring-4 ring-accent-50" />
         <h1 className="mt-4 font-display text-3xl text-primary-900 leading-tight break-words">
           {name}
           {verified && <VerifiedTick size="lg" className="ml-1.5 align-[-0.1em]" />}
