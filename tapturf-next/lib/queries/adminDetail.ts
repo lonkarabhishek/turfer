@@ -1,8 +1,8 @@
-import { adminConfirmed, adminUserRows, adminUsers } from "@/lib/queries/adminUsers";
+import { adminConfirmed, adminUserRows, adminUsers, signupPeople } from "@/lib/queries/adminUsers";
 import { gameRows, requestRows, turfsById, type TurfBrief } from "@/lib/queries/admin";
 import { anonRead } from "@/lib/admin/db";
 import { createdSince, gameState, istMinute, latestGames, requestsByGame, type GameRow, type GameState } from "@/lib/admin/home";
-import { isVerified, type Confirmed } from "@/lib/admin/people";
+import { isVerified, userCity, type Confirmed, type UserCity } from "@/lib/admin/people";
 import { both, okSection, readAllPages, rowsOf, type Section } from "@/lib/admin/section";
 import { isCity } from "@/lib/city";
 
@@ -109,6 +109,8 @@ export interface AdminUser {
   gamesHosted: number;
   requestsMade: number;
   duplicateOf: number; // size of this person's group if > 1
+  /** Their recorded city, else the best guess from activity (lib/admin/people.ts userCity); null when neither. */
+  city: UserCity | null;
 }
 
 export const USER_FILTERS = {
@@ -128,13 +130,15 @@ const normPhone = (p: string | null) => {
   return d.length > 10 ? d.slice(-10) : d;
 };
 
-export async function getAdminUsers(filter: UserFilter = "all"): Promise<Section<AdminUser[]>> {
-  const [users, games, reqs, confirmed] = await Promise.all([adminUsers(), gameRows(), requestRows(), adminConfirmed()]);
+/** The users for a filter; citiesRead false when the cities (admin_people) couldn't be read, so every city reads null. */
+export async function getAdminUsers(filter: UserFilter = "all"): Promise<Section<{ users: AdminUser[]; citiesRead: boolean }>> {
+  const [users, games, reqs, confirmed, { people }] = await Promise.all([adminUsers(), gameRows(), requestRows(), adminConfirmed(), signupPeople()]);
   // The hosted and requested columns (and the active filters) need the games: without them the list would show 0s.
   if (!users.ok) return users;
   if (!games.ok) return games;
   if (!reqs.ok) return reqs;
   const rows = users.data;
+  const personById = new Map((people ?? []).map((p) => [p.id, p]));
 
   // Same person = same email or same phone (matches the headline count).
   const groupSize = new Map<string, number>();
@@ -169,6 +173,7 @@ export async function getAdminUsers(filter: UserFilter = "all"): Promise<Section
       gamesHosted: hosted.get(u.id) ?? 0,
       requestsMade: requested.get(u.id) ?? 0,
       duplicateOf: groupSize.get(personKey(u)) ?? 1,
+      city: userCity(personById.get(u.id)),
     };
   });
 
@@ -180,7 +185,7 @@ export async function getAdminUsers(filter: UserFilter = "all"): Promise<Section
     const ids = activeSince(filter === "active7" ? 7 : 30);
     list = list.filter((u) => ids.has(u.id));
   }
-  return okSection(list);
+  return okSection({ users: list, citiesRead: people !== null });
 
   function personKeySort(a: AdminUser, b: AdminUser) {
     const ka = (a.email ?? normPhone(a.phone)).toLowerCase();

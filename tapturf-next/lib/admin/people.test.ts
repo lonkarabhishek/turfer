@@ -4,8 +4,11 @@ import {
   HALF_TEXT,
   NO_CITY,
   ago,
+  CITY_HOW,
   byCity,
   cityOf,
+  cityParam,
+  countCities,
   confirmedById,
   duration,
   hasTick,
@@ -16,6 +19,7 @@ import {
   joinedBetween,
   matches,
   personId,
+  rowInCity,
   sitePath,
   sourceOf,
   tickHalves,
@@ -25,6 +29,7 @@ import {
   tickedOnly,
   ticksById,
   toPeople,
+  userCity,
   whatsappLink,
   type DetailsRow,
 } from "./people";
@@ -209,6 +214,27 @@ test("cities: recorded first, then the best guess, else none", () => {
   assert.deepEqual(people.filter((p) => inCity(p, "pune")).map((p) => p.id).sort(), ["a", "b"]);
   assert.deepEqual(people.filter((p) => inCity(p, NO_CITY)).map((p) => p.id).sort(), ["d", "e"]);
   assert.equal(people.filter((p) => inCity(p, null)).length, people.length);
+});
+
+test("users list cities: recorded with how, else the guess, filtered and counted", () => {
+  const people = toPeople([
+    row({ id: "a", city: "pune", city_source: "picked", likely_city: "nashik", likely_share: 0.9 }),
+    row({ id: "b", city: "pune", city_source: "ip", city_ip: "Hinjawadi" }),
+    row({ id: "c", likely_city: "nashik", likely_share: 1 }),
+    row({ id: "d" }),
+  ]);
+  const rows = people.map((p) => ({ id: p.id, city: userCity(p) }));
+  assert.deepEqual(rows.map((r) => r.city), [{ id: "pune", how: "picked" }, { id: "pune", how: "ip" }, { id: "nashik", how: "guess" }, null]);
+  assert.deepEqual(rows.map((r) => (r.city ? CITY_HOW[r.city.how] : "")), ["picked", "internet", "likely", ""]);
+  assert.equal(userCity(undefined), null);
+  assert.deepEqual(countCities(rows), { cities: [{ id: "pune", label: "Pune", n: 2 }, { id: "nashik", label: "Nashik", n: 1 }], unknown: 1 });
+  assert.deepEqual(rows.filter((r) => rowInCity(r.city, "pune")).map((r) => r.id), ["a", "b"]);
+  assert.deepEqual(rows.filter((r) => rowInCity(r.city, NO_CITY)).map((r) => r.id), ["d"]);
+  assert.equal(rows.filter((r) => rowInCity(r.city, null)).length, 4);
+  // The address: a city id or "none", anything else is every city.
+  assert.equal(cityParam("pune"), "pune");
+  assert.equal(cityParam(NO_CITY), NO_CITY);
+  for (const bad of [undefined, null, "", "Pune!", "../x", "a".repeat(80)]) assert.equal(cityParam(bad), null, String(bad));
 });
 
 test("only same-site paths become links", () => {

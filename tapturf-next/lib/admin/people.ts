@@ -529,6 +529,43 @@ export function inCity(p: Person, city: string | null): boolean {
   return city === NO_CITY ? c === null : c?.id === city;
 }
 
+/** A user's city on the Users list (/admin/users): how it was recorded, or "guess" when it is the best guess from activity. */
+export type UserCity = { id: string; how: CitySource | "guess" };
+
+/** The Users list's city for this person: the recorded one, else the best guess; null when neither. */
+export function userCity(p: Person | null | undefined): UserCity | null {
+  if (p?.city?.id) return { id: p.city.id, how: p.city.source };
+  if (p?.likely) return { id: p.likely.id, how: "guess" };
+  return null;
+}
+
+/** How the city was found, in a word, next to it on the Users list. */
+export const CITY_HOW: Record<UserCity["how"], string> = { picked: "picked", gps: "GPS", ip: "internet", unknown: "", guess: "likely" };
+
+/** The Users list's city filter from the address (?city=): a city id, NO_CITY, or null for every city. */
+export function cityParam(raw: string | null | undefined): string | null {
+  return raw === NO_CITY ? NO_CITY : cityId(raw);
+}
+
+/** Whether a row counts under the city filter (null: every city; NO_CITY: no city at all). */
+export function rowInCity(c: UserCity | null, city: string | null): boolean {
+  if (city === null) return true;
+  return city === NO_CITY ? c === null : c?.id === city;
+}
+
+/** Rows per city, most first (ties by name), and how many have no city: the city filter's choices. */
+export function countCities(rows: readonly { city: UserCity | null }[]): { cities: { id: string; label: string; n: number }[]; unknown: number } {
+  const m = new Map<string, number>();
+  let unknown = 0;
+  for (const r of rows) {
+    if (r.city) m.set(r.city.id, (m.get(r.city.id) ?? 0) + 1);
+    else unknown++;
+  }
+  const cities = [...m].map(([id, n]) => ({ id, label: cityLabel(id), n }));
+  cities.sort((a, b) => b.n - a.n || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  return { cities, unknown };
+}
+
 export type CityCount = { id: string; label: string; recorded: number; guessed: number; total: number };
 
 /** People per city, most first (ties by name), and how many have no city at all. */

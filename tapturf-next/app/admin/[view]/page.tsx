@@ -30,6 +30,7 @@ import {
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 import { signupPeople } from "@/lib/queries/adminUsers";
+import { CITY_HOW, NO_CITY, cityLabel, cityParam, countCities, rowInCity } from "@/lib/admin/people";
 import { googleUnfinishedRows } from "@/lib/queries/adminLinks";
 import { UNFINISHED_LABEL, unfinishedList } from "@/lib/admin/links";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
@@ -132,17 +133,19 @@ export default async function AdminDetailPage({
   searchParams,
 }: {
   params: Promise<{ view: string }>;
-  searchParams: Promise<{ f?: string }>;
+  searchParams: Promise<{ f?: string; city?: string }>;
 }) {
   if (!(await isAdmin())) return <AdminGate />;
   const { view } = await params;
   if (!(view in VIEWS)) notFound();
   const v = view as View;
-  const { f } = await searchParams;
+  const { f, city: cityRaw } = await searchParams;
   const filters = VIEWS[v].filters as Record<string, string>;
   const filter = f && f in filters ? f : "all";
+  // The Users list also filters by city (?city=), kept when another filter is picked.
+  const city = v === "users" ? cityParam(cityRaw) : null;
 
-  const body = await renderView(v, filter);
+  const body = await renderView(v, filter, city);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -160,7 +163,7 @@ export default async function AdminDetailPage({
           {Object.entries(filters).map(([key, label]) => (
             <Link
               key={key}
-              href={key === "all" ? `/admin/${v}` : `/admin/${v}?f=${key}`}
+              href={viewHref(v, key, city)}
               className={`shrink-0 h-9 px-4 inline-flex items-center rounded-full text-[14px] font-medium ${
                 key === filter ? "bg-primary-900 text-white" : "bg-primary-100 text-primary-900 hover:bg-primary-200"
               }`}
@@ -198,7 +201,45 @@ const sportName = (s: string | null) => (s ? s.replace(/-/g, " ").replace(/^\w/,
 /** A view whose rows couldn't be read: why, and a retry (never "Nothing here"). */
 const failedView = (reason: Reason, what: string) => ({ count: null, node: <SectionError reason={reason} what={what} /> });
 
-async function renderView(v: View, filter: string): Promise<{ count: number | null; node: React.ReactNode }> {
+/** A view's address for a filter, and for the Users list a city (null: every city). */
+function viewHref(v: View, filter: string, city: string | null): string {
+  const q = new URLSearchParams();
+  if (filter !== "all") q.set("f", filter);
+  if (city) q.set("city", city);
+  const s = q.toString();
+  return `/admin/${v}${s ? `?${s}` : ""}`;
+}
+
+/** The Users list's city filter: every city with its count under the current filter, then "Not known". */
+function CityFilter({ filter, city, counts }: { filter: string; city: string | null; counts: ReturnType<typeof countCities> }) {
+  const shown = [...counts.cities];
+  // A picked city with nobody under this filter still shows, at 0, so it can be turned off.
+  if (city && city !== NO_CITY && !shown.some((c) => c.id === city)) shown.push({ id: city, label: cityLabel(city), n: 0 });
+  const chips: { key: string | null; label: string; n: number | null }[] = [
+    { key: null, label: "All cities", n: null },
+    ...shown.map((c) => ({ key: c.id, label: c.label, n: c.n })),
+    { key: NO_CITY, label: "Not known", n: counts.unknown },
+  ];
+  return (
+    <div className="flex gap-1.5 overflow-x-auto scrollbar-hide mb-4 -mx-4 px-4 sm:mx-0 sm:px-0" aria-label="Filter by city">
+      {chips.map((c) => (
+        <Link
+          key={c.key ?? "all"}
+          href={viewHref("users", filter, c.key)}
+          aria-current={c.key === city ? "true" : undefined}
+          className={`shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium ${
+            c.key === city ? "bg-accent-600 text-white" : "bg-white border border-primary-200 text-primary-800 hover:bg-primary-50"
+          }`}
+        >
+          {c.label}
+          {c.n !== null && <span className={`tabular-nums ${c.key === city ? "text-white/80" : "text-primary-400"}`}>{c.n}</span>}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+async function renderView(v: View, filter: string, city: string | null = null): Promise<{ count: number | null; node: React.ReactNode }> {
   switch (v) {
     case "live": {
       const now = Date.now();
@@ -371,11 +412,19 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
     case "users": {
       const res = await getAdminUsers(filter as UserFilter);
       if (!res.ok) return failedView(res.reason, "the users");
-      const users = res.data;
+      const { users: all, citiesRead } = res.data;
+      // Without the cities every row reads as none, so a city filter then shows everyone, as the note says.
+      const users = citiesRead ? all.filter((u) => rowInCity(u.city, city)) : all;
       return {
         count: users.length,
         node: (
-          <Table head={["Name", "Email", "Phone", "Sign-in", "Hosted", "Requests", "Joined", ""]} empty={users.length === 0}>
+          <>
+          {citiesRead ? (
+            <CityFilter filter={filter} city={city} counts={countCities(all)} />
+          ) : (
+            <p className="mb-4 text-[14px] text-primary-500">Couldn&apos;t read cities just now, so the list shows everyone without them. Reload to try again.</p>
+          )}
+          <Table head={["Name", "Email", "Phone", "City", "Sign-in", "Hosted", "Requests", "Joined", ""]} empty={users.length === 0}>
             {users.map((u) => (
               <tr key={u.id}>
                 <td className="px-4 py-3 text-primary-900">
@@ -384,6 +433,16 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
                 </td>
                 <td className="px-4 py-3 text-primary-700">{u.email || <span className="text-primary-400">-</span>}</td>
                 <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{u.phone || <span className="text-primary-400">-</span>}</td>
+                <td className="px-4 py-3 text-primary-900 whitespace-nowrap" title={u.city?.how === "guess" ? "A guess from their activity (games, turfs contacted, searches)" : undefined}>
+                  {u.city ? (
+                    <>
+                      {cityLabel(u.city.id)}
+                      {CITY_HOW[u.city.how] && <span className="ml-1.5 text-[12px] text-primary-400">{CITY_HOW[u.city.how]}</span>}
+                    </>
+                  ) : (
+                    <span className="text-primary-400">-</span>
+                  )}
+                </td>
                 <td className="px-4 py-3"><Badge className="bg-primary-100 text-primary-700">{u.method}</Badge></td>
                 <td className="px-4 py-3 tabular-nums">{u.gamesHosted}</td>
                 <td className="px-4 py-3 tabular-nums">{u.requestsMade}</td>
@@ -398,6 +457,7 @@ async function renderView(v: View, filter: string): Promise<{ count: number | nu
               </tr>
             ))}
           </Table>
+          </>
         ),
       };
     }
