@@ -52,6 +52,62 @@ export function relaxSteps<T>(
 }
 
 /**
+ * "Near me" with the visitor's location: how far from them the cards may
+ * be, in km, each tried in turn until NEARBY_MIN match. Never all of
+ * India: on 30 Oct "cheapest football turf near me" from Pune listed
+ * venues in Hyderabad, Bangalore and Delhi, 493 to 1,161 km away.
+ */
+export const NEARBY_KM = [25, 50, 100] as const;
+export const NEARBY_MIN = 3;
+
+/**
+ * The rows within NEARBY_KM of the visitor, whatever the sort: the first
+ * radius where NEARBY_MIN pass every step, else what passes them within
+ * the last one. Only when nothing within it does, relaxSteps radius by
+ * radius, widening while fewer than NEARBY_MIN match. So a stricter
+ * budget never gets a worse answer than a looser one: from Talegaon on 30
+ * Oct, football "under ₹300" dropped the budget for Powerplay Park at
+ * ₹350, 23 km away, while three turfs at ₹200 to ₹300 were 36 to 41 km
+ * away. A row with no location is never near. A radius past the first is
+ * said first in `relaxed` ("near:50", nearbyLabel); nothing within the
+ * last one gives none.
+ */
+export function relaxNearby<T>(
+  all: readonly T[],
+  steps: readonly RelaxStep<T>[],
+  dropOrder: readonly string[],
+  km: (row: T) => number | null | undefined,
+): { matched: T[]; relaxed: string[] } {
+  const last = NEARBY_KM[NEARBY_KM.length - 1];
+  const dist = new Map<T, number>();
+  for (const row of all) {
+    const d = km(row);
+    if (d != null && Number.isFinite(d) && d <= last) dist.set(row, d);
+  }
+  const near = [...dist.keys()];
+  const within = (r: number) => near.filter((row) => dist.get(row)! <= r);
+  const at = (r: number, out: { matched: T[]; relaxed: string[] }) => ({ matched: out.matched, relaxed: r > NEARBY_KM[0] ? [`near:${r}`, ...out.relaxed] : out.relaxed });
+  for (const r of NEARBY_KM) {
+    const strict = within(r).filter((row) => steps.every((s) => s.keep(row)));
+    if (strict.length >= NEARBY_MIN || (r === last && strict.length)) return at(r, { matched: strict, relaxed: [] });
+  }
+  let out: { matched: T[]; relaxed: string[] } = { matched: [], relaxed: [] };
+  let radius: number = NEARBY_KM[0];
+  for (const r of NEARBY_KM) {
+    radius = r;
+    out = relaxSteps(within(r), steps, dropOrder);
+    if (out.matched.length >= NEARBY_MIN) break;
+  }
+  return at(radius, out);
+}
+
+/** A radius relaxNearby widened to, for the "after widening ..." line: "the distance to 50 km". Null for any other key. */
+export function nearbyLabel(key: string): string | null {
+  const m = /^near:(\d+)$/.exec(key);
+  return m ? `the distance to ${m[1]} km` : null;
+}
+
+/**
  * applyAskFilters' drop order when nothing matches, softest first.
  *
  * A search: sport and an explicit city stay. A narrow sport widens after

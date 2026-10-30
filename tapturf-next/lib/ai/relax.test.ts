@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { citiesLine, closestRow, dropOrder, noneIn, nowhereReply, relaxSteps, venueLine, venueReply, venueRows, widenedReply, type RelaxStep } from "./relax";
+import { citiesLine, closestRow, dropOrder, NEARBY_KM, NEARBY_MIN, nearbyLabel, noneIn, nowhereReply, relaxNearby, relaxSteps, venueLine, venueReply, venueRows, widenedReply, type RelaxStep } from "./relax";
+import { haversineKm } from "../utils/location";
+import { applyAskFilters } from "./ask";
+import { quickAnswer } from "./quick";
+import type { Turf } from "../../types/turf";
 
 type Row = { name: string; sport: string[]; area: string; city: string; price: number | null };
 
@@ -333,4 +337,117 @@ test("closest names listed: two cards with one name said once, semicolons when a
     "No turf called Players Kings on TapTurf yet. Closest in Mumbai: Players Turf, Mahakali Caves; PLAYERS TURF -PPS BHANDUP; and Players Turf At Saki Naka.",
   );
   assert.deepEqual(closestRow("Pune", 2), { label: "Closest", place: "Pune", count: 2 });
+});
+
+// ── Near me: within a radius of the visitor ─────────────────────────
+
+// Football venues as listed on 30 Oct (SELECT only): the cheapest in India
+// by listed rate, and Pune's out to Lonavala.
+type Venue = { name: string; city: string; lat: number | null; lng: number | null; price: number };
+const venues2: Venue[] = [
+  { name: "Hotfut Kharadi", city: "pune", lat: 18.5557645, lng: 73.9612833, price: 200 },
+  { name: "Nova Center For Excellence", city: "pune", lat: 18.5210973, lng: 73.9464171, price: 250 },
+  { name: "Jignasa Sports Venue", city: "hyderabad", lat: 17.4698085, lng: 78.3077991, price: 299 },
+  { name: "Greenland Turf", city: "bangalore", lat: 12.7999059, lng: 77.6830084, price: 300 },
+  { name: "The Defender's multisports turf", city: "nashik", lat: 19.9302307813809, lng: 73.811603610806, price: 350 },
+  { name: "Powerplay Park", city: "pune", lat: 18.5495006, lng: 73.7629951, price: 350 },
+  { name: "PlayAll DIS Dwarka", city: "delhi", lat: 28.5639508, lng: 77.0582883, price: 300 },
+  { name: "Ace Sports Arena (GGIS Tathawade)", city: "pune", lat: 18.6307759, lng: 73.7514631, price: 400 },
+  { name: "Wakad Goal Arena", city: "pune", lat: 18.59682, lng: 73.77551, price: 800 },
+  { name: "The Turf Hub", city: "pune", lat: 18.7418516, lng: 73.4132872, price: 0 },
+  { name: "Dabhade Sports Club / Turf", city: "pune", lat: 18.74193, lng: 73.4196771, price: 0 },
+  { name: "ARKADE sports", city: "mumbai", lat: 19.1989396, lng: 73.1858189, price: 800 },
+  { name: "No Pin Arena", city: "pune", lat: null, lng: null, price: 100 },
+];
+const from = (at: { lat: number; lng: number }) => (v: Venue) => (v.lat != null && v.lng != null ? haversineKm(at, { lat: v.lat, lng: v.lng }) : null);
+const BANER_AT = { lat: 18.559, lng: 73.7868 };
+const LONAVALA_AT = { lat: 18.7505, lng: 73.4071 };
+const vNames = (out: { matched: Venue[] }) => out.matched.map((v) => v.name);
+const SEARCH_ORDER = dropOrder([], false);
+
+test("near me stays near: within 25 km of the visitor, whatever the sort, never all of India", () => {
+  // "Cheapest football turf near me" from Baner: Hyderabad, Bangalore, Nashik and Delhi were in the answer.
+  const out = relaxNearby(venues2, [], SEARCH_ORDER, from(BANER_AT));
+  assert.deepEqual(out.relaxed, []);
+  assert.deepEqual(vNames(out), ["Hotfut Kharadi", "Nova Center For Excellence", "Powerplay Park", "Ace Sports Arena (GGIS Tathawade)", "Wakad Goal Arena"]);
+  // A row with no location is never near.
+  assert.ok(!vNames(out).includes("No Pin Arena"));
+  assert.ok(out.matched.every((v) => from(BANER_AT)(v)! <= 25));
+});
+
+test("near me widens to 50, then 100 km, only while fewer than three match, and says so", () => {
+  // From Lonavala: two football turfs within 25 km, so the search reaches 50 km (Tathawade, Wakad).
+  const lonavala = relaxNearby(venues2, [], SEARCH_ORDER, from(LONAVALA_AT));
+  assert.deepEqual(lonavala.relaxed, ["near:50"]);
+  assert.deepEqual(vNames(lonavala), ["Powerplay Park", "Ace Sports Arena (GGIS Tathawade)", "Wakad Goal Arena", "The Turf Hub", "Dabhade Sports Club / Turf"]);
+  assert.equal(nearbyLabel(lonavala.relaxed[0]), "the distance to 50 km");
+  // Fewer than three even at 100 km: what 100 km has, never further (ARKADE is 55 km from Lonavala, Deolali 138).
+  const priced = (max: number): RelaxStep<Venue>[] => [{ key: "price", keep: (v) => v.price > 0 && v.price <= max }];
+  const few = relaxNearby(venues2, [{ key: "sport", keep: (v) => v.city !== "pune" }], SEARCH_ORDER, from(LONAVALA_AT));
+  assert.deepEqual(few.relaxed, ["near:100"]);
+  assert.deepEqual(vNames(few), ["ARKADE sports"]);
+  // Nothing within 100 km: nothing, not the nearest in another state.
+  const none = relaxNearby(venues2, [{ key: "sport", keep: (v) => v.city === "delhi" }], SEARCH_ORDER, from(BANER_AT));
+  assert.deepEqual(none, { matched: [], relaxed: ["near:100"] });
+  // The usual widening happens only when nothing within 100 km passes every filter, and then within
+  // 25 km first: a budget no venue near meets gives way there, and one some meet holds.
+  const cheap = relaxNearby(venues2, priced(150), SEARCH_ORDER, from(BANER_AT));
+  assert.deepEqual(cheap.relaxed, ["price"]);
+  assert.equal(cheap.matched.length, 5);
+  const budget = relaxNearby(venues2, priced(400), SEARCH_ORDER, from(BANER_AT));
+  assert.deepEqual(budget.relaxed, []);
+  assert.deepEqual(vNames(budget), ["Hotfut Kharadi", "Nova Center For Excellence", "Powerplay Park", "Ace Sports Arena (GGIS Tathawade)"]);
+  assert.equal(nearbyLabel("price"), null);
+  assert.ok(NEARBY_KM.every((km, i) => i === 0 || km > NEARBY_KM[i - 1]) && NEARBY_MIN === 3);
+});
+
+test("near me widens on every filter first: a budget met a little further away is kept, never dropped for the nearest", () => {
+  // From Talegaon, football under ₹300: none within 25 km (Powerplay Park, ₹350, is 23 km away), three at ₹200 to ₹300 within 50.
+  const TALEGAON_AT = { lat: 18.735, lng: 73.675 };
+  const rows = [...venues2, { name: "Kanade Sports Club", city: "pune", lat: 18.4439484, lng: 73.9146692, price: 300 }];
+  const under = (max: number): RelaxStep<Venue>[] => [{ key: "price", keep: (v) => v.price > 0 && v.price <= max }];
+  const strict = relaxNearby(rows, under(300), SEARCH_ORDER, from(TALEGAON_AT));
+  assert.deepEqual(strict.relaxed, ["near:50"]);
+  assert.deepEqual(vNames(strict), ["Hotfut Kharadi", "Nova Center For Excellence", "Kanade Sports Club"]);
+  // A looser budget never gets a worse answer than a stricter one.
+  const looser = relaxNearby(rows, under(350), SEARCH_ORDER, from(TALEGAON_AT));
+  assert.deepEqual(looser.relaxed, ["near:50"]);
+  assert.deepEqual(vNames(looser), ["Hotfut Kharadi", "Nova Center For Excellence", "Powerplay Park", "Kanade Sports Club"]);
+  // One or two within 100 km pass every filter: those, rather than the budget dropped nearer.
+  const two = relaxNearby(rows, under(250), SEARCH_ORDER, from(TALEGAON_AT));
+  assert.deepEqual(two.relaxed, ["near:100"]);
+  assert.deepEqual(vNames(two), ["Hotfut Kharadi", "Nova Center For Excellence"]);
+});
+
+test("near me on another city's page: the visitor's location wins over the page's city, not over a city they named", () => {
+  // "Football turf near me" from Baner on a Mumbai page: the quick reading takes the page's city.
+  const mumbai: Venue[] = [
+    { name: "ARKADE sports", city: "mumbai", lat: 19.1989396, lng: 73.1858189, price: 800 },
+    { name: "Kharghar turf", city: "mumbai", lat: 19.033, lng: 73.1003, price: 900 },
+    { name: "Nerul turf", city: "mumbai", lat: 19.0176, lng: 73.0391, price: 1000 },
+    { name: "Panvel turf", city: "mumbai", lat: 18.9894, lng: 73.1175, price: 1100 },
+  ];
+  const turfs = [...venues2, ...mumbai].map(
+    (v, i) =>
+      ({ id: `v${i}`, slug: `v${i}`, name: v.name, city: v.city, area: null, address: "", sports: ["Football"], amenities: [], images: [], rating: 4.2, total_reviews: 10, lat: v.lat, lng: v.lng, morning_price: v.price || null }) as unknown as Turf,
+  );
+  const f = quickAnswer("football turf near me", { areas: {}, turfs }, { prefCity: "pune", city: "mumbai" })!;
+  assert.equal(f.city, "mumbai");
+  assert.equal(f.wants_nearby, true);
+  const page = applyAskFilters(turfs, f, { prefCity: "pune", loc: BANER_AT, askedCity: null });
+  assert.deepEqual(page.relaxed, []);
+  assert.deepEqual(page.turfs.map((t) => t.name), ["Powerplay Park", "Wakad Goal Arena", "Ace Sports Arena (GGIS Tathawade)", "Nova Center For Excellence", "Hotfut Kharadi"]);
+  assert.ok(page.turfs.every((t) => t.city === "pune" && t.distanceKm! <= 25));
+  // No city chip, nor the next turn's city, for cards that aren't the page's.
+  assert.equal(page.city, null);
+  // On their own city's page the cards are its, so its chip and list stay.
+  const own = applyAskFilters(turfs, { ...f, city: "pune" }, { prefCity: "pune", loc: BANER_AT, askedCity: null });
+  assert.deepEqual(own.turfs.map((t) => t.name), page.turfs.map((t) => t.name));
+  assert.equal(own.city, "pune");
+  // "Near me in Mumbai": a city the player named keeps them there.
+  const named = applyAskFilters(turfs, f, { prefCity: "pune", loc: BANER_AT, askedCity: "mumbai" });
+  assert.equal(named.city, "mumbai");
+  assert.ok(named.turfs.length > 0 && named.turfs.every((t) => t.city === "mumbai"));
+  // A caller that doesn't know what the player named (the games' fallback turfs): the reading's city, as before.
+  assert.ok(applyAskFilters(turfs, f, { prefCity: "pune", loc: BANER_AT }).turfs.every((t) => t.city === "mumbai"));
 });

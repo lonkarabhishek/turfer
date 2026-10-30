@@ -18,16 +18,16 @@ import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { AskResponse } from "./AskProvider";
 import { turfPath } from "@/lib/utils/turfPath";
-import { visualsToDraw } from "@/lib/ask/visuals";
+import { cardPriceOf, visualsToDraw } from "@/lib/ask/visuals";
 import { CompareTableView, HostCardView, PriceChartView, ResultsMapView } from "./AskVisuals";
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
 /**
  * n: the card's number on the answer's map, shown before its name.
- * price: the price the comparison's table shows above the card (the
- * sport's own when a sport was asked; null when none is listed), so the
- * two agree; else its own (summarisePrice).
+ * price: the price the comparison's table shows above the card, or a
+ * search's price for the sport asked (the chart's), so the two agree;
+ * null when none is listed. Else its own (summarisePrice).
  */
 export function TurfMiniCard({
   turf,
@@ -254,7 +254,8 @@ export function AskResultBody({
           ) : (
             <Row>
               {turfs.map((t, i) => (
-                <TurfMiniCard key={t.id} turf={t} priority={i < 2} n={numbered ? i + 1 : undefined} />
+                // With a sport, the price the chart reads (none sent: its own, as on a reply saved before them).
+                <TurfMiniCard key={t.id} turf={t} priority={i < 2} n={numbered ? i + 1 : undefined} price={cardPriceOf(res.cardPrices, t.id)} />
               ))}
             </Row>
           )}
