@@ -8,7 +8,7 @@ import { getUserLocation, type Coords } from "@/lib/utils/location";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { BlogAnswer } from "@/lib/ask/blogTypes";
-import type { AskVisuals } from "@/lib/ask/visuals";
+import type { AskVisuals, CardPrices } from "@/lib/ask/visuals";
 
 export type AskResponse = {
   query: string;
@@ -50,6 +50,8 @@ export type AskResponse = {
   compare?: { verdict: string; rows?: { label: string; values: string[] }[]; best_for: string[]; caveats: string | null } | null;
   /** The pictures under the reply, picked from the reading and filled from our rows (lib/ask/cards.ts); drawn after visualsToDraw. */
   visuals?: AskVisuals;
+  /** find_turf with a sport: the cards' prices where the sport's rule changes them (lib/ask/cards.ts cardPrices), read with cardPriceOf. */
+  cardPrices?: CardPrices;
   /** link: under an answer about what people say, the venue's Google reviews ("Read Google reviews"). */
   answer?: { answer: string; covered: boolean; link?: { label: string; href: string } } | null;
   /** For create_game: the sentence to draft the wizard from. */

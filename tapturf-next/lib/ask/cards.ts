@@ -1,16 +1,16 @@
 import { haversineKm, type Coords } from "../utils/location";
 import { cardPrice, sportBandMap, sportBandTimeRange, sportPrice, type CardSport, type SportBandTimeMap } from "../utils/cardSport";
-import { positivePrice, summarisePrice } from "../utils/prices";
+import { positivePrice, summarisePagePrice, summarisePrice } from "../utils/prices";
 import { formatSpan, normaliseOpeningHours } from "../utils/hours";
 import { areaFor } from "../utils/area";
 import { getPhone, getWhatsAppPhone } from "../utils/seo";
 import { sportBySlug } from "../sports";
 import { isCity, labelFor } from "../city";
 import type { Turf } from "../../types/turf";
-import { MAP_ASPECT, type AskVisuals, type CompareTable, type CompareVenue, type HostPreview, type PriceChart, type ResultsMap, type Visual } from "./visuals";
+import { MAP_ASPECT, type AskVisuals, type CardPrices, type CompareTable, type CompareVenue, type HostPreview, type PriceChart, type ResultsMap, type Visual } from "./visuals";
 
 export { MAP_ASPECT };
-export type { AskVisuals, CompareTable, CompareVenue, HostPreview, PriceChart, ResultsMap, Visual };
+export type { AskVisuals, CardPrices, CompareTable, CompareVenue, HostPreview, PriceChart, ResultsMap, Visual };
 
 /**
  * The pictures under an Ask answer: "Claude chooses, the database fills".
@@ -85,6 +85,28 @@ export function withOwnBands(t: Turf): Turf {
   if (t.sport_bands !== undefined || !t.pricing_bands?.length) return t;
   const bands = sportBandMap([{ id: t.id, pricing_bands: t.pricing_bands, price_owner_confirmed: t.price_owner_confirmed ?? null }])[t.id];
   return bands ? { ...t, sport_bands: bands } : t;
+}
+
+/**
+ * A search's cards' prices when the reading has a sport: the price the
+ * chart and the table read (cardPrice, with each row's sport bands,
+ * withSportBands), so a card never shows ₹1,200 to ₹2,200 over a chart at
+ * football's band of ₹3,000 to ₹4,000 (N Sports Arena, Hyderabad, 30 Oct),
+ * or a box cricket rate beside "No badminton rate listed". Only the cards
+ * whose price that changes are sent: a card with no entry shows its own
+ * (summarisePrice), as with no sport, and as every card of a reply saved
+ * before these does (cardPriceOf). null when none changes.
+ */
+export function cardPrices(turfs: readonly Turf[], sport: string | null | undefined): CardPrices | null {
+  const rule = cardSportOf(sport);
+  if (!rule) return null;
+  const out: CardPrices = {};
+  for (const t of turfs) {
+    const own = summarisePrice(t);
+    const p = cardPrice(t, rule);
+    if (p.label !== own.label || p.kind !== own.kind) out[t.id] = p.kind === "unknown" ? null : { label: p.label, kind: p.kind };
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN")}`;
@@ -396,12 +418,13 @@ export function hoursLine(t: Pick<Turf, "opening_hours" | "start_time" | "end_ti
  * hours, distance, sports, facilities, the Claimed mark and the page's
  * Call and WhatsApp numbers. `reports`: each venue's TapTurf players'
  * count and average (the fact sheet's tapturf_reports), when it has any.
- * The price is a card's (cardPrice: the sport's own when a sport was
- * asked, summarisePrice otherwise), and the cards under the table show
- * this same price (AskResults' compare view hands it to them), so the two
- * never disagree; a venue that lists only price bands reads "Not listed"
- * here as on its card, though its page shows the bands
- * (summarisePagePrice; which wins on cards is the owner's call).
+ * The price is the sport's own when a sport was asked (cardPrice, the
+ * sport pages' rule), else the one the venue's own page shows
+ * (summarisePagePrice: the owner's prices, else the bands its Pricing
+ * table lists), so Dribble Den, which lists prices only as bands, reads
+ * ₹1,300 to ₹2,500 as on its page rather than "Not listed". The cards
+ * under the table show this same price (AskResults' compare view hands it
+ * to them), so the two never disagree.
  */
 export function compareTable(
   turfs: readonly Turf[],
@@ -410,7 +433,7 @@ export function compareTable(
   const sport = cardSportOf(opts.sport);
   const loc = opts.loc && validPoint(opts.loc.lat, opts.loc.lng) ? opts.loc : null;
   const venues = turfs.map((t, i): CompareVenue => {
-    const p = cardPrice(sport ? withOwnBands(t) : t, sport);
+    const p = sport ? cardPrice(withOwnBands(t), sport) : summarisePagePrice(t);
     const rating = Number(t.rating) || 0;
     const km = loc && validPoint(t.lat, t.lng) ? haversineKm(loc, { lat: Number(t.lat), lng: Number(t.lng) }) : null;
     const rep = opts.reports?.[i] ?? null;

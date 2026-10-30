@@ -52,6 +52,50 @@ export function relaxSteps<T>(
 }
 
 /**
+ * "Near me" with the visitor's location: how far from them the cards may
+ * be, in km, each tried in turn until NEARBY_MIN match. Never all of
+ * India: on 30 Oct "cheapest football turf near me" from Pune listed
+ * venues in Hyderabad, Bangalore and Delhi, 493 to 1,161 km away.
+ */
+export const NEARBY_KM = [25, 50, 100] as const;
+export const NEARBY_MIN = 3;
+
+/**
+ * relaxSteps over the rows within NEARBY_KM of the visitor, widening to
+ * the next radius only while fewer than NEARBY_MIN match (after the usual
+ * widening inside it), whatever the sort. A row with no location is never
+ * near. A radius past the first is said first in `relaxed` ("near:50",
+ * nearbyLabel); nothing within the last one gives none.
+ */
+export function relaxNearby<T>(
+  all: readonly T[],
+  steps: readonly RelaxStep<T>[],
+  dropOrder: readonly string[],
+  km: (row: T) => number | null | undefined,
+): { matched: T[]; relaxed: string[] } {
+  const dist = new Map<T, number>();
+  for (const row of all) {
+    const d = km(row);
+    if (d != null && Number.isFinite(d) && d <= NEARBY_KM[NEARBY_KM.length - 1]) dist.set(row, d);
+  }
+  const near = [...dist.keys()];
+  let out: { matched: T[]; relaxed: string[] } = { matched: [], relaxed: [] };
+  let radius: number = NEARBY_KM[0];
+  for (const r of NEARBY_KM) {
+    radius = r;
+    out = relaxSteps(near.filter((row) => dist.get(row)! <= r), steps, dropOrder);
+    if (out.matched.length >= NEARBY_MIN) break;
+  }
+  return { matched: out.matched, relaxed: radius > NEARBY_KM[0] ? [`near:${radius}`, ...out.relaxed] : out.relaxed };
+}
+
+/** A radius relaxNearby widened to, for the "after widening ..." line: "the distance to 50 km". Null for any other key. */
+export function nearbyLabel(key: string): string | null {
+  const m = /^near:(\d+)$/.exec(key);
+  return m ? `the distance to ${m[1]} km` : null;
+}
+
+/**
  * applyAskFilters' drop order when nothing matches, softest first.
  *
  * A search: sport and an explicit city stay. A narrow sport widens after

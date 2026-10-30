@@ -7,7 +7,7 @@ import { areaFor } from "@/lib/utils/area";
 import { getMinimumPrice } from "@/lib/utils/prices";
 import { compareTopRated } from "@/lib/utils/ranking";
 import { haversineKm, type Coords } from "@/lib/utils/location";
-import { dropOrder, relaxSteps } from "./relax";
+import { dropOrder, nearbyLabel, relaxNearby, relaxSteps } from "./relax";
 import { reviewsSubject } from "./reviewsAnswer";
 import type { Turf } from "@/types/turf";
 
@@ -633,7 +633,16 @@ export function applyAskFilters(
     });
 
   // Softest first (dropOrder in lib/ai/relax.ts).
-  const { matched, relaxed } = relaxSteps(pool, steps, dropOrder(f.needs.map((n) => `need:${n}`), !!named));
+  const order = dropOrder(f.needs.map((n) => `need:${n}`), !!named);
+  // Near me with the visitor's location: within a radius of them, widened
+  // only while too few match, never all of India (relaxNearby). A city the
+  // player named bounds the search already: a visitor far from it gets the
+  // city, as before.
+  const near = !named && f.wants_nearby && opts.loc ? opts.loc : null;
+  let { matched, relaxed } = near
+    ? relaxNearby(pool, steps, order, (t) => (t.lat != null && t.lng != null ? haversineKm(near, { lat: Number(t.lat), lng: Number(t.lng) }) : null))
+    : relaxSteps(pool, steps, order);
+  if (near && !matched.length && explicitCity) ({ matched, relaxed } = relaxSteps(pool, steps, order));
 
   const withDist = matched.map((t) => {
     const km =
@@ -724,6 +733,7 @@ export function applyAskFilters(
 /** Human labels for relaxed filters, for the "we widened your search" line. */
 export function relaxedLabel(key: string): string {
   if (key.startsWith("need:")) return key.slice(5).replace("_", " ");
+  if (key.startsWith("near:")) return nearbyLabel(key) ?? key;
   return (
     {
       text: "the name",

@@ -49,15 +49,25 @@ export type ResultsMap = {
 
 export const MAP_ASPECT = 1.6;
 
+/** A price as a card shows it; null when none is listed ("Prices not listed yet"). */
+export type CardPrice = { label: string; kind: "real" | "reported" | "reported_text" } | null;
+
+/**
+ * A search's cards' prices when a sport was asked, by card id: the price
+ * the chart reads (lib/ask/cards.ts cardPrices), only for the cards where
+ * it isn't their own.
+ */
+export type CardPrices = Record<string, CardPrice>;
+
 /** One venue's column in the comparison: every value from its row, null where it lists none ("Not listed"). */
 export type CompareVenue = {
   id: string;
   /**
-   * The price as a card shows it: the sport's own when a sport was asked
-   * (cardPrice), else summarisePrice; null when none is listed. The cards
-   * under the table show this same price.
+   * The price: the sport's own when a sport was asked (cardPrice), else
+   * the one its turf page shows (summarisePagePrice); null when none is
+   * listed. The cards under the table show this same price.
    */
-  price: { label: string; kind: "real" | "reported" | "reported_text" } | null;
+  price: CardPrice;
   /** Google's rating and review count, said as Google's. */
   google: { rating: string; reviews: string | null } | null;
   /** TapTurf players' own live reports. */
@@ -106,4 +116,17 @@ export function visualsToDraw(v: unknown): Visual[] {
     if (ok[k as Visual](v[k])) out.push(k as Visual);
   }
   return out;
+}
+
+/**
+ * One card's price from a reply's cardPrices: undefined when it has none
+ * for the card, which then shows its own (summarisePrice), as every card
+ * of a reply saved before them does; null for "Prices not listed yet". A
+ * misshapen entry counts as none.
+ */
+export function cardPriceOf(prices: unknown, id: string): CardPrice | undefined {
+  if (!isObj(prices) || !Object.prototype.hasOwnProperty.call(prices, id)) return undefined;
+  const p = prices[id];
+  if (p === null) return null;
+  return isObj(p) && typeof p.label === "string" && (p.kind === "real" || p.kind === "reported" || p.kind === "reported_text") ? { label: p.label, kind: p.kind } : undefined;
 }

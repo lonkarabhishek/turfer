@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { haversineKm } from "../utils/location";
-import { asksPrice, compareTable, dayType, hostPreview, hostVenueWords, hoursLine, MAP_ASPECT, priceChart, resultsMap, saysHere, visualsFor, type Reading } from "./cards";
-import { visualsToDraw } from "./visuals";
+import { asksPrice, cardPrices, compareTable, dayType, hostPreview, hostVenueWords, hoursLine, MAP_ASPECT, priceChart, resultsMap, saysHere, visualsFor, type Reading } from "./cards";
+import { cardPriceOf, visualsToDraw } from "./visuals";
 import { sportBandMap, sportBandTimeMap } from "../utils/cardSport";
+import { summarisePrice } from "../utils/prices";
 import type { PriceBand, Turf } from "../../types/turf";
 
 // Rows shaped like production's (30 Oct 2026, Pune and Bangalore). Every
@@ -279,6 +280,52 @@ test("late night and no time read the card's own lowest rate; a rate per slot is
   assert.deepEqual(c.off, [{ id: "sl", why: "₹1500/90-min slot" }]);
 });
 
+test("with a sport, a search's cards show the price the chart reads; without one, their own", () => {
+  // Rows as listed on 30 Oct (SELECT only), with their bands as the route gives them (sportBandMap, withSportBands).
+  const band = (format: string, lo: number, hi: number): PriceBand[] => [
+    { band: "morning", days: "all", format, price_per_hour: lo },
+    { band: "evening", days: "all", format, price_per_hour: hi },
+  ];
+  const nSports = turf({ id: "ns", name: "N Sports Arena", city: "hyderabad", morning_price: 1200, afternoon_price: 1200, evening_price: 1800, weekend_morning_price: 1300, weekend_afternoon_price: 1300, weekend_evening_price: 2200, pricing_bands: [...band("box cricket (7-a-side)", 1200, 2200), ...band("5-a-side", 3000, 4000)] });
+  const swingZone = turf({ id: "sz", name: "Swing Zone", city: "hyderabad", sports: ["Box Cricket", "Football", "Volleyball"], morning_price: 400, afternoon_price: 400, evening_price: 600, pricing_bands: band("box cricket (6-a-side)", 400, 900) });
+  const kanade = turf({ id: "ks", name: "Kanade Sports Club", morning_price: 300, afternoon_price: 300, evening_price: 700, weekend_evening_price: 900, pricing_bands: [...band("6-a-side", 300, 900), ...band("9-a-side", 500, 1600)] });
+  const jignasa = turf({ id: "jg", name: "Jignasa Sports Venue", morning_price: 299, afternoon_price: null, evening_price: 299, pricing_bands: [...band("box cricket (Small)", 299, 299), ...band("3-a-side", 299, 299)] });
+  const dee = turf({ id: "dee", name: "DEE SPORTS HONGASANDRA", sports: ["Box Cricket", "Football", "Badminton", "Swimming"], morning_price: 1300, afternoon_price: 1300, evening_price: 1300 });
+  const courts = turf({ id: "bc", name: "Shuttle Courts", sports: ["Badminton"], morning_price: 450, afternoon_price: 450, evening_price: 450 });
+  const all = [nSports, swingZone, kanade, jignasa, dee, courts, powerplay, unpriced];
+  const bands = sportBandMap(all.map((t) => ({ id: t.id, pricing_bands: t.pricing_bands ?? null, price_owner_confirmed: null })));
+  const rows = all.map((t) => (bands[t.id] ? { ...t, pricing_bands: null, sport_bands: bands[t.id] } : t));
+  // Football: the band's range where it isn't the card's own; null where the bands name only another sport. The rest send nothing.
+  assert.deepEqual(cardPrices(rows, "football"), {
+    ns: { label: "₹3000 – ₹4000/hr", kind: "real" },
+    sz: null,
+    ks: { label: "₹300 – ₹1600/hr", kind: "real" },
+  });
+  // Badminton: no band names it and every price but the courts' is another sport's (as the chart's "No badminton rate listed").
+  const badminton = cardPrices(rows, "badminton")!;
+  assert.deepEqual(Object.keys(badminton).sort(), ["dee", "jg", "ks", "ns", "pp", "sz"]);
+  assert.ok(Object.values(badminton).every((p) => p === null));
+  // No sport, or one we don't know: nothing sent, every card its own, as before.
+  assert.equal(cardPrices(rows, null), null);
+  assert.equal(cardPrices(rows, "curling"), null);
+  assert.equal(cardPrices([powerplay, courts], "football"), null);
+  // Card and chart agree: every charted card shows a real price whose range holds the bar, every card named
+  // under the chart as listing no rate for the sport reads "Prices not listed yet".
+  for (const sport of ["football", "badminton", "box-cricket"]) {
+    const sent = cardPrices(rows, sport) ?? {};
+    // As TurfMiniCard reads it: the price sent, null for none listed, else its own.
+    const shown = (t: Turf) => (t.id in sent ? (sent[t.id] ?? { label: "Prices not listed yet", kind: "unknown" }) : summarisePrice(t));
+    const chart = priceChart(rows, reading({ sport, sort: "price_low" }), FRIDAY);
+    for (const b of chart.bars) {
+      const p = shown(rows.find((t) => t.id === b.id)!);
+      assert.equal(p.kind, "real", `${sport} ${b.id}`);
+      assert.match(p.label, new RegExp(`^₹${b.value}\\b`), `${sport} ${b.id}`);
+    }
+    for (const o of chart.off.filter((x) => /^No .* rate listed$|^Prices not listed yet$/.test(x.why)))
+      assert.equal(shown(rows.find((t) => t.id === o.id)!).label, "Prices not listed yet", `${sport} ${o.id}`);
+  }
+});
+
 // ── Map ────────────────────────────────────────────────────────────
 
 const place = (id: string, lat: number, lng: number, area: string | null) => ({ id, lat, lng, area });
@@ -429,8 +476,8 @@ test("the comparison's every cell comes from the rows, and what a venue doesn't 
   const score = turf({ id: "score", name: "Score Bengaluru Sports Park", city: "bangalore", area: "Begur", rating: 4, total_reviews: 1846, morning_price: null, afternoon_price: null, evening_price: null, owner_phone: null, opening_hours: null, start_time: null, end_time: null, has_floodlights: null, parking_available: null, washroom_available: null, has_cafeteria: null, lat: null, lng: null });
   const t = compareTable([den, score], { reports: [{ players: 3, average: "4.7" }, null] });
   const [a, b] = t.venues;
-  // The price its card shows under the table: none listed in the slot columns, so none here either.
-  assert.equal(a.price, null);
+  // No sport asked: the price its own page shows (its owner confirmed prices listed only as bands), and the card under the table shows it too.
+  assert.deepEqual(a.price, { label: "₹1300 – ₹2500/hr", kind: "real" });
   assert.equal(b.price, null);
   assert.deepEqual(a.google, { rating: "5.0", reviews: "22" });
   assert.deepEqual(b.google, { rating: "4.0", reviews: "1,846" });
@@ -463,8 +510,13 @@ test("the comparison's every cell comes from the rows, and what a venue doesn't 
     ],
   });
   assert.equal(compareTable([banded, den], { sport: "football" }).venues[0].price?.label, "₹1400/hr");
-  assert.equal(compareTable([banded, den]).venues[0].price?.label, "₹600 – ₹1200/hr");
-  // A reported price is the card's too, and says so (the table styles it as the card does).
+  // No sport: its page's price, which follows the bands its Pricing table lists, not the slot columns' ₹600 – ₹1200.
+  assert.equal(compareTable([banded, den]).venues[0].price?.label, "₹600 – ₹1400/hr");
+  // A sport asked keeps the sport pages' rule: Dribble Den lists no price of its own, so none for football.
+  assert.equal(compareTable([den, banded], { sport: "football" }).venues[0].price, null);
+  // An owner's own listed prices win over the bands, as on the page.
+  assert.equal(compareTable([{ ...banded, price_owner_confirmed: true } as Turf, den]).venues[0].price?.label, "₹600 – ₹1200/hr");
+  // A reported price is the page's too, and says so (the table styles it as the card does).
   assert.deepEqual(compareTable([reported, den]).venues[0].price, { label: "~₹900/hr (reported)", kind: "reported" });
   // The visitor's distance, when their place is known; none for a venue without one.
   const near = compareTable([den, score], { loc: { lat: 12.9279, lng: 77.6271 } });
@@ -537,4 +589,16 @@ test("an old reply draws as before, and a misshapen or unknown picture is left o
   const map = resultsMap(PUNE, null);
   assert.deepEqual(visualsToDraw({ show: ["prices", "map", "prices"], prices, map }), ["prices", "map"]);
   assert.deepEqual(visualsToDraw({ show: ["prices"], prices: { ...prices, bars: [{ id: "a", value: "1" }] } }), []);
+});
+
+test("a card's price from the reply: none sent (an old reply, or no sport) shows its own; a misshapen one too", () => {
+  assert.equal(cardPriceOf(undefined, "a"), undefined);
+  assert.equal(cardPriceOf({}, "a"), undefined);
+  assert.equal(cardPriceOf({ b: null }, "a"), undefined);
+  assert.equal(cardPriceOf({ a: null }, "a"), null);
+  assert.deepEqual(cardPriceOf({ a: { label: "₹3000 – ₹4000/hr", kind: "real" } }, "a"), { label: "₹3000 – ₹4000/hr", kind: "real" });
+  assert.equal(cardPriceOf({ a: { label: "₹1", kind: "unknown" } }, "a"), undefined);
+  assert.equal(cardPriceOf({ a: { label: 1, kind: "real" } }, "a"), undefined);
+  assert.equal(cardPriceOf([{ label: "₹1", kind: "real" }], "0"), undefined);
+  assert.equal(cardPriceOf({}, "constructor"), undefined);
 });

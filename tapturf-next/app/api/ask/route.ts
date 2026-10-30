@@ -22,9 +22,9 @@ import {
 } from "@/lib/ai/ask";
 import { quickAnswer } from "@/lib/ai/quick";
 import { namesVenue, placedAt, resolveWithPage, shownNames, wholeVenueName } from "@/lib/ai/names";
-import { asksPrice, compareTable, hostPreview, hostVenueWords, priceChart, resultsMap, saysHere, visualsFor, type AskVisuals } from "@/lib/ask/cards";
+import { asksPrice, cardPrices, compareTable, hostPreview, hostVenueWords, priceChart, resultsMap, saysHere, visualsFor, type AskVisuals } from "@/lib/ask/cards";
 import { getSportBands, getSportBandTimes, withSportBands } from "@/lib/queries/sportBands";
-import { cap, citiesLine, closestRow, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
+import { cap, citiesLine, closestRow, NEARBY_KM, noneIn, nowhereReply, venueLine, venueReply, venueRows, widenedReply } from "@/lib/ai/relax";
 import { areaFor } from "@/lib/utils/area";
 import { Declined, parseFresh } from "@/lib/ai/parseCache";
 import { applyGameFilters, loadOpenGames } from "@/lib/ai/games";
@@ -603,14 +603,21 @@ export async function GET(req: Request) {
         // "Near me" before the location is shared: the visitor's city, best rated, until it is.
         else if (filters.wants_nearby && !loc && stayedIn && isCity(stayedIn))
           body.reply = `These are the top rated in ${labelFor(stayedIn)}. Share your location to see the nearest first.`;
+        // Near me found nothing within the last radius (applyAskFilters): not "Here are the turfs near you".
+        else if (filters.wants_nearby && loc && r.total === 0) body.reply = `Nothing that matches is listed within ${NEARBY_KM[NEARBY_KM.length - 1]} km of you yet.`;
         // Pictures from the same cards: each one's price at the time asked
         // (with the sport's bands, and by time when a time was asked: cached
-        // reads, when a sport was asked) and where they are. The budget was
-        // dropped when nothing fit it.
+        // reads) and where they are. The budget was dropped when nothing fit
+        // it. With a sport, the cards show the price the chart reads too
+        // (cardPrices), where it isn't their own.
         const asked = { ...filters, sport: r.sport, max_price_per_hour: r.relaxed.includes("price") ? null : filters.max_price_per_hour };
-        const banded = asksPrice(asked) && !!asked.sport;
-        const [bands, times] = banded ? await Promise.all([getSportBands(), asked.time && asked.time !== "late_night" ? getSportBandTimes() : null]) : [null, null];
-        const chart = asksPrice(asked) ? priceChart(bands ? r.turfs.map((t) => withSportBands(t, bands)) : r.turfs, asked, new Date(), times) : null;
+        const [bands, times] = asked.sport
+          ? await Promise.all([getSportBands(), asksPrice(asked) && asked.time && asked.time !== "late_night" ? getSportBandTimes() : null])
+          : [null, null];
+        const rows = bands ? r.turfs.map((t) => withSportBands(t, bands)) : r.turfs;
+        const prices = cardPrices(rows, asked.sport);
+        if (prices) body.cardPrices = prices;
+        const chart = asksPrice(asked) ? priceChart(rows, asked, new Date(), times) : null;
         const map = resultsMap(r.turfs.map((t) => ({ id: t.id, lat: t.lat, lng: t.lng, area: areaFor(t) })), loc);
         const show = visualsFor(asked, { priced: chart?.bars.length ?? 0, map: !!map });
         if (show.length)
