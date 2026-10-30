@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { ALL_POSTS, getPostBySlug } from "@/content/blog";
 
@@ -6,8 +8,9 @@ import { ALL_POSTS, getPostBySlug } from "@/content/blog";
 // at deploy for every post and served as a static file; any other slug
 // is a 404. Under /api, so proxy.ts never runs for it.
 //
-// Text only, in the bundled Noto Sans: an emoji would be fetched from a
-// CDN while the build runs, and a failed fetch would fail the build.
+// Text in the bundled Noto Sans, and the app icon read from public/, so
+// nothing is fetched: an emoji would come from a CDN while the build
+// runs, and a failed fetch would fail the build.
 export const dynamic = "force-static";
 export const dynamicParams = false;
 
@@ -23,6 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   if (!post) return new Response("Not found", { status: 404 });
   const title = post.title;
   const size = title.length <= 45 ? 76 : title.length <= 70 ? 64 : 54;
+  const mark = `data:image/png;base64,${(await readFile(join(process.cwd(), "public", "apple-icon.png"))).toString("base64")}`;
 
   return new ImageResponse(
     (
@@ -39,22 +43,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
-          {/* The favicon's mark: a white T on the brand green. */}
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 16,
-              background: "#FFFFFF",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              paddingTop: 15,
-            }}
-          >
-            <div style={{ width: 45, height: 12, background: "#00A699", borderRadius: 2 }} />
-            <div style={{ width: 13, height: 33, background: "#00A699", borderRadius: 2 }} />
-          </div>
+          {/* The home-screen icon: the logo's stadium and ball on white. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={mark} alt="" width={72} height={72} style={{ borderRadius: 16 }} />
           <div style={{ marginLeft: 22, fontSize: 40, letterSpacing: -0.5 }}>TapTurf</div>
           <div
             style={{

@@ -49,12 +49,12 @@ export const metadata: Metadata = {
     title: "TapTurf",
   },
   // app/favicon.ico (16, 32 and 48px) is added by the file convention,
-  // first; listing it here too gave every page two favicon links. The
-  // SVG is the same white T on #00A699, drawn on a 48px grid so it stays
-  // sharp at the 16px Google shows beside each mobile result.
+  // first; listing it here too gave every page two favicon links. Every
+  // icon is the logo's stadium and cricket ball, cut from public/logo.png
+  // by scripts/site-icons.mjs. No SVG: browsers take one over the .ico,
+  // and the logo is a picture, not shapes.
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
