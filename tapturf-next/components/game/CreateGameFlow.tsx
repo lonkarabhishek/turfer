@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { ACCOUNT_NOT_CONFIRMED, useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
-import { searchTurfs } from "@/lib/queries/users";
+import { getTurfPlace, searchTurfs } from "@/lib/queries/users";
+import { gameShareText } from "@/lib/utils/gameShare";
 import { TimeSlotSheet } from "./TimeSlotSheet";
 import { GameDraftBox } from "./GameDraftBox";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
@@ -173,6 +174,8 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const [duration, setDuration] = useState<number | null>(null);
   const [turfId, setTurfId] = useState(preselectedTurfId);
   const [turfName, setTurfName] = useState(preselectedTurfName);
+  // The new game's area and city, read once it is made, for the WhatsApp message.
+  const [turfPlace, setTurfPlace] = useState<{ area: string | null; city: string | null } | null>(null);
   const [turfSearch, setTurfSearch] = useState("");
   const [turfResults, setTurfResults] = useState<{ id: string; name: string; address: string }[]>([]);
   const [showTurfDropdown, setShowTurfDropdown] = useState(false);
@@ -303,7 +306,11 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     );
 
     setSubmitting(false);
-    if (data && !error) { setCreatedGameId(data.id); setStep(4); }
+    if (data && !error) {
+      setCreatedGameId(data.id);
+      setStep(4);
+      getTurfPlace(turfId).then(setTurfPlace, () => {});
+    }
     else setSubmitError(error || "Failed to create game. Please try again.");
   };
 
@@ -316,7 +323,22 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
 
   const handleWhatsAppShare = () => {
     if (!createdGameId) return;
-    const text = `Join my ${sport} game on TapTurf!\n${window.location.origin}/game/${createdGameId}`;
+    // Which game, where and when (lib/utils/gameShare.ts), the link last.
+    const text = gameShareText(
+      {
+        sport,
+        date,
+        start_time: startTime,
+        end_time: endTime,
+        max_players: maxPlayers,
+        current_players: 1,
+        price_per_player: costPerPerson,
+        skill_level: skillLevel,
+        turf_booked: turfBooked,
+        turfs: { name: turfName, ...turfPlace },
+      },
+      { host: true, url: `${window.location.origin}/game/${createdGameId}` },
+    );
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 

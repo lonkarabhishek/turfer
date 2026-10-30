@@ -22,3 +22,10 @@ export async function searchTurfs(query?: string) {
   // Names without a booking app's attribution, as on the turf's own page.
   return { data: (data || []).map((t) => ({ ...t, name: cleanVenueName(t.name) })), error: error?.message || null };
 }
+
+/** A turf's area and city, for the message a new game is shared with; null when it cannot be read. */
+export async function getTurfPlace(id: string): Promise<{ area: string | null; city: string | null } | null> {
+  const supabase = createClient();
+  const { data } = await supabase.from("turfs").select("area, city").eq("id", id).maybeSingle();
+  return data ?? null;
+}

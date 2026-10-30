@@ -22,6 +22,7 @@ import {
 } from "@/lib/utils/game";
 import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber } from "@/lib/utils/gameState";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
+import { gameShareText } from "@/lib/utils/gameShare";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
@@ -187,20 +188,20 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   };
 
   const handleShare = async () => {
+    if (!game) return;
     const url = window.location.href;
-    const sport = sportLabel(game?.sport);
-    const venue = game?.turfs?.name;
-    const when = game ? [formatGameDay(game.date).title, formatTimeRange(game.start_time, game.end_time).replace(/ /g, " ")] : [];
-    const text = [`${isHost ? `Join my ${sport} game` : `${sport} game`}${venue ? ` at ${venue}` : ""}`, ...when].filter(Boolean).join(", ");
+    // Which game, where and when (lib/utils/gameShare.ts); the share sheet adds the link itself.
+    const closed = game.status === "cancelled" ? "cancelled" : status === "expired" || game.status === "completed" ? "ended" : undefined;
+    const text = gameShareText(game, { host: isHost, closed });
     if (navigator.share) {
       try {
-        await navigator.share({ title: text, text, url });
+        await navigator.share({ title: text.split("\n")[0], text, url });
       } catch {
         // Closed the share sheet.
       }
     } else {
       try {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(gameShareText(game, { host: isHost, closed, url }));
         setShared(true);
         setTimeout(() => setShared(false), 2000);
       } catch {
