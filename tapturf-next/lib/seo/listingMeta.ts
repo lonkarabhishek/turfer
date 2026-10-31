@@ -182,42 +182,79 @@ export interface CitySportFacts extends ListingReach {
 
 const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
-/** "31 Badminton Courts in Hyderabad: Prices & Timings". */
+/**
+ * "Badminton Courts in Hyderabad: Alwal & Kompally".
+ * The words people type ("badminton courts in Hyderabad") come first,
+ * then where most of the venues are. The count-first form is the
+ * fallback when a long city or area name leaves no room.
+ */
 export function citySportTitle(f: CitySportFacts): string {
   const venues = f.count === 1 ? `${f.sport.name} ${cap(venueWord(f.sport, 1))}` : sportVenues(f.sport, { title: true });
+  const query = `${venues} in ${f.cityLabel}`;
   const head = `${inr(f.count)} ${venues} in ${f.cityLabel}`;
   const facets =
     f.priced * 2 > f.count
       ? [f.withHours > 0 && "Prices & Timings", "Prices"].filter((x): x is string => !!x)
       : facetsFrom({ timings: f.withHours > 0, photos: f.withPhotos > 0, ratings: f.rated > 0 });
-  return firstFitting([...facets.map((fc) => `${head}: ${fc}`), head], titleFits);
+  const noun = cap(venueWord(f.sport, f.count));
+  const cityNorm = f.cityLabel.toLowerCase();
+  const areas = [2, 1]
+    .map((k) => {
+      const names = f.areas.filter((a) => a.toLowerCase() !== cityNorm).slice(0, k);
+      if (!names.length) return null;
+      return names.length === 1 ? names[0] : `${names[0]} & ${names[1]}`;
+    })
+    .filter((a): a is string => !!a);
+  // One venue: the count is the fact, and an area list would just repeat it.
+  const queryForms =
+    f.count > 1
+      ? [
+          ...areas.map((a) => `${query}: ${a}`),
+          ...facets.map((fc) => `${query}: ${inr(f.count)} ${noun}, ${fc}`),
+          `${query}: ${inr(f.count)} ${noun}`,
+        ]
+      : [];
+  return firstFitting([...queryForms, ...facets.map((fc) => `${head}: ${fc}`), head], titleFits);
 }
 
-/** "31 badminton courts in Hyderabad, 30 with listed prices. Most in Alwal, ... Timings, photos, map. Call or WhatsApp, no booking fee." */
+/**
+ * "31 badminton courts in Hyderabad. Most in Alwal, Kompally and
+ * Kothapet. Timings, photos, map. Call or WhatsApp, no booking fee."
+ * Areas before a price count: a phone snippet cuts the later sentences,
+ * and "3 with listed prices" was hiding the neighbourhoods. A price
+ * count is kept when most venues list one, or when there is no area.
+ */
 export function citySportDescription(f: CitySportFacts): string {
   const lower = f.sport.name.toLowerCase();
   const venues = venueWord(f.sport, f.count);
   const priced =
     f.priced <= 0 ? null : f.priced === f.count && f.count > 1 ? "all with listed prices" : f.priced === 1 ? "1 with a listed price" : `${inr(f.priced)} with listed prices`;
+  const sayPriced = !!priced && (f.priced * 2 > f.count || f.areas.length === 0);
   const range =
     QUOTE_CITY_PRICE_RANGE && f.priceMin != null && f.priceMax != null ? `₹${inr(f.priceMin)} to ₹${inr(f.priceMax)} an hour listed` : null;
   const lit = f.sport.venue === "turf" && f.floodlit > 0 ? `${inr(f.floodlit)} floodlit` : null;
   type Part = { kind: "priced" | "range" | "areas" | "lit" | "what"; text: string };
   const options: Part[][] = [
-    priced ? [{ kind: "priced", text: priced }] : [],
-    range ? [{ kind: "range", text: range }] : [],
     [3, 2, 1].map((k) => ({ kind: "areas" as const, text: andList(f.areas.slice(0, k)) })).filter((p) => !!p.text),
     lit ? [{ kind: "lit", text: lit }] : [],
+    sayPriced && priced ? [{ kind: "priced", text: priced }] : [],
+    range ? [{ kind: "range", text: range }] : [],
     // What the turf pages show: the map always, timings and photos when a venue has them.
     [{ kind: "what", text: f.withHours > 0 || f.withPhotos > 0 ? `${cap([f.withHours > 0 && "timings", f.withPhotos > 0 && "photos", "map"].filter(Boolean).join(", "))}.` : "Map and directions." }],
   ];
   const make = (chosen: Part[]) => {
     const get = (k: Part["kind"]) => chosen.find((p) => p.kind === k)?.text;
-    const head = `${inr(f.count)} ${lower} ${venues} in ${f.cityLabel}${get("priced") ? `, ${get("priced")}` : ""}${get("range") ? `, ${get("range")}` : ""}.`;
     const areas = get("areas");
+    const pricedBit = get("priced");
+    const rangeBit = get("range");
+    // No area to lead with: keep the price count in the first sentence.
+    const head = areas
+      ? `${inr(f.count)} ${lower} ${venues} in ${f.cityLabel}.`
+      : `${inr(f.count)} ${lower} ${venues} in ${f.cityLabel}${pricedBit ? `, ${pricedBit}` : ""}${rangeBit ? `, ${rangeBit}` : ""}.`;
     const litText = get("lit");
     const where = areas ? `Most in ${areas}${litText ? `; ${litText}` : ""}.` : litText ? `${cap(litText)}.` : "";
-    return [head, where, get("what"), listingCta(f.contactable)].filter(Boolean).join(" ");
+    const priceAfter = areas ? [pricedBit, rangeBit].filter(Boolean).join(", ") : "";
+    return [head, where, priceAfter ? `${cap(priceAfter)}.` : "", get("what"), listingCta(f.contactable)].filter(Boolean).join(" ");
   };
   return greedy(options, make);
 }

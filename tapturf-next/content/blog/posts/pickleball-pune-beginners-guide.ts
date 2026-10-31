@@ -4,16 +4,16 @@ export const post: Post = {
   slug: "pickleball-pune-beginners-guide",
   title: "Pickleball for Beginners: Rules, Scoring and Courts in Pune",
   description:
-    "What is pickleball and how do you play it? The basic rules, the kitchen, scoring to 11, paddle and ball tips, singles vs doubles, and where to play in Pune.",
-  seoTitle: "Pickleball Rules for Beginners: Serve, Kitchen & Scoring",
+    "Where to play pickleball in Pune, for beginners: courts confirmed in this guide, the underhand serve, the 7-foot kitchen and scoring to 11.",
+  seoTitle: "Pickleball Courts in Pune for Beginners",
   seoDescription:
-    "Pickleball rules in plain words: the serve, the 7-foot kitchen, scoring to 11 and the 44×20 ft court. Singles vs doubles, gear, and where to play in Pune.",
-  hook: "A small-court paddle sport you can learn in an hour. Here are the rules that matter on day one, and where to play in Pune.",
+    "Where to play pickleball in Pune: beginner courts, the underhand serve, the 7-foot kitchen and scoring to 11. Courts named here as of 22 Oct 2026.",
+  hook: "Courts confirmed in this Pune guide (22 Oct 2026) include Chondhe Patil Sports Zone in Aundh, Kaizen Sports in Karve Nagar and Rama Sports in Kothrud. Beginners play on a 44 by 20 foot court, with an underhand serve, a 7-foot kitchen and scoring to 11.",
   category: "Guides",
   city: "pune",
   readMinutes: 7,
   publishedAt: "2026-09-26",
-  updatedAt: "2026-10-22",
+  updatedAt: "2026-10-31",
   coverEmoji: "🏓",
   keywords: [
     "pickleball",
@@ -30,7 +30,7 @@ export const post: Post = {
   blocks: [
     {
       type: "p",
-      text: "Pickleball is a small-court racket sport that borrows from tennis, badminton and table tennis. The court is one-third the size of a tennis court, the ball has holes and doesn't bounce much, and one hour is enough for a beginner to have real rallies with a real opponent. It's the fastest-growing racket sport in India, and Pune is early to it.",
+      text: "Pickleball in Pune is played on a 44 by 20 foot court, about a third of a tennis court, to 11 points. The courts named above are on TapTurf and were confirmed for pickleball in this guide on 22 Oct 2026. The ball has holes and doesn't bounce much, and one hour is enough for a beginner to have real rallies with a real opponent.",
     },
 
     { type: "stat-grid", items: [

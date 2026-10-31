@@ -93,7 +93,7 @@ function assertNoRepeatedPlace(title: string, words: (string | null | undefined)
 const DIFFERS: Record<string, { description: string }> = {
   foothill: {
     description:
-      "Open 6 AM–11 PM daily. Cricket & football turf in Kothrud, Pune, floodlit, 7-a-side. 4.4 on Google (102 reviews). Call the turf for rates, no booking fee.",
+      "Cricket & football turf in Kothrud, Pune, floodlit, 7-a-side. Open 6 AM–11 PM daily. 4.4 on Google (102 reviews). Call the turf for rates, no booking fee.",
   },
 };
 
@@ -304,6 +304,59 @@ test("placeFor leaves out what the name already says (no 'Hinjewadi Hinjewadi', 
   assert.deepEqual(placeFor("Goal Zone", "Baner", null), { full: "Baner", city: "" });
 });
 
+test("a brand title names the sport when the name does not, without dropping the area", () => {
+  const photos = [1, 2, 3].map(googlePhoto);
+  const up = turfMeta({
+    turf: turf({
+      name: "Turf Up - Hinjewadi",
+      area: "Hinjewadi",
+      city: "pune",
+      sports: ["Football", "Box Cricket"],
+      morning_price: 800,
+      evening_price: 1100,
+      rating: 4.5,
+      total_reviews: 789,
+      images: photos,
+    }),
+    contact: { call: true, whatsapp: true },
+  });
+  // Brand and area stay in the title. The sport leads the description,
+  // because adding it to the title would drop the price or the area.
+  assert.equal(up.title, "Turf Up - Hinjewadi, Pune – from ₹800/hr, Reviews & Photos");
+  assert.match(up.description, /^Football & box cricket turf\./);
+  assert.match(up.description, /₹800–1,100\/hr/);
+  assertClean(up, "turf up");
+  // The name already says the sport: no second "Box Cricket Turf" in the title.
+  const jds = turfMeta({
+    turf: turf({ name: "JDS Box Cricket", area: "Kukatpally", city: "hyderabad", sports: ["Box Cricket"], rating: 5, total_reviews: 48, images: photos }),
+    contact: { call: true, whatsapp: false },
+  });
+  assert.equal(jds.title, "JDS Box Cricket, Kukatpally, Hyderabad – Reviews & Photos");
+  // Sport plus the full place does not fit, so the area stays and the description leads with the sport.
+  const long = turfMeta({
+    turf: turf({
+      name: "Kridadham Premium Multisport Club",
+      area: "Rane Nagar",
+      city: "nashik",
+      sports: ["Cricket", "Football"],
+      morning_price: 500,
+      evening_price: 700,
+      weekend_morning_price: 600,
+      weekend_evening_price: 800,
+      opening_hours: { daily: "6 AM–12 AM" },
+      has_floodlights: true,
+      rating: 5,
+      total_reviews: 6,
+      images: photos,
+    }),
+    contact: { call: true, whatsapp: false },
+  });
+  assert.equal(long.title, "Kridadham Premium Multisport Club, Nashik – from ₹500/hr");
+  assert.ok(!long.title.includes("Cricket Turf"), long.title);
+  assert.match(long.description, /^Cricket & football turf in Rane Nagar, Nashik/);
+  assertClean(long, "kridadham");
+});
+
 test("the names the design calls out make clean titles", () => {
   const rows: [Partial<Turf>, string][] = [
     [{ name: "Hatrics Football/Cricket Turf Thane", area: "Thane West", city: "mumbai", rating: 4.4, total_reviews: 90, images: [1, 2, 3].map(googlePhoto) }, "Hatrics Football/Cricket Turf Thane – Reviews & Photos"],
@@ -339,7 +392,7 @@ test("listed bands win over the slot columns, and the unit follows price_unit", 
   assert.ok(!bands.title.includes("660") && !bands.description.includes("660"));
   const slot = turfMeta({ turf: turf({ name: "Slot Turf", city: "pune", morning_price: 1500, evening_price: 1800, price_unit: "per_slot", slot_minutes: 90 }), contact: { call: true, whatsapp: true } });
   assert.match(slot.title, /from ₹1,500\/slot/);
-  assert.match(slot.description, /^₹1,500–1,800\/slot\./);
+  assert.match(slot.description, /^Football turf\. ₹1,500–1,800\/slot\./);
   const person = turfMeta({ turf: turf({ name: "Pool Club", city: "pune", sports: ["Swimming"], morning_price: 150, price_unit: "per_person" }), contact: { call: true, whatsapp: false } });
   assert.match(person.title, /₹150\/person/);
 });
@@ -402,7 +455,7 @@ test("hours: compact, and lower-case day keys count", () => {
   assert.equal(compactHours("Open 6:00 AM – 12:00 PM, 4:00 PM – 11:00 PM daily"), "Open 6 AM–noon, 4 PM–11 PM daily");
   const lower = Object.fromEntries(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((d) => [d, "6 AM–11 PM"]));
   const m = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", opening_hours: lower as Turf["opening_hours"], images: [1, 2, 3].map(googlePhoto) }), contact: { call: true, whatsapp: true } });
-  assert.match(m.description, /^Open 6 AM–11 PM daily\./);
+  assert.match(m.description, /^Football turf\. Open 6 AM–11 PM daily\./);
   assert.equal(m.title, "Goal Zone, Pune – Timings & Photos");
   // One fact that is not a price is not worth a title slot.
   assert.equal(turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", opening_hours: lower as Turf["opening_hours"] }), contact: { call: true, whatsapp: true } }).title, "Goal Zone, Pune");

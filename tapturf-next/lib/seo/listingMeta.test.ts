@@ -90,16 +90,21 @@ test("city description drops the least useful parts first to stay within 155", (
 
 test("city + sport: the design's Hyderabad badminton and Mumbai cricket", () => {
   const hyd = { ...reachAll(31), cityLabel: "Hyderabad", sport: sport("badminton"), count: 31, priced: 30, floodlit: 3, areas: ["Alwal", "Kompally", "Kothapet"], priceMin: 300, priceMax: 800 };
-  assert.equal(citySportTitle(hyd), "31 Badminton Courts in Hyderabad: Prices & Timings");
+  assert.equal(citySportTitle(hyd), "Badminton Courts in Hyderabad: Alwal & Kompally");
   assert.equal(
     citySportDescription(hyd),
-    "31 badminton courts in Hyderabad, 30 with listed prices. Most in Alwal, Kompally and Kothapet. Timings, photos, map. Call or WhatsApp, no booking fee.",
+    "31 badminton courts in Hyderabad. Most in Alwal, Kompally and Kothapet. 30 with listed prices. Timings, photos, map. Call or WhatsApp, no booking fee.",
   );
   clean(citySportTitle(hyd), citySportDescription(hyd));
   const mum = { ...reachAll(30), cityLabel: "Mumbai", sport: sport("cricket"), count: 30, priced: 3, floodlit: 20, areas: ["Mira Road East", "Bandra West"], priceMin: null, priceMax: null };
-  assert.equal(citySportTitle(mum), "30 Cricket Turfs in Mumbai: Timings, Photos & Ratings");
-  assert.match(citySportDescription(mum), /^30 cricket turfs in Mumbai, 3 with listed prices\. Most in Mira Road East and Bandra West; 20 floodlit\./);
+  assert.equal(citySportTitle(mum), "Cricket Turfs in Mumbai: Mira Road East & Bandra West");
+  assert.equal(
+    citySportDescription(mum),
+    "30 cricket turfs in Mumbai. Most in Mira Road East and Bandra West; 20 floodlit. Timings, photos, map. Call or WhatsApp, no booking fee.",
+  );
   clean(citySportTitle(mum), citySportDescription(mum));
+  // A minority of listed prices stays out of the snippet so the areas show.
+  assert.ok(!citySportDescription(mum).includes("listed prices"));
   // No price range in the snippet while QUOTE_CITY_PRICE_RANGE is off.
   assert.ok(!citySportDescription(hyd).includes("₹"));
 });
@@ -125,18 +130,24 @@ test("city: no 'Timings', 'Photos' or 'Call or WhatsApp' that no turf behind the
 });
 
 test("city + sport: facets and the call to action follow the venues", () => {
-  // /bhilwara/pickleball: 3 courts, none with hours.
+  // /bhilwara/pickleball: 3 courts, none with hours, no area with 2 or more.
   const bhl = { ...reachAll(3), withHours: 0, cityLabel: "Bhilwara", sport: sport("pickleball"), count: 3, priced: 0, floodlit: 0, areas: [], priceMin: null, priceMax: null };
-  assert.equal(citySportTitle(bhl), "3 Pickleball Courts in Bhilwara: Photos & Ratings");
+  assert.equal(citySportTitle(bhl), "Pickleball Courts in Bhilwara: 3 Courts, Photos & Ratings");
   assert.equal(citySportDescription(bhl), "3 pickleball courts in Bhilwara. Photos, map. Call or WhatsApp, no booking fee.");
   // /delhi/futsal: every number a Delhi 011 landline the page cannot dial as stored.
   const futsal = { ...reachAll(8), contactable: 0, cityLabel: "Delhi", sport: sport("futsal"), count: 8, priced: 0, floodlit: 0, areas: [], priceMin: null, priceMax: null };
+  assert.equal(citySportTitle(futsal), "Futsal Turfs in Delhi: 8 Turfs, Timings, Photos & Ratings");
   assert.match(citySportDescription(futsal), /Timings, photos, map\. No booking fee\.$/);
   const bare = { ...futsal, withHours: 0, withPhotos: 0, rated: 0 };
-  assert.equal(citySportTitle(bare), "8 Futsal Turfs in Delhi");
+  assert.equal(citySportTitle(bare), "Futsal Turfs in Delhi: 8 Turfs");
   assert.equal(citySportDescription(bare), "8 futsal turfs in Delhi. Map and directions. No booking fee.");
-  assert.equal(citySportTitle({ ...bare, priced: 5 }), "8 Futsal Turfs in Delhi: Prices");
+  assert.equal(citySportTitle({ ...bare, priced: 5 }), "Futsal Turfs in Delhi: 8 Turfs, Prices");
+  // A long city name steps back to a form that still fits.
+  const long = { ...bare, cityLabel: "Thiruvananthapuram", sport: sport("badminton"), count: 12, areas: ["Sreekaryam Junction Extension", "Kazhakkoottam"] };
+  assert.ok(titleFits(citySportTitle(long)), citySportTitle(long));
+  assert.match(citySportTitle(long), /Thiruvananthapuram/);
   clean(citySportTitle(bhl), citySportDescription(bare));
+  clean(citySportTitle(long), citySportDescription(long));
 });
 
 test("reach: a number the page can dial or WhatsApp, hours from opening_hours or start/end", () => {
