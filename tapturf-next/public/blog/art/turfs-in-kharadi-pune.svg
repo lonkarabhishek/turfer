@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Summary card for turfs in Kharadi, Pune: 9 listed, a ₹1,200 typical weekday evening rate, ₹1,500 highest listed hour, 7 open to midnight or later, and a bar chart of weekday evening prices by venue</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="105" font-size="46" font-weight="700">Turfs in Kharadi, Pune</text>
+<text x="80" y="145" font-size="24" fill-opacity="0.7">Kharadi, listed on TapTurf, 31 Oct 2026</text>
+<g>
+<rect x="80" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="104" y="258" font-size="56" font-weight="700" fill="#4ADE80">9</text>
+<text x="104" y="294" font-size="20" fill-opacity="0.8">turfs listed</text>
+<rect x="340" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="364" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹1,200</text>
+<text x="364" y="294" font-size="20" fill-opacity="0.8">typical evening hour</text>
+<rect x="600" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="624" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹1,500</text>
+<text x="624" y="294" font-size="20" fill-opacity="0.8">highest listed hour</text>
+<rect x="860" y="190" width="260" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="884" y="258" font-size="56" font-weight="700" fill="#4ADE80">7</text>
+<text x="884" y="294" font-size="20" fill-opacity="0.8">open to midnight or later</text>
+</g>
+<text x="80" y="362" font-size="22" font-weight="700" fill-opacity="0.9">Weekday evening rate per hour, priced venues</text>
+<g font-size="18">
+<text x="80" y="392">Sportygen x Arya Sports Hub</text><rect x="360" y="375" width="400" height="22" rx="5" fill="#16A34A"/><text x="772" y="392" font-weight="700">₹1,000</text>
+<text x="80" y="422">LSBI turf</text><rect x="360" y="405" width="400" height="22" rx="5" fill="#16A34A"/><text x="772" y="422" font-weight="700">₹1,000</text>
+<text x="80" y="452">Turf Up</text><rect x="360" y="435" width="480" height="22" rx="5" fill="#16A34A"/><text x="852" y="452" font-weight="700">₹1,200</text>
+<text x="80" y="482">Sportsage Turf</text><rect x="360" y="465" width="480" height="22" rx="5" fill="#16A34A"/><text x="852" y="482" font-weight="700">₹1,200</text>
+<text x="80" y="512">Sportagon DPES Turf</text><rect x="360" y="495" width="560" height="22" rx="5" fill="#16A34A"/><text x="932" y="512" font-weight="700">₹1,400</text>
+<text x="80" y="542">Playshire Sports Club</text><rect x="360" y="525" width="600" height="22" rx="5" fill="#16A34A"/><text x="972" y="542" font-weight="700">₹1,500</text>
+</g>
+<text x="80" y="592" font-size="16" fill-opacity="0.6">Listed prices, not owner-confirmed. Hotfut Kharadi lists ₹200, see the post. tapturf.in</text>
+</g></svg>
