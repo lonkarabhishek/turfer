@@ -8,8 +8,10 @@
  *
  * Titles fit 60 characters and about 580px (lib/seo/width.ts) with no
  * " | TapTurf": Google shows the site name above every result, and the
- * venue's name is what people search. Descriptions stay within 155
- * characters, most useful fact first.
+ * venue's name is what people search. The title keeps the area and the
+ * strongest facts (price, timings, reviews). The description leads with
+ * the sport, so a brand search still sees what the place is before the
+ * price. Descriptions stay within 155 characters.
  *
  * Pure (relative imports only), so node --test runs it
  * (lib/seo/turfMeta.test.ts, npm run test:seo).
@@ -258,6 +260,20 @@ function joinFacets(f: string[]): string {
   return f.length <= 1 ? f.join("") : `${f.slice(0, -1).join(", ")} & ${f.at(-1)}`;
 }
 
+/**
+ * "Football Turf" or "Badminton Court" when the cleaned name does not
+ * already say that sport ("JDS Box Cricket" does; "Turf Up" does not).
+ * A bare "Turf" in the name does not count. Used to decide whether the
+ * description needs to lead with the sport.
+ */
+function titleSport(name: string, sports: string[]): string | null {
+  const { short } = describeTurfType(sports);
+  if (!short) return null;
+  const kind = short.replace(/\s+(?:turfs?|courts?|pools?|tables?|nets?)$/i, "");
+  const said = kind.split(/\s+&\s+/).some((bit) => bit.split(/\s+/).some((w) => w.length >= 4 && containsPlace(name, w)));
+  return said ? null : short;
+}
+
 /** Without a "(" the cut left open: "ASSC Cricket Academy (Elegants Cricket Nets" -> "ASSC Cricket Academy". */
 function closeBrackets(s: string): string {
   let t = s;
@@ -346,6 +362,9 @@ export function turfMeta({ turf, contact, reports, nameShared = false }: TurfMet
   const reportCount = reports && reports.count > 0 ? reports.count : 0;
 
   // ── title: "{name}, {place} – {facets}", the first that fits ──
+  // The sport is not squeezed in here: it would push out the area or the
+  // price. The description leads with it instead (below).
+  const sportBit = titleSport(name, turf.sports ?? []);
   const facets = (
     titlePrice
       ? [titlePrice, hasTimings && "Timings", (googleOk || reportCount > 0) && "Reviews", photos.length >= MIN_PHOTOS_TO_QUOTE && "Photos"]
@@ -407,11 +426,16 @@ export function turfMeta({ turf, contact, reports, nameShared = false }: TurfMet
   if (format && format.length <= 12) optional.push(["extra", format]);
   if (photos.length >= MIN_PHOTOS_TO_QUOTE) optional.push(["fact", `${photos.length} photos`]);
 
-  const build = (chosen: Opt[], o: { lead: string | null; where: boolean }) => {
+  const build = (chosen: Opt[], o: { lead: string | null; where: boolean }, sportFirst = false) => {
     const extras = chosen.filter(([k]) => k === "extra").map(([, v]) => v);
     const facts = chosen.filter(([k]) => k === "fact").map(([, v]) => v);
     const typeLine = `${type}${o.where && !placeInTitle ? ` in ${place.full}` : ""}${extras.length ? `, ${extras.join(", ")}` : ""}.`;
-    return [o.lead ? `${o.lead}.` : "", typeLine, facts.length ? `${facts.join(", ")}.` : "", cta].filter(Boolean).join(" ");
+    const lead = o.lead ? `${o.lead}.` : "";
+    const factLine = facts.length ? `${facts.join(", ")}.` : "";
+    // The title already names the sport when it fitted beside the area.
+    // When it did not, lead with the sport so a brand snippet still says
+    // what the place is before the price.
+    return (sportFirst ? [typeLine, lead, factLine, cta] : [lead, typeLine, factLine, cta]).filter(Boolean).join(" ");
   };
   const hoursShort = hours ? compactHours(hours) : null;
   // The must-haves, trimmed only if a long place or type pushes them past the limit.
@@ -421,10 +445,11 @@ export function turfMeta({ turf, contact, reports, nameShared = false }: TurfMet
     { lead: descPrice ?? hoursShort, where: false },
     { lead: null, where: false },
   ];
-  const shape = shapes.find((sh) => build([], sh).length <= DESCRIPTION_MAX_CHARS) ?? shapes[shapes.length - 1];
+  const sportFirst = !!sportBit && !title.includes(sportBit);
+  const shape = shapes.find((sh) => build([], sh, sportFirst).length <= DESCRIPTION_MAX_CHARS) ?? shapes[shapes.length - 1];
   const chosen: Opt[] = [];
-  for (const o of optional) if (build([...chosen, o], shape).length <= DESCRIPTION_MAX_CHARS) chosen.push(o);
-  let description = build(chosen, shape);
+  for (const o of optional) if (build([...chosen, o], shape, sportFirst).length <= DESCRIPTION_MAX_CHARS) chosen.push(o);
+  let description = build(chosen, shape, sportFirst);
   if (description.length > DESCRIPTION_MAX_CHARS) description = `${truncateWords(description, DESCRIPTION_MAX_CHARS - 1)}.`;
 
   const first = turfPhotos(turf)[0];
