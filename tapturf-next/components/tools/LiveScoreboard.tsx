@@ -8,6 +8,8 @@ import { trackTool } from "@/lib/analytics/tools";
 import { START_CODE_WAIT_MS, within } from "@/lib/tools/usage";
 import { sportIcon } from "@/components/board/shared";
 import { useWatchers } from "@/components/live/useWatchers";
+import { useLiveViews } from "@/components/live/useLiveViews";
+import { viewsLabel } from "@/lib/live/views";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
 import { liveToken } from "./scorer/liveToken";
@@ -73,6 +75,9 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   // The eye count by the LIVE pill: only while scoring a match whose link is on. The scorer listens, never counts in.
   const watchLink = liveLinks && open && board ? live.info(board.id) : null;
   const watchers = useWatchers(watchLink?.on && watchLink.link ? watchLink.link.code : null, { track: false });
+  // How many times the follower page was viewed, while the board's link is on: read only, the scorer is never counted.
+  const viewLink = liveLinks && board ? live.info(board.id) : null;
+  const views = useLiveViews(viewLink?.on && viewLink.link ? viewLink.link.code : null, { count: false, refresh: true });
   const rootRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
 
@@ -216,7 +221,15 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
   /** inPlay: the match is not finished (LiveInfo's closed). */
   const liveFor = (id: string, inPlay: boolean): ShareLive => {
     const info = live.info(id, inPlay);
-    return { info, url: urlOf(info), onStart: () => void startLink(id), onStop: () => void stopLink(id), loginFirst: !auth.user || info.fault === "login", onLogin: () => loginForLink(id) };
+    return {
+      info,
+      url: urlOf(info),
+      onStart: () => void startLink(id),
+      onStop: () => void stopLink(id),
+      loginFirst: !auth.user || info.fault === "login",
+      onLogin: () => loginForLink(id),
+      views: id === board?.id ? views : null,
+    };
   };
 
   const onChange = (b: Board) => {
@@ -331,6 +344,8 @@ export function LiveScoreboard({ cta, liveLinks = false }: { cta: { label: strin
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-bold">{cardPaused ? "Live link paused, log in again" : "Live link on"}</span>
                 <span className="block text-[12px] text-white/70 truncate">{shortUrl(cardUrl)}</span>
+                {/* Its own line: the link is cut to fit, the count never is. */}
+                {!!views && <span className="block text-[12px] text-white/70 tabular-nums">{viewsLabel(views)}</span>}
               </span>
               {cardPaused ? (
                 <button type="button" onClick={() => loginForLink(board.id)} className="press-tight shrink-0 inline-flex items-center gap-1.5 h-12 px-4 rounded-full bg-amber-300 text-amber-950 text-[14px] font-bold hover:bg-amber-200">

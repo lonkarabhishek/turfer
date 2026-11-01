@@ -33,12 +33,15 @@ export function AskPanel() {
   const [welcome, setWelcome] = useState<string[]>(WELCOME_CHIPS);
   const fresh = turns.length === 0;
   const onArticle = !!pageContext.blog;
+  // A live score page: the chat is about that match, with its own chips, and asking takes a sign-in.
+  const liveCtx = pageContext.live ?? null;
+  const onLive = !!liveCtx;
 
   // Opening chips follow the city on screen (or the visitor's city):
   // its own area and turfs, and a games chip only when it has open games.
-  // An article opens with its own questions instead.
+  // An article opens with its own questions instead, a live score with the match's.
   useEffect(() => {
-    if (!open || !fresh || onArticle) return;
+    if (!open || !fresh || onArticle || onLive) return;
     const city = pageContext.city ?? getCityPref();
     let live = true;
     fetch(`/api/ask/chips${city ? `?city=${encodeURIComponent(city)}` : ""}`)
@@ -50,7 +53,7 @@ export function AskPanel() {
     return () => {
       live = false;
     };
-  }, [open, fresh, onArticle, pageContext.city]);
+  }, [open, fresh, onArticle, onLive, pageContext.city]);
 
   useEffect(() => {
     if (!open) return;
@@ -102,9 +105,11 @@ export function AskPanel() {
   const offerSummary = !!blog && !turns.some((t) => t.res?.blog?.slug === blog.slug && t.res.blog.mode !== "answer");
   // On a turf page the chat opens with what players say about it.
   const next = last?.res?.followups?.length ? last.res.followups : fresh ? openingChips(welcome, !!where) : [];
-  const chips = offerSummary && !fresh ? [SUMMARY_CHIP, ...next.filter((c) => c !== SUMMARY_CHIP)] : next;
-  // Signed out with no free answers left: Try again would be refused, so the sign-in card stands in.
-  const gated = !signedIn && freeLeft === 0;
+  // On a live score page, the match's own questions, unless the last answer was about it (its chips are).
+  const here = liveCtx && last?.res?.intent !== "live" ? liveCtx.chips : next;
+  const chips = offerSummary && !fresh ? [SUMMARY_CHIP, ...here.filter((c) => c !== SUMMARY_CHIP)] : here;
+  // Signed out with no free answers left, or on a live page: Try again would be refused, so the sign-in card stands in.
+  const gated = !signedIn && (freeLeft === 0 || onLive);
 
   return (
     <ViewportOverlay className="z-50 flex md:justify-end" role="presentation">
@@ -130,7 +135,7 @@ export function AskPanel() {
           </button>
           <div className="min-w-0 flex-1 px-1 md:px-2.5">
             <p className="font-display text-[17px] text-primary-900 leading-tight">Ask TapTurf</p>
-            <p className="text-[12px] text-primary-500 truncate">{where ? `About ${where}` : blog ? "About this article" : "Turfs, games, prices and comparisons"}</p>
+            <p className="text-[12px] text-primary-500 truncate">{where ? `About ${where}` : blog ? "About this article" : onLive ? "About this match" : "Turfs, games, prices and comparisons"}</p>
           </div>
           {turns.length > 0 && (
             <button
@@ -158,7 +163,7 @@ export function AskPanel() {
         <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain" aria-live="polite">
           {/* A parked message shows its sign-in card even when the thread is empty. */}
           {turns.length === 0 && !(gated && pending) ? (
-            <Welcome where={where} article={where ? null : blog} chips={chips} onPick={(c) => void send(c)} />
+            <Welcome where={where} article={where ? null : blog} match={onLive ? { signIn: signedIn ? null : signIn } : null} chips={chips} onPick={(c) => void send(c)} />
           ) : (
             <div className="px-4 py-5 space-y-7">
               {turns.map((t, i) => (
@@ -180,7 +185,7 @@ export function AskPanel() {
                   onCards={() => toNewest(true)}
                 />
               ))}
-              {gated && <SignInCard pending={pending} onSignIn={signIn} />}
+              {gated && <SignInCard pending={pending} onSignIn={signIn} match={onLive && freeLeft !== 0} />}
             </div>
           )}
         </div>
@@ -227,7 +232,19 @@ export function AskPanel() {
                 e.currentTarget.scrollIntoView({ block: "nearest" });
               }}
               autoComplete="off"
-              placeholder={!signedIn && freeLeft === 0 ? "Sign in to keep going" : blog ? "Ask anything about this article" : turns.length ? "Ask a follow-up" : "Ask for a turf, a game, or compare two"}
+              placeholder={
+                !signedIn && onLive
+                  ? "Sign in to ask"
+                  : !signedIn && freeLeft === 0
+                    ? "Sign in to keep going"
+                    : blog
+                      ? "Ask anything about this article"
+                      : onLive
+                        ? "Ask about this match"
+                        : turns.length
+                          ? "Ask a follow-up"
+                          : "Ask for a turf, a game, or compare two"
+              }
               className="w-full h-12 pl-4 pr-14 rounded-full border border-primary-200 bg-white shadow-soft text-[16px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus-visible:outline-none focus:border-primary-400 transition-colors"
             />
             <button
@@ -267,21 +284,48 @@ const DIAGRAM_CHIP = "Explain it with a diagram";
  * answer (its own FAQ, a chart when it has numbers, a diagram), one per
  * row so a whole question fits.
  */
-function Welcome({ where, article, chips, onPick }: { where: string | null; article: PageContext["blog"]; chips: string[]; onPick: (c: string) => void }) {
+function Welcome({
+  where,
+  article,
+  match,
+  chips,
+  onPick,
+}: {
+  where: string | null;
+  article: PageContext["blog"];
+  /** On a live score page; signIn while signed out (asking there takes a sign-in). */
+  match: { signIn: (() => void) | null } | null;
+  chips: string[];
+  onPick: (c: string) => void;
+}) {
   const asks = article ? [...(article.questions ?? []).slice(0, 3), ...(article.charts ? [CHART_CHIP] : []), DIAGRAM_CHIP] : [];
   return (
     <div className="min-h-full flex flex-col justify-center px-5 py-8 ask-message-in">
       <Orb size={44} />
       <h2 className="mt-4 font-display text-[26px] leading-tight text-primary-900">
-        {where ? <>Ask about {where}</> : article ? <>Short on time?</> : <>What are you playing today?</>}
+        {where ? <>Ask about {where}</> : article ? <>Short on time?</> : match ? <>Ask about this match</> : <>What are you playing today?</>}
       </h2>
       <p className="mt-1.5 text-[15px] leading-snug text-primary-500">
         {where
           ? "What players say, prices, timings, facilities, or how it compares with another turf."
           : article
             ? articleWelcome(!!article.charts)
-            : "Turfs, open games, prices and comparisons. Hinglish chalega."}
+            : match
+              ? "The score, who's batting or ahead, how many are needed. I answer from this live scorecard as it updates."
+              : "Turfs, open games, prices and comparisons. Hinglish chalega."}
       </p>
+      {match?.signIn && (
+        <div className="mt-5 rounded-2xl bg-primary-900 text-white px-4 py-3.5">
+          <p className="text-[14px] leading-snug">Sign in to ask about this match. It&rsquo;s free and takes ten seconds.</p>
+          <button
+            type="button"
+            onClick={match.signIn}
+            className="mt-2.5 inline-flex items-center justify-center h-11 px-5 rounded-full bg-accent-500 hover:bg-accent-400 text-white text-[14px] font-semibold cursor-pointer transition-colors"
+          >
+            Sign in to ask
+          </button>
+        </div>
+      )}
       {article ? (
         <>
           <button
@@ -336,11 +380,15 @@ function From() {
   );
 }
 
-/** Inline sign-in step: the thread stays, the parked message goes once they're in. */
-function SignInCard({ pending, onSignIn }: { pending: string | null; onSignIn: () => void }) {
+/** Inline sign-in step: the thread stays, the parked message goes once they're in. match: asked on a live score page, which takes a sign-in. */
+function SignInCard({ pending, onSignIn, match = false }: { pending: string | null; onSignIn: () => void; match?: boolean }) {
   return (
     <div className="ask-message-in rounded-2xl bg-primary-900 text-white px-4 py-4">
-      <p className="text-[15px] leading-snug">Sign in to keep chatting. It&rsquo;s free and takes ten seconds, and I&rsquo;ll pick up right where we are.</p>
+      <p className="text-[15px] leading-snug">
+        {match
+          ? "Sign in to ask about this match. It’s free and takes ten seconds, and I’ll answer as soon as you’re in."
+          : "Sign in to keep chatting. It’s free and takes ten seconds, and I’ll pick up right where we are."}
+      </p>
       {pending && <p className="mt-1.5 text-[13px] text-white/70">Next up: &ldquo;{pending}&rdquo;</p>}
       <button
         type="button"
@@ -494,6 +542,10 @@ function Subline({ res, className = "" }: { res: Turn["res"] & object; className
       case "question":
         if (res.missing?.length) text = `I couldn't find "${res.missing[0]}" in our listings.`;
         else if (!res.answer) text = "Couldn't answer that right now.";
+        break;
+      case "live":
+        // When the score it was read from came in: the page goes on updating, the answer does not.
+        if (res.live?.asOf && (res.live.state === "live" || res.live.state === "done")) text = `From the live scorecard, updated ${res.live.asOf}.`;
         break;
     }
   if (!text) return null;

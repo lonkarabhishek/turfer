@@ -250,7 +250,7 @@ async function renderView(v: View, filter: string, city: string | null = null): 
       return {
         count: links.length,
         node: (
-          <Table head={["Link", "Started by", "Sport", "Match", "Title and venue", "Status", "Updates", "Started", "Last update"]} empty={links.length === 0}>
+          <Table head={["Link", "Started by", "Sport", "Match", "Title and venue", "Status", "Updates", "Views", "Started", "Last update"]} empty={links.length === 0}>
             {links.map((l) => (
               <tr key={l.code}>
                 <td className="px-4 py-3 whitespace-nowrap">
@@ -293,6 +293,19 @@ async function renderView(v: View, filter: string, city: string | null = null): 
                 <td className="px-4 py-3 text-primary-600">{[l.title, l.venue].filter(Boolean).join(" · ") || <span className="text-primary-400">-</span>}</td>
                 <td className="px-4 py-3"><LiveStatus link={l} now={now} /></td>
                 <td className="px-4 py-3 tabular-nums" title={l.events ? `${l.events} events in the match` : undefined}>{l.writes}</td>
+                {/* Kept after the match is cleared (20261101_live_views.sql); "-" while views can't be read. */}
+                <td className="px-4 py-3 tabular-nums whitespace-nowrap" title={l.views?.last ? `Last viewed ${fmtDateTime(l.views.last)}` : undefined}>
+                  {l.views ? (
+                    <>
+                      <span className="text-primary-900">{l.views.views.toLocaleString("en-IN")}</span>
+                      <span className="block text-[12px] text-primary-500" title="Unique viewers: one per browser per day">
+                        {l.views.viewers.toLocaleString("en-IN")} unique
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-primary-400">-</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(l.created_at)}</td>
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(l.updated_at)}</td>
               </tr>

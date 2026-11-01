@@ -12,6 +12,7 @@ import { bearerToken, identifyToken } from "../account/identity";
 import { resolveAccount } from "../account/server";
 import { checkLiveTags, createTagLookup } from "./tags";
 import { createLiveWho, legacyRead, type LinkRead, type LiveSigner, type LiveWho } from "./gate";
+import { toViewCount, type ViewCount } from "./views";
 import {
   LIVE_MAX_MATCH_CHARS,
   LIVE_MAX_REV,
@@ -290,6 +291,82 @@ export async function recordLiveStarter(code: string, signer: LiveSigner, tool: 
     console.warn("live: starter record threw", code, e);
     fail();
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Views (lib/live/views.ts)                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A keyed hash of a view's own random tag (lib/live/views.ts newViewTag),
+ * or of the network and the browser's agent for a view without one: which
+ * view this is, for the per-instance view limits only. Two people on one
+ * Wi-Fi with the same phone send different tags. Kept in memory, never
+ * stored or sent anywhere.
+ */
+export function liveViewerHash(req: Request, key: string, tag: string | null): string {
+  const who = tag ? `tag|${tag}` : `${clientNetwork(req)}|${req.headers.get("user-agent") ?? ""}`;
+  return createHash("sha256").update(`${key}|view|${who}`).digest("hex").slice(0, 32);
+}
+
+/** Before 20261101_live_views.sql is applied the functions are not there: no count, said once per instance. */
+const viewsMissing = (code: string | undefined) => code === "PGRST202" || code === "42883";
+let viewsMissingSaid = false;
+function viewsFailed(what: string, code: string, e: { code?: string; message?: string }): null {
+  const missing = viewsMissing(e.code);
+  if (!missing || !viewsMissingSaid) console.warn(`live: ${what} failed`, code, e.code, e.message);
+  if (missing) viewsMissingSaid = true;
+  return null;
+}
+
+/**
+ * Count one view (live_view_add): the link's counts after it, "none"
+ * for a link that shows no score (waiting, turned off, expired), null
+ * when it could not be counted (not set up, the database down). Never throws.
+ */
+export async function addLiveView(code: string, unique: boolean): Promise<ViewCount | "none" | null> {
+  const key = liveWriteKey();
+  if (!key) return null;
+  try {
+    const { data, error } = await liveWriteClient().rpc("live_view_add", { p_key: key, p_code: code, p_unique: unique });
+    if (error) return viewsFailed("view count", code, error);
+    if ((data as { r?: unknown } | null)?.r === "none") return "none";
+    const counted = toViewCount(data);
+    if (!counted) console.warn("live: unexpected view count result", code, data);
+    return counted;
+  } catch (e) {
+    console.warn("live: view count threw", code, e);
+    return null;
+  }
+}
+
+async function readViews(code: string): Promise<ViewCount | null> {
+  const key = liveWriteKey();
+  if (!key) return null;
+  try {
+    const { data, error } = await createReadOnlyClient().rpc("live_view_count", { p_key: key, p_code: code });
+    if (error) return viewsFailed("view read", code, error);
+    return toViewCount(data);
+  } catch (e) {
+    console.warn("live: view read threw", code, e);
+    return null;
+  }
+}
+
+/** How long a link's counts are kept in Next's data cache: GET /api/live/<code>/views reads the database at most this often per link per region, whatever the URL. */
+const LIVE_VIEWS_CACHE_S = 30;
+
+/**
+ * A link's counts (live_view_count), 0 before its first view; null when
+ * they cannot be read (cached too: a count, not a score, so it may lag).
+ * From the data cache, so a request the CDN has not seen (a new query
+ * string) costs no database read. Never throws.
+ */
+export function readLiveViews(code: string): Promise<ViewCount | null> {
+  return unstable_cache(() => readViews(code), ["live-views", code], { revalidate: LIVE_VIEWS_CACHE_S })().catch((e) => {
+    console.warn("live: view read cache failed", code, e);
+    return null;
+  });
 }
 
 /**

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { createHash } from "node:crypto";
 import { getAskTurfs } from "@/lib/queries/turfCache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { isCity, labelFor } from "@/lib/city";
+import { CITIES, CITY_ALIASES, NOT_IN_TEXT, isCity, labelFor } from "@/lib/city";
 import { forCard } from "@/lib/utils/cardTurf";
 import {
   AskFilters,
@@ -70,6 +70,24 @@ import { getPostBySlug } from "@/content/blog";
 import { articleSearchChips, englishChip, hinglishChip, isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
 import { answerBlog, type BlogResult } from "@/lib/ai/blogAnswer";
 import { cleanVenueName, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
+import {
+  liveAnswerKind,
+  liveAskChips,
+  liveAskGate,
+  liveAskKind,
+  liveCodeOf,
+  liveFacts,
+  liveFallback,
+  liveFollowups,
+  liveGoesOn,
+  liveOwnNames,
+  livePlaces,
+  liveReply,
+  type LiveFacts,
+} from "@/lib/ask/live";
+import { answerLive } from "@/lib/ai/liveAnswer";
+import { verifyLiveCode } from "@/lib/live/codes";
+import { getLive, liveWriteKey } from "@/lib/live/server";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -95,8 +113,8 @@ const BLOG_DEADLINE_MS = 40_000;
 // model: a slow reading on top would run past the chat's wait.
 const BLOG_LATE_MS = 20_000;
 
-/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen. */
-type Via = "quick" | "cache" | "claude" | "keywords" | "blog";
+/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen; live: from the live score on screen. */
+type Via = "quick" | "cache" | "claude" | "keywords" | "blog" | "live";
 
 function ipHash(req: Request): string {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
@@ -107,19 +125,20 @@ const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.dist
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** What page the player is on, trimmed. blog: the slug of the article on screen. */
-function parseContext(raw: string | null): AskContext & { blog: string | null } {
-  if (!raw) return { blog: null };
+/** What page the player is on, trimmed. blog: the slug of the article on screen. live: a live score page's link code (lib/ask/live.ts). */
+function parseContext(raw: string | null): AskContext & { blog: string | null; live: string | null } {
+  if (!raw) return { blog: null, live: null };
   try {
-    const o = JSON.parse(raw) as { turf?: unknown; turfId?: unknown; city?: unknown; blog?: unknown };
+    const o = JSON.parse(raw) as { turf?: unknown; turfId?: unknown; city?: unknown; blog?: unknown; live?: unknown };
     return {
       turf: typeof o.turf === "string" ? o.turf.slice(0, 80) : null,
       turfId: typeof o.turfId === "string" && UUID.test(o.turfId) ? o.turfId : null,
       city: isCity(typeof o.city === "string" ? o.city : null) ? (o.city as AskContext["city"]) : null,
       blog: typeof o.blog === "string" ? o.blog.slice(0, 120) : null,
+      live: liveCodeOf(o.live),
     };
   } catch {
-    return { blog: null };
+    return { blog: null, live: null };
   }
 }
 
@@ -163,6 +182,30 @@ const timingOf = (ms: Record<string, number>, via: Via) =>
 
 /** Router v10's fields a follow-up keeps ("only claimed ones", "and free ones?"), and players, the spots a game search needs. */
 const HISTORY_V10 = [...EXTRA_KEYS, "players"];
+
+/** A model answer about a live match gives up by then: the chat waits 25 s. */
+const LIVE_DEADLINE_MS = 15_000;
+/** The cities a message on a live page may name for a search ("games in Pune"), as free text names them. */
+const LIVE_CITY_NAMES = [...CITIES.filter((c) => !NOT_IN_TEXT.has(c.id)).map((c) => c.label), ...Object.keys(CITY_ALIASES)];
+
+/**
+ * The live link's facts as followers see it now: the same read GET
+ * /api/live/<code> serves (the data cache, purged by every update), and
+ * the match for its chips. A code that isn't one of ours is missing; a
+ * failed read is unknown, never a guess.
+ */
+async function liveFactsFor(code: string): Promise<{ facts: LiveFacts; match: unknown }> {
+  const key = liveWriteKey();
+  if (!key || !verifyLiveCode(code, key)) return { facts: liveFacts({ status: "missing", match: null, updatedAt: null }, Date.now()), match: null };
+  try {
+    const row = await getLive(code);
+    const facts = liveFacts(row ? { status: row.status, match: row.match, updatedAt: row.updated_at } : { status: "waiting", match: null, updatedAt: null }, Date.now());
+    return { facts, match: facts.cricket || facts.board ? row?.match : null };
+  } catch (e) {
+    console.warn("ask live: read failed", code, e);
+    return { facts: liveFacts({ status: null, match: null, updatedAt: null }, Date.now()), match: null };
+  }
+}
 
 /** Last three turns from the client, trimmed so a hostile client can't pad the prompt. `version` 10 keeps v10's fields too. */
 function parseHistory(raw: string | null, version: RouterVersion): AskTurn[] {
@@ -209,7 +252,8 @@ export async function GET(req: Request) {
   const choice = routerChoice(process.env, req.headers.get(EVAL_HEADER));
   const version = choice.version;
   const history = parseHistory(searchParams.get("h"), version);
-  const { blog: blogSlug, ...ctx } = parseContext(searchParams.get("ctx"));
+  // live is taken out with blog: the reading below never sees it, so every other page asks exactly as before.
+  const { blog: blogSlug, live: liveCode, ...ctx } = parseContext(searchParams.get("ctx"));
   // Signed-in players send their account id; visitors a browser id and
   // get three answers a day before sign-in. Phone users have no server
   // session, so both are trusted ids; the per-IP budget caps abuse.
@@ -218,6 +262,8 @@ export async function GET(req: Request) {
   const userId = UUID.test(uid) ? uid : null;
   const anonId = !userId && UUID.test(aid) ? aid : null;
   if (!userId && !anonId) return NextResponse.json({ error: "sign_in" }, { status: 401 });
+  // On a live score page asking takes an account: no visitor answers there (live: the chat keeps its free answers elsewhere).
+  if (liveAskGate(liveCode, userId) === "sign_in") return NextResponse.json({ error: "sign_in", live: true }, { status: 401 });
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
@@ -263,6 +309,59 @@ export async function GET(req: Request) {
   }
 
   const usage = newUsage();
+
+  // On a live score page a question about the match is answered from the
+  // match itself, read as followers get it (lib/ask/live.ts): the usual
+  // questions in words built here, a named player from that player's
+  // lines, any other by the model from those facts only. A turf or game
+  // search, a tool or a host goes on to the reading below, as anywhere
+  // else: one that says so or names a day with a game, a place the turfs
+  // have ("games tonight in Baner"), or one the quick reader reads as one.
+  if (liveCode) {
+    const t0 = performance.now();
+    const turfs = await turfsLoad.catch(() => [] as Turf[]);
+    const areas = areasFromTurfs(turfs);
+    const { facts, match } = await liveFactsFor(liveCode);
+    const asked = liveAskKind(q, { places: livePlaces(areas, LIVE_CITY_NAMES), ...liveOwnNames(facts) });
+    const answers = asked !== "search" && !liveGoesOn(q, asked, quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }, version)?.intent ?? null);
+    if (answers) {
+      const kind = liveAnswerKind(asked, facts, q);
+      const said =
+        kind !== "other" || (!facts.cricket && !facts.board)
+          ? { reply: kind === "other" ? liveFallback(facts, q) : liveReply(kind, facts, q), via: "keywords" as const }
+          : await answerLive(q, facts, history.map((h) => ({ user: h.user, reply: h.reply })), usage, started + LIVE_DEADLINE_MS);
+      ms.handler = Math.round(performance.now() - t0);
+      ms.total = Date.now() - started;
+      const source = said.via;
+      const body = {
+        query: q,
+        intent: "live",
+        summary: `Live: ${facts.teams ?? "this match"}`.slice(0, 120),
+        reply: said.reply,
+        followups: liveFollowups(liveAskChips(match), q),
+        source,
+        via: "live",
+        filters: { city: null, sport: null, areas: [], maxPrice: null, time: null, when: null, skill: null, open24x7: false, wantsNearby: false, needs: [], players: null, sort: "rating" },
+        needsLocation: false,
+        freeLeft,
+        // A follow-up is a fresh question about the match, or a fresh search.
+        memo: { intent: "other", top: [] },
+        relaxed: [],
+        total: 0,
+        live: { code: liveCode, state: facts.state, asOf: facts.updated },
+      };
+      logFinish(supabase, logId, {
+        filters: { intent: "live", code: liveCode, kind, state: facts.state, _src: "live", _t: ms, ...(usage.calls ? { _usage: usage } : {}) },
+        // 1 for an answer from a score: admin counts 0 as an ask that found nothing.
+        results: facts.cricket || facts.board ? 1 : 0,
+        ms: Date.now() - started,
+        source,
+        reply: said.reply,
+        intent: "live",
+      });
+      return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "live") } });
+    }
+  }
 
   // On an article, the article answers first: no turfs are searched and
   // the sentence isn't read, unless it turns out to be a search.
