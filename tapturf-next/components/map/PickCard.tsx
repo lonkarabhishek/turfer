@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MapPin, Star, Users, X } from "lucide-react";
+import { MapPin, Star, TrendingUp, Users, X } from "lucide-react";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { MapGame } from "@/lib/map/data";
+import { trendWords } from "@/lib/map/trending";
 import { cardPrice, cardSports, type CardSport } from "@/lib/utils/cardSport";
 import { priceRangeText } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
@@ -24,7 +25,7 @@ import { GamePhoto } from "@/components/game/detail/GamePhoto";
  * shared their location, how far. One link to the turf's (or the game's)
  * page; the close button sits outside it. A bubble that cannot split (turfs
  * on one site, or one turf's games, soonest first) lists each of them the
- * same way.
+ * same way. With Trending on, a trending turf's photo wears its rank.
  */
 export function PickCard({
   turfs,
@@ -32,7 +33,7 @@ export function PickCard({
   sport,
   onClose,
 }: {
-  turfs: { turf: Turf; km: number | null }[];
+  turfs: { turf: Turf; km: number | null; trend?: number | null }[];
   games: { game: MapGame; km: number | null }[];
   sport: CardSport | null;
   onClose: () => void;
@@ -58,9 +59,9 @@ export function PickCard({
         </ul>
       ) : (
         <ul className="max-h-[min(19rem,45vh)] overflow-y-auto overscroll-contain divide-y divide-primary-100">
-          {turfs.map(({ turf, km: d }) => (
+          {turfs.map(({ turf, km: d, trend }) => (
             <li key={turf.id}>
-              <TurfRow turf={turf} sport={sport} km={d} />
+              <TurfRow turf={turf} sport={sport} km={d} trend={trend ?? null} />
             </li>
           ))}
         </ul>
@@ -69,7 +70,7 @@ export function PickCard({
   );
 }
 
-function TurfRow({ turf, sport, km }: { turf: Turf; sport: CardSport | null; km: number | null }) {
+function TurfRow({ turf, sport, km, trend }: { turf: Turf; sport: CardSport | null; km: number | null; trend: number | null }) {
   const [broken, setBroken] = useState(false);
   const photo = turfPhotos(turf)[0];
   const price = cardPrice(turf, sport);
@@ -88,9 +89,18 @@ function TurfRow({ turf, sport, km }: { turf: Turf; sport: CardSport | null; km:
             <MapPin className="w-6 h-6 text-primary-300" aria-hidden />
           </div>
         )}
+        {trend != null && (
+          // The map's Trending coral (MAP_COLORS.trend, 5.0:1 on white); the name says it for screen readers.
+          <span aria-hidden className="absolute top-1.5 left-1.5 h-5 pl-1 pr-1.5 inline-flex items-center gap-0.5 rounded-full bg-white/95 text-[11px] font-bold text-[#D81B4F] tabular-nums shadow-soft">
+            <TrendingUp className="w-3 h-3" strokeWidth={3} />#{trend}
+          </span>
+        )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[16px] font-semibold text-primary-900 leading-snug line-clamp-2 [overflow-wrap:anywhere]">{turf.name}</p>
+        <p className="text-[16px] font-semibold text-primary-900 leading-snug line-clamp-2 [overflow-wrap:anywhere]">
+          {turf.name}
+          {trend != null && <span className="sr-only">, {trendWords(trend)}</span>}
+        </p>
         <p className="mt-0.5 flex items-center gap-1 text-[13px] text-primary-500 min-w-0">
           {turf.rating > 0 && (
             <span className="inline-flex items-center gap-1 shrink-0 text-primary-900">

@@ -7,7 +7,7 @@ import { cardPrice, cardSports } from "../utils/cardSport";
 import { turfPhotos } from "../utils/images";
 import { areaFor } from "../utils/area";
 import { SPORT_CHIPS } from "../turfList/query";
-import { fromMapTurf, gamePin, pickedGames, roundDeg, toMapGame, toMapTurf, turfPin } from "./data";
+import { fromMapTurf, gamePin, mapPoint, pickedGames, roundDeg, toMapGame, toMapTurf, turfHourly, turfPin } from "./data";
 
 /** A card row as getNearTurfs hands it over: forCard() of a full row, sport bands added when it has any. */
 function row(p: Partial<Turf> & Record<string, unknown> = {}): Turf {
@@ -118,20 +118,74 @@ test("fromMapTurf: every card and pin reads the same price, sports, place and ph
   }
 });
 
-test("turfPin: the low end of the card's price, or the sport", () => {
-  assert.deepEqual(turfPin(ROWS[0]), { text: "₹800", label: "Turf Up, ₹800–1,400/hr" });
-  assert.deepEqual(turfPin(ROWS[2]), { text: "~₹700", label: "Turf Up, players reported ₹700–1,000/hr" });
-  assert.deepEqual(turfPin(ROWS[3]), { text: "Box Cricket", label: "Turf Up, Box Cricket, prices not listed yet" });
-  assert.deepEqual(turfPin(ROWS[4]), { text: "Badminton", label: "Turf Up, Badminton, prices not listed yet" });
+test("turfPin: the name and the low end of the card's price, or the sport", () => {
+  assert.deepEqual(turfPin(ROWS[0]), { text: "Turf Up | ₹800/hr", label: "Turf Up, ₹800–1,400/hr", name: "Turf Up", tail: "₹800/hr", short: "₹800" });
+  assert.deepEqual(turfPin(ROWS[2]), {
+    text: "Turf Up | ~₹700/hr",
+    label: "Turf Up, players reported ₹700–1,000/hr",
+    name: "Turf Up",
+    tail: "~₹700/hr",
+    short: "~₹700",
+  });
+  assert.deepEqual(turfPin(ROWS[3]), { text: "Turf Up | Box Cricket", label: "Turf Up, Box Cricket, prices not listed yet", name: "Turf Up", tail: "Box Cricket", short: null });
+  assert.deepEqual(turfPin(ROWS[4]), { text: "Turf Up | Badminton", label: "Turf Up, Badminton, prices not listed yet", name: "Turf Up", tail: "Badminton", short: null });
+  // A slot price says so, short; the label keeps the slot's length.
+  assert.equal(turfPin(ROWS[5]).text, "Turf Up | ₹800/slot");
   assert.equal(turfPin(ROWS[5]).label, "Turf Up, ₹800–1,400/90-min slot");
+  assert.equal(turfPin(row({ price_unit: "per_person" })).tail, "₹800/person");
   // A chip shows only that sport's price: the bands' football range, never the card's.
-  assert.equal(turfPin(ROWS[6], { chip: "Football" }).text, "₹1,500");
-  assert.equal(turfPin(ROWS[6], { chip: "Box Cricket" }).text, "₹1,000");
-  // Badminton at a venue whose prices are another sport's: no price, the chip's sport leads.
-  assert.deepEqual(turfPin(ROWS[6], { chip: "Badminton" }), { text: "Badminton", label: "Turf Up, Badminton, prices not listed yet" });
-  // "Cricket" leads with the label it matched.
-  assert.equal(turfPin(ROWS[4], { chip: "Pickleball" }).text, "Pickleball");
+  assert.equal(turfPin(ROWS[6], { chip: "Football" }).text, "Turf Up | ₹1,500/hr");
+  assert.equal(turfPin(ROWS[6], { chip: "Box Cricket" }).short, "₹1,000");
+  // Badminton at a venue whose prices are another sport's: no price, and the chip already says the sport, so the name alone.
+  assert.deepEqual(turfPin(ROWS[6], { chip: "Badminton" }), { text: "Turf Up", label: "Turf Up, Badminton, prices not listed yet", name: "Turf Up", tail: null, short: null });
+  // The label leads with the label the chip matched.
+  assert.equal(turfPin(ROWS[4], { chip: "Pickleball" }).label, "Turf Up, Pickleball, prices not listed yet");
+  // A long name is cut on the pin, whole in the label (the card and a screen reader).
+  const long = turfPin(row({ name: "Gamechangers Sports Arena Baner" }));
+  assert.equal(long.text, "Gamechangers… | ₹800/hr");
+  assert.equal(long.label, "Gamechangers Sports Arena Baner, ₹800–1,400/hr");
+  // No name, no sport, no price: still a pin.
+  assert.equal(turfPin(row({ name: "", sports: [], morning_price: null, afternoon_price: null, evening_price: null, weekend_evening_price: null })).text, "Turf");
   for (const t of ROWS) assert.ok(!turfPin(t).text.includes("₹0"));
+});
+
+test("turfHourly: the pin's listed price per hour, for its bubble's average", () => {
+  assert.equal(turfHourly(ROWS[0]), 800, "the low end the pin shows");
+  assert.equal(turfHourly(ROWS[2]), null, "a reported price is not a listed one");
+  assert.equal(turfHourly(ROWS[3]), null);
+  assert.equal(turfHourly(ROWS[4]), null, "no price at all");
+  assert.equal(turfHourly(ROWS[5]), (800 * 60) / 90, "₹800 a 90-minute slot is about ₹533 an hour");
+  assert.equal(turfHourly(row({ price_unit: "per_slot", slot_minutes: null })), null, "a slot of no stated length has no hourly rate");
+  assert.equal(turfHourly(row({ price_unit: "per_person" })), null, "nor has a price per person");
+  assert.equal(turfHourly(row({ price_unit: null, slot_minutes: null })), 800, "no unit reads as per hour, as on the card");
+  // A chip's price rule: the bands' football range (per hour), never the card's; none for a sport it does not price.
+  assert.equal(turfHourly(ROWS[6], { chip: "Football" }), 1500);
+  assert.equal(turfHourly(ROWS[6], { chip: "Box Cricket" }), 1000);
+  assert.equal(turfHourly(ROWS[6], { chip: "Badminton" }), null);
+  assert.equal(
+    turfHourly(row({ price_unit: "per_slot", slot_minutes: 90, sports: ["Football", "Box Cricket"], sport_bands: { football: [1200, 1200] } }), { chip: "Football" }),
+    1200,
+    "a band's price is per hour whatever the card's unit",
+  );
+  // Always the number the pin shows, per hour.
+  for (const t of ROWS) {
+    for (const sport of [null, ...SPORT_CHIPS.map((chip) => ({ chip }))]) {
+      const h = turfHourly(t, sport);
+      if (h != null && cardPrice(t, sport).unit === "/hr") assert.equal(turfPin(t, sport).tail, `₹${h.toLocaleString("en-IN")}/hr`, `${t.name} ${sport?.chip}`);
+      if (h != null) assert.ok(h > 0);
+    }
+  }
+});
+
+test("mapPoint: the pin's key and point, or none", () => {
+  assert.deepEqual(mapPoint(ROWS[0]), { k: "turf-up-baner", y: 18.56106, x: 73.78902 });
+  assert.deepEqual(mapPoint(ROWS[1]), { k: "9c029dc9-f608-4de7-a42a-9c0070bb2b5c", y: 18.56106, x: 73.78902 });
+  assert.equal(mapPoint({ id: "a", lat: 0, lng: 0 }), null);
+  assert.equal(mapPoint({ id: "a", lat: null, lng: 73 }), null);
+  for (const t of ROWS) {
+    const w = toMapTurf(t)!;
+    assert.deepEqual(mapPoint(t), { k: w.k, y: w.y, x: w.x }, "the same point as the pin");
+  }
 });
 
 const GAME: Game = {

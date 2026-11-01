@@ -6,6 +6,7 @@ import { cardPrice, type CardSport } from "../utils/cardSport";
 import { priceRangeText } from "../utils/prices";
 import { formatClock, formatGameDay, sortGamesByDateTime } from "../utils/game";
 import { sportLabel } from "../utils/sport";
+import { pinLine, pinName, pinUnit } from "./pins";
 
 /**
  * What /map shows, as it travels (GET /api/map/turfs and /api/map/games)
@@ -74,15 +75,24 @@ function finiteCoord(v: unknown, max: number): number | null {
 }
 
 /**
- * One turf for the map, from a card row (forCard, with its sport bands
- * when it has any), or null when it has no usable location. A 0,0 point
- * (the sea off Africa) is no location either.
+ * A turf's key and point on the map (its pin's), or null when it has no
+ * usable location. A 0,0 point (the sea off Africa) is no location either.
  */
-export function toMapTurf(t: Turf): MapTurfWire | null {
+export function mapPoint(t: { id: string; slug?: string | null; lat?: unknown; lng?: unknown }): Pick<MapTurfWire, "k" | "y" | "x"> | null {
   const lat = finiteCoord(t.lat, 90);
   const lng = finiteCoord(t.lng, 180);
   if (lat == null || lng == null || (lat === 0 && lng === 0)) return null;
-  const w: MapTurfWire = { k: t.slug || t.id, n: t.name, y: roundDeg(lat), x: roundDeg(lng) };
+  return { k: t.slug || t.id, y: roundDeg(lat), x: roundDeg(lng) };
+}
+
+/**
+ * One turf for the map, from a card row (forCard, with its sport bands
+ * when it has any), or null when it has no usable location (mapPoint).
+ */
+export function toMapTurf(t: Turf): MapTurfWire | null {
+  const at = mapPoint(t);
+  if (!at) return null;
+  const w: MapTurfWire = { k: at.k, n: t.name, y: at.y, x: at.x };
   const place = areaFor(t) ?? t.address;
   if (place) w.p = place;
   if (t.city) w.c = t.city;
@@ -202,24 +212,60 @@ export function pickedGames<G extends Pick<MapGame, "id" | "date" | "start_time"
 /** A pin's words: `text` on the pin, `label` for a screen reader. */
 export type PinText = { text: string; label: string };
 
+/** A turf pin's words, and its parts (turfPin). */
+export type TurfPinText = PinText & { name: string; tail: string | null; short: string | null };
+
 /**
- * A turf's pin: the low end of the price its card shows (cardPrice, so a
- * sport chip shows only that sport's price, and a reported price reads
- * "~"), else the sport it leads with. Never "₹0".
+ * A turf's pin: `text` is its line, "O2 Turf | ₹500/hr" (lib/map/pins.ts),
+ * the name cut to fit (`name`) and after it (`tail`) the low end of the
+ * price its card shows, with its unit (cardPrice, so a sport chip shows
+ * only that sport's price, and a reported price reads "~"); with no
+ * price, the sport it leads with ("O2 Turf | Box Cricket"), or the name
+ * alone under a sport chip, which already says the sport. `short` is the
+ * price alone ("₹500"), for a pin with little room; `label`, for a screen
+ * reader, has the whole name and the whole range. Never "₹0".
  */
-export function turfPin(t: Turf, sport?: CardSport | null): PinText {
+export function turfPin(t: Turf, sport?: CardSport | null): TurfPinText {
   const price = cardPrice(t, sport);
   const from = price.kind === "real" || price.kind === "reported" ? priceRangeText(price.min, price.min) : null;
   const range = price.kind === "real" || price.kind === "reported" ? priceRangeText(price.min, price.max) : null;
   const lead = sport && "chip" in sport ? (t.sports.find((s) => s.toLowerCase().includes(sport.chip.toLowerCase())) ?? t.sports[0]) : t.sports[0];
+  const name = pinName(t.name) || "Turf";
   if (from && range) {
     const reported = price.kind === "reported";
+    const short = reported ? `~${from}` : from;
+    const tail = `${short}${pinUnit(price.unit)}`;
     return {
-      text: reported ? `~${from}` : from,
+      text: pinLine(name, tail),
       label: `${t.name}, ${reported ? "players reported " : ""}${range}${price.unit}`,
+      name,
+      tail,
+      short,
     };
   }
-  return { text: lead || "Turf", label: `${t.name}${lead ? `, ${lead}` : ""}, prices not listed yet` };
+  const tail = sport ? null : lead || null;
+  return { text: pinLine(name, tail), label: `${t.name}${lead ? `, ${lead}` : ""}, prices not listed yet`, name, tail, short: null };
+}
+
+/**
+ * A turf's share of its bubble's average: the low end of the price its
+ * pin shows (cardPrice, so the sport chip's rule applies), per hour, when
+ * that price is listed. A reported price ("~₹700") is not listed and
+ * counts for nothing. A price per slot of a known length becomes its
+ * hourly rate (₹1,500 for a 90-minute slot is ₹1,000 an hour); one per
+ * slot of no stated length, or per person, has no hourly rate and counts
+ * for nothing. A band's price is per hour. On 1 Nov every listed price
+ * was per hour: 1,183 of the 1,212 active turfs with one said so, the
+ * other 29 named no unit, which the site reads as per hour, and none was
+ * per slot or per person.
+ */
+export function turfHourly(t: Turf, sport?: CardSport | null): number | null {
+  const price = cardPrice(t, sport);
+  if (price.kind !== "real" || price.min == null || !(price.min > 0)) return null;
+  if (price.unit === "/hr") return price.min;
+  const slot = /^\/(\d+)-min slot$/.exec(price.unit);
+  const minutes = slot ? Number(slot[1]) : 0;
+  return minutes > 0 ? (price.min * 60) / minutes : null;
 }
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
