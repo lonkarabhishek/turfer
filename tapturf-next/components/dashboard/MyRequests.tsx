@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Clock, Check, X, Trash2, ChevronRight, MessageSquare, Gamepad2 } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { cancelMyRequest, type GameLine } from "@/lib/queries/games";
 import { askedAgo, formatDate, formatTimeSlot } from "@/lib/utils/game";
 import { Avatar } from "@/components/game/detail/Avatar";
@@ -16,7 +17,6 @@ import type { Game, GameRequest } from "@/types/game";
  * which counts the pending ones.
  */
 export function MyRequests({
-  userId,
   requests,
   requestGames,
   incoming,
@@ -24,7 +24,6 @@ export function MyRequests({
   loading,
   reloadRequests,
 }: {
-  userId: string;
   requests: GameRequest[];
   requestGames: Map<string, GameLine>;
   incoming: GameRequest[];
@@ -32,8 +31,9 @@ export function MyRequests({
   loading: boolean;
   reloadRequests: () => Promise<void>;
 }) {
+  const { getToken } = useAuth();
   const handleCancel = async (requestId: string) => {
-    await cancelMyRequest(requestId, userId);
+    await cancelMyRequest(getToken, requestId);
     await reloadRequests();
   };
 
@@ -137,6 +137,8 @@ const STATUS = {
   pending: { label: "Pending", icon: Clock, cls: "bg-amber-50 text-amber-800 border border-amber-200" },
   accepted: { label: "Accepted", icon: Check, cls: "bg-accent-50 text-accent-800 border border-accent-500/40" },
   declined: { label: "Declined", icon: X, cls: "bg-primary-100 text-primary-600" },
+  // Taken back: kept in the database, but the requests routes never list one.
+  withdrawn: { label: "Withdrawn", icon: X, cls: "bg-primary-100 text-primary-600" },
 } as const;
 
 /** One request this person sent: the game (sport, time, venue), its host, the status, their note; Cancel while pending. */

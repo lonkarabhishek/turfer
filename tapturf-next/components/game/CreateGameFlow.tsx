@@ -7,7 +7,7 @@ import {
   Trophy, CircleDot, Target, Circle, Feather,
   Grip, Dumbbell, Loader2, Users, Zap, ChevronRight,
 } from "lucide-react";
-import { ACCOUNT_NOT_CONFIRMED, useAuth } from "@/components/auth/AuthProvider";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { createGame } from "@/lib/queries/games";
 import { getTurfPlace, searchTurfs } from "@/lib/queries/users";
 import { gameShareText } from "@/lib/utils/gameShare";
@@ -148,7 +148,7 @@ function defaultHostPhone(profilePhone: string | undefined): string {
 }
 
 export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = {}) {
-  const { user, login, loading: authLoading, confirmedUser } = useAuth();
+  const { user, login, loading: authLoading, getToken } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   // Prefill turf when the visitor arrived via "Create a game here" on
@@ -292,17 +292,11 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     if (hostPhone) {
       try { localStorage.setItem(HOST_PHONE_KEY, hostPhone); } catch { /* ignore */ }
     }
-    // The account the server confirms for this sign-in, never only what this device kept.
-    const me = await confirmedUser();
-    if (!me) {
-      setSubmitting(false);
-      setSubmitError(ACCOUNT_NOT_CONFIRMED);
-      return;
-    }
-
+    // The server works out the host from this sign-in, and takes their name and photo from the account.
     const { data, error } = await createGame(
+      getToken,
       { turfId, date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked },
-      { id: me.id, name: me.name, phone: hostPhone ? `+91${hostPhone}` : "", profile_image_url: me.profile_image_url }
+      hostPhone ? `+91${hostPhone}` : ""
     );
 
     setSubmitting(false);
@@ -851,6 +845,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     type="text"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
+                    maxLength={500}
                     placeholder="e.g. Bring your own shoes, red jersey"
                     className="w-full px-4 py-3.5 min-h-[56px] text-[15px] text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
                   />

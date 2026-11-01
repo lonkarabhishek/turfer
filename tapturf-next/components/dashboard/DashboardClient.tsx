@@ -329,7 +329,6 @@ function Me({
             )}
             {tab === "requests" && (
               <MyRequests
-                userId={user.id}
                 requests={data.requests}
                 requestGames={data.requestGames}
                 incoming={data.incoming}

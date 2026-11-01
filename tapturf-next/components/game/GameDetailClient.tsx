@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getGameById, getGameParticipants, getGameRequests, getMyRequestForGame, sendJoinRequest, acceptRequest, declineRequest, updateGame, notifyVenueMove } from "@/lib/queries/games";
+import { quietToken } from "@/lib/account/client";
+import { getGameById, getGameParticipants, getGameRequests, getMyRequestForGame, sendJoinRequest, acceptRequest, declineRequest, updateGame } from "@/lib/queries/games";
 import {
   durationLabel,
   firstName,
@@ -48,7 +49,9 @@ const field = "w-full min-h-12 border border-primary-200 rounded-xl px-4 py-3 te
 const label = "block text-[14px] font-medium text-primary-700 mb-1";
 
 export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string; liveLinks?: boolean }) {
-  const { user, login, confirmedUser } = useAuth();
+  const { user, login, getToken, signedInWith } = useAuth();
+  // Reads on load never sign anyone out; the actions use getToken.
+  const readToken = quietToken(signedInWith);
   const [game, setGame] = useState<Game | null>(null);
   const [participants, setParticipants] = useState<GameParticipant[]>([]);
   const [participantsLoaded, setParticipantsLoaded] = useState(false);
@@ -59,6 +62,8 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const [joinNote, setJoinNote] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinStatus, setJoinStatus] = useState<"idle" | "sent" | "error">("idle");
+  // Why the last request didn't go through, in the server's words.
+  const [joinError, setJoinError] = useState("");
   const [showJoinForm, setShowJoinForm] = useState(false);
   const [shared, setShared] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -98,7 +103,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   };
 
   const loadRequests = async () => {
-    const { data } = await getGameRequests(gameId);
+    const { data } = await getGameRequests(readToken, gameId);
     setRequests(data);
   };
 
@@ -126,7 +131,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     if (!game) return;
     let alive = true;
     if (user && isHost) {
-      getGameRequests(gameId).then(({ data }) => {
+      getGameRequests(readToken, gameId).then(({ data }) => {
         if (alive) setRequests(data);
       });
     }
@@ -138,34 +143,29 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     return () => {
       alive = false;
     };
-  }, [game, user, isHost, gameId]);
+  }, [game, user, isHost, gameId, readToken]);
 
   // Pending or declined after a reload: one small read, only for a
   // signed-in viewer who is neither the host nor already playing.
   useEffect(() => {
     if (!viewerId || isHost || !participantsLoaded || isParticipant) return;
     let alive = true;
-    getMyRequestForGame(gameId, viewerId).then(({ data }) => {
+    getMyRequestForGame(readToken, gameId).then(({ data }) => {
       if (alive) setMyRequest(data ? { userId: viewerId, ...data } : null);
     });
     return () => {
       alive = false;
     };
-  }, [gameId, viewerId, isHost, participantsLoaded, isParticipant]);
+  }, [gameId, viewerId, isHost, participantsLoaded, isParticipant, readToken]);
 
   const handleJoin = async () => {
     if (!user) { login(); return; }
     setJoining(true);
-    // The account the server confirms for this sign-in, never only what this device kept.
-    const me = await confirmedUser();
-    if (!me) {
-      setJoining(false);
-      setJoinStatus("error");
-      return;
-    }
-    const { error } = await sendJoinRequest(gameId, me.id, joinNote, me.name);
+    // The server works out who is asking from this sign-in, and words any refusal.
+    const { error } = await sendJoinRequest(getToken, gameId, joinNote);
     setJoining(false);
     if (error) {
+      setJoinError(error);
       setJoinStatus("error");
     } else {
       setJoinStatus("sent");
@@ -177,7 +177,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
 
   const handleAccept = async (requestId: string) => {
     setAcceptError("");
-    const { success, error } = await acceptRequest(requestId, gameId, user!.id);
+    const { success, error } = await acceptRequest(getToken, requestId);
     if (!success) {
       setAcceptError(error || "Failed to accept request");
       setTimeout(() => setAcceptError(""), 4000);
@@ -189,7 +189,11 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   };
 
   const handleDecline = async (requestId: string) => {
-    await declineRequest(requestId, gameId);
+    const { success, error } = await declineRequest(getToken, requestId);
+    if (!success) {
+      setAcceptError(error || "Failed to decline request");
+      setTimeout(() => setAcceptError(""), 4000);
+    }
     await loadRequests();
   };
 
@@ -254,19 +258,18 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     setSaving(true);
     setSaveError("");
     const moved = newVenue && newVenue.id !== game.turf_id ? newVenue : null;
-    const { data: saved, error } = await updateGame(game.id, user.id, {
+    // A move is part of the same save: the server tells the players.
+    const { error } = await updateGame(getToken, game.id, {
       date: editData.date,
       start_time: editData.start_time,
       end_time: editData.end_time,
       max_players: editData.max_players,
-      price_per_player: editData.price_per_player,
+      price_per_player: Number(editData.price_per_player),
       description: editData.description || undefined,
       turf_booked: editData.turf_booked,
-      skill_level: editData.skill_level,
+      skill_level: editData.skill_level as Game["skill_level"],
       ...(moved ? { turf_id: moved.id } : {}),
     });
-    // The saved row: a date changed in the same save is the one players are told.
-    if (!error && saved && moved) await notifyVenueMove(saved, moved, game.turf_id);
     setSaving(false);
     if (error) {
       setSaveError(error);
@@ -497,6 +500,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               value={joinNote}
               onChange={(e) => setJoinNote(e.target.value)}
               placeholder={`Add a note for ${hostFirst === "the host" ? "the host" : hostFirst} (optional)`}
+              maxLength={300}
               rows={3}
               className={`${field} resize-none`}
             />
@@ -521,7 +525,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
 
             {joinStatus === "error" && (
               <p role="alert" className="text-[14px] text-hot-600 text-center mt-3">
-                Couldn&apos;t send your request. You may have asked already.
+                {joinError || "Couldn't send your request. You may have asked already."}
               </p>
             )}
           </div>
@@ -615,6 +619,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                   onChange={(e) => setEditData({ ...editData, description: e.target.value })}
                   aria-describedby="edit-note-hint"
                   placeholder="Ball type, format, what to bring…"
+                  maxLength={500}
                   rows={3}
                   className={`${field} resize-none`}
                 />

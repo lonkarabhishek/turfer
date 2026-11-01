@@ -41,6 +41,11 @@ async function getAuthLazy(): Promise<Auth> {
   return _authP;
 }
 
+/** Whether this tab has started the SDK already (so reading a token costs no download). */
+export function firebaseAuthStarted(): boolean {
+  return _authP !== null;
+}
+
 /** Await-able accessor for callers that need the Auth instance (e.g. signOut). */
 export async function getFirebaseAuth(): Promise<Auth> {
   return getAuthLazy();

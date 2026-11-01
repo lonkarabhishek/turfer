@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getGameLines, getMyRequests, getPendingRequestsFor, getUserGames, getUserJoinedGames, type GameLine } from "@/lib/queries/games";
 import { getUnreadCount } from "@/lib/queries/notifications";
+import { quietToken } from "@/lib/account/client";
 import { ownerRpc, type OwnerHome } from "@/lib/my/client";
 import { createClient } from "@/lib/supabase/client";
 import type { SignedInWith } from "@/components/auth/AuthProvider";
@@ -44,6 +45,8 @@ const EMPTY_LINES = new Map<string, GameLine>();
  * rows: nothing is shown until it is known.
  */
 export function useMeData(userId: string, signedInWith: SignedInWith | null): MeData {
+  // Requests and notifications come from the games routes as this sign-in, read quietly (never a sign-out).
+  const readToken = quietToken(signedInWith);
   const [state, setState] = useState<{ for: string; created: Game[]; joined: Game[]; requests: GameRequest[] } | null>(null);
   // Read after the lists, from them (a query each, only when there is something to name).
   const [extraFor, setExtraFor] = useState<{ for: string; incoming: GameRequest[]; games: Map<string, GameLine> } | null>(null);
@@ -52,24 +55,24 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([getUserGames(userId), getUserJoinedGames(userId), getMyRequests(userId)]).then(([c, j, r]) => {
+    void Promise.all([getUserGames(userId), getUserJoinedGames(userId), getMyRequests(readToken)]).then(([c, j, r]) => {
       if (!alive) return;
       setState({ for: userId, created: c.data, joined: j.data, requests: r.data });
       const hosting = c.data.filter((g) => getGameStatus(g) !== "expired").map((g) => g.id);
       const asked = [...new Set(r.data.map((q) => q.game_id))];
-      void Promise.all([getPendingRequestsFor(hosting), getGameLines(asked)])
+      void Promise.all([getPendingRequestsFor(readToken, hosting), getGameLines(asked)])
         .then(([inc, lines]) => {
           if (alive) setExtraFor({ for: userId, incoming: inc.data, games: new Map(lines.data.map((g) => [g.id, g])) });
         })
         .catch(() => alive && setExtraFor({ for: userId, incoming: [], games: new Map() }));
     });
-    void getUnreadCount(userId)
+    void getUnreadCount(readToken)
       .then(({ data, error }) => alive && !error && setUnreadFor({ for: userId, n: data }))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [userId]);
+  }, [userId, readToken]);
 
   // myTapturf's own read of the turfs this sign-in runs (its database function checks who is asking).
   // A Google sign-in rides on its Supabase session, so only a phone sign-in fetches a Firebase token:
@@ -107,9 +110,9 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
 
   const setRequests = useCallback((r: GameRequest[]) => setState((s) => (s ? { ...s, requests: r } : s)), []);
   const reloadRequests = useCallback(async () => {
-    const { data } = await getMyRequests(userId);
+    const { data } = await getMyRequests(readToken);
     setState((s) => (s && s.for === userId ? { ...s, requests: data } : s));
-  }, [userId]);
+  }, [userId, readToken]);
   const setUnread = useCallback((n: number) => setUnreadFor({ for: userId, n }), [userId]);
 
   return {

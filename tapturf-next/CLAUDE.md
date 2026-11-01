@@ -55,7 +55,7 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 - `users` — id, name, email, phone, role, profile_image_url
 - `turfs` — id, name, address, sports, amenities, images, pricing fields, "Gmap Embed link"
 - `games` — id, creator_id, turf_id, sport, date, start_time, end_time, max_players, current_players, price_per_player, status, host_name
-- `game_requests` — id, game_id, user_id, status (pending/accepted/declined), requester_name, note
+- `game_requests` — id, game_id, user_id, status (pending/accepted/declined/withdrawn), requester_name, note
 - `game_participants` — game_id, user_id, joined_at
 - `notifications` — id, user_id, type, title, message, metadata, is_read
 
@@ -71,6 +71,7 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 - Supabase turfs table uses `"Gmap Embed link"` (with quotes, capital G, spaces) as column name
 - Game queries fetch turfs separately (no JOINs) to avoid RLS issues
 - Dual auth: localStorage for phone users, Supabase session for Google users
+- Games, join requests and notifications are written (and requests and notifications read) only through the games routes as the verified caller (`lib/games/server.ts`, API in `lib/games/types.ts`, tests: `npm run test:games`); the database lets the browser read only games and lineups (`supabase/migrations/20261030_games_lockdown*.sql`)
 
 ## SEO & Metadata
 - Titles and descriptions are built from each page's own data in `lib/seo/`: `turfMeta.ts` (turf pages), `listingMeta.ts` (home, city, city+sport, sport, near-me), `blogMeta.ts` (posts, with optional `seoTitle`/`seoDescription`; `npm run check:blog` checks them), `pageMetadata.ts` (home, /turfs, /games). Titles fit 60 characters and about 580px (`width.ts`), descriptions 155 characters. Shared robots/OG/Twitter pieces are in `defaults.ts`. Tests: `npm run test:seo`.

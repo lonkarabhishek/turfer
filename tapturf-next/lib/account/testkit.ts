@@ -83,8 +83,11 @@ export type RpcCall = { fn: string; args: Record<string, unknown> };
 /** The fake network. Each test sets what it needs and calls reset() first. */
 export const net = {
   rpcCalls: [] as RpcCall[],
-  /** Answers per RPC name; a missing one answers { r: "ok" }. A Response is sent as it is (an error from PostgREST). */
+  /** Answers per RPC name; a missing one answers { r: "ok" }. A Response is sent as it is (an error from PostgREST, a PGRST202 say). */
   rpc: {} as Record<string, (args: Record<string, unknown>) => unknown>,
+  /** PostgREST's table requests (/rest/v1/<table>), when a test answers them; else they throw. */
+  rest: null as ((method: string, url: URL, body: unknown) => Response) | null,
+  restCalls: [] as Array<{ method: string; table: string; search: string; body: unknown }>,
   /** GoTrue's /user per access token. */
   users: new Map<string, unknown>(),
   pkceCalls: [] as Array<{ auth_code?: unknown; code_verifier?: unknown; headers: Headers }>,
@@ -93,6 +96,8 @@ export const net = {
   reset() {
     this.rpcCalls = [];
     this.rpc = {};
+    this.rest = null;
+    this.restCalls = [];
     this.users = new Map();
     this.pkceCalls = [];
     this.pkce = () => new Response("{}", { status: 500 });
@@ -137,6 +142,13 @@ export function installNet() {
       net.rpcCalls.push({ fn: m[1], args });
       const answer = net.rpc[m[1]] ? net.rpc[m[1]](args) : { r: "ok" };
       return answer instanceof Response ? answer : Response.json(answer);
+    }
+    const t = /^https:\/\/example\.supabase\.co\/rest\/v1\/([a-z_]+)(\?.*)?$/.exec(url);
+    if (t && net.rest) {
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      net.restCalls.push({ method, table: t[1], search: t[2] ?? "", body });
+      return net.rest(method, new URL(url), body);
     }
     throw new Error(`unexpected fetch ${url}`);
   }) as typeof fetch;

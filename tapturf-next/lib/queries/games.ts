@@ -1,8 +1,32 @@
 import { createClient } from "@/lib/supabase/client";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { usableTurfPhotos } from "@/lib/utils/images";
-import { venueMoveNotice, venueMoveRecipients, venueProblem, type VenueOption } from "@/lib/utils/gameVenue";
+import {
+  answerRequestCall,
+  createGameCall,
+  gameProblem,
+  incomingRequestsCall,
+  myRequestsCall,
+  requestsForGameCall,
+  sendRequestCall,
+  updateGameCall,
+  withdrawRequestCall,
+  type GameAnswer,
+  type GetToken,
+} from "@/lib/games/client";
+import type { GameChanges } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
+
+// Public reads (games, lineups, turfs) use the anon key, as the pages
+// always have. Every write, and every read of join requests, goes through
+// the games routes as the signed-in caller (lib/games/client.ts): pass
+// useAuth().getToken. The database lets nothing else write.
+
+/** The body when the call went through, else the page's words for what went wrong. */
+function outcome<T extends object>(a: GameAnswer<T>, has: keyof T): { ok: T } | { error: string } {
+  const b = a.body as T;
+  return a.status === 200 && b && has in b ? { ok: b } : { error: gameProblem(a) ?? "Something went wrong. Please try again." };
+}
 
 // ── Game CRUD ──────────────────────────────────────────
 
@@ -106,17 +130,10 @@ export async function getGameById(gameId: string) {
  * so a reload still says "Request sent" or "Request declined". Read only
  * for someone who is neither the host nor already playing.
  */
-export async function getMyRequestForGame(gameId: string, userId: string) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("game_requests")
-    .select("id,status")
-    .eq("game_id", gameId)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const row = Array.isArray(data) ? data[0] : null;
-  return { data: (row as { id: string; status: GameRequest["status"] } | undefined) ?? null, error: error?.message || null };
+export async function getMyRequestForGame(getToken: GetToken, gameId: string) {
+  const r = outcome(await requestsForGameCall(getToken, gameId), "host");
+  if ("error" in r) return { data: null, error: r.error };
+  return { data: r.ok.host ? null : r.ok.mine, error: null };
 }
 
 export async function getUserGames(userId: string) {
@@ -168,218 +185,81 @@ export async function getUserJoinedGames(userId: string) {
   return { data: (games as Game[]) || [], error: gamesError?.message || null };
 }
 
-export async function createGame(gameData: CreateGameData, user: { id: string; name: string; phone?: string; profile_image_url?: string }) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("games")
-    .insert([{
-      creator_id: user.id,
+/** The signed-in caller hosts a new game (they become its first player). hostPhone: "" or +91 and 10 digits. */
+export async function createGame(getToken: GetToken, gameData: CreateGameData, hostPhone: string) {
+  const r = outcome(
+    await createGameCall(getToken, {
       turf_id: gameData.turfId,
-      title: `${gameData.sport} Game`,
-      description: gameData.description || gameData.notes || `${gameData.sport} game`,
       sport: gameData.sport,
       skill_level: gameData.skillLevel,
       max_players: gameData.maxPlayers,
-      current_players: 1,
       date: gameData.date,
       start_time: gameData.startTime,
       end_time: gameData.endTime,
       price_per_player: gameData.costPerPerson,
-      status: "open",
-      host_name: user.name || "Player",
-      host_phone: user.phone || "",
-      host_profile_image_url: user.profile_image_url || "",
+      description: gameData.description || gameData.notes || null,
       turf_booked: gameData.turfBooked || false,
-    }])
-    .select()
-    .single();
-
-  if (error) return { data: null, error: error.message };
-
-  // Add creator as first participant
-  if (data) {
-    const { error: participantError } = await supabase.from("game_participants").insert([{
-      game_id: data.id,
-      user_id: user.id,
-    }]);
-    if (participantError) {
-      console.error("Failed to add creator as participant:", participantError.message);
-    }
-  }
-
-  return { data: data as Game, error: null };
-}
-
-export async function updateGame(gameId: string, userId: string, updates: {
-  date?: string;
-  start_time?: string;
-  end_time?: string;
-  max_players?: number;
-  price_per_player?: number;
-  description?: string;
-  turf_booked?: boolean;
-  skill_level?: string;
-  /** A new venue (the host's "Change venue"): saved only when it is a listed turf. */
-  turf_id?: string;
-}) {
-  const supabase = createClient();
-  if (updates.turf_id) {
-    // Read again at save time: the sheet's list can be minutes old.
-    const { data: turf, error: readError } = await supabase.from("turfs").select("id").eq("id", updates.turf_id).eq("is_active", true).maybeSingle();
-    const problem = venueProblem({ id: updates.turf_id }, null, turf, !!readError);
-    if (problem) return { data: null, error: problem };
-  }
-  const { data, error } = await supabase
-    .from("games")
-    .update(updates)
-    .eq("id", gameId)
-    .eq("creator_id", userId)
-    .select()
-    .single();
-
-  if (error) return { data: null, error: error.message };
-  return { data: data as Game, error: null };
+      host_phone: hostPhone,
+    }),
+    "game",
+  );
+  return "error" in r ? { data: null, error: r.error } : { data: r.ok.game, error: null };
 }
 
 /**
- * The game moved (updateGame saved a new turf_id): a notification for
- * everyone playing and everyone with a request still waiting, never the
- * host ("Asha moved Football on Sat 7 Nov to Dribble Den, Begur"). Best
- * effort: the move is saved either way.
+ * The host's edit. A new turf_id moves the game to another listed turf,
+ * and the server tells everyone playing or waiting on a request.
  */
-export async function notifyVenueMove(
-  game: Pick<Game, "id" | "creator_id" | "host_name" | "sport" | "date">,
-  to: VenueOption,
-  fromTurfId: string | null,
-) {
-  const supabase = createClient();
-  const [{ data: players }, { data: asks }] = await Promise.all([
-    supabase.from("game_participants").select("user_id").eq("game_id", game.id),
-    supabase.from("game_requests").select("user_id, status").eq("game_id", game.id).in("status", ["pending", "accepted"]),
-  ]);
-  const ids = venueMoveRecipients(game.creator_id, players ?? [], asks ?? []);
-  if (ids.length === 0) return { sent: 0, error: null };
-  const { title, message } = venueMoveNotice(game, to);
-  const { error } = await supabase.from("notifications").insert(ids.map((user_id) => ({
-    user_id,
-    type: "game_venue_changed",
-    title,
-    message,
-    metadata: { gameId: game.id, turfId: to.id, fromTurfId },
-    is_read: false,
-  })));
-  if (error) console.error("Venue change notifications failed:", error.message);
-  return { sent: error ? 0 : ids.length, error: error?.message || null };
-}
-
-export async function deleteGame(gameId: string, userId: string) {
-  const supabase = createClient();
-  // Delete in order: notifications, requests, participants, game
-  await supabase.from("notifications").delete().eq("metadata->>gameId", gameId);
-  await supabase.from("game_requests").delete().eq("game_id", gameId);
-  await supabase.from("game_participants").delete().eq("game_id", gameId);
-
-  const { error } = await supabase
-    .from("games")
-    .delete()
-    .eq("id", gameId)
-    .eq("creator_id", userId);
-
-  return { success: !error, error: error?.message || null };
+export async function updateGame(getToken: GetToken, gameId: string, updates: GameChanges) {
+  const r = outcome(await updateGameCall(getToken, gameId, updates), "game");
+  return "error" in r ? { data: null, error: r.error } : { data: r.ok.game, error: null };
 }
 
 // ── Game Requests ──────────────────────────────────────
 
-export async function sendJoinRequest(gameId: string, userId: string, note?: string, requesterName?: string) {
-  const supabase = createClient();
-  // Check for existing request
-  const { data: existing } = await supabase
-    .from("game_requests")
-    .select("id, status")
-    .eq("game_id", gameId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existing?.status === "pending") {
-    return { data: null, error: "You already have a pending request" };
-  }
-  if (existing?.status === "accepted") {
-    return { data: null, error: "You have already joined this game" };
-  }
-
-  const { data, error } = await supabase
-    .from("game_requests")
-    .insert([{
-      game_id: gameId,
-      user_id: userId,
-      note: note || null,
-      status: "pending",
-      requester_name: requesterName || "Player",
-    }])
-    .select()
-    .single();
-
-  if (error) return { data: null, error: error.message };
-
-  // Notify the host
-  const { data: game } = await supabase
-    .from("games")
-    .select("creator_id, sport")
-    .eq("id", gameId)
-    .single();
-
-  if (game?.creator_id) {
-    await supabase.from("notifications").insert([{
-      user_id: game.creator_id,
-      type: "game_request",
-      title: "New Join Request",
-      message: `${requesterName || "Someone"} wants to join your ${game.sport || "game"}`,
-      metadata: { gameId, requestId: data.id },
-      is_read: false,
-    }]);
-  }
-
-  return { data: data as GameRequest, error: null };
+/** Ask to join, as the signed-in caller; the host is told. */
+export async function sendJoinRequest(getToken: GetToken, gameId: string, note?: string) {
+  const r = outcome(await sendRequestCall(getToken, gameId, note?.trim() || null), "request");
+  return "error" in r ? { data: null, error: r.error } : { data: r.ok.request, error: null };
 }
 
-export async function getGameRequests(gameId: string) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("game_requests")
-    .select("*")
-    .eq("game_id", gameId)
-    .order("created_at", { ascending: false });
-
-  if (error || !data || data.length === 0) return { data: (data as GameRequest[]) || [], error: error?.message || null };
-  await withCurrentPhotos(supabase, data);
-  return { data: data as GameRequest[], error: null };
+/** The host's requests for their game (with notes), each with the player's picture as it is now; [] for anyone else. */
+export async function getGameRequests(getToken: GetToken, gameId: string) {
+  const r = outcome(await requestsForGameCall(getToken, gameId), "host");
+  if ("error" in r) return { data: [] as GameRequest[], error: r.error };
+  if (!r.ok.host || r.ok.requests.length === 0) return { data: [] as GameRequest[], error: null };
+  await withCurrentPhotos(r.ok.requests);
+  return { data: r.ok.requests, error: null };
 }
 
-/** Each player's picture as it is now (a request keeps a copy from when it was sent, and older ones have none). */
-async function withCurrentPhotos(supabase: ReturnType<typeof createClient>, rows: Record<string, unknown>[]) {
-  const userIds = [...new Set(rows.map((r) => r.user_id as string).filter(Boolean))];
+/**
+ * Each player's picture as it is now (a request keeps a copy from when it
+ * was sent, and older ones have none), from the public users columns.
+ */
+async function withCurrentPhotos(rows: GameRequest[]) {
+  const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
   if (userIds.length === 0) return;
-  const { data: users } = await supabase.from("users").select("id, profile_image_url").in("id", userIds);
+  const { data: users } = await createClient().from("users").select("id, profile_image_url").in("id", userIds);
   if (!users) return;
   const photos = new Map(users.map((u) => [u.id, u.profile_image_url as string | null]));
   rows.forEach((r) => {
-    if (photos.has(r.user_id as string)) r.requester_avatar = photos.get(r.user_id as string) ?? undefined;
+    if (photos.has(r.user_id)) r.requester_avatar = photos.get(r.user_id) ?? undefined;
   });
 }
 
-/** Pending requests to join any of these games (the host's own, for the Me tab), newest first. */
-export async function getPendingRequestsFor(gameIds: string[]) {
+/**
+ * Players waiting for the signed-in host's answer, newest first: the
+ * pending requests on the games they host (GET /api/game-requests?incoming=1),
+ * kept to these games (the Me tab passes the ones not over yet).
+ */
+export async function getPendingRequestsFor(getToken: GetToken, gameIds: string[]) {
   if (gameIds.length === 0) return { data: [] as GameRequest[], error: null };
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("game_requests")
-    .select("id, game_id, user_id, note, status, requester_name, requester_avatar, created_at")
-    .in("game_id", gameIds)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
-  if (error || !data) return { data: [] as GameRequest[], error: error?.message || null };
-  await withCurrentPhotos(supabase, data);
-  return { data: data as GameRequest[], error: null };
+  const r = outcome(await incomingRequestsCall(getToken), "requests");
+  if ("error" in r) return { data: [] as GameRequest[], error: r.error };
+  const ids = new Set(gameIds);
+  const data = r.ok.requests.filter((q) => ids.has(q.game_id));
+  await withCurrentPhotos(data);
+  return { data, error: null };
 }
 
 /** A game as a list of requests names it. */
@@ -402,102 +282,28 @@ export async function getGameLines(ids: string[]) {
   return { data: data.map((g) => ({ ...g, venue: names.get(g.turf_id) ?? null })) as GameLine[], error: null };
 }
 
-export async function getMyRequests(userId: string) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("game_requests")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  return { data: (data as GameRequest[]) || [], error: error?.message || null };
+/** The signed-in caller's own requests, newest first. */
+export async function getMyRequests(getToken: GetToken) {
+  const r = outcome(await myRequestsCall(getToken), "requests");
+  return "error" in r ? { data: [] as GameRequest[], error: r.error } : { data: r.ok.requests, error: null };
 }
 
-export async function acceptRequest(requestId: string, gameId: string, userId: string) {
-  const supabase = createClient();
-
-  // Check if game is full before accepting.
-  // .limit(1) instead of .single() — never crash on 0-row RLS results.
-  const { data: gameRows } = await supabase
-    .from("games")
-    .select("current_players, max_players")
-    .eq("id", gameId)
-    .limit(1);
-
-  const game = gameRows?.[0];
-  if (!game) return { success: false, error: "Game not found" };
-  if (game.current_players >= game.max_players) return { success: false, error: "Game is full" };
-
-  const { data: updatedRows, error } = await supabase
-    .from("game_requests")
-    .update({ status: "accepted" })
-    .eq("id", requestId)
-    .select();
-
-  if (error) return { success: false, error: error.message };
-  const updatedRequest = updatedRows?.[0];
-  if (!updatedRequest) return { success: false, error: "Couldn't update the request. Please refresh and try again." };
-
-  // Increment player count
-  await supabase
-    .from("games")
-    .update({ current_players: game.current_players + 1 })
-    .eq("id", gameId);
-
-  // Add as participant
-  await supabase.from("game_participants").insert([{
-    game_id: gameId,
-    user_id: updatedRequest.user_id,
-  }]);
-
-  // Notify the requester
-  await supabase.from("notifications").insert([{
-    user_id: updatedRequest.user_id,
-    type: "game_request_accepted",
-    title: "Request Accepted!",
-    message: "Your request to join the game has been accepted!",
-    metadata: { gameId, requestId },
-    is_read: false,
-  }]);
-
-  return { success: true, error: null };
+/** The host accepts: the player is added (unless the game is full) and told. */
+export async function acceptRequest(getToken: GetToken, requestId: string) {
+  const r = outcome(await answerRequestCall(getToken, requestId, true), "status");
+  return "error" in r ? { success: false, error: r.error } : { success: true, error: null };
 }
 
-export async function declineRequest(requestId: string, gameId: string) {
-  const supabase = createClient();
-  const { data: updatedRows, error } = await supabase
-    .from("game_requests")
-    .update({ status: "declined" })
-    .eq("id", requestId)
-    .select();
-
-  if (error) return { success: false, error: error.message };
-  const updatedRequest = updatedRows?.[0];
-  if (!updatedRequest) return { success: false, error: "Couldn't update the request. Please refresh and try again." };
-
-  // Notify the requester
-  await supabase.from("notifications").insert([{
-    user_id: updatedRequest.user_id,
-    type: "game_request_declined",
-    title: "Request Declined",
-    message: "Your request to join the game was declined.",
-    metadata: { gameId, requestId },
-    is_read: false,
-  }]);
-
-  return { success: true, error: null };
+/** The host declines; the player is told. */
+export async function declineRequest(getToken: GetToken, requestId: string) {
+  const r = outcome(await answerRequestCall(getToken, requestId, false), "status");
+  return "error" in r ? { success: false, error: r.error } : { success: true, error: null };
 }
 
-export async function cancelMyRequest(requestId: string, userId: string) {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("game_requests")
-    .delete()
-    .eq("id", requestId)
-    .eq("user_id", userId)
-    .eq("status", "pending");
-
-  return { success: !error, error: error?.message || null };
+/** Take back the caller's own pending request. */
+export async function cancelMyRequest(getToken: GetToken, requestId: string) {
+  const r = outcome(await withdrawRequestCall(getToken, requestId), "r");
+  return "error" in r ? { success: false, error: r.error } : { success: true, error: null };
 }
 
 export async function getGameParticipants(gameId: string) {

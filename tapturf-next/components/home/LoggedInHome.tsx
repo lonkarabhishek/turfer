@@ -7,6 +7,7 @@ import {
   Plus, Search, Zap, Gamepad2, LogOut, Compass, Inbox,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { quietToken } from "@/lib/account/client";
 import { getUserStats, type UserStats } from "@/lib/queries/stats";
 import {
   getAvailableGames,
@@ -35,7 +36,7 @@ import type { Game, GameRequest } from "@/types/game";
  * "Start exploring" empty state instead of a wall of zeros.
  */
 export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLineProps }) {
-  const { user, logout } = useAuth();
+  const { user, logout, signedInWith } = useAuth();
   // The city this page was rendered for (server props): no pref listener,
   // a city change re-renders the page with new props.
   const city = scope.kind === "city" ? { id: scope.id, label: scope.label } : null;
@@ -54,7 +55,8 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
         getUserStats(user.id),
         getUserGames(user.id),
         getUserJoinedGames(user.id),
-        getMyRequests(user.id),
+        // Read quietly: the home never signs anyone out.
+        getMyRequests(quietToken(signedInWith)),
         getAvailableGames({}),
       ]);
       if (cancelled) return;
