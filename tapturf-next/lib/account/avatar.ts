@@ -7,35 +7,94 @@
  * served at /avatars/<id>.svg (app/avatars/[file]/route.ts).
  */
 
-/** The drawn avatars, in the order the picker shows them. label: the accessible name. */
-export const AVATAR_PRESETS = [
+/** The groups the picker shows the avatars in, in order. */
+export const AVATAR_GROUPS = [
+  { id: "cricket", label: "Cricket" },
   { id: "football", label: "Football" },
-  { id: "cricket-ball", label: "Cricket ball" },
-  { id: "bat", label: "Cricket bat" },
-  { id: "stumps", label: "Stumps" },
-  { id: "racquet", label: "Tennis racquet" },
-  { id: "shuttlecock", label: "Shuttlecock" },
-  { id: "basketball", label: "Basketball" },
-  { id: "volleyball", label: "Volleyball" },
-  { id: "whistle", label: "Whistle" },
-  { id: "trophy", label: "Trophy" },
-  { id: "jersey", label: "Jersey" },
-  { id: "hockey", label: "Hockey stick" },
+  { id: "racquet", label: "Racquet sports" },
+  { id: "court", label: "Court sports" },
+  { id: "more", label: "Other sports" },
 ] as const;
 
-export type AvatarPresetId = (typeof AVATAR_PRESETS)[number]["id"];
+export type AvatarGroupId = (typeof AVATAR_GROUPS)[number]["id"];
+
+/** The picker shows the avatars this many to a row, at every width; no group leaves one alone on its last row. */
+export const AVATAR_COLUMNS = 3;
+
+/**
+ * The drawn avatars: players, each with a name of their own and what they
+ * play, in the order the picker shows them. An id is for good: it is what
+ * users.profile_image_url keeps (/avatars/<id>.svg).
+ */
+export const AVATAR_PRESETS = [
+  { id: "batter", name: "Sixer Sid", role: "Batter", group: "cricket" },
+  { id: "fast-bowler", name: "Yorker Rani", role: "Fast bowler", group: "cricket" },
+  { id: "spinner", name: "Googly Guru", role: "Spin bowler", group: "cricket" },
+  { id: "wicketkeeper", name: "Stumper Zoya", role: "Wicketkeeper", group: "cricket" },
+  { id: "all-rounder", name: "Golden-Arm Gagan", role: "All-rounder", group: "cricket" },
+  { id: "captain", name: "Skipper Meera", role: "Captain", group: "cricket" },
+  { id: "gully-cricketer", name: "Gully Gopi", role: "Box cricketer", group: "cricket" },
+  { id: "umpire", name: "Umpire Uncle", role: "Umpire", group: "cricket" },
+  { id: "striker", name: "Hat-trick Hari", role: "Striker", group: "football" },
+  { id: "midfielder", name: "Playmaker Priya", role: "Midfielder", group: "football" },
+  { id: "defender", name: "Tackle Tiger", role: "Defender", group: "football" },
+  { id: "goalkeeper", name: "Safe-Hands Sana", role: "Goalkeeper", group: "football" },
+  { id: "winger", name: "Rocket Rehan", role: "Winger", group: "football" },
+  { id: "tennis-player", name: "Topspin Tara", role: "Tennis player", group: "racquet" },
+  { id: "badminton-player", name: "Smash Sameer", role: "Badminton player", group: "racquet" },
+  { id: "pickleball-player", name: "Dink Dadi", role: "Pickleball player", group: "racquet" },
+  { id: "table-tennis-player", name: "Rally Ravi", role: "Table tennis player", group: "racquet" },
+  { id: "padel-player", name: "Padel Pari", role: "Padel player", group: "racquet" },
+  { id: "basketball-player", name: "Hoops Harman", role: "Basketball player", group: "court" },
+  { id: "volleyball-player", name: "Spike Sneha", role: "Volleyball player", group: "court" },
+  { id: "frisbee-player", name: "Disc Diya", role: "Frisbee player", group: "more" },
+  { id: "swimmer", name: "Splash Sonu", role: "Swimmer", group: "more" },
+  { id: "coach", name: "Coach Didi", role: "Coach", group: "more" },
+] as const satisfies readonly { id: string; name: string; role: string; group: AvatarGroupId }[];
+
+export type AvatarPreset = (typeof AVATAR_PRESETS)[number];
+export type AvatarPresetId = AvatarPreset["id"];
 
 export const isPresetId = (id: unknown): id is AvatarPresetId => AVATAR_PRESETS.some((p) => p.id === id);
+
+/** An avatar's accessible name: "Sixer Sid, batter". */
+export const avatarLabel = (p: { name: string; role: string }) => `${p.name}, ${p.role.toLowerCase()}`;
+
+/**
+ * The first avatars were sports gear, not players. Their addresses keep
+ * working, each as the player it became, and a page from before that
+ * sends one saves that player.
+ */
+export const OLD_PRESETS = {
+  football: "striker",
+  "cricket-ball": "fast-bowler",
+  bat: "batter",
+  stumps: "wicketkeeper",
+  racquet: "tennis-player",
+  shuttlecock: "badminton-player",
+  basketball: "basketball-player",
+  volleyball: "volleyball-player",
+  whistle: "coach",
+  trophy: "captain",
+  jersey: "midfielder",
+  hockey: "winger",
+} as const satisfies Record<string, AvatarPresetId>;
+
+/** The avatar an id is (an old one's player), or null. */
+export function presetIdOf(id: unknown): AvatarPresetId | null {
+  if (isPresetId(id)) return id;
+  return typeof id === "string" && Object.hasOwn(OLD_PRESETS, id) ? OLD_PRESETS[id as keyof typeof OLD_PRESETS] : null;
+}
 
 /** Where an avatar is served; also what users.profile_image_url holds for one (account_photo_set). */
 export const presetPath = (id: AvatarPresetId) => `/avatars/${id}.svg`;
 
 const PRESET_URL = /^(?:https:\/\/(?:www\.)?tapturf\.in)?\/avatars\/([a-z][a-z0-9-]{1,30})\.svg$/;
 
-/** The avatar a picture is, or null. */
+/** The avatar a picture is (an old address: its player), or null. */
 export function presetOf(url: string | null | undefined): AvatarPresetId | null {
   const m = PRESET_URL.exec(url ?? "");
-  return m && isPresetId(m[1]) ? m[1] : null;
+  return m ? presetIdOf(m[1]) : null;
 }
 
 const GOOGLE_PHOTO = /^https:\/\/lh\d+\.googleusercontent\.com\/[A-Za-z0-9/_=.~-]+$/;

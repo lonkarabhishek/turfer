@@ -1,13 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  AVATAR_COLUMNS,
+  AVATAR_GROUPS,
   AVATAR_PRESETS,
   INITIALS_COLORS,
+  OLD_PRESETS,
   PHOTO_UPLOAD,
   clampCrop,
   coverScale,
   cropSource,
   googlePhotoToKeep,
+  avatarLabel,
   imageInfo,
   initialsColor,
   initialsOf,
@@ -15,6 +19,7 @@ import {
   maxZoom,
   photoErrorText,
   pictureKind,
+  presetIdOf,
   presetOf,
   presetPath,
   sizedPhotoUrl,
@@ -29,47 +34,123 @@ import { avatarSvg } from "./avatarArt";
 /* Avatars                                                             */
 /* ------------------------------------------------------------------ */
 
-test("avatars: at least eight, each with its own id, name and colour", () => {
-  assert.ok(AVATAR_PRESETS.length >= 8);
+/** The database's rule for an avatar id (account_photo_set). */
+const DB_ID = /^[a-z][a-z0-9-]{1,30}$/;
+
+test("avatars: 18 to 24 players, each with its own id, name, role and colour", () => {
+  assert.ok(AVATAR_PRESETS.length >= 18 && AVATAR_PRESETS.length <= 24, String(AVATAR_PRESETS.length));
   assert.equal(new Set(AVATAR_PRESETS.map((p) => p.id)).size, AVATAR_PRESETS.length);
-  assert.equal(new Set(AVATAR_PRESETS.map((p) => p.label)).size, AVATAR_PRESETS.length);
-  const backgrounds = AVATAR_PRESETS.map((p) => /<rect width="64" height="64" fill="(#[0-9A-F]{6})"/.exec(avatarSvg(p.id))?.[1]);
+  assert.equal(new Set(AVATAR_PRESETS.map((p) => p.name)).size, AVATAR_PRESETS.length);
+  assert.equal(new Set(AVATAR_PRESETS.map(avatarLabel)).size, AVATAR_PRESETS.length);
+  const backgrounds = AVATAR_PRESETS.map((p) => /<rect width="64" height="64" fill="(#[0-9A-F]{6})"\/>/.exec(avatarSvg(p.id))?.[1]);
   assert.ok(backgrounds.every(Boolean));
   assert.equal(new Set(backgrounds).size, AVATAR_PRESETS.length, "no two look alike at a glance");
   for (const p of AVATAR_PRESETS) {
-    // The database's rule for an avatar id (account_photo_set).
-    assert.match(p.id, /^[a-z][a-z0-9-]{1,30}$/);
+    assert.match(p.id, DB_ID);
     assert.ok(isPresetId(p.id));
+    // Short enough for two lines under a 76 px circle in the picker.
+    assert.ok(p.name.length <= 16 && p.role.length <= 20, p.id);
   }
+  assert.equal(avatarLabel(AVATAR_PRESETS[0]), "Sixer Sid, batter");
   assert.equal(isPresetId("dragon"), false);
+  assert.equal(isPresetId("football"), false, "an old id is not one to show");
 });
 
-test("avatars: plain SVG with its name, nothing that runs or loads", () => {
+test("avatars: every sport group has players, in the picker's order", () => {
+  const groups = AVATAR_GROUPS.map((g) => g.id);
+  assert.equal(new Set(groups).size, groups.length);
+  for (const g of groups) assert.ok(AVATAR_PRESETS.some((p) => p.group === g), g);
+  // Listed group by group, so the picker's order and the list's agree.
+  const order = AVATAR_PRESETS.map((p) => groups.indexOf(p.group));
+  assert.ok(order.every((n, i) => n >= 0 && (i === 0 || n >= order[i - 1])), order.join(","));
+  // Three to a row at every width, and no player alone on a group's last row.
+  assert.equal(AVATAR_COLUMNS, 3);
+  for (const g of groups) assert.notEqual(AVATAR_PRESETS.filter((p) => p.group === g).length % AVATAR_COLUMNS, 1, `${g} leaves one alone`);
+});
+
+/** A small XML check: tags close in order, attributes are name="value" once each, text only in the title. */
+function xmlProblem(svg: string): string | null {
+  const stack: string[] = [];
+  let at = 0;
+  for (const m of svg.matchAll(/<(\/?)([a-zA-Z][\w:-]*)((?:\s+[\w:-]+="[^"<>]*")*)\s*(\/?)>|([^<]+)/g)) {
+    if (m.index !== at) return `junk at ${at}`;
+    at = m.index + m[0].length;
+    const [, close, name, attrs, self, text] = m;
+    if (text !== undefined) {
+      if (stack[stack.length - 1] !== "title") return `text outside the title: ${text.slice(0, 20)}`;
+    } else if (close) {
+      if (stack.pop() !== name || attrs || self) return `</${name}> out of order`;
+    } else {
+      const names = [...attrs.matchAll(/([\w:-]+)=/g)].map((a) => a[1]);
+      if (new Set(names).size !== names.length) return `<${name}> repeats an attribute`;
+      if (!self) stack.push(name);
+    }
+  }
+  return at === svg.length && stack.length === 0 ? null : "not closed";
+}
+
+test("avatars: well-formed SVG with its name, nothing that runs or loads, small", () => {
+  assert.equal(xmlProblem("<svg><g></svg></g>"), "</svg> out of order");
+  assert.equal(xmlProblem('<svg><path d="M0 0" d="M1 1"/></svg>'), "<path> repeats an attribute");
+  assert.equal(xmlProblem("<svg><g>hi</g></svg>"), "text outside the title: hi");
+  const shapes = new Set(["svg", "title", "defs", "clipPath", "g", "rect", "circle", "ellipse", "path", "polygon"]);
   for (const p of AVATAR_PRESETS) {
     const svg = avatarSvg(p.id);
     assert.ok(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"'), p.id);
     assert.ok(svg.endsWith("</svg>"));
-    assert.ok(svg.includes(`<title>${p.label}</title>`) && svg.includes(`aria-label="${p.label}"`), `${p.id} is named`);
-    assert.doesNotMatch(svg, /<script|<foreignObject|<image|\son[a-z]+=|href=|<text/i, `${p.id} is static`);
+    assert.equal(xmlProblem(svg), null, p.id);
+    const label = avatarLabel(p);
+    assert.ok(svg.includes(`<title>${label}</title>`) && svg.includes(`aria-label="${label}"`), `${p.id} is named`);
+    for (const [, tag] of svg.matchAll(/<([a-zA-Z]+)/g)) assert.ok(shapes.has(tag), `${p.id}: <${tag}>`);
+    assert.doesNotMatch(svg, /<script|<foreignObject|<image|<style|\son[a-z]+=|href=|<text/i, `${p.id} is static`);
     assert.equal(svg.match(/https?:/g)?.length, 1, `${p.id}: only the namespace`);
-    assert.doesNotMatch(svg, /NaN|undefined/);
+    // url() only for its own clip paths.
+    for (const [, ref] of svg.matchAll(/url\(([^)]*)\)/g)) assert.ok(/^#[a-z]+$/.test(ref) && svg.includes(`id="${ref.slice(1)}"`), `${p.id}: url(${ref})`);
+    assert.doesNotMatch(svg, /NaN|undefined|Infinity/);
+    assert.ok(Buffer.byteLength(svg) <= 6 * 1024, `${p.id}: ${Buffer.byteLength(svg)} bytes`);
   }
 });
 
-test("avatars: the address is the picture", () => {
+test("avatars: the address is the picture, old addresses the player each became", () => {
   for (const p of AVATAR_PRESETS) {
     assert.equal(presetPath(p.id), `/avatars/${p.id}.svg`);
     assert.equal(presetOf(presetPath(p.id)), p.id);
     assert.equal(presetOf(`https://www.tapturf.in/avatars/${p.id}.svg`), p.id);
+    assert.equal(presetIdOf(p.id), p.id);
   }
-  for (const x of ["/avatars/dragon.svg", "/avatars/football.png", "https://evil.in/avatars/football.svg", "avatars/football.svg", null, undefined, ""])
+  // The first twelve were sports gear; each keeps working as a fitting player.
+  assert.deepEqual(OLD_PRESETS, {
+    football: "striker",
+    "cricket-ball": "fast-bowler",
+    bat: "batter",
+    stumps: "wicketkeeper",
+    racquet: "tennis-player",
+    shuttlecock: "badminton-player",
+    basketball: "basketball-player",
+    volleyball: "volleyball-player",
+    whistle: "coach",
+    trophy: "captain",
+    jersey: "midfielder",
+    hockey: "winger",
+  });
+  for (const [old, now] of Object.entries(OLD_PRESETS)) {
+    assert.match(old, DB_ID);
+    assert.ok(isPresetId(now), now);
+    assert.ok(!AVATAR_PRESETS.some((p) => p.id === old), `${old} is not also a player's id`);
+    assert.equal(presetIdOf(old), now);
+    assert.equal(presetOf(`/avatars/${old}.svg`), now);
+    assert.equal(presetOf(`https://tapturf.in/avatars/${old}.svg`), now);
+  }
+  for (const x of ["dragon", "constructor", "__proto__", "toString", "hasOwnProperty", "", null, undefined, 3, {}]) assert.equal(presetIdOf(x), null, String(x));
+  for (const x of ["/avatars/dragon.svg", "/avatars/constructor.svg", "/avatars/football.png", "https://evil.in/avatars/football.svg", "avatars/football.svg", null, undefined, ""])
     assert.equal(presetOf(x), null, String(x));
 });
 
 test("pictureKind: an avatar, Google's photo, an upload, or something else", () => {
   assert.equal(pictureKind(null), null);
   assert.equal(pictureKind(""), null);
-  assert.equal(pictureKind("/avatars/whistle.svg"), "preset");
+  assert.equal(pictureKind("/avatars/coach.svg"), "preset");
+  assert.equal(pictureKind("/avatars/whistle.svg"), "preset", "an old address too");
   assert.equal(pictureKind("https://lh3.googleusercontent.com/a/ACg8oc_x-Y=s96-c"), "google");
   assert.equal(pictureKind("https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/avatars/0123456789abcdef01234567.webp"), "upload");
   assert.equal(pictureKind("https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/profile-photos/u/profile.jpg"), "upload");
