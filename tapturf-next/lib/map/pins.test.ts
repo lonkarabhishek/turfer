@@ -1,6 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DOT, PIN_NAME_MAX, claimOrder, collide, declutter, pinLine, pinName, pinUnit, type PinSpot, type Rect, type Size } from "./pins";
+import {
+  DOT,
+  PIN_NAME_MAX,
+  TAG_TUCK,
+  badgeRect,
+  claimOrder,
+  collide,
+  declutter,
+  discRect,
+  pinLine,
+  pinName,
+  pinUnit,
+  placeTags,
+  tagRect,
+  type BubbleSpot,
+  type PinSpot,
+  type Rect,
+  type Size,
+} from "./pins";
 
 const len = (s: string) => Array.from(s).length;
 
@@ -148,4 +166,80 @@ test("declutter: a crowd: every pin gets an answer, and no two names or prices o
   const lods = new Set(out.values());
   assert.ok(lods.has("full") && lods.has("short") && lods.has("dot"), [...lods].join());
   assert.equal(DOT[0], 16);
+});
+
+const TAG: Size = [80, 18];
+const bub = (key: string, x: number, y: number, more: Partial<BubbleSpot> = {}): BubbleSpot => ({ key, x, y, disc: [48, 48], tag: TAG, badge: null, count: 100, ...more });
+
+test("tagRect: the price tag tucks under its disc's edge, below or above", () => {
+  const b = bub("a", 100, 100);
+  assert.deepEqual(discRect(b), [76, 76, 124, 124]);
+  assert.deepEqual(tagRect(b, "below"), [60, 124 - TAG_TUCK, 140, 124 - TAG_TUCK + 18]);
+  assert.deepEqual(tagRect(b, "above"), [60, 76 + TAG_TUCK - 18, 140, 76 + TAG_TUCK]);
+  assert.deepEqual(badgeRect(bub("t", 100, 100, { badge: [10, -34, 38, -14] })), [110, 66, 138, 86]);
+  assert.equal(badgeRect(b), null);
+});
+
+test("placeTags: a lone bubble's tag hangs under it; a bubble with no price has none", () => {
+  const out = placeTags([bub("a", 100, 100), bub("n", 300, 100, { tag: null })]);
+  assert.equal(out.get("a"), "below");
+  assert.equal(out.has("n"), false);
+});
+
+test("placeTags: a tag that would run into the next bubble hangs over its own disc, else is left off", () => {
+  // 513 with 118 down and to its left, as on the India view: 513's tag would cross 118's disc.
+  const big = bub("513", 122, 306, { count: 513 });
+  const small = bub("118", 73, 342, { count: 118 });
+  let out = placeTags([small, big]);
+  assert.equal(out.get("513"), "above");
+  assert.equal(out.get("118"), "below");
+  // Boxed in above and below: left off (its label still says the average).
+  const top = bub("top", 122, 250, { count: 50 });
+  out = placeTags([small, big, top]);
+  assert.equal(out.get("513"), "none");
+  assert.equal(out.get("top"), "above", "its own tag would run into the 513's disc");
+});
+
+test("placeTags: the bigger bubble keeps its tag first; two tags never overlap", () => {
+  // Side by side, their tags would touch: the bigger keeps below, the smaller goes over.
+  const out = placeTags([bub("small", 170, 100, { count: 20 }), bub("big", 100, 100, { count: 900 })]);
+  assert.equal(out.get("big"), "below");
+  assert.equal(out.get("small"), "above");
+});
+
+test("placeTags: a Trending badge and the bar over the map are in the way too", () => {
+  // Its badge at its shoulder: a tag over the disc would run into it.
+  const badged = bub("b", 122, 306, { count: 513, badge: [10, -34, 38, -14] });
+  assert.equal(placeTags([bub("118", 73, 342, { count: 118 }), badged]).get("b"), "none");
+  // Under the bar: the tag is left off rather than hung under it.
+  const bar: Rect = [-1e4, -1e4, 1e4, 290];
+  assert.equal(placeTags([bub("118", 73, 342, { count: 118 }), bub("513", 122, 306, { count: 513 })], [bar]).get("513"), "none");
+  assert.equal(placeTags([bub("x", 100, 280)], [bar]).get("x"), "below");
+});
+
+test("placeTags: a crowd: every tag hung is clear of every other disc, every badge and every other tag", () => {
+  // A city's bubbles: about a cluster radius apart and more, some trending.
+  const bubbles: BubbleSpot[] = [];
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let i = 0;
+  for (let x = 40; x < 390; x += 88) for (let y = 40; y < 700; y += 80) {
+    bubbles.push(bub(`c${i}`, x + (rnd() - 0.5) * 36, y + (rnd() - 0.5) * 30, { count: 10 + Math.floor(rnd() * 500), badge: i++ % 4 === 0 ? [10, -34, 38, -14] : null }));
+  }
+  const out = placeTags(bubbles);
+  const tags: Rect[] = [];
+  for (const b of bubbles) {
+    const at = out.get(b.key);
+    assert.ok(at === "below" || at === "above" || at === "none");
+    if (at === "none") continue;
+    const r = tagRect(b, at);
+    for (const o of bubbles) {
+      if (o !== b) assert.ok(!collide(discRect(o), r, 0), `${b.key} ${at} vs ${o.key}`);
+      const badge = badgeRect(o);
+      if (badge) assert.ok(!collide(badge, r, 0), `${b.key} ${at} vs ${o.key}'s badge`);
+    }
+    tags.push(r);
+  }
+  for (let a = 0; a < tags.length; a++) for (let b = a + 1; b < tags.length; b++) assert.ok(!collide(tags[a], tags[b], 0));
+  assert.ok(tags.length > bubbles.length / 2, `${tags.length} of ${bubbles.length}`);
 });

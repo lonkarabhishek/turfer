@@ -4,8 +4,10 @@
  * that would run into each other give way, top rated last to go: a pin
  * shows its name and price where there is room, else its price alone
  * (a turf with no price, its name alone), else a dot. The picked or
- * hovered pin always shows in full. Pure, relative imports only, so
- * `npm run test:list` compiles it on its own.
+ * hovered pin always shows in full. A turf bubble's price tag makes way
+ * the same way (placeTags): under its disc, else over it, else left off.
+ * Pure, relative imports only, so `npm run test:list` compiles it on its
+ * own.
  */
 
 /**
@@ -89,7 +91,7 @@ export type PinSpot = {
   order: number;
 };
 
-function around(s: PinSpot, [w, h]: Size): Rect {
+function around(s: { x: number; y: number }, [w, h]: Size): Rect {
   return [s.x - w / 2, s.y - h / 2, s.x + w / 2, s.y + h / 2];
 }
 
@@ -135,6 +137,72 @@ export function declutter(spots: readonly PinSpot[], blocked: readonly Rect[], n
     }
     placed.push(box);
     out.set(s.key, lod);
+  }
+  return out;
+}
+
+/** Where a turf bubble's price tag hangs: under its disc, over it, or nowhere (its label still says the average). */
+export type TagAt = "below" | "above" | "none";
+
+/** How far a price tag tucks under the edge of its disc, px. */
+export const TAG_TUCK = 8;
+
+export type BubbleSpot = {
+  key: string;
+  /** Its spot, px on the map (its disc is centred there). */
+  x: number;
+  y: number;
+  /** Its disc's size. */
+  disc: Size;
+  /** Its price tag's size; null when no turf in it lists a price. */
+  tag: Size | null;
+  /** Its Trending badge, from its spot (left, top, right, bottom); null when it has none. */
+  badge: Rect | null;
+  /** How many turfs it holds: the bigger bubbles keep their tags first. */
+  count: number;
+};
+
+/** A bubble's disc on the map. */
+export function discRect(b: BubbleSpot): Rect {
+  return around(b, b.disc);
+}
+
+/** Its price tag on the map, hung under or over its disc. */
+export function tagRect(b: BubbleSpot, at: "below" | "above"): Rect {
+  const [w, h] = b.tag ?? [0, 0];
+  const y0 = at === "below" ? b.y + b.disc[1] / 2 - TAG_TUCK : b.y - b.disc[1] / 2 + TAG_TUCK - h;
+  return [b.x - w / 2, y0, b.x + w / 2, y0 + h];
+}
+
+/** Its Trending badge on the map. */
+export function badgeRect(b: BubbleSpot): Rect | null {
+  return b.badge && [b.x + b.badge[0], b.y + b.badge[1], b.x + b.badge[2], b.y + b.badge[3]];
+}
+
+/**
+ * Where each bubble's price tag hangs. Bubbles sit at least the cluster
+ * radius apart, but a tag is wider than its disc, so one can run into the
+ * next bubble. Biggest first, each tag hangs under its disc where that
+ * runs into no other disc, no badge, no tag already hung and nothing in
+ * `blocked` (the bar and legends over the map), else over it, else it is
+ * left off.
+ */
+export function placeTags(bubbles: readonly BubbleSpot[], blocked: readonly Rect[] = []): Map<string, TagAt> {
+  const fixed: Rect[] = [...blocked];
+  for (const b of bubbles) {
+    const badge = badgeRect(b);
+    if (badge) fixed.push(badge);
+  }
+  const discs = new Map(bubbles.map((b) => [b, discRect(b)]));
+  const hung: Rect[] = [];
+  const out = new Map<string, TagAt>();
+  const order = [...bubbles].sort((a, b) => b.count - a.count || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  for (const b of order) {
+    if (!b.tag) continue;
+    const free = (r: Rect) => !fixed.some((p) => collide(p, r, 1)) && !hung.some((p) => collide(p, r, 1)) && ![...discs].some(([o, d]) => o !== b && collide(d, r, 1));
+    const at = (["below", "above"] as const).find((side) => free(tagRect(b, side))) ?? "none";
+    if (at !== "none") hung.push(tagRect(b, at));
+    out.set(b.key, at);
   }
   return out;
 }

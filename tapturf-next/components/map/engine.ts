@@ -3,7 +3,7 @@ import Supercluster, { type ClusterProperties } from "supercluster";
 import { MAX_BOUNDS, bubbleLabel, type Bounds } from "@/lib/map/view";
 import { MAP_COLORS, addBubbleSum, averagePrice, avgPriceShort, bubbleSum, countText, type BubbleSum } from "@/lib/map/clusters";
 import type { HeatFeatures } from "@/lib/map/heat";
-import { NAME_ZOOM, declutter, type Lod, type PinSpot, type Rect, type Size } from "@/lib/map/pins";
+import { NAME_ZOOM, badgeRect, collide, declutter, discRect, placeTags, tagRect, type BubbleSpot, type Lod, type PinSpot, type Rect, type Size } from "@/lib/map/pins";
 
 /**
  * /map's map: MapLibre GL (bundled from npm, loaded only by /map, after
@@ -16,17 +16,21 @@ import { NAME_ZOOM, declutter, type Lod, type PinSpot, type Rect, type Size } fr
  *
  * A turf bubble is TapTurf teal with its count and, under it, the average
  * hourly price of its turfs that list one (lib/map/clusters.ts, summed by
- * Supercluster's map and reduce); a game bubble is the site's green with a
- * calendar. The street map's own labels give way under every bubble and
- * pin (an invisible symbol layer the size of each one, HOLD), so a city
- * name does not run under a bubble. Up close a turf's pin names it and its
- * price per hour ("O2 Turf | ₹500/hr"); where pins would run into each
- * other or a bubble, the later ones (lib/map/pins.ts declutter) show their
- * price alone or a dot, and the picked, hovered or focused one always
- * shows in full. The "Popular" heat layer (setHeat)
- * sits under the street map's labels. With "Trending" on, a trending
- * turf's pin (Pin.trend: its rank) wears a small coral arrow at its
- * shoulder, and a bubble holding any says how many in a coral badge.
+ * Supercluster's map and reduce); where that tag would run into the next
+ * bubble it hangs over its disc instead, or is left off (placeTags). A
+ * game bubble is the site's green with a calendar. The street map's own
+ * labels give way under every bubble and pin (an invisible symbol layer
+ * the size of each one, HOLD), so a city name does not run under a
+ * bubble. Up close a turf's pin names it and its price per hour ("O2 Turf
+ * | ₹500/hr"); where pins would run into each other or a bubble, the
+ * later ones (lib/map/pins.ts declutter) show their price alone or a dot,
+ * and the picked, hovered or focused one always shows in full. Pins and
+ * tags under the bar and legends over the map (EngineOptions.covered)
+ * make way too. The "Popular" layer (setHeat) sits under the street map's
+ * labels: a heatmap zoomed out, then, from about a city and its suburbs,
+ * each popular turf's own spot in its level's colour. With "Trending" on,
+ * a trending turf's pin (Pin.trend: its rank) wears a small coral arrow at
+ * its shoulder, and a bubble holding any says how many in a coral badge.
  *
  * Requests: the style, its tiles, fonts and sprites from
  * tiles.openfreemap.org (free, no key, no cookies), made only once the
@@ -37,8 +41,8 @@ import { NAME_ZOOM, declutter, type Lod, type PinSpot, type Rect, type Size } fr
 /** OpenFreeMap's light street map: quiet colours, so the pins read first. */
 export const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 
-/** Pins closer than this many px share a bubble; a turf bubble's price tag needs a little more room. */
-const RADIUS: Record<PinKind, number> = { turf: 62, game: 56 };
+/** Pins closer than this many px share a bubble. A turf bubble's price tag makes way where it would run into the next one (placeTags). */
+const RADIUS = 56;
 /**
  * The map's closest zoom, and the bubbles' too, so pins on one spot never
  * stack: a bubble that does not split by then (a turf's weekly games,
@@ -77,6 +81,8 @@ export type EngineOptions = {
   exact: boolean;
   /** Room the camera keeps clear of the bars over the map. */
   padding: () => Padding;
+  /** What floats over the map (the phone bar, the Popular and Trending legends), px from its top left: pins there show a dot, and tags hang clear. */
+  covered: () => readonly Rect[];
   /** Zoom buttons (desktop; phones pinch). */
   zoomButtons: boolean;
   /** After every move, by the viewer (`byUser`) or by the page. */
@@ -99,6 +105,13 @@ export type Engine = {
   flyTo: (at: { lat: number; lng: number }, zoom: number) => void;
   setActive: (key: string | null) => void;
   setHot: (key: string | null) => void;
+  /**
+   * Something now floats over these boxes (a legend just shown), below
+   * what floated there before (down to `from`, px from the map's top): if
+   * a marker that was in view sits under them, the map moves down by the
+   * room they take, so what was in view still is.
+   */
+  reveal: (boxes: readonly Rect[], from: number) => void;
   setMe: (at: { lat: number; lng: number } | null) => void;
   /** Keyboard focus on the map itself (its marker gone). */
   focusMap: () => void;
@@ -165,9 +178,13 @@ const DISC = {
   turf: "rounded-full text-white font-bold tabular-nums flex items-center justify-center border-2 border-white bg-[linear-gradient(180deg,var(--tt-face),var(--tt-deep))] [text-shadow:0_1px_1px_rgba(0,0,0,0.18)] transition-colors duration-200 [.tt-heat-on_&]:bg-none [.tt-heat-on_&]:bg-white/80 [.tt-heat-on_&]:text-(--tt-deep) [.tt-heat-on_&]:[text-shadow:none] [.tt-heat-on_&]:border-(--tt-teal)/60 group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-600",
   game: "rounded-full text-white font-bold tabular-nums flex items-center justify-center border-2 border-white bg-(--tt-game) group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-primary-900",
 };
-/** "avg ₹1.2k/hr", white, under a turf bubble; its ink is the deep teal (7.2:1), "avg" the muted grey (5.1:1). */
+/**
+ * "avg ₹1.2k/hr", white, under a turf bubble (its button's data-tag, set
+ * by layout: over it when "above", hidden when "none"); its ink is the
+ * deep teal (7.2:1), "avg" the muted grey (5.1:1). TAG_TUCK is its 8 px.
+ */
 const TAG =
-  "tt-tag absolute left-1/2 top-[calc(100%-8px)] -translate-x-1/2 h-[18px] px-1.5 flex items-center rounded-full bg-white text-(--tt-deep) text-[10.5px] leading-none font-bold tabular-nums whitespace-nowrap shadow-[0_1px_3px_rgba(0,0,0,0.2)] ring-1 ring-black/5";
+  "tt-tag absolute left-1/2 top-[calc(100%-8px)] -translate-x-1/2 h-[18px] px-1.5 flex items-center rounded-full bg-white text-(--tt-deep) text-[10.5px] leading-none font-bold tabular-nums whitespace-nowrap shadow-[0_1px_3px_rgba(0,0,0,0.2)] ring-1 ring-black/5 group-data-[tag=above]:top-auto group-data-[tag=above]:bottom-[calc(100%-8px)] group-data-[tag=none]:invisible";
 /** A small calendar on a game's bubble, in a white badge at its shoulder. */
 const BADGE = "absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-white text-(--tt-game) flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.25)]";
 /** A small calendar on a game's pin. */
@@ -207,23 +224,33 @@ function bubbleSize(n: number): { cls: string; halo: number } {
         : { cls: "w-14 h-14 text-[15px]", halo: 6 };
 }
 
-/** The invisible symbol layer under the markers that the street map's labels make way for, and the heat layer. */
+/** The invisible symbol layer under the markers that the street map's labels make way for, and the heat layers. */
 const HOLD = "tt-hold";
 const HEAT = "tt-heat";
+const HEAT_SPOT = "tt-heat-spot";
 const NONE: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 /**
- * The "Popular" layer: each popular turf's level (1 to 5) weighs its
- * point; the colour runs from clear through TapTurf teal to amber and
- * coral where the most viewed turfs crowd together. Wide enough at every
- * zoom to glow out from under the bubbles, and gentle enough in a city
- * that one turf at the top level alone reads orange, not a coral blot.
+ * The "Popular" layer has two looks. Zoomed out (HEAT), a heatmap: each
+ * popular turf's level (1 to 5) weighs its point, and the colour runs
+ * from clear through TapTurf teal to amber and coral where the most
+ * viewed turfs crowd together. A heatmap sums its points, and one point
+ * alone peaks at weight × intensity × 0.4 (MapLibre's Gaussian kernel),
+ * so in a city, where popular turfs stand apart, it would show where they
+ * are, not how popular each is. So from HEAT_SPOT_ZOOM (about a city and
+ * its suburbs across a phone) it fades into HEAT_SPOT: each popular
+ * turf's own soft spot, in its own level's colour from the same ramp (the
+ * legend's), never summed. Both glow out from under the bubbles and pins.
  */
+const HEAT_SPOT_ZOOM = 8.5;
+const HEAT_FADE = 1;
+/** A level's colour, as the heatmap's ramp has it at that share of its top. */
+const HEAT_RAMP = [rgba(MAP_COLORS.teal, 0.32), rgba(MAP_COLORS.teal, 0.55), "rgba(255,190,80,0.72)", "rgba(255,120,72,0.8)", rgba(MAP_COLORS.hot, 0.86)];
 const HEAT_PAINT = {
   "heatmap-weight": ["interpolate", ["linear"], ["get", "l"], 1, 0.2, 5, 1],
-  "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 3, 0.15, 6, 0.2, 9, 0.24, 12, 0.42, 15, 0.85],
-  "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 3, 34, 6, 38, 9, 38, 12, 44, 15, 60],
-  "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0.85, 15, 0.75],
+  "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 3, 0.15, 6, 0.2, 9, 0.24],
+  "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 3, 34, 6, 38],
+  "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0.85, HEAT_SPOT_ZOOM, 0.8, HEAT_SPOT_ZOOM + HEAT_FADE, 0],
   "heatmap-color": [
     "interpolate",
     ["linear"],
@@ -241,6 +268,13 @@ const HEAT_PAINT = {
     1,
     rgba(MAP_COLORS.hot, 0.82),
   ],
+} as const;
+/** A soft spot a little wider than a pin's dot, wider the more popular, so its colour rings the pin or bubble over it. */
+const HEAT_SPOT_PAINT = {
+  "circle-color": ["match", ["get", "l"], 1, HEAT_RAMP[0], 2, HEAT_RAMP[1], 3, HEAT_RAMP[2], 4, HEAT_RAMP[3], HEAT_RAMP[4]],
+  "circle-radius": ["interpolate", ["linear"], ["zoom"], HEAT_SPOT_ZOOM, ["+", 5, ["get", "l"]], 10, ["+", 8, ["get", "l"]], 12, ["+", 11, ["*", 1.5, ["get", "l"]]], 15, ["+", 16, ["*", 2, ["get", "l"]]]],
+  "circle-blur": 0.55,
+  "circle-opacity": ["interpolate", ["linear"], ["zoom"], HEAT_SPOT_ZOOM, 0, HEAT_SPOT_ZOOM + HEAT_FADE, 1],
 } as const;
 
 const toBounds = (m: MapLibre): Bounds => {
@@ -307,15 +341,32 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
   let focused: string | null = null;
   /** A turf pin's place in the declutter: its order (top rated first), its Trending rank, whether it has a price. */
   const spots = new WeakMap<HTMLElement, { order: number; trend: number | null; priced: boolean }>();
-  /** A turf pin's faces' sizes, and a bubble's box around its spot (its disc, price tag and badge), once measured. */
+  /** A turf pin's faces' sizes, and a turf bubble's disc and price tag sizes and its badge around its spot, once measured. */
   let sizes = new WeakMap<HTMLElement, { full: Size; short: Size | null }>();
-  let extents = new WeakMap<HTMLElement, Rect>();
+  let parts = new WeakMap<HTMLElement, Pick<BubbleSpot, "disc" | "tag" | "badge" | "count">>();
   let dead = false;
 
   const mark = (key: string, el: HTMLElement, at: [number, number]) => {
     const m = new Marker({ element: el, anchor: "center" }).setLngLat(at).addTo(map);
     markers.set(key, m);
     return m;
+  };
+
+  /**
+   * A marker's box on the map, px from `frame` (the map's own box): a turf
+   * pin's face that shows (the others are hidden on the same spot), else
+   * the marker, with a bubble's price tag where it hangs and a Trending
+   * badge, which reach outside the button. Null when not laid out.
+   */
+  const boxOf = (el: HTMLElement, frame: DOMRect): Rect | null => {
+    const root = (el.dataset.lod && el.querySelector<HTMLElement>(`[data-face="${el.dataset.lod}"]`)) || el;
+    let { left, right, top, bottom } = root.getBoundingClientRect();
+    for (const part of root.querySelectorAll(el.dataset.tag === "none" ? ".tt-badge" : ".tt-tag, .tt-badge")) {
+      const p = part.getBoundingClientRect();
+      [left, right, top, bottom] = [Math.min(left, p.left), Math.max(right, p.right), Math.min(top, p.top), Math.max(bottom, p.bottom)];
+    }
+    if (right - left < 1 || bottom - top < 1) return null;
+    return [left - frame.left, top - frame.top, right - frame.left, bottom - frame.top];
   };
 
   /**
@@ -338,25 +389,18 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
           paint: { "icon-opacity": 0 },
         });
       }
-      const box = container.getBoundingClientRect();
+      const frame = container.getBoundingClientRect();
       const feats: GeoJSON.Feature[] = [];
       for (const m of markers.values()) {
-        const el = m.getElement();
-        // A turf pin's face that shows (the others are hidden on the same spot), else the marker.
-        const root = (el.dataset.lod && el.querySelector<HTMLElement>(`[data-face="${el.dataset.lod}"]`)) || el;
-        let { left, right, top, bottom } = root.getBoundingClientRect();
-        // A bubble's price tag and a Trending badge reach outside the button.
-        for (const part of root.querySelectorAll(".tt-tag, .tt-badge")) {
-          const p = part.getBoundingClientRect();
-          [left, right, top, bottom] = [Math.min(left, p.left), Math.max(right, p.right), Math.min(top, p.top), Math.max(bottom, p.bottom)];
-        }
-        if (right - left < 1 || bottom - top < 1) continue;
+        const box = boxOf(m.getElement(), frame);
+        if (!box) continue;
+        const [left, top, right, bottom] = box;
         const at = map.project(m.getLngLat());
         const w = Math.ceil((right - left) / 4) * 4;
         const h = Math.ceil((bottom - top) / 4) * 4;
         const img = `${HOLD}-${w}x${h}`;
         if (!map.hasImage(img)) map.addImage(img, { width: w, height: h, data: new Uint8Array(w * h * 4) });
-        const off = [Math.round((left + right) / 2 - box.left - at.x), Math.round((top + bottom) / 2 - box.top - at.y)];
+        const off = [Math.round((left + right) / 2 - at.x), Math.round((top + bottom) / 2 - at.y)];
         feats.push({ type: "Feature", geometry: { type: "Point", coordinates: m.getLngLat().toArray() }, properties: { img, off } });
       }
       (map.getSource(HOLD) as GeoJSONSource).setData({ type: "FeatureCollection", features: feats });
@@ -367,9 +411,10 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
   };
 
   /**
-   * The heat layer, under the street map's labels (its first symbol layer),
-   * shown or hidden. While it shows, the map carries .tt-heat-on and the
-   * turf bubbles turn frosted white (DISC), so the glow under them reads.
+   * The heat layers, under the street map's labels (its first symbol
+   * layer), shown or hidden. While they show, the map carries .tt-heat-on
+   * and the turf bubbles turn frosted white (DISC), so the glow under them
+   * reads.
    */
   const paintHeat = () => {
     container.classList.toggle("tt-heat-on", styleOk && !!heat?.features.length);
@@ -377,16 +422,17 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     try {
       const src = map.getSource(HEAT) as GeoJSONSource | undefined;
       if (!heat) {
-        if (map.getLayer(HEAT)) map.setLayoutProperty(HEAT, "visibility", "none");
+        for (const id of [HEAT, HEAT_SPOT]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
         return;
       }
       if (src) src.setData(heat);
       else {
         map.addSource(HEAT, { type: "geojson", data: heat });
         const labels = map.getStyle().layers.find((l) => l.type === "symbol" && l.id !== HOLD)?.id;
-        map.addLayer({ id: HEAT, type: "heatmap", source: HEAT, maxzoom: CLUSTER_MAX_ZOOM + 1, paint: HEAT_PAINT as never }, labels);
+        map.addLayer({ id: HEAT, type: "heatmap", source: HEAT, maxzoom: HEAT_SPOT_ZOOM + HEAT_FADE, paint: HEAT_PAINT as never }, labels);
+        map.addLayer({ id: HEAT_SPOT, type: "circle", source: HEAT, minzoom: HEAT_SPOT_ZOOM, layout: { "circle-sort-key": ["get", "l"] }, paint: HEAT_SPOT_PAINT as never }, labels);
       }
-      map.setLayoutProperty(HEAT, "visibility", "visible");
+      for (const id of [HEAT, HEAT_SPOT]) map.setLayoutProperty(id, "visibility", "visible");
     } catch (e) {
       console.warn("map: heat layer unavailable", e);
     }
@@ -405,35 +451,42 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
   };
 
   /**
-   * Which face each turf pin shows (lib/map/pins.ts declutter): with the
-   * bubbles in the way, in the order of claimOrder, each pin takes its name
-   * and price where they run into nothing, else its price alone, else a
-   * dot; names from NAME_ZOOM. Sizes are measured once per marker (one
+   * Where each turf bubble's price tag hangs (lib/map/pins.ts placeTags:
+   * under its disc, else over it, else left off) and which face each turf
+   * pin shows (declutter): with the bubbles, their tags and what floats
+   * over the map in the way, in the order of claimOrder, each pin takes its
+   * name and price where they run into nothing, else its price alone, else
+   * a dot; names from NAME_ZOOM. Sizes are measured once per marker (one
    * layout read for the new ones); after that a run is arithmetic, cheap
-   * enough for every frame of a zoom. True when a face changed.
+   * enough for every frame of a zoom. True when a face or a tag changed.
    */
   const layout = (): boolean => {
     if (kind !== "turf") return false;
-    const blocked: Rect[] = [];
+    const over = opts.covered();
+    const bubbles: (BubbleSpot & { el: HTMLElement })[] = [];
     const list: PinSpot[] = [];
     for (const [key, m] of markers) {
       const el = m.getElement();
       const at = map.project(m.getLngLat());
       if (key.startsWith("c:")) {
-        let e = extents.get(el);
-        if (!e) {
-          const r = el.getBoundingClientRect();
-          const [cx, cy] = [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
-          let [l, t, rr, b] = [r.left, r.top, r.right, r.bottom];
-          for (const part of el.querySelectorAll(".tt-tag, .tt-badge")) {
-            const p = part.getBoundingClientRect();
-            [l, t, rr, b] = [Math.min(l, p.left), Math.min(t, p.top), Math.max(rr, p.right), Math.max(b, p.bottom)];
-          }
-          e = [l - cx, t - cy, rr - cx, b - cy];
+        let p = parts.get(el);
+        if (!p) {
+          const disc = el.querySelector<HTMLElement>(".tt-disc");
           // Not laid out yet (a hidden page): measured next time.
-          if (r.width > 0) extents.set(el, e);
+          if (!disc?.offsetWidth) continue;
+          const [w, h] = [disc.offsetWidth, disc.offsetHeight];
+          const tag = el.querySelector<HTMLElement>(".tt-tag");
+          // Offsets from the bubble's face (the disc's box), so a hover's scale does not count.
+          const badge = el.querySelector<HTMLElement>(".tt-badge");
+          p = {
+            disc: [w, h],
+            tag: tag ? [tag.offsetWidth, tag.offsetHeight] : null,
+            badge: badge ? [badge.offsetLeft - w / 2, badge.offsetTop - h / 2, badge.offsetLeft + badge.offsetWidth - w / 2, badge.offsetTop + badge.offsetHeight - h / 2] : null,
+            count: Number(el.dataset.count) || 0,
+          };
+          parts.set(el, p);
         }
-        blocked.push([at.x + e[0], at.y + e[1], at.x + e[2], at.y + e[3]]);
+        bubbles.push({ key, x: at.x, y: at.y, ...p, el });
         continue;
       }
       const s = spots.get(el);
@@ -451,6 +504,20 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       list.push({ key, x: at.x, y: at.y, ...size, priced: s.priced, trend: s.trend, order: s.order, pinned: k === active || k === hot || key === hover || key === focused });
     }
     let changed = false;
+    const tags = placeTags(bubbles, over);
+    const blocked: Rect[] = [...over];
+    for (const b of bubbles) {
+      blocked.push(discRect(b));
+      const badge = badgeRect(b);
+      if (badge) blocked.push(badge);
+      if (!b.tag) continue;
+      const at = tags.get(b.key) ?? "none";
+      if (at !== "none") blocked.push(tagRect(b, at));
+      if (b.el.dataset.tag !== at) {
+        b.el.dataset.tag = at;
+        changed = true;
+      }
+    }
     for (const [key, lod] of declutter(list, blocked, map.getZoom() >= NAME_ZOOM)) {
       const el = markers.get(key)?.getElement();
       if (el && el.dataset.lod !== lod) {
@@ -472,11 +539,12 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     const el = document.createElement("button");
     el.type = "button";
     el.className = `${MARK} block tt-bubble`;
+    el.dataset.count = String(count);
     const size = bubbleSize(count);
     const face = document.createElement("span");
     face.className = BUBBLE;
     const disc = document.createElement("span");
-    disc.className = `${DISC[kind]} ${size.cls}`;
+    disc.className = `tt-disc ${DISC[kind]} ${size.cls}`;
     const ink = kind === "game" ? MAP_COLORS.game : MAP_COLORS.teal;
     disc.style.boxShadow = `0 0 0 ${size.halo}px ${rgba(ink, 0.22)}, 0 3px 10px ${rgba(kind === "game" ? MAP_COLORS.game : MAP_COLORS.deep, 0.35)}`;
     disc.textContent = countText(count);
@@ -494,6 +562,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       per.textContent = "/hr";
       tag.append(word, avgPriceShort(avg), per);
       face.append(tag);
+      el.dataset.tag = "below";
     } else if (kind === "game") {
       const badge = document.createElement("span");
       badge.className = BADGE;
@@ -694,7 +763,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
   document.fonts?.ready.then(() => {
     if (dead) return;
     sizes = new WeakMap();
-    extents = new WeakMap();
+    parts = new WeakMap();
     relayout();
   });
 
@@ -729,13 +798,13 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       index =
         k === "turf"
           ? new Supercluster<Props, Partial<BubbleSum>>({
-              radius: RADIUS.turf,
+              radius: RADIUS,
               maxZoom: CLUSTER_MAX_ZOOM,
               minPoints: 2,
               map: (p) => bubbleSum(p.h, !!p.t),
               reduce: (acc, p) => addBubbleSum(acc as BubbleSum, p as BubbleSum),
             })
-          : new Supercluster<Props, Partial<BubbleSum>>({ radius: RADIUS.game, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
+          : new Supercluster<Props, Partial<BubbleSum>>({ radius: RADIUS, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
       index.load(
         next.map((p, i) => ({
           type: "Feature",
@@ -764,6 +833,18 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     setHot(key) {
       hot = key;
       relayout();
+    },
+    reveal(boxes, from) {
+      if (!boxes.length) return;
+      const frame = container.getBoundingClientRect();
+      const to = Math.max(...boxes.map((b) => b[3]));
+      // A marker that was in view (its middle below `from`) and is now under them.
+      const under = [...markers.values()].some((m) => {
+        const r = boxOf(m.getElement(), frame);
+        return !!r && (r[1] + r[3]) / 2 >= from && boxes.some((b) => collide(b, r, 0));
+      });
+      // Down by the room they take, so all that was in view below `from` is in view below them; a nudge, never a jump.
+      if (under && to > from && to - from <= 120) map.panBy([0, from - to], { duration: 300 });
     },
     setMe(at) {
       me?.remove();

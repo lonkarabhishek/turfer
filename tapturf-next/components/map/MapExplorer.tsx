@@ -11,6 +11,7 @@ import { fromMapTurf, gamePin, pickedGames, turfHourly, turfPin, type MapGame, t
 import { heatFeatures, parseHeat, type HeatWire } from "@/lib/map/heat";
 import { enoughTrending, parseTrending, trendFirst, trendWords, type TrendWire } from "@/lib/map/trending";
 import { MAP_COLORS } from "@/lib/map/clusters";
+import type { Rect } from "@/lib/map/pins";
 import {
   INDIA_BOUNDS,
   boundsParam,
@@ -301,6 +302,27 @@ export function MapExplorer() {
     return { top: bar + 20 + (legend ? legend + 10 : 0), bottom: PEEK + 20 + credit, left: 24, right: 24 };
   }, []);
 
+  /** What floats over the map, px from its top left: the phone bar (its whole width) and each legend. */
+  const covered = useCallback((): Rect[] => {
+    const map = mapEl.current?.getBoundingClientRect();
+    if (!map) return [];
+    const out: Rect[] = [];
+    const bar = barRef.current;
+    if (bar?.offsetHeight) out.push([-1e4, -1e4, 1e4, bar.getBoundingClientRect().bottom - map.top]);
+    for (const el of legendRef.current?.children ?? []) {
+      const r = el.getBoundingClientRect();
+      out.push([r.left - map.left, r.top - map.top, r.right - map.left, r.bottom - map.top]);
+    }
+    return out;
+  }, []);
+  /**
+   * A legend the viewer just turned on: how far down the map was covered
+   * before it, for engine.reveal once it shows. Null otherwise, and on
+   * Back, which restores the view as it was.
+   */
+  const revealNext = useRef<number | null>(null);
+  const coveredTo = () => Math.max(0, ...covered().map((r) => r[3]));
+
   // The map, once the URL is read: MapLibre and the street map load now, never before.
   useEffect(() => {
     if (!parsed) return;
@@ -316,6 +338,7 @@ export function MapExplorer() {
             bounds: first,
             exact: !!s || (!!q?.b && !q.city),
             padding,
+            covered,
             zoomButtons: window.matchMedia(DESKTOP).matches,
             onView: (b, _zoom, byUser) => {
               setView(b);
@@ -352,7 +375,7 @@ export function MapExplorer() {
       engine.current = null;
       setReady(false);
     };
-  }, [parsed, padding, writeUrl]);
+  }, [parsed, padding, covered, writeUrl]);
 
   // The map credit's height, as it folds and unfolds.
   useEffect(() => {
@@ -431,6 +454,16 @@ export function MapExplorer() {
   useEffect(() => {
     if (ready) engine.current?.setHeat(heatPoints);
   }, [ready, heatPoints]);
+
+  // A legend just turned on: a marker that was in view under it is moved clear (its whole row: a legend widens once loaded).
+  useEffect(() => {
+    const from = revealNext.current;
+    if (from == null || !(heatShown || trendShown)) return;
+    revealNext.current = null;
+    const map = mapEl.current?.getBoundingClientRect();
+    const r = legendRef.current?.getBoundingClientRect();
+    if (map && r) engine.current?.reveal([[r.left - map.left, r.top - map.top, r.right - map.left, r.bottom - map.top]], from);
+  }, [heatShown, trendShown]);
 
   const picked = useMemo(() => {
     if (!pick) return null;
@@ -635,6 +668,7 @@ export function MapExplorer() {
   const toggleTrend = () => {
     // Turned on again after a while: the ranks are fetched afresh.
     if (!trendOn && trend && Date.now() - trendAt.current > TREND_STALE_MS) setTrend(null);
+    revealNext.current = trendOn ? null : coveredTo();
     setTrendOn(!trendOn);
     setTrendFailed(false);
     setRestoreN(null);
@@ -693,7 +727,8 @@ export function MapExplorer() {
                 type="button"
                 aria-pressed={heatOn}
                 onClick={() => {
-                  setHeatOn((on) => !on);
+                  revealNext.current = heatOn ? null : coveredTo();
+                  setHeatOn(!heatOn);
                   setHeatFailed(false);
                 }}
                 title="Where turfs get the most views"

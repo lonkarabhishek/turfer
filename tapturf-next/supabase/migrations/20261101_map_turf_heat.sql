@@ -39,6 +39,16 @@
 -- from the day's total the same even way), 0 to 16, and 5 or more at all
 -- three times on each of the last four days.
 --
+-- A known limit, for the site owner to weigh before Trending ships: the
+-- counts come from log_turf_view, which anon may call, once per turf page
+-- load (once per tab session after a cookie consent), with no cap per
+-- visitor. Reloading a quiet turf's page a few times, or a script calling
+-- the function, lifts it over the bar of 3 and into the top 10 with a
+-- public "Trending" tag. Popular has the same source but is harder to move
+-- (30 days, levels by rank). Counting each visitor once a day in
+-- log_turf_view would close it; that changes the owners' myTapturf
+-- numbers too, so it is the owner's call and not in this file.
+--
 -- The app reads them through GET /api/map/heat (cached an hour) and GET
 -- /api/map/trending (cached 10 minutes), which put each level or rank on
 -- its turf's map point; the page asks for one only when a visitor turns
