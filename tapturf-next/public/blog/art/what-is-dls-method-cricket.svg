@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t d">
+<title id="t">What is the DLS method</title>
+<desc id="d">A lesson card with a partly filled resources bar, 20 overs still to bat and 10 wickets in hand. It is not a target.</desc>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#0B1F14"/>
+<stop offset="1" stop-color="#123524"/>
+</linearGradient>
+</defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="72" y="118" font-size="54" font-weight="700">What is the DLS method?</text>
+<text x="72" y="168" font-size="26" fill-opacity="0.75">Overs left and wickets in hand</text>
+<text x="72" y="250" font-size="18" font-weight="700" fill="#4ADE80">RESOURCES LEFT, AS A PICTURE</text>
+<rect x="72" y="272" width="700" height="36" rx="18" fill="#FFFFFF" fill-opacity="0.12"/>
+<rect x="72" y="272" width="280" height="36" rx="18" fill="#4ADE80"/>
+<text x="72" y="348" font-size="20" fill-opacity="0.8">More overs, or more wickets, fills the bar</text>
+<g>
+<rect x="72" y="400" width="330" height="130" rx="18" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="96" y="458" font-size="48" font-weight="700">20</text>
+<text x="96" y="498" font-size="20" fill-opacity="0.75">overs still to bat</text>
+<rect x="422" y="400" width="350" height="130" rx="18" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="446" y="458" font-size="48" font-weight="700">10</text>
+<text x="446" y="498" font-size="20" fill-opacity="0.75">wickets in hand</text>
+</g>
+<text x="72" y="590" font-size="22" fill-opacity="0.85">Lesson picture. Not a target.</text>
+<text x="72" y="632" font-size="20" fill-opacity="0.55">tapturf.in/blog/what-is-dls-method-cricket</text>
+</g>
+<g transform="translate(900 250)" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="8" stroke-linecap="round">
+<line x1="40" y1="40" x2="40" y2="150"/>
+<line x1="90" y1="40" x2="90" y2="150"/>
+<line x1="140" y1="40" x2="140" y2="150"/>
+<path d="M28 40 H152" stroke-width="10"/>
+</g>
+<g fill="#7DD3FC" fill-opacity="0.9">
+<circle cx="930" cy="150" r="8"/>
+<circle cx="970" cy="180" r="6"/>
+<circle cx="1010" cy="140" r="7"/>
+<circle cx="1055" cy="175" r="5"/>
+</g>
+</svg>
