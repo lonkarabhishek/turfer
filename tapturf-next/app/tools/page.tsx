@@ -4,6 +4,7 @@ import { Activity, Calculator, Coins, ImageIcon, ListOrdered, Tally5, Users } fr
 import { TOOLS, TOOLS_BASE, toolPath, type ToolSlug } from "@/lib/tools/registry";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { StartLiveCta } from "@/components/tournament/GoLive";
 
 // 59 characters, about 541px: the whole title shows on a phone and a desktop.
 const TITLE = "Free Cricket Tools: Live Scorer, NRR, Toss & More | TapTurf";
@@ -70,6 +71,8 @@ export default function ToolsHub() {
           );
         })}
       </ul>
+      {/* Live tournaments (/tournament/new); shows once the server can take them. */}
+      <StartLiveCta tool="tools_hub" className="mt-3 sm:mt-4" />
 
       <div className="mt-12 space-y-3 text-[15px] leading-relaxed text-primary-700">
         <h2 className="text-[22px] font-display text-primary-900">Made at the turf</h2>

@@ -49,6 +49,9 @@ import { CLAIMED_FILTERS, CLAIMS_CAP, claimCounts, claimWhen, claimedTurfs, clai
 import { keyLabel } from "@/lib/admin/claims";
 import { SectionError } from "@/components/admin/SectionStatus";
 import type { Reason } from "@/lib/admin/section";
+import { getAdminTournaments } from "@/lib/queries/adminTournaments";
+
+const TOURNAMENT_FILTERS = { all: "All", live: "Live now", on: "On", removed: "Taken down" } as const;
 
 export const revalidate = 0;
 export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
@@ -67,6 +70,7 @@ const VIEWS = {
   listing: { title: "Listing checks", filters: { all: "Flagged" } },
   asks: { title: "Ask TapTurf chats", filters: ASK_FILTERS },
   live: { title: "Live scoreboard links", filters: LIVE_FILTERS },
+  tournaments: { title: "Live tournaments", filters: TOURNAMENT_FILTERS },
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -328,6 +332,54 @@ function UsersTable({ users, lastActive, now }: { users: AdminUser[]; lastActive
 
 async function renderView(v: View, filter: string, city: string | null = null): Promise<{ count: number | null; node: React.ReactNode }> {
   switch (v) {
+    case "tournaments": {
+      const res = await getAdminTournaments();
+      if (!res.ok) return failedView(res.reason, "the tournaments");
+      const list = res.data.filter((t) => (filter === "live" ? t.liveNow > 0 && t.status === "on" : filter === "on" ? t.status === "on" : filter === "removed" ? t.status === "removed" : true));
+      return {
+        count: list.length,
+        node: (
+          <Table head={["Tournament", "Format", "Teams", "Played", "Live now", "Views", "Organiser", "Created", "Last activity"]} empty={list.length === 0}>
+            {list.map((t) => (
+              <tr key={t.code}>
+                <td className="px-4 py-3 min-w-[11rem]">
+                  <a href={`/tournament/${t.code}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-semibold text-accent-700 hover:underline">
+                    {t.name || t.code} <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                  <span className="block font-mono text-[12px] text-primary-400">/tournament/{t.code}</span>
+                  {t.status === "removed" && <Badge className="bg-primary-100 text-primary-500">Taken down</Badge>}
+                </td>
+                <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{t.format}</td>
+                <td className="px-4 py-3 tabular-nums">{t.teams}</td>
+                <td className="px-4 py-3 tabular-nums whitespace-nowrap">
+                  {t.played} <span className="text-primary-400">of {t.fixtures}</span>
+                </td>
+                <td className="px-4 py-3 tabular-nums">{t.liveNow ? <Badge className="bg-amber-100 text-amber-800">{t.liveNow} live</Badge> : <span className="text-primary-400">-</span>}</td>
+                <td className="px-4 py-3 tabular-nums whitespace-nowrap">
+                  <span className="text-primary-900">{t.views.toLocaleString("en-IN")}</span>
+                  <span className="block text-[12px] text-primary-500" title="Unique viewers: one per browser per day">
+                    {t.viewers.toLocaleString("en-IN")} unique
+                  </span>
+                </td>
+                {/* The account it is kept with, when the organiser was signed in. */}
+                <td className="px-4 py-3 min-w-[8rem]">
+                  {t.organiser ? (
+                    <a href={`/admin?person=${t.organiser.id}#people`} className="font-semibold text-accent-700 hover:underline">
+                      {t.organiser.name || "No name on the account"}
+                    </a>
+                  ) : (
+                    <span className="text-primary-400 whitespace-nowrap">Not signed in</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(t.createdAt)}</td>
+                <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(t.updatedAt)}</td>
+              </tr>
+            ))}
+          </Table>
+        ),
+      };
+    }
+
     case "live": {
       const now = Date.now();
       const res = await getAdminLiveLinks(filter as LiveFilter, now);

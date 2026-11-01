@@ -20,6 +20,7 @@ import { PassportEntry } from "@/components/profile/PassportEntry";
 import { PassportTab } from "@/components/profile/PassportTab";
 import { StreakNudge } from "@/components/profile/StreakNudge";
 import type { PassportResponse } from "@/lib/profile/types";
+import { MyTournaments } from "@/components/tournament/MyTournaments";
 import type { AppUser } from "@/types/user";
 
 const TABS = [
@@ -392,6 +393,9 @@ function Me({
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
             {tab === "passport" && <PassportTab onLoaded={setPassport} />}
           </div>
+
+          {/* Live tournaments this account (or this phone) runs; nothing when there are none. */}
+          <MyTournaments className="mt-8" />
 
           {/* On a phone they come last: nothing above the sections moves when Your turfs arrives, and
               the bottom space lets Log out scroll clear of the Ask button. */}

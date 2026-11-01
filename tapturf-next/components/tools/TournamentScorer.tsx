@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, Plus, Trash2, Trophy } from "lucide-react";
-import { parseOvers, formatOvers, formatNrr } from "@/lib/cricket/overs";
+import { formatOvers, formatNrr } from "@/lib/cricket/overs";
 import { computeStandings, decideResult, describeResult, seriesStatus, DEFAULT_POINTS, type MatchInput, type PointsConfig, type ResultChoice } from "@/lib/cricket/nrr";
+import { emptyScoreDraft, readScoreDraft, scoreDraftOf, type ScoreDraft } from "@/lib/cricket/resultForm";
 import { trackTool } from "@/lib/analytics/tools";
 import { ToolCta } from "./ToolCta";
+import { GoLive, StartLiveCta } from "@/components/tournament/GoLive";
 import { Field, NumberInput, OversInput, PrimaryButton, SecondaryButton, Segmented, TextInput } from "./inputs";
 
 const TOOL = "tournament_scorer";
@@ -28,21 +30,9 @@ const FORMATS: { value: Format; label: string; teams: number; blurb: string }[] 
   { value: "roundrobin", label: "Round robin", teams: 4, blurb: "Up to ten teams, everyone plays everyone." },
 ];
 
-type Draft = {
-  teamA: string;
-  teamB: string;
-  aRuns: string;
-  aWkts: string;
-  aOvers: string;
-  aAllOut: boolean;
-  bRuns: string;
-  bWkts: string;
-  bOvers: string;
-  bAllOut: boolean;
-  result: ResultChoice;
-  battedFirst: "a" | "b";
-};
-const emptyDraft = (teams: string[]): Draft => ({ teamA: teams[0] ?? "", teamB: teams[1] ?? "", aRuns: "", aWkts: "", aOvers: "", aAllOut: false, bRuns: "", bWkts: "", bOvers: "", bAllOut: false, result: "auto", battedFirst: "a" });
+// Scores, overs, result and who batted first are read and checked in lib/cricket/resultForm.ts, as the live tournament's result sheet does.
+type Draft = ScoreDraft & { teamA: string; teamB: string };
+const emptyDraft = (teams: string[]): Draft => ({ teamA: teams[0] ?? "", teamB: teams[1] ?? "", ...emptyScoreDraft() });
 
 function load(): Tournament | null {
   try {
@@ -115,20 +105,7 @@ export function TournamentScorer({ cta }: { cta: { label: string; href: string }
   };
   const openEdit = (m: Tournament["matches"][number]) => {
     setEditing(m.id);
-    setDraft({
-      teamA: m.teamA,
-      teamB: m.teamB,
-      aRuns: String(m.a.runs),
-      aWkts: String(m.a.wickets),
-      aOvers: formatOvers(m.a.balls),
-      aAllOut: !!m.a.allOut,
-      bRuns: String(m.b.runs),
-      bWkts: String(m.b.wickets),
-      bOvers: formatOvers(m.b.balls),
-      bAllOut: !!m.b.allOut,
-      result: m.result,
-      battedFirst: m.battedFirst,
-    });
+    setDraft({ teamA: m.teamA, teamB: m.teamB, ...scoreDraftOf(m) });
     setFormError(null);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
@@ -150,23 +127,14 @@ export function TournamentScorer({ cta }: { cta: { label: string; href: string }
 
   const submit = () => {
     if (!draft) return;
-    const pa = parseOvers(draft.aOvers);
-    const pb = parseOvers(draft.bOvers);
     if (draft.teamA === draft.teamB) return setFormError("Pick two different teams.");
-    if (draft.result !== "nr") {
-      if (draft.aRuns === "" || draft.bRuns === "") return setFormError("Enter runs for both teams.");
-      if (!pa.ok) return setFormError(`${draft.teamA} overs: ${pa.error}`);
-      if (!pb.ok) return setFormError(`${draft.teamB} overs: ${pb.error}`);
-      if (pa.balls === 0 || pb.balls === 0) return setFormError("Overs must be more than 0 for a completed match. Use No result if the match was not played out.");
-    }
+    const read = readScoreDraft(draft, { a: draft.teamA, b: draft.teamB });
+    if ("error" in read) return setFormError(read.error);
     const m: Tournament["matches"][number] = {
       id: editing ?? `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       teamA: draft.teamA,
       teamB: draft.teamB,
-      a: { runs: Number(draft.aRuns || 0), wickets: Number(draft.aWkts || 0), balls: pa.ok ? pa.balls : 0, allOut: draft.aAllOut },
-      b: { runs: Number(draft.bRuns || 0), wickets: Number(draft.bWkts || 0), balls: pb.ok ? pb.balls : 0, allOut: draft.bAllOut },
-      result: draft.result,
-      battedFirst: draft.battedFirst,
+      ...read.ok,
       at: Date.now(),
     };
     const matches = editing ? t.matches.map((x) => (x.id === editing ? { ...m, at: x.at } : x)) : [...t.matches, m];
@@ -357,6 +325,9 @@ export function TournamentScorer({ cta }: { cta: { label: string; href: string }
         </ul>
       )}
 
+      {/* Live tournaments: this one as a page anyone can follow (only once the server can take them). */}
+      <GoLive local={t} tool={TOOL} />
+
       <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
     </div>
   );
@@ -455,6 +426,7 @@ function Setup({ onStart }: { onStart: (t: Tournament) => void }) {
         <Trophy className="w-4 h-4" aria-hidden /> Start scoring
       </PrimaryButton>
       <p className="mt-2 text-[12px] text-primary-400 text-center">Saved in this browser only. No account needed.</p>
+      <StartLiveCta tool={TOOL} className="mt-4" />
     </div>
   );
 }

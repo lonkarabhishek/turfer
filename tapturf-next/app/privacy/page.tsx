@@ -165,6 +165,19 @@ const SECTIONS: LegalSection[] = [
           people watching it. Nothing about you is sent. Opening a live score also adds one to its view count (and,
           once a day per browser, to its count of viewers), which identifies nobody and is kept after the match is cleared.
         </p>
+        <p id="live-tournaments" className="scroll-mt-24">
+          <strong>Live tournaments.</strong> If you start a live tournament, or turn one from the Tournament
+          Manager into a live one, what you type is sent to our server so others can follow it: the
+          tournament&rsquo;s and teams&rsquo; names and short codes, the venue you picked from TapTurf&rsquo;s
+          turfs, the dates, the points and overs, the fixtures and their results, and for a match you score
+          live, its live link&rsquo;s code and its result when it ends. We also keep a one-way hash of your
+          network address (never the address itself) so one network cannot make tournaments in bulk. No login
+          is needed to run one. If you are signed in, the tournament is kept with your account so you can
+          manage it from another phone; your own name, number or email does not go with it, and only
+          TapTurf&rsquo;s team sees which account runs it. Nothing about the people following a tournament is
+          kept: opening its page adds one to its view count (and, once a day per browser, to its count of
+          viewers), which identifies nobody.
+        </p>
         <p id="tools" className="scroll-mt-24">
           <strong>When you use our free tools.</strong> Each time you start or finish something in a free tool
           (a toss, a match on the Live Cricket Scorer or Live Scoreboard, a scorecard, a tournament, a team
@@ -203,6 +216,7 @@ const SECTIONS: LegalSection[] = [
         <li>To show hosts who wants to join their game, and to show players how to reach the host.</li>
         <li>To publish reviews and venue corrections you submit.</li>
         <li>To show a live score to the people you send its link to, and how many are watching.</li>
+        <li>To show a live tournament, its table, fixtures and results, to the people you send its link to.</li>
         <li>To show your public profile and let friends tag you on live scores, unless you turn that off.</li>
         <li>To keep the service safe: rate-limiting sign-ins and OTP sends, and investigating misuse.</li>
         <li>To understand which turfs, cities and features people use, in aggregate, so we can improve them.</li>
@@ -233,6 +247,11 @@ const SECTIONS: LegalSection[] = [
           Links are not listed anywhere on TapTurf and are hidden from search engines, but anyone who has one
           can forward it, so ask your players before you add or tag them. Turn the link off in the scorer at
           any time, or email <Email /> and we will take it down.
+        </p>
+        <p>
+          <strong>Live tournaments.</strong> Anyone with a tournament&rsquo;s link can see it, team names and
+          results included. Like live links, tournaments are not listed anywhere on TapTurf and are hidden from
+          search engines. Take it down from its page at any time, or email <Email /> and we will.
         </p>
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are
@@ -365,10 +384,10 @@ const SECTIONS: LegalSection[] = [
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
         prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
         WhatsApp number you last gave players for a game, the matches and tournaments you score with our
-        free tools, and which live scores it opened in the last two days (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        free tools, and which live scores and tournaments it opened in the last two days (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
-        &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link it also keeps the key that lets only this browser update that
-        link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
+        &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link or a live tournament it also keeps the key that lets only this browser update
+        it; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
         token, which identifies you to our server, the city you picked and whether you picked it or let your
         location find it (for the city note described under &ldquo;Your city&rdquo;), that one summary when
         you create an account, the random tag with each use of a free tool, and a match while its live link is on. Clearing site data in your browser removes all of it. A live link that was
@@ -404,6 +423,11 @@ const SECTIONS: LegalSection[] = [
           A live link stops updating after 2 hours without a new score; people with the link then see the last
           score. A live score is cleared when you turn its link off, or 30 days after its last update. The
           one-way hash of the network address is kept for 2 days to stop misuse.
+        </li>
+        <li>
+          A live tournament stays until you take it down from its page; then its page says only that it was
+          taken down, and the record (its names, fixtures and results) is kept unless you ask us to remove it.
+          The one-way hash of the network address is kept for 2 days to stop misuse.
         </li>
         <li>Emails you send us are kept as long as needed to deal with your request.</li>
       </ul>

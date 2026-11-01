@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/tournament",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": [
+      "es2023",
+      "dom"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "lib/tournament/fixtures.test.ts",
+    "lib/tournament/standings.test.ts",
+    "lib/tournament/live.test.ts",
+    "lib/tournament/payload.test.ts",
+    "lib/tournament/local.test.ts",
+    "lib/tournament/store.test.ts",
+    "lib/tournament/codes.test.ts",
+    "lib/tournament/read.test.ts",
+    "lib/admin/tournaments.test.ts",
+    "lib/tournament/format.test.ts"
+  ]
+}

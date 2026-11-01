@@ -8,7 +8,7 @@
     "build:data": "tsc -p tsconfig.build-data.json && node .test-out/build-data/scripts/build-data.js",
     "start": "next start",
     "lint": "eslint",
-    "test:cricket": "tsc lib/cricket/overs.ts lib/cricket/nrr.ts lib/cricket/cricket.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cricket.test.js",
+    "test:cricket": "tsc lib/cricket/overs.ts lib/cricket/nrr.ts lib/cricket/resultForm.ts lib/cricket/cricket.test.ts lib/cricket/resultForm.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cricket.test.js .test-out/resultForm.test.js",
     "test:scorer": "tsc lib/cricket/overs.ts lib/cricket/scoring.ts lib/cricket/scoring.test.ts --rootDir . --module commonjs --target es2022 --moduleResolution node --outDir .test-out/scoring --skipLibCheck --esModuleInterop && node --test .test-out/scoring/lib/cricket/scoring.test.js &&tsc lib/cricket/overs.ts lib/cricket/scoring.ts components/tools/scorer/logic.ts components/tools/scorer/logic.test.ts components/tools/scorer/live.ts components/tools/scorer/live.test.ts --rootDir . --module commonjs --target es2022 --moduleResolution node --outDir .test-out/scorer-ui --skipLibCheck --esModuleInterop && node --test .test-out/scorer-ui/components/tools/scorer/logic.test.js .test-out/scorer-ui/components/tools/scorer/live.test.js",
     "test:city": "tsc lib/city.ts lib/cityRouting.ts lib/cityPrePaint.ts lib/sports.ts lib/cityRouting.test.ts lib/sports.test.ts --module commonjs --target es2022 --moduleResolution node --outDir .test-out --skipLibCheck --esModuleInterop && node --test .test-out/cityRouting.test.js .test-out/sports.test.js",
     "check:blog": "tsc -p tsconfig.check-blog.json && node .test-out/check-blog/scripts/check-blog.js",
@@ -32,7 +32,8 @@
     "test:consent": "tsc -p tsconfig.test-consent.json && node --test .test-out/consent/lib/consent.test.js .test-out/consent/lib/analytics/consentGates.test.js .test-out/consent/lib/policy.test.js",
     "test:list": "tsc -p tsconfig.test-list.json && node --test .test-out/list/lib/turfList/query.test.js .test-out/list/lib/turfList/client.test.js .test-out/list/lib/map/data.test.js .test-out/list/lib/map/view.test.js .test-out/list/lib/map/clusters.test.js .test-out/list/lib/map/heat.test.js .test-out/list/lib/map/trending.test.js .test-out/list/lib/map/pins.test.js",
     "test:build": "tsc -p tsconfig.test-build.json && node --test .test-out/build/lib/build/build.test.js",
-    "test:profile": "tsc -p tsconfig.test-profile.json && node --test .test-out/profile/lib/profile/profile.test.js .test-out/profile/lib/profile/routes.test.js"
+    "test:profile": "tsc -p tsconfig.test-profile.json && node --test .test-out/profile/lib/profile/profile.test.js .test-out/profile/lib/profile/routes.test.js",
+    "test:tournament": "tsc -p tsconfig.test-tournament.json && node --test .test-out/tournament/lib/tournament/fixtures.test.js .test-out/tournament/lib/tournament/standings.test.js .test-out/tournament/lib/tournament/live.test.js .test-out/tournament/lib/tournament/payload.test.js .test-out/tournament/lib/tournament/local.test.js .test-out/tournament/lib/tournament/store.test.js .test-out/tournament/lib/tournament/codes.test.js .test-out/tournament/lib/tournament/read.test.js .test-out/tournament/lib/admin/tournaments.test.js .test-out/tournament/lib/tournament/format.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

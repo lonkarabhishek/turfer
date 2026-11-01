@@ -25,6 +25,7 @@ import {
   type LiveRow,
 } from "@/lib/live/server";
 import { LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib/live/types";
+import { recordTournamentResult } from "@/lib/tournament/server";
 
 // One live scorecard link (lib/live/types.ts has the whole flow).
 //   GET    -> LiveGetResponse, what followers poll. Served by the CDN and
@@ -140,6 +141,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     // Who started the link, once, after the reply: a failure only leaves the admin's "Not recorded".
     const signer = gate.record;
     if (signer && starterWanted(code)) later(() => recordLiveStarter(code, signer, isLiveBoard(match) ? "board" : "cricket"));
+    // A finished cricket match: its result onto any live tournament fixture scored on this link (20261102_live_tournaments.sql).
+    if (store.status === "done" && !isLiveBoard(match)) later(() => recordTournamentResult(code, match, rev ?? body.rev));
     return reply("ok", { rev: rev ?? body.rev });
   }
   // Closed after 2 hours without an update (20261029_live_idle_close.sql): the scorer is told why.
