@@ -193,12 +193,14 @@ export function countLine(n: number, show: MapShow): string {
  * "2 turfs here". A turf bubble whose turfs list prices says their average
  * (`price`: the average and how many it is over), as its tag does:
  * "406 turfs here, average ₹1,150 an hour over the 120 with a listed
- * price. Zoom in".
+ * price. Zoom in". With Trending on, how many of them trend (`trending`),
+ * as its badge does: "406 turfs here, 2 trending, ...".
  */
-export function bubbleLabel(n: number, show: MapShow, places: readonly string[] | null, price?: { avg: number; n: number } | null): string {
+export function bubbleLabel(n: number, show: MapShow, places: readonly string[] | null, price?: { avg: number; n: number } | null, trending = 0): string {
   let what = `${n.toLocaleString("en-IN")} ${show === "games" ? "games" : "turfs"}`;
   const one = places?.[0]?.trim();
   what += !places ? " here" : one && places.every((p) => p.trim() === one) ? ` at ${one}` : " here";
+  if (trending > 0) what += `, ${trending.toLocaleString("en-IN")} trending`;
   if (price && price.n > 0 && price.avg > 0) {
     const avg = `${avgPriceWords(price.avg)} an hour`;
     what += price.n >= n ? `, average ${avg}` : `, average ${avg} over the ${price.n.toLocaleString("en-IN")} with a listed price`;
@@ -211,7 +213,8 @@ export function bubbleLabel(n: number, show: MapShow, places: readonly string[] 
  * Back from a turf or game page finds the list as they left it: the view,
  * whether it came from "Near me" (then it never goes into the URL), the
  * phone sheet's stop, how many cards the list showed, how far it was
- * scrolled and the picked card. It stays on the device.
+ * scrolled, the picked card, and whether "Popular" and "Trending" were on
+ * (Trending reorders the list). It stays on the device.
  */
 export type MapSnapshot = {
   b: Bounds;
@@ -220,6 +223,8 @@ export type MapSnapshot = {
   n: number;
   top: number;
   pick: string[] | null;
+  heat: boolean;
+  trend: boolean;
 };
 
 /** The snapshot kept in history.state, or null when there is none or it is not one. */
@@ -238,5 +243,7 @@ export function parseSnapshot(raw: unknown): MapSnapshot | null {
     n,
     top,
     pick: pick.length ? pick : null,
+    heat: r.heat === true,
+    trend: r.trend === true,
   };
 }

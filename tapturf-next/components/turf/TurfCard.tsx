@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Flame, MapPin, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Flame, MapPin, Star, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { priceRangeText } from "@/lib/utils/prices";
 import { cardPrice, cardSports, sportLineParts, type CardSport, type SportLineParts } from "@/lib/utils/cardSport";
 import { areaFor } from "@/lib/utils/area";
@@ -28,12 +28,18 @@ interface TurfCardProps {
    * list, which renders as before.
    */
   sport?: CardSport | null;
+  /**
+   * /map with Trending on: the turf's rank among the most viewed in the
+   * last 24 hours (lib/map/trending.ts), shown as a small coral tag.
+   * Unset everywhere else.
+   */
+  trendRank?: number | null;
 }
 
 // Slide duration when a swipe or arrow moves to the next photo.
 const FADE_MS = 500;
 
-export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport, trendRank }: TurfCardProps) {
   // Cover first (unless it is a tiny thumb), then the rest, with our own
   // copies ahead of Google links: a turf whose Google cover has expired
   // but has photos in our storage leads with one of those.
@@ -157,12 +163,19 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
           onTouchEnd={onTouchEnd}
           onTouchCancel={onTouchEnd}
         >
-          {(trending || turf.claimed) && (
+          {(trending || turf.claimed || !!trendRank) && (
             <div className="absolute top-2.5 left-2.5 z-10 flex flex-col items-start gap-1.5 pointer-events-none">
               {trending && (
                 <span className="inline-flex items-center gap-1 rounded-full spotlight-badge px-2.5 py-1 text-[11px] font-semibold shadow-soft">
                   <Flame className="w-3 h-3 fill-[#e0a92e] text-[#b9851f]" />
                   Trending this week
+                </span>
+              )}
+              {!!trendRank && (
+                // The map's Trending coral (lib/map/clusters.ts MAP_COLORS.trend, 5.0:1 on white); the h3 says it for screen readers.
+                <span aria-hidden className="inline-flex h-6 items-center gap-1 rounded-full bg-white/95 pl-1.5 pr-2.5 text-[11px] font-semibold text-[#D81B4F] tabular-nums shadow-soft">
+                  <TrendingUp className="w-3.5 h-3.5" strokeWidth={2.75} />
+                  Trending #{trendRank}
                 </span>
               )}
               {turf.claimed && (
@@ -267,6 +280,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                   <span className="sr-only">, claimed by its owner</span>
                 </>
               )}
+              {/* As the map's pins say it (lib/map/trending.ts trendWords, not imported: this card is on every list). */}
+              {!!trendRank && <span className="sr-only">, trending, number {trendRank} by views in the last 24 hours</span>}
             </h3>
             {turf.rating > 0 && (
               <span className="flex items-center gap-1 text-[14px] text-primary-900 shrink-0">

@@ -2,13 +2,14 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Flame, Loader2, LocateFixed, Map as MapIcon, RotateCw, X } from "lucide-react";
+import { Flame, Loader2, LocateFixed, Map as MapIcon, RotateCw, TrendingUp, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { GameCard } from "@/components/game/GameCard";
 import { PickCard, asGame } from "./PickCard";
 import type { Engine, Padding, Pin } from "./engine";
 import { fromMapTurf, gamePin, pickedGames, turfHourly, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
 import { heatFeatures, parseHeat, type HeatWire } from "@/lib/map/heat";
+import { enoughTrending, parseTrending, trendFirst, trendWords, type TrendWire } from "@/lib/map/trending";
 import { MAP_COLORS } from "@/lib/map/clusters";
 import {
   INDIA_BOUNDS,
@@ -16,9 +17,11 @@ import {
   chipsFor,
   cityBounds,
   countLine,
+  inBounds,
   inView,
   mapSearch,
   matchesChip,
+  padBounds,
   parseMapQuery,
   parseSnapshot,
   type Bounds,
@@ -47,6 +50,8 @@ const DESKTOP = "(min-width: 768px)";
 const SNAP = "ttMap";
 /** Games older than this when the tab comes back (or the clock ticks) are fetched again. */
 const GAMES_STALE_MS = 5 * 60_000;
+/** Trending older than this when it is turned on again is fetched again (the route's answer lives 10 minutes). */
+const TREND_STALE_MS = 15 * 60_000;
 
 type Sheet = MapSnapshot["sheet"];
 
@@ -77,6 +82,10 @@ function subscribeDesktop(cb: () => void) {
  * price) or, for games, green "when" pills; a tap opens the place's card.
  * "Popular" lays a heatmap of turf page views under the pins (GET
  * /api/map/heat, fetched only when it is first turned on; off on every visit).
+ * "Trending" marks the turfs most viewed in the last 24 hours, by rank, on
+ * their pins, their bubbles and their cards, and leads the list with them
+ * (GET /api/map/trending, fetched only when it is turned on; off on every
+ * visit; when too few turfs trend it says there are not enough views yet).
  * The list beside the map (desktop) or in the sheet over it (phones) is
  * what is in view, top rated first, or nearest first once the viewer taps
  * "Near me" (GPS only on that tap; the point stays on the device). The
@@ -85,8 +94,9 @@ function subscribeDesktop(cb: () => void) {
  * with replaceState, so a reload or a shared link opens the same map and
  * Back leaves the page; except a view found with "Near me", which is
  * centred on the viewer and never goes into the URL. Opening a card keeps
- * the rest (sheet, list length and scroll, picked card, that view) in this
- * page's history entry, so Back finds the list as it was.
+ * the rest (sheet, list length and scroll, picked card, that view, Popular
+ * and Trending) in this page's history entry, so Back finds the list as it
+ * was.
  *
  * Data: GET /api/map/turfs and /api/map/games (lib/map/data.ts), each one
  * CDN-cached JSON. The map library and the street map load only here, after
@@ -97,6 +107,8 @@ export function MapExplorer() {
   const frameRef = useRef<HTMLDivElement>(null);
   const mapEl = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  /** The Popular and Trending legends under the phone bar, for the camera to keep clear of too. */
+  const legendRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const pickRef = useRef<HTMLDivElement>(null);
@@ -152,6 +164,12 @@ export function MapExplorer() {
   const [heat, setHeat] = useState<HeatWire[] | null>(null);
   const [heatFailed, setHeatFailed] = useState(false);
   const [heatTry, setHeatTry] = useState(0);
+  /** "Trending" (turfs only): on, its ranks once fetched (empty when too few turfs trend), whether that failed, and when they came. */
+  const [trendOn, setTrendOn] = useState(false);
+  const [trend, setTrend] = useState<TrendWire[] | null>(null);
+  const [trendFailed, setTrendFailed] = useState(false);
+  const [trendTry, setTrendTry] = useState(0);
+  const trendAt = useRef(0);
 
   useEffect(() => {
     desktopRef.current = desktop;
@@ -174,6 +192,8 @@ export function MapExplorer() {
         setPick(s.pick);
         setRestoreN(s.n > PAGE ? s.n : null);
         restoreTop.current = s.top || null;
+        setHeatOn(s.heat);
+        setTrendOn(s.trend);
       }
       setParsed(true);
     };
@@ -266,14 +286,17 @@ export function MapExplorer() {
   const keepSnapshot = (n: number) => {
     if (location.pathname !== mapPath.current) return;
     const st = (window.history.state ?? {}) as Record<string, unknown>;
-    const s: MapSnapshot = { b: engine.current?.view().bounds ?? view, gps: gps.current, sheet, n, top: scrollerRef.current?.scrollTop ?? 0, pick };
+    const s: MapSnapshot = { b: engine.current?.view().bounds ?? view, gps: gps.current, sheet, n, top: scrollerRef.current?.scrollTop ?? 0, pick, heat: heatOn, trend: trendOn };
     window.history.replaceState({ ...st, [SNAP]: s }, "", location.href);
   };
 
   const padding = useCallback((): Padding => {
     if (desktopRef.current) return { top: 48, bottom: 48, left: 48, right: 48 };
     const bar = barRef.current?.offsetHeight ?? 96;
-    return { top: bar + 20, bottom: PEEK + 20, left: 24, right: 24 };
+    const legend = legendRef.current?.offsetHeight ?? 0;
+    // The map's credit rides on the sheet once the map is up (it folds to an "i" after a drag).
+    const credit = mapEl.current?.querySelector<HTMLElement>(".maplibregl-ctrl-bottom-left")?.offsetHeight ?? 0;
+    return { top: bar + 20 + (legend ? legend + 10 : 0), bottom: PEEK + 20 + credit, left: 24, right: 24 };
   }, []);
 
   // The map, once the URL is read: MapLibre and the street map load now, never before.
@@ -354,12 +377,36 @@ export function MapExplorer() {
   const shownGames = useMemo(() => liveGames.filter((g) => matchesChip([sportLabel(g.sport)], sport)), [liveGames, sport]);
   const byKey = useMemo(() => new Map(shownTurfs.map((t) => [t.id, t])), [shownTurfs]);
 
+  // The "Trending" ranks: fetched when it is turned on (a cached JSON, 10 minutes old at most), none when too few turfs trend.
+  useEffect(() => {
+    if (!trendOn || trend) return;
+    const ctrl = new AbortController();
+    getJson("/api/map/trending", ctrl.signal, (j) => enoughTrending(parseTrending(j)))
+      .then((t) => {
+        trendAt.current = Date.now();
+        setTrend(t);
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setTrendFailed(true);
+      });
+    return () => ctrl.abort();
+  }, [trendOn, trend, trendTry]);
+  const trendShown = trendOn && show === "turfs";
+  /** Each trending turf's rank by its key, while Trending shows and there are some. */
+  const rankByKey = useMemo(() => (trendShown && trend?.length ? new Map(trend.map((t) => [t.k, t.r])) : null), [trendShown, trend]);
+  /** The trending turfs the sport chip shows, most viewed first. */
+  const trendHere = useMemo(() => (rankByKey && trend ? trend.filter((t) => byKey.has(t.k)) : []), [rankByKey, trend, byKey]);
+
   const pins = useMemo<Pin[]>(
     () =>
       show === "games"
         ? shownGames.map((g) => ({ key: g.id, lat: g.turfs.lat, lng: g.turfs.lng, place: g.turfs.name, ...gamePin(g, now) }))
-        : shownTurfs.map((t) => ({ key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), ...turfPin(t, chip) })),
-    [show, shownTurfs, shownGames, chip, now],
+        : shownTurfs.map((t) => {
+            const pin = turfPin(t, chip);
+            const r = rankByKey?.get(t.id) ?? null;
+            return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), text: pin.text, label: r ? `${pin.label}, ${trendWords(r)}` : pin.label, trend: r };
+          }),
+    [show, shownTurfs, shownGames, chip, now, rankByKey],
   );
   useEffect(() => {
     if (ready) engine.current?.setPins(show === "games" ? "game" : "turf", pins);
@@ -439,22 +486,28 @@ export function MapExplorer() {
     return () => document.removeEventListener("keydown", onKey);
   }, [pick, closePick]);
 
-  const turfList = useMemo(() => inView(shownTurfs, view, (t) => ({ lat: t.lat as number, lng: t.lng as number }), me), [shownTurfs, view, me]);
+  // With Trending on, the trending turfs in view lead the list, most viewed first.
+  const turfList = useMemo(() => {
+    const list = inView(shownTurfs, view, (t) => ({ lat: t.lat as number, lng: t.lng as number }), me);
+    return rankByKey ? trendFirst(list, (x) => rankByKey.get(x.item.id)) : list;
+  }, [shownTurfs, view, me, rankByKey]);
   const gameList = useMemo(() => inView(shownGames, view, (g) => g.turfs, me), [shownGames, view, me]);
   const count = show === "games" ? gameList.length : turfList.length;
   const loading = show === "games" ? games == null && !failed.games : turfs == null && !failed.turfs;
   const loadFailed = show === "games" ? games == null && failed.games : turfs == null && failed.turfs;
-  const listKey = `${show}|${sport ?? ""}|${boundsParam(view)}|${me ? "me" : ""}`;
+  const listKey = `${show}|${sport ?? ""}|${boundsParam(view)}|${me ? "me" : ""}|${rankByKey ? "trend" : ""}`;
   const limit = more.key === listKey ? more.n : (restoreN ?? PAGE);
+  /** Trending is on and its ranks are still on the way: the list is about to reorder. */
+  const trendPending = trendShown && trend == null && !trendFailed;
 
-  // Back from a card's page: the list scrolled where it was, once its cards are in.
+  // Back from a card's page: the list scrolled where it was, once its cards are in (and in Trending's order, when it was on).
   useEffect(() => {
     const top = restoreTop.current;
     const el = scrollerRef.current;
-    if (top == null || !el || loading || !(ready || mapError)) return;
+    if (top == null || !el || loading || trendPending || !(ready || mapError)) return;
     restoreTop.current = null;
     if (window.matchMedia(DESKTOP).matches || sheet !== "peek") el.scrollTop = top;
-  }, [loading, ready, mapError, sheet, count]);
+  }, [loading, trendPending, ready, mapError, sheet, count]);
 
   const chips = useMemo(() => {
     const all = show === "games" ? chipsFor(SPORT_CHIPS, liveGames.map((g) => [sportLabel(g.sport)])) : chipsFor(SPORT_CHIPS, (turfs ?? []).map((t) => t.sports));
@@ -577,6 +630,24 @@ export function MapExplorer() {
     engine.current?.fitTo(INDIA_BOUNDS);
   };
 
+  const toggleTrend = () => {
+    // Turned on again after a while: the ranks are fetched afresh.
+    if (!trendOn && trend && Date.now() - trendAt.current > TREND_STALE_MS) setTrend(null);
+    setTrendOn(!trendOn);
+    setTrendFailed(false);
+    setRestoreN(null);
+  };
+  /** No trending turf in view: the map moves to show them all, with room for their bubbles' tags at the edges. */
+  const trendInView = trendHere.some((t) => inBounds({ lat: t.y, lng: t.x }, view));
+  const showTrending = () => {
+    if (!trendHere.length) return;
+    const xs = trendHere.map((t) => t.x);
+    const ys = trendHere.map((t) => t.y);
+    touched.current = true;
+    setRestoreN(null);
+    engine.current?.fitTo(padBounds([Math.min(...xs) - 0.02, Math.min(...ys) - 0.02, Math.max(...xs) + 0.02, Math.max(...ys) + 0.02], 0.18));
+  };
+
   const bar = (
     <>
       <div className="flex items-center gap-2">
@@ -613,7 +684,7 @@ export function MapExplorer() {
       </div>
       {chips.length > 0 && (
         <div className="-mx-3 px-3 md:mx-0 md:px-0 mt-2 flex gap-2 overflow-x-auto scrollbar-hide pointer-events-auto">
-          {/* The "Popular" layer (turfs only), ahead of the sport chips. */}
+          {/* The "Popular" layer and "Trending" (turfs only), ahead of the sport chips. */}
           {show === "turfs" && (
             <>
               <button
@@ -631,6 +702,19 @@ export function MapExplorer() {
               >
                 <Flame className="w-4 h-4" style={{ color: heatOn ? "#FFC266" : MAP_COLORS.hot }} strokeWidth={2.25} aria-hidden />
                 Popular
+              </button>
+              <button
+                type="button"
+                aria-pressed={trendOn}
+                onClick={toggleTrend}
+                title="The turfs most viewed in the last 24 hours"
+                style={trendOn ? { backgroundColor: MAP_COLORS.trend } : undefined}
+                className={`shrink-0 h-9 pl-3 pr-4 inline-flex items-center gap-1.5 rounded-full text-[14px] font-medium transition-colors cursor-pointer focus-neon ${
+                  trendOn ? "text-white" : "bg-white text-primary-900 shadow-soft border border-primary-200/80 md:shadow-none md:border-0 md:bg-primary-100 hover:bg-primary-100 md:hover:bg-primary-200"
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" style={{ color: trendOn ? "#FFFFFF" : MAP_COLORS.trend }} strokeWidth={2.5} aria-hidden />
+                Trending
               </button>
               <span className="shrink-0 w-px my-1.5 bg-primary-200" aria-hidden />
             </>
@@ -714,7 +798,7 @@ export function MapExplorer() {
                 ))
               : turfList.slice(0, limit).map(({ item: t, km }) => (
                   <li key={t.id} onMouseEnter={() => engine.current?.setHot(t.id)} onMouseLeave={() => engine.current?.setHot(null)}>
-                    <TurfCard turf={t} distanceKm={km} cityLabel={cityOf(t)} sport={chip} />
+                    <TurfCard turf={t} distanceKm={km} cityLabel={cityOf(t)} sport={chip} trendRank={rankByKey?.get(t.id) ?? null} />
                   </li>
                 ))}
           </ul>
@@ -822,12 +906,13 @@ export function MapExplorer() {
           style={{ height: barH ? barH + TOP_GAP + 18 : 120 }}
         />
 
-        {heatShown && (
+        {(heatShown || trendShown) && (
           <div
-            className="absolute z-10 left-3 md:left-1/2 md:-translate-x-1/2 md:top-4 pointer-events-auto"
+            ref={legendRef}
+            className="absolute z-10 left-3 right-3 md:right-auto md:left-1/2 md:-translate-x-1/2 md:top-4 flex flex-col items-start md:items-center gap-1.5 pointer-events-none [&>*]:pointer-events-auto"
             style={desktop ? undefined : { top: (barH || 96) + TOP_GAP + 10 }}
           >
-            {heatFailed && !heat ? (
+            {heatShown && (heatFailed && !heat ? (
               <p role="status" className="h-8 pl-3 pr-1.5 inline-flex items-center gap-1 rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
                 Couldn&apos;t load popular turfs.
                 <button
@@ -865,7 +950,51 @@ export function MapExplorer() {
                   · 30 days
                 </span>
               </p>
-            )}
+            ))}
+            {trendShown &&
+              (trendFailed && !trend ? (
+                <p role="status" className="h-8 pl-3 pr-1.5 inline-flex items-center gap-1 rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                  Couldn&apos;t load trending turfs.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrendFailed(false);
+                      setTrendTry((n) => n + 1);
+                    }}
+                    className="h-6 px-2 rounded-full font-semibold text-primary-900 hover:bg-primary-100 cursor-pointer"
+                  >
+                    Try again
+                  </button>
+                </p>
+              ) : !trend ? (
+                <p role="status" className="h-8 px-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                  Finding trending turfs
+                </p>
+              ) : trend.length === 0 ? (
+                <p role="status" className="h-8 px-3 inline-flex items-center rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                  Not enough views yet to show trending turfs.
+                </p>
+              ) : trendHere.length === 0 ? (
+                <p role="status" className="h-8 px-3 inline-flex items-center rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                  No {sport ? `${sport} ` : ""}turfs are trending right now.
+                </p>
+              ) : (
+                <p role="status" className="h-8 pl-2.5 pr-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 shadow-soft text-[12px] font-medium text-primary-700 whitespace-nowrap">
+                  <span className="w-5 h-5 inline-flex items-center justify-center rounded-full text-white" style={{ backgroundColor: MAP_COLORS.trend }} aria-hidden>
+                    <TrendingUp className="w-3 h-3" strokeWidth={3} />
+                  </span>
+                  <span className="sr-only">
+                    Trending: the {sport ? `${sport} ` : ""}turfs most viewed in the last 24 hours, marked on the map and first in the list.
+                  </span>
+                  <span aria-hidden>Most viewed · last 24 h</span>
+                  {!trendInView && (
+                    <button type="button" onClick={showTrending} className="-mr-1.5 h-6 px-2 rounded-full font-semibold text-primary-900 hover:bg-primary-100 cursor-pointer">
+                      Show them
+                    </button>
+                  )}
+                </p>
+              ))}
           </div>
         )}
 
@@ -878,7 +1007,7 @@ export function MapExplorer() {
         {picked && (
           <div ref={pickRef} className="absolute z-20 inset-x-3 bottom-[88px] md:inset-x-auto md:bottom-auto md:left-4 md:top-4 md:w-[380px]">
             <PickCard
-              turfs={picked.turfs.map((t) => ({ turf: t, km: me ? haversineKm(me, { lat: t.lat as number, lng: t.lng as number }) : null }))}
+              turfs={picked.turfs.map((t) => ({ turf: t, km: me ? haversineKm(me, { lat: t.lat as number, lng: t.lng as number }) : null, trend: rankByKey?.get(t.id) ?? null }))}
               games={picked.games.map((g) => ({ game: g, km: me ? haversineKm(me, g.turfs) : null }))}
               sport={chip}
               onClose={closePick}

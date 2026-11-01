@@ -3,7 +3,8 @@
  * each one shows. A turf bubble says how many turfs it holds and what the
  * ones that list a price charge an hour on average ("406", "avg ₹1.2k/hr"),
  * summed by Supercluster as it clusters (map and reduce below), so the
- * average is over exactly the turfs in the bubble. Pure, relative imports
+ * average is over exactly the turfs in the bubble; with Trending on, the
+ * same sums count its trending turfs for the badge. Pure, relative imports
  * only, so `npm run test:list` compiles it on its own.
  */
 
@@ -26,6 +27,8 @@ export const MAP_COLORS = {
   muted: "#6E6E73",
   /** TapTurf coral: the heat's hottest end. */
   hot: "#FF385C",
+  /** TapTurf coral deepened for the Trending marks: white on it 5.0:1, and it as ink on white the same. */
+  trend: "#D81B4F",
 } as const;
 
 /** sRGB relative luminance of "#RRGGBB" (WCAG 2). */
@@ -61,6 +64,24 @@ export function priceSum(hourly: number | null | undefined): PriceSum {
 export function addPriceSum(acc: PriceSum, add: Readonly<PriceSum>): void {
   acc.ps += add.ps;
   acc.pn += add.pn;
+}
+
+/**
+ * What a turf point or bubble carries: its price sums, and how many of its
+ * turfs are trending (tn; none unless Trending is on), for the badge on
+ * the bubble.
+ */
+export type BubbleSum = PriceSum & { tn: number };
+
+/** A turf pin's share: its hourly price and whether it is trending. Supercluster's `map`. */
+export function bubbleSum(hourly: number | null | undefined, trending: boolean): BubbleSum {
+  return { ...priceSum(hourly), tn: trending ? 1 : 0 };
+}
+
+/** Folds one point's or bubble's sums into another's. Supercluster's `reduce` (it mutates `acc`). */
+export function addBubbleSum(acc: BubbleSum, add: Readonly<BubbleSum>): void {
+  addPriceSum(acc, add);
+  acc.tn += add.tn;
 }
 
 /** The bubble's average hourly price, or null when none of its turfs lists one. */

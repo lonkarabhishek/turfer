@@ -1,7 +1,7 @@
 import { AttributionControl, Map as MapLibre, Marker, NavigationControl, setWorkerUrl, type GeoJSONSource } from "maplibre-gl";
 import Supercluster, { type ClusterProperties } from "supercluster";
 import { MAX_BOUNDS, bubbleLabel, type Bounds } from "@/lib/map/view";
-import { MAP_COLORS, addPriceSum, averagePrice, avgPriceShort, countText, priceSum, type PriceSum } from "@/lib/map/clusters";
+import { MAP_COLORS, addBubbleSum, averagePrice, avgPriceShort, bubbleSum, countText, type BubbleSum } from "@/lib/map/clusters";
 import type { HeatFeatures } from "@/lib/map/heat";
 
 /**
@@ -19,7 +19,9 @@ import type { HeatFeatures } from "@/lib/map/heat";
  * calendar. The street map's own labels give way under every bubble and
  * pin (an invisible symbol layer the size of each one, HOLD), so a city
  * name does not run under a bubble. The "Popular" heat layer (setHeat)
- * sits under the street map's labels.
+ * sits under the street map's labels. With "Trending" on, a trending
+ * turf's pin (Pin.trend: its rank) wears a small coral arrow at its
+ * shoulder, and a bubble holding any says how many in a coral badge.
  *
  * Requests: the style, its tiles, fonts and sprites from
  * tiles.openfreemap.org (free, no key, no cookies), made only once the
@@ -43,8 +45,9 @@ export type PinKind = "turf" | "game";
 /**
  * `place`: the turf's name, so a bubble at one turf can say so. `hourly`:
  * a turf's listed price per hour (turfHourly), for its bubble's average.
+ * `trend`: a trending turf's rank, while Trending is on.
  */
-export type Pin = { key: string; lat: number; lng: number; text: string; label: string; place: string; hourly?: number | null };
+export type Pin = { key: string; lat: number; lng: number; text: string; label: string; place: string; hourly?: number | null; trend?: number | null };
 
 export type Padding = { top: number; bottom: number; left: number; right: number };
 
@@ -84,8 +87,8 @@ export type Engine = {
   destroy: () => void;
 };
 
-/** A point's own properties: its pin, and a turf's hourly price for the average (`h`). */
-type Props = { i: number; h?: number | null };
+/** A point's own properties: its pin, a turf's hourly price for the average (`h`), and whether it is trending (`t`). */
+type Props = { i: number; h?: number | null; t?: boolean };
 
 /**
  * A pin is two boxes: the button MapLibre places (its `transform`, which
@@ -123,6 +126,21 @@ const BADGE = "absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-white 
 /** A small calendar on a game's pin. */
 const GAME_GLYPH =
   '<svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>';
+/** Trending's rising arrow (lucide's trending-up, as on the chip), white on coral. */
+const TREND_GLYPH =
+  '<svg aria-hidden="true" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg>';
+/**
+ * Trending: on a turf bubble, a coral badge at its shoulder with the arrow
+ * and how many of its turfs trend; on a trending turf's pin, the arrow in
+ * a coral dot at its other shoulder, and a coral edge. White on that coral
+ * is 5.0:1. Both are measured for the labels to make way (tt-badge).
+ */
+const TREND_BADGE =
+  "tt-badge absolute -top-2.5 -right-3.5 h-5 min-w-5 pl-[3px] pr-[5px] flex items-center justify-center gap-px rounded-full bg-(--tt-trend) text-white text-[11px] leading-none font-bold tabular-nums ring-2 ring-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
+const TREND_DOT =
+  "tt-badge absolute -top-2 -left-2 w-[18px] h-[18px] flex items-center justify-center rounded-full bg-(--tt-trend) text-white ring-2 ring-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
+/** A trending pin's face: room for the dot, and the coral edge. */
+const TREND_FACE = "relative border-(--tt-trend)/70! ring-1 ring-(--tt-trend)/25";
 
 /** "#00A699" at `a` opacity. */
 function rgba(hex: string, a: number): string {
@@ -228,7 +246,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
 
   let kind: PinKind = "turf";
   let pins: readonly Pin[] = [];
-  let index: Supercluster<Props, Partial<PriceSum>> | null = null;
+  let index: Supercluster<Props, Partial<BubbleSum>> | null = null;
   let markers = new Map<string, Marker>();
   let active: string | null = null;
   let hot: string | null = null;
@@ -267,12 +285,12 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       const feats: GeoJSON.Feature[] = [];
       for (const m of markers.values()) {
         const el = m.getElement();
-        const r = el.getBoundingClientRect();
-        const tag = el.querySelector(".tt-tag")?.getBoundingClientRect();
-        const left = Math.min(r.left, tag?.left ?? r.left);
-        const right = Math.max(r.right, tag?.right ?? r.right);
-        const top = Math.min(r.top, tag?.top ?? r.top);
-        const bottom = Math.max(r.bottom, tag?.bottom ?? r.bottom);
+        let { left, right, top, bottom } = el.getBoundingClientRect();
+        // A bubble's price tag and a Trending badge reach outside the button.
+        for (const part of el.querySelectorAll(".tt-tag, .tt-badge")) {
+          const p = part.getBoundingClientRect();
+          [left, right, top, bottom] = [Math.min(left, p.left), Math.max(right, p.right), Math.min(top, p.top), Math.max(bottom, p.bottom)];
+        }
         if (right - left < 1 || bottom - top < 1) continue;
         const at = map.project(m.getLngLat());
         const w = Math.ceil((right - left) / 4) * 4;
@@ -321,12 +339,13 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       const on = key === `p:${active}` || key === `p:${hot}`;
       el.dataset.on = String(on);
       if (key.startsWith("p:")) el.setAttribute("aria-pressed", String(key === `p:${active}`));
-      el.style.zIndex = key === `p:${active}` ? "3" : on ? "2" : key.startsWith("c:") ? "1" : "";
+      // A trending pin rides over its neighbours.
+      el.style.zIndex = key === `p:${active}` ? "3" : on || el.dataset.trend ? "2" : key.startsWith("c:") ? "1" : "";
     }
   };
 
-  /** A count bubble's button: its disc, and a turf bubble's average price under it (or a game bubble's calendar). */
-  const bubble = (count: number, sums: Partial<PriceSum>): { el: HTMLButtonElement; avg: number | null } => {
+  /** A count bubble's button: its disc, and a turf bubble's average price under it and Trending badge (or a game bubble's calendar). */
+  const bubble = (count: number, sums: Partial<BubbleSum>): { el: HTMLButtonElement; avg: number | null } => {
     const el = document.createElement("button");
     el.type = "button";
     el.className = `${MARK} tt-bubble`;
@@ -358,6 +377,14 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       badge.innerHTML = GAME_GLYPH.replace(/width="15" height="15"/, 'width="11" height="11"');
       face.append(badge);
     }
+    if (kind === "turf" && sums.tn) {
+      const badge = document.createElement("span");
+      badge.className = TREND_BADGE;
+      badge.setAttribute("aria-hidden", "true");
+      badge.innerHTML = TREND_GLYPH;
+      badge.append(String(sums.tn));
+      face.append(badge);
+    }
     el.append(face);
     return { el, avg };
   };
@@ -375,7 +402,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     markers = new Map();
     for (const f of feats) {
       const [lng, lat] = f.geometry.coordinates as [number, number];
-      const props = f.properties as Partial<ClusterProperties> & Partial<Props> & Partial<PriceSum>;
+      const props = f.properties as Partial<ClusterProperties> & Partial<Props> & Partial<BubbleSum>;
       if (props.cluster && props.cluster_id != null) {
         const key = `c:${props.cluster_id}`;
         const kept = old.get(key);
@@ -392,7 +419,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         const { el, avg } = bubble(count, props);
         el.setAttribute(
           "aria-label",
-          bubbleLabel(count, kind === "game" ? "games" : "turfs", leaves && leaves.map((p) => p.place), avg != null ? { avg, n: props.pn ?? 0 } : null),
+          bubbleLabel(count, kind === "game" ? "games" : "turfs", leaves && leaves.map((p) => p.place), avg != null ? { avg, n: props.pn ?? 0 } : null, props.tn ?? 0),
         );
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -424,6 +451,15 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         face.className = kind === "turf" && !/^~?₹/.test(pin.text) ? PIN.bare : PIN[kind];
         if (kind === "game") face.innerHTML = GAME_GLYPH;
         face.append(pin.text);
+        if (kind === "turf" && pin.trend) {
+          el.dataset.trend = "true";
+          face.className += ` ${TREND_FACE}`;
+          const dot = document.createElement("span");
+          dot.className = TREND_DOT;
+          dot.setAttribute("aria-hidden", "true");
+          dot.innerHTML = TREND_GLYPH;
+          face.append(dot);
+        }
         el.append(face);
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -471,24 +507,30 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         next.length === pins.length &&
         next.every((p, i) => {
           const q = pins[i];
-          return p.key === q.key && p.lat === q.lat && p.lng === q.lng && p.text === q.text && p.label === q.label && p.place === q.place && p.hourly === q.hourly;
+          return (
+            p.key === q.key && p.lat === q.lat && p.lng === q.lng && p.text === q.text && p.label === q.label && p.place === q.place && p.hourly === q.hourly && p.trend === q.trend
+          );
         });
       pins = next;
       if (same && index) return;
       kind = k;
-      // Turf bubbles sum their turfs' hourly prices as they cluster, for the average on their tag.
+      // Turf bubbles sum their turfs' hourly prices (and count the trending ones) as they cluster, for their tag and badge.
       index =
         k === "turf"
-          ? new Supercluster<Props, Partial<PriceSum>>({
+          ? new Supercluster<Props, Partial<BubbleSum>>({
               radius: RADIUS.turf,
               maxZoom: CLUSTER_MAX_ZOOM,
               minPoints: 2,
-              map: (p) => priceSum(p.h),
-              reduce: (acc, p) => addPriceSum(acc as PriceSum, p as PriceSum),
+              map: (p) => bubbleSum(p.h, !!p.t),
+              reduce: (acc, p) => addBubbleSum(acc as BubbleSum, p as BubbleSum),
             })
-          : new Supercluster<Props, Partial<PriceSum>>({ radius: RADIUS.game, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
+          : new Supercluster<Props, Partial<BubbleSum>>({ radius: RADIUS.game, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
       index.load(
-        next.map((p, i) => ({ type: "Feature", geometry: { type: "Point", coordinates: [p.lng, p.lat] }, properties: k === "turf" ? { i, h: p.hourly ?? null } : { i } })),
+        next.map((p, i) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [p.lng, p.lat] },
+          properties: k === "turf" ? { i, h: p.hourly ?? null, t: !!p.trend } : { i },
+        })),
       );
       for (const m of markers.values()) m.remove();
       markers = new Map();
