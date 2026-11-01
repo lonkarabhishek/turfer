@@ -5,11 +5,12 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { rowsFor, starWord, type PlayedWhen, type Score } from "@/lib/reviews/catalog";
-import { problemOf, saveReport, type SaveProblem } from "@/lib/reviews/client";
+import { problemOf, saveReport, type SaveProblem, type SaveRefusal } from "@/lib/reviews/client";
+import { DAILY_RULE, dailyMessage, PLAYED_HERE_LINE } from "@/lib/reviews/daily";
 import { clearDraft, emptyDraft, hasAnswers, loadDraft, markWaiting, saveDraft, type Draft, type Step } from "@/lib/reviews/draft";
 import { contactProblem } from "@/lib/reviews/screen";
 import { listedFor, priceChips, tipPlaceholder, type ListedPrices } from "@/lib/reviews/sheet";
-import type { Aspects, MineResponse, RateHint, ReportBody, ReportChannel, SaveResponse } from "@/lib/reviews/types";
+import type { Aspects, DailyAllowance, MineResponse, RateHint, ReportBody, ReportChannel, SaveResponse } from "@/lib/reviews/types";
 import { unlockLine } from "@/lib/reviews/unlock";
 import type { TokenCheck } from "@/lib/account/client";
 import type { ReviewWithUser } from "@/types/review";
@@ -44,6 +45,8 @@ const MESSAGES: Record<SaveProblem, string> = {
   own_turf: "You manage this turf, so you can't rate it. You can see what players say on myTapturf.",
   contact_info: CONTACT_MESSAGE,
   limit: "That's a lot of reports for one day. Try again tomorrow.",
+  // Shown with the counts the server gave (dailyMessage); this is the rule alone.
+  daily: DAILY_RULE,
   new: "Finish signing up to post.",
   sign_in: "Your login ended. Log in again to post; your answers are saved.",
   gone: "This turf isn't taking reports right now.",
@@ -131,6 +134,7 @@ export function ReportSheet({
   turf,
   open,
   hint,
+  daily,
   priceAsk,
   players,
   userName,
@@ -143,6 +147,8 @@ export function ReportSheet({
   turf: SheetTurf;
   open: SheetOpen;
   hint: RateHint | null;
+  /** Today's new reports (review_mine): when a new one here would be over the day's limit, the sheet says so first. */
+  daily?: DailyAllowance | null;
   /** Ask what they paid (fewer than 3 player prices here): the listed rates, players' range and the price they shared before. */
   priceAsk: { listed: ListedPrices | null; players: { min: number; max: number } | null; mine: number | null } | null;
   /** The From players range now, for the thank-you line. */
@@ -158,7 +164,7 @@ export function ReportSheet({
 }) {
   const [d, setD] = useState<Draft>(() => startDraft(turf, open, hint, priceAsk?.mine ?? null, userId));
   const [posting, setPosting] = useState(false);
-  const [error, setError] = useState<{ problem: SaveProblem; field?: "comment" | "note"; existing?: Mine } | null>(null);
+  const [error, setError] = useState<SaveRefusal | null>(null);
   const [done, setDone] = useState<{ saved: SavedReport; body: ReportBody } | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // The report this save replaces: the one opened for editing, or the one they chose to replace.
@@ -305,6 +311,8 @@ export function ReportSheet({
 
   const rows = rowsFor(d.sport, d.when);
   const tappedHere = rows.some((a) => d.aspects[a]) || d.when !== null;
+  // A new report here would be over the day's limit: said on whichever screen the sheet opens, before anything is typed.
+  const dailyFull = !editing && !!daily?.full && error?.problem !== "daily";
   const step: Step | 4 = done ? 4 : d.step;
   // Each screen opens at its top (the screens share one scroll box).
   useEffect(() => {
@@ -383,6 +391,11 @@ export function ReportSheet({
           </button>
         </div>
         {(step === 2 || step === 3) && <StarsBar stars={d.stars} onPick={(n) => patch({ stars: n })} />}
+        {step !== 4 && dailyFull && (
+          <p role="note" className="mx-5 mb-2 rounded-xl bg-amber-50 px-4 py-3 text-[14px] text-amber-900">
+            {dailyMessage(daily ?? null)}
+          </p>
+        )}
 
         <div ref={scroller} className="overflow-y-auto overscroll-contain px-5" style={step === 4 ? { paddingBottom: "max(1.5rem, var(--safe-b, env(safe-area-inset-bottom)))" } : undefined}>
           {step === 1 && <Overall turfName={turf.name} stars={d.stars} onPick={pickOverall} />}
@@ -449,7 +462,7 @@ export function ReportSheet({
               </div>
             ) : error && (
               <div role="alert" className="mb-3 rounded-xl bg-hot-500/10 px-4 py-3 text-[14px] text-hot-600">
-                {MESSAGES[error.problem]}
+                {error.problem === "daily" ? dailyMessage(error) : MESSAGES[error.problem]}
                 {error.problem === "own_turf" && (
                   <Link href="/my" className="ml-1 font-semibold underline">
                     Open myTapturf
@@ -462,7 +475,12 @@ export function ReportSheet({
                 )}
               </div>
             )}
-            {!signedIn && step === 3 && <p className="mb-2 text-[12px] text-primary-500 text-right">Your answers are saved.</p>}
+            {step === 3 && (
+              <p className="mb-2 flex flex-wrap justify-between gap-x-3 text-[12px] text-primary-500">
+                <span>{PLAYED_HERE_LINE}</span>
+                {!signedIn && <span>Your answers are saved.</span>}
+              </p>
+            )}
             {open.autoPost && posting && <p className="mb-2 text-[13px] text-primary-600">Posting your report…</p>}
             <div className="flex items-center justify-between gap-3">
               {step === 3 ? (

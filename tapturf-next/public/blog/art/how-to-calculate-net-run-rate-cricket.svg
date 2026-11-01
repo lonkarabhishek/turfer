@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Net run rate formula: runs scored divided by overs faced, minus runs conceded divided by overs bowled, with a three-team points table from a 6-over turf tri-series showing Warriors +1.321, Titans +0.226 and Strikers -1.530</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="110" font-size="50" font-weight="700">How to calculate net run rate</text>
+<text x="80" y="155" font-size="26" fill-opacity="0.7">Add up every match first, count overs in balls</text>
+<rect x="80" y="210" width="540" height="330" rx="16" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="110" y="265" font-size="24" fill-opacity="0.7">NRR =</text>
+<text x="110" y="315" font-size="30" font-weight="700"><tspan fill="#4ADE80">Runs scored</tspan> / overs faced</text>
+<text x="110" y="370" font-size="30" font-weight="700" fill-opacity="0.6">minus</text>
+<text x="110" y="425" font-size="30" font-weight="700"><tspan fill="#FCA5A5">Runs conceded</tspan> / overs bowled</text>
+<text x="110" y="500" font-size="21" fill-opacity="0.7">All out? Count the full quota of overs.</text>
+<rect x="680" y="210" width="440" height="330" rx="20" fill="#111113"/>
+<rect x="680" y="210" width="440" height="8" fill="#16A34A"/>
+<text x="705" y="262" font-size="22" font-weight="800">6-over tri-series</text>
+<g font-size="15" fill-opacity="0.55"><text x="705" y="305">Team</text><text x="960" y="305" text-anchor="end">Pts</text><text x="1095" y="305" text-anchor="end">NRR</text></g>
+<g font-size="22"><text x="705" y="360">Warriors</text><text x="960" y="360" text-anchor="end">4</text><text x="1095" y="360" text-anchor="end" fill="#86EFAC">+1.321</text>
+<text x="705" y="420">Titans</text><text x="960" y="420" text-anchor="end">2</text><text x="1095" y="420" text-anchor="end" fill="#86EFAC">+0.226</text>
+<text x="705" y="480">Strikers</text><text x="960" y="480" text-anchor="end">0</text><text x="1095" y="480" text-anchor="end" fill="#FCA5A5">-1.530</text></g>
+<text x="80" y="625" font-size="24" fill-opacity="0.7">tapturf.in/tools/cricket-nrr-calculator</text>
+</g>
+</svg>

@@ -79,6 +79,9 @@ test("post: the database's refusals, as the sheet reads them", async () => {
     [{ r: "contact_info", field: "comment" }, 400, { reason: "contact_info", field: "comment", error: "bad" }],
     [{ r: "gone" }, 400, { reason: "gone", error: "bad" }],
     [{ r: "limit" }, 429, { error: "limit" }],
+    // One new report a day, or one per turf played at today (20261101_reviews_policy.sql).
+    [{ r: "limit", why: "daily", allowed: 2, played: 2 }, 429, { reason: "daily", allowed: 2, played: 2, error: "limit" }],
+    [{ r: "limit", why: "daily", allowed: "x" }, 429, { reason: "daily", allowed: 1, played: 0, error: "limit" }],
     [{ r: "bad" }, 400, { error: "bad" }],
     [{ r: "unavailable" }, 503, { error: "unavailable" }],
     [{ r: "something new" }, 503, { error: "unavailable" }],
@@ -97,9 +100,18 @@ test("get: the caller's own report, votes, hint and price; nothing for a bad tur
   net.rpc.review_mine = () => ({ r: "ok", mine: null, voted: [REVIEW, 7], blocked: null, hint: { kind: "call", at: "2026-10-24T09:00:00+05:30" }, my_price: 1000 });
   const res = await getReviews(req(`/api/reviews?turf=${TURF}`, { token: phoneToken() }));
   assert.equal(res.status, 200);
-  assert.deepEqual(await json(res), { mine: null, voted: [REVIEW], blocked: null, hint: { kind: "call", at: "2026-10-24T09:00:00+05:30" }, my_price: 1000 });
+  // A database from before the daily rule has no daily key: null, and the sheet works as before.
+  assert.deepEqual(await json(res), { mine: null, voted: [REVIEW], blocked: null, hint: { kind: "call", at: "2026-10-24T09:00:00+05:30" }, my_price: 1000, daily: null });
   assert.equal(net.calls("review_mine")[0].args.p_user_id, "acc-1");
   assert.equal((await getReviews(req(`/api/reviews?turf=x`, { token: phoneToken() }))).status, 400);
+});
+
+test("get: today's new reports pass through checked, junk as null", async () => {
+  signedIn();
+  net.rpc.review_mine = () => ({ r: "ok", mine: null, voted: [], blocked: null, hint: null, my_price: null, daily: { allowed: 1, posted: 1, played: 0, full: true, x: 1 } });
+  assert.deepEqual((await json(await getReviews(req(`/api/reviews?turf=${TURF}`, { token: phoneToken() })))).daily, { allowed: 1, posted: 1, played: 0, full: true });
+  net.rpc.review_mine = () => ({ r: "ok", mine: null, voted: [], blocked: null, hint: null, my_price: null, daily: { allowed: "lots" } });
+  assert.equal((await json(await getReviews(req(`/api/reviews?turf=${TURF}`, { token: phoneToken() })))).daily, null);
 });
 
 test("delete: removes the caller's own report only", async () => {

@@ -1,14 +1,15 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
- * Which reading of the sentence Ask uses: v9 (what production runs) or
- * v10 (lib/ai/ask.ts AskFiltersV10: claimed, owner prices, photos, player
- * reviews, open at a time, free and turf-booked games). v10 is off by
- * default. It is on for every request when ASK_ROUTER_VERSION is "10", and
- * for one request when its x-ask-eval header is ASK_EVAL_KEY, so the real
- * model can be graded on production (scripts/ask-eval) before anyone sees
- * it. With no ASK_EVAL_KEY set (or an empty one) the header does nothing.
- * Relative imports only (npm run test:ask).
+ * Which reading of the sentence Ask uses: v10 (lib/ai/ask.ts
+ * AskFiltersV10: claimed, owner prices, photos, player reviews, open at a
+ * time, free and turf-booked games) or v9, the one before it. v10 is the
+ * default since 1 Nov, when the real model passed 53 of the 56 eval
+ * questions on production (scripts/ask-eval). ASK_ROUTER_VERSION "9" puts
+ * every request back on v9 (the way back, with no deploy of code); a
+ * request whose x-ask-eval header is ASK_EVAL_KEY is always v10, so the
+ * eval can still run. With no ASK_EVAL_KEY set (or an empty one) the
+ * header does nothing. Relative imports only (npm run test:ask).
  */
 
 export type RouterVersion = 9 | 10;
@@ -30,7 +31,7 @@ function sameSecret(a: string, b: string): boolean {
 export function routerChoice(env: Readonly<Record<string, string | undefined>>, evalHeader: string | null | undefined): { version: RouterVersion; eval: boolean } {
   const key = (env.ASK_EVAL_KEY ?? "").trim();
   const isEval = !!key && !!evalHeader && sameSecret(key, evalHeader.trim());
-  return { version: isEval || (env.ASK_ROUTER_VERSION ?? "").trim() === "10" ? 10 : 9, eval: isEval };
+  return { version: isEval || (env.ASK_ROUTER_VERSION ?? "").trim() !== "9" ? 10 : 9, eval: isEval };
 }
 
 /** The version alone (routerChoice). */

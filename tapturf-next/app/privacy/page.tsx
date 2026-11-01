@@ -106,17 +106,21 @@ const SECTIONS: LegalSection[] = [
           to the owner. Your name, stars, taps, tip and rate are public. A private note is seen only by the
           turf&rsquo;s verified owner and TapTurf, without your name unless you choose to show it; a note
           without your name reaches the owner only together with notes from at least two other players. We
-          note whether you played a TapTurf game at the turf, and may later show it on your report. Some
-          reports are checked before they show, for example one from someone who runs another turf in the
-          city, or one of many arriving at a turf at once; until then only you see it, marked Under review.
-          We may use your TapTurf games and your Call or WhatsApp taps to ask how your game went; taps are
-          never shown to anyone else. You can edit or remove your report from the turf page at any time.
+          note whether you played a TapTurf game at the turf, and may later show it on your report. Reports
+          go live at once. You can post one new report a day, or one for each turf where you played a
+          TapTurf game that day. A turf&rsquo;s verified owner can ask TapTurf to remove a report that breaks
+          the rules; it stays up while we decide, and if we remove it only you still see it, marked hidden.
+          We never tell you that an owner asked, or who. We may use your TapTurf games and your Call or
+          WhatsApp taps to ask how your game went; taps are never shown to anyone else. You can edit or
+          remove your report from the turf page at any time.
         </p>
         <p id="owners" className="scroll-mt-24">
           <strong>If you claim a turf on myTapturf.</strong> We keep the TapTurf account you claimed it from,
           your role and any note you add. If you check a phone number against the listing, we keep that number
           with your claim so our team can confirm it with you; if you confirm the listed number with a code, we
-          keep which number it was. Only TapTurf&rsquo;s team sees these. Once we confirm your claim, the
+          keep which number it was. If you ask us to remove a player&rsquo;s report on your turf, we keep the
+          request with the account and sign-in it came from, the reason you picked and any line you add.
+          Only TapTurf&rsquo;s team sees these. Once we confirm your claim, the
           turf&rsquo;s page says &ldquo;Managed by @your-username&rdquo; if you have a username and
           &ldquo;Let others find and tag me&rdquo; is on, with the verified tick if you have it. Your name,
           number and email never show there. Turning the switch off takes it off within a minute or so.

@@ -5,28 +5,29 @@ import { loggedShownIds, routerChoice, routerVersion, EVAL_HEADER } from "./rout
 import { decodeWeek, encodeWeek, isOpenAt, istNow, normalOpenAt, onDay, openAtAny, openAtSlots, openAtWords, parseClock, weekOf } from "./openAt";
 import { askTurfFacts, hoursCopyFrom, reportsCopyFrom, type HourRow } from "./askFacts";
 
-// Router v10 (off by default): the switch, the reading's schema and prompt,
+// Router v10 (the default since 1 Nov): the switch, the reading's schema and prompt,
 // and the data its new filters read. The filters themselves are in
 // relax.test.ts, the keyword path in quick.test.ts.
 
-test("v10 is on only by ASK_ROUTER_VERSION=10, or by x-ask-eval equal to ASK_EVAL_KEY", () => {
+test("v10 is the default; ASK_ROUTER_VERSION=9 goes back to v9, except for an ask with x-ask-eval equal to ASK_EVAL_KEY", () => {
   assert.equal(EVAL_HEADER, "x-ask-eval");
-  assert.equal(routerVersion({}, null), 9);
-  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "9" }, null), 9);
+  assert.equal(routerVersion({}, null), 10);
   assert.equal(routerVersion({ ASK_ROUTER_VERSION: "10" }, null), 10);
-  assert.equal(routerVersion({ ASK_ROUTER_VERSION: " 10\n" }, null), 10);
-  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "11" }, null), 9);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "11" }, null), 10);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "9" }, null), 9);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: " 9\n" }, null), 9);
   const key = "eval-6f1c2a9e";
-  assert.equal(routerVersion({ ASK_EVAL_KEY: key }, key), 10);
-  assert.equal(routerVersion({ ASK_EVAL_KEY: key }, `${key}x`), 9);
-  assert.equal(routerVersion({ ASK_EVAL_KEY: key }, "e"), 9, "a shorter header is compared without throwing (both are hashed first)");
-  assert.equal(routerVersion({ ASK_EVAL_KEY: key }, null), 9);
-  assert.equal(routerVersion({ ASK_EVAL_KEY: key }, ""), 9);
+  const back = { ASK_ROUTER_VERSION: "9", ASK_EVAL_KEY: key };
+  assert.equal(routerVersion(back, key), 10);
+  assert.equal(routerVersion(back, `${key}x`), 9);
+  assert.equal(routerVersion(back, "e"), 9, "a shorter header is compared without throwing (both are hashed first)");
+  assert.equal(routerVersion(back, null), 9);
+  assert.equal(routerVersion(back, ""), 9);
   // No key, or an empty one: the header does nothing, whatever it says.
-  assert.equal(routerVersion({}, key), 9);
-  assert.equal(routerVersion({ ASK_EVAL_KEY: "" }, ""), 9);
-  assert.equal(routerVersion({ ASK_EVAL_KEY: "  " }, "  "), 9);
-  assert.equal(routerVersion({ ASK_EVAL_KEY: "" }, "anything"), 9);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "9" }, key), 9);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "9", ASK_EVAL_KEY: "" }, ""), 9);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "9", ASK_EVAL_KEY: "  " }, "  "), 9);
+  assert.equal(routerVersion({ ASK_ROUTER_VERSION: "9", ASK_EVAL_KEY: "" }, "anything"), 9);
 });
 
 test("an eval ask is only one whose x-ask-eval is the key, and its log row shows no turf to the owners' count", () => {
@@ -35,8 +36,9 @@ test("an eval ask is only one whose x-ask-eval is the key, and its log row shows
   assert.deepEqual(routerChoice({ ASK_EVAL_KEY: key, ASK_ROUTER_VERSION: "10" }, key), { version: 10, eval: true }, "v10 for everyone: still an eval ask");
   assert.deepEqual(routerChoice({ ASK_ROUTER_VERSION: "10" }, null), { version: 10, eval: false }, "v10 for everyone: real traffic");
   assert.deepEqual(routerChoice({ ASK_ROUTER_VERSION: "10" }, key), { version: 10, eval: false }, "no key set: the header is nothing");
-  assert.deepEqual(routerChoice({ ASK_EVAL_KEY: key }, "wrong"), { version: 9, eval: false });
-  assert.deepEqual(routerChoice({}, null), { version: 9, eval: false });
+  assert.deepEqual(routerChoice({ ASK_EVAL_KEY: key }, "wrong"), { version: 10, eval: false }, "v10 by default: a wrong key is real traffic");
+  assert.deepEqual(routerChoice({ ASK_EVAL_KEY: key, ASK_ROUTER_VERSION: "9" }, "wrong"), { version: 9, eval: false });
+  assert.deepEqual(routerChoice({}, null), { version: 10, eval: false });
   // owner_dashboard counts shown_ids for myTapturf's "Shown in Ask TapTurf": an eval ask logs none.
   const shown = ["turf-a", "turf-b"];
   assert.deepEqual(loggedShownIds(shown, routerChoice({ ASK_EVAL_KEY: key }, key)), []);

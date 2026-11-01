@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getMine } from "@/lib/reviews/client";
-import type { MineResponse, RateHint } from "@/lib/reviews/types";
+import type { DailyAllowance, MineResponse, RateHint } from "@/lib/reviews/types";
 import type { Mine } from "./ReportSheet";
 
 export type MyReportState = {
@@ -18,9 +18,11 @@ export type MyReportState = {
   blocked: boolean;
   hint: RateHint | null;
   myPrice: number | null;
+  /** Today's new reports; null on a database from before the daily rule. */
+  daily: DailyAllowance | null;
 };
 
-const EMPTY: MyReportState = { loaded: false, for: null, failed: false, mine: null, voted: new Set(), blocked: false, hint: null, myPrice: null };
+const EMPTY: MyReportState = { loaded: false, for: null, failed: false, mine: null, voted: new Set(), blocked: false, hint: null, myPrice: null, daily: null };
 
 /**
  * What only this signed-in viewer sees of a turf's reports, which the
@@ -46,7 +48,7 @@ export function useMyReport(turfId: string) {
       setState((s) => ({ ...s, loaded: true, for: userId, failed: true }));
       return;
     }
-    setState({ loaded: true, for: userId, failed: false, mine: b.mine, voted: new Set(b.voted), blocked: b.blocked === "own_turf", hint: b.hint, myPrice: b.my_price });
+    setState({ loaded: true, for: userId, failed: false, mine: b.mine, voted: new Set(b.voted), blocked: b.blocked === "own_turf", hint: b.hint, myPrice: b.my_price, daily: b.daily ?? null });
   }, [getToken, turfId, userId]);
 
   useEffect(() => {
