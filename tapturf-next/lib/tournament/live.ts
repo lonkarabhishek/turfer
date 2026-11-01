@@ -36,6 +36,13 @@ export function liveResultOf(view: ViewPart): LiveResult | null {
   return { a: side("a"), b: side("b"), outcome, battedFirst: view.innings[0]?.batting === "b" ? "b" : "a", text: r.text.slice(0, 120) };
 }
 
+/** The same result, field by field (the order keys were written in does not matter). */
+export function sameLiveResult(x: LiveResult | null, y: LiveResult | null): boolean {
+  if (!x || !y) return x === y;
+  const side = (p: LiveResult["a"], q: LiveResult["a"]) => p.name === q.name && p.runs === q.runs && p.wickets === q.wickets && p.balls === q.balls && !!p.allOut === !!q.allOut;
+  return side(x.a, y.a) && side(x.b, y.b) && x.outcome === y.outcome && x.battedFirst === y.battedFirst && x.text === y.text;
+}
+
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 /** Whether the match's team A is the fixture's away team: the names say so, and nothing says otherwise. */

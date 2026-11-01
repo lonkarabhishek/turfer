@@ -17,6 +17,7 @@ import {
   SignupsSection,
   ToolsSection,
   TopHostsSection,
+  TournamentsSection,
   activitySummary,
   bookingsSummary,
   breakdownsSummary,
@@ -32,6 +33,7 @@ import {
   signupsSummary,
   toolsSummary,
   topHostsSummary,
+  tournamentsSummary,
 } from "@/components/admin/HomeSections";
 import { AtAGlance } from "@/components/admin/Glance";
 import { Fold } from "@/components/admin/Fold";
@@ -149,6 +151,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {/* The free tools: live scoreboard links, and uses counted since 26 Oct 2026 (lib/tools/usage.ts). */}
       <AdminSection id="tools" title="Tools" height={140} summary={toolsSummary}>
         <ToolsSection />
+      </AdminSection>
+
+      {/* Live tournaments (/tournament/<code>): how many, matches being scored live now, views; the list is /admin/tournaments. */}
+      <AdminSection id="tournaments" title="Tournaments" height={140} summary={tournamentsSummary}>
+        <TournamentsSection />
       </AdminSection>
 
       {/* AI tools (each reads its progress in the browser, once the page is idle). */}

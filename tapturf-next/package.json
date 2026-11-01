@@ -32,7 +32,7 @@
     "test:consent": "tsc -p tsconfig.test-consent.json && node --test .test-out/consent/lib/consent.test.js .test-out/consent/lib/analytics/consentGates.test.js .test-out/consent/lib/policy.test.js",
     "test:list": "tsc -p tsconfig.test-list.json && node --test .test-out/list/lib/turfList/query.test.js .test-out/list/lib/turfList/client.test.js .test-out/list/lib/map/data.test.js .test-out/list/lib/map/view.test.js",
     "test:build": "tsc -p tsconfig.test-build.json && node --test .test-out/build/lib/build/build.test.js",
-    "test:tournament": "tsc -p tsconfig.test-tournament.json && node --test .test-out/tournament/lib/tournament/fixtures.test.js .test-out/tournament/lib/tournament/standings.test.js .test-out/tournament/lib/tournament/live.test.js .test-out/tournament/lib/tournament/payload.test.js .test-out/tournament/lib/tournament/local.test.js .test-out/tournament/lib/tournament/store.test.js"
+    "test:tournament": "tsc -p tsconfig.test-tournament.json && node --test .test-out/tournament/lib/tournament/fixtures.test.js .test-out/tournament/lib/tournament/standings.test.js .test-out/tournament/lib/tournament/live.test.js .test-out/tournament/lib/tournament/payload.test.js .test-out/tournament/lib/tournament/local.test.js .test-out/tournament/lib/tournament/store.test.js .test-out/tournament/lib/tournament/codes.test.js .test-out/tournament/lib/tournament/read.test.js .test-out/tournament/lib/admin/tournaments.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

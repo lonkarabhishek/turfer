@@ -24,6 +24,8 @@ import { adminTickRows, signupPeople } from "@/lib/queries/adminUsers";
 import { getLatestLiveLink, getLiveViews, getToolUsage } from "@/lib/queries/adminTools";
 import { latestLinkSub, starterName, viewTotals } from "@/lib/admin/live";
 import { viewsLabel } from "@/lib/live/views";
+import { getAdminTournaments } from "@/lib/queries/adminTournaments";
+import { tournamentTotals } from "@/lib/admin/tournaments";
 import { personId, tickTotals, tickedOnly } from "@/lib/admin/people";
 import { claimCounts } from "@/lib/admin/claimed";
 import { refusalsOf } from "@/lib/admin/links";
@@ -255,6 +257,29 @@ export async function ToolsSection() {
         </Link>
       </div>
     </>
+  );
+}
+
+/** Live tournaments (20261102_live_tournaments.sql): how many, matches being scored live now, views, the newest. */
+export async function TournamentsSection() {
+  const res = await getAdminTournaments();
+  if (!res.ok) return <SectionError reason={res.reason} what="the tournaments" />;
+  const list = res.data;
+  const t = tournamentTotals(list, readTime());
+  const latest = list[0];
+  return (
+    <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
+      <StatTile label="Tournaments" href="/admin/tournaments" value={t.total} sub={`+${t.last7} this week · ${t.signedIn} kept with an account`} />
+      <StatTile label="Matches live now" href="/admin/tournaments" value={t.liveNow} sub="Scored on the live scorer" tone={t.liveNow ? "accent" : "default"} />
+      <StatTile label="Tournament views" href="/admin/tournaments" value={t.views.toLocaleString("en-IN")} sub={`${t.viewers.toLocaleString("en-IN")} unique viewers`} />
+      <StatTile
+        label="Newest tournament"
+        href="/admin/tournaments"
+        compact
+        value={latest ? latest.name : DASH}
+        sub={latest ? `${latest.format} · ${latest.teams} teams · ${latest.played} of ${latest.fixtures} played · ${timeAgo(latest.createdAt)}` : "None yet"}
+      />
+    </section>
   );
 }
 
@@ -581,6 +606,13 @@ export async function toolsSummary(): Promise<FoldSummary> {
   const scorecards = uses ? count(n(uses.started, "live_scorer", "live_scoreboard"), "scorecard") : `${DASH} scorecards`;
   const tosses = uses ? count(n(uses.started, "toss"), "coin toss", "coin tosses") : `${DASH} coin tosses`;
   return { line: `${scoreboards} · ${scorecards} · ${tosses}` };
+}
+
+export async function tournamentsSummary(): Promise<FoldSummary> {
+  const res = await getAdminTournaments();
+  if (!res.ok) return { line: reasonText(res.reason) };
+  const t = tournamentTotals(res.data, readTime());
+  return { line: `${count(t.total, "tournament")} · ${t.liveNow.toLocaleString("en-IN")} live now · ${viewsLabel(t.views)}` };
 }
 
 export async function signupWindowsSummary(): Promise<FoldSummary> {

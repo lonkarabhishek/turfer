@@ -22,6 +22,9 @@
     "lib/tournament/live.test.ts",
     "lib/tournament/payload.test.ts",
     "lib/tournament/local.test.ts",
-    "lib/tournament/store.test.ts"
+    "lib/tournament/store.test.ts",
+    "lib/tournament/codes.test.ts",
+    "lib/tournament/read.test.ts",
+    "lib/admin/tournaments.test.ts"
   ]
 }
