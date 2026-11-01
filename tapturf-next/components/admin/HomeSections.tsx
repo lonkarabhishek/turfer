@@ -14,6 +14,7 @@ import {
   turfsByCitySection,
 } from "@/lib/queries/admin";
 import { getAdminGames } from "@/lib/queries/adminDetail";
+import { reviewRemovalNumbers } from "@/lib/queries/adminReviews";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
@@ -364,13 +365,21 @@ export async function BookingsSection() {
 
 /** Reviews + notifications snapshot. */
 export async function ReviewsSection() {
-  const [reviews, notes, games] = await Promise.all([reviewNumbers(), notificationNumbers(), gameNumbers()]);
+  const [reviews, notes, games, removals] = await Promise.all([reviewNumbers(), notificationNumbers(), gameNumbers(), reviewRemovalNumbers()]);
   const none = reviews.ok && reviews.data.totalReviews === 0;
+  // Owners' requests to take a report off; none to show on a database from before them.
+  const waiting = removals.ok ? removals.data.open : 0;
   return (
     <section className="mb-8 mt-4">
       <p className="text-[11px] font-bold text-primary-500 mb-3">Reviews & notifications</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <StatTile label="Total reviews" href="/admin/reviews" value={valueOf(reviews, (r) => r.totalReviews)} sub={subOf(reviews, (r) => (r.totalReviews === 0 ? "None yet" : "In-app reviews"))} />
+        <StatTile
+          label="Total reviews"
+          href={waiting > 0 ? "/admin/reviews#removal-requests" : "/admin/reviews"}
+          tone={waiting > 0 ? "hot" : "default"}
+          value={valueOf(reviews, (r) => r.totalReviews)}
+          sub={waiting > 0 ? `${waiting} removal request${waiting === 1 ? "" : "s"} waiting` : subOf(reviews, (r) => (r.totalReviews === 0 ? "None yet" : "In-app reviews"))}
+        />
         <StatTile
           label="Avg rating"
           href="/admin/reviews"
@@ -380,7 +389,7 @@ export async function ReviewsSection() {
         <StatTile label="Notifications" href="/admin/notifications" value={valueOf(notes, (n) => n.total)} sub={subOf(notes, (n) => `${n.unread} unread`)} />
         <StatTile label="Games (all-time)" href="/admin/games" value={valueOf(games, (g) => g.totalGames)} sub={subOf(games, (g) => `${g.games30d} in last 30d`)} />
       </div>
-      <SomeFailed count={(reviews.ok ? 0 : 2) + failures(notes, games)} className="mt-2" />
+      <SomeFailed count={(reviews.ok ? 0 : 2) + failures(notes, games) + (removals.ok || removals.reason === "not_set_up" ? 0 : 1)} className="mt-2" />
     </section>
   );
 }

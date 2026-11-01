@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/reviews/reviews.test.ts", "lib/reviews/routes.test.ts"]
+  "files": ["lib/reviews/reviews.test.ts", "lib/reviews/routes.test.ts", "lib/reviews/policy.test.ts"]
 }

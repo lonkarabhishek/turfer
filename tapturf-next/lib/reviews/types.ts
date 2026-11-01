@@ -66,6 +66,13 @@ export type AspectCount = {
 /** [no, maybe, yes] over the last 365 days. */
 export type PlayAgainCounts = [number, number, number];
 
+/**
+ * One new report a day, or one for each turf played at that day (India time): allowed, the
+ * other turfs posted on today, the turfs played at today, and whether a new report here
+ * would be refused (full).
+ */
+export type DailyAllowance = { allowed: number; posted: number; played: number; full: boolean };
+
 export type RateHint = { kind: "game" | "call" | "whatsapp"; at: string; sport?: string | null; played_when?: PlayedWhen | null };
 
 /** A review as the routes send it: review_row_json plus its status. */
@@ -93,6 +100,8 @@ export type MineResponse =
       blocked: "own_turf" | null;
       hint: RateHint | null;
       my_price: number | null;
+      /** Today's new reports (20261101_reviews_policy.sql); null on a database from before it, or for a manager. */
+      daily: DailyAllowance | null;
     }
   | { error: string; reason?: string };
 
@@ -110,6 +119,14 @@ export type SaveResponse =
       after: { tapturf_n: number; aspects: Partial<Record<AspectId, number>> };
       price_saved: boolean;
     }
-  | { error: string; reason?: "own_turf" | "contact_info" | "gone" | "exists"; field?: "comment" | "note"; review?: MyReport };
+  | {
+      error: string;
+      reason?: "own_turf" | "contact_info" | "gone" | "exists" | "daily";
+      field?: "comment" | "note";
+      review?: MyReport;
+      /** reason daily: how many new reports they may post today, and how many turfs they played at. */
+      allowed?: number;
+      played?: number;
+    };
 
 export type VoteResponse = { r: "ok"; on: boolean; upvotes: number } | { error: string; reason?: "own" | "google" | "gone" };

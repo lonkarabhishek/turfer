@@ -207,6 +207,7 @@ export function TurfReviews(props: {
           turf={{ id: turfId, name: turfName, slug: props.slug, sports, claimed: props.claimed }}
           open={sheet}
           hint={me.hint}
+          daily={me.daily}
           priceAsk={priceAsk}
           players={props.playerPrice}
           userName={user ? user.name || "a player" : null}

@@ -41,11 +41,18 @@ export const voteReview = (token: string, reviewId: string, on: boolean) =>
   call<VoteResponse>(token, "/api/reviews/vote", { method: "POST", body: JSON.stringify({ review_id: reviewId, on }) });
 
 /** What went wrong, in the sheet's words (lib/reviews/server.ts refusal). */
-export type SaveProblem = "own_turf" | "contact_info" | "limit" | "new" | "sign_in" | "gone" | "bad" | "unavailable" | "exists";
+export type SaveProblem = "own_turf" | "contact_info" | "limit" | "daily" | "new" | "sign_in" | "gone" | "bad" | "unavailable" | "exists";
 
-export function problemOf(a: ReviewAnswer<unknown>): { problem: SaveProblem; field?: "comment" | "note"; existing?: MyReport } | null {
-  const b = (a.body ?? {}) as { error?: string; reason?: string; field?: string; review?: unknown };
+export type SaveRefusal = { problem: SaveProblem; field?: "comment" | "note"; existing?: MyReport; allowed?: number; played?: number };
+
+export function problemOf(a: ReviewAnswer<unknown>): SaveRefusal | null {
+  const b = (a.body ?? {}) as { error?: string; reason?: string; field?: string; review?: unknown; allowed?: unknown; played?: unknown };
   if (!b.error) return null;
+  // Over the day's new reports: how many they may post today and how many turfs they played at.
+  if (b.reason === "daily") {
+    const n = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : undefined);
+    return { problem: "daily", allowed: n(b.allowed), played: n(b.played) };
+  }
   if (b.reason === "exists") {
     const r = b.review as MyReport | null | undefined;
     return r && typeof r === "object" && typeof r.id === "string" && typeof r.rating === "number" ? { problem: "exists", existing: r } : { problem: "exists" };

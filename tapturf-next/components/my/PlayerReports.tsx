@@ -7,6 +7,7 @@ import type { OwnerReviews } from "@/lib/my/client";
 import { playedLine, ReportChips } from "@/components/turf/reviews/ui";
 import { PartBar } from "@/components/turf/reviews/Scorecard";
 import { scrubBookingApps } from "@/lib/utils/bookingApps";
+import { RemovalAsk, useOwnerRemovals } from "./RemovalAsk";
 
 /**
  * "Player reports" on /my › a turf: what TapTurf players said in the last
@@ -15,10 +16,13 @@ import { scrubBookingApps } from "@/lib/utils/bookingApps";
  * anyway, and counts a part rated Needs work with no reason picked too;
  * private notes are anonymous unless the player chose otherwise, those
  * arrive only in batches of 3 or more players, and none links to a
- * report. A part's bar shows from 3 ratings. Owners can't hide,
- * edit or remove a report, and TapTurf never removes one for being negative.
+ * report. A part's bar shows from 3 ratings. Owners can't hide or edit a
+ * report; they can ask TapTurf to remove one that breaks the rules
+ * (RemovalAsk, once the database has requests), and TapTurf never removes
+ * one for being negative.
  */
-export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; turfSports: readonly string[] }) {
+export function PlayerReports({ reviews, turfSports, turfId }: { reviews: OwnerReviews; turfSports: readonly string[]; turfId: string }) {
+  const { removals, mark } = useOwnerRemovals(turfId);
   const knows = typeof reviews.n === "number";
   const n = reviews.n ?? 0;
   const day = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
@@ -146,13 +150,18 @@ export function PlayerReports({ reviews, turfSports }: { reviews: OwnerReviews; 
                   {tap && <ReportChips aspects={r.aspects} sport={r.sport} turfSports={turfSports} />}
                   {answer && <p className="mt-1.5 text-[13px] font-medium text-primary-700">{answer}</p>}
                   {tip && <p className="mt-1 text-[14px] text-primary-800 leading-snug whitespace-pre-line">{tip}</p>}
+                  {tap && r.id && removals && <RemovalAsk reviewId={r.id} existing={removals.get(r.id)} onAsked={(x) => mark(r.id!, x)} />}
                 </li>
               );
             })}
           </ul>
         </>
       )}
-      <p className="mt-3 text-[12px] text-primary-500">You can&apos;t hide, edit or remove players&apos; reports, and TapTurf never removes one for being negative.</p>
+      <p className="mt-3 text-[12px] text-primary-500">
+        {removals
+          ? "You can't hide or edit players' reports. If one breaks the rules (they never played here, abuse, personal details), ask TapTurf to remove it. TapTurf never removes one for being negative."
+          : "You can't hide, edit or remove players' reports, and TapTurf never removes one for being negative."}
+      </p>
     </section>
   );
 }
