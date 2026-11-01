@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { Sheet } from "./Sheet";
 import { UserAvatar } from "./UserAvatar";
 import {
+  AVATAR_COLUMNS,
   AVATAR_GROUPS,
   AVATAR_PRESETS,
   avatarLabel,
@@ -37,7 +38,7 @@ const problemOf = (a: Answer<unknown>) => {
  * The profile photo sheet (the Me tab): upload a photo (cropped to a
  * square here, checked on the server before it shows), "Use my Google
  * photo" for a Google sign-in, one of the drawn players (by sport, each
- * with its name and role), or back to initials. Before the database has photos it says so and offers
+ * with its name and role, three to a row), or back to initials. Before the database has photos it says so and offers
  * nothing (lib/account/photoRoutes.ts GET).
  */
 export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose: () => void; onSaved: (text: string) => void }) {
@@ -233,7 +234,7 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
                 <h4 id={`avatars-${g.id}`} className="text-[13px] font-semibold text-primary-900">
                   {g.label}
                 </h4>
-                <div className="mt-2 grid grid-cols-3 min-[360px]:grid-cols-4 gap-x-2 gap-y-3">
+                <div className="mt-2 grid gap-x-2 gap-y-3" style={{ gridTemplateColumns: `repeat(${AVATAR_COLUMNS}, minmax(0, 1fr))` }}>
                   {AVATAR_PRESETS.filter((p) => p.group === g.id).map((p) => {
                     const on = currentPreset === p.id;
                     return (
@@ -247,12 +248,12 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
                         className="group flex min-w-0 flex-col items-center rounded-2xl px-0.5 pt-1 pb-1.5 text-center disabled:opacity-60 focus-neon"
                       >
                         <span
-                          className={`relative block w-full max-w-[64px] aspect-square rounded-full transition-transform group-active:scale-95 ${
+                          className={`relative block w-full max-w-[76px] aspect-square rounded-full transition-transform group-active:scale-95 ${
                             on ? "ring-2 ring-accent-500 ring-offset-2" : "group-hover:scale-105"
                           }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={presetPath(p.id)} alt="" width={64} height={64} loading="lazy" decoding="async" className="w-full h-full rounded-full" />
+                          <img src={presetPath(p.id)} alt="" width={76} height={76} loading="lazy" decoding="async" className="w-full h-full rounded-full" />
                           {busy === p.id && (
                             <span className="absolute inset-0 grid place-items-center rounded-full bg-white/60">
                               <Loader2 className="w-5 h-5 animate-spin text-primary-900" aria-hidden />

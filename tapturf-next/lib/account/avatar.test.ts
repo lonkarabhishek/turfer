@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  AVATAR_COLUMNS,
   AVATAR_GROUPS,
   AVATAR_PRESETS,
   INITIALS_COLORS,
@@ -62,6 +63,9 @@ test("avatars: every sport group has players, in the picker's order", () => {
   // Listed group by group, so the picker's order and the list's agree.
   const order = AVATAR_PRESETS.map((p) => groups.indexOf(p.group));
   assert.ok(order.every((n, i) => n >= 0 && (i === 0 || n >= order[i - 1])), order.join(","));
+  // Three to a row at every width, and no player alone on a group's last row.
+  assert.equal(AVATAR_COLUMNS, 3);
+  for (const g of groups) assert.notEqual(AVATAR_PRESETS.filter((p) => p.group === g).length % AVATAR_COLUMNS, 1, `${g} leaves one alone`);
 });
 
 /** A small XML check: tags close in order, attributes are name="value" once each, text only in the title. */

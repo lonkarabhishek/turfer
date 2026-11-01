@@ -13,10 +13,13 @@ export const AVATAR_GROUPS = [
   { id: "football", label: "Football" },
   { id: "racquet", label: "Racquet sports" },
   { id: "court", label: "Court sports" },
-  { id: "more", label: "More" },
+  { id: "more", label: "Other sports" },
 ] as const;
 
 export type AvatarGroupId = (typeof AVATAR_GROUPS)[number]["id"];
+
+/** The picker shows the avatars this many to a row, at every width; no group leaves one alone on its last row. */
+export const AVATAR_COLUMNS = 3;
 
 /**
  * The drawn avatars: players, each with a name of their own and what they
@@ -28,7 +31,7 @@ export const AVATAR_PRESETS = [
   { id: "fast-bowler", name: "Yorker Rani", role: "Fast bowler", group: "cricket" },
   { id: "spinner", name: "Googly Guru", role: "Spin bowler", group: "cricket" },
   { id: "wicketkeeper", name: "Stumper Zoya", role: "Wicketkeeper", group: "cricket" },
-  { id: "all-rounder", name: "Golden-Arm Gill", role: "All-rounder", group: "cricket" },
+  { id: "all-rounder", name: "Golden-Arm Gagan", role: "All-rounder", group: "cricket" },
   { id: "captain", name: "Skipper Meera", role: "Captain", group: "cricket" },
   { id: "gully-cricketer", name: "Gully Gopi", role: "Box cricketer", group: "cricket" },
   { id: "umpire", name: "Umpire Uncle", role: "Umpire", group: "cricket" },
