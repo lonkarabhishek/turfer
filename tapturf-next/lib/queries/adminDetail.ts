@@ -1,6 +1,6 @@
 import { adminConfirmed, adminUserRows, adminUsers, signupPeople } from "@/lib/queries/adminUsers";
 import { gameRows, requestRows, turfsById, type TurfBrief } from "@/lib/queries/admin";
-import { anonRead } from "@/lib/admin/db";
+import { anonRead, ownerRead } from "@/lib/admin/db";
 import { createdSince, gameState, istMinute, latestGames, requestsByGame, type GameRow, type GameState } from "@/lib/admin/home";
 import { isVerified, userCity, type Confirmed, type UserCity } from "@/lib/admin/people";
 import { both, okSection, readAllPages, rowsOf, type Section } from "@/lib/admin/section";
@@ -212,15 +212,32 @@ type RequestListRow = {
 };
 type RequestGame = { id: string; sport: string; date: string; start_time: string; host_name: string | null; turf_id: string | null };
 
+/**
+ * The newest 500 join requests (withdrawn ones too, under All) with their
+ * game and turf: the requests through admin_game_requests (site owner
+ * only), or the anon read while the database doesn't have it yet; games
+ * and turfs are public.
+ */
 export async function getAdminRequests(filter: RequestFilter = "all") {
-  return anonRead("join requests", async (s, signal) => {
-    let q = s
-      .from("game_requests")
-      .select("id, game_id, user_id, status, note, requester_name, requester_phone, created_at, responded_at")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (filter !== "all") q = q.eq("status", filter);
-    const rows = rowsOf<RequestListRow>(await q.abortSignal(signal), "game_requests");
+  const status = filter === "all" ? null : filter;
+  const owner = await ownerRead("admin_game_requests", async ({ supabase, token }, signal) =>
+    rowsOf<RequestListRow>(await supabase.rpc("admin_game_requests", { p_firebase_token: token, p_status: status }).range(0, 499).abortSignal(signal), "admin_game_requests"),
+  );
+  const listed =
+    owner.ok || owner.reason !== "not_set_up"
+      ? owner
+      : await anonRead("join requests", async (s, signal) => {
+          let q = s
+            .from("game_requests")
+            .select("id, game_id, user_id, status, note, requester_name, requester_phone, created_at, responded_at")
+            .order("created_at", { ascending: false })
+            .limit(500);
+          if (status) q = q.eq("status", status);
+          return rowsOf<RequestListRow>(await q.abortSignal(signal), "game_requests");
+        });
+  if (!listed.ok) return listed;
+  return anonRead("join requests' games", async (s, signal) => {
+    const rows = listed.data;
     const gameIds = [...new Set(rows.map((r) => r.game_id))];
     const games = gameIds.length ? rowsOf<RequestGame>(await s.from("games").select("id, sport, date, start_time, host_name, turf_id").in("id", gameIds).abortSignal(signal), "games") : [];
     const turfIds = [...new Set(games.map((g) => g.turf_id).filter(Boolean))] as string[];
@@ -333,7 +350,15 @@ export type NotificationFilter = keyof typeof NOTIFICATION_FILTERS;
 
 type NotificationRow = { id: string; user_id: string | null; type: string; title: string; message: string; is_read: boolean; created_at: string };
 
+/**
+ * The newest 500 notifications: through admin_notifications (site owner
+ * only), or the anon read while the database doesn't have it yet.
+ */
 export async function getAdminNotifications(filter: NotificationFilter = "all") {
+  const owner = await ownerRead("admin_notifications", async ({ supabase, token }, signal) =>
+    rowsOf<NotificationRow>(await supabase.rpc("admin_notifications", { p_firebase_token: token, p_unread: filter === "unread" }).abortSignal(signal), "admin_notifications"),
+  );
+  if (owner.ok || owner.reason !== "not_set_up") return owner;
   return anonRead("notifications list", async (s, signal) => {
     let q = s.from("notifications").select("id, user_id, type, title, message, is_read, created_at").order("created_at", { ascending: false }).limit(500);
     if (filter === "unread") q = q.eq("is_read", false);

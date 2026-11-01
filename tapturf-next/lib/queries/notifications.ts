@@ -1,70 +1,36 @@
-import { createClient } from "@/lib/supabase/client";
+import { gameProblem, markReadCall, notificationsCall, unreadCall, type GetToken } from "@/lib/games/client";
 import type { Notification } from "@/types/notification";
 
-export async function getUserNotifications(userId: string, limit = 50) {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+// The signed-in caller's own notifications, through /api/notifications
+// (lib/games/server.ts): the database lets nobody read or mark anyone
+// else's, and only the server's actions make them. Pass useAuth().getToken.
 
-  return { data: (data as Notification[]) || [], error: error?.message || null };
+export async function getUserNotifications(getToken: GetToken, limit = 50) {
+  const a = await notificationsCall(getToken, limit);
+  const b = a.body as { notifications?: Notification[] };
+  if (a.status === 200 && Array.isArray(b.notifications)) return { data: b.notifications, error: null };
+  return { data: [] as Notification[], error: gameProblem(a) };
 }
 
-export async function getUnreadCount(userId: string) {
-  const supabase = createClient();
-  const { count, error } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("is_read", false);
-
-  return { data: count ?? 0, error: error?.message || null };
+/**
+ * How many are unread, for the header's badge. A sign-in that is gone
+ * counts 0 (nothing to show); offline or failing is an error, so the
+ * poll backs off.
+ */
+export async function getUnreadCount(getToken: GetToken) {
+  const a = await unreadCall(getToken);
+  const b = a.body as { unread?: number };
+  if (a.status === 200 && typeof b.unread === "number") return { data: b.unread, error: null };
+  if (a.status === 401) return { data: 0, error: null };
+  return { data: 0, error: gameProblem(a) ?? "unavailable" };
 }
 
-export async function markAsRead(notificationId: string) {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("id", notificationId);
-
-  return { success: !error, error: error?.message || null };
+export async function markAsRead(getToken: GetToken, notificationId: string) {
+  const a = await markReadCall(getToken, notificationId);
+  return { success: a.status === 200, error: a.status === 200 ? null : gameProblem(a) };
 }
 
-export async function markAllAsRead(userId: string) {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("user_id", userId)
-    .eq("is_read", false);
-
-  return { success: !error, error: error?.message || null };
-}
-
-export async function createNotification(data: {
-  userId: string;
-  type: string;
-  title: string;
-  message: string;
-  metadata?: Record<string, unknown>;
-}) {
-  const supabase = createClient();
-  const { data: notif, error } = await supabase
-    .from("notifications")
-    .insert([{
-      user_id: data.userId,
-      type: data.type,
-      title: data.title,
-      message: data.message,
-      metadata: data.metadata || {},
-      is_read: false,
-    }])
-    .select()
-    .single();
-
-  return { data: notif as Notification | null, error: error?.message || null };
+export async function markAllAsRead(getToken: GetToken) {
+  const a = await markReadCall(getToken, "all");
+  return { success: a.status === 200, error: a.status === 200 ? null : gameProblem(a) };
 }

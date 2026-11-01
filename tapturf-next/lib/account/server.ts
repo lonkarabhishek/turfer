@@ -93,33 +93,24 @@ export async function accountRpc(fn: string, args: Record<string, unknown>): Pro
 
 /**
  * accountRpc for a function a migration may not have added yet: a
- * database without it answers { missing: true }, quietly (the photo
- * routes say photos are not on yet).
+ * database without it (PGRST202, 42883) answers { missing: true },
+ * quietly. The photo routes then say photos are not on yet; the games
+ * routes (lib/games/server.ts) do the same checks themselves until the
+ * games migration is in.
  */
 export async function accountRpcIfThere(fn: string, args: Record<string, unknown>): Promise<Rpc | { missing: true }> {
-  const key = accountKey();
-  if (!key) return { unavailable: true };
-  try {
-    const { data, error } = await accountClient().rpc(fn, { p_key: key, ...args });
-    if (error && missingFunction(error.code)) return { missing: true };
-    if (error) {
-      console.warn(`account: ${fn} failed`, error.message);
-      return { unavailable: true };
-    }
-    if (!data || typeof data !== "object" || (data as { r?: unknown }).r === "unavailable") return { unavailable: true };
-    return { data: data as Record<string, unknown> };
-  } catch (e) {
-    console.warn(`account: ${fn} threw`, e);
-    return { unavailable: true };
-  }
+  return call(fn, args, true);
 }
 
-async function call(fn: string, args: Record<string, unknown>): Promise<Rpc> {
+async function call(fn: string, args: Record<string, unknown>): Promise<Rpc>;
+async function call(fn: string, args: Record<string, unknown>, orMissing: true): Promise<Rpc | { missing: true }>;
+async function call(fn: string, args: Record<string, unknown>, orMissing = false): Promise<Rpc | { missing: true }> {
   const key = accountKey();
   if (!key) return { unavailable: true };
   try {
     const { data, error } = await accountClient().rpc(fn, { p_key: key, ...args });
     if (error) {
+      if (orMissing && missingFunction(error.code)) return { missing: true };
       console.warn(`account: ${fn} failed`, error.message);
       return { unavailable: true };
     }

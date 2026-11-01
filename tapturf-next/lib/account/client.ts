@@ -90,6 +90,18 @@ export async function supabaseToken(): Promise<TokenCheck> {
   }
 }
 
+const noToken = async (): Promise<TokenCheck> => ({ none: true });
+
+/**
+ * The token getter for a background read (a list on page load, the
+ * header's badge): the sign-in's own token, read quietly, so a page view
+ * never signs anyone out (useAuth().getToken can, for a phone sign-in
+ * that is gone). Pass useAuth().signedInWith. Stable per sign-in kind.
+ */
+export function quietToken(via: "phone" | "google" | null | undefined): () => Promise<TokenCheck> {
+  return via === "google" ? supabaseToken : via === "phone" ? firebaseToken : noToken;
+}
+
 /** undefined until AuthProvider has its first answer (a Google session can take a network refresh to read). */
 let signedInToken: (() => Promise<TokenCheck>) | null | undefined = undefined;
 let onKnown: (() => void)[] = [];

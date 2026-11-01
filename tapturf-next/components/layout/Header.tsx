@@ -3,16 +3,18 @@
 import Link from "next/link";
 import { Bell, RotateCw } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { quietPath, useAuth } from "@/components/auth/AuthProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUnreadCount } from "@/lib/queries/notifications";
+import { quietToken } from "@/lib/account/client";
+import { firebaseAuthStarted } from "@/lib/firebase/client";
 import { notify } from "@/lib/notifications/browser";
 import { unreadWait, wakeWait } from "@/lib/notifications/unreadPoll";
 import { HeaderMenu } from "@/components/layout/HeaderMenu";
 import { UserAvatar } from "@/components/account/UserAvatar";
 
 export function Header() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, signedInWith } = useAuth();
   // Tagged with whose count it is, so signing out shows 0 without a reset.
   const [unreadFor, setUnreadFor] = useState<{ userId: string; n: number } | null>(null);
   const prevUnreadRef = useRef<number | null>(null);
@@ -27,13 +29,27 @@ export function Header() {
   // restart it with an extra check.
   useEffect(() => {
     prevUnreadRef.current = null;
-    if (!userId) return;
+    if (!userId || !signedInWith) return;
+    // Read quietly: a phone sign-in missing on this device never signs anyone out from a poll.
+    const readToken = quietToken(signedInWith);
+    // A phone sign-in's token comes from the Firebase SDK, and starting it
+    // (with Google's auth iframe on mobile) is not something a page view
+    // should pay for just for the badge: the first check waits until the
+    // page is idle, and none runs on live and tools pages or a data-saving
+    // connection until something else has started the SDK in this tab.
+    const phone = signedInWith === "phone";
+    const mayRead = () => {
+      if (!phone || firebaseAuthStarted()) return true;
+      const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+      return !quietPath() && !conn?.saveData;
+    };
 
     let alive = true;
     let busy = false;
     let lastAt = 0;
     let failures = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
     const visible = () => document.visibilityState === "visible";
     // No timer while the tab is hidden; showing it again checks.
     const schedule = (ms: number) => {
@@ -43,9 +59,14 @@ export function Header() {
 
     const poll = async () => {
       if (busy || !alive) return;
+      // Not here: the next timed check, or the tab coming back, looks again.
+      if (!mayRead()) {
+        schedule(unreadWait(failures));
+        return;
+      }
       busy = true;
       lastAt = Date.now();
-      const { data: nextCount, error } = await getUnreadCount(userId).catch(() => ({ data: 0, error: "network" }));
+      const { data: nextCount, error } = await getUnreadCount(readToken).catch(() => ({ data: 0, error: "network" }));
       busy = false;
       if (!alive) return;
       if (error) {
@@ -72,22 +93,32 @@ export function Header() {
 
     const onWake = () => {
       if (!visible()) { clearTimeout(timer); return; }
-      if (busy) return;
+      if (busy || idle !== undefined) return;
       const wait = wakeWait(Date.now(), lastAt, failures);
       if (wait === 0) poll();
       else schedule(wait);
     };
 
-    poll();
+    if (phone) {
+      const first = () => {
+        idle = undefined;
+        poll();
+      };
+      idle = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(first, { timeout: 5000 }) : (setTimeout(first, 2000) as unknown as number);
+    } else poll();
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
     return () => {
       alive = false;
       clearTimeout(timer);
+      if (idle !== undefined) {
+        if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idle);
+        else clearTimeout(idle);
+      }
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
     };
-  }, [userId]);
+  }, [userId, signedInWith]);
 
   return (
     <header className="sticky top-0 z-40 material-thin border-b border-primary-100/60">

@@ -264,8 +264,9 @@ function clearFidCookie() {
  * Pages where a background check never runs and a missing Firebase
  * session never signs out: live scoring and following must not be
  * interrupted, and /account/link says itself when the phone login ended.
+ * The header's badge also skips them for a phone sign-in.
  */
-function quietPath(): boolean {
+export function quietPath(): boolean {
   const p = window.location.pathname;
   return p.startsWith("/live") || p.startsWith("/tools") || p === "/account/link" || p.startsWith("/account/link/");
 }

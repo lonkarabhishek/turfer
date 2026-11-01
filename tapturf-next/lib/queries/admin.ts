@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { anonRead } from "@/lib/admin/db";
+import { anonRead, ownerRead } from "@/lib/admin/db";
 import { adminConfirmed, adminUserRows, adminUsers } from "@/lib/queries/adminUsers";
 import { googleUnfinished } from "@/lib/queries/adminLinks";
 import { isVerified } from "@/lib/admin/people";
@@ -54,12 +54,28 @@ export const gameRows = cache(() =>
   ),
 );
 
-/** Every join request (its game, who, status and time), paged, once per render. */
-export const requestRows = cache(() =>
-  anonRead("game_requests", (s, signal) =>
-    readAllPages<RequestRow>((from, to) => s.from("game_requests").select("game_id, user_id, status, created_at").order("id").range(from, to).abortSignal(signal), "game_requests"),
-  ),
-);
+/**
+ * Every join request (its game, who, status and time), paged, once per
+ * render: through admin_game_requests (site owner only; the anon key can't
+ * read join requests after 20261030_games_lockdown_step2.sql), or the anon
+ * read while the database doesn't have it yet. A withdrawn request isn't
+ * counted, as before (it used to be removed).
+ */
+export const requestRows = cache(async (): Promise<Section<RequestRow[]>> => {
+  const owner = await ownerRead("admin_game_requests", ({ supabase, token }, signal) =>
+    readAllPages<RequestRow>(
+      (from, to) => supabase.rpc("admin_game_requests", { p_firebase_token: token, p_status: null }).range(from, to).abortSignal(signal),
+      "admin_game_requests",
+    ),
+  );
+  const s =
+    owner.ok || owner.reason !== "not_set_up"
+      ? owner
+      : await anonRead("game_requests", (s, signal) =>
+          readAllPages<RequestRow>((from, to) => s.from("game_requests").select("game_id, user_id, status, created_at").order("id").range(from, to).abortSignal(signal), "game_requests"),
+        );
+  return mapSection(s, (rows) => rows.filter((r) => r.status !== "withdrawn").map(({ game_id, user_id, status, created_at }) => ({ game_id, user_id, status, created_at })));
+});
 
 export type TurfBrief = { id: string; name: string; city: string | null };
 
@@ -193,16 +209,29 @@ export const peopleNumbers = cache(async (): Promise<Section<PeopleNumbers>> => 
   });
 });
 
-/** All notifications and the unread ones, counted on ids. */
-export const notificationNumbers = cache(() =>
-  anonRead("notifications", async (s, signal) => {
+/**
+ * All notifications and the unread ones, counted: through
+ * admin_notification_counts (site owner only), or counted on ids with the
+ * anon key while the database doesn't have it yet.
+ */
+export const notificationNumbers = cache(async (): Promise<Section<{ total: number; unread: number }>> => {
+  const owner = await ownerRead("admin_notification_counts", async ({ supabase, token }, signal) => {
+    const [row] = rowsOf<{ total: number | string; unread: number | string }>(
+      await supabase.rpc("admin_notification_counts", { p_firebase_token: token }).abortSignal(signal),
+      "admin_notification_counts",
+    );
+    if (!row) throw new ReadFailed("error", "admin_notification_counts: no row");
+    return { total: Number(row.total), unread: Number(row.unread) };
+  });
+  if (owner.ok || owner.reason !== "not_set_up") return owner;
+  return anonRead("notifications", async (s, signal) => {
     const [all, unread] = await Promise.all([
       s.from("notifications").select("id", { count: "exact", head: true }).abortSignal(signal),
       s.from("notifications").select("id", { count: "exact", head: true }).eq("is_read", false).abortSignal(signal),
     ]);
     return { total: countOf(all, "notifications"), unread: countOf(unread, "unread notifications") };
-  }),
-);
+  });
+});
 
 /** Bookings and revenue (every booking, paged). */
 export const bookingNumbers = cache(() =>
