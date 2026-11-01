@@ -19,6 +19,10 @@ export const metadata: Metadata = {
 
 const FAQ = [
   {
+    q: "Can I manage a local cricket tournament with it?",
+    a: "Yes. Set up your league, tri-series or round robin with up to ten teams, add each result as it is played, and the points table, standings and NRR update straight away. Plan the fixtures and book the ground yourself; the tool keeps the results and the table for the whole tournament.",
+  },
+  {
     q: "How is NRR calculated in a tournament?",
     a: "Add up every run a team scored and every ball it faced across its counted matches, and divide to get runs per over. Do the same for runs conceded and balls bowled. NRR is the difference. It is not the average of each match's NRR. No-result matches are left out; ties are counted.",
   },
@@ -44,7 +48,7 @@ export default function Page() {
   return (
     <ToolPage
       tool={tool}
-      intro="Set up a bilateral series, tri-series or round robin, enter each match, and the points table, series score and net run rate work themselves out. Saved in your browser, no account."
+      intro="Manage your cricket tournament in one place: set up a league, bilateral series, tri-series or round robin, enter each match, and the points table, series score and net run rate work themselves out. Saved in your browser, no account."
       explainer={[
         {
           title: "Points table with NRR, done right",
