@@ -118,19 +118,34 @@ test("fromMapTurf: every card and pin reads the same price, sports, place and ph
   }
 });
 
-test("turfPin: the low end of the card's price, or the sport", () => {
-  assert.deepEqual(turfPin(ROWS[0]), { text: "₹800", label: "Turf Up, ₹800–1,400/hr" });
-  assert.deepEqual(turfPin(ROWS[2]), { text: "~₹700", label: "Turf Up, players reported ₹700–1,000/hr" });
-  assert.deepEqual(turfPin(ROWS[3]), { text: "Box Cricket", label: "Turf Up, Box Cricket, prices not listed yet" });
-  assert.deepEqual(turfPin(ROWS[4]), { text: "Badminton", label: "Turf Up, Badminton, prices not listed yet" });
+test("turfPin: the name and the low end of the card's price, or the sport", () => {
+  assert.deepEqual(turfPin(ROWS[0]), { text: "Turf Up | ₹800/hr", label: "Turf Up, ₹800–1,400/hr", name: "Turf Up", tail: "₹800/hr", short: "₹800" });
+  assert.deepEqual(turfPin(ROWS[2]), {
+    text: "Turf Up | ~₹700/hr",
+    label: "Turf Up, players reported ₹700–1,000/hr",
+    name: "Turf Up",
+    tail: "~₹700/hr",
+    short: "~₹700",
+  });
+  assert.deepEqual(turfPin(ROWS[3]), { text: "Turf Up | Box Cricket", label: "Turf Up, Box Cricket, prices not listed yet", name: "Turf Up", tail: "Box Cricket", short: null });
+  assert.deepEqual(turfPin(ROWS[4]), { text: "Turf Up | Badminton", label: "Turf Up, Badminton, prices not listed yet", name: "Turf Up", tail: "Badminton", short: null });
+  // A slot price says so, short; the label keeps the slot's length.
+  assert.equal(turfPin(ROWS[5]).text, "Turf Up | ₹800/slot");
   assert.equal(turfPin(ROWS[5]).label, "Turf Up, ₹800–1,400/90-min slot");
+  assert.equal(turfPin(row({ price_unit: "per_person" })).tail, "₹800/person");
   // A chip shows only that sport's price: the bands' football range, never the card's.
-  assert.equal(turfPin(ROWS[6], { chip: "Football" }).text, "₹1,500");
-  assert.equal(turfPin(ROWS[6], { chip: "Box Cricket" }).text, "₹1,000");
-  // Badminton at a venue whose prices are another sport's: no price, the chip's sport leads.
-  assert.deepEqual(turfPin(ROWS[6], { chip: "Badminton" }), { text: "Badminton", label: "Turf Up, Badminton, prices not listed yet" });
-  // "Cricket" leads with the label it matched.
-  assert.equal(turfPin(ROWS[4], { chip: "Pickleball" }).text, "Pickleball");
+  assert.equal(turfPin(ROWS[6], { chip: "Football" }).text, "Turf Up | ₹1,500/hr");
+  assert.equal(turfPin(ROWS[6], { chip: "Box Cricket" }).short, "₹1,000");
+  // Badminton at a venue whose prices are another sport's: no price, and the chip already says the sport, so the name alone.
+  assert.deepEqual(turfPin(ROWS[6], { chip: "Badminton" }), { text: "Turf Up", label: "Turf Up, Badminton, prices not listed yet", name: "Turf Up", tail: null, short: null });
+  // The label leads with the label the chip matched.
+  assert.equal(turfPin(ROWS[4], { chip: "Pickleball" }).label, "Turf Up, Pickleball, prices not listed yet");
+  // A long name is cut on the pin, whole in the label (the card and a screen reader).
+  const long = turfPin(row({ name: "Gamechangers Sports Arena Baner" }));
+  assert.equal(long.text, "Gamechangers… | ₹800/hr");
+  assert.equal(long.label, "Gamechangers Sports Arena Baner, ₹800–1,400/hr");
+  // No name, no sport, no price: still a pin.
+  assert.equal(turfPin(row({ name: "", sports: [], morning_price: null, afternoon_price: null, evening_price: null, weekend_evening_price: null })).text, "Turf");
   for (const t of ROWS) assert.ok(!turfPin(t).text.includes("₹0"));
 });
 
@@ -156,7 +171,7 @@ test("turfHourly: the pin's listed price per hour, for its bubble's average", ()
   for (const t of ROWS) {
     for (const sport of [null, ...SPORT_CHIPS.map((chip) => ({ chip }))]) {
       const h = turfHourly(t, sport);
-      if (h != null && cardPrice(t, sport).unit === "/hr") assert.equal(turfPin(t, sport).text, `₹${h.toLocaleString("en-IN")}`, `${t.name} ${sport?.chip}`);
+      if (h != null && cardPrice(t, sport).unit === "/hr") assert.equal(turfPin(t, sport).tail, `₹${h.toLocaleString("en-IN")}/hr`, `${t.name} ${sport?.chip}`);
       if (h != null) assert.ok(h > 0);
     }
   }

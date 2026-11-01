@@ -3,6 +3,7 @@ import Supercluster, { type ClusterProperties } from "supercluster";
 import { MAX_BOUNDS, bubbleLabel, type Bounds } from "@/lib/map/view";
 import { MAP_COLORS, addBubbleSum, averagePrice, avgPriceShort, bubbleSum, countText, type BubbleSum } from "@/lib/map/clusters";
 import type { HeatFeatures } from "@/lib/map/heat";
+import { NAME_ZOOM, declutter, type Lod, type PinSpot, type Rect, type Size } from "@/lib/map/pins";
 
 /**
  * /map's map: MapLibre GL (bundled from npm, loaded only by /map, after
@@ -18,7 +19,11 @@ import type { HeatFeatures } from "@/lib/map/heat";
  * Supercluster's map and reduce); a game bubble is the site's green with a
  * calendar. The street map's own labels give way under every bubble and
  * pin (an invisible symbol layer the size of each one, HOLD), so a city
- * name does not run under a bubble. The "Popular" heat layer (setHeat)
+ * name does not run under a bubble. Up close a turf's pin names it and its
+ * price per hour ("O2 Turf | ₹500/hr"); where pins would run into each
+ * other or a bubble, the later ones (lib/map/pins.ts declutter) show their
+ * price alone or a dot, and the picked, hovered or focused one always
+ * shows in full. The "Popular" heat layer (setHeat)
  * sits under the street map's labels. With "Trending" on, a trending
  * turf's pin (Pin.trend: its rank) wears a small coral arrow at its
  * shoulder, and a bubble holding any says how many in a coral badge.
@@ -45,9 +50,23 @@ export type PinKind = "turf" | "game";
 /**
  * `place`: the turf's name, so a bubble at one turf can say so. `hourly`:
  * a turf's listed price per hour (turfHourly), for its bubble's average.
- * `trend`: a trending turf's rank, while Trending is on.
+ * `trend`: a trending turf's rank, while Trending is on. A turf pin's
+ * parts (turfPin): `name`, cut to fit, `tail`, its price or sport after the
+ * "|", and `short`, its price alone; a game pin shows `text`.
  */
-export type Pin = { key: string; lat: number; lng: number; text: string; label: string; place: string; hourly?: number | null; trend?: number | null };
+export type Pin = {
+  key: string;
+  lat: number;
+  lng: number;
+  text: string;
+  label: string;
+  place: string;
+  hourly?: number | null;
+  trend?: number | null;
+  name?: string;
+  tail?: string | null;
+  short?: string | null;
+};
 
 export type Padding = { top: number; bottom: number; left: number; right: number };
 
@@ -97,13 +116,41 @@ type Props = { i: number; h?: number | null; t?: boolean };
  * hover, when picked (data-on) and shows the keyboard focus. Colours come
  * from MAP_COLORS as CSS variables on the map (--tt-*).
  */
-const MARK = "tt-mark group block p-0 m-0 border-0 bg-transparent cursor-pointer hover:z-10 focus:outline-none";
+const MARK = "tt-mark group p-0 m-0 border-0 bg-transparent cursor-pointer hover:z-10 focus:outline-none";
 const FACE = "block transition-[scale,background-color,color] duration-150 group-focus-visible:outline-2 group-focus-visible:outline-offset-2";
+/** A game's pin: green, with a calendar and when it starts. */
+const GAME_PIN = `${FACE} h-7 pl-1.5 pr-2.5 flex items-center gap-1 rounded-full bg-(--tt-game) text-white text-[13px] font-bold whitespace-nowrap border border-white shadow-[0_1px_4px_rgba(0,0,0,0.3)] group-hover:scale-[1.08] group-data-[on=true]:bg-accent-900 group-data-[on=true]:scale-[1.12] group-focus-visible:outline-primary-900`;
+/**
+ * A turf's pin is three faces stacked on its spot, the one that shows
+ * chosen by the button's data-lod (layout): its name and price, its price
+ * alone (or, with no price, its name alone), or a dot. The button itself
+ * takes no taps (its box is the widest face's); the face that shows does,
+ * and fades in as the others fade out.
+ */
+const TURF_FACE =
+  "[grid-area:1/1] pointer-events-auto transition-[opacity,visibility,scale,background-color,color] duration-150 group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-600";
+const SHOW: Record<Lod, string> = {
+  full: "invisible opacity-0 group-data-[lod=full]:visible group-data-[lod=full]:opacity-100",
+  short: "invisible opacity-0 group-data-[lod=short]:visible group-data-[lod=short]:opacity-100",
+  dot: "invisible opacity-0 group-data-[lod=dot]:visible group-data-[lod=dot]:opacity-100",
+};
+/** A white pill, picked deep teal with white ink. */
+const PILL = `${TURF_FACE} h-7 px-2.5 flex items-center rounded-full bg-white whitespace-nowrap group-hover:scale-[1.06] group-data-[on=true]:bg-(--tt-deep) group-data-[on=true]:border-white group-data-[on=true]:scale-[1.1]`;
 const PIN = {
-  turf: `${FACE} h-7 px-2.5 flex items-center rounded-full bg-white text-(--tt-deep) text-[13px] font-bold tabular-nums whitespace-nowrap border border-(--tt-teal)/45 shadow-[0_1px_4px_rgba(0,0,0,0.22)] group-hover:scale-[1.08] group-data-[on=true]:bg-(--tt-deep) group-data-[on=true]:border-white group-data-[on=true]:text-white group-data-[on=true]:scale-[1.12] group-focus-visible:outline-accent-600`,
-  game: `${FACE} h-7 pl-1.5 pr-2.5 flex items-center gap-1 rounded-full bg-(--tt-game) text-white text-[13px] font-bold whitespace-nowrap border border-white shadow-[0_1px_4px_rgba(0,0,0,0.3)] group-hover:scale-[1.08] group-data-[on=true]:bg-accent-900 group-data-[on=true]:scale-[1.12] group-focus-visible:outline-primary-900`,
-  /** A turf with no price to show (its pin names its sport): quieter, so the prices read first. */
-  bare: `${FACE} h-7 px-2.5 flex items-center rounded-full bg-white text-(--tt-muted) text-[12px] font-semibold whitespace-nowrap border border-black/10 shadow-[0_1px_4px_rgba(0,0,0,0.18)] group-hover:scale-[1.08] group-data-[on=true]:bg-(--tt-deep) group-data-[on=true]:border-white group-data-[on=true]:text-white group-data-[on=true]:scale-[1.12] group-focus-visible:outline-accent-600`,
+  /** A turf with a price: a teal edge, and the price in deep teal (7.2:1). */
+  priced: `${PILL} border border-(--tt-teal)/45 shadow-[0_1px_4px_rgba(0,0,0,0.22)]`,
+  /** A turf with no price to show: quieter, so the prices read first. */
+  bare: `${PILL} border border-black/10 shadow-[0_1px_4px_rgba(0,0,0,0.18)]`,
+  /** A dot in TapTurf teal with a white ring and a soft halo; a bigger target than it looks. */
+  dot: `${TURF_FACE} relative w-3.5 h-3.5 rounded-full border-2 border-white bg-(--tt-deep) shadow-[0_0_0_3px_rgba(0,166,153,0.22),0_1px_3px_rgba(0,0,0,0.35)] after:absolute after:-inset-[7px] after:rounded-full group-hover:scale-125`,
+};
+/** The name in ink (16:1 on white), then a light "|", then the price in deep teal or the sport in grey (5.1:1). */
+const INK = {
+  name: "text-[12.5px] font-semibold text-primary-900 group-data-[on=true]:text-white",
+  bar: "mx-1.5 text-[13px] font-normal text-black/20 group-data-[on=true]:text-white/50",
+  price: "text-[12.5px] font-bold tabular-nums text-(--tt-deep) group-data-[on=true]:text-white",
+  sport: "text-[12px] font-medium text-(--tt-muted) group-data-[on=true]:text-white/90",
+  short: "text-[13px] font-bold tabular-nums text-(--tt-deep) group-data-[on=true]:text-white",
 };
 /** The bubble's face (it carries the hover scale) holds the disc and, for turfs, the price tag hanging off its bottom edge. */
 const BUBBLE = "relative block transition-[scale] duration-150 group-hover:scale-110";
@@ -139,8 +186,9 @@ const TREND_BADGE =
   "tt-badge absolute -top-2.5 -right-3.5 h-5 min-w-5 pl-[3px] pr-[5px] flex items-center justify-center gap-px rounded-full bg-(--tt-trend) text-white text-[11px] leading-none font-bold tabular-nums ring-2 ring-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
 const TREND_DOT =
   "tt-badge absolute -top-2 -left-2 w-[18px] h-[18px] flex items-center justify-center rounded-full bg-(--tt-trend) text-white ring-2 ring-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
-/** A trending pin's face: room for the dot, and the coral edge. */
+/** A trending pin's face: room for the dot, and the coral edge; its dot face is coral. */
 const TREND_FACE = "relative border-(--tt-trend)/70! ring-1 ring-(--tt-trend)/25";
+const TREND_DOT_FACE = "bg-(--tt-trend)! shadow-[0_0_0_3px_rgba(216,27,79,0.22),0_1px_3px_rgba(0,0,0,0.35)]!";
 
 /** "#00A699" at `a` opacity. */
 function rgba(hex: string, a: number): string {
@@ -254,6 +302,15 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
   let heat: HeatFeatures | null = null;
   /** Where a bubble opened from the keyboard was: after its zoom, focus goes to the marker nearest it. */
   let refocus: [number, number] | null = null;
+  /** The turf pin under the mouse, and the one with keyboard focus (their marker keys): both show in full. */
+  let hover: string | null = null;
+  let focused: string | null = null;
+  /** A turf pin's place in the declutter: its order (top rated first), its Trending rank, whether it has a price. */
+  const spots = new WeakMap<HTMLElement, { order: number; trend: number | null; priced: boolean }>();
+  /** A turf pin's faces' sizes, and a bubble's box around its spot (its disc, price tag and badge), once measured. */
+  let sizes = new WeakMap<HTMLElement, { full: Size; short: Size | null }>();
+  let extents = new WeakMap<HTMLElement, Rect>();
+  let dead = false;
 
   const mark = (key: string, el: HTMLElement, at: [number, number]) => {
     const m = new Marker({ element: el, anchor: "center" }).setLngLat(at).addTo(map);
@@ -285,9 +342,11 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       const feats: GeoJSON.Feature[] = [];
       for (const m of markers.values()) {
         const el = m.getElement();
-        let { left, right, top, bottom } = el.getBoundingClientRect();
+        // A turf pin's face that shows (the others are hidden on the same spot), else the marker.
+        const root = (el.dataset.lod && el.querySelector<HTMLElement>(`[data-face="${el.dataset.lod}"]`)) || el;
+        let { left, right, top, bottom } = root.getBoundingClientRect();
         // A bubble's price tag and a Trending badge reach outside the button.
-        for (const part of el.querySelectorAll(".tt-tag, .tt-badge")) {
+        for (const part of root.querySelectorAll(".tt-tag, .tt-badge")) {
           const p = part.getBoundingClientRect();
           [left, right, top, bottom] = [Math.min(left, p.left), Math.max(right, p.right), Math.min(top, p.top), Math.max(bottom, p.bottom)];
         }
@@ -339,16 +398,80 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       const on = key === `p:${active}` || key === `p:${hot}`;
       el.dataset.on = String(on);
       if (key.startsWith("p:")) el.setAttribute("aria-pressed", String(key === `p:${active}`));
-      // A trending pin rides over its neighbours.
-      el.style.zIndex = key === `p:${active}` ? "3" : on || el.dataset.trend ? "2" : key.startsWith("c:") ? "1" : "";
+      // The picked pin on top, then a hovered or focused one, then a trending one; a name over a dot.
+      el.style.zIndex =
+        key === `p:${active}` ? "4" : on || key === hover || key === focused ? "3" : el.dataset.trend ? "2" : key.startsWith("c:") || el.dataset.lod === "full" ? "1" : "";
     }
+  };
+
+  /**
+   * Which face each turf pin shows (lib/map/pins.ts declutter): with the
+   * bubbles in the way, in the order of claimOrder, each pin takes its name
+   * and price where they run into nothing, else its price alone, else a
+   * dot; names from NAME_ZOOM. Sizes are measured once per marker (one
+   * layout read for the new ones); after that a run is arithmetic, cheap
+   * enough for every frame of a zoom. True when a face changed.
+   */
+  const layout = (): boolean => {
+    if (kind !== "turf") return false;
+    const blocked: Rect[] = [];
+    const list: PinSpot[] = [];
+    for (const [key, m] of markers) {
+      const el = m.getElement();
+      const at = map.project(m.getLngLat());
+      if (key.startsWith("c:")) {
+        let e = extents.get(el);
+        if (!e) {
+          const r = el.getBoundingClientRect();
+          const [cx, cy] = [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+          let [l, t, rr, b] = [r.left, r.top, r.right, r.bottom];
+          for (const part of el.querySelectorAll(".tt-tag, .tt-badge")) {
+            const p = part.getBoundingClientRect();
+            [l, t, rr, b] = [Math.min(l, p.left), Math.min(t, p.top), Math.max(rr, p.right), Math.max(b, p.bottom)];
+          }
+          e = [l - cx, t - cy, rr - cx, b - cy];
+          // Not laid out yet (a hidden page): measured next time.
+          if (r.width > 0) extents.set(el, e);
+        }
+        blocked.push([at.x + e[0], at.y + e[1], at.x + e[2], at.y + e[3]]);
+        continue;
+      }
+      const s = spots.get(el);
+      if (!s) continue;
+      let size = sizes.get(el);
+      if (!size) {
+        const face = (lod: Lod) => el.querySelector<HTMLElement>(`[data-face="${lod}"]`);
+        const full = face("full");
+        const short = face("short");
+        if (!full?.offsetWidth) continue;
+        size = { full: [full.offsetWidth, full.offsetHeight], short: short ? [short.offsetWidth, short.offsetHeight] : null };
+        sizes.set(el, size);
+      }
+      const k = key.slice(2);
+      list.push({ key, x: at.x, y: at.y, ...size, priced: s.priced, trend: s.trend, order: s.order, pinned: k === active || k === hot || key === hover || key === focused });
+    }
+    let changed = false;
+    for (const [key, lod] of declutter(list, blocked, map.getZoom() >= NAME_ZOOM)) {
+      const el = markers.get(key)?.getElement();
+      if (el && el.dataset.lod !== lod) {
+        el.dataset.lod = lod;
+        changed = true;
+      }
+    }
+    return changed;
+  };
+  /** After a pick, a hover or a focus: the faces, the stacking, and the street map's labels around them. */
+  const relayout = () => {
+    layout();
+    paintOn();
+    hold();
   };
 
   /** A count bubble's button: its disc, and a turf bubble's average price under it and Trending badge (or a game bubble's calendar). */
   const bubble = (count: number, sums: Partial<BubbleSum>): { el: HTMLButtonElement; avg: number | null } => {
     const el = document.createElement("button");
     el.type = "button";
-    el.className = `${MARK} tt-bubble`;
+    el.className = `${MARK} block tt-bubble`;
     const size = bubbleSize(count);
     const face = document.createElement("span");
     face.className = BUBBLE;
@@ -387,6 +510,88 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     }
     el.append(face);
     return { el, avg };
+  };
+
+  const span = (cls: string, text: string) => {
+    const s = document.createElement("span");
+    s.className = cls;
+    s.textContent = text;
+    return s;
+  };
+
+  /**
+   * A turf's pin: its faces (TURF_FACE) for layout to choose from. Full:
+   * "O2 Turf | ₹500/hr" (or the sport, or the name alone); short: "₹500",
+   * or the name alone when it has no price; and a dot. With Trending on, a
+   * trending turf's pill faces wear the coral edge and arrow, its dot is coral.
+   */
+  const turfPinEl = (pin: Pin, key: string, order: number): HTMLButtonElement => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `${MARK} tt-pin grid place-items-center pointer-events-none`;
+    el.setAttribute("aria-label", pin.label);
+    el.dataset.lod = "full";
+    const priced = pin.short != null;
+    const trend = !!pin.trend;
+    const full = document.createElement("span");
+    full.className = `${priced ? PIN.priced : PIN.bare} ${SHOW.full}`;
+    full.append(span(INK.name, pin.name || pin.text));
+    if (pin.tail) {
+      const bar = span(INK.bar, "|");
+      bar.setAttribute("aria-hidden", "true");
+      full.append(bar, span(priced ? INK.price : INK.sport, pin.tail));
+    }
+    const faces: [Lod, HTMLElement][] = [["full", full]];
+    // The price alone; with no price, the name alone, when the full face has more than the name.
+    if (priced || pin.tail) {
+      const short = document.createElement("span");
+      short.className = `${priced ? PIN.priced : PIN.bare} ${SHOW.short}`;
+      short.append(span(priced ? INK.short : INK.name, priced ? (pin.short as string) : pin.name || pin.text));
+      faces.push(["short", short]);
+    }
+    const dot = document.createElement("span");
+    dot.className = `${PIN.dot} ${SHOW.dot}${trend ? ` ${TREND_DOT_FACE}` : ""}`;
+    faces.push(["dot", dot]);
+    for (const [lod, face] of faces) {
+      face.dataset.face = lod;
+      if (trend && lod !== "dot") {
+        face.className += ` ${TREND_FACE}`;
+        const badge = document.createElement("span");
+        badge.className = TREND_DOT;
+        badge.setAttribute("aria-hidden", "true");
+        badge.innerHTML = TREND_GLYPH;
+        face.append(badge);
+      }
+      el.append(face);
+    }
+    if (trend) el.dataset.trend = "true";
+    spots.set(el, { order, trend: pin.trend ?? null, priced });
+    // The mouse over it, or keyboard focus on it: in full while it lasts.
+    el.addEventListener("pointerover", (ev) => {
+      if (ev.pointerType !== "mouse" || hover === key) return;
+      hover = key;
+      relayout();
+    });
+    el.addEventListener("pointerout", (ev) => {
+      if (ev.pointerType !== "mouse" || hover !== key || el.contains(ev.relatedTarget as Node | null)) return;
+      hover = null;
+      relayout();
+    });
+    el.addEventListener("focus", () => {
+      if (!el.matches(":focus-visible")) return;
+      focused = key;
+      relayout();
+    });
+    el.addEventListener("blur", () => {
+      if (focused !== key) return;
+      focused = null;
+      relayout();
+    });
+    el.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      opts.onPick([pin.key], el, ev.detail === 0);
+    });
+    return el;
   };
 
   /** `settled`: after a move, when a bubble that had the keyboard hands it on. */
@@ -443,23 +648,18 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
           old.delete(key);
           continue;
         }
+        if (kind === "turf") {
+          mark(key, turfPinEl(pin, key, props.i), [lng, lat]);
+          continue;
+        }
         const el = document.createElement("button");
         el.type = "button";
-        el.className = `${MARK} tt-pin`;
+        el.className = `${MARK} block tt-pin`;
         el.setAttribute("aria-label", pin.label);
         const face = document.createElement("span");
-        face.className = kind === "turf" && !/^~?₹/.test(pin.text) ? PIN.bare : PIN[kind];
-        if (kind === "game") face.innerHTML = GAME_GLYPH;
+        face.className = GAME_PIN;
+        face.innerHTML = GAME_GLYPH;
         face.append(pin.text);
-        if (kind === "turf" && pin.trend) {
-          el.dataset.trend = "true";
-          face.className += ` ${TREND_FACE}`;
-          const dot = document.createElement("span");
-          dot.className = TREND_DOT;
-          dot.setAttribute("aria-hidden", "true");
-          dot.innerHTML = TREND_GLYPH;
-          face.append(dot);
-        }
         el.append(face);
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -483,9 +683,20 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       else map.getCanvas().focus({ preventScroll: true });
     }
     for (const m of old.values()) m.remove();
-    paintOn();
-    hold();
+    relayout();
   };
+
+  // Pins come closer or part as the map zooms: they make way (or take their names back) as it goes.
+  map.on("zoom", () => {
+    if (layout()) paintOn();
+  });
+  // The page's font in (if it was not yet): the markers measured again.
+  document.fonts?.ready.then(() => {
+    if (dead) return;
+    sizes = new WeakMap();
+    extents = new WeakMap();
+    relayout();
+  });
 
   map.on("moveend", (e) => {
     render(true);
@@ -508,7 +719,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         next.every((p, i) => {
           const q = pins[i];
           return (
-            p.key === q.key && p.lat === q.lat && p.lng === q.lng && p.text === q.text && p.label === q.label && p.place === q.place && p.hourly === q.hourly && p.trend === q.trend
+            p.key === q.key && p.lat === q.lat && p.lng === q.lng && p.text === q.text && p.label === q.label && p.place === q.place && p.hourly === q.hourly && p.trend === q.trend && p.short === q.short
           );
         });
       pins = next;
@@ -548,11 +759,11 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     },
     setActive(key) {
       active = key;
-      paintOn();
+      relayout();
     },
     setHot(key) {
       hot = key;
-      paintOn();
+      relayout();
     },
     setMe(at) {
       me?.remove();
@@ -567,6 +778,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     focusMap: () => map.getCanvas().focus({ preventScroll: true }),
     view: () => ({ bounds: toBounds(map), zoom: map.getZoom() }),
     destroy() {
+      dead = true;
       for (const m of markers.values()) m.remove();
       me?.remove();
       map.remove();

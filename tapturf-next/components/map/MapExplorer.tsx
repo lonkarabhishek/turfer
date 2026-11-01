@@ -78,8 +78,10 @@ function subscribeDesktop(cb: () => void) {
  * /map: every turf (or open game) on a street map of India, Airbnb style.
  * Pins cluster into count bubbles that split as the map zooms in (a turf
  * bubble also says the average hourly price of its turfs that list one),
- * and become price pills (cardPrice: a sport chip shows only that sport's
- * price) or, for games, green "when" pills; a tap opens the place's card.
+ * and become pills with the turf's name and price per hour ("O2 Turf |
+ * ₹500/hr"; cardPrice: a sport chip shows only that sport's price; where
+ * pills would crowd, the price alone or a dot) or, for games, green "when"
+ * pills; a tap opens the place's card.
  * "Popular" lays a heatmap of turf page views under the pins (GET
  * /api/map/heat, fetched only when it is first turned on; off on every visit).
  * "Trending" marks the turfs most viewed in the last 24 hours, by rank, on
@@ -404,7 +406,7 @@ export function MapExplorer() {
         : shownTurfs.map((t) => {
             const pin = turfPin(t, chip);
             const r = rankByKey?.get(t.id) ?? null;
-            return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), text: pin.text, label: r ? `${pin.label}, ${trendWords(r)}` : pin.label, trend: r };
+            return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), ...pin, label: r ? `${pin.label}, ${trendWords(r)}` : pin.label, trend: r };
           }),
     [show, shownTurfs, shownGames, chip, now, rankByKey],
   );

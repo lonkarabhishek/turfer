@@ -6,6 +6,7 @@ import { cardPrice, type CardSport } from "../utils/cardSport";
 import { priceRangeText } from "../utils/prices";
 import { formatClock, formatGameDay, sortGamesByDateTime } from "../utils/game";
 import { sportLabel } from "../utils/sport";
+import { pinLine, pinName, pinUnit } from "./pins";
 
 /**
  * What /map shows, as it travels (GET /api/map/turfs and /api/map/games)
@@ -211,24 +212,39 @@ export function pickedGames<G extends Pick<MapGame, "id" | "date" | "start_time"
 /** A pin's words: `text` on the pin, `label` for a screen reader. */
 export type PinText = { text: string; label: string };
 
+/** A turf pin's words, and its parts (turfPin). */
+export type TurfPinText = PinText & { name: string; tail: string | null; short: string | null };
+
 /**
- * A turf's pin: the low end of the price its card shows (cardPrice, so a
- * sport chip shows only that sport's price, and a reported price reads
- * "~"), else the sport it leads with. Never "₹0".
+ * A turf's pin: `text` is its line, "O2 Turf | ₹500/hr" (lib/map/pins.ts),
+ * the name cut to fit (`name`) and after it (`tail`) the low end of the
+ * price its card shows, with its unit (cardPrice, so a sport chip shows
+ * only that sport's price, and a reported price reads "~"); with no
+ * price, the sport it leads with ("O2 Turf | Box Cricket"), or the name
+ * alone under a sport chip, which already says the sport. `short` is the
+ * price alone ("₹500"), for a pin with little room; `label`, for a screen
+ * reader, has the whole name and the whole range. Never "₹0".
  */
-export function turfPin(t: Turf, sport?: CardSport | null): PinText {
+export function turfPin(t: Turf, sport?: CardSport | null): TurfPinText {
   const price = cardPrice(t, sport);
   const from = price.kind === "real" || price.kind === "reported" ? priceRangeText(price.min, price.min) : null;
   const range = price.kind === "real" || price.kind === "reported" ? priceRangeText(price.min, price.max) : null;
   const lead = sport && "chip" in sport ? (t.sports.find((s) => s.toLowerCase().includes(sport.chip.toLowerCase())) ?? t.sports[0]) : t.sports[0];
+  const name = pinName(t.name) || "Turf";
   if (from && range) {
     const reported = price.kind === "reported";
+    const short = reported ? `~${from}` : from;
+    const tail = `${short}${pinUnit(price.unit)}`;
     return {
-      text: reported ? `~${from}` : from,
+      text: pinLine(name, tail),
       label: `${t.name}, ${reported ? "players reported " : ""}${range}${price.unit}`,
+      name,
+      tail,
+      short,
     };
   }
-  return { text: lead || "Turf", label: `${t.name}${lead ? `, ${lead}` : ""}, prices not listed yet` };
+  const tail = sport ? null : lead || null;
+  return { text: pinLine(name, tail), label: `${t.name}${lead ? `, ${lead}` : ""}, prices not listed yet`, name, tail, short: null };
 }
 
 /**
