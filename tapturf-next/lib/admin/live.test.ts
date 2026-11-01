@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { latestLinkSub, methodLabel, recordedLater, starterName, toAdminLiveLink } from "./live";
+import { latestLinkSub, methodLabel, recordedLater, starterName, toAdminLiveLink, toLiveViews, viewTotals, withViews } from "./live";
 
 const ID = "AAAAAAAA-AAAA-4AAA-8AAA-000000000001";
 const base = { code: "k7m2q9x4a1b3", status: "live", sport: "cricket", team_a: "Kothrud Kings", team_b: "Baner Blasters", title: "Sunday cup", venue: "Turf Park", events: 42, writes: 40, created_at: "2026-10-29T14:06:01.000Z", updated_at: "2026-10-29T15:00:00.000Z" };
@@ -8,7 +8,7 @@ const base = { code: "k7m2q9x4a1b3", status: "live", sport: "cricket", team_a: "
 test("a row of admin_live_links2 carries its starter; one of admin_live_links, or with none recorded, has none", () => {
   const withOne = toAdminLiveLink({ ...base, starter_id: ID, starter_name: " Asha Patil ", starter_username: "asha_p", starter_method: "google", started_at: "2026-10-29T14:06:01.500Z" });
   assert.deepEqual(withOne.starter, { id: ID.toLowerCase(), name: "Asha Patil", username: "asha_p", method: "google", at: "2026-10-29T14:06:01.500Z" });
-  assert.deepEqual({ ...withOne, starter: null }, { ...base, starter: null }, "the link's own columns as they were");
+  assert.deepEqual({ ...withOne, starter: null }, { ...base, starter: null, views: null }, "the link's own columns as they were (views are joined later)");
   // The old read (before the migration) and a link with no row: "Not recorded", never a guess.
   for (const row of [base, { ...base, starter_id: null, starter_name: null, starter_username: null, starter_method: null, started_at: null }]) {
     const l = toAdminLiveLink(row);
@@ -52,4 +52,31 @@ test("the admin home's line under the latest link", () => {
   assert.equal(latestLinkSub(recorded, "3 hr ago", idle), "Cricket · closed (idle) · started 3 hr ago · @asha_p · Google");
   assert.equal(latestLinkSub(board, "1 day ago", idle), "Table tennis · finished · started 1 day ago · Phone", "a finished one keeps its result");
   assert.equal(latestLinkSub(toAdminLiveLink({ ...base, updated_at: "" }), "3 hr ago", idle), "Cricket · live now · started 3 hr ago", "no update time: as stored");
+});
+
+test("views by link for the admin: kept after the match is cleared, 0 for a link never viewed, none while they can't be read", () => {
+  const views = toLiveViews([
+    { code: "k7m2q9x4a1b3", views: 12, viewers: 5, first_viewed_at: "2026-11-01T10:00:00Z", last_viewed_at: "2026-11-01T11:00:00Z" },
+    // bigint counts can come as strings: read when they are whole counts, else left out.
+    { code: "bbbbbbbbbbbb", views: "40", viewers: "41", last_viewed_at: null },
+    { code: "not a code", views: 3, viewers: 1 },
+    { code: "cccccccccccc", views: -1, viewers: 0 },
+    { code: "dddddddddddd", views: 2.5, viewers: 1 },
+  ]);
+  assert.deepEqual([...views.keys()], ["k7m2q9x4a1b3", "bbbbbbbbbbbb"]);
+  assert.deepEqual(views.get("k7m2q9x4a1b3"), { views: 12, viewers: 5, last: "2026-11-01T11:00:00Z" });
+  assert.deepEqual(views.get("bbbbbbbbbbbb"), { views: 40, viewers: 40, last: null }, "viewers never more than views");
+
+  const links = [toAdminLiveLink(base), toAdminLiveLink({ ...base, code: "eeeeeeeeeeee", status: "expired", team_a: null, team_b: null })];
+  const joined = withViews(links, views);
+  assert.deepEqual(
+    joined.map((l) => l.views),
+    [{ views: 12, viewers: 5, last: "2026-11-01T11:00:00Z" }, { views: 0, viewers: 0, last: null }],
+  );
+  assert.deepEqual(withViews(links, null).map((l) => l.views), [null, null], "before 20261101_live_views.sql: no views, never 0");
+  assert.deepEqual(joined.map((l) => ({ ...l, views: null })), links, "nothing else changes");
+
+  assert.deepEqual(viewTotals(views), { views: 52, viewers: 45, links: 2 }, "the tile's total: every viewed link, cleared ones included");
+  assert.deepEqual(viewTotals(new Map()), { views: 0, viewers: 0, links: 0 });
+  assert.equal(viewTotals(null), null);
 });

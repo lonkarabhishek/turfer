@@ -4,7 +4,9 @@
  * the account that turned it on, as the server verified it on the link's
  * first write. Links from before that, and every link while the file is
  * not applied, say "Not recorded": nothing here guesses from times or
- * sign-ins. Pure; relative imports only (npm run test:live).
+ * sign-ins. And how many times each was viewed (admin_live_views,
+ * 20261101_live_views.sql, kept after the match is cleared; lib/live/views.ts
+ * says what a view is). Pure; relative imports only (npm run test:live).
  */
 
 import { liveStatusAt } from "../live/types";
@@ -34,7 +36,12 @@ export type AdminLiveLink = {
   updated_at: string;
   /** null: not recorded. */
   starter: LiveStarter | null;
+  /** Its views (admin_live_views, 20261101_live_views.sql), 0 and 0 when never viewed; null when views can't be read (before that file too). */
+  views: LiveViews | null;
 };
+
+/** A link's views: page views, and unique viewers (one per browser per day, so a browser back the next day counts again). */
+export type LiveViews = { views: number; viewers: number; last: string | null };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const USERNAME = /^[a-z][a-z0-9_]{2,19}$/;
@@ -59,7 +66,38 @@ export function toAdminLiveLink(row: Record<string, unknown>): AdminLiveLink {
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
     starter: id ? { id, name: str(row.starter_name), username: username && USERNAME.test(username) ? username : null, method, at: str(row.started_at) } : null,
+    views: null,
   };
+}
+
+/** admin_live_views' rows by code. Counts arrive as numbers or, past 2^53, strings: anything not a whole count is left out. */
+export function toLiveViews(rows: Record<string, unknown>[]): Map<string, LiveViews> {
+  const out = new Map<string, LiveViews>();
+  for (const r of rows) {
+    const code = typeof r.code === "string" ? r.code : "";
+    const views = Number(r.views);
+    const viewers = Number(r.viewers);
+    if (!/^[a-z0-9]{12}$/.test(code) || !Number.isSafeInteger(views) || !Number.isSafeInteger(viewers) || views < 0 || viewers < 0) continue;
+    out.set(code, { views, viewers: Math.min(viewers, views), last: str(r.last_viewed_at) });
+  }
+  return out;
+}
+
+/** The links with their views: 0 for one never viewed; all null when the views could not be read. */
+export function withViews(links: AdminLiveLink[], views: Map<string, LiveViews> | null): AdminLiveLink[] {
+  return links.map((l) => ({ ...l, views: views ? (views.get(l.code) ?? { views: 0, viewers: 0, last: null }) : null }));
+}
+
+/** Every link's views added up, for the admin home's tile; null when they could not be read. */
+export function viewTotals(views: Map<string, LiveViews> | null): { views: number; viewers: number; links: number } | null {
+  if (!views) return null;
+  let v = 0;
+  let u = 0;
+  for (const x of views.values()) {
+    v += x.views;
+    u += x.viewers;
+  }
+  return { views: v, viewers: u, links: views.size };
 }
 
 export const methodLabel = (m: LiveStarter["method"]): string => (m === "google" ? "Google" : m === "phone" ? "Phone" : "Sign-in");

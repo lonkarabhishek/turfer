@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { ownerRead } from "@/lib/admin/db";
 import { readAllPages, rowsOf, type Reason, type Section } from "@/lib/admin/section";
-import { toAdminLiveLink, type AdminLiveLink } from "@/lib/admin/live";
+import { toAdminLiveLink, toLiveViews, withViews, type AdminLiveLink, type LiveViews } from "@/lib/admin/live";
 import { summarizeToolUsage, type CountedTool, type LiveRow, type ToolUsage, type UseRow } from "@/lib/tools/usage";
 import type { ToolActivityRow, ToolCountRow, ToolUserRow, WhoFilter } from "@/lib/tools/users";
 import { liveStatusAt } from "@/lib/live/types";
@@ -102,11 +102,26 @@ async function readLiveLinks(limit: number | null, minWrites = 0): Promise<Secti
   return { ok: true, data: limit === null ? links : links.slice(0, limit) };
 }
 
-/** Every live scoreboard link, newest first, with its starter; or why it can't be read. */
+/**
+ * How many times each live link was viewed, by code (admin_live_views,
+ * owner only, 20261101_live_views.sql), kept after the hourly job clears a
+ * match. null when it can't be read, before that file is applied too: the
+ * list and the tile then show no views, never 0.
+ */
+export const getLiveViews = cache(async (): Promise<Map<string, LiveViews> | null> => {
+  const s = await ownerRead("admin_live_views", ({ supabase, token }, signal) =>
+    readAllPages<Record<string, unknown>>((from, to) => supabase.rpc("admin_live_views", { p_firebase_token: token }).range(from, to).abortSignal(signal), "admin_live_views"),
+  );
+  return s.ok ? toLiveViews(s.data) : null;
+});
+
+/** Every live scoreboard link, newest first, with its starter and views; or why it can't be read. */
 export async function getAdminLiveLinks(filter: LiveFilter = "all", now = Date.now()): Promise<Section<AdminLiveLink[]>> {
-  const s = await readLiveLinks(null);
-  if (!s.ok || filter === "all") return s;
-  return { ok: true, data: s.data.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : adminLiveStatus(r, now) === filter)) };
+  const [s, views] = await Promise.all([readLiveLinks(null), getLiveViews()]);
+  if (!s.ok) return s;
+  const links = withViews(s.data, views);
+  if (filter === "all") return { ok: true, data: links };
+  return { ok: true, data: links.filter((r) => (filter === "stopped" ? r.status === "stopped" || r.status === "expired" : adminLiveStatus(r, now) === filter)) };
 }
 
 /**

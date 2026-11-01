@@ -5,6 +5,7 @@ import { useAsk } from "./AskProvider";
 import { SPORT_PAGES, type SportPage } from "@/lib/sports";
 import { CITIES, CITY_ALIASES, getCityPref, labelFor } from "@/lib/city";
 import { isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
+import { liveAskKind } from "@/lib/ask/liveKind";
 
 /** What the reply will show under its text, so the placeholders take the same shape. */
 export type CardsKind = "turf" | "game" | "compare";
@@ -165,7 +166,7 @@ const join = (...parts: (string | null | undefined | false)[]) => parts.filter(B
  * then picking. Each line only says what the server really does for
  * that kind of question; venue names only ever come from the player.
  */
-export function thinkingPlan(text: string, ctx: { city: string | null; turf: string | null; located: boolean; retry?: boolean; blog?: boolean }): ThinkingPlan {
+export function thinkingPlan(text: string, ctx: { city: string | null; turf: string | null; located: boolean; retry?: boolean; blog?: boolean; live?: boolean }): ThinkingPlan {
   const q = ` ${text.toLowerCase().replace(/(\d),(\d)/g, "$1$2").replace(/24\s*[x/]\s*7/g, "24x7").replace(/[^\p{L}\p{M}\p{N}₹\s]+/gu, " ").replace(/\s+/g, " ").trim()} `;
   const t = q.trim().split(" ");
   const read: Stage = { at: AT.read, text: ctx.retry ? "Trying again" : "Reading your question" };
@@ -193,6 +194,8 @@ export function thinkingPlan(text: string, ctx: { city: string | null; turf: str
     if (DRAW.test(q)) return plan(null, "Reading the article", "Working out the picture", "Putting it together");
     return plan(null, "Reading the article", "Finding the part that answers this", "Writing your answer");
   }
+  // On a live score page a question about the match is read from its scorecard (lib/ask/live.ts); a search is a search.
+  if (ctx.live && liveAskKind(text) !== "search") return plan(null, "Checking the live score", null, "Writing your answer");
   for (const [re, line] of TOOLS) if (re.test(q)) return plan(null, line);
   if (HOST.test(bare)) return plan(null);
 
@@ -388,7 +391,9 @@ export function AskSkeleton({ kind, verdict = true, className = "" }: { kind: Ca
  */
 export function AskThinking({ text, since, retry = false, onCards }: { text: string; since: number; retry?: boolean; onCards?: () => void }) {
   const { pageContext, hasLocation } = useAsk();
-  const [plan] = useState(() => thinkingPlan(text, { city: pageContext.city ?? getCityPref(), turf: pageContext.turf?.name ?? null, located: hasLocation, retry, blog: !!pageContext.blog }));
+  const [plan] = useState(() =>
+    thinkingPlan(text, { city: pageContext.city ?? getCityPref(), turf: pageContext.turf?.name ?? null, located: hasLocation, retry, blog: !!pageContext.blog, live: !!pageContext.live }),
+  );
   const [elapsed, setElapsed] = useState(() => Date.now() - since);
   const cardsShown = useEffectEvent(() => onCards?.());
 

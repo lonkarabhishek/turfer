@@ -12,7 +12,7 @@ import type { AskVisuals, CardPrices } from "@/lib/ask/visuals";
 
 export type AskResponse = {
   query: string;
-  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog";
+  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog" | "live";
   summary: string;
   reply: string;
   followups: string[];
@@ -71,6 +71,8 @@ export type AskResponse = {
   tool?: { slug: string; name: string; tagline: string; href: string };
   /** For blog: the short version of the article on screen, or an answer about it, with its sources. */
   blog?: BlogAnswer;
+  /** For live: the live score it was answered from (lib/ask/live.ts), and its last update in India's time ("7:41 pm"). */
+  live?: { code: string; state: string; asOf: string | null };
 };
 
 /** `retry`: the error offers Try again (too slow, no connection, server error). `tries`: times Try again was pressed. */
@@ -82,6 +84,12 @@ export type PageContext = {
   blog?: { slug: string; title: string; questions?: string[]; charts?: boolean } | null;
   /** A turf list (/turfs, /c/<city>/turfs): the pill offers, once, to answer turf questions. */
   listing?: boolean;
+  /**
+   * A live score page (/live/<code>): questions are about that match, and
+   * asking takes a sign-in (no free answers here). chips: what to ask,
+   * for the match as it stands (lib/ask/live.ts liveAskChips).
+   */
+  live?: { code: string; chips: string[] } | null;
 };
 
 type Ctx = {
@@ -230,10 +238,18 @@ export function AskProvider({ children }: { children: ReactNode }) {
           params.set("lng", at.lng.toFixed(4));
         }
         if (history.length) params.set("h", JSON.stringify(history));
-        if (pageContext.turf || pageContext.city || pageContext.blog)
+        // live only on a live score page, so every other page sends what it always did.
+        const live = pageContext.live?.code ?? null;
+        if (pageContext.turf || pageContext.city || pageContext.blog || live)
           params.set(
             "ctx",
-            JSON.stringify({ turf: pageContext.turf?.name ?? null, turfId: pageContext.turf?.id ?? null, city: pageContext.city ?? null, blog: pageContext.blog?.slug ?? null }),
+            JSON.stringify({
+              turf: pageContext.turf?.name ?? null,
+              turfId: pageContext.turf?.id ?? null,
+              city: pageContext.city ?? null,
+              blog: pageContext.blog?.slug ?? null,
+              ...(live ? { live } : {}),
+            }),
           );
         let r: Response;
         try {
@@ -244,8 +260,10 @@ export function AskProvider({ children }: { children: ReactNode }) {
         }
         if (r.status === 429) throw new Error("That's a lot of questions in a row. Give it a few minutes.");
         if (r.status === 401) {
-          // Free answers used up: keep the message and show the sign-in card.
-          setFreeLeft(0);
+          // Free answers used up: keep the message and show the sign-in card. On a live score page
+          // (live: true) the sign-in is that page's rule only, and the free answers elsewhere stay.
+          const liveRule = ((await r.json().catch(() => null)) as { live?: unknown } | null)?.live === true;
+          if (!liveRule) setFreeLeft(0);
           setPending(q);
           setTurns((prev) => prev.filter((t) => t.id !== id));
           return;
@@ -274,12 +292,14 @@ export function AskProvider({ children }: { children: ReactNode }) {
     [pageContext, user],
   );
 
+  // On a live score page asking takes a sign-in: no free answers there (the server says the same).
+  const onLive = !!pageContext.live;
   const send = useCallback(
     async (text: string, loc?: Coords | null) => {
       const q = text.trim();
       if (q.length < 1 || busy) return;
-      if (!user && freeLeft === 0) {
-        // Out of free answers: park the message, show the sign-in card.
+      if (!user && (freeLeft === 0 || onLive)) {
+        // Out of free answers, or on a live page: park the message, show the sign-in card.
         setPending(q);
         setDraft("");
         return;
@@ -289,19 +309,19 @@ export function AskProvider({ children }: { children: ReactNode }) {
       setTurns((prev) => [...prev, { id, user: q, res: null, at: Date.now() }].slice(-MAX_TURNS));
       await ask(id, q, historyOf(turns), loc);
     },
-    [busy, turns, user, freeLeft, ask],
+    [busy, turns, user, freeLeft, onLive, ask],
   );
 
   // Try again: the same message in the same turn, so no second bubble.
   const retry = useCallback(
     (id: string) => {
       const turn = turns.find((t) => t.id === id);
-      // Out of free answers: the server would refuse it, so the sign-in card takes over.
-      if (busy || !turn?.error || (!user && freeLeft === 0)) return;
+      // Out of free answers (or signed out on a live page): the server would refuse it, so the sign-in card takes over.
+      if (busy || !turn?.error || (!user && (freeLeft === 0 || onLive))) return;
       setTurns((prev) => prev.map((t) => (t.id === id ? { id, user: t.user, res: null, tries: (t.tries ?? 0) + 1, at: Date.now() } : t)));
       void ask(id, turn.user, historyOf(turns.filter((t) => t.id !== id)));
     },
-    [busy, turns, user, freeLeft, ask],
+    [busy, turns, user, freeLeft, onLive, ask],
   );
 
   // Signed in: the allowance no longer applies.

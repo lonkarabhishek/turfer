@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Check, Copy, Link2, Loader2, LogIn, MessageCircle, Radio, Share2, X } from "lucide-react";
 import { shortUrl, type LiveFault, type LiveInfo } from "./live";
+import { viewsLabel } from "@/lib/live/views";
 import { Sheet } from "./ui";
 
 /**
  * Sharing, shared by the Live Cricket Scorer and the Live Scoreboard: the
- * WhatsApp text, the live link block and a plain confirm sheet. Only ./live
- * and ./ui here, never a scoring engine, so the scoreboard's bundle does not
+ * WhatsApp text, the live link block and a plain confirm sheet. Only ./live,
+ * ./ui and lib/live/views here, never a scoring engine, so the scoreboard's bundle does not
  * carry the cricket one. Sheets.tsx re-exports all of it for the cricket
  * imports.
  */
@@ -24,6 +25,8 @@ export type ShareLive = {
   loginFirst?: boolean;
   /** The server asked for a login again (fault login): off to it, back to this match, and the link carries on. */
   onLogin?: () => void;
+  /** How many times the follower page was viewed (useLiveViews); null or 0: nothing shown. */
+  views?: number | null;
 };
 
 /** What the link carries, in the sport's own words. */
@@ -231,6 +234,7 @@ export function LiveLinkBlock({ live, text, onShared, words = CRICKET_WORDS }: {
         <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${status ? status.dot : "bg-red-500"}`} aria-hidden />
         <span className={status ? "text-primary-700" : "font-semibold text-red-700"}>{status ? status.text : (fault ?? "Live link stopped.")}</span>
       </p>
+      {!!live.views && <p className="mt-1 pl-4 text-[13px] text-primary-500 tabular-nums">{viewsLabel(live.views)} of this link so far</p>}
       {info.fault === "login" && live.onLogin && (
         <button type="button" onClick={live.onLogin} className="press-tight mt-2 w-full inline-flex items-center justify-center gap-2 h-12 rounded-full bg-primary-900 text-white text-[15px] font-bold hover:bg-primary-800">
           <LogIn className="w-4 h-4" aria-hidden /> Log in again

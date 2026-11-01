@@ -19,7 +19,11 @@ import { BoardHeader } from "@/components/board/BoardHeader";
 import { BoardTabs } from "@/components/board/BoardTabs";
 import { accessOf, ago, boardNow, boardPause, clockNow, followLoginHref, freshness, joinClock, liveBadgeOn, pauseOf, pauseText, pollsFor, resultCardHref, setClock, startPolling, type FollowStatus } from "./follow";
 import { useWatchers } from "./useWatchers";
+import { useLiveViews } from "./useLiveViews";
 import { WatchCount } from "./WatchCount";
+import { viewsLabel } from "@/lib/live/views";
+import { AskPageContext } from "@/components/ask/AskPageContext";
+import { liveAskChips } from "@/lib/ask/live";
 
 const TOOL = "live_follow";
 /** Past this, a Supabase session still unresolved (a dead network) counts as logged out. */
@@ -188,6 +192,8 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   // Everyone following counts, themselves included. Waiting and turned off links count no one, and nor does
   // a score seen logged out: those viewers get no updates, and each count is a Realtime connection.
   const watchers = useWatchers(scored && match && access === "in" ? code : null, { track: true });
+  // Opening a score is a view, logged in or not (never the scorer's own, a bot's or a background tab's, lib/live/views.ts).
+  const views = useLiveViews(scored && match ? code : null, { count: true, refresh: polls });
   const walled = scored && access === "out";
   useEffect(() => {
     if (walled) trackTool("tool_action", TOOL, { action: "login_wall" });
@@ -252,10 +258,14 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
     </div>
   );
 
+  // Ask TapTurf on this page answers about this match (lib/ask/live.ts), for a signed-in player.
+  const askHere = <AskPageContext live={{ code, chips: liveAskChips(scored ? match : null) }} />;
+
   if (!shown || !names || !scored) {
     const state = shown && !scored ? (shown.status as Exclude<FollowStatus, "live" | "done">) : "unavailable";
     return (
       <div className="mx-auto max-w-xl px-4 py-6 sm:py-10">
+        {askHere}
         <StateCard state={state} />
         <div className="mt-4 space-y-4">
           {(state === "waiting" || state === "unavailable") && shareBar}
@@ -291,11 +301,13 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
   const tabsClass = "border-t border-primary-200 sm:border sm:rounded-3xl sm:overflow-hidden lg:col-start-2 lg:row-start-1 lg:row-span-2";
   return (
     <div className="mx-auto max-w-6xl pb-6 sm:px-4 sm:py-5 lg:grid lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:items-start">
+      {askHere}
       <div className="lg:col-start-1 lg:row-start-1">
         <h1 className="sr-only">{names} live score</h1>
         {header}
         <div className="px-3 py-2.5 sm:px-1 space-y-2">
           {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} frozenAt={frozenAt} />}
+          {views !== null && views > 0 && <p className="text-[13px] text-primary-500 tabular-nums">{viewsLabel(views)}</p>}
           {trouble && (
             <p role="status" className="text-[13px] font-semibold text-red-700">
               Can&rsquo;t get the latest score. Trying again.

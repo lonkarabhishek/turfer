@@ -18,8 +18,9 @@ import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
 import { getRecentLogins, loginStats } from "@/lib/queries/adminLogins";
 import { adminTickRows, signupPeople } from "@/lib/queries/adminUsers";
-import { getLatestLiveLink, getToolUsage } from "@/lib/queries/adminTools";
-import { latestLinkSub, starterName } from "@/lib/admin/live";
+import { getLatestLiveLink, getLiveViews, getToolUsage } from "@/lib/queries/adminTools";
+import { latestLinkSub, starterName, viewTotals } from "@/lib/admin/live";
+import { viewsLabel } from "@/lib/live/views";
 import { personId, tickTotals, tickedOnly } from "@/lib/admin/people";
 import { reasonText, type Reason, type Section } from "@/lib/admin/section";
 import { StatTile } from "./StatTile";
@@ -190,7 +191,9 @@ export async function LoginsSection() {
 
 /** Live scoreboard links and the tools' counted uses (counted since 26 Oct 2026, lib/tools/usage.ts). */
 export async function ToolsSection() {
-  const [{ live, uses }, latest] = await Promise.all([getToolUsage(), getLatestLiveLink()]);
+  const [{ live, uses }, latest, liveViews] = await Promise.all([getToolUsage(), getLatestLiveLink(), getLiveViews()]);
+  // Every link's views added up, kept after the matches are cleared; none shown while they can't be read.
+  const seen = viewTotals(liveViews);
   const now = readTime();
   const n = (r: Record<string, number> | undefined, ...keys: string[]) => keys.reduce((s, k) => s + (r?.[k] ?? 0), 0);
   const since = uses?.since ? `Counted since ${dayLabel(uses.since)}` : "Counting from today";
@@ -205,7 +208,12 @@ export async function ToolsSection() {
   return (
     <>
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
-        <StatTile label="Live scoreboards shared" href="/admin/live" value={live ? live.total : DASH} sub={live ? `+${live.last7} this week · ${live.liveNow} live now` : "Couldn't load"} />
+        <StatTile
+          label="Live scoreboards shared"
+          href="/admin/live"
+          value={live ? live.total : DASH}
+          sub={live ? `+${live.last7} this week · ${live.liveNow} live now${seen ? ` · ${viewsLabel(seen.views)}` : ""}` : "Couldn't load"}
+        />
         {/* The other three open Tool users: who used each tool and what (from 27 Oct 2026). */}
         <StatTile
           label="Scorecards started"

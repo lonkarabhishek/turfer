@@ -142,7 +142,8 @@ const SECTIONS: LegalSection[] = [
           starting notes your account and the link (see &ldquo;When you use our free tools&rdquo;), and only
           TapTurf&rsquo;s team sees it. If you tag players with their TapTurf usernames,
           those usernames go with the match. While you follow a live score, your browser joins a count of
-          people watching it. Nothing about you is sent.
+          people watching it. Nothing about you is sent. Opening a live score also adds one to its view count (and,
+          once a day per browser, to its count of viewers), which identifies nobody and is kept after the match is cleared.
         </p>
         <p id="tools" className="scroll-mt-24">
           <strong>When you use our free tools.</strong> Each time you start or finish something in a free tool
@@ -337,8 +338,8 @@ const SECTIONS: LegalSection[] = [
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
         prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
-        WhatsApp number you last gave players for a game, and the matches and tournaments you score with our
-        free tools. Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        WhatsApp number you last gave players for a game, the matches and tournaments you score with our
+        free tools, and which live scores it opened in the last two days (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
         &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link it also keeps the key that lets only this browser update that
         link; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
