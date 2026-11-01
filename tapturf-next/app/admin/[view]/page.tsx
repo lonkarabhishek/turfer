@@ -40,6 +40,7 @@ import { AskDigestCard } from "@/components/admin/AskDigest";
 import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
+import { ReviewFlags } from "@/components/admin/ReviewFlags";
 import { ReviewRemovals } from "@/components/admin/ReviewRemovals";
 import { turfPath } from "@/lib/utils/turfPath";
 import { LIVE_FILTERS, adminLiveStatus, getAdminLiveLinks, type AdminLiveLink, type LiveFilter } from "@/lib/queries/adminTools";
@@ -804,6 +805,14 @@ async function renderView(v: View, filter: string, city: string | null = null): 
                 Every player report goes live at once. A turf&rsquo;s owner can ask you to take one off; it stays up until you decide, and its author is never told who asked.
               </p>
               <ReviewRemovals />
+            </section>
+            {/* Players' reports of reviews (read in the browser, after the page). */}
+            <section id="review-reports" className="mb-6 rounded-2xl bg-white border border-primary-200 p-5 scroll-mt-20">
+              <h2 className="font-semibold text-primary-900 mb-1">Reported reviews</h2>
+              <p className="text-[13px] text-primary-500 mb-4">
+                Signed-in players can report a review from the turf page. It stays up until you decide, and its author is never told who reported it.
+              </p>
+              <ReviewFlags />
             </section>
             <Table head={["Turf", "Rating", "Comment", "By", "Source", "Date"]} empty={reviews.length === 0}>
               {reviews.map((r) => (

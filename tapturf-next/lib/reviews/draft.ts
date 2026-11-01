@@ -1,11 +1,14 @@
 import { isWhen, type PlayedWhen, type Score } from "./catalog";
-import { parseAspects } from "./payload";
-import type { Aspects, ReportChannel } from "./types";
+import { isUuid, parseAspects } from "./payload";
+import { REVIEW_PHOTOS, shapeReviewPhotos } from "./photos";
+import type { Aspects, ReportChannel, ReviewPhoto } from "./types";
 
 /**
  * A report in progress, kept on this phone after every tap
- * ("tt_report_draft:<turf id>"), so closing the sheet, losing the
- * connection or going off to log in loses nothing. A draft belongs to the
+ * ("tt_report_draft:<turf id>"), so closing the sheet (its X, Escape or a
+ * tap outside), losing the connection or going off to log in loses
+ * nothing: opening it again picks up where they left off, an edit too
+ * (base). Posting clears it. A draft belongs to the
  * account that wrote it (by; null when signed out): a phone can be shared,
  * so a signed-in viewer picks up only their own, or one written signed out
  * in the last 30 minutes (the login they just did from the sheet). Sign-out
@@ -40,7 +43,16 @@ export type Draft = {
   /** When the sheet was first opened for this report (ms), for the time to post. */
   startedAt: number;
   savedAt: number;
+  /** The photos, in order: ones already on the report (at null) and ones added since (at: when, ms). */
+  photos: DraftPhoto[];
+  /** A photo was added or taken out: the save sends the list. */
+  photosChanged: boolean;
+  /** The report this draft edits (its id), so reopening Edit picks the edit up again; null for a new one. */
+  base: string | null;
 };
+
+/** A photo in a draft: on the report already (at null), or added on this phone and not posted yet (the server keeps those 2 days). */
+export type DraftPhoto = ReviewPhoto & { at: number | null };
 
 const PREFIX = "tt_report_draft:";
 const KEY = (turfId: string) => `${PREFIX}${turfId}`;
@@ -54,12 +66,32 @@ export function emptyDraft(now = Date.now()): Draft {
   return {
     v: 1, stars: 0, sport: null, when: null, aspects: {}, playAgain: null, price: null, priceOther: "", comment: "",
     noteOpen: false, note: "", showName: false, step: 1, channel: "turf_page", by: null, startedAt: now, savedAt: now,
+    photos: [], photosChanged: false, base: null,
   };
 }
 
-/** Anything worth asking "Leave your report?" about. */
+/** Anything typed or tapped: a sheet that opens on it says it picked up where they left off. */
 export function hasAnswers(d: Draft): boolean {
-  return d.stars > 0 || Object.keys(d.aspects).length > 0 || !!d.comment.trim() || !!d.note.trim() || d.playAgain !== null || d.price !== null;
+  return d.stars > 0 || Object.keys(d.aspects).length > 0 || !!d.comment.trim() || !!d.note.trim() || d.playAgain !== null || d.price !== null || d.photosChanged;
+}
+
+/** Two drafts that would post the same report (an edit opened and closed again without a change is no edit to pick up). */
+export function sameAnswers(a: Draft, b: Draft): boolean {
+  const key = (d: Draft) =>
+    JSON.stringify([d.stars, d.sport, d.when, d.aspects, d.playAgain, d.price, d.priceOther.trim(), d.comment.trim(), d.noteOpen ? d.note.trim() : "", d.noteOpen && d.showName, d.photos.map((p) => p.id)]);
+  return key(a) === key(b);
+}
+
+/** A draft's photos as stored: well formed, each once, at most 3, and an added one only while the server still keeps it. */
+export function readDraftPhotos(raw: unknown, now = Date.now()): DraftPhoto[] {
+  if (!Array.isArray(raw)) return [];
+  const keep = shapeReviewPhotos(raw);
+  return keep
+    .map((p) => {
+      const at = (raw.find((x) => x && typeof x === "object" && (x as { id?: unknown }).id === p.id) as { at?: unknown } | undefined)?.at;
+      return { ...p, at: typeof at === "number" ? at : null };
+    })
+    .filter((p) => p.at === null || (now - p.at >= 0 && now - p.at < REVIEW_PHOTOS.readyMs - 3_600_000));
 }
 
 /** A stored draft, checked field by field; null when there is none, it is old, or storage can't be read. */
@@ -91,6 +123,9 @@ export function readDraft(raw: string | null, now = Date.now()): Draft | null {
       by: typeof o.by === "string" && o.by ? o.by : null,
       startedAt: typeof o.startedAt === "number" ? o.startedAt : now,
       savedAt: o.savedAt,
+      photos: readDraftPhotos(o.photos, now),
+      photosChanged: o.photosChanged === true,
+      base: isUuid(o.base) ? o.base : null,
     };
   } catch {
     return null;

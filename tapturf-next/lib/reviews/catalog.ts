@@ -17,8 +17,11 @@ export type PlayedWhen = "morning" | "afternoon" | "evening" | "night";
  * while anyone can add a game or join one (public.games and
  * game_participants take writes from the browser), since a faked game would
  * make a faked report look the most trustworthy. The database keeps working
- * it out at every save (reviews.verified_via); turn this on once games are
- * written through a server route.
+ * it out at every save (reviews.verified_via). The turf page's badge is now
+ * "Played here (verified)" (played_here, 20261102_reviews_trust.sql: games
+ * are written through the server since 20261030_games_lockdown.sql, and
+ * only a game made before it started, and over, counts); this older label
+ * stays off.
  */
 export const SHOW_GAME_BADGE: boolean = false;
 

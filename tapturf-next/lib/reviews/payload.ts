@@ -1,5 +1,6 @@
 import { ASPECT_ORDER, ASPECTS, isWhen, MAX_ASPECTS, MAX_TAGS, SPORT_ROWS, sportRow, type AspectId, type Score } from "./catalog";
-import { cleanText, NOTE_MAX, TIP_MAX } from "./screen";
+import { REVIEW_PHOTOS } from "./photos";
+import { cleanText, contactProblem, NOTE_MAX, TIP_MAX, tipProblem } from "./screen";
 import type { Aspects, ReportBody, ReportChannel } from "./types";
 
 /**
@@ -9,7 +10,9 @@ import type { Aspects, ReportBody, ReportChannel } from "./types";
  * Unknown parts and chips are dropped (a catalogue change on the server
  * before the page reloads must not lose a report), and so are rows the
  * sheet would never show: Lights without an evening or night game, a sport
- * row for another sport. Anything malformed is "bad".
+ * row for another sport. Anything malformed is "bad". A tip or note with
+ * contact details is "contact" (the tip's rule for the tip, the note's for
+ * the note, lib/reviews/screen.ts), refused here as review_save refuses it.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,7 +25,7 @@ const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 
 export const PRICE_MIN = 100;
 export const PRICE_MAX = 20_000;
 
-export type ParsedReport = { ok: ReportBody } | { bad: string };
+export type ParsedReport = { ok: ReportBody } | { bad: string } | { contact: "comment" | "note" };
 
 /**
  * The scorecard: known parts only, chips that match the score, at most 3,
@@ -107,6 +110,17 @@ export function parseReport(body: Record<string, unknown> | null): ParsedReport 
     base = body.base.toLowerCase();
   }
 
+  // The photos, in order: up to 3 ids, each once. Left out, the report keeps the ones it has.
+  let photos: string[] | undefined;
+  if (body.photos !== undefined) {
+    if (!Array.isArray(body.photos) || body.photos.length > REVIEW_PHOTOS.perReport || !body.photos.every(isUuid)) return { bad: "photos" };
+    photos = [...new Set(body.photos.map((x) => x.toLowerCase()))];
+  }
+
+  // Contact details, after everything else is well formed: the order review_save checks in.
+  if (tipProblem(comment)) return { contact: "comment" };
+  if (note && contactProblem(note.body)) return { contact: "note" };
+
   const channel = CHANNELS.includes(body.channel as ReportChannel) ? (body.channel as ReportChannel) : "turf_page";
   const ms = typeof body.ms === "number" && Number.isInteger(body.ms) && body.ms >= 0 && body.ms <= 600_000 ? body.ms : undefined;
 
@@ -115,5 +129,6 @@ export function parseReport(body: Record<string, unknown> | null): ParsedReport 
   if (price != null) out.price_paid = price;
   if (ms !== undefined) out.ms = ms;
   if (base) out.base = base;
+  if (photos) out.photos = photos;
   return { ok: out };
 }

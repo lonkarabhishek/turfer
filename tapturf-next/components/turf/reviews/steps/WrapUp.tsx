@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Lock, Plus } from "lucide-react";
 import { PLAY_AGAIN, type Score } from "@/lib/reviews/catalog";
-import { contactProblem, NOTE_MAX, TIP_COUNTER_FROM, TIP_MAX } from "@/lib/reviews/screen";
+import { contactProblem, NOTE_MAX, TIP_COUNTER_FROM, TIP_MAX, tipProblem } from "@/lib/reviews/screen";
 import { rupees, type PriceChip } from "@/lib/reviews/sheet";
 import { Pill, ScorePill } from "../ui";
 
 export const CONTACT_MESSAGE = "Please take out phone numbers, emails and links. The turf's contact is already on this page.";
+/** Under the tip while it breaks the tip's rule (lib/reviews/screen.ts tipProblem). */
+export const TIP_CONTACT_MESSAGE = "Please take out phone numbers, emails, links and @handles. The turf's contact is already on this page.";
+/** Above Post while it is off: why. */
+export const TIP_BLOCKED = "To post, take the phone number, email, link or @handle out of your tip.";
+export const NOTE_BLOCKED = "To post, take the phone number, email or link out of your private note.";
 
 /**
  * Screen 3, "Last bit", all optional: would they play here again, what they
  * paid (only while the turf has fewer than 3 player prices), a one-line tip
- * for the next team, and a private note for the owner. The note sits in the
- * same place at every star rating and is never offered instead of the
- * public report.
+ * for the next team, photos from the game (where the database has them),
+ * and a private note for the owner. The note sits in the same place at
+ * every star rating and is never offered instead of the public report.
  */
 export function WrapUp({
   playAgain,
@@ -27,6 +32,7 @@ export function WrapUp({
   comment,
   onComment,
   prompt,
+  photos,
   noteOpen,
   onNoteOpen,
   note,
@@ -49,6 +55,8 @@ export function WrapUp({
   onComment: (v: string) => void;
   /** What to write about, from their taps ("You flagged the lights. ..."): shown above the box, not as a faint placeholder. */
   prompt: string;
+  /** The photos field (PhotoField), after the tip; null where the sheet offers none. */
+  photos?: ReactNode;
   noteOpen: boolean;
   onNoteOpen: () => void;
   note: string;
@@ -69,7 +77,7 @@ export function WrapUp({
     el.style.height = `${Math.min(el.scrollHeight, 4 * 24 + 22)}px`;
   }, [comment]);
 
-  const tipBad = flagged === "comment" || !!contactProblem(comment);
+  const tipBad = flagged === "comment" || !!tipProblem(comment);
   const noteBad = flagged === "note" || !!contactProblem(note);
   const chips = priceAsk ? withMine(priceAsk.chips, priceAsk.mine) : [];
   const otherOn = price === null && priceOther !== "";
@@ -152,10 +160,12 @@ export function WrapUp({
           }`}
         />
         <div id="report-tip-help" className="mt-1 flex items-start justify-between gap-3 text-[12px]">
-          <span className={tipBad ? "text-hot-600" : "text-primary-500"}>{tipBad ? CONTACT_MESSAGE : "English, Hindi, Marathi or Hinglish. No phone numbers or links."}</span>
+          <span className={tipBad ? "text-hot-600" : "text-primary-500"}>{tipBad ? TIP_CONTACT_MESSAGE : "English, Hindi, Marathi or Hinglish. No phone numbers, links or @handles."}</span>
           {comment.length >= TIP_COUNTER_FROM && <span className="shrink-0 tabular-nums text-primary-500">{comment.length}/{TIP_MAX}</span>}
         </div>
       </section>
+
+      {photos}
 
       <section className="mt-5">
         {!noteOpen ? (
@@ -207,7 +217,7 @@ export function WrapUp({
       </section>
 
       <p className="mt-5 text-[12px] text-primary-500 leading-snug">
-        {userName ? `Posting as ${userName}. ` : ""}Your name, stars, taps and tip are public. The private note never is.
+        {userName ? `Posting as ${userName}. ` : ""}Your name, stars, taps{photos ? ", tip and photos" : " and tip"} are public. The private note never is.
       </p>
     </div>
   );

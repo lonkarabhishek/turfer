@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { removeReport, voteReview } from "@/lib/reviews/client";
 import { hasWaiting, loadDraft, takeWaiting } from "@/lib/reviews/draft";
+import { shapeReviewPhotos } from "@/lib/reviews/photos";
 import { PRICE_ASK_BELOW, type ListedPrices } from "@/lib/reviews/sheet";
 import type { AspectCount, PlayAgainCounts, ReportChannel, VoteResponse } from "@/lib/reviews/types";
 import type { ReviewSummary, ReviewWithUser } from "@/types/review";
+import { FlagSheet } from "./reviews/FlagSheet";
 import { RateInline } from "./reviews/RateInline";
 import { ReportSheet, type SavedReport, type SheetOpen } from "./reviews/ReportSheet";
 import { ReviewList } from "./reviews/ReviewList";
@@ -27,7 +29,9 @@ const noop = () => () => {};
  * and remove their report. The sheet lives in components/turf/reviews.
  * A sheet asked for by a link or a button opens only once we know whether
  * this viewer already rated here, and then on their own report: a blank
- * one would post over it.
+ * one would post over it. "Report this review" (signed in; signed out it
+ * asks to log in) shows once the database takes reports
+ * (20261102_reviews_trust.sql: its reviews carry played_here).
  */
 export function TurfReviews(props: {
   turfId: string;
@@ -55,6 +59,11 @@ export function TurfReviews(props: {
   const me = useMyReport(turfId);
   const [reviews, setReviews] = useState(props.initialReviews);
   const [sheet, setSheet] = useState<SheetOpen | null>(null);
+  /** The review being reported, and the ones this viewer reported on this visit. */
+  const [flagFor, setFlagFor] = useState<ReviewWithUser | null>(null);
+  const [flagged, setFlagged] = useState<Set<string>>(() => new Set());
+  // A database that takes reports sends played_here on its rows (20261102_reviews_trust.sql).
+  const flagsReady = reviews.some((r) => !r.source && typeof r.played_here === "boolean");
   /** A sheet asked for (a "Rate your game" button, the ?rate=1 link) before we know whether they already rated here. */
   const [asked, setAsked] = useState<{ stars?: number; channel: ReportChannel } | null>(null);
   /** Their report here that a new one would replace: live, held or hidden. */
@@ -125,7 +134,15 @@ export function TurfReviews(props: {
   const reload = me.reload;
   const onSaved = useCallback(
     (s: SavedReport) => {
-      const row: ReviewWithUser = { ...s.review, booking_id: null, updated_at: null, source: null, viewer_has_upvoted: false, upvotes: s.review.upvotes ?? 0 };
+      const row: ReviewWithUser = {
+        ...s.review,
+        booking_id: null,
+        updated_at: null,
+        source: null,
+        viewer_has_upvoted: false,
+        upvotes: s.review.upvotes ?? 0,
+        photos: shapeReviewPhotos(s.review.photos),
+      };
       setReviews((prev) => (s.review.status === "live" ? [row, ...prev.filter((r) => r.id !== row.id)] : prev.filter((r) => r.id !== row.id)));
       void reload();
     },
@@ -163,6 +180,12 @@ export function TurfReviews(props: {
     else flip(!on);
   };
 
+  /** Report this review: signed out, log in first. */
+  const onFlag = (r: ReviewWithUser) => {
+    if (!user) return login();
+    setFlagFor(r);
+  };
+
   const tapturfN = props.initialSummary.count;
   const hasGoogle = typeof props.googleRating === "number" && props.googleRating > 0;
   const priceAsk = (props.playerPrice?.count ?? 0) < PRICE_ASK_BELOW ? { listed: props.listedPrices, players: props.playerPrice, mine: me.myPrice } : null;
@@ -198,9 +221,21 @@ export function TurfReviews(props: {
         hydrated={hydrated}
         turfSports={sports}
         onVote={onVote}
+        onFlag={flagsReady ? onFlag : undefined}
+        flagged={flagged}
         onEdit={() => mine && setSheet({ channel: "edit", editing: mine })}
         onRemove={onRemove}
       />
+
+      {flagFor && (
+        <FlagSheet
+          reviewId={flagFor.id}
+          author={flagFor.user_name || "a TapTurf player"}
+          getToken={getToken}
+          onClose={() => setFlagFor(null)}
+          onSent={(id) => setFlagged((s) => new Set(s).add(id))}
+        />
+      )}
 
       {sheet && (
         <ReportSheet
