@@ -12,12 +12,17 @@ import {
   mapHref,
   mapSearch,
   matchesChip,
+  nearBounds,
+  nearbyLine,
   padBounds,
   parseBounds,
   parseMapQuery,
   parseSnapshot,
+  parseTurfKey,
+  turfMapHref,
   type Bounds,
 } from "./view";
+import { haversineKm } from "../utils/location";
 
 test("parseBounds: four numbers west, south, east, north, clamped to where the map goes", () => {
   assert.deepEqual(parseBounds("73.7,18.43,73.96,18.69"), [73.7, 18.43, 73.96, 18.69]);
@@ -35,8 +40,8 @@ test("boundsParam: 4 decimals, and back", () => {
 });
 
 test("parseMapQuery: the city, the view, games and the chip from the URL", () => {
-  assert.deepEqual(parseMapQuery(""), { city: null, b: null, show: "turfs", sport: null });
-  assert.deepEqual(parseMapQuery("?city=Pune&show=games&sport=box-cricket"), { city: "pune", b: null, show: "games", sport: "Box Cricket" });
+  assert.deepEqual(parseMapQuery(""), { city: null, b: null, show: "turfs", sport: null, turf: null });
+  assert.deepEqual(parseMapQuery("?city=Pune&show=games&sport=box-cricket"), { city: "pune", b: null, show: "games", sport: "Box Cricket", turf: null });
   assert.deepEqual(parseMapQuery("?b=73.7,18.43,73.96,18.69").b, [73.7, 18.43, 73.96, 18.69]);
   for (const bad of ["turfs", "api", "pick", "../x", "pune;drop", "a".repeat(40)]) assert.equal(parseMapQuery(`?city=${bad}`).city, null, bad);
   assert.equal(parseMapQuery("?city=new-town").city, "new-town", "a city not curated yet");
@@ -45,20 +50,56 @@ test("parseMapQuery: the city, the view, games and the chip from the URL", () =>
 });
 
 test("mapSearch: the city and the view, defaults left out, other params kept", () => {
-  assert.equal(mapSearch({ city: null, b: null, show: "turfs", sport: null }), "");
-  assert.equal(mapSearch({ city: "pune", b: null, show: "turfs", sport: null }), "?city=pune");
-  assert.equal(mapSearch({ city: "pune", b: [73.7, 18.43, 73.96, 18.69], show: "games", sport: "Box Cricket" }), "?city=pune&b=73.7,18.43,73.96,18.69&show=games&sport=box-cricket");
-  assert.equal(mapSearch({ city: null, b: [73.7, 18.43, 73.96, 18.69], show: "turfs", sport: null }, "?city=pune&b=1,2,3,4"), "?b=73.7,18.43,73.96,18.69", "a move leaves the city behind");
-  assert.equal(mapSearch({ city: null, b: null, show: "turfs", sport: "Football" }, "?utm_source=wa&city=pune&b=1,2,3,4&show=games"), "?utm_source=wa&sport=football");
-  const q = parseMapQuery(mapSearch({ city: null, b: [73.7, 18.43, 73.96, 18.69], show: "games", sport: "Cricket" }));
-  assert.deepEqual(q, { city: null, b: [73.7, 18.43, 73.96, 18.69], show: "games", sport: "Cricket" });
+  assert.equal(mapSearch({ city: null, b: null, show: "turfs", sport: null, turf: null }), "");
+  assert.equal(mapSearch({ city: "pune", b: null, show: "turfs", sport: null, turf: null }), "?city=pune");
+  assert.equal(mapSearch({ city: "pune", b: [73.7, 18.43, 73.96, 18.69], show: "games", sport: "Box Cricket", turf: null }), "?city=pune&b=73.7,18.43,73.96,18.69&show=games&sport=box-cricket");
+  assert.equal(mapSearch({ city: null, b: [73.7, 18.43, 73.96, 18.69], show: "turfs", sport: null, turf: null }, "?city=pune&b=1,2,3,4"), "?b=73.7,18.43,73.96,18.69", "a move leaves the city behind");
+  assert.equal(mapSearch({ city: null, b: null, show: "turfs", sport: "Football", turf: null }, "?utm_source=wa&city=pune&b=1,2,3,4&show=games"), "?utm_source=wa&sport=football");
+  const q = parseMapQuery(mapSearch({ city: null, b: [73.7, 18.43, 73.96, 18.69], show: "games", sport: "Cricket", turf: null }));
+  assert.deepEqual(q, { city: null, b: [73.7, 18.43, 73.96, 18.69], show: "games", sport: "Cricket", turf: null });
 });
 
 test("mapHref: the turf list's Map button", () => {
   assert.equal(mapHref(null), "/map");
   assert.equal(mapHref("pune"), "/map?city=pune");
   assert.equal(mapHref("pune", [73.70004, 18.43, 73.96, 18.69]), "/map?city=pune&b=73.7,18.43,73.96,18.69");
-  assert.deepEqual(parseMapQuery("?city=pune&b=73.7,18.43,73.96,18.69"), { city: "pune", b: [73.7, 18.43, 73.96, 18.69], show: "turfs", sport: null });
+  assert.deepEqual(parseMapQuery("?city=pune&b=73.7,18.43,73.96,18.69"), { city: "pune", b: [73.7, 18.43, 73.96, 18.69], show: "turfs", sport: null, turf: null });
+});
+
+test("parseTurfKey: a turf page's key, its slug or its id, nothing else", () => {
+  assert.equal(parseTurfKey("force-playing-fields-baner"), "force-playing-fields-baner");
+  assert.equal(parseTurfKey(" Turf-Up-Baner "), "turf-up-baner", "trimmed, lower case as slugs are made");
+  assert.equal(parseTurfKey("5b9f50b1-dcce-45a9-9c8f-c847812b18d0"), "5b9f50b1-dcce-45a9-9c8f-c847812b18d0");
+  assert.equal(parseTurfKey("o2"), "o2");
+  assert.equal(parseTurfKey("machaxi-sssc-sikki-sumeeth-sports-centre-osman-nagar"), "machaxi-sssc-sikki-sumeeth-sports-centre-osman-nagar");
+  assert.equal(parseTurfKey("a".repeat(160)), "a".repeat(160));
+  for (const bad of [null, undefined, "", "  ", "-turf", "turf-", "turf up", "turf_up", "../map", "turf%2Fup", "turf/up", "a".repeat(161), "\u091f\u0930\u094d\u092b", "turf;drop", "?b=1"]) {
+    assert.equal(parseTurfKey(bad), null, String(bad));
+  }
+});
+
+test("parseMapQuery and mapSearch: ?turf= from a turf page's Open full map, and gone with the first move", () => {
+  assert.deepEqual(parseMapQuery("?turf=force-playing-fields-baner"), { city: null, b: null, show: "turfs", sport: null, turf: "force-playing-fields-baner" });
+  assert.equal(parseMapQuery("?turf=..%2F..%2Fadmin").turf, null);
+  assert.equal(parseMapQuery("?turf=").turf, null);
+  assert.equal(parseMapQuery("?turf=a&turf=b").turf, "a", "the first one");
+  // With the rest: a sport chip, games, a view (which then says where the map looks).
+  assert.deepEqual(parseMapQuery("?turf=turf-up-baner&sport=football&show=games&b=73.7,18.43,73.96,18.69"), {
+    city: null,
+    b: [73.7, 18.43, 73.96, 18.69],
+    show: "games",
+    sport: "Football",
+    turf: "turf-up-baner",
+  });
+  assert.equal(turfMapHref("force-playing-fields-baner"), "/map?turf=force-playing-fields-baner");
+  assert.equal(turfMapHref("5B9F50B1-DCCE-45A9-9C8F-C847812B18D0"), "/map?turf=5b9f50b1-dcce-45a9-9c8f-c847812b18d0");
+  assert.equal(turfMapHref("not a key"), "/map", "never a broken link");
+  assert.equal(parseMapQuery(turfMapHref("turf-up-baner").slice(4)).turf, "turf-up-baner", "and back");
+  // MapExplorer's first move writes { b, city: null, turf: null }: the view replaces the turf, other params stay.
+  const after = mapSearch({ ...parseMapQuery("?turf=turf-up-baner&utm_source=wa"), b: [73.7, 18.43, 73.96, 18.69], turf: null }, "?turf=turf-up-baner&utm_source=wa");
+  assert.equal(after, "?utm_source=wa&b=73.7,18.43,73.96,18.69");
+  // Until then the URL keeps it (another write, a chip, leaves it).
+  assert.equal(mapSearch({ ...parseMapQuery("?turf=turf-up-baner"), sport: "Football" }, "?turf=turf-up-baner"), "?sport=football&turf=turf-up-baner");
 });
 
 const near = (city: string, lat: number, lng: number) => ({ city, lat, lng });
@@ -81,6 +122,63 @@ test("cityBounds: around the city's turfs, a stray one left out, never too tight
   const centre = cityBounds("pune", [])!;
   assert.ok(inBounds({ lat: 18.5204, lng: 73.8567 }, centre) && Math.abs(centre[2] - centre[0] - 0.2) < 1e-9);
   assert.equal(cityBounds("nowhere-town", []), null);
+});
+
+/** A point `km` from `at` towards `deg` (0 north, 90 east), near enough on a city's scale. */
+function towards(at: { lat: number; lng: number }, km: number, deg: number) {
+  const r = (deg * Math.PI) / 180;
+  return { lat: at.lat + (km * Math.cos(r)) / 111.32, lng: at.lng + (km * Math.sin(r)) / (111.32 * Math.cos((at.lat * Math.PI) / 180)) };
+}
+/** How far the view reaches north of `at`, and east, in km. */
+function reach(b: Bounds, at: { lat: number; lng: number }) {
+  return { n: haversineKm(at, { lat: b[3], lng: at.lng }), e: haversineKm(at, { lat: at.lat, lng: b[2] }) };
+}
+
+test("nearBounds: centred on the turf, out to its fifth nearest neighbour, a little past it", () => {
+  const baner = { lat: 18.5596, lng: 73.7795 };
+  const others = [0.6, 0.9, 1.5, 1.5, 1.6, 2.4, 3.1].map((km, i) => towards(baner, km, i * 50));
+  const b = nearBounds(baner, others);
+  assert.ok(Math.abs((b[0] + b[2]) / 2 - baner.lng) < 1e-9 && Math.abs((b[1] + b[3]) / 2 - baner.lat) < 1e-9, `centred: ${b}`);
+  const r = reach(b, baner);
+  assert.ok(Math.abs(r.n - 1.6 * 1.15) < 0.02 && Math.abs(r.e - 1.6 * 1.15) < 0.02, `fifth nearest is 1.6 km: ${JSON.stringify(r)}`);
+  for (const p of others.slice(0, 5)) assert.ok(inBounds(p, b), `the nearest five are in view: ${p.lat},${p.lng}`);
+  assert.ok(!inBounds(others[6], b), "a farther one is not");
+  // Order does not matter.
+  assert.deepEqual(nearBounds(baner, [...others].reverse()), b);
+});
+
+test("nearBounds: never closer than 0.8 km, never past 4 km, a lone turf its neighbourhood", () => {
+  const at = { lat: 18.5596, lng: 73.7795 };
+  // Five turfs inside one complex: still the streets around it.
+  const tight = reach(nearBounds(at, [0.05, 0.1, 0.1, 0.2, 0.3].map((km, i) => towards(at, km, i * 70))), at);
+  assert.ok(Math.abs(tight.n - 0.8) < 0.01, JSON.stringify(tight));
+  // Two neighbours within 4 km, the rest far: out to the farther of the two.
+  const two = reach(nearBounds(at, [towards(at, 1, 0), towards(at, 3, 90), towards(at, 12, 180), towards(at, 40, 270)]), at);
+  assert.ok(Math.abs(two.n - 3.45) < 0.02, JSON.stringify(two));
+  // Only far ones (a Nashik edge, 8.6 km): its neighbourhood, 1.2 km.
+  const lone = reach(nearBounds(at, [towards(at, 8.6, 30), towards(at, 9.9, 200)]), at);
+  assert.ok(Math.abs(lone.n - 1.2) < 0.01, JSON.stringify(lone));
+  assert.deepEqual(nearBounds(at, []), nearBounds(at, [towards(at, 50, 0)]), "no neighbours at all: the same");
+  // Never more than 4 km each way (3.6 km x 1.15 would be 4.14).
+  const wide = reach(nearBounds(at, [3.2, 3.3, 3.4, 3.5, 3.6].map((km, i) => towards(at, km, i * 70))), at);
+  assert.ok(Math.abs(wide.n - 4) < 0.02, JSON.stringify(wide));
+  // Square on the ground: wider in degrees of longitude away from the equator.
+  const delhi = { lat: 28.61, lng: 77.21 };
+  const d = nearBounds(delhi, []);
+  assert.ok(d[2] - d[0] > d[3] - d[1], String(d));
+  const dr = reach(d, delhi);
+  assert.ok(Math.abs(dr.n - dr.e) < 0.01, JSON.stringify(dr));
+});
+
+test("nearbyLine: how many other turfs are within 3 km, else how far the nearest is", () => {
+  const at = { lat: 18.5596, lng: 73.7795 };
+  assert.equal(nearbyLine(at, [0.6, 0.9, 1.5, 2.9, 3.4, 8].map((km, i) => towards(at, km, i * 40))), "4 other turfs within 3 km");
+  assert.equal(nearbyLine(at, [towards(at, 2, 90)]), "1 other turf within 3 km");
+  assert.equal(nearbyLine(at, Array.from({ length: 1200 }, (_, i) => towards(at, 0.5 + (i % 20) * 0.1, i))), "1,200 other turfs within 3 km");
+  assert.equal(nearbyLine(at, [towards(at, 8.6, 30), towards(at, 12, 200)]), "Nearest other turf: 8.6 km");
+  assert.equal(nearbyLine(at, [towards(at, 14.2, 30)]), "Nearest other turf: 14 km");
+  assert.equal(nearbyLine(at, []), "No other turfs on the map yet");
+  assert.equal(nearbyLine(at, [{ lat: NaN, lng: 73 }]), "No other turfs on the map yet", "a point that is no point");
 });
 
 test("padBounds and inBounds", () => {

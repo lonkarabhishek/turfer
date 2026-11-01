@@ -29,6 +29,7 @@ import { TurfPricing, slotRatesHint } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
+import { TurfOnMapCard } from "@/components/turf/TurfOnMapCard";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { TurfReviews } from "@/components/turf/TurfReviews";
 import { OwnerBadge } from "@/components/turf/OwnerBadge";
@@ -368,6 +369,8 @@ export default async function TurfDetailPage({
                   address={turf.address}
                   name={turf.name}
                 />
+                {/* TapTurf's own map, with the turfs around it: drawn in the HTML, the real map only on a tap. */}
+                <TurfOnMapCard turf={turf} />
               </div>
             )}
 

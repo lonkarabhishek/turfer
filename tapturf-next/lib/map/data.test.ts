@@ -7,7 +7,7 @@ import { cardPrice, cardSports } from "../utils/cardSport";
 import { turfPhotos } from "../utils/images";
 import { areaFor } from "../utils/area";
 import { SPORT_CHIPS } from "../turfList/query";
-import { fromMapTurf, gamePin, mapPoint, pickedGames, roundDeg, toMapGame, toMapTurf, turfHourly, turfPin } from "./data";
+import { fromMapTurf, gamePin, mapPoint, mapTurfPin, pagePin, pickedGames, roundDeg, toMapGame, toMapTurf, turfHourly, turfPin } from "./data";
 
 /** A card row as getNearTurfs hands it over: forCard() of a full row, sport bands added when it has any. */
 function row(p: Partial<Turf> & Record<string, unknown> = {}): Turf {
@@ -174,6 +174,40 @@ test("turfHourly: the pin's listed price per hour, for its bubble's average", ()
       if (h != null && cardPrice(t, sport).unit === "/hr") assert.equal(turfPin(t, sport).tail, `₹${h.toLocaleString("en-IN")}/hr`, `${t.name} ${sport?.chip}`);
       if (h != null) assert.ok(h > 0);
     }
+  }
+});
+
+test("mapTurfPin: a map turf's pin, its key, point, place, hourly price and words", () => {
+  const t = fromMapTurf(toMapTurf(ROWS[0])!);
+  assert.deepEqual(mapTurfPin(t), { key: "turf-up-baner", lat: 18.56106, lng: 73.78902, place: "Turf Up", hourly: 800, ...turfPin(t) });
+  assert.equal(mapTurfPin(t).text, "Turf Up | ₹800/hr");
+  const banded = fromMapTurf(toMapTurf(ROWS[6])!);
+  assert.deepEqual(mapTurfPin(banded, { chip: "Football" }), { key: "turf-up-baner", lat: 18.56106, lng: 73.78902, place: "Turf Up", hourly: 1500, ...turfPin(banded, { chip: "Football" }) });
+});
+
+test("pagePin: a turf page's own pin is exactly the one /map draws for it", () => {
+  // The page's row is the whole row (notes, contact and all); /map's comes through forCard and the wire.
+  const page = {
+    ...ROWS[0],
+    morning_price: null,
+    afternoon_price: null,
+    evening_price: null,
+    weekend_evening_price: null,
+    price_mentions: [{ price_inr: 1000, context: "weekday nights" }, { text: "Rs 900 before 7" }, { price_inr: 700, source: "player" }],
+    description: "Long text",
+    owner_phone: "9800000000",
+    contact_info: { phone: "9800000001", email: "owner@example.com" },
+    images: ["https://example.supabase.co/a.webp", "https://example.supabase.co/b.webp", "https://example.supabase.co/c.webp", "https://example.supabase.co/d.webp", "https://example.supabase.co/e.webp"],
+  } as unknown as Turf;
+  const onMap = mapTurfPin(fromMapTurf(JSON.parse(JSON.stringify(toMapTurf(forCard(page))))));
+  assert.deepEqual(pagePin(page), onMap);
+  assert.equal(pagePin(page)!.text, "Turf Up | ~₹700/hr", "the reported low end, as the map shows it");
+  for (const t of ROWS) assert.deepEqual(pagePin(t), mapTurfPin(fromMapTurf(toMapTurf(t)!)), t.name);
+  const json = JSON.stringify(pagePin(page));
+  for (const secret of ["9800000000", "9800000001", "owner@example.com", "Long text", "weekday", "Rs 900"]) assert.ok(!json.includes(secret), secret);
+  // No point on the map: no map card.
+  for (const at of [{ lat: null, lng: null }, { lat: 0, lng: 0 }, { lat: 18.5, lng: null }, { lat: 91, lng: 73 }]) {
+    assert.equal(pagePin({ ...page, ...at } as unknown as Turf), null, JSON.stringify(at));
   }
 });
 

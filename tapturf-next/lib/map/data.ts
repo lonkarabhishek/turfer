@@ -1,6 +1,7 @@
 import type { PriceMention, PriceUnit, SportBands, Turf } from "../../types/turf";
 import type { Game } from "../../types/game";
 import { areaFor } from "../utils/area";
+import { forCard } from "../utils/cardTurf";
 import { turfPhotos } from "../utils/images";
 import { cardPrice, type CardSport } from "../utils/cardSport";
 import { priceRangeText } from "../utils/prices";
@@ -245,6 +246,28 @@ export function turfPin(t: Turf, sport?: CardSport | null): TurfPinText {
   }
   const tail = sport ? null : lead || null;
   return { text: pinLine(name, tail), label: `${t.name}${lead ? `, ${lead}` : ""}, prices not listed yet`, name, tail, short: null };
+}
+
+/**
+ * A turf's pin as the map takes it (engine.ts Pin): its key and point,
+ * its name for a bubble at one site (`place`), its hourly price for its
+ * bubble's average (turfHourly) and its words (turfPin). `t` is a map
+ * turf (fromMapTurf), so `id` is its key.
+ */
+export type MapTurfPin = TurfPinText & { key: string; lat: number; lng: number; place: string; hourly: number | null };
+
+export function mapTurfPin(t: Turf, sport?: CardSport | null): MapTurfPin {
+  return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, sport), ...turfPin(t, sport) };
+}
+
+/**
+ * A turf page's own pin, exactly as /map draws it: its row cut to a card
+ * row and sent the way /api/map/turfs sends it, then read back. Null when
+ * it has no point on the map (mapPoint), and the page shows no map card.
+ */
+export function pagePin(t: Turf): MapTurfPin | null {
+  const w = toMapTurf(forCard(t));
+  return w ? mapTurfPin(fromMapTurf(w)) : null;
 }
 
 /**

@@ -7,7 +7,8 @@ import { NAME_ZOOM, badgeRect, collide, declutter, discRect, placeTags, tagRect,
 
 /**
  * /map's map: MapLibre GL (bundled from npm, loaded only by /map, after
- * the page is up: MapExplorer imports this module dynamically) over
+ * the page is up: MapExplorer imports this module dynamically; and by a
+ * turf page's map once the visitor taps it: MiniMap) over
  * OpenFreeMap's street map, with our own HTML pins. Clustering is
  * Supercluster's, here in the page, so the pins for exactly the view are
  * one call away; the pins are buttons (keyboard, screen readers), and
@@ -24,7 +25,8 @@ import { NAME_ZOOM, badgeRect, collide, declutter, discRect, placeTags, tagRect,
  * bubble. Up close a turf's pin names it and its price per hour ("O2 Turf
  * | ₹500/hr"); where pins would run into each other or a bubble, the
  * later ones (lib/map/pins.ts declutter) show their price alone or a dot,
- * and the picked, hovered or focused one always shows in full. Pins and
+ * and the picked, hovered or focused one always shows in full. The turf
+ * a page is about (EngineOptions.alone) never joins a bubble. Pins and
  * tags under the bar and legends over the map (EngineOptions.covered)
  * make way too. The "Popular" layer (setHeat) sits under the street map's
  * labels: a heatmap zoomed out, then, from about a city and its suburbs,
@@ -85,6 +87,18 @@ export type EngineOptions = {
   covered: () => readonly Rect[];
   /** Zoom buttons (desktop; phones pinch). */
   zoomButtons: boolean;
+  /**
+   * The map sits in a page that scrolls (a turf page's): one finger or the
+   * wheel scroll the page, two fingers or Ctrl (⌘) and the wheel move the
+   * map, as MapLibre's cooperative gestures say over it when tried.
+   */
+  inPage?: boolean;
+  /**
+   * A turf pin (its key) that never joins a bubble: the turf a page is
+   * about (a turf page's own map, /map?turf=), so its pin shows wherever
+   * the map is. The bubbles count the others.
+   */
+  alone?: string | null;
   /** After every move, by the viewer (`byUser`) or by the page. */
   onView: (b: Bounds, zoom: number, byUser: boolean) => void;
   /**
@@ -303,6 +317,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     pitchWithRotate: false,
     touchPitch: false,
     attributionControl: false,
+    cooperativeGestures: !!opts.inPage,
     // What a screen reader hears on the map itself (the list beside it has every place).
     locale: { "Map.Title": "Map. Arrow keys move it, plus and minus zoom." },
   });
@@ -328,6 +343,8 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
 
   let kind: PinKind = "turf";
   let pins: readonly Pin[] = [];
+  /** Where in `pins` the pin that never joins a bubble is (EngineOptions.alone); -1 for none. */
+  let aloneAt = -1;
   let index: Supercluster<Props, Partial<BubbleSum>> | null = null;
   let markers = new Map<string, Marker>();
   let active: string | null = null;
@@ -504,7 +521,9 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       list.push({ key, x: at.x, y: at.y, ...size, priced: s.priced, trend: s.trend, order: s.order, pinned: k === active || k === hot || key === hover || key === focused });
     }
     let changed = false;
-    const tags = placeTags(bubbles, over);
+    // The picked pin shows in full whatever it covers: the bubbles' price tags make way for it (not for a hovered one, so a tag never flips under the mouse).
+    const picked = list.filter((p) => p.key === `p:${active}`).map((p): Rect => [p.x - p.full[0] / 2, p.y - p.full[1] / 2, p.x + p.full[0] / 2, p.y + p.full[1] / 2]);
+    const tags = placeTags(bubbles, [...over, ...picked]);
     const blocked: Rect[] = [...over];
     for (const b of bubbles) {
       blocked.push(discRect(b));
@@ -671,7 +690,13 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     const [w, s, e, n] = toBounds(map);
     const dx = (e - w) * 0.15;
     const dy = (n - s) * 0.15;
-    const feats = idx.getClusters([Math.max(-180, w - dx), Math.max(-85, s - dy), Math.min(180, e + dx), Math.min(85, n + dy)], z);
+    const box: [number, number, number, number] = [Math.max(-180, w - dx), Math.max(-85, s - dy), Math.min(180, e + dx), Math.min(85, n + dy)];
+    const feats = idx.getClusters(box, z);
+    // The pin that never joins a bubble, when it is in (or near) the view.
+    const lone = pins[aloneAt];
+    if (lone && lone.lng >= box[0] && lone.lng <= box[2] && lone.lat >= box[1] && lone.lat <= box[3]) {
+      feats.push({ type: "Feature", geometry: { type: "Point", coordinates: [lone.lng, lone.lat] }, properties: { i: aloneAt } });
+    }
     const old = markers;
     markers = new Map();
     for (const f of feats) {
@@ -794,6 +819,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       pins = next;
       if (same && index) return;
       kind = k;
+      aloneAt = k === "turf" && opts.alone ? next.findIndex((p) => p.key === opts.alone) : -1;
       // Turf bubbles sum their turfs' hourly prices (and count the trending ones) as they cluster, for their tag and badge.
       index =
         k === "turf"
@@ -806,11 +832,17 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
             })
           : new Supercluster<Props, Partial<BubbleSum>>({ radius: RADIUS, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
       index.load(
-        next.map((p, i) => ({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [p.lng, p.lat] },
-          properties: k === "turf" ? { i, h: p.hourly ?? null, t: !!p.trend } : { i },
-        })),
+        next.flatMap((p, i) =>
+          i === aloneAt
+            ? []
+            : [
+                {
+                  type: "Feature" as const,
+                  geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
+                  properties: k === "turf" ? { i, h: p.hourly ?? null, t: !!p.trend } : { i },
+                },
+              ],
+        ),
       );
       for (const m of markers.values()) m.remove();
       markers = new Map();
