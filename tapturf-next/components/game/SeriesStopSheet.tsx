@@ -21,7 +21,7 @@ export function SeriesStopSheet({
   open: boolean;
   /** "Every Tue and Thu" (lib/games/repeat.ts repeatLabel). */
   label: string;
-  /** Its games up and not played yet; null when not known. */
+  /** Its games up and not started yet (what cancelling calls off); null when not known. */
   left: number | null;
   onStop: (cancel: boolean) => Promise<string | null>;
   onClose: () => void;

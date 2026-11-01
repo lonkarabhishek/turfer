@@ -2,8 +2,9 @@
 -- games", the host choosing how, "just like how google calendar let us
 -- choose". In the create flow the host picks, for one game:
 --   * weekly on one or more weekdays (Tue and Thu), every 1 to 4 weeks
---     (2 is every other week); the weeks count from the Monday of the
---     first day;
+--     (2 is every other week); the first game is the first of those days
+--     on or after the first day, and the weeks count from its week
+--     (Monday first);
 --   * monthly on the same date (the 14th; a 29th, 30th or 31st is the
 --     month's last day in shorter months), or on the nth weekday of the
 --     first day (the first Sunday, the last Saturday);
@@ -26,9 +27,10 @@
 --
 -- Games go up ahead, not all at once: every day of the next 4 weeks
 -- (today counts), at most 8 not yet played per series, and always the
--- next one (so a monthly series has its next game up). A day whose start
--- has passed is skipped. A daily job (05:37 IST) tops every series up;
--- one with no day left to make is ended ('done').
+-- next one (so a monthly series has its next game up; a game the host
+-- cancelled counts for neither, so the one after it goes up). A day
+-- whose start has passed is skipped. A daily job (05:37 IST) tops every
+-- series up; one with no day left to make is ended ('done').
 --
 -- Functions (the server key, private.account_key_ok, and the account the
 -- server resolved, never one the browser names; anon and authenticated
@@ -134,8 +136,23 @@ as $$
 $$;
 revoke all on function private.game_series_month_days(date) from public, anon, authenticated;
 
+-- The Monday of the week of a weekly rule's first game (the first of its
+-- days on or after p_start): its weeks count from there, so every 2 weeks
+-- on Monday from a Sunday starts the next day.
+create or replace function private.game_series_week_one(p_rule jsonb, p_start date)
+returns date
+language sql
+immutable
+set search_path = ''
+as $$
+  select x.f - (extract(isodow from x.f)::integer - 1)
+    from (select p_start + (select min(((e #>> '{}')::integer - extract(dow from p_start)::integer + 7) % 7)
+                              from jsonb_array_elements(p_rule -> 'days') e) as f) x;
+$$;
+revoke all on function private.game_series_week_one(jsonb, date) from public, anon, authenticated;
+
 -- Is p_day on the rule? p_start: the series' first day (the weeks of a
--- weekly rule count from its Monday). Days are 0 (Sunday) to 6.
+-- weekly rule count from its first game's week). Days are 0 (Sunday) to 6.
 create or replace function private.game_series_matches(p_rule jsonb, p_start date, p_day date)
 returns boolean
 language sql
@@ -145,7 +162,7 @@ as $$
   select case p_rule ->> 'freq'
     when 'weekly' then
       (p_rule -> 'days') @> to_jsonb(extract(dow from p_day)::integer)
-      and ((p_day - (p_start - (extract(isodow from p_start)::integer - 1))) / 7) % (p_rule ->> 'interval')::integer = 0
+      and ((p_day - private.game_series_week_one(p_rule, p_start)) / 7) % (p_rule ->> 'interval')::integer = 0
     when 'monthly' then
       case p_rule ->> 'by'
         when 'date' then
@@ -363,7 +380,10 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('game_series_fill:' || v_s.host_id::text, 0));
   v_room := 30 - (select count(*) from public.games g
                    where g.creator_id = v_s.host_id and g.series_id is not null and g.created_at > p_now - interval '1 day');
-  select count(*) into v_ahead from private.game_series_dates d where d.series_id = v_s.id and d.day >= v_today;
+  -- Its games still on from today: one the host cancelled holds no place
+  -- (game_series_dates still keeps its day from being made again).
+  select count(*) into v_ahead from public.games g
+   where g.series_id = v_s.id and coalesce(g.status, 'open') in ('open', 'full') and g.date >= v_today;
   for v_day in
     select x.day
       from private.game_series_days(v_s.rule, v_s.starts_on, private.game_series_last(v_s), v_s.max_games) x
@@ -567,8 +587,9 @@ revoke all on function public.game_series_stop(text, uuid, uuid, boolean) from p
 grant execute on function public.game_series_stop(text, uuid, uuid, boolean) to anon, authenticated;
 
 -- The host's series, newest first (at most 20), each with its games still
--- to play (open or full, not over) and the next of them {id, date,
--- start_time}. {r: ok, series}.
+-- to play (open or full, not over), how many of them have not started
+-- (unstarted: what a stop that cancels calls off) and the next of them
+-- {id, date, start_time}. {r: ok, series}.
 create or replace function public.game_series_mine(p_key text, p_user_id uuid)
 returns jsonb
 language plpgsql
@@ -588,6 +609,9 @@ begin
              'upcoming', (select count(*) from public.games g
                            where g.series_id = s.id and coalesce(g.status, 'open') in ('open', 'full')
                              and not private.game_over(g.date, g.start_time, g.end_time)),
+             'unstarted', (select count(*) from public.games g
+                            where g.series_id = s.id and g.creator_id = s.host_id and coalesce(g.status, 'open') in ('open', 'full')
+                              and g.date + g.start_time > (now() at time zone 'Asia/Kolkata')),
              'next', (select jsonb_build_object('id', g.id, 'date', g.date, 'start_time', g.start_time)
                         from public.games g
                        where g.series_id = s.id and coalesce(g.status, 'open') in ('open', 'full')

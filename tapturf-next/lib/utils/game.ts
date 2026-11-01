@@ -62,6 +62,21 @@ export function sortGamesByDateTime<T extends Pick<Game, "date" | "start_time">>
   });
 }
 
+/**
+ * A list of games, soonest first, with each repeat's soonest only: the
+ * listings show a repeat once (its card says "Repeats"), and its other
+ * dates are on that game's page (20261102_game_series.sql puts up to 8 up).
+ */
+export function oneGamePerRepeat<T extends Pick<Game, "series_id">>(games: T[]): T[] {
+  const seen = new Set<string>();
+  return games.filter((g) => {
+    if (!g.series_id) return true;
+    if (seen.has(g.series_id)) return false;
+    seen.add(g.series_id);
+    return true;
+  });
+}
+
 export function getGameStatus(game: Pick<Game, "date" | "start_time" | "end_time">, now: number = Date.now()): "upcoming" | "live" | "expired" {
   const day = dayOf(game.date);
   if (Number.isNaN(day)) return "upcoming";

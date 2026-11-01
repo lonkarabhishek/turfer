@@ -59,11 +59,20 @@ function monthDays(d: string): number {
   return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
 }
 
-/** Is `day` on the rule? `start`: the series' first day (the weeks of a weekly rule count from its Monday). */
+/**
+ * The Monday of the week of a weekly rule's first game (the first of its
+ * days on or after `start`): its weeks count from there, so every 2 weeks
+ * on Monday from a Sunday starts the next day.
+ */
+function weekOne(rule: WeeklyRule, start: string): number {
+  const first = dayNum(start) + Math.min(...rule.days.map((d) => (d - weekdayOf(start) + 7) % 7));
+  return first - ((new Date(first * DAY_MS).getUTCDay() + 6) % 7);
+}
+
+/** Is `day` on the rule? `start`: the series' first day (the weeks of a weekly rule count from its first game's week). */
 export function matches(rule: RepeatRule, start: string, day: string): boolean {
   if (rule.freq === "weekly") {
-    const monday = dayNum(start) - ((weekdayOf(start) + 6) % 7);
-    return rule.days.includes(weekdayOf(day)) && Math.floor((dayNum(day) - monday) / 7) % rule.interval === 0;
+    return rule.days.includes(weekdayOf(day)) && Math.floor((dayNum(day) - weekOne(rule, start)) / 7) % rule.interval === 0;
   }
   if (rule.by === "date") return dateOf(day) === Math.min(rule.day, monthDays(day));
   if (weekdayOf(day) !== rule.weekday) return false;

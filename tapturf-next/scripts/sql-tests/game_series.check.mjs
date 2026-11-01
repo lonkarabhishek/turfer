@@ -7,11 +7,12 @@
 // ending on a date or after N), the days going by India's clock, the games each
 // series puts up (as game_create makes a game, the host the first player, the
 // turf booked on the first only), never a day twice (run again, a day later, a
-// game moved), the limits (3 running, 5 a day, 30 series games a day, and
-// game_create's 10 a day counting single games only), the server key and the
-// host only, stopping with and without cancelling (who is told), the host's list,
-// the public read, the daily job, grants, and that no grant or policy on a public
-// table changes. Never touches a real database.
+// game moved), a game the host cancels holding no place (the next goes up), the
+// limits (3 running, 5 a day, 30 series games a day, and game_create's 10 a day
+// counting single games only), the server key and the host only, stopping with
+// and without cancelling (who is told), the host's list (with what a stop would
+// cancel), the public read, the daily job, grants, and that no grant or policy on
+// a public table changes. Never touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/game_series.check.mjs supabase/migrations
 // REPEAT_JS=<lib/games/repeat.js as npm run test:games builds it> also compares
 // the TS maths with the database's on random rules.
@@ -227,6 +228,27 @@ const monthEnds = (await gamesOf(s3.series.id)).map((g) => g.d);
 ok(monthEnds.every((d) => plusDays(d, 1).slice(8) === "01"), `each on its month's last day: ${monthEnds.join(", ")}`);
 eq(monthEnds.length, 4, "four of them");
 
+/* ---------------- a game the host cancels holds no place ---------------- */
+const MEERA = U(7);
+await q(`insert into public.users (id, name) values ('${MEERA}', 'Meera Iyer')`);
+const m15 = ist(3);
+const sm = await create(MEERA, { ...GAME, date: m15 }, { rule: { freq: "monthly", by: "date", day: Number(m15.slice(8)) }, ends: { type: "never" } });
+eq([sm.r, sm.made, sm.games.map((g) => g.date)], ["ok", 1, [m15]], "(a monthly series on the date: its first game up)");
+eq((await rpc("game_cancel", [KEY, MEERA, sm.games[0].id])).r, "ok", "(the host cancels that game)");
+const inTwoDays = new Date(Date.now() + 2 * 86400000).toISOString();
+eq(await fill(sm.series.id, inTwoDays), 1, "two days on, the next month's game goes up: the cancelled one is no next game");
+const smGames = await gamesOf(sm.series.id);
+eq(smGames.map((g) => [g.d, g.status]), [[m15, "cancelled"], [smGames[1].d, "open"]], "the cancelled day stays cancelled, the next month's is open");
+ok(smGames[1].d > plusDays(m15, 27) && smGames[1].d <= plusDays(m15, 31), "a month on");
+eq(await fill(sm.series.id, inTwoDays), 0, "and the cancelled day is never made again");
+const smMine = (await mine(MEERA)).series.find((s) => s.id === sm.series.id);
+eq([smMine.upcoming, smMine.next.date], [1, smGames[1].d], "the host's list has the next one");
+const sd = await create(MEERA, { ...GAME, date: START }, weekly([0, 1, 2, 3, 4, 5, 6]));
+eq(sd.made, 8, "(a daily series: 8 up)");
+for (const g of sd.games.slice(2, 4)) await rpc("game_cancel", [KEY, MEERA, g.id]);
+eq(await fill(sd.series.id), 2, "the host cancels two of them: two more go up, still 8 to play");
+eq((await gamesOf(sd.series.id)).filter((g) => g.status === "open").length, 8, "(8 open)");
+
 /* ---------------- India's clock ---------------- */
 const D = ist(40);
 const daily = { freq: "weekly", interval: 1, days: [0, 1, 2, 3, 4, 5, 6] };
@@ -351,9 +373,16 @@ const list = await mine(HOST);
 eq(list.r, "ok", "the host's list");
 eq(list.series.map((s) => s.id), (await q(`select id from private.game_series where host_id = $1 order by created_at desc`, [HOST])).map((r) => r.id), "every one of theirs, newest first");
 const two = list.series.find((s) => s.id === S2);
-eq([two.active, two.ended, two.upcoming, two.next.date], [false, "done", 3, fs1], "each with its games to play and the next");
+eq([two.active, two.ended, two.upcoming, two.unstarted, two.next.date], [false, "done", 3, 3, fs1], "each with its games to play, those not started, and the next");
 ok(list.series.every((s) => !("host_phone" in s) && !("host_id" in s)), "no number, no account id");
 eq((await mine(KIRAN)).series, [], "a player who hosts none has none");
+// A game in progress is still to play, but no longer one a stop calls off.
+const sp = await create(MEERA, { ...GAME, date: START }, weekly([0, 1, 2, 3, 4, 5, 6], { type: "after", count: 3 }));
+eq(sp.made, 3, "(a series of 3)");
+await q(`update public.games set date = (now() at time zone 'Asia/Kolkata')::date, start_time = '00:00', end_time = '23:59' where id = $1`, [sp.games[0].id]);
+const spMine = (await mine(MEERA)).series.find((s) => s.id === sp.series.id);
+eq([spMine.upcoming, spMine.unstarted], [3, 2], "with its first game in progress: 3 still to play, 2 not started");
+eq((await stop(MEERA, sp.series.id, true)).cancelled, spMine.unstarted, "stopping and cancelling calls off those 2: the list's count is the stop's");
 const pub = await asRole("anon", () => one(`select public.game_series_public($1::uuid[]) r`, [[S1, S2, SOME]]));
 eq(pub.r.map((s) => s.id).sort(), [S1, S2].sort(), "anyone reads what a game page shows of its series");
 eq(Object.keys(pub.r[0]).sort(), ["active", "end_time", "ends", "id", "rule", "start_time", "starts_on"], "the rule, the time and the end only");
@@ -367,7 +396,7 @@ for (const fn of ["game_series_create", "game_series_stop", "game_series_mine", 
                          from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and proname = $1`, [fn]);
   eq([r.a, r.b, r.p, r.prosecdef, String(r.proconfig).includes("search_path=")], [true, true, false, true, true], `${fn}: anon and authenticated may call it, PUBLIC not; definer, empty search_path`);
 }
-for (const fn of ["game_series_month_days", "game_series_matches", "game_series_days", "game_series_problem", "game_series_last", "game_series_ends", "game_series_json", "game_series_fill", "game_series_tick"]) {
+for (const fn of ["game_series_month_days", "game_series_week_one", "game_series_matches", "game_series_days", "game_series_problem", "game_series_last", "game_series_ends", "game_series_json", "game_series_fill", "game_series_tick"]) {
   const r = await one(`select bool_or(has_function_privilege('anon', p.oid, 'execute')) a, bool_or(has_function_privilege('authenticated', p.oid, 'execute')) b, bool_and(proconfig::text like '%search_path=%') s
                          from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and proname = $1`, [fn]);
   eq([r.a, r.b, r.s], [false, false, true], `private.${fn}: closed to the API roles, empty search_path`);

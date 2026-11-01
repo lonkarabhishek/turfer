@@ -74,8 +74,9 @@ export type GameSeries = {
   ended: "stopped" | "done" | null;
   stopped_at: string | null;
   created_at: string;
-  /** In the host's list: its games still to play, and the soonest. */
+  /** In the host's list: its games still to play, how many of them have not started (what a stop that cancels calls off), and the soonest. */
   upcoming?: number;
+  unstarted?: number;
   next?: { id: string; date: string; start_time: string } | null;
 };
 

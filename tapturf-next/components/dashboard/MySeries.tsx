@@ -88,7 +88,7 @@ export function MySeries({
         <SeriesStopSheet
           open
           label={repeatLabel(stopping.rule)}
-          left={stopping.upcoming ?? null}
+          left={stopping.unstarted ?? null}
           onStop={async (cancel) => {
             const problem = await onStop(stopping.id, cancel);
             if (!problem) setStopping(null);

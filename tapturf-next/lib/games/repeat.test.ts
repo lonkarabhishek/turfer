@@ -40,6 +40,17 @@ test("repeat: every shared case is refused (or not) as the database refuses it",
 test("repeat: a day before the first is never one", () => {
   const r: Repeat = { rule: { freq: "weekly", interval: 1, days: [2] }, ends: { type: "after", count: 2 } };
   assert.deepEqual(seriesDays(r, "2026-11-04"), ["2026-11-10", "2026-11-17"]);
+  // Every N weeks: the first game is the first picked day on or after the first day, whatever N.
+  for (let start = 0; start < 7; start++) {
+    const from = `2026-11-0${2 + start}`;
+    for (const interval of [2, 3, 4]) {
+      for (const day of [0, 1, 2, 3, 4, 5, 6]) {
+        const first = seriesDays({ rule: { freq: "weekly", interval, days: [day] }, ends: { type: "after", count: 2 } }, from)[0];
+        const gap = (Date.parse(first) - Date.parse(from)) / 86_400_000;
+        assert.ok(gap >= 0 && gap <= 6 && new Date(first).getUTCDay() === day, `${from} every ${interval} weeks on ${day}: ${first}`);
+      }
+    }
+  }
   assert.equal(matches({ freq: "monthly", by: "date", day: 31 }, "2027-01-31", "2027-02-28"), true);
   assert.equal(matches({ freq: "monthly", by: "date", day: 31 }, "2027-01-31", "2027-02-27"), false);
 });

@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { CalendarDays } from "lucide-react";
 import { GameCard } from "@/components/game/GameCard";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
-import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
+import { filterNonExpiredGames, oneGamePerRepeat, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
 const noop = () => () => {};
@@ -13,7 +13,8 @@ const noop = () => () => {};
  * "Games at this turf" on the turf profile: upcoming open games here,
  * then the host CTA right below. The games come with the page (turf_page)
  * instead of a browser query per view (20 Oct outage); the cache queue
- * refreshes the page when a game here is created or changes.
+ * refreshes the page when a game here is created or changes. A repeat
+ * shows once, its soonest game (that game's page lists its next ones).
  */
 export function TurfGames({
   turfId,
@@ -35,7 +36,7 @@ export function TurfGames({
   // "Today" against now (lib/utils/game.ts reads both sides in IST).
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
   const now = hydrated ? undefined : renderedAt;
-  const games = sortGamesByDateTime(filterNonExpiredGames(initialGames, now));
+  const games = oneGamePerRepeat(sortGamesByDateTime(filterNonExpiredGames(initialGames, now)));
 
   const visible = showAll ? games : games.slice(0, 3);
 
