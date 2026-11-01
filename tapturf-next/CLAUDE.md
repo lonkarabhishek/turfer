@@ -24,7 +24,7 @@ Airbnb-inspired: clean whitespace, `rounded-2xl` cards, `shadow-elevated`, frost
 - `/games` — Games listing with sport/skill filters
 - `/game/[id]` — Game detail with join request flow
 - `/game/create` — 4-step game creation wizard (protected)
-- `/dashboard` — User dashboard with tabs: Games, Requests, Notifications, Profile (protected)
+- `/dashboard` — User dashboard with tabs: Games, Requests, Notifications, Profile, Passport (numbers, weekly streak, medals, stamps, reviewed turfs, played with; `lib/profile/`, `GET /api/me/passport`, tests: `npm run test:profile`) (protected)
 - `/api/auth/callback` — Supabase OAuth callback
 
 ### Auth Flow

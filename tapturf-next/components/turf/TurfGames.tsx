@@ -4,6 +4,8 @@ import { useState, useSyncExternalStore } from "react";
 import { CalendarDays } from "lucide-react";
 import { GameCard } from "@/components/game/GameCard";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
+import { PlayedHereNote } from "@/components/profile/PlayedHereNote";
+import { usePlayed } from "@/components/profile/usePlayed";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
@@ -38,6 +40,9 @@ export function TurfGames({
   const games = sortGamesByDateTime(filterNonExpiredGames(initialGames, now));
 
   const visible = showAll ? games : games.slice(0, 3);
+  // Someone who played here reads "You played here on ..." right above: the empty state then says
+  // none are coming up rather than none ever (after load only, so the page's HTML stays the same).
+  const playedHere = !!usePlayed()?.turfs[turfId];
 
   return (
     <section className="section-divider" aria-labelledby="turf-games">
@@ -54,14 +59,16 @@ export function TurfGames({
       <p className="text-[14px] text-primary-500 mb-5">
         Join a game that&apos;s already on, or host your own.
       </p>
+      {/* The signed-in player's own last game here (after the page loads; never in the HTML). */}
+      <PlayedHereNote turfId={turfId} />
 
       {games.length === 0 ? (
         <div className="rounded-2xl bg-primary-50 px-5 py-6 text-center mb-4">
           <div className="mx-auto mb-3 w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-soft">
             <CalendarDays className="w-5 h-5 text-primary-400" />
           </div>
-          <p className="text-[15px] font-semibold text-primary-900">No games scheduled here yet</p>
-          <p className="mt-1 text-[14px] text-primary-500">Be the first to host one and find players.</p>
+          <p className="text-[15px] font-semibold text-primary-900">{playedHere ? "No upcoming games here" : "No games scheduled here yet"}</p>
+          <p className="mt-1 text-[14px] text-primary-500">{playedHere ? "Host the next one and find players." : "Be the first to host one and find players."}</p>
         </div>
       ) : (
         <>

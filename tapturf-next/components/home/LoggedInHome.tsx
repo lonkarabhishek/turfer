@@ -20,6 +20,8 @@ import type { CityLineProps } from "@/lib/cityLine";
 import type { HomeScope } from "@/lib/home/select";
 import { CityLine } from "@/components/city/CityLine";
 import { UserAvatar } from "@/components/account/UserAvatar";
+import { StreakNudge } from "@/components/profile/StreakNudge";
+import { usePlayed } from "@/components/profile/usePlayed";
 import {
   filterNonExpiredGames,
   sortGamesByDateTime,
@@ -46,6 +48,9 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
   const [tonight, setTonight] = useState<Game[]>([]);
   const [requests, setRequests] = useState<GameRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  // Played games only (the passport's counts), so each tile says what the passport and the public
+  // profile say, and matches what it opens. A dash until they are in.
+  const played = usePlayed();
 
   useEffect(() => {
     if (!user) return;
@@ -143,12 +148,15 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
             {/* ─── Next up card ─────────────────────────────── */}
             <NextGameHero stats={stats} />
 
-            {/* ─── Stats row ────────────────────────────────── */}
+            {/* ─── Stats row: each opens where its number comes from ─── */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
-              <StatTile icon={<Trophy className="w-4 h-4" />} value={stats?.totalGames ?? 0} label="Games" />
-              <StatTile icon={<Users className="w-4 h-4" />} value={stats?.peopleMet ?? 0} label="Squad" />
-              <StatTile icon={<Target className="w-4 h-4" />} value={stats?.sportsPlayed ?? 0} label="Sports" />
+              <StatTile href="/dashboard?tab=passport" icon={<Trophy className="w-4 h-4" />} value={played?.games ?? "–"} label="Played" sr=", open your passport" />
+              <StatTile href="/dashboard?tab=passport#played-with" icon={<Users className="w-4 h-4" />} value={played?.people ?? "–"} label="Played with" sr=", open the list" />
+              <StatTile href="/dashboard?tab=passport#stamps" icon={<Target className="w-4 h-4" />} value={played?.sports ?? "–"} label="Sports" sr=", open your stamps" />
             </div>
+
+            {/* ─── The weekly streak, from played games ─────── */}
+            <StreakNudge className="-mt-3 mb-6" />
 
             {/* ─── Quick actions ────────────────────────────── */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-8">
@@ -216,13 +224,13 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
 
         {/* ─── Profile / logout chip ────────────────────────── */}
         <div className="mt-8 mb-10 flex items-center justify-between border-t border-primary-200 pt-5">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <Link href="/dashboard?tab=profile" className="flex items-center gap-2.5 min-w-0 rounded-xl focus-neon hover:opacity-90">
             <UserAvatar src={user.profile_image_url} name={user.name} size={36} />
             <div className="min-w-0">
               <p className="text-[14px] font-semibold text-primary-800 leading-none">{user.name}</p>
               <p className="text-[11px] text-primary-500 mt-0.5 truncate">{user.phone || user.email}</p>
             </div>
-          </div>
+          </Link>
           <button
             onClick={async () => { await logout(); window.location.href = "/"; }}
             className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary-500 hover:text-hot-600 border border-primary-200 rounded-full px-3 py-1.5"
@@ -446,17 +454,21 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
 // Reusable bits
 // ────────────────────────────────────────────────────────────
 
-function StatTile({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
+function StatTile({ href, icon, value, label, sr }: { href: string; icon: React.ReactNode; value: number | string; label: string; sr: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white border border-primary-200 py-4 px-2">
-      <span className="text-accent-600">{icon}</span>
+    <Link
+      href={href}
+      className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white border border-primary-200 py-4 px-2 hover:border-accent-500 active:scale-[0.97] transition-all focus-neon"
+    >
+      <span className="text-accent-600" aria-hidden>{icon}</span>
       <span className="font-display text-2xl sm:text-3xl text-primary-800 tabular leading-none">
         {value}
       </span>
       <span className="text-[10px] font-semibold text-primary-500">
         {label}
       </span>
-    </div>
+      <span className="sr-only">{sr}</span>
+    </Link>
   );
 }
 

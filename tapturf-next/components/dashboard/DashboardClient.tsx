@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Gamepad2, Bell, User, LogOut, Inbox, Loader2, Camera, MapPin, Store, ChevronRight, AtSign } from "lucide-react";
+import { Gamepad2, Bell, User, LogOut, Inbox, Loader2, Camera, MapPin, Store, ChevronRight, AtSign, Award } from "lucide-react";
 import { useAuth, type SignedInWith } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { NameWithTick } from "@/components/account/VerifiedTick";
@@ -16,6 +16,10 @@ import { NotificationsList } from "./NotificationsList";
 import { ProfileSection } from "./ProfileSection";
 import { NotificationsPrompt } from "./NotificationsPrompt";
 import { useMeData } from "./useMeData";
+import { PassportEntry } from "@/components/profile/PassportEntry";
+import { PassportTab } from "@/components/profile/PassportTab";
+import { StreakNudge } from "@/components/profile/StreakNudge";
+import type { PassportResponse } from "@/lib/profile/types";
 import type { AppUser } from "@/types/user";
 
 const TABS = [
@@ -23,6 +27,8 @@ const TABS = [
   { key: "requests", label: "Requests", icon: Inbox },
   { key: "notifications", label: "Alerts", icon: Bell },
   { key: "profile", label: "Profile", icon: User },
+  // A pill on a wide screen; on a phone the card's "Your passport" opens it, so the four tiles keep one row.
+  { key: "passport", label: "Passport", icon: Award },
 ] as const;
 
 type TabKey = typeof TABS[number]["key"];
@@ -35,10 +41,13 @@ function greeting(now = new Date()): string {
 
 /**
  * The Me tab (/dashboard): who you are on TapTurf (your picture, name,
- * username, tick and city, with numbers from your own games), then your
- * games, the requests you sent, alerts and profile settings, each with
- * its count. ?tab= picks the section, as before. Two columns on a wide
- * screen: the card stays put while the section scrolls.
+ * username, tick and city, with numbers from your own games and a way
+ * into your passport), then your games, the requests you sent, alerts,
+ * profile settings and the passport, each with its count. ?tab= picks the
+ * section, as before. Two columns on a wide screen: the card stays put
+ * while the section scrolls. While the passport is open the card's
+ * numbers are the passport's (played, turfs, medals), so no two numbers
+ * on the screen count different things.
  */
 export function DashboardClient() {
   const { user, loading, login, logout, signedInWith } = useAuth();
@@ -104,6 +113,19 @@ function Me({
   const [photoNote, setPhotoNote] = useState("");
   const city = useCityChoice();
   const [hello] = useState(() => greeting());
+  const [passport, setPassport] = useState<PassportResponse | null>(null);
+  const onPassport = tab === "passport";
+  // Before a first game the passport's own card says so: no row of zeros up here as well.
+  const passportEmpty = !!passport && passport.passport.numbers.games === 0 && !passport.passport.medals.some((m) => m.earned);
+  const openPassport = () => {
+    pick("passport");
+    // On a phone the section starts under the card: bring it up.
+    requestAnimationFrame(() => {
+      const el = document.getElementById("me-panel");
+      const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (el && el.getBoundingClientRect().top > window.innerHeight * 0.6) el.scrollIntoView({ block: "start", behavior: calm ? "auto" : "smooth" });
+    });
+  };
 
   useEffect(() => {
     if (!photoNote) return;
@@ -134,6 +156,7 @@ function Me({
     requests: requestsLoading ? null : data.pending,
     notifications: data.unread,
     profile: null,
+    passport: null,
   };
 
   const logoutButton = (className: string) => (
@@ -232,18 +255,29 @@ function Me({
               )}
 
               {/* Real numbers from their own games; a dash until they are in. Hosted and Joined open their
-                  list; Upcoming counts both lists (each game once), so it is a number, not a link. */}
-              <ul className="mt-4 grid grid-cols-3 divide-x divide-primary-100 rounded-2xl bg-primary-50/70 py-3" aria-label="Your games">
-                {(
-                  [
-                    ["Hosted", data.created.length, () => showGames("created")],
-                    ["Joined", data.joined.length, () => showGames("joined")],
-                    ["Upcoming", data.upcoming, null],
-                  ] as const
+                  list; Upcoming counts both lists (each game once), so it is a number, not a link. With the
+                  passport open: its own played, turfs and medals instead, under its name (on a phone no
+                  tile below says which section is open). */}
+              {onPassport && !passportEmpty && <p className="mt-4 -mb-2 text-[12px] font-semibold text-accent-700">Your passport</p>}
+              <ul
+                className={`mt-4 ${onPassport && passportEmpty ? "hidden" : "grid"} grid-cols-3 divide-x divide-primary-100 rounded-2xl bg-primary-50/70 py-3`}
+                aria-label={onPassport ? "Your passport" : "Your games"}
+              >
+                {(onPassport
+                  ? ([
+                      ["Played", passport?.passport.numbers.games ?? null, null],
+                      ["Turfs", passport?.passport.numbers.turfs ?? null, null],
+                      ["Medals", passport ? passport.passport.medals.filter((m) => m.earned).length : null, null],
+                    ] as const)
+                  : ([
+                      ["Hosted", data.loading ? null : data.created.length, () => showGames("created")],
+                      ["Joined", data.loading ? null : data.joined.length, () => showGames("joined")],
+                      ["Upcoming", data.loading ? null : data.upcoming, null],
+                    ] as const)
                 ).map(([label, n, go]) => {
                   const inner = (
                     <>
-                      <span className="block font-display text-[24px] leading-none text-primary-900 tabular-nums">{data.loading ? "–" : n}</span>
+                      <span className="block font-display text-[24px] leading-none text-primary-900 tabular-nums">{n ?? "–"}</span>
                       <span className="mt-1 block text-[12px] font-medium text-primary-500">{label}</span>
                     </>
                   );
@@ -260,6 +294,14 @@ function Me({
                   );
                 })}
               </ul>
+              {/* The passport's way in, and the weekly streak (nothing for someone who never played); the
+                  passport shows both itself, so neither is here while it is open. */}
+              {!onPassport && (
+                <>
+                  <PassportEntry onOpen={openPassport} />
+                  <StreakNudge className="mt-3" />
+                </>
+              )}
             </div>
           </section>
 
@@ -271,7 +313,8 @@ function Me({
         <div className="mt-5 lg:mt-0 min-w-0">
           <NotificationsPrompt />
 
-          {/* Four sections: a row of tiles on a phone (each count in view), pills on a wide screen. */}
+          {/* Five sections: a row of four tiles on a phone (each count in view; the card above opens the
+              passport), pills on a wide screen. */}
           <div
             className="grid grid-cols-4 gap-1 p-1 mb-5 rounded-2xl bg-primary-100/70 sm:flex sm:gap-2 sm:p-0 sm:bg-transparent"
             role="tablist"
@@ -293,7 +336,7 @@ function Me({
                   role="tab"
                   aria-selected={active}
                   onClick={() => pick(key)}
-                  className={`relative flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 min-h-[58px] sm:min-h-[44px] px-1 sm:px-4 rounded-xl sm:rounded-full text-[12px] sm:text-[13px] font-bold whitespace-nowrap sm:border-2 transition-all focus-neon ${
+                  className={`relative ${key === "passport" ? "hidden sm:flex" : "flex"} flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 min-h-[58px] sm:min-h-[44px] px-1 sm:px-4 rounded-xl sm:rounded-full text-[12px] sm:text-[13px] font-bold whitespace-nowrap sm:border-2 transition-all focus-neon ${
                     active
                       ? "bg-accent-500 text-white sm:border-accent-500 shadow-neon"
                       : "text-primary-700 hover:bg-white/70 sm:bg-white sm:border-primary-200 sm:hover:border-accent-500"
@@ -323,7 +366,7 @@ function Me({
             })}
           </div>
 
-          <div role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
+          <div id="me-panel" role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label} className="scroll-mt-20">
             {tab === "games" && (
               <MyGames createdGames={data.created} joinedGames={data.joined} loading={data.loading} view={view} onView={setView} waiting={waiting} />
             )}
@@ -339,6 +382,7 @@ function Me({
             )}
             {tab === "notifications" && <NotificationsList userId={user.id} onUnread={data.setUnread} />}
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
+            {tab === "passport" && <PassportTab onLoaded={setPassport} />}
           </div>
 
           {/* On a phone they come last: nothing above the sections moves when Your turfs arrives, and

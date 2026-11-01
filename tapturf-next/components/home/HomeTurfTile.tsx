@@ -5,6 +5,7 @@ import { MapPin, Star } from "lucide-react";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import type { HomeTile } from "@/lib/home/types";
 import { turfPath } from "@/lib/utils/turfPath";
+import { PlayedBadge } from "@/components/profile/PlayedHere";
 
 const SEP = " · ";
 
@@ -30,6 +31,7 @@ export function HomeTurfTile({ tile, eager = false }: { tile: HomeTile; eager?: 
             className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 motion-safe:group-hover:scale-[1.03]"
           />
         )}
+        <PlayedBadge turfId={tile.id} wide />
       </div>
       <p className="mt-2.5 text-[15px] font-semibold text-primary-900 truncate">{tile.name}</p>
       <p className="text-[13px] text-primary-500 truncate">
