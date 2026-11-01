@@ -7,7 +7,9 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { Sheet } from "./Sheet";
 import { UserAvatar } from "./UserAvatar";
 import {
+  AVATAR_GROUPS,
   AVATAR_PRESETS,
+  avatarLabel,
   clampCrop,
   coverScale,
   maxZoom,
@@ -17,7 +19,6 @@ import {
   presetPath,
   startCrop,
   zoomCrop,
-  type AvatarPresetId,
   type Crop,
 } from "@/lib/account/avatar";
 import { choosePreset, chooseGooglePhoto, errorOf, getPhotoState, profileIn, removePhoto, uploadPhoto, type Answer } from "@/lib/account/client";
@@ -35,8 +36,8 @@ const problemOf = (a: Answer<unknown>) => {
 /**
  * The profile photo sheet (the Me tab): upload a photo (cropped to a
  * square here, checked on the server before it shows), "Use my Google
- * photo" for a Google sign-in, one of the drawn sports avatars, or back
- * to initials. Before the database has photos it says so and offers
+ * photo" for a Google sign-in, one of the drawn players (by sport, each
+ * with its name and role), or back to initials. Before the database has photos it says so and offers
  * nothing (lib/account/photoRoutes.ts GET).
  */
 export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose: () => void; onSaved: (text: string) => void }) {
@@ -53,6 +54,7 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
   const current = user.profile_image_url ?? null;
   const kind = pictureKind(current);
   const currentPreset = presetOf(current);
+  const currentAvatar = AVATAR_PRESETS.find((p) => p.id === currentPreset);
 
   useEffect(() => {
     let alive = true;
@@ -162,7 +164,7 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
         <UserAvatar src={current} name={user.name} size={72} eager className="ring-4 ring-accent-50" />
         <div className="min-w-0 text-[14px] text-primary-600">
           {kind === "preset"
-            ? `Avatar: ${AVATAR_PRESETS.find((p) => p.id === currentPreset)?.label ?? "sports"}`
+            ? `Avatar: ${currentAvatar ? avatarLabel(currentAvatar) : "a player"}`
             : kind === "google"
               ? "Your Google photo"
               : current
@@ -222,37 +224,54 @@ export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose:
             <p className="mt-3 text-[13px] text-primary-500">Photo uploads are paused for a bit. You can pick an avatar.</p>
           )}
 
-          <h3 className="mt-6 text-[13px] font-semibold text-primary-500">Or pick an avatar</h3>
-          <div className="mt-2.5 grid grid-cols-4 gap-3" role="group" aria-label="Avatars">
-            {AVATAR_PRESETS.map((p) => {
-              const on = currentPreset === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  aria-label={`${p.label} avatar`}
-                  aria-pressed={on}
-                  disabled={!!busy}
-                  onClick={() => (on ? onClose() : void save(p.id, (t) => choosePreset(t, p.id as AvatarPresetId), `${p.label} avatar set`))}
-                  className={`relative aspect-square rounded-full transition-transform active:scale-95 disabled:opacity-60 focus-neon ${
-                    on ? "ring-2 ring-accent-500 ring-offset-2" : "hover:scale-105"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={presetPath(p.id)} alt="" width={64} height={64} loading="lazy" decoding="async" className="w-full h-full rounded-full" />
-                  {busy === p.id && (
-                    <span className="absolute inset-0 grid place-items-center rounded-full bg-white/60">
-                      <Loader2 className="w-5 h-5 animate-spin text-primary-900" aria-hidden />
-                    </span>
-                  )}
-                  {on && (
-                    <span className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-accent-500 text-white ring-2 ring-white" aria-hidden>
-                      <Check className="w-3 h-3" strokeWidth={3} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <h3 id="avatars-title" className="mt-6 text-[13px] font-semibold text-primary-500">
+            Or pick an avatar
+          </h3>
+          <div role="group" aria-labelledby="avatars-title">
+            {AVATAR_GROUPS.map((g) => (
+              <div key={g.id} role="group" aria-labelledby={`avatars-${g.id}`} className="mt-3">
+                <h4 id={`avatars-${g.id}`} className="text-[13px] font-semibold text-primary-900">
+                  {g.label}
+                </h4>
+                <div className="mt-2 grid grid-cols-3 min-[360px]:grid-cols-4 gap-x-2 gap-y-3">
+                  {AVATAR_PRESETS.filter((p) => p.group === g.id).map((p) => {
+                    const on = currentPreset === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        aria-label={avatarLabel(p)}
+                        aria-pressed={on}
+                        disabled={!!busy}
+                        onClick={() => (on ? onClose() : void save(p.id, (t) => choosePreset(t, p.id), `Avatar set: ${p.name}`))}
+                        className="group flex min-w-0 flex-col items-center rounded-2xl px-0.5 pt-1 pb-1.5 text-center disabled:opacity-60 focus-neon"
+                      >
+                        <span
+                          className={`relative block w-full max-w-[64px] aspect-square rounded-full transition-transform group-active:scale-95 ${
+                            on ? "ring-2 ring-accent-500 ring-offset-2" : "group-hover:scale-105"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={presetPath(p.id)} alt="" width={64} height={64} loading="lazy" decoding="async" className="w-full h-full rounded-full" />
+                          {busy === p.id && (
+                            <span className="absolute inset-0 grid place-items-center rounded-full bg-white/60">
+                              <Loader2 className="w-5 h-5 animate-spin text-primary-900" aria-hidden />
+                            </span>
+                          )}
+                          {on && (
+                            <span className="absolute -bottom-0.5 -right-0.5 grid place-items-center w-5 h-5 rounded-full bg-accent-500 text-white ring-2 ring-white" aria-hidden>
+                              <Check className="w-3 h-3" strokeWidth={3} />
+                            </span>
+                          )}
+                        </span>
+                        <span className={`mt-1.5 w-full text-[12px] font-semibold leading-tight line-clamp-2 ${on ? "text-accent-700" : "text-primary-900"}`}>{p.name}</span>
+                        <span className="mt-0.5 w-full text-[11px] leading-tight text-primary-500 line-clamp-2">{p.role}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {current && (

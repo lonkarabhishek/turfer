@@ -1,5 +1,5 @@
 import type { NextResponse } from "next/server";
-import { googlePhotoToKeep, imageInfo, isPresetId, PHOTO_UPLOAD, stripPhotoDetails, uploadProblem } from "./avatar";
+import { googlePhotoToKeep, imageInfo, PHOTO_UPLOAD, presetIdOf, stripPhotoDetails, uploadProblem } from "./avatar";
 import type { Identity } from "./identity";
 import { photoDrop, photoFilesGone, photoFinish, photoReady, photoSet, photoStart, photoSweepList, type PhotoChangeResult, type PhotoFile } from "./photoServer";
 import { refreshProfilePage } from "./profilePage";
@@ -139,7 +139,9 @@ export async function patchPhoto(req: Request, deps: PhotoDeps): Promise<NextRes
   const preset = body.preset;
   const google = body.google;
   if ((preset === undefined) === (google === undefined)) return accountError("bad");
-  if (preset !== undefined && !isPresetId(preset)) return accountError("bad");
+  // An avatar, or an old one's id (a page from before the players): kept as the player.
+  const presetId = preset === undefined ? null : presetIdOf(preset);
+  if (preset !== undefined && !presetId) return accountError("bad");
   if (google !== undefined && google !== true) return accountError("bad");
   // Google's own photo of the verified sign-in, never an address the browser sent.
   const googleUrl = google === true && who.id.kind === "google" ? googlePhotoToKeep(who.id.avatar) : null;
@@ -147,7 +149,7 @@ export async function patchPhoto(req: Request, deps: PhotoDeps): Promise<NextRes
 
   const acc = await account(who.id);
   if ("reply" in acc) return acc.reply;
-  const r = googleUrl ? await photoSet(acc.me.id, "google", googleUrl) : await photoSet(acc.me.id, "preset", preset as string);
+  const r = googleUrl ? await photoSet(acc.me.id, "google", googleUrl) : await photoSet(acc.me.id, "preset", presetId as string);
   return changed(deps, acc.me.id, r);
 }
 

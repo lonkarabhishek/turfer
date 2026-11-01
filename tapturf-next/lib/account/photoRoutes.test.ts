@@ -271,11 +271,16 @@ test("photo POST: ten a day; paused; a failed upload", async () => {
 test("photo PATCH: an avatar from the list", async () => {
   database();
   const { deps } = fakes();
-  const res = await patchPhoto(req("/api/account/photo", { method: "PATCH", token: phoneToken(), body: { preset: "cricket-ball" } }), deps);
+  const res = await patchPhoto(req("/api/account/photo", { method: "PATCH", token: phoneToken(), body: { preset: "fast-bowler" } }), deps);
   assert.equal(res.status, 200);
-  assert.equal(((await json(res)).profile as { profile_image_url: string }).profile_image_url, "/avatars/cricket-ball.svg");
-  assert.deepEqual(net.calls("account_photo_set")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_kind: "preset", p_value: "cricket-ball" });
-  for (const body of [{ preset: "dragon" }, { preset: "../x" }, { preset: 3 }, {}, { preset: "football", google: true }, { google: "yes" }]) {
+  assert.equal(((await json(res)).profile as { profile_image_url: string }).profile_image_url, "/avatars/fast-bowler.svg");
+  assert.deepEqual(net.calls("account_photo_set")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_kind: "preset", p_value: "fast-bowler" });
+  // A page from before the players sends an old id: saved as the player it became.
+  database();
+  const old = await patchPhoto(req("/api/account/photo", { method: "PATCH", token: phoneToken(), body: { preset: "cricket-ball" } }), deps);
+  assert.equal(old.status, 200);
+  assert.deepEqual(net.calls("account_photo_set")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_kind: "preset", p_value: "fast-bowler" });
+  for (const body of [{ preset: "dragon" }, { preset: "constructor" }, { preset: "../x" }, { preset: 3 }, {}, { preset: "football", google: true }, { google: "yes" }]) {
     database();
     const r = await patchPhoto(req("/api/account/photo", { method: "PATCH", token: phoneToken(), body }), deps);
     assert.equal(r.status, 400, JSON.stringify(body));

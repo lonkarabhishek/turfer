@@ -1,17 +1,178 @@
-import { AVATAR_PRESETS, type AvatarPresetId } from "./avatar";
+import { AVATAR_PRESETS, avatarLabel, type AvatarPresetId } from "./avatar";
 
 /**
- * The sports avatars, drawn here as SVG (64 x 64, a full square: every
- * place shows it in a circle). Served at /avatars/<id>.svg by
+ * The avatars, drawn here as SVG (64 x 64, a full square: every place
+ * shows it in a circle): players, head and shoulders, in one flat style.
+ * Every player has the same head, face and shoulders, and their own skin,
+ * hair, kit and gear, so the gear and the kit's colour say the role at
+ * 24 px and the face is the fun at 160. Served at /avatars/<id>.svg by
  * app/avatars/[file]/route.ts, so any <img> of a profile picture shows
- * one with no special case. Brand greens and black, with the colour the
- * sport's own gear has (a red ball, an orange basketball). Static markup
- * only: no scripts, links or outside references. Relative imports only
- * (npm run test:account).
+ * one with no special case. Static markup only: no scripts, links, text
+ * or outside references. Relative imports only (npm run test:account).
  */
 
+type Skin = { base: string; shade: string };
+
+/** Five skin tones, light to deep; shade: the neck and nose. */
+const SKIN: Skin[] = [
+  { base: "#F6D2B0", shade: "#E4B28C" },
+  { base: "#E9B78D", shade: "#D39B70" },
+  { base: "#C98F62", shade: "#B0774D" },
+  { base: "#A66B42", shade: "#8C5633" },
+  { base: "#7A4B2D", shade: "#643B22" },
+];
+
+const HAIR = { black: "#241B17", brown: "#5A3622", grey: "#A9A39E", silver: "#D9D4CF" };
+const EYE = "#2A1C15";
+const MOUTH = "#8E3324";
 const INK = "#1D1D1F";
+
 const r1 = (n: number) => Math.round(n * 10) / 10;
+const path = (d: string, fill: string, more = "") => `<path d="${d}" fill="${fill}"${more}/>`;
+const line = (d: string, stroke: string, w: number, more = "") =>
+  `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${more}/>`;
+/** The same, left for right. */
+const flip = (s: string) => `<g transform="matrix(-1 0 0 1 64 0)">${s}</g>`;
+const both = (s: string) => s + flip(s);
+
+/* ------------------------------------------------------------------ */
+/* The head and face                                                   */
+/* ------------------------------------------------------------------ */
+
+type Face = {
+  /** grin: open, teeth showing; smile: closed. */
+  mouth?: "grin" | "smile";
+  /** The brows' colour; none under a cap's peak. */
+  brows?: string;
+  beard?: "full" | "short" | "stubble" | "moustache";
+  beardColor?: string;
+  glasses?: boolean;
+  wink?: boolean;
+};
+
+const neck = (s: Skin) => path("M27.5 33h9v13.5h-9z", s.shade);
+
+function head(s: Skin, ears: boolean): string {
+  return (ears ? both(`<ellipse cx="21.7" cy="28.4" rx="2.2" ry="2.9" fill="${s.base}"/>`) : "") + `<ellipse cx="32" cy="27" rx="10.4" ry="11.4" fill="${s.base}"/>`;
+}
+
+function face(s: Skin, f: Face): string {
+  const hair = f.beardColor ?? HAIR.black;
+  let out = "";
+  if (f.beard !== "full" && f.beard !== "short") out += `<g fill="#EE6A5A" fill-opacity=".28"><ellipse cx="25.8" cy="32.4" rx="2" ry="1.3"/><ellipse cx="38.2" cy="32.4" rx="2" ry="1.3"/></g>`;
+  out += line("M32.4 28.7q-1.3 2.6.1 3.1", s.shade, 1.1);
+  if (f.beard === "full" || f.beard === "short" || f.beard === "stubble") {
+    const chin = f.beard === "full" ? 42.4 : 40.4;
+    const d = `M21.6 27C21.4 36 25.4 ${chin} 32 ${chin}S42.6 36 42.4 27C41.6 31.4 39.8 33.8 37.4 34.4 35.8 31.8 33.6 31.2 32 31.8 30.4 31.2 28.2 31.8 26.6 34.4 24.2 33.8 22.4 31.4 21.6 27Z`;
+    out += path(d, hair, f.beard === "stubble" ? ` fill-opacity=".2"` : "");
+  }
+  if (f.beard === "moustache")
+    out += path("M27.4 34C28.2 31.6 30.6 31.4 32 32.5 33.4 31.4 35.8 31.6 36.6 34 34.9 33.3 33.2 33.5 32 34.2 30.8 33.5 29.1 33.3 27.4 34Z", hair);
+  const low = f.beard === "moustache" ? ` transform="translate(0 1.3)"` : "";
+  out +=
+    f.mouth === "smile"
+      ? `<g${low}>${line("M28.9 33.6Q32 36.4 35.1 33.6", MOUTH, 1.3)}</g>`
+      : `<g${low}>${path("M28.6 33.1Q32 34.2 35.4 33.1Q35 37.3 32 37.3T28.6 33.1Z", MOUTH)}${path("M29.3 33.4Q32 34.3 34.7 33.4L34.5 34.4Q32 35.1 29.5 34.4Z", "#fff")}</g>`;
+  out += f.wink
+    ? line("M26.6 28.6q1.4-1.3 2.8 0", EYE, 1.2)
+    : `<ellipse cx="28" cy="28.2" rx="1.3" ry="1.55" fill="${EYE}"/><circle cx="28.45" cy="27.6" r=".45" fill="#fff"/>`;
+  out += `<ellipse cx="36" cy="28.2" rx="1.3" ry="1.55" fill="${EYE}"/><circle cx="36.45" cy="27.6" r=".45" fill="#fff"/>`;
+  if (f.brows) out += line("M25.9 24.9q2-1.2 4-.3M34.1 24.6q2-.9 4 .3", f.brows, 1.15);
+  if (f.glasses) out += `<g fill="none" stroke="#3B3633" stroke-width=".9"><circle cx="28" cy="28.3" r="2.9"/><circle cx="36" cy="28.3" r="2.9"/><path d="M30.9 28q1.1-.8 2.2 0M25.1 27.7l-3.4-.8M38.9 27.7l3.4-.8"/></g>`;
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Kit                                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Numbers for a shirt, drawn (no font): each 4 wide, 6 tall. */
+const DIGIT: Record<string, string> = {
+  "0": "M2 0C.8 0 0 1 0 2.4v1.2C0 5 .8 6 2 6s2-1 2-2.4V2.4C4 1 3.2 0 2 0Z",
+  "1": "M.8 1.4 2.4 0v6",
+  "4": "M3 6V0L0 4.2h4",
+  "7": "M0 0h4L1.6 6",
+  "9": "M4 2.2C4 3.4 3.1 4.3 2 4.3S0 3.4 0 2.2.9 0 2 0s2 1 2 2.2v1.6C4 5.1 3.2 6 2 6 1.2 6 .6 5.6.3 5",
+};
+
+function shirtNumber(n: string, color: string, y = 52.6): string {
+  const w = n.length * 4 + (n.length - 1) * 1.8;
+  return [...n]
+    .map((c, i) => `<path transform="translate(${r1(32 - w / 2 + i * 5.8)} ${y})" d="${DIGIT[c]}" fill="none" stroke="${color}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>`)
+    .join("");
+}
+
+type Kit = {
+  trim?: string;
+  neck?: "round" | "v" | "polo" | "zip";
+  num?: string;
+  numColor?: string;
+  /** A child's narrower shoulders. */
+  kid?: boolean;
+};
+
+/** A shirt from the shoulders down, its neck, trim and number. */
+function kit(color: string, k: Kit = {}): string {
+  const v = k.neck === "v";
+  const top = k.kid ? 46 : 43.7;
+  const neckD = v ? `L32 ${top + 5.4}L${36.6} ${top}` : `Q32 ${top + 4.2} 36.6 ${top}`;
+  const body = k.kid
+    ? `M9 64C9.5 54 15 48 23.4 46.6L27.4 ${top}${neckD}L40.6 46.6C49 48 54.5 54 55 64Z`
+    : `M5 64C5.5 52 13 45.6 23.4 44.3L27.4 ${top}${neckD}L40.6 44.3C51 45.6 58.5 52 59 64Z`;
+  let out = path(body, color);
+  // The sleeves' seams, a shade darker.
+  out += both(line(k.kid ? "M16.4 52.6Q18.6 58 18 64" : "M13.6 51Q16.4 57 15.8 64", "#000", 1.1, ` stroke-opacity=".12"`));
+  const trim = k.trim ?? "#fff";
+  if (k.neck === "polo") {
+    out += both(path(`M27.4 ${top}L32 ${top + 3.6}L29.4 ${top + 6.6}L25.4 ${top + 1.2}Z`, trim));
+    out += line(`M32 ${top + 3.6}v5.6`, "#000", 0.9, ` stroke-opacity=".2"`);
+  } else if (k.neck === "zip") {
+    out += path(`M26.8 ${top - 1}L27.6 ${top + 3}Q32 ${top + 5.6} 36.4 ${top + 3}L37.2 ${top - 1}Q32 ${top + 2.2} 26.8 ${top - 1}Z`, color);
+    out += line(`M26.8 ${top - 1}Q32 ${top + 2.2} 37.2 ${top - 1}`, trim, 1);
+    out += line(`M32 ${top + 4.4}V64`, trim, 1.1);
+  } else {
+    out += line(`M27.4 ${top}${neckD}`, trim, 1.7);
+  }
+  if (k.num) out += shirtNumber(k.num, k.numColor ?? trim, k.kid ? 54 : 52.6);
+  return out;
+}
+
+/** Bare shoulders (a tank top's arms, a swimmer). */
+const shoulders = (s: Skin) => path("M5 64C5.5 52 13 45.6 23.4 44.3Q27.4 43.4 28.6 41.4H35.4Q36.6 43.4 40.6 44.3C51 45.6 58.5 52 59 64Z", s.base);
+
+/** A tank top over bare shoulders. */
+function tank(color: string, trim: string, num: string, s: Skin): string {
+  return (
+    shoulders(s) +
+    path("M15.8 64C16.6 56 18.6 49.4 22.2 45.4L26.2 44.4Q32 52 37.8 44.4L41.8 45.4C45.4 49.4 47.4 56 48.2 64Z", color) +
+    line("M26.2 44.4Q32 52 37.8 44.4M22.2 45.4C18.6 49.4 16.6 56 15.8 64M41.8 45.4C45.4 49.4 47.4 56 48.2 64", trim, 1.5) +
+    shirtNumber(num, trim, 54.4)
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Hands                                                               */
+/* ------------------------------------------------------------------ */
+
+/** A forearm raised from below the frame to a wrist at (x, y): skin, or a sleeve with a cuff. */
+function forearm(x: number, y: number, s: Skin, sleeve?: string, cuff?: string): string {
+  const d = `M${r1(x - 4.8)} 64C${r1(x - 4)} ${r1(y + 9)} ${r1(x - 3.4)} ${r1(y + 3)} ${r1(x - 3.2)} ${y}H${r1(x + 3.2)}C${r1(x + 3.5)} ${r1(y + 3)} ${r1(x + 4.6)} ${r1(y + 9)} ${r1(x + 6)} 64Z`;
+  return path(d, sleeve ?? s.base) + (cuff ? `<rect x="${r1(x - 3.4)}" y="${r1(y + 0.4)}" width="6.8" height="2.6" rx=".8" fill="${cuff}"/>` : "");
+}
+
+/** A fist at (x, y), its knuckles to the front. */
+function fist(x: number, y: number, s: Skin): string {
+  return `<rect x="${r1(x - 3.8)}" y="${r1(y - 3.4)}" width="7.6" height="7" rx="2.8" fill="${s.base}"/>` + line(`M${r1(x - 1.2)} ${r1(y - 3.2)}v2.4M${r1(x + 1.3)} ${r1(y - 3.2)}v2.4`, s.shade, 0.8);
+}
+
+/** A hand from below holding something up at (x, y): the palm, the thumb at the side. */
+function palm(x: number, y: number, s: Skin): string {
+  return `<ellipse cx="${x}" cy="${y}" rx="4" ry="3.3" fill="${s.base}"/>` + `<ellipse cx="${r1(x - 3.4)}" cy="${r1(y - 1.6)}" rx="1.4" ry="2.2" fill="${s.base}" transform="rotate(-24 ${r1(x - 3.4)} ${r1(y - 1.6)})"/>`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Balls                                                               */
+/* ------------------------------------------------------------------ */
 
 /** A regular polygon's points: n corners at radius r around (cx, cy), the first at angle a0 (degrees, 0 = right, clockwise). */
 function poly(cx: number, cy: number, r: number, n: number, a0: number): string {
@@ -23,153 +184,602 @@ function poly(cx: number, cy: number, r: number, n: number, a0: number): string 
   return pts.join(" ");
 }
 
-/** A football: a black pentagon in the middle, five more at the edge, seams between. */
-function football(): string {
-  const angles = [-90, -18, 54, 126, 198];
+/** A football at (cx, cy): a black pentagon in the middle, five more at the edge. */
+function football(cx: number, cy: number, r: number): string {
   const rad = (a: number) => (a * Math.PI) / 180;
-  const at = (a: number, r: number) => `${r1(32 + r * Math.cos(rad(a)))} ${r1(32 + r * Math.sin(rad(a)))}`;
-  const edge = angles.map((a) => `<polygon points="${poly(32 + 19 * Math.cos(rad(a)), 32 + 19 * Math.sin(rad(a)), 7, 5, a + 180)}"/>`).join("");
-  const seams = angles.map((a) => `M${at(a, 6.5)}L${at(a, 12.6)}`).join("");
+  const edge = [-90, -18, 54, 126, 198]
+    .map((a) => `<polygon points="${poly(cx + r * 1.02 * Math.cos(rad(a)), cy + r * 1.02 * Math.sin(rad(a)), r * 0.4, 5, a + 180)}"/>`)
+    .join("");
   return (
-    `<defs><clipPath id="b"><circle cx="32" cy="32" r="19"/></clipPath></defs>` +
-    `<circle cx="32" cy="32" r="19" fill="#fff"/>` +
-    `<g clip-path="url(#b)" fill="${INK}"><polygon points="${poly(32, 32, 6.5, 5, -90)}"/>${edge}</g>` +
-    `<path d="${seams}" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/>` +
-    `<circle cx="32" cy="32" r="19" fill="none" stroke="${INK}" stroke-opacity=".18" stroke-width="1.5"/>`
+    `<defs><clipPath id="fb"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/>` +
+    `<g clip-path="url(#fb)" fill="${INK}"><polygon points="${poly(cx, cy, r * 0.36, 5, -90)}"/>${edge}</g>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${INK}" stroke-opacity=".25" stroke-width="1"/>`
   );
 }
 
-const ART: Record<AvatarPresetId, { bg: string; body: () => string }> = {
-  football: { bg: "#16A34A", body: football },
-  "cricket-ball": {
-    bg: "#14532D",
-    body: () =>
-      `<circle cx="32" cy="32" r="18" fill="#DC2626"/>` +
-      `<circle cx="26" cy="25" r="7" fill="#fff" fill-opacity=".16"/>` +
-      `<g transform="rotate(-32 32 32)" fill="none" stroke="#FEF3C7" stroke-linecap="round">` +
-      `<path d="M14.5 31A17.5 5 0 0 0 49.5 31" stroke-width="1.5"/>` +
-      `<path d="M14.5 33A17.5 9 0 0 0 49.5 33" stroke-width="1.5"/>` +
-      `<path d="M15.5 32A16.5 7 0 0 0 48.5 32" stroke-width="2.6" stroke-dasharray=".1 2.6"/>` +
-      `</g>` +
-      `<circle cx="32" cy="32" r="18" fill="none" stroke="#000" stroke-opacity=".15" stroke-width="1.2"/>`,
+/** A red leather cricket ball, its seam across. */
+function cricketBall(cx: number, cy: number, r: number): string {
+  const a = r * 0.95;
+  return (
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#D22B2B"/>` +
+    line(`M${r1(cx - a)} ${r1(cy - r * 0.35)}Q${cx} ${r1(cy + r * 0.3)} ${r1(cx + a)} ${r1(cy - r * 0.35)}`, "#F7E6C4", r1(r * 0.13)) +
+    line(`M${r1(cx - a)} ${r1(cy + r * 0.05)}Q${cx} ${r1(cy + r * 0.7)} ${r1(cx + a)} ${r1(cy + r * 0.05)}`, "#F7E6C4", r1(r * 0.13)) +
+    `<ellipse cx="${r1(cx - r * 0.38)}" cy="${r1(cy - r * 0.45)}" rx="${r1(r * 0.3)}" ry="${r1(r * 0.18)}" fill="#fff" fill-opacity=".4"/>`
+  );
+}
+
+/** A tennis ball (also padel's). */
+function tennisBall(cx: number, cy: number, r: number): string {
+  return (
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#D4EC3D"/>` +
+    line(`M${r1(cx - r * 0.7)} ${r1(cy - r * 0.72)}Q${r1(cx - r * 0.05)} ${cy} ${r1(cx - r * 0.7)} ${r1(cy + r * 0.72)}M${r1(cx + r * 0.7)} ${r1(cy - r * 0.72)}Q${r1(cx + r * 0.05)} ${cy} ${r1(cx + r * 0.7)} ${r1(cy + r * 0.72)}`, "#fff", r1(r * 0.17))
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Hair and headwear                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Tight curls round the top of the head. */
+function curls(c: string, r = 3.3, from = 196, to = 344, n = 9, rad = 10.6, cy = 25.4): string {
+  let out = path("M21.6 26C21.4 18.4 26 14.6 32 14.6S42.6 18.4 42.4 26C38 22 26 22 21.6 26Z", c);
+  for (let i = 0; i < n; i++) {
+    const a = ((from + ((to - from) * i) / (n - 1)) * Math.PI) / 180;
+    out += `<circle cx="${r1(32 + rad * Math.cos(a))}" cy="${r1(cy + rad * 1.04 * Math.sin(a))}" r="${r}" fill="${c}"/>`;
+  }
+  return out;
+}
+
+/** A sports headband across the forehead. */
+const headband = (c: string, stripe?: string) =>
+  path("M21.4 22.4Q32 16 42.6 22.4L42.8 25Q32 18.8 21.2 25Z", c) + (stripe ? line("M21.6 23.8Q32 17.6 42.4 23.8", stripe, 0.7) : "");
+
+/** A cricket cap from the front: the crown, its peak over the brows. */
+function cap(c: string, peak: string, badge?: string): string {
+  return (
+    path("M20.6 25C20.2 16.2 25.4 12.4 32 12.4S43.8 16.2 43.4 25Z", c) +
+    line("M32 12.6v11.6M26 13.8q-2.6 4.6-2.4 10.6M38 13.8q2.6 4.6 2.4 10.6", "#000", 0.7, ` stroke-opacity=".18"`) +
+    path("M18.8 24.4Q32 20.4 45.2 24.4Q46 26.4 44.6 27Q32 23.8 19.4 27Q18 26.4 18.8 24.4Z", peak) +
+    (badge ? `<circle cx="32" cy="18.6" r="2.1" fill="${badge}"/>` : "")
+  );
+}
+
+/** A visor: a band round the head and a peak, the hair above. */
+const visor = (c: string, edge: string) =>
+  path("M21.2 21.6Q32 16.4 42.8 21.6L43 24.2Q32 19.2 21 24.2Z", c) + path("M19.6 23.2Q32 18.4 44.4 23.2Q45.8 25.8 43.8 26.4Q32 22.4 20.2 26.4Q18.2 25.8 19.6 23.2Z", c) + line("M20.2 26.4Q32 22.4 43.8 26.4", edge, 0.8);
+
+/* ------------------------------------------------------------------ */
+/* The players                                                         */
+/* ------------------------------------------------------------------ */
+
+type Player = {
+  bg: string;
+  skin: Skin;
+  /** Behind everything: long hair, a ponytail, speed lines. */
+  back?: string;
+  /** From the shoulders down. */
+  kit: string;
+  /** Between the kit and the head: a bat on the shoulder. */
+  mid?: string;
+  /** false under a hijab or a swim cap. */
+  ears?: boolean;
+  face: Face;
+  /** Hair and headwear, over the head. */
+  top?: string;
+  /** Hands and gear, in front of everything. */
+  front?: string;
+};
+
+/** A cricket bat resting on the shoulder, its handle at (x, y), leaning `tilt` degrees. */
+function bat(x: number, y: number, tilt: number, sticker: string): string {
+  return (
+    `<g transform="translate(${x} ${y}) rotate(${tilt})">` +
+    `<rect x="-1.5" y="-15" width="3" height="15" rx="1" fill="#1F2937"/>` +
+    line("M-1.4 -11.6h2.8M-1.4 -8.4h2.8M-1.4 -5.2h2.8", "#4B5563", 0.8) +
+    path("M-1.5 -14.4-4.3-18h8.6L1.5-14.4Z", "#E2B66E") +
+    `<rect x="-4.3" y="-39" width="8.6" height="22" rx="2.8" fill="#EDCB8C"/>` +
+    `<rect x="1.8" y="-38.4" width="2.5" height="21" rx="1.2" fill="#D6AA62"/>` +
+    `<rect x="-3.1" y="-34.6" width="4.6" height="4.2" rx=".8" fill="${sticker}"/>` +
+    `</g>`
+  );
+}
+
+/** A batting glove gripping the handle at (x, y). */
+const battingGlove = (x: number, y: number, pad: string) =>
+  `<rect x="${x - 5}" y="${y - 4.2}" width="10" height="8.6" rx="3.2" fill="#fff"/>` + line(`M${x - 2.5} ${y - 3.6}v7.4M${x} ${y - 3.6}v7.4M${x + 2.5} ${y - 3.6}v7.4`, pad, 1.1);
+
+/** Sparkles (four-point stars) for something golden. */
+const sparkle = (x: number, y: number, r: number, c: string) =>
+  path(`M${x} ${r1(y - r)}Q${r1(x + r * 0.18)} ${r1(y - r * 0.18)} ${r1(x + r)} ${y}Q${r1(x + r * 0.18)} ${r1(y + r * 0.18)} ${x} ${r1(y + r)}Q${r1(x - r * 0.18)} ${r1(y + r * 0.18)} ${r1(x - r)} ${y}Q${r1(x - r * 0.18)} ${r1(y - r * 0.18)} ${x} ${r1(y - r)}Z`, c);
+
+const PLAYERS: Record<AvatarPresetId, () => Player> = {
+  batter: () => {
+    const s = SKIN[2];
+    const helmet = "#1E3A8A";
+    return {
+      bg: "#FCE4B0",
+      skin: s,
+      kit: kit("#0E9F8E", { trim: "#FACC15" }) + path("M41.6 49.6Q44.4 57 47.6 64H57.6Q54.6 55.4 50.6 48.8Z", "#0B8577"),
+      mid: bat(46, 47.6, 9, "#16A34A"),
+      face: { mouth: "grin" },
+      top:
+        path("M20.2 30.4C19.6 17.4 25 12 32 12S44.4 17.4 43.8 30.4L43.6 34.8C43.4 35.8 42.6 36.2 41.6 36L41.2 27.4C39 25 35.6 24 32 24S25 25 22.8 27.4L22.4 36C21.4 36.2 20.6 35.8 20.4 34.8Z", helmet) +
+        path("M18.6 24.4C24 21 40 21 45.4 24.4L45 26.4C39 23.4 25 23.4 19 26.4Z", "#172554") +
+        `<circle cx="32" cy="17.4" r="1.9" fill="#22C55E"/>` +
+        line("M22.6 31.4Q32 33.4 41.4 31.4M23 35.4Q32 41.8 41 35.4M22.6 31.4 23 35.4M41.4 31.4 41 35.4", "#B4BCC7", 1.2),
+      front: battingGlove(46, 48.6, "#16A34A"),
+    };
   },
-  bat: {
-    bg: "#DCFCE7",
-    body: () =>
-      `<g transform="rotate(38 32 32)">` +
-      `<rect x="29.6" y="5" width="4.8" height="17" rx="2.2" fill="${INK}"/>` +
-      `<path d="M29.6 10.5h4.8M29.6 14.5h4.8M29.6 18.5h4.8" stroke="#4B5563" stroke-width="1"/>` +
-      `<path d="M25.5 22.5h13v25.5a4.5 4.5 0 0 1-4.5 4.5h-4a4.5 4.5 0 0 1-4.5-4.5Z" fill="#E8B866" stroke="#A16207" stroke-width="1.3"/>` +
-      `<path d="M32 25v24" stroke="#A16207" stroke-opacity=".45" stroke-width="1.2"/>` +
-      `</g>` +
-      `<circle cx="47" cy="46" r="5.5" fill="#DC2626"/>` +
-      `<path d="M43.2 43.6q3.8 2.6 7.6 4.8" fill="none" stroke="#FEF3C7" stroke-width="1.1" stroke-dasharray="1 1.4"/>`,
+  "fast-bowler": () => {
+    const s = SKIN[1];
+    return {
+      bg: "#C8F1DC",
+      skin: s,
+      back: path("M36 14.6C43.4 11.4 51 14.6 50.4 22.8 50 28.4 46.4 31.2 45.4 35.8 44.2 30 46.2 25 42.4 21Z", HAIR.black),
+      kit: kit("#1D4ED8", { trim: "#A3E635", neck: "v" }),
+      face: { mouth: "grin", brows: HAIR.black },
+      top:
+        path("M21.4 28C20.6 19 25.4 14.2 32 14.2S43.4 19 42.6 28C41.8 24 40 21.8 37 20.6 33.6 19.4 28.8 19.6 25.6 21.2 23.4 22.6 22 25 21.4 28Z", HAIR.black) +
+        `<circle cx="39" cy="15.4" r="1.6" fill="#A3E635"/>` +
+        headband("#fff", "#A3E635"),
+      front: forearm(49.4, 46, s, undefined, "#A3E635") + palm(49.4, 45, s) + cricketBall(49.6, 39.6, 5.2),
+    };
   },
-  stumps: {
-    bg: "#0284C7",
-    body: () =>
-      `<g fill="#FEF3C7"><rect x="20.5" y="19" width="5" height="31" rx="2"/><rect x="29.5" y="19" width="5" height="31" rx="2"/><rect x="38.5" y="19" width="5" height="31" rx="2"/></g>` +
-      `<g fill="#F59E0B"><rect x="19.5" y="14.5" width="12" height="3.2" rx="1.6"/><rect x="32.5" y="14.5" width="12" height="3.2" rx="1.6"/></g>` +
-      `<rect x="12" y="51" width="40" height="2.4" rx="1.2" fill="#fff" fill-opacity=".55"/>`,
+  spinner: () => {
+    const s = SKIN[4];
+    return {
+      bg: "#B9DFD0",
+      skin: s,
+      kit: kit("#F7F1E3", { trim: "#8B1E3F", neck: "v" }),
+      face: { mouth: "grin", beard: "full", beardColor: HAIR.grey },
+      top: both(path("M21.4 27.6C21 25 21.2 23.6 21.8 22.6L24 23.2C23.2 24.6 22.8 26 22.6 27.8Z", HAIR.grey)) + cap("#8B1E3F", "#6E1430", "#F7F1E3"),
+      front:
+        forearm(49.4, 47, s) +
+        palm(49.4, 46, s) +
+        cricketBall(49.6, 40.6, 4.8) +
+        line("M41.6 37.4A9 9 0 0 1 56.4 34.2M57.4 43.8A9 9 0 0 1 42.6 46.8", "#fff", 1.5) +
+        path("M56.4 34.2l.4-3 1.8 2.6Z", "#fff") +
+        path("M42.6 46.8l-.4 3-1.8-2.6Z", "#fff"),
+    };
   },
-  racquet: {
-    bg: "#EF4444",
-    body: () =>
-      `<defs><clipPath id="h"><ellipse cx="32" cy="23" rx="9.6" ry="12.4"/></clipPath></defs>` +
-      `<g transform="rotate(-35 32 32)">` +
-      `<g clip-path="url(#h)" stroke="#fff" stroke-opacity=".8" stroke-width=".9">` +
-      [22.4, 25.6, 28.8, 32, 35.2, 38.4, 41.6].map((x) => `<path d="M${x} 9v28"/>`).join("") +
-      [12, 15.2, 18.4, 21.6, 24.8, 28, 31.2, 34.4].map((y) => `<path d="M20 ${y}h24"/>`).join("") +
-      `</g>` +
-      `<ellipse cx="32" cy="23" rx="11" ry="13.8" fill="none" stroke="#fff" stroke-width="3"/>` +
-      `<path d="M28.6 35.6 31 43h2l2.4-7.4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>` +
-      `<rect x="29.8" y="42" width="4.4" height="15" rx="2.2" fill="${INK}"/>` +
-      `</g>` +
-      `<circle cx="47.5" cy="46.5" r="6" fill="#FDE047"/>` +
-      `<path d="M42.2 44.6q5.6 0.4 6.6 7.6M52.8 48.4q-5.6-0.4-6.6-7.6" fill="none" stroke="#fff" stroke-width="1.3"/>`,
+  wicketkeeper: () => {
+    const s = SKIN[0];
+    const hijab = "#0F766E";
+    // Keeping gloves, palms to the front: big padded mitts, a tan palm, the webbing by the thumb.
+    const glove = both(
+      path("M18.2 48.4 16.4 64H5.6L7.6 48.4Z", "#38BDF8") +
+        path("M5.4 33.6C5.4 28.6 8.6 26.4 12.4 26.4S19.4 28.6 19.4 33.6V44.4C19.4 47.6 16.6 49.2 12.4 49.2S5.4 47.6 5.4 44.4Z", "#FBF7EE") +
+        path("M19.4 35.4C23.4 33.6 26.2 36.8 24.2 40.6L19.4 45Z", "#FBF7EE") +
+        path("M19.4 36.6 22.6 38.4 19.4 42Z", "#7A5536") +
+        path("M7.6 37.6Q12.4 35.4 17.2 37.6V44Q12.4 46.6 7.6 44Z", "#E3C595") +
+        line("M9.6 28v7.4M12.4 27.2v8M15.2 28v7.4", "#CFC6B4", 0.9) +
+        `<rect x="6.2" y="46.4" width="12.4" height="3.6" rx="1.2" fill="#16A34A"/>`,
+    );
+    return {
+      bg: "#FAD4DA",
+      skin: s,
+      ears: false,
+      kit: kit("#38BDF8", { trim: "#0F766E" }),
+      face: { mouth: "grin", brows: HAIR.brown },
+      top:
+        path("M32 12.4C22.4 12.4 18.6 19.6 18.6 27.6 18.6 34.4 19.8 39.6 22 43.8L15.6 50.4C20.6 47.4 26 46.6 32 46.6S43.4 47.4 48.4 50.4L42 43.8C44.2 39.6 45.4 34.4 45.4 27.6 45.4 19.6 41.6 12.4 32 12.4ZM32 17.6C26.2 17.6 22.4 21.4 22.4 27.8 22.4 34.6 26.4 39.4 32 39.4S41.6 34.6 41.6 27.8C41.6 21.4 37.8 17.6 32 17.6Z", hijab, ` fill-rule="evenodd"`) +
+        line("M22.6 23.6Q32 15.6 41.4 23.6", "#0B5F58", 1.4) +
+        line("M24.6 41.4Q32 45.4 39.4 41.4", "#0B5F58", 1),
+      front: glove,
+    };
   },
-  shuttlecock: {
-    bg: INK,
-    body: () =>
-      `<g transform="rotate(-28 32 32)">` +
-      `<path d="M24.5 39 17.5 13.5q2.4-2.2 4.6 0 2.3-2.2 4.6 0 2.3-2.2 4.6 0 2.3-2.2 4.6 0 2.3-2.2 4.6 0 2.3-2.2 4.6 0L39.5 39Z" fill="#fff"/>` +
-      `<path d="M27.5 39 22.6 14M32 39V14M36.5 39l4.9-25" stroke="#9CA3AF" stroke-width="1"/>` +
-      `<path d="M21.7 27.5h20.6" stroke="#9CA3AF" stroke-width="1"/>` +
-      `<rect x="24" y="37.6" width="16" height="3" fill="#16A34A"/>` +
-      `<path d="M24 40.6h16v1.4a8 8 0 0 1-16 0Z" fill="#FBBF24"/>` +
-      `</g>`,
+  "all-rounder": () => {
+    const s = SKIN[1];
+    const turban = "#1E40AF";
+    return {
+      bg: "#FDF0C2",
+      skin: s,
+      kit: kit("#15803D", { trim: "#FBBF24", neck: "v" }) + flip(path("M41.6 49.6Q44.4 57 47.6 64H57.6Q54.6 55.4 50.6 48.8Z", "#126B33")),
+      mid: flip(bat(46, 47.6, 9, "#FBBF24")),
+      face: { mouth: "grin", brows: HAIR.black, beard: "full" },
+      top:
+        path("M20.6 26C19.8 15.4 25 10.2 32 10.2S44.2 15.4 43.4 26C41 23.6 37.6 21.4 32 23 26.4 21.4 23 23.6 20.6 26Z", turban) +
+        line("M22.2 21.4C26 16.4 30 17.4 32 23M41.8 21.4C38 16.4 34 17.4 32 23M24 15.8C28.4 12.4 34.4 12.8 39 15.6", "#14307F", 1.2),
+      front:
+        flip(battingGlove(46, 48.6, "#15803D")) +
+        forearm(50, 48, s) +
+        palm(50, 47, s) +
+        cricketBall(50.2, 41.6, 4.8) +
+        sparkle(56.4, 34.6, 2.6, "#F59E0B") +
+        sparkle(44.2, 34, 1.8, "#F59E0B"),
+    };
   },
-  basketball: {
-    bg: "#FFEDD5",
-    body: () =>
-      `<defs><clipPath id="k"><circle cx="32" cy="32" r="18"/></clipPath></defs>` +
-      `<circle cx="32" cy="32" r="18" fill="#EA580C"/>` +
-      `<g clip-path="url(#k)" fill="none" stroke="${INK}" stroke-width="1.8">` +
-      `<path d="M32 13v38M13 32h38M21 16q9.5 16 0 32M43 16q-9.5 16 0 32"/>` +
-      `</g>` +
-      `<circle cx="32" cy="32" r="18" fill="none" stroke="${INK}" stroke-width="1.8"/>`,
+  captain: () => {
+    const s = SKIN[3];
+    const gold = "#F5B50A";
+    return {
+      bg: "#DCD5FB",
+      skin: s,
+      kit: kit("#1E3A8A", { trim: gold }) + `<circle cx="22.6" cy="54" r="3" fill="${gold}"/>` + line("M23.6 52.8a1.6 1.6 0 1 0 0 2.4", "#1E3A8A", 1),
+      ears: false,
+      face: { mouth: "grin" },
+      // A bob from under the cap to the jaw.
+      top: both(path("M19.6 24.6C18.8 31 19.2 36.4 21 40 22.8 41 25 40.6 26.4 39.4 23.8 36.8 22.8 32.6 22.8 25.4Z", HAIR.black)) + cap("#1E3A8A", "#172C6B", gold),
+      front:
+        forearm(49.4, 55, s) +
+        path("M42.8 36H56V40.4A6.6 6.6 0 0 1 42.8 40.4Z", gold) +
+        line("M42.8 38H40.6A2.8 2.8 0 0 0 42.8 43.4M56 38H58.2A2.8 2.8 0 0 1 56 43.4", gold, 1.5) +
+        path("M44.6 37.4H48V39Q47.6 43.4 45.2 44.6 44.6 41.6 44.6 37.4Z", "#fff", ` fill-opacity=".35"`) +
+        `<rect x="48.2" y="46.6" width="2.8" height="3.4" fill="#D69A06"/>` +
+        `<rect x="45.4" y="49.6" width="8.4" height="5.6" rx="1.2" fill="#B07D04"/>` +
+        fist(49.6, 56.4, s),
+    };
   },
-  volleyball: {
-    bg: "#F59E0B",
-    body: () =>
-      `<defs><clipPath id="v"><circle cx="32" cy="32" r="18"/></clipPath></defs>` +
-      `<circle cx="32" cy="32" r="18" fill="#fff"/>` +
-      `<g clip-path="url(#v)">` +
-      `<path d="M32 32C31 23 25.5 17 17 14.5L13 22c8 1.5 14 5 19 10Z" fill="#2563EB"/>` +
-      `<path d="M32 32c7.5-4.5 15.6-4.4 20.6.6l-3 8.4c-5-4.2-11-5.6-17.6-9Z" fill="#FACC15"/>` +
-      `<path d="M32 32c-1 8.5-6 15-13.6 18.6l7.6 3.4c5-4.8 6.8-12 6-22Z" fill="#2563EB"/>` +
-      `</g>` +
-      `<g clip-path="url(#v)" fill="none" stroke="${INK}" stroke-width="1.4">` +
-      `<path d="M32 32C31 23 25.5 17 17 14.5M32 32c7.5-4.5 15.6-4.4 20.6.6M32 32c-1 8.5-6 15-13.6 18.6"/>` +
-      `</g>` +
-      `<circle cx="32" cy="32" r="18" fill="none" stroke="${INK}" stroke-width="1.6"/>`,
+  "gully-cricketer": () => {
+    const s = SKIN[2];
+    return {
+      bg: "#FFDFC2",
+      skin: s,
+      // Stumps chalked on the wall behind.
+      back: line("M8.4 23v19M12.2 23v19M16 23v19M7.8 21.4h4.4M11.6 21.4h4.6", "#C0612F", 1.3, ` stroke-opacity=".75"`),
+      kit: kit("#0EA5E9", { trim: "#fff" }) + line("M7.6 56.4Q32 51.6 56.4 56.4", "#fff", 1.6, ` stroke-opacity=".5"`),
+      face: { mouth: "grin", brows: HAIR.black, wink: true },
+      top:
+        both(`<circle cx="21.6" cy="24.4" r="2.6" fill="${HAIR.black}"/><circle cx="22.4" cy="20.6" r="2.4" fill="${HAIR.black}"/>`) +
+        path("M20.8 24.4C20.4 16 25.4 12.6 32 12.6S43.6 16 43.2 24.4C40 22 36 21 32 21S24 22 20.8 24.4Z", "#DC2626") +
+        path("M28.2 21.4Q32 15.6 35.8 21.4Z", HAIR.black) +
+        line("M28.4 19.4h7.2", "#991B1B", 1.1) +
+        line("M24 15.4Q32 9.6 40 15.4", "#B91C1C", 0.8),
+      front:
+        forearm(49.4, 47, s) +
+        palm(49.4, 46, s) +
+        `<circle cx="49.6" cy="40.4" r="5.2" fill="#D4EC3D"/>` +
+        path("M44.5 39.2Q49.6 36.6 54.7 39.2L54.8 42Q49.6 39.4 44.4 42Z", "#DC2626") +
+        line("M46.4 37.8 47 40.6M52.6 37.8 52.2 40.6", "#991B1B", 0.6),
+    };
   },
-  whistle: {
-    bg: "#7C3AED",
-    body: () =>
-      `<path d="M15 31C9 22 12 12 22 9" fill="none" stroke="#FACC15" stroke-width="2.6" stroke-linecap="round"/>` +
-      `<circle cx="16" cy="32.5" r="3" fill="none" stroke="#E5E7EB" stroke-width="2"/>` +
-      `<path d="M24.5 26H49a2.5 2.5 0 0 1 2.5 2.5v3A2.5 2.5 0 0 1 49 34H34.6A10.5 10.5 0 1 1 24.5 26Z" fill="#F3F4F6" stroke="#9CA3AF" stroke-width="1.2"/>` +
-      `<circle cx="24.5" cy="36.5" r="5" fill="#D1D5DB"/>` +
-      `<rect x="29" y="27.6" width="7" height="3" rx="1" fill="#6B7280"/>`,
+  umpire: () => {
+    const s = SKIN[1];
+    return {
+      bg: "#F9CF98",
+      skin: s,
+      kit:
+        kit("#93C5FD", { neck: "polo", trim: "#DBEAFE" }) +
+        path("M30.6 48.4H33.4L34 50 33.2 51 34.4 59.4 32 62 29.6 59.4 30.8 51 30 50Z", "#1E3A8A"),
+      face: { mouth: "smile", brows: HAIR.grey, beard: "moustache", beardColor: HAIR.grey, glasses: true },
+      top:
+        both(path("M21.4 27C21 24.4 21.2 23 21.8 22L24 22.8C23.2 24.2 22.8 25.6 22.6 27.2Z", HAIR.silver)) +
+        path("M23.4 20.6C23.2 13.2 27 10.6 32 10.6S40.8 13.2 40.6 20.6Z", "#FFFDF7") +
+        `<rect x="23.2" y="17.6" width="17.6" height="3" fill="#1E3A8A"/>` +
+        `<ellipse cx="32" cy="21" rx="16.6" ry="3.6" fill="#FFFDF7"/>` +
+        line("M15.6 21.6Q32 26.2 48.4 21.6", "#000", 0.8, ` stroke-opacity=".12"`),
+      front:
+        forearm(48.8, 41.6, s, "#93C5FD", "#DBEAFE") +
+        `<rect x="45.4" y="24.6" width="3.4" height="13" rx="1.7" fill="${s.base}"/>` +
+        `<rect x="44.8" y="33.6" width="8.4" height="8.6" rx="3" fill="${s.base}"/>` +
+        line("M45.2 37.4h3.4", s.shade, 0.8),
+    };
   },
-  trophy: {
-    bg: "#E0F2FE",
-    body: () =>
-      `<path d="M22 17h-4a5 5 0 0 0 5 8.5M42 17h4a5 5 0 0 1-5 8.5" fill="none" stroke="#D97706" stroke-width="2.6" stroke-linecap="round"/>` +
-      `<path d="M21.5 13h21v10.5a10.5 10.5 0 0 1-21 0Z" fill="#F59E0B"/>` +
-      `<polygon points="${poly(32, 22, 4.6, 5, -90)}" fill="#FEF3C7"/>` +
-      `<rect x="29.8" y="33.5" width="4.4" height="7" fill="#D97706"/>` +
-      `<rect x="24.5" y="40.5" width="15" height="4" rx="1.2" fill="#D97706"/>` +
-      `<rect x="21" y="44.5" width="22" height="6" rx="1.6" fill="#92400E"/>`,
+  striker: () => {
+    const s = SKIN[4];
+    return {
+      bg: "#CDE8FF",
+      skin: s,
+      kit: kit("#DC2626", { trim: "#fff", num: "9" }),
+      face: { mouth: "grin", brows: HAIR.black },
+      top: curls(HAIR.black, 3.1, 192, 348, 10, 10.4, 24.4),
+      front: forearm(50, 39, s, undefined, "#fff") + fist(50, 35.6, s) + football(13.6, 53.6, 7.4),
+    };
   },
-  jersey: {
-    bg: "#FDE68A",
-    body: () =>
-      `<path d="M24.5 13 17 15.5 9.5 23.5l5.5 7 4.5-3.2V52h25V27.3l4.5 3.2 5.5-7-7.5-8L39.5 13q-7.5 6.5-15 0Z" fill="#16A34A"/>` +
-      `<path d="M24.5 13q7.5 6.5 15 0" fill="none" stroke="#14532D" stroke-width="2.2"/>` +
-      `<path d="M19.5 27.3 15 30.5M44.5 27.3l4.5 3.2" stroke="#14532D" stroke-width="1.4"/>` +
-      // "10", drawn so it never depends on a font.
-      `<g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">` +
-      `<path d="M25.5 30.5l3-2.2v14"/>` +
-      `<rect x="33" y="28.3" width="7" height="14" rx="3.5"/>` +
-      `</g>`,
+  midfielder: () => {
+    const s = SKIN[2];
+    const braid = (x: number) =>
+      [0, 1, 2, 3, 4].map((i) => `<ellipse cx="${r1(x - i * 0.3)}" cy="${r1(36.6 + i * 3.4)}" rx="2.3" ry="2.1" fill="${HAIR.black}"/>`).join("") +
+      `<rect x="${r1(x - 2.8)}" y="52.4" width="3.6" height="1.6" rx=".6" fill="#FACC15"/>` +
+      path(`M${r1(x - 3)} 54Q${r1(x - 1)} 57.6 ${r1(x + 1)} 54Z`, HAIR.black);
+    return {
+      bg: "#FCCFE3",
+      skin: s,
+      kit: kit("#16A34A", { trim: "#fff", num: "10" }),
+      face: { mouth: "grin", brows: HAIR.black },
+      top: path("M21.2 28.4C20.4 18.6 25.4 14 32 14S43.6 18.6 42.8 28.4L41.6 28C41.2 23.4 38.6 20.4 32.4 19.4H31.6C25.4 20.4 22.8 23.4 22.4 28Z", HAIR.black) + braid(22.4) + flip(braid(22.4)),
+      front: football(50.4, 54.4, 7.2),
+    };
   },
-  hockey: {
-    bg: "#0F766E",
-    body: () =>
-      `<path d="M41 9 27 44.5q-2.4 5.6-8 4.6-4.6-.9-3.4-5" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>` +
-      `<path d="M41 9l-3.4 8.4" stroke="${INK}" stroke-width="5.6" stroke-linecap="round"/>` +
-      `<circle cx="44.5" cy="46" r="4.8" fill="#FDE047"/>`,
+  defender: () => {
+    const s = SKIN[3];
+    return {
+      bg: "#A7F3D0",
+      skin: s,
+      kit: kit("#1E3A8A", { trim: "#fff", num: "4" }),
+      face: { mouth: "smile", brows: HAIR.black, beard: "short" },
+      top: path("M21.6 26.6C21 18.4 25.4 14.6 32 14.6S43 18.4 42.4 26.6C41.6 23 40 21 37.4 20.4 33.8 21.2 30.2 21.2 26.6 20.4 24 21 22.4 23 21.6 26.6Z", HAIR.black, ` fill-opacity=".85"`),
+      // Heading it clear.
+      front: football(49.4, 13.6, 6.4) + line("M41.4 16.6l-2.2-1.2M42.4 12.8l-2.4-.2M43.6 20l-1.8.8", "#fff", 1.2),
+    };
+  },
+  goalkeeper: () => {
+    const s = SKIN[1];
+    const glove = (x: number) =>
+      `<rect x="${r1(x - 5.4)}" y="46" width="10.8" height="12.6" rx="4.2" fill="#F97316"/>` +
+      `<rect x="${r1(x - 5)}" y="55.6" width="10" height="3.6" rx="1" fill="#fff"/>` +
+      line(`M${r1(x - 2.4)} 46.8v6M${x} 46.4v6.4M${r1(x + 2.4)} 46.8v6`, "#C2410C", 0.8);
+    return {
+      bg: "#C9D3FB",
+      skin: s,
+      kit: kit("#FACC15", { trim: INK }) + both(line("M8.8 56.6Q11.6 50.6 18 47.6", INK, 2.4)),
+      face: { mouth: "grin", brows: HAIR.black },
+      top: `<circle cx="32" cy="12.4" r="4.6" fill="${HAIR.black}"/>` + path("M21.4 28C20.4 19 25.2 14.4 32 14.4S43.6 19 42.6 28C42 23.6 40.2 21 36.6 19.8 33.4 18.8 30.6 18.8 27.4 19.8 23.8 21 22 23.6 21.4 28Z", HAIR.black),
+      front: football(32, 53.6, 7.6) + glove(22.6) + glove(41.4),
+    };
+  },
+  winger: () => {
+    const s = SKIN[0];
+    return {
+      bg: "#FFE8A3",
+      skin: s,
+      back: line("M4 22H14M2.6 29H12.6M5 36H13.6", "#fff", 2),
+      kit: kit("#7C3AED", { trim: "#fff", num: "7" }),
+      face: { mouth: "grin", brows: HAIR.brown },
+      top: path("M21.4 28C20.4 19 23.6 13 30.6 11.8 36 11 41.6 12.4 43 17.2 44 20.4 43.2 24.6 42.6 28H41.6C41.2 24.4 40 22 38 21 34.4 22 29 21.6 25.6 19.6 24 21.6 22.8 24.6 22.4 28Z", HAIR.brown) + line("M27.4 15.4Q33 12.8 39.4 15.6", "#7A4A30", 1),
+      front: line("M2 49H6.4M1 54.6H5.4", "#fff", 1.8) + football(14.6, 52.4, 7),
+    };
+  },
+  "tennis-player": () => {
+    const s = SKIN[4];
+    const frame = "#DB2777";
+    return {
+      bg: "#99E1D9",
+      skin: s,
+      kit: kit("#fff", { trim: frame, neck: "polo" }),
+      face: { mouth: "grin", brows: HAIR.black },
+      top: `<circle cx="32" cy="11.4" r="5.4" fill="${HAIR.black}"/><circle cx="29" cy="9.6" r="2.6" fill="${HAIR.black}"/><circle cx="35.4" cy="9.8" r="2.8" fill="${HAIR.black}"/>` + path("M21.6 26C21.2 18.6 25.6 14.2 32 14.2S42.8 18.6 42.4 26Z", HAIR.black) + visor("#fff", "#E5E7EB"),
+      front:
+        `<g transform="rotate(18 50.6 24)">` +
+        `<defs><clipPath id="rh"><ellipse cx="50.6" cy="24" rx="5.6" ry="7.2"/></clipPath></defs>` +
+        `<g clip-path="url(#rh)" stroke="#fff" stroke-opacity=".9" stroke-width=".6">` +
+        [46.4, 48.5, 50.6, 52.7, 54.8].map((x) => `<path d="M${x} 16v16"/>`).join("") +
+        [18.8, 21.4, 24, 26.6, 29.2].map((y) => `<path d="M44 ${y}h13"/>`).join("") +
+        `</g>` +
+        `<ellipse cx="50.6" cy="24" rx="6.4" ry="8" fill="none" stroke="${frame}" stroke-width="1.8"/>` +
+        line("M48.6 31.6 50.6 37.4 52.6 31.6", frame, 1.5) +
+        `<rect x="49.2" y="36.6" width="2.8" height="9" rx="1.2" fill="${INK}"/>` +
+        `</g>` +
+        forearm(47.8, 47.6, s, undefined, frame) +
+        fist(47.8, 45, s) +
+        tennisBall(14, 24, 4),
+    };
+  },
+  "badminton-player": () => {
+    const s = SKIN[0];
+    return {
+      bg: "#FBD5C5",
+      skin: s,
+      kit: kit("#2563EB", { trim: "#fff", neck: "v" }),
+      face: { mouth: "grin", brows: HAIR.black },
+      // Short hair, a few spikes up front, and a sweatband.
+      top:
+        path("M21.3 28.2C20.4 20.4 22.8 16 26.4 14.4L27.4 11.4 29.8 13.4 32.4 10.6 34 13.4 37.6 11.8 37.8 14.8C41.6 16.4 43.4 21 42.7 28.2L41.7 28C41.3 24.6 40.4 22.6 39 21.4 35 22.8 28.8 22.6 25 20.4 23.6 22.2 22.6 24.8 22.3 28Z", HAIR.black) +
+        path("M21.6 22.2Q32 17.6 42.4 22.2L42.6 24.4Q32 19.8 21.4 24.4Z", "#EF4444"),
+      front:
+        `<g transform="rotate(14 51 20)">` +
+        `<ellipse cx="51" cy="20" rx="4.4" ry="5.8" fill="#fff" fill-opacity=".35"/>` +
+        line("M48.4 17h5.2M48 20h6M48.4 23h5.2M49.6 14.8v10.4M52.4 14.8v10.4", "#fff", 0.5) +
+        `<ellipse cx="51" cy="20" rx="4.4" ry="5.8" fill="none" stroke="${INK}" stroke-width="1.3"/>` +
+        line("M51 25.8V38", "#6B7280", 1) +
+        `<rect x="49.7" y="37.4" width="2.6" height="7.6" rx="1.1" fill="#EF4444"/>` +
+        `</g>` +
+        forearm(48.8, 47.4, s, undefined, "#EF4444") +
+        fist(48.8, 45, s) +
+        `<g transform="rotate(-38 14 20)">` +
+        path("M10.4 13 17.6 13 15.6 21.4H12.4Z", "#fff") +
+        line("M12.2 13.2 13 21M15.8 13.2 15 21M10.9 16.6H17.1", "#CBD5E1", 0.5) +
+        `<rect x="12.2" y="21" width="3.6" height="1.6" fill="#22C55E"/>` +
+        path("M12.2 22.6H15.8V23.4A1.8 1.8 0 0 1 12.2 23.4Z", "#F59E0B") +
+        `</g>`,
+    };
+  },
+  "pickleball-player": () => {
+    const s = SKIN[2];
+    const paddle = "#0D9488";
+    return {
+      bg: "#DCEEFF",
+      skin: s,
+      kit: kit("#FB7185", { trim: "#fff", neck: "polo" }),
+      face: { mouth: "grin", brows: HAIR.grey, glasses: true },
+      top: `<circle cx="32" cy="12" r="4.4" fill="${HAIR.silver}"/>` + path("M21.4 28C20.4 19 25.2 14.4 32 14.4S43.6 19 42.6 28C42 23.6 40.2 21 36.6 19.8 33.4 18.8 30.6 18.8 27.4 19.8 23.8 21 22 23.6 21.4 28Z", HAIR.silver) + visor(paddle, "#0B776D"),
+      front:
+        `<g transform="rotate(16 50 27)">` +
+        `<rect x="44.2" y="16" width="11.6" height="14" rx="4.8" fill="${paddle}"/>` +
+        `<rect x="44.2" y="16" width="11.6" height="14" rx="4.8" fill="none" stroke="#134E4A" stroke-width="1.1"/>` +
+        path("M46.4 19.4Q50 17.6 53.6 19.4", "none", ` stroke="#fff" stroke-opacity=".5" stroke-width="1"`) +
+        `<rect x="48.6" y="29.6" width="2.8" height="8.6" rx="1.2" fill="#374151"/>` +
+        `</g>` +
+        forearm(47.2, 46.6, s) +
+        fist(47.2, 44, s) +
+        `<circle cx="14.4" cy="22.6" r="4.2" fill="#FDE047"/>` +
+        `<g fill="#CA8A04"><circle cx="13" cy="21.2" r=".8"/><circle cx="15.8" cy="21.4" r=".8"/><circle cx="14.4" cy="24" r=".8"/><circle cx="11.6" cy="23.8" r=".6"/><circle cx="17.1" cy="24" r=".6"/></g>`,
+    };
+  },
+  "table-tennis-player": () => {
+    const s = SKIN[3];
+    return {
+      bg: "#BFE9F7",
+      skin: s,
+      kit: kit("#FACC15", { trim: "#1D4ED8", kid: true }),
+      face: { mouth: "grin", brows: HAIR.black },
+      top: path("M21.2 28.4C20.2 18.4 25 13.6 32 13.6S43.8 18.4 42.8 28.4H41.8C41.6 25 40.8 22.6 39.2 21.2 34.6 20.4 30 19 27.6 16.8 26.6 19.6 24 21.2 22.4 21.8 22.2 23.6 22.2 26 22.2 28.4Z", HAIR.black),
+      front:
+        `<g transform="rotate(-14 50 34)">` +
+        `<rect x="48.4" y="33.6" width="3.4" height="9" rx="1.2" fill="#B07A44"/>` +
+        `<circle cx="50.1" cy="27.4" r="7" fill="#DC2626"/>` +
+        `<circle cx="50.1" cy="27.4" r="7" fill="none" stroke="#7F1D1D" stroke-width=".9"/>` +
+        `</g>` +
+        forearm(50, 48, s) +
+        fist(50, 45.6, s) +
+        line("M7 26.4 11.4 23.6M6.6 22 10.6 21", "#fff", 1.1) +
+        `<circle cx="14.6" cy="22.2" r="2.6" fill="#FB923C"/>`,
+    };
+  },
+  "padel-player": () => {
+    const s = SKIN[1];
+    const hair = HAIR.brown;
+    return {
+      bg: "#CFF3F1",
+      skin: s,
+      back: path("M20.4 26C19 16 24.4 12.4 32 12.4S45 16 43.6 26C44.6 34 46.6 40 44.4 46.6H19.6C17.4 40 19.4 34 20.4 26Z", hair),
+      kit: kit("#C026D3", { trim: "#fff", neck: "v" }),
+      face: { mouth: "grin", brows: hair },
+      top: path("M21.4 28.6C20.4 19 25.4 14.2 32 14.2S43.6 19 42.6 28.6C41.6 23 39 20 34.6 19.2 31.6 21.6 26.4 22.6 22.8 22.8 22.2 24.6 21.8 26.4 21.4 28.6Z", hair),
+      front:
+        `<g transform="rotate(14 50.6 24)">` +
+        path("M50.6 13.4C55.6 13.4 58 17.2 58 22.2 58 27.6 55 31.6 50.6 31.6S43.2 27.6 43.2 22.2C43.2 17.2 45.6 13.4 50.6 13.4Z", "#BEF264") +
+        `<g fill="#3F6212" fill-opacity=".55">` +
+        [
+          [48, 18],
+          [50.6, 17.4],
+          [53.2, 18],
+          [46.8, 21],
+          [49.4, 20.8],
+          [51.8, 20.8],
+          [54.4, 21],
+          [48, 24],
+          [50.6, 23.8],
+          [53.2, 24],
+          [49.4, 26.8],
+          [51.8, 26.8],
+        ]
+          .map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".7"/>`)
+          .join("") +
+        `</g>` +
+        path("M50.6 13.4C55.6 13.4 58 17.2 58 22.2 58 27.6 55 31.6 50.6 31.6S43.2 27.6 43.2 22.2C43.2 17.2 45.6 13.4 50.6 13.4Z", "none", ` stroke="${INK}" stroke-width="1.3"`) +
+        path("M48.4 31.2 50.6 34.6 52.8 31.2Z", INK) +
+        `<rect x="49.3" y="34" width="2.6" height="8.4" rx="1.1" fill="${INK}"/>` +
+        `</g>` +
+        forearm(48.4, 46.6, s, undefined, "#fff") +
+        fist(48.4, 44.2, s) +
+        tennisBall(13.6, 22.4, 3.8),
+    };
+  },
+  "basketball-player": () => {
+    const s = SKIN[1];
+    return {
+      bg: "#E3F1C8",
+      skin: s,
+      kit: tank("#6D28D9", "#FACC15", "11", s),
+      face: { mouth: "grin", brows: HAIR.black, beard: "short" },
+      top: `<circle cx="32" cy="12.6" r="4.6" fill="${INK}"/>` + path("M21.2 27C20.6 17.2 25.4 13.4 32 13.4S43.4 17.2 42.8 27C40 23.4 36 21.8 32 21.8S24 23.4 21.2 27Z", INK) + line("M28.6 15.6Q32 18.6 35.4 15.6", "#3F3F46", 1),
+      front:
+        forearm(50.4, 44, s) +
+        `<rect x="49" y="31" width="2.8" height="11" rx="1.4" fill="${s.base}"/>` +
+        `<rect x="46.4" y="38.8" width="8" height="7.6" rx="2.8" fill="${s.base}"/>` +
+        `<defs><clipPath id="bb"><circle cx="50.4" cy="23.6" r="7.2"/></clipPath></defs>` +
+        `<circle cx="50.4" cy="23.6" r="7.2" fill="#EA580C"/>` +
+        `<g clip-path="url(#bb)" fill="none" stroke="${INK}" stroke-width="1">` +
+        `<path d="M50.4 16v15.2M43 23.6h14.8M45.4 17.6q4 6-.2 12M55.4 17.6q-4 6 .2 12"/>` +
+        `</g>` +
+        line("M41.4 18.4A10 10 0 0 0 41 28.6M59.4 18.4A10 10 0 0 1 59.8 28.6", "#fff", 1.3),
+    };
+  },
+  "volleyball-player": () => {
+    const s = SKIN[3];
+    return {
+      bg: "#FFD0D6",
+      skin: s,
+      kit: kit("#0D9488", { trim: "#fff", num: "1" }),
+      face: { mouth: "grin", brows: HAIR.black },
+      top: curls(HAIR.black, 3.4, 186, 354, 10, 10.8, 25.6),
+      front:
+        flip(forearm(48.6, 40, s, undefined, "#fff") + palm(48.6, 38.6, s)) +
+        `<defs><clipPath id="vb"><circle cx="15.6" cy="27.4" r="7.2"/></clipPath></defs>` +
+        `<circle cx="15.6" cy="27.4" r="7.2" fill="#fff"/>` +
+        `<g clip-path="url(#vb)">` +
+        path("M15.6 27.4C15.2 22.8 12.6 19.8 8.6 18.6L6.6 22.4C10.4 23.2 13.4 24.8 15.6 27.4Z", "#2563EB") +
+        path("M15.6 27.4C19.2 25.2 23.2 25.2 25.6 27.6L24.2 31.8C21.8 29.8 18.8 29 15.6 27.4Z", "#FACC15") +
+        path("M15.6 27.4C15.2 31.6 12.6 34.8 9 36.6L12.8 38.2C15.2 35.8 16 32.2 15.6 27.4Z", "#2563EB") +
+        `</g>` +
+        `<g clip-path="url(#vb)" fill="none" stroke="${INK}" stroke-width=".8">` +
+        `<path d="M15.6 27.4C15.2 22.8 12.6 19.8 8.6 18.6M15.6 27.4C19.2 25.2 23.2 25.2 25.6 27.6M15.6 27.4C15.2 31.6 12.6 34.8 9 36.6"/>` +
+        `</g>` +
+        `<circle cx="15.6" cy="27.4" r="7.2" fill="none" stroke="${INK}" stroke-width=".9"/>`,
+    };
+  },
+  "frisbee-player": () => {
+    const s = SKIN[0];
+    const hair = HAIR.brown;
+    return {
+      bg: "#E6D8FF",
+      skin: s,
+      kit: kit("#22C55E", { trim: "#fff" }) + line("M10 52.4Q14 49 18 52.4T26 52.4M38 52.4Q42 49 46 52.4T54 52.4", "#fff", 1.2, ` stroke-opacity=".55"`),
+      face: { mouth: "grin", brows: hair },
+      top: `<circle cx="23.4" cy="14.8" r="4.4" fill="${hair}"/><circle cx="40.6" cy="14.8" r="4.4" fill="${hair}"/>` + path("M21.4 28C20.4 19 25.2 14.4 32 14.4S43.6 19 42.6 28C42 23.6 40.2 21 36.6 19.8 33.4 18.8 30.6 18.8 27.4 19.8 23.8 21 22 23.6 21.4 28Z", hair) + headband("#F97316"),
+      front:
+        forearm(49.4, 48.4, s, undefined, "#F97316") +
+        `<g transform="rotate(-16 49.6 42.6)">` +
+        `<ellipse cx="49.6" cy="42.6" rx="10.4" ry="3.8" fill="#F97316"/>` +
+        `<ellipse cx="49.6" cy="41.8" rx="8" ry="2.4" fill="#FB923C"/>` +
+        `<ellipse cx="49.6" cy="42.6" rx="10.4" ry="3.8" fill="none" stroke="#C2410C" stroke-width=".8"/>` +
+        `</g>` +
+        fist(49.4, 46.4, s),
+    };
+  },
+  swimmer: () => {
+    const s = SKIN[3];
+    const capC = "#2563EB";
+    return {
+      bg: "#BFE7FC",
+      skin: s,
+      ears: false,
+      kit: shoulders(s) + path("M0 54.4Q5.4 51 10.8 54.4T21.6 54.4T32.4 54.4T43.2 54.4T54 54.4T64.8 54.4V64H0Z", "#38B2EA") + line("M0 54.4Q5.4 51 10.8 54.4T21.6 54.4T32.4 54.4T43.2 54.4T54 54.4T64.8 54.4", "#fff", 1.4),
+      face: { mouth: "grin", brows: HAIR.black },
+      top:
+        path("M20.6 28C19.8 16.8 25.2 12.6 32 12.6S44.2 16.8 43.4 28C41 24.2 37 22.4 32 22.4S23 24.2 20.6 28Z", capC) +
+        line("M20.8 21.8Q32 17.4 43.2 21.8", "#1E3A8A", 1.4) +
+        `<ellipse cx="27.6" cy="19.8" rx="3.2" ry="2.3" fill="#22D3EE" stroke="#1E3A8A" stroke-width="1"/>` +
+        `<ellipse cx="36.4" cy="19.8" rx="3.2" ry="2.3" fill="#22D3EE" stroke="#1E3A8A" stroke-width="1"/>` +
+        `<ellipse cx="26.8" cy="19.2" rx="1.1" ry=".6" fill="#fff" fill-opacity=".7"/><ellipse cx="35.6" cy="19.2" rx="1.1" ry=".6" fill="#fff" fill-opacity=".7"/>` +
+        line("M30.8 19.6q1.2-.8 2.4 0", "#1E3A8A", 1) +
+        `<circle cx="12" cy="42" r="1.6" fill="#fff" fill-opacity=".8"/><circle cx="15.4" cy="38" r="1" fill="#fff" fill-opacity=".8"/><circle cx="51" cy="40.4" r="1.3" fill="#fff" fill-opacity=".8"/>`,
+    };
+  },
+  coach: () => {
+    const s = SKIN[4];
+    return {
+      bg: "#BEEFC9",
+      skin: s,
+      kit: kit("#1E3A8A", { trim: "#fff", neck: "zip" }) + both(line("M6.2 60Q8.6 51 17.4 47.2", "#fff", 1.4) + line("M8.4 61.4Q10.8 52.6 18.6 49.4", "#fff", 1.4)),
+      face: { mouth: "grin", brows: HAIR.black },
+      top:
+        path("M21.2 28.4C20 18.4 25 13.6 32 13.6S44 18.4 42.8 28.4H41.8C41.4 23.6 39.6 20.6 36 19.6 32.8 21.4 27.4 22.6 23 22.4 22.4 24.2 22.2 26 22.2 28.4Z", HAIR.black) +
+        line("M33.6 14.6Q38.6 15.8 40.6 20.8", HAIR.silver, 1.6) +
+        both(`<circle cx="21.5" cy="31.8" r="1" fill="#F5B50A"/>`),
+      front:
+        // The whistle on its lanyard: a round chamber, the mouthpiece to the side.
+        line("M27 44.6Q28.4 51.4 30.4 55.2M37 44.6Q35.6 51.4 30.4 55.2", "#EF4444", 1) +
+        `<rect x="30.6" y="54.8" width="6.4" height="2.6" rx=".8" fill="#CBD5E1"/>` +
+        `<circle cx="30.8" cy="57.8" r="2.8" fill="#CBD5E1"/>` +
+        `<rect x="32.4" y="55.3" width="1.8" height="1.1" fill="#64748B"/>` +
+        line("M29.2 57.2q.4-1.2 1.6-1.4", "#fff", 0.6) +
+        `<rect x="6.6" y="48.6" width="13" height="16" rx="1.6" fill="#B07A44" transform="rotate(-10 13 56)"/>` +
+        `<rect x="8.4" y="50.6" width="9.4" height="12.6" rx=".6" fill="#fff" transform="rotate(-10 13 56)"/>` +
+        line("M10.2 54.4h5.8M10.4 57h5.6M10.6 59.6h4", "#94A3B8", 0.8, ` transform="rotate(-10 13 56)"`) +
+        `<rect x="10.6" y="47.4" width="5" height="2.6" rx=".8" fill="#9CA3AF" transform="rotate(-10 13 56)"/>`,
+    };
   },
 };
 
 /** An avatar's SVG file. */
 export function avatarSvg(id: AvatarPresetId): string {
-  const { bg, body } = ART[id];
-  const label = AVATAR_PRESETS.find((p) => p.id === id)?.label ?? id;
+  const p = PLAYERS[id]();
+  const preset = AVATAR_PRESETS.find((a) => a.id === id);
+  const label = preset ? avatarLabel(preset) : id;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="${label}">` +
-    `<title>${label}</title><rect width="64" height="64" fill="${bg}"/>${body()}</svg>`
+    `<title>${label}</title><rect width="64" height="64" fill="${p.bg}"/>` +
+    (p.back ?? "") +
+    neck(p.skin) +
+    p.kit +
+    (p.mid ?? "") +
+    head(p.skin, p.ears !== false) +
+    face(p.skin, p.face) +
+    (p.top ?? "") +
+    (p.front ?? "") +
+    `</svg>`
   );
 }
