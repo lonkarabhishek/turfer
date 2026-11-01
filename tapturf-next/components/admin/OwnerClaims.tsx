@@ -2,9 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { digits10, editorLabel, keyLabel, toClaims, typedNameDiffers, type AdminClaim, type ClaimStatus } from "@/lib/admin/claims";
 import { METHOD_NAMES, ago, istDateTime, whatsappLink } from "@/lib/admin/people";
 import { adminFetch } from "@/lib/admin/adminFetch";
+import { claimCounts } from "@/lib/admin/claimed";
+import { claimsLine } from "@/lib/admin/glance";
+import { useFoldReport } from "./Fold";
 
 const spaced = (p10: string) => p10.replace(/^(\d{5})(\d{5})$/, "$1 $2");
 /** A stored number as admin reads it: +91 and the mobile, 0 and the STD code for a landline, "none" for none. */
@@ -20,6 +24,9 @@ export function OwnerClaims() {
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [now, setNow] = useState(0);
+  // The fold around this panel: its line and waiting count follow each reload (after an approve, too).
+  const report = useFoldReport();
+  const router = useRouter();
 
   // Through the admin page's gate (lib/admin/fetchGate.ts): one session refresh, not one per call.
   const load = useCallback(async () => {
@@ -42,6 +49,12 @@ export function OwnerClaims() {
     return () => clearTimeout(t);
   }, [load]);
 
+  useEffect(() => {
+    if (!claims) return;
+    const n = claimCounts(claims);
+    report?.({ line: claimsLine(n), waiting: n.waiting });
+  }, [claims, report]);
+
   const decide = async (c: AdminClaim, status: ClaimStatus) => {
     const key = c.turfId + c.userKey;
     setBusy(key);
@@ -61,6 +74,8 @@ export function OwnerClaims() {
     setBusy(null);
     if (!ok) setFailed(key);
     void load();
+    // The page's own numbers (the glance at the top: claimed, this week, waiting) read anew, so they agree with this panel.
+    if (ok) router.refresh();
   };
 
   if (error)
@@ -85,7 +100,7 @@ export function OwnerClaims() {
           <li key={key} className={`rounded-2xl border p-3 ${c.status === "pending" ? "border-amber-300 bg-amber-50" : "border-primary-200 bg-white"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0 space-y-1">
-                <Link href={`/turf/${c.slug ?? c.turfId}`} target="_blank" className="font-semibold text-primary-900 hover:underline">
+                <Link href={`/turf/${c.slug ?? c.turfId}`} target="_blank" className="inline-block -my-2.5 py-2.5 font-semibold text-primary-900 hover:underline">
                   {c.turfName}
                 </Link>
                 <p className="text-[13px] text-primary-500">
@@ -194,18 +209,18 @@ export function OwnerClaims() {
               <div className="flex gap-2">
                 {c.status === "pending" && (
                   <>
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-9 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">Approve</button>
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-9 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Reject</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-10 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">Approve</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-10 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Reject</button>
                   </>
                 )}
                 {c.status === "active" && (
-                  <button type="button" disabled={busy === key} onClick={() => void decide(c, "revoked")} className="h-9 px-3 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Revoke</button>
+                  <button type="button" disabled={busy === key} onClick={() => void decide(c, "revoked")} className="h-10 px-3 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Revoke</button>
                 )}
                 {c.status === "revoked" && (
                   <>
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-9 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Restore</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-10 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Restore</button>
                     {/* Rejected, not revoked: their number stops being held back from instant claims. */}
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-9 px-3 rounded-full bg-primary-100 text-primary-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Close, don&rsquo;t block</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-10 px-3 rounded-full bg-primary-100 text-primary-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Close, don&rsquo;t block</button>
                   </>
                 )}
               </div>

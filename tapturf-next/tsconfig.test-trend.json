@@ -25,6 +25,8 @@
     "lib/admin/section.test.ts",
     "lib/admin/home.test.ts",
     "lib/admin/fetchGate.test.ts",
-    "lib/admin/readers.test.ts"
+    "lib/admin/readers.test.ts",
+    "lib/admin/glance.test.ts",
+    "lib/admin/fold.test.ts"
   ]
 }

@@ -21,6 +21,7 @@ import {
   getAdminUsers,
   userNames,
   type AdminGame,
+  type AdminUser,
   type BookingFilter,
   type GameFilter,
   type NotificationFilter,
@@ -30,7 +31,7 @@ import {
 } from "@/lib/queries/adminDetail";
 import { LOGIN_FILTERS, filterLogins, getRecentLogins, type LoginFilter } from "@/lib/queries/adminLogins";
 import { signupPeople } from "@/lib/queries/adminUsers";
-import { CITY_HOW, NO_CITY, cityLabel, cityParam, countCities, rowInCity } from "@/lib/admin/people";
+import { CITY_HOW, NO_CITY, ago, cityLabel, cityParam, countCities, rowInCity } from "@/lib/admin/people";
 import { googleUnfinishedRows } from "@/lib/queries/adminLinks";
 import { UNFINISHED_LABEL, unfinishedList } from "@/lib/admin/links";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
@@ -149,8 +150,8 @@ export default async function AdminDetailPage({
   const body = await renderView(v, filter, city);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-900 mb-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 md:py-8">
+      <Link href="/admin" className="-ml-2 inline-flex min-h-10 items-center gap-1 rounded-full px-2 text-sm text-primary-500 hover:text-primary-900 mb-2">
         <ChevronLeft className="w-4 h-4" /> Admin
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
@@ -165,7 +166,7 @@ export default async function AdminDetailPage({
             <Link
               key={key}
               href={viewHref(v, key, city)}
-              className={`shrink-0 h-9 px-4 inline-flex items-center rounded-full text-[14px] font-medium ${
+              className={`shrink-0 h-10 px-4 inline-flex items-center rounded-full text-[14px] font-medium ${
                 key === filter ? "bg-primary-900 text-white" : "bg-primary-100 text-primary-900 hover:bg-primary-200"
               }`}
             >
@@ -228,7 +229,7 @@ function CityFilter({ filter, city, counts }: { filter: string; city: string | n
           key={c.key ?? "all"}
           href={viewHref("users", filter, c.key)}
           aria-current={c.key === city ? "true" : undefined}
-          className={`shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium ${
+          className={`shrink-0 h-10 px-3 inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium ${
             c.key === city ? "bg-accent-600 text-white" : "bg-white border border-primary-200 text-primary-800 hover:bg-primary-50"
           }`}
         >
@@ -236,6 +237,91 @@ function CityFilter({ filter, city, counts }: { filter: string; city: string | n
           {c.n !== null && <span className={`tabular-nums ${c.key === city ? "text-white/80" : "text-primary-400"}`}>{c.n}</span>}
         </Link>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The Users list: name, city, joined and last active first, then how they
+ * sign in, what they did and how to reach them. A table from a tablet up;
+ * on a phone every row is a card (the same cells in three short lines, each
+ * with its label), so nothing scrolls sideways. lastActive is null when the
+ * people list couldn't be read: "-" then, never "Never".
+ */
+function UsersTable({ users, lastActive, now }: { users: AdminUser[]; lastActive: Map<string, number | null> | null; now: number }) {
+  if (users.length === 0) {
+    return (
+      <div className="rounded-2xl bg-white border border-primary-200">
+        <p className="px-5 py-10 text-center text-sm text-primary-400">Nothing here.</p>
+      </div>
+    );
+  }
+  // "confirmed" sits with the name, as on a phone's card: a column of its own pushed the table past a laptop's width.
+  const head = ["Name", "City", "Joined", "Last active", "Sign-in", "Hosted", "Requests", "Email", "Phone"];
+  // A phone's card, three lines under the name: where and when (order 2), how they sign in and what they
+  // did (4), how to reach them (6). The row's ::after and ::before (orders 3 and 5) are the line breaks.
+  const cell = "px-4 py-3 max-sm:p-0 max-sm:text-[13px] max-sm:before:text-primary-400";
+  return (
+    <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
+      <div className="sm:overflow-x-auto">
+        <table className="w-full text-sm max-sm:block">
+          <thead className="bg-primary-50 text-[11px] text-primary-500 font-semibold max-sm:hidden">
+            <tr>
+              {head.map((h) => (
+                <th key={h} className="text-left px-4 py-2.5 whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-primary-100 max-sm:block">
+            {users.map((u) => {
+              const active = lastActive ? (lastActive.get(u.id) ?? null) : undefined;
+              return (
+                <tr
+                  key={u.id}
+                  className="max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-0.5 max-sm:px-4 max-sm:py-3 max-sm:after:order-3 max-sm:after:basis-full max-sm:before:order-5 max-sm:before:basis-full"
+                >
+                  <td className="px-4 py-3 text-primary-900 max-sm:order-1 max-sm:basis-full max-sm:p-0 max-sm:pb-0.5 max-sm:text-[15px] max-sm:font-semibold">
+                    {u.name || <span className="text-primary-400">-</span>}
+                    {u.duplicateOf > 1 && <Badge className="ml-1.5 bg-amber-100 text-amber-800">{u.duplicateOf} accounts</Badge>}
+                    {u.verified && (
+                      <span title={u.verifiedHow ?? undefined}>
+                        <Badge className="ml-1.5 bg-accent-50 text-accent-700">confirmed</Badge>
+                      </span>
+                    )}
+                  </td>
+                  <td
+                    className={`${cell} text-primary-900 whitespace-nowrap max-sm:order-2 ${u.city ? "" : "max-sm:hidden"}`}
+                    title={u.city?.how === "guess" ? "A guess from their activity (games, turfs contacted, searches)" : undefined}
+                  >
+                    {u.city ? (
+                      <>
+                        {cityLabel(u.city.id)}
+                        {CITY_HOW[u.city.how] && <span className="ml-1.5 text-[12px] text-primary-400">{CITY_HOW[u.city.how]}</span>}
+                      </>
+                    ) : (
+                      <span className="text-primary-400">-</span>
+                    )}
+                  </td>
+                  <td className={`${cell} text-primary-500 whitespace-nowrap max-sm:order-2 max-sm:before:content-['Joined_']`}>{fmtDateTime(u.created_at)}</td>
+                  <td
+                    className={`${cell} text-primary-700 whitespace-nowrap max-sm:order-2 max-sm:before:content-['Active_']`}
+                    title={active ? fmtDateTime(new Date(active).toISOString()) : undefined}
+                  >
+                    {active === undefined ? <span className="text-primary-400">-</span> : active === null ? <span className="text-primary-400">Never</span> : ago(active, now)}
+                  </td>
+                  <td className={`${cell} max-sm:order-4`}><Badge className="bg-primary-100 text-primary-700">{u.method}</Badge></td>
+                  <td className={`${cell} tabular-nums max-sm:order-4 max-sm:before:content-['Hosted_']`}>{u.gamesHosted}</td>
+                  <td className={`${cell} tabular-nums max-sm:order-4 max-sm:before:content-['Requests_']`}>{u.requestsMade}</td>
+                  <td className={`${cell} text-primary-700 max-sm:order-6 max-sm:break-all ${u.email ? "" : "max-sm:hidden"}`}>{u.email || <span className="text-primary-400">-</span>}</td>
+                  <td className={`${cell} text-primary-700 whitespace-nowrap max-sm:order-6 ${u.phone ? "" : "max-sm:hidden"}`}>
+                    {u.phone || <span className="text-primary-400">-</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -424,11 +510,14 @@ async function renderView(v: View, filter: string, city: string | null = null): 
     }
 
     case "users": {
-      const res = await getAdminUsers(filter as UserFilter);
+      // The people list's read (made once per render, getAdminUsers reads it too) gives each account's last activity.
+      const [res, { people }] = await Promise.all([getAdminUsers(filter as UserFilter), signupPeople()]);
       if (!res.ok) return failedView(res.reason, "the users");
       const { users: all, citiesRead } = res.data;
       // Without the cities every row reads as none, so a city filter then shows everyone, as the note says.
       const users = citiesRead ? all.filter((u) => rowInCity(u.city, city)) : all;
+      const lastActive = new Map((people ?? []).map((p) => [p.id, p.lastActive]));
+      const now = Date.now();
       return {
         count: users.length,
         node: (
@@ -438,39 +527,8 @@ async function renderView(v: View, filter: string, city: string | null = null): 
           ) : (
             <p className="mb-4 text-[14px] text-primary-500">Couldn&apos;t read cities just now, so the list shows everyone without them. Reload to try again.</p>
           )}
-          <Table head={["Name", "Email", "Phone", "City", "Sign-in", "Hosted", "Requests", "Joined", ""]} empty={users.length === 0}>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td className="px-4 py-3 text-primary-900">
-                  {u.name || <span className="text-primary-400">-</span>}
-                  {u.duplicateOf > 1 && <Badge className="ml-1.5 bg-amber-100 text-amber-800">{u.duplicateOf} accounts</Badge>}
-                </td>
-                <td className="px-4 py-3 text-primary-700">{u.email || <span className="text-primary-400">-</span>}</td>
-                <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{u.phone || <span className="text-primary-400">-</span>}</td>
-                <td className="px-4 py-3 text-primary-900 whitespace-nowrap" title={u.city?.how === "guess" ? "A guess from their activity (games, turfs contacted, searches)" : undefined}>
-                  {u.city ? (
-                    <>
-                      {cityLabel(u.city.id)}
-                      {CITY_HOW[u.city.how] && <span className="ml-1.5 text-[12px] text-primary-400">{CITY_HOW[u.city.how]}</span>}
-                    </>
-                  ) : (
-                    <span className="text-primary-400">-</span>
-                  )}
-                </td>
-                <td className="px-4 py-3"><Badge className="bg-primary-100 text-primary-700">{u.method}</Badge></td>
-                <td className="px-4 py-3 tabular-nums">{u.gamesHosted}</td>
-                <td className="px-4 py-3 tabular-nums">{u.requestsMade}</td>
-                <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(u.created_at)}</td>
-                <td className="px-4 py-3">
-                  {u.verified && (
-                    <span title={u.verifiedHow ?? undefined}>
-                      <Badge className="bg-accent-50 text-accent-700">confirmed</Badge>
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </Table>
+          {/* The columns that matter most first; on a phone each row is a card (UsersTable). */}
+          <UsersTable users={users} lastActive={people ? lastActive : null} now={now} />
           </>
         ),
       };
