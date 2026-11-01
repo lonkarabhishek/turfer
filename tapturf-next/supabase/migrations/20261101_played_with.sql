@@ -9,7 +9,9 @@
 --   * their WhatsApp number, only when THEY turned sharing on
 --     (private.whatsapp_shares, off until they do), their number was
 --     proved with a one-time code (private.phone_proven), and the person
---     asking really played a game with them.
+--     asking really played a game with them: both in it before it
+--     started, at a time set before it came (private.whatsapp_mates; a
+--     trigger on games notes when a game's date or start time changes).
 -- And, for the public profile page's numbers and medals, which account a
 -- public username belongs to, for the server only (public.profile_owner).
 --
@@ -27,7 +29,8 @@
 --
 -- Needs 20261021_accounts_usernames.sql and 20261027_verified_tick.sql
 -- (private.phone_proven). Additive: nothing is removed or changed, no
--- existing function is replaced. Safe to run again. The app works before
+-- existing function is replaced; the one trigger it adds to games only
+-- writes its own private table. Safe to run again. The app works before
 -- it: the list shows names and photos without usernames or numbers, the
 -- switch says it is not available yet, and the public profile shows no
 -- numbers.
@@ -75,6 +78,82 @@ as $$
      and private.game_over_at(g.date, g.start_time, g.end_time) <= now();
 $$;
 revoke all on function private.played_game_ids(uuid) from public, anon, authenticated;
+
+-- When a game starts (India time).
+create or replace function private.game_start_at(p_date date, p_start time)
+returns timestamptz
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (p_date + coalesce(p_start, time '00:00')) at time zone 'Asia/Kolkata';
+$$;
+revoke all on function private.game_start_at(date, time) from public, anon, authenticated;
+
+-- When a game's date or start time last changed (the host's edit sheet,
+-- or any other update). No row: as it was made.
+create table if not exists private.game_start_moves (
+  game_id uuid primary key,
+  moved_at timestamptz not null default now()
+);
+revoke all on private.game_start_moves from public, anon, authenticated;
+
+create or replace function private.game_start_moved()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into private.game_start_moves (game_id, moved_at) values (new.id, now())
+  on conflict (game_id) do update set moved_at = excluded.moved_at;
+  return null;
+end;
+$$;
+revoke all on function private.game_start_moved() from public, anon, authenticated;
+
+create or replace trigger games_start_moved
+  after update of "date", start_time on public.games
+  for each row
+  when (old."date" is distinct from new."date" or old.start_time is distinct from new.start_time)
+  execute function private.game_start_moved();
+
+-- The people a person really played with, for the WhatsApp number only:
+-- a game both played (played_game_ids) that was made, and last moved,
+-- before it started, with both of them in it before it started (its host
+-- from when it was made, a player from when they were accepted). So a
+-- host who moves a game to a time already gone, makes one after its
+-- start, or accepts someone once it has started unlocks no number.
+create or replace function private.whatsapp_mates(p_user_id uuid)
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with fair as (
+    select g.id, g.creator_id, private.game_start_at(g.date, g.start_time) as starts
+      from public.games g
+      left join private.game_start_moves m on m.game_id = g.id
+     where g.id in (select private.played_game_ids(p_user_id))
+       and greatest(g.created_at, m.moved_at) < private.game_start_at(g.date, g.start_time)
+  ), members as (
+    select f.id, f.creator_id as user_id from fair f
+    union
+    select f.id, p.user_id
+      from fair f
+      join public.game_participants p on p.game_id = f.id
+     where p.joined_at < f.starts
+  )
+  select distinct o.user_id
+    from members me
+    join members o on o.id = me.id
+   where me.user_id = p_user_id
+     and o.user_id is not null
+     and o.user_id <> p_user_id;
+$$;
+revoke all on function private.whatsapp_mates(uuid) from public, anon, authenticated;
 
 -- The account's number as the switch sees it: ok (proved with a one-time code), unproven, or none.
 create or replace function private.whatsapp_phone_state(p_user_id uuid)
@@ -131,8 +210,9 @@ grant execute on function public.account_whatsapp(text, uuid, boolean) to anon;
 
 -- The people in the games this account played, other than itself: each
 -- one's public username (only when their profile is public) and their
--- WhatsApp number (only when they share it and it is proved). Ids go to
--- the server, which sends the browser names, photos and these only.
+-- WhatsApp number (only when they share it, it is proved and they really
+-- played together: private.whatsapp_mates). Ids go to the server, which
+-- sends the browser names, photos and these only.
 create or replace function public.played_with_extras(p_key text, p_user_id uuid)
 returns jsonb
 language plpgsql
@@ -151,7 +231,8 @@ begin
     select jsonb_agg(jsonb_build_object(
              'id', o.user_id,
              'u', n.username,
-             'wa', case when s.share and u.phone ~ '^\+91[0-9]{10}$' and private.phone_proven(u.id) then u.phone end)
+             'wa', case when s.share and u.phone ~ '^\+91[0-9]{10}$' and private.phone_proven(u.id)
+                         and o.user_id in (select private.whatsapp_mates(p_user_id)) then u.phone end)
            order by o.user_id)
       from (select distinct x.user_id
               from (select p.user_id

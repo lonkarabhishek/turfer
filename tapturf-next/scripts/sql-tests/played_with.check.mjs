@@ -4,7 +4,9 @@
 // over and not cancelled (the same instants as lib/profile/history.ts); the
 // WhatsApp switch is off until its owner turns it on, and on only for a
 // proved number; a number shows only to someone who played a game with its
-// owner, only while it is shared and proved; usernames only for public
+// owner, only while it is shared and proved, and never for a game moved to
+// a time already gone, made after its start, or joined once it started
+// (the trigger notes every move, whoever writes it); usernames only for public
 // profiles; profile_owner only for a current public username; the server
 // key everywhere; and the grants. Never touches a real database.
 // The server key is 'server-key'.
@@ -39,8 +41,9 @@ create table public.users (id uuid primary key, name text not null, phone text, 
 create table public.usernames (user_id uuid primary key references public.users(id), username text not null unique, taggable boolean not null default true);
 create table public.username_history (username text primary key, user_id uuid not null);
 create table public.games (id uuid primary key default gen_random_uuid(), creator_id uuid, turf_id uuid, date date not null,
-  start_time time not null, end_time time not null, status text, host_phone text);
-create table public.game_participants (id uuid primary key default gen_random_uuid(), game_id uuid, user_id uuid, unique (game_id, user_id));
+  start_time time not null, end_time time not null, status text, host_phone text, created_at timestamptz default now());
+create table public.game_participants (id uuid primary key default gen_random_uuid(), game_id uuid, user_id uuid,
+  joined_at timestamptz default now(), unique (game_id, user_id));
 -- The tick's phone half (20261027_verified_tick.sql), reduced to a list of proved accounts.
 create table private.proven (user_id uuid primary key);
 create function private.phone_proven(p_user_id uuid) returns boolean language sql stable security definer set search_path = '' as
@@ -55,15 +58,17 @@ for (const f of ["account_whatsapp(text,uuid,boolean)", "played_with_extras(text
   eq((await one(`select has_function_privilege('anon', 'public.${f}', 'execute') a`)).a, true, `${f}: the server's key-gated calls`);
   eq((await one(`select has_function_privilege('authenticated', 'public.${f}', 'execute') a`)).a, false, `${f}: not for signed-in browsers`);
 }
-for (const f of ["game_over_at(date,time,time)", "played_game_ids(uuid)", "whatsapp_phone_state(uuid)"]) {
+for (const f of ["game_over_at(date,time,time)", "played_game_ids(uuid)", "whatsapp_phone_state(uuid)", "game_start_at(date,time)", "game_start_moved()", "whatsapp_mates(uuid)"]) {
   eq((await one(`select has_function_privilege('anon', 'private.${f}', 'execute') a`)).a, false, `private.${f} closed`);
   eq((await one(`select has_function_privilege('authenticated', 'private.${f}', 'execute') a`)).a, false, `private.${f} closed to authenticated`);
 }
 for (const role of ["anon", "authenticated"]) {
   eq((await one(`select has_table_privilege('${role}', 'private.whatsapp_shares', 'select') a`)).a, false, `${role} can't read who shares`);
   eq((await one(`select has_table_privilege('${role}', 'private.whatsapp_shares', 'insert') a`)).a, false, `${role} can't write it`);
+  eq((await one(`select has_table_privilege('${role}', 'private.game_start_moves', 'select') a`)).a, false, `${role} can't read the moves`);
+  eq((await one(`select has_table_privilege('${role}', 'private.game_start_moves', 'insert') a`)).a, false, `${role} can't write them`);
 }
-for (const f of ["account_whatsapp", "played_with_extras", "profile_owner"]) {
+for (const f of ["account_whatsapp", "played_with_extras", "profile_owner", "whatsapp_mates", "game_start_moved"]) {
   eq((await one(`select p.prosecdef d, array_to_string(p.proconfig, ',') c from pg_proc p where p.proname = $1`, [f])), { d: true, c: 'search_path=""' }, `${f}: security definer, empty search_path`);
 }
 
@@ -77,6 +82,8 @@ eq(await over("2026-11-01", "18:00", "18:00"), "2026-11-02T12:30:00.000Z", "an e
 // ── People and games, around now ─────────────────────────
 const id = (n) => `${String(n).padStart(8, "0")}-0000-4000-8000-000000000000`;
 const P = { asha: id(1), ravi: id(2), priya: id(3), kiran: id(4), neha: id(5), omar: id(6), lee: id(7), zoe: id(8), sam: id(9) };
+// For the games that only look played: each shares a proved number.
+const Q = { tara: id(10), umar: id(11), vik: id(12), wen: id(13), xia: id(14), yan: id(15), zed: id(16), ali: id(17), bo: id(18) };
 const ph = (n) => `+9198000000${String(n).padStart(2, "0")}`;
 await q(`insert into public.users (id, name, phone) values
   ($1, 'Asha', '${ph(1)}'), ($2, 'Ravi', null), ($3, 'Priya', '${ph(3)}'), ($4, 'Kiran', '${ph(4)}'), ($5, 'Neha', '${ph(5)}'),
@@ -88,15 +95,18 @@ await q(`insert into public.username_history values ('ashar', $1)`, [P.asha]);
 // India's date and clock, offset by minutes from now.
 const ist = (mins) => new Date(Date.now() + (330 + mins) * 60_000).toISOString();
 const at = (mins) => ({ date: ist(mins).slice(0, 10), time: ist(mins).slice(11, 16) });
-async function game(host, people, startMins, lengthMins, status = "completed") {
+const utc = (mins) => new Date(Date.now() + mins * 60_000).toISOString();
+const DAY = 1440;
+// Made a day before it starts (or a day ago, for one still to come), everyone in it half a day before; `made` and `joined` (by person) say otherwise.
+async function game(host, people, startMins, lengthMins, status = "completed", { made, joined = {} } = {}) {
   const s = at(startMins);
   const e = at(startMins + lengthMins);
-  const g = (await one(`insert into public.games (creator_id, date, start_time, end_time, status, host_phone) values ($1, $2, $3, $4, $5, '+919000000999') returning id`,
-    [host, s.date, s.time, e.time, status])).id;
-  for (const p of people) await q(`insert into public.game_participants (game_id, user_id) values ($1, $2)`, [g, p]);
+  const before = Math.min(startMins, 0);
+  const g = (await one(`insert into public.games (creator_id, date, start_time, end_time, status, host_phone, created_at) values ($1, $2, $3, $4, $5, '+919000000999', $6) returning id`,
+    [host, s.date, s.time, e.time, status, utc(made ?? before - DAY)])).id;
+  for (const p of people) await q(`insert into public.game_participants (game_id, user_id, joined_at) values ($1, $2, $3)`, [g, p, utc(joined[p] ?? before - DAY / 2)]);
   return g;
 }
-const DAY = 1440;
 await game(P.asha, [P.asha, P.ravi, P.priya, P.kiran], -3 * DAY, 60); // played: Asha hosts Ravi, Priya, Kiran
 await game(P.neha, [P.neha, P.asha], 2 * DAY, 60, "open"); // not yet played
 await game(P.omar, [P.omar, P.asha], -5 * DAY, 60, "cancelled"); // cancelled
@@ -111,7 +121,7 @@ const wa = (user, on = null, key = K) => rpc("account_whatsapp", [key, user, on]
 const extras = async (user, key = K) => rpc("played_with_extras", [key, user]);
 const names = async (user) => {
   const r = await extras(user);
-  const byId = Object.fromEntries(Object.entries(P).map(([k, v]) => [v, k]));
+  const byId = Object.fromEntries(Object.entries({ ...P, ...Q }).map(([k, v]) => [v, k]));
   return Object.fromEntries(r.players.map((p) => [byId[p.id], [p.u, p.wa]]));
 };
 
@@ -167,6 +177,52 @@ eq((await names(P.asha)).priya, ["priya", null], "Priya's number stops being pro
 eq(await wa(P.priya), { r: "ok", on: true, phone: "unproven" }, "her switch says why");
 await q("insert into private.proven values ($1)", [P.priya]);
 ok(!JSON.stringify(await extras(P.asha)).includes("+919000000999"), "a game's own number is never read");
+
+// ── Played for real: in it before it started, at a time set before it came ──
+await q(`insert into public.users (id, name, phone) values ${Object.keys(Q).map((k, i) => `($${i + 1}, '${k}', '${ph(10 + i)}')`).join(", ")}`, Object.values(Q));
+await q(`insert into private.proven values ${Object.keys(Q).map((_, i) => `($${i + 1})`).join(", ")}`, Object.values(Q));
+for (const p of Object.values(Q)) await wa(p, true);
+const moves = async (g) => (await one("select count(*)::int n from private.game_start_moves where game_id = $1", [g])).n;
+
+// The host moves an open game, a player already in, to a time already gone (the lockdown's game_update allows a start earlier today).
+const moved = await game(Q.tara, [Q.tara, Q.umar], 2 * DAY, 60, "open");
+eq(await names(Q.tara), {}, "still to come");
+await q("update public.games set status = 'full', start_time = start_time, date = date where id = $1", [moved]);
+eq(await moves(moved), 0, "an edit that keeps its date and start time is no move");
+const gone = at(-180);
+await q("update public.games set date = $2, start_time = $3, end_time = $4 where id = $1", [moved, gone.date, gone.time, at(-120).time]);
+eq(await moves(moved), 1, "the move is noted");
+eq(await names(Q.tara), { umar: [null, null] }, "moved into the past: played by the clock, so listed, but Umar's number stays hidden");
+eq(await names(Q.umar), { tara: [null, null] }, "and Tara's from Umar");
+
+// A move is fair only when it was made before the new start.
+const shifted = await game(Q.vik, [Q.vik, Q.wen], -2 * DAY, 60);
+eq(await names(Q.vik), { wen: [null, ph(13)] }, "a fair game: the number shows");
+await q("update public.games set start_time = $2 where id = $1", [shifted, at(-2 * DAY + 15).time]);
+eq(await names(Q.vik), { wen: [null, null] }, "its start moved after it began: hidden");
+await q("update private.game_start_moves set moved_at = $2 where game_id = $1", [shifted, utc(-2 * DAY - 60)]);
+eq(await names(Q.vik), { wen: [null, ph(13)] }, "moved an hour before it began: shown again");
+eq(await names(Q.wen), { vik: [null, ph(12)] });
+
+// Made after its own start (a game that only looks played), and a player accepted once it had started.
+await game(Q.xia, [Q.xia, Q.yan], -DAY, 60, "completed", { made: -DAY + 10, joined: { [Q.yan]: -DAY + 12 } });
+eq(await names(Q.xia), { yan: [null, null] }, "made after it started: no number");
+eq(await names(Q.yan), { xia: [null, null] });
+await game(Q.zed, [Q.zed, Q.ali, Q.bo], -DAY, 60, "completed", { joined: { [Q.bo]: -DAY + 40 } });
+eq(await names(Q.zed), { ali: [null, ph(17)], bo: [null, null] }, "Ali was in before the start; Bo was accepted 40 minutes in");
+eq(await names(Q.bo), { zed: [null, null], ali: [null, null] }, "so Bo sees neither number");
+eq((await names(Q.ali)).zed, [null, ph(16)], "while Ali and the host see each other's");
+
+// The trigger notes a move whoever writes it, though nobody may call its function.
+await db.exec("create role writer; grant select, update on public.games to writer");
+const later = await game(Q.tara, [Q.tara], 3 * DAY, 60, "open");
+await db.exec("set role writer");
+try {
+  await q("update public.games set start_time = '05:00' where id = $1", [later]);
+} finally {
+  await db.exec("reset role");
+}
+eq(await moves(later), 1, "noted for any writer");
 
 // ── The profile's owner ──────────────────────────────────
 eq(await rpc("profile_owner", [K, "asha"]), { r: "ok", id: P.asha });

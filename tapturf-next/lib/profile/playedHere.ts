@@ -24,8 +24,3 @@ function when(day: string, now: number): string {
 export function playedHereShort(day: string, now: number): string {
   return `Played here · ${when(day, now)}`;
 }
-
-/** A plain list row's: "Played 12 Oct". */
-export function playedHereRow(day: string, now: number): string {
-  return `Played ${when(day, now)}`;
-}

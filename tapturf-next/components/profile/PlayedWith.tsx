@@ -155,7 +155,7 @@ export function WhatsAppSwitch({ initial }: { initial: WhatsAppState | null }) {
             <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" aria-hidden />
           </summary>
           <p className="pb-1 text-[12px] leading-relaxed text-primary-500">
-            When it&rsquo;s on, people who were in a TapTurf game with you, once that game has happened, see your number and a WhatsApp
+            When it&rsquo;s on, people who were in a TapTurf game with you before it started, once that game has happened, see your number and a WhatsApp
             button in their own Played with list. Nobody else does: not on your profile, in search or anywhere else. It works only for a
             number you confirmed with a one-time code, and when you turn it off it&rsquo;s gone from their lists straight away.{" "}
             <Link href="/privacy#played-with" className="font-semibold text-accent-700 underline underline-offset-2">

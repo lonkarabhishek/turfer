@@ -141,11 +141,11 @@ const SECTIONS: LegalSection[] = [
           public profile if they have one. Only you see your list; it is never public. Your phone number is
           not shown there unless you turn on &ldquo;Let players I&rsquo;ve played with see my WhatsApp&rdquo;
           on the Me tab. It is off until you do, and works only for a number you confirmed with a one-time
-          code. While it is on, people who played a TapTurf game with you see that number, with a WhatsApp
-          button, in their own Played with list, and nobody else does: not on your profile, in search or
-          anywhere else. Turn it off at any time and it is gone from their lists straight away. Your Me tab
-          and turf pages also show you, and only you, where and when you played (&ldquo;You played here
-          on&rdquo; a date), worked out from your own games.
+          code. While it is on, people who played a TapTurf game with you (both of you in it before it started)
+          see that number, with a WhatsApp button, in their own Played with list, and nobody else does: not on
+          your profile, in search or anywhere else. Turn it off at any time and it is gone from their lists
+          straight away. Your Me tab and turf pages also show you, and only you, where and when you played
+          (&ldquo;You played here on&rdquo; a date), worked out from your own games.
         </p>
         <p id="live-links" className="scroll-mt-24">
           <strong>Live score links.</strong> The free Live Cricket Scorer and Live Scoreboard keep your match

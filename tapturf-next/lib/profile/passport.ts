@@ -1,6 +1,8 @@
 import { dayNumber, istDay, playedGames, type GameRow, type PlayedGame, type ReviewRow, type TurfRef } from "./history";
 import { bestFirst, medalsOf, type Medal, type MedalArt } from "./medals";
 import { streakOf, streakReachedOn, type Streak } from "./streak";
+import { gameSportPage } from "../utils/gameVenue";
+import { sportLabel } from "../utils/sport";
 
 /**
  * A player's passport, worked out from their history: the numbers they
@@ -39,7 +41,7 @@ export type TurfStamp = {
   sport: string | null;
 };
 
-/** A city or a sport: key (the city id, or the sport in lower case), what to call it, the first game's date and how many. */
+/** A city or a sport: key (the city id, or the sport's page slug, else its label in lower case), what to call it, the first game's date and how many. */
 export type PlaceStamp = { key: string; label: string; first: string; games: number };
 
 export type ReviewedTurf = { turfId: string; slug: string | null; name: string; cityLabel: string | null; rating: number; day: string | null };
@@ -65,7 +67,18 @@ export type PassportInput = {
   now: number;
 };
 
-const sportKey = (s: string) => s.trim().toLowerCase();
+/**
+ * One sport however the game stored it: its sport page, by the slug and
+ * named as the page is ("Football", "5v5 Football", "7v7 Football" and
+ * "football" are all Football; Box Cricket has its own page), else its
+ * label ("Kabaddi"). Formats of one sport are never more sports.
+ */
+function sportOf(raw: string): { key: string; label: string } {
+  const page = gameSportPage(raw);
+  if (page) return { key: page.slug, label: page.name };
+  const label = sportLabel(raw);
+  return { key: label.toLowerCase(), label };
+}
 
 /** Each review once per turf (the newest), newest first. */
 function reviewsByTurf(reviews: readonly ReviewRow[]): ReviewRow[] {
@@ -109,9 +122,10 @@ export function buildPassport(input: PassportInput): Passport {
       if (g.sport) {
         const at = turfSports.get(turf.id) ?? new Map<string, { label: string; n: number }>();
         turfSports.set(turf.id, at);
-        const had = at.get(sportKey(g.sport));
+        const sp = sportOf(g.sport);
+        const had = at.get(sp.key);
         if (had) had.n++;
-        else at.set(sportKey(g.sport), { label: g.sport, n: 1 });
+        else at.set(sp.key, { label: sp.label, n: 1 });
       }
       if (turf.city) {
         const c = cities.get(turf.city);
@@ -123,11 +137,11 @@ export function buildPassport(input: PassportInput): Passport {
       }
     }
     if (g.sport) {
-      const k = sportKey(g.sport);
-      const s = sports.get(k);
+      const sp = sportOf(g.sport);
+      const s = sports.get(sp.key);
       if (s) s.games++;
       else {
-        sports.set(k, { key: k, label: g.sport, first: g.day, games: 1 });
+        sports.set(sp.key, { key: sp.key, label: sp.label, first: g.day, games: 1 });
         days.sports.push(g.day);
       }
     }

@@ -4,7 +4,7 @@ import { gameEndsAt, isPlayed, istDay, playedGames, shortDay, weekDays, weekOf, 
 import { streakNudge, streakOf, streakReachedOn, sundayWords } from "./streak";
 import { MEDALS, STARTER_MEDALS, bestFirst, lockedShortlist, medalsOf, nextMedal, toGo, type MedalProgress } from "./medals";
 import { buildPassport, latestPlayedByTurf, publicPassport } from "./passport";
-import { playedHereRow, playedHereShort, playedHereText } from "./playedHere";
+import { playedHereShort, playedHereText } from "./playedHere";
 import { coPlayers, playedWithList, spacedWhatsapp, whatsappLink } from "./playedWith";
 
 // Sunday 1 Nov 2026, 6 PM in India. Its week: Monday 26 Oct to Sunday 1 Nov.
@@ -237,6 +237,44 @@ test("passport: stamps, numbers, reviewed and review more, from played games onl
   assert.equal(publicPassport(empty).medals.length, 0);
 });
 
+test("passport: a sport's formats are one sport, by its sport page", () => {
+  const football = buildPassport({
+    userId: ME,
+    games: [game("2026-10-01", { sport: "Football" }), game("2026-10-08", { sport: "5v5 Football" }), game("2026-10-15", { sport: "7v7 Football" })],
+    turfs: TURFS,
+    reviews: [],
+    since: null,
+    now: NOW,
+  });
+  assert.equal(football.numbers.sports, 1);
+  assert.deepEqual(football.stamps.sports.map((s) => [s.key, s.label, s.games]), [["football", "Football", 3]]);
+  assert.equal(football.stamps.turfs[0].sport, "Football", "the turf stamp's sport too");
+  assert.equal(football.medals.find((m) => m.id === "sports-3")?.earned, false, "no All-Rounder for football alone");
+  assert.equal(publicPassport(football).numbers.sports, 1);
+
+  const mixed = buildPassport({
+    userId: ME,
+    games: [
+      game("2026-10-01", { sport: "5v5 Football" }),
+      game("2026-10-02", { sport: "football" }),
+      game("2026-10-03", { sport: "Box Cricket" }),
+      game("2026-10-04", { sport: "cricket" }),
+      game("2026-10-05", { sport: "kabaddi" }),
+      game("2026-10-06", { sport: " Kabaddi " }),
+    ],
+    turfs: TURFS,
+    reviews: [],
+    since: null,
+    now: NOW,
+  });
+  assert.deepEqual(
+    mixed.stamps.sports.map((s) => [s.label, s.games]),
+    [["Football", 2], ["Box Cricket", 1], ["Cricket", 1], ["Kabaddi", 2]],
+    "Box Cricket keeps its own page; a sport with no page goes by its label",
+  );
+  assert.equal(mixed.numbers.sports, 4);
+});
+
 test("played here: the latest day per turf, in words", () => {
   const played = playedGames(ME, [game("2026-09-14", { turf_id: "t1" }), game("2026-10-05", { turf_id: "t1" }), game("2026-10-02", { turf_id: "t2" }), game("2026-11-09", { turf_id: "t3" })], NOW);
   assert.deepEqual(latestPlayedByTurf(played), { t1: "2026-10-05", t2: "2026-10-02" });
@@ -245,8 +283,7 @@ test("played here: the latest day per turf, in words", () => {
   assert.equal(playedHereText("2026-11-01", NOW), "You played here today");
   assert.equal(playedHereText("2026-10-31", NOW), "You played here yesterday");
   assert.equal(playedHereShort("2026-10-05", NOW), "Played here · 5 Oct");
-  assert.equal(playedHereRow("2026-10-05", NOW), "Played 5 Oct");
-  assert.equal(playedHereRow("2026-10-31", NOW), "Played yesterday");
+  assert.equal(playedHereShort("2026-10-31", NOW), "Played here · yesterday");
   assert.equal(shortDay("2026-10-05", NOW), "5 Oct");
 });
 

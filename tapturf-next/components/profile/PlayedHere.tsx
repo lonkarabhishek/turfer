@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CircleCheck } from "lucide-react";
-import { playedHereRow, playedHereShort, playedHereText } from "@/lib/profile/playedHere";
+import { playedHereShort, playedHereText } from "@/lib/profile/playedHere";
 import { usePlayed } from "./usePlayed";
 
 /**
@@ -29,21 +29,6 @@ export function PlayedBadge({ turfId, wide = false }: { turfId: string; wide?: b
       <span className="truncate" aria-hidden>
         {playedHereShort(day, now)}
       </span>
-      <span className="sr-only">{playedHereText(day, now)}.</span>
-    </span>
-  );
-}
-
-/** A row of a plain turf list (a city's "All turfs"): "Played 16 Oct" at its end, beside the name. */
-export function PlayedRowMark({ turfId }: { turfId: string }) {
-  const played = usePlayed();
-  const [now] = useState(Date.now);
-  const day = played?.turfs[turfId];
-  if (!day) return null;
-  return (
-    <span className="ml-auto shrink-0 inline-flex items-center gap-1 pl-1 text-[12px] font-semibold text-accent-700 whitespace-nowrap">
-      <CircleCheck className="w-3.5 h-3.5 text-accent-600" aria-hidden />
-      <span aria-hidden>{playedHereRow(day, now)}</span>
       <span className="sr-only">{playedHereText(day, now)}.</span>
     </span>
   );
