@@ -187,7 +187,7 @@ export function TournamentCreate() {
               onChange={(v) => setPlayoffs(v)}
               ariaLabel="Playoffs"
               options={teams.length < 4 ? [{ value: "final", label: "Top 2 final" }] : [
-                { value: "semis", label: "Top 4 semis + final" },
+                { value: "semis", label: "Top 4 semis" },
                 { value: "final", label: "Top 2 final" },
               ]}
             />
@@ -320,7 +320,7 @@ export function TournamentCreate() {
         </p>
       )}
       <div>
-        <PrimaryButton type="submit" disabled={busy} className="w-full h-14 text-[17px]">
+        <PrimaryButton type="submit" disabled={busy} className="w-full h-14 px-4 text-[16px] sm:text-[17px]">
           {busy ? <Loader2 className="w-5 h-5 motion-safe:animate-spin" aria-hidden /> : <Radio className="w-5 h-5" aria-hidden />} Create and get the link
         </PrimaryButton>
         <p className="mt-2 text-[12px] text-primary-500 text-center">
