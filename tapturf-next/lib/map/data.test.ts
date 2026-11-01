@@ -7,7 +7,7 @@ import { cardPrice, cardSports } from "../utils/cardSport";
 import { turfPhotos } from "../utils/images";
 import { areaFor } from "../utils/area";
 import { SPORT_CHIPS } from "../turfList/query";
-import { fromMapTurf, gamePin, roundDeg, toMapGame, toMapTurf, turfPin } from "./data";
+import { fromMapTurf, gamePin, pickedGames, roundDeg, toMapGame, toMapTurf, turfPin } from "./data";
 
 /** A card row as getNearTurfs hands it over: forCard() of a full row, sport bands added when it has any. */
 function row(p: Partial<Turf> & Record<string, unknown> = {}): Turf {
@@ -166,6 +166,15 @@ test("toMapGame: what GameCard shows, never the host's number", () => {
   assert.equal("host_profile_image_url" in g, false, "an empty photo is left out");
   assert.equal(toMapGame({ ...GAME, turfs: undefined }), null);
   assert.equal(toMapGame({ ...GAME, turfs: { ...GAME.turfs!, lat: null, lng: null } }), null);
+});
+
+test("pickedGames: a turf's weekly games, every one, soonest first", () => {
+  const at = (id: string, date: string, start: string) => toMapGame({ ...GAME, id, date, start_time: start })!;
+  // As a bubble's leaves come (supercluster's order), plus one elsewhere.
+  const games = [at("a008", "2026-11-16", "19:00:00"), at("a001", "2026-11-02", "19:00:00"), at("x", "2026-11-03", "07:00:00"), at("a007", "2026-11-09", "19:00:00"), at("a009", "2026-11-02", "06:30:00")];
+  assert.deepEqual(pickedGames(["a008", "a001", "a007", "a009"], games).map((g) => g.id), ["a009", "a001", "a007", "a008"]);
+  assert.deepEqual(pickedGames(["a001"], games).map((g) => g.id), ["a001"]);
+  assert.deepEqual(pickedGames(["gone"], games), [], "a game no longer on the map");
 });
 
 test("gamePin: when it starts, short", () => {

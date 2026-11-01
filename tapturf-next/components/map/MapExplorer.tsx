@@ -7,7 +7,7 @@ import { TurfCard } from "@/components/turf/TurfCard";
 import { GameCard } from "@/components/game/GameCard";
 import { PickCard, asGame } from "./PickCard";
 import type { Engine, Padding, Pin } from "./engine";
-import { fromMapTurf, gamePin, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
+import { fromMapTurf, gamePin, pickedGames, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
 import {
   INDIA_BOUNDS,
   boundsParam,
@@ -18,26 +18,48 @@ import {
   mapSearch,
   matchesChip,
   parseMapQuery,
+  parseSnapshot,
   type Bounds,
   type MapQuery,
   type MapShow,
+  type MapSnapshot,
 } from "@/lib/map/view";
 import { SPORT_CHIPS } from "@/lib/turfList/query";
 import { isCity, labelFor } from "@/lib/city";
 import { getUserLocation, haversineKm, type Coords } from "@/lib/utils/location";
+import { filterNonExpiredGames } from "@/lib/utils/game";
 import { sportLabel } from "@/lib/utils/sport";
 import type { CardSport } from "@/lib/utils/cardSport";
 import type { Turf } from "@/types/turf";
 
 /** The phone sheet's closed height: its handle and "N turfs in this area". */
 const PEEK = 76;
-/** Gap between the sheet's top and the frame's top when it is pulled all the way up. */
+/** The sheet's top (and the bar's) below the frame's top. */
 const TOP_GAP = 12;
+/** Room between the bar and the sheet pulled all the way up. */
+const BAR_GAP = 8;
 /** Cards the list shows at first, and adds per "Show more". */
 const PAGE = 12;
 const DESKTOP = "(min-width: 768px)";
+/** The key of this page's snapshot in history.state (MapSnapshot). */
+const SNAP = "ttMap";
+/** Games older than this when the tab comes back (or the clock ticks) are fetched again. */
+const GAMES_STALE_MS = 5 * 60_000;
 
-type Sheet = "peek" | "half" | "full";
+type Sheet = MapSnapshot["sheet"];
+
+async function getJson<T>(url: string, signal: AbortSignal, pickOut: (j: unknown) => T): Promise<T> {
+  const r = await fetch(url, { signal });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return pickOut(await r.json());
+}
+
+/** history.state without this page's snapshot. */
+function withoutSnap(st: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...st };
+  delete out[SNAP];
+  return out;
+}
 
 function subscribeDesktop(cb: () => void) {
   const mq = window.matchMedia(DESKTOP);
@@ -52,10 +74,14 @@ function subscribeDesktop(cb: () => void) {
  * price) or, for games, green "when" pills; a tap opens the place's card.
  * The list beside the map (desktop) or in the sheet over it (phones) is
  * what is in view, top rated first, or nearest first once the viewer taps
- * "Near me" (GPS only on that tap, never stored). The view, the toggle and
- * the chip live in the URL (?b=, ?show=games, ?sport=; ?city= and the turf
- * list's Map button open on a city), written with replaceState, so a
- * reload or a shared link opens the same map and Back leaves the page.
+ * "Near me" (GPS only on that tap; the point stays on the device). The
+ * view, the toggle and the chip live in the URL (?b=, ?show=games,
+ * ?sport=; ?city= and the turf list's Map button open on a city), written
+ * with replaceState, so a reload or a shared link opens the same map and
+ * Back leaves the page; except a view found with "Near me", which is
+ * centred on the viewer and never goes into the URL. Opening a card keeps
+ * the rest (sheet, list length and scroll, picked card, that view) in this
+ * page's history entry, so Back finds the list as it was.
  *
  * Data: GET /api/map/turfs and /api/map/games (lib/map/data.ts), each one
  * CDN-cached JSON. The map library and the street map load only here, after
@@ -67,15 +93,27 @@ export function MapExplorer() {
   const mapEl = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const pickRef = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
   const query = useRef<MapQuery | null>(null);
+  /** This history entry's snapshot (Back from a card's page), read once. */
+  const snap = useRef<MapSnapshot | null>(null);
   /** The page's own path, so a write after the viewer left never lands on another page's URL. */
   const mapPath = useRef("/map");
   /** The viewer moved the map (or tapped a bubble): from then on the URL follows the view. */
   const touched = useRef(false);
+  /** The view came from "Near me" on this entry: from then on it stays out of the URL. */
+  const gps = useRef(false);
   const fitted = useRef(false);
   const desktopRef = useRef(false);
+  /** The marker a card was opened from, for focus when it closes; and whether focus goes into the card. */
+  const opener = useRef<HTMLElement | null>(null);
+  const focusCard = useRef(false);
+  /** The list's scroll to restore after Back, once its cards are in. */
+  const restoreTop = useRef<number | null>(null);
+  /** When the games last arrived. */
+  const gamesAt = useRef(0);
 
   const desktop = useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP).matches, () => false);
   const [parsed, setParsed] = useState(false);
@@ -89,27 +127,44 @@ export function MapExplorer() {
   const [games, setGames] = useState<MapGame[] | null>(null);
   const [failed, setFailed] = useState({ turfs: false, games: false });
   const [attempt, setAttempt] = useState(0);
+  const [gamesRev, setGamesRev] = useState(0);
+  /** The clock games expire by (30 minutes after kickoff, as on /games), ticking each minute. */
+  const [now, setNow] = useState(() => Date.now());
   const [me, setMe] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [pick, setPick] = useState<string[] | null>(null);
   const [sheet, setSheet] = useState<Sheet>("peek");
   const [frameH, setFrameH] = useState(0);
+  const [barH, setBarH] = useState(0);
+  /** The map credit's height (it folds to an "i" once the map is dragged), for the Ask pill's lift. */
+  const [creditH, setCreditH] = useState(0);
   const [more, setMore] = useState<{ key: string; n: number }>({ key: "", n: PAGE });
+  /** The list's length from a snapshot, until the viewer moves the map or changes a filter. */
+  const [restoreN, setRestoreN] = useState<number | null>(null);
 
   useEffect(() => {
     desktopRef.current = desktop;
   }, [desktop]);
 
-  // The URL's view, once, before the first paint after hydration; and the page stops scrolling under the map.
+  // The URL's view (or this entry's snapshot), once, before the first paint after hydration; and the page stops scrolling under the map.
   useLayoutEffect(() => {
     const start = () => {
       const q = parseMapQuery(location.search);
+      const s = parseSnapshot((window.history.state as Record<string, unknown> | null)?.[SNAP]);
       query.current = q;
+      snap.current = s;
       mapPath.current = location.pathname;
       setShow(q.show);
       setSport(q.sport);
-      setView(q.b ?? (q.city ? cityBounds(q.city, []) : null) ?? INDIA_BOUNDS);
+      setView(s?.b ?? q.b ?? (q.city ? cityBounds(q.city, []) : null) ?? INDIA_BOUNDS);
+      if (s) {
+        gps.current = s.gps;
+        setSheet(s.sheet);
+        setPick(s.pick);
+        setRestoreN(s.n > PAGE ? s.n : null);
+        restoreTop.current = s.top || null;
+      }
       setParsed(true);
     };
     start();
@@ -124,12 +179,7 @@ export function MapExplorer() {
   // The data: every turf and every open game, each one cached JSON.
   useEffect(() => {
     const ctrl = new AbortController();
-    const get = async <T,>(url: string, pickOut: (j: unknown) => T): Promise<T> => {
-      const r = await fetch(url, { signal: ctrl.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return pickOut(await r.json());
-    };
-    get("/api/map/turfs", (j) => ((j as { turfs?: MapTurfWire[] }).turfs ?? []).map(fromMapTurf))
+    getJson("/api/map/turfs", ctrl.signal, (j) => ((j as { turfs?: MapTurfWire[] }).turfs ?? []).map(fromMapTurf))
       .then((t) => {
         setTurfs(t);
         setFailed((f) => ({ ...f, turfs: false }));
@@ -137,8 +187,14 @@ export function MapExplorer() {
       .catch(() => {
         if (!ctrl.signal.aborted) setFailed((f) => ({ ...f, turfs: true }));
       });
-    get("/api/map/games", (j) => (j as { games?: MapGame[] }).games ?? [])
+    return () => ctrl.abort();
+  }, [attempt]);
+  // Games again when they are a few minutes old (the ones on screen stay until the new ones are in).
+  useEffect(() => {
+    const ctrl = new AbortController();
+    getJson("/api/map/games", ctrl.signal, (j) => (j as { games?: MapGame[] }).games ?? [])
       .then((g) => {
+        gamesAt.current = Date.now();
         setGames(g);
         setFailed((f) => ({ ...f, games: false }));
       })
@@ -146,14 +202,38 @@ export function MapExplorer() {
         if (!ctrl.signal.aborted) setFailed((f) => ({ ...f, games: true }));
       });
     return () => ctrl.abort();
-  }, [attempt]);
+  }, [attempt, gamesRev]);
 
-  // The frame's height, for the phone sheet's stops.
+  // The clock: each minute, and when the tab comes back; a game that started half an hour ago leaves the map.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      const t = Date.now();
+      setNow(t);
+      if (gamesAt.current && t - gamesAt.current > GAMES_STALE_MS) {
+        gamesAt.current = t;
+        setGamesRev((r) => r + 1);
+      }
+    };
+    const id = window.setInterval(tick, 60_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+
+  // The frame's height and the phone bar's, for the phone sheet's stops.
   useEffect(() => {
     const el = frameRef.current;
+    const bar = barRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setFrameH(el.clientHeight));
+    const ro = new ResizeObserver(() => {
+      setFrameH(el.clientHeight);
+      setBarH(bar?.offsetHeight ?? 0);
+    });
     ro.observe(el);
+    if (bar) ro.observe(bar);
     return () => ro.disconnect();
   }, []);
 
@@ -166,8 +246,19 @@ export function MapExplorer() {
     // map's last moveend (it resizes as the page goes) would put ?b= on the turf page.
     if (location.pathname !== mapPath.current) return;
     const s = mapSearch(next, location.search);
-    if (s !== location.search) window.history.replaceState(window.history.state, "", location.pathname + s + location.hash);
+    // A move or a filter after Back spends the snapshot: from here the URL says where the map is.
+    const st = window.history.state as Record<string, unknown> | null;
+    const spent = !!st && SNAP in st;
+    if (s !== location.search || spent) window.history.replaceState(st && withoutSnap(st), "", location.pathname + s + location.hash);
   }, []);
+
+  /** Keep where the viewer is in this history entry, for Back from the page a link opens. */
+  const keepSnapshot = (n: number) => {
+    if (location.pathname !== mapPath.current) return;
+    const st = (window.history.state ?? {}) as Record<string, unknown>;
+    const s: MapSnapshot = { b: engine.current?.view().bounds ?? view, gps: gps.current, sheet, n, top: scrollerRef.current?.scrollTop ?? 0, pick };
+    window.history.replaceState({ ...st, [SNAP]: s }, "", location.href);
+  };
 
   const padding = useCallback((): Padding => {
     if (desktopRef.current) return { top: 48, bottom: 48, left: 48, right: 48 };
@@ -180,24 +271,32 @@ export function MapExplorer() {
     if (!parsed) return;
     let dead = false;
     const q = query.current;
-    const first = q?.b ?? (q?.city ? cityBounds(q.city, []) : null) ?? INDIA_BOUNDS;
+    const s = snap.current;
+    const first = s?.b ?? q?.b ?? (q?.city ? cityBounds(q.city, []) : null) ?? INDIA_BOUNDS;
     import("./engine")
       .then(({ createEngine }) => {
         if (dead || !mapEl.current) return;
         try {
           engine.current = createEngine(mapEl.current, {
             bounds: first,
-            exact: !!q?.b && !q.city,
+            exact: !!s || (!!q?.b && !q.city),
             padding,
             zoomButtons: window.matchMedia(DESKTOP).matches,
             onView: (b, _zoom, byUser) => {
               setView(b);
-              if (byUser) touched.current = true;
-              if (touched.current) writeUrl({ b, city: null });
+              if (byUser) {
+                touched.current = true;
+                setRestoreN(null);
+              }
+              // A view found with "Near me" is centred on the viewer: it never goes into the URL (or a shared link, or analytics).
+              if (touched.current) writeUrl(gps.current ? { b: null, city: null } : { b, city: null });
             },
-            onPick: (keys) => {
-              setPick(keys && keys.length ? keys : null);
-              if (keys) setSheet("peek");
+            onPick: (keys, from, keyboard) => {
+              const some = keys && keys.length ? keys : null;
+              setPick(some);
+              opener.current = some ? (from ?? null) : null;
+              focusCard.current = !!some && !!keyboard;
+              if (some) setSheet("peek");
             },
             onStyleError: () => setStyleError(true),
           });
@@ -220,27 +319,37 @@ export function MapExplorer() {
     };
   }, [parsed, padding, writeUrl]);
 
+  // The map credit's height, as it folds and unfolds.
+  useEffect(() => {
+    const credit = ready ? mapEl.current?.querySelector<HTMLElement>(".maplibregl-ctrl-bottom-left") : null;
+    if (!credit || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setCreditH(credit.offsetHeight));
+    ro.observe(credit);
+    return () => ro.disconnect();
+  }, [ready]);
+
   // A ?city= link without a view: around that city's turfs, once they are here.
   useEffect(() => {
     if (!ready || !turfs || fitted.current) return;
     fitted.current = true;
     const q = query.current;
-    if (!q?.city || q.b || touched.current) return;
+    if (!q?.city || q.b || touched.current || snap.current) return;
     const b = cityBounds(q.city, turfs);
     if (b) engine.current?.fitTo(b, false);
   }, [ready, turfs]);
 
   const chip = useMemo<CardSport | null>(() => (sport ? { chip: sport } : null), [sport]);
   const shownTurfs = useMemo(() => (turfs ?? []).filter((t) => matchesChip(t.sports, sport)), [turfs, sport]);
-  const shownGames = useMemo(() => (games ?? []).filter((g) => matchesChip([sportLabel(g.sport)], sport)), [games, sport]);
+  const liveGames = useMemo(() => filterNonExpiredGames(games ?? [], now), [games, now]);
+  const shownGames = useMemo(() => liveGames.filter((g) => matchesChip([sportLabel(g.sport)], sport)), [liveGames, sport]);
   const byKey = useMemo(() => new Map(shownTurfs.map((t) => [t.id, t])), [shownTurfs]);
 
   const pins = useMemo<Pin[]>(
     () =>
       show === "games"
-        ? shownGames.map((g) => ({ key: g.id, lat: g.turfs.lat, lng: g.turfs.lng, ...gamePin(g) }))
-        : shownTurfs.map((t) => ({ key: t.id, lat: t.lat as number, lng: t.lng as number, ...turfPin(t, chip) })),
-    [show, shownTurfs, shownGames, chip],
+        ? shownGames.map((g) => ({ key: g.id, lat: g.turfs.lat, lng: g.turfs.lng, place: g.turfs.name, ...gamePin(g, now) }))
+        : shownTurfs.map((t) => ({ key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, ...turfPin(t, chip) })),
+    [show, shownTurfs, shownGames, chip, now],
   );
   useEffect(() => {
     if (ready) engine.current?.setPins(show === "games" ? "game" : "turf", pins);
@@ -249,30 +358,58 @@ export function MapExplorer() {
   const picked = useMemo(() => {
     if (!pick) return null;
     if (show === "games") {
-      const g = shownGames.find((x) => x.id === pick[0]);
-      return g ? { turfs: [], game: g } : null;
+      const list = pickedGames(pick, shownGames);
+      return list.length ? { turfs: [], games: list } : null;
     }
     const list = pick.map((k) => byKey.get(k)).filter((t): t is Turf => !!t);
-    return list.length ? { turfs: list, game: null } : null;
+    return list.length ? { turfs: list, games: [] } : null;
   }, [pick, show, shownGames, byKey]);
-  const activeKey = picked && (picked.game ? picked.game.id : picked.turfs.length === 1 ? picked.turfs[0].id : null);
+  const one = picked && (picked.games.length === 1 ? picked.games[0] : picked.turfs.length === 1 ? picked.turfs[0] : null);
+  const activeKey = one ? one.id : null;
+  /** What a screen reader hears as a card opens. */
+  const pickSay = !picked
+    ? ""
+    : picked.games.length > 1
+      ? `${picked.games.length} games listed, soonest first`
+      : picked.turfs.length > 1
+        ? `${picked.turfs.length} turfs listed`
+        : picked.games.length
+          ? `Opened the game at ${picked.games[0].turfs.name}`
+          : `Opened ${picked.turfs[0].name}`;
   useEffect(() => {
     if (ready) engine.current?.setActive(activeKey);
   }, [ready, activeKey, pins]);
+  // Picked from the keyboard: focus goes to the card's first link.
+  useEffect(() => {
+    if (!picked || !focusCard.current) return;
+    focusCard.current = false;
+    pickRef.current?.querySelector<HTMLElement>("a[href]")?.focus({ preventScroll: true });
+  }, [picked]);
 
   useEffect(() => {
     if (ready) engine.current?.setMe(me);
   }, [ready, me]);
 
+  /** The card goes away; focus that was in it goes back to its marker (or the map). */
+  const closePick = useCallback(() => {
+    setPick(null);
+    const el = opener.current;
+    opener.current = null;
+    const at = document.activeElement;
+    if (at && at !== document.body && !pickRef.current?.contains(at)) return;
+    if (el?.isConnected) el.focus({ preventScroll: true });
+    else engine.current?.focusMap();
+  }, []);
+
   // Escape puts the picked card away.
   useEffect(() => {
     if (!pick) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPick(null);
+      if (e.key === "Escape") closePick();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [pick]);
+  }, [pick, closePick]);
 
   const turfList = useMemo(() => inView(shownTurfs, view, (t) => ({ lat: t.lat as number, lng: t.lng as number }), me), [shownTurfs, view, me]);
   const gameList = useMemo(() => inView(shownGames, view, (g) => g.turfs, me), [shownGames, view, me]);
@@ -280,21 +417,32 @@ export function MapExplorer() {
   const loading = show === "games" ? games == null && !failed.games : turfs == null && !failed.turfs;
   const loadFailed = show === "games" ? games == null && failed.games : turfs == null && failed.turfs;
   const listKey = `${show}|${sport ?? ""}|${boundsParam(view)}|${me ? "me" : ""}`;
-  const limit = more.key === listKey ? more.n : PAGE;
+  const limit = more.key === listKey ? more.n : (restoreN ?? PAGE);
+
+  // Back from a card's page: the list scrolled where it was, once its cards are in.
+  useEffect(() => {
+    const top = restoreTop.current;
+    const el = scrollerRef.current;
+    if (top == null || !el || loading || !(ready || mapError)) return;
+    restoreTop.current = null;
+    if (window.matchMedia(DESKTOP).matches || sheet !== "peek") el.scrollTop = top;
+  }, [loading, ready, mapError, sheet, count]);
 
   const chips = useMemo(() => {
-    const all = show === "games" ? chipsFor(SPORT_CHIPS, (games ?? []).map((g) => [sportLabel(g.sport)])) : chipsFor(SPORT_CHIPS, (turfs ?? []).map((t) => t.sports));
+    const all = show === "games" ? chipsFor(SPORT_CHIPS, liveGames.map((g) => [sportLabel(g.sport)])) : chipsFor(SPORT_CHIPS, (turfs ?? []).map((t) => t.sports));
     return sport && !all.includes(sport) ? [sport, ...all] : all;
-  }, [show, sport, games, turfs]);
+  }, [show, sport, liveGames, turfs]);
 
   const setMode = (next: MapShow) => {
     if (next === show) return;
     setShow(next);
     setPick(null);
+    setRestoreN(null);
     writeUrl({ show: next });
   };
   const setChip = (next: string | null) => {
     setSport(next);
+    setRestoreN(null);
     writeUrl({ sport: next });
   };
 
@@ -305,7 +453,10 @@ export function MapExplorer() {
       const at = await getUserLocation();
       if (!Number.isFinite(at.lat) || !Number.isFinite(at.lng)) throw new Error("bad location");
       setMe(at);
-      touched.current = true;
+      setRestoreN(null);
+      // The map is about to centre on the viewer: from here its view stays out of the URL.
+      gps.current = true;
+      writeUrl({ b: null, city: null });
       engine.current?.flyTo(at, 12.5);
     } catch (err) {
       const code = (err as { code?: number })?.code;
@@ -323,7 +474,9 @@ export function MapExplorer() {
 
   // ── phone sheet ──
   const sheetH = Math.max(0, frameH - TOP_GAP);
-  const stops = { peek: Math.max(0, sheetH - PEEK), half: Math.round(sheetH * 0.45), full: 0 };
+  const half = Math.round(sheetH * 0.45);
+  // Pulled all the way up it stops under the bar, so the toggle, the chips and Near me stay in reach.
+  const stops = { peek: Math.max(0, sheetH - PEEK), half, full: Math.min(half, barH ? barH + BAR_GAP : 0) };
   const sheetY = frameH ? `${stops[sheet]}px` : `calc(100% - ${PEEK}px)`;
   const drag = useRef<{ y0: number; t0: number; from: number; y: number; moved: boolean } | null>(null);
   const dragged = useRef(false);
@@ -343,7 +496,7 @@ export function MapExplorer() {
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
       el.dataset.drag = "1";
     }
-    d.y = Math.min(stops.peek, Math.max(0, d.from + dy));
+    d.y = Math.min(stops.peek, Math.max(stops.full, d.from + dy));
     el.style.setProperty("--sheet-y", `${d.y}px`);
   };
   const onSheetUp = () => {
@@ -379,9 +532,10 @@ export function MapExplorer() {
     }
     const card = pickRef.current?.offsetHeight ?? 0;
     const edge = sheet === "peek" ? PEEK + (card ? card + 12 : 0) : sheetH - stops[sheet];
-    frame?.style.setProperty("--tt-inset", `${edge}px`);
-    // The Ask pill sits 4.75rem up; lift it clear of the handle and the card (over the list it may float).
-    if (sheet === "peek") root.style.setProperty("--ask-lift", `${Math.max(0, edge + 8 - 20)}px`);
+    // The map's credit rides on top of that; with the list pulled all the way up the map is covered, and its credit with it.
+    frame?.style.setProperty("--tt-inset", `${sheet === "full" ? 0 : edge}px`);
+    // The Ask pill sits 4.75rem up; lift it clear of the handle, the card and the credit (over the list it may float).
+    if (sheet === "peek") root.style.setProperty("--ask-lift", `${Math.max(0, edge + creditH + 8 - 20)}px`);
     else root.style.removeProperty("--ask-lift");
     return () => {
       root.style.removeProperty("--ask-lift");
@@ -391,6 +545,7 @@ export function MapExplorer() {
   const cityOf = (t: { city?: string | null }) => (t.city && isCity(t.city) ? labelFor(t.city) : undefined);
   const zoomOut = () => {
     touched.current = true;
+    setRestoreN(null);
     engine.current?.fitTo(INDIA_BOUNDS);
   };
 
@@ -409,8 +564,8 @@ export function MapExplorer() {
               }`}
             >
               {m === "turfs" ? "Turfs" : "Games"}
-              {m === "games" && games && games.length > 0 && (
-                <span className={`ml-1.5 tabular-nums ${show === m ? "text-white/80" : "text-accent-700"}`}>{games.length}</span>
+              {m === "games" && liveGames.length > 0 && (
+                <span className={`ml-1.5 tabular-nums ${show === m ? "text-white/80" : "text-accent-700"}`}>{liveGames.length}</span>
               )}
             </button>
           ))}
@@ -533,6 +688,10 @@ export function MapExplorer() {
   return (
     <div
       ref={frameRef}
+      onClickCapture={(e) => {
+        // A link out (a card, a picked card): Back should find the map as it is now.
+        if ((e.target as Element).closest?.("a[href]")) keepSnapshot(limit);
+      }}
       className="tt-map fixed inset-x-0 top-[calc(3.5rem+1px)] md:top-[calc(4rem+1px)] bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:bottom-0 z-20 flex bg-[#f2f3f0] overflow-hidden"
     >
       <h1 className="sr-only">Map of turfs and open games</h1>
@@ -549,7 +708,8 @@ export function MapExplorer() {
         style={{ "--sheet-y": sheetY, "--list-pad": frameH ? `${stops[sheet]}px` : "0px" } as React.CSSProperties}
         className="max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:top-3 max-md:z-30 max-md:rounded-t-3xl max-md:shadow-[0_-4px_24px_rgba(15,23,42,0.14)] max-md:[translate:0_var(--sheet-y)] max-md:transition-[translate] max-md:duration-300 max-md:ease-out max-md:data-[drag]:transition-none md:relative md:w-[380px] lg:w-[440px] xl:w-[640px] md:shrink-0 md:border-r md:border-primary-200 bg-white flex flex-col min-h-0"
       >
-        {/* Phones: the handle. Drag it, or tap it to open or close the list. */}
+        {/* Phones: the handle. Drag it, or tap it to open or close the list. Its touch-action is inline: the
+            global button rule (manipulation, unlayered) beats a layered utility, and would turn a drag into a pan. */}
         <button
           type="button"
           onClick={onSheetTap}
@@ -558,7 +718,8 @@ export function MapExplorer() {
           onPointerUp={onSheetUp}
           onPointerCancel={onSheetUp}
           aria-expanded={sheet !== "peek"}
-          className="md:hidden shrink-0 w-full h-[76px] flex flex-col items-center pt-2.5 touch-none cursor-grab select-none focus-neon rounded-t-3xl"
+          style={{ touchAction: "none" }}
+          className="md:hidden shrink-0 w-full h-[76px] flex flex-col items-center pt-2.5 cursor-grab select-none focus-neon rounded-t-3xl"
         >
           <span className="w-10 h-1.5 rounded-full bg-primary-300" aria-hidden />
           <span className="mt-3.5 text-[16px] font-semibold text-primary-900 tabular-nums" aria-live="polite">
@@ -574,7 +735,7 @@ export function MapExplorer() {
         </div>
 
         {/* A closed phone sheet shows only its count: its cards (and their photos) wait until it opens. */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 md:px-6 pt-1 md:pt-5 pb-8 max-md:pb-[calc(var(--list-pad)+2rem)]">
+        <div ref={scrollerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 md:px-6 pt-1 md:pt-5 pb-8 max-md:pb-[calc(var(--list-pad)+2rem)]">
           {(desktop || sheet !== "peek") && list}
         </div>
 
@@ -583,7 +744,7 @@ export function MapExplorer() {
           <button
             type="button"
             onClick={() => setSheet("peek")}
-            className="md:hidden absolute bottom-5 left-1/2 -translate-x-1/2 h-12 px-5 inline-flex items-center gap-2 rounded-full bg-primary-900 text-white text-[15px] font-semibold shadow-elevated cursor-pointer press-tight"
+            className="md:hidden absolute bottom-[calc(var(--list-pad)+1.25rem)] left-1/2 -translate-x-1/2 h-12 px-5 inline-flex items-center gap-2 rounded-full bg-primary-900 text-white text-[15px] font-semibold shadow-elevated cursor-pointer press-tight"
           >
             <MapIcon className="w-4 h-4" aria-hidden />
             Map
@@ -591,8 +752,10 @@ export function MapExplorer() {
         )}
       </section>
 
+      {/* The map's credit (OpenFreeMap, OpenStreetMap) rides above the phone sheet and the card: important,
+          as maplibre-gl.css's own bottom: 0 is unlayered and would beat a layered utility. */}
       <div
-        className="relative flex-1 min-w-0 [&_.maplibregl-ctrl-bottom-left]:bottom-[var(--tt-inset,0px)] [&_.maplibregl-ctrl-bottom-left]:transition-[bottom] [&_.maplibregl-ctrl-bottom-left]:duration-300"
+        className="relative flex-1 min-w-0 [&_.maplibregl-ctrl-bottom-left]:bottom-[var(--tt-inset,0px)]! [&_.maplibregl-ctrl-bottom-left]:transition-[bottom] [&_.maplibregl-ctrl-bottom-left]:duration-300"
       >
         {/* MapLibre makes its container position: relative, so the box that fills the frame is this wrapper. */}
         <div className="absolute inset-0">
@@ -609,13 +772,15 @@ export function MapExplorer() {
           <div ref={pickRef} className="absolute z-20 inset-x-3 bottom-[88px] md:inset-x-auto md:bottom-auto md:left-4 md:top-4 md:w-[380px]">
             <PickCard
               turfs={picked.turfs.map((t) => ({ turf: t, km: me ? haversineKm(me, { lat: t.lat as number, lng: t.lng as number }) : null }))}
-              game={picked.game}
+              games={picked.games.map((g) => ({ game: g, km: me ? haversineKm(me, g.turfs) : null }))}
               sport={chip}
-              km={picked.game && me ? haversineKm(me, picked.game.turfs) : null}
-              onClose={() => setPick(null)}
+              onClose={closePick}
             />
           </div>
         )}
+        <p className="sr-only" aria-live="polite">
+          {pickSay}
+        </p>
       </div>
     </div>
   );

@@ -23,24 +23,23 @@ import { GamePhoto } from "@/components/game/detail/GamePhoto";
  * price (cardPrice, as every turf card), rating and, once the viewer
  * shared their location, how far. One link to the turf's (or the game's)
  * page; the close button sits outside it. A bubble that cannot split (turfs
- * on one site) lists each of them the same way.
+ * on one site, or one turf's games, soonest first) lists each of them the
+ * same way.
  */
 export function PickCard({
   turfs,
-  game,
+  games,
   sport,
-  km,
   onClose,
 }: {
   turfs: { turf: Turf; km: number | null }[];
-  game: MapGame | null;
+  games: { game: MapGame; km: number | null }[];
   sport: CardSport | null;
-  /** The game's distance, when known. */
-  km: number | null;
   onClose: () => void;
 }) {
+  const label = games.length ? (games.length > 1 ? "Games here" : "Picked game") : turfs.length > 1 ? "Turfs here" : "Picked turf";
   return (
-    <div role="region" aria-label={game ? "Picked game" : turfs.length > 1 ? "Turfs here" : "Picked turf"} className="relative rounded-2xl bg-white shadow-elevated border border-primary-200/70 overflow-hidden">
+    <div role="region" aria-label={label} className="relative rounded-2xl bg-white shadow-elevated border border-primary-200/70 overflow-hidden">
       <button
         type="button"
         onClick={onClose}
@@ -49,8 +48,14 @@ export function PickCard({
       >
         <X className="w-4 h-4" />
       </button>
-      {game ? (
-        <GameRow game={game} km={km} />
+      {games.length ? (
+        <ul className="max-h-[min(19rem,45vh)] overflow-y-auto overscroll-contain divide-y divide-primary-100">
+          {games.map(({ game, km }) => (
+            <li key={game.id}>
+              <GameRow game={game} km={km} />
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="max-h-[min(19rem,45vh)] overflow-y-auto overscroll-contain divide-y divide-primary-100">
           {turfs.map(({ turf, km: d }) => (

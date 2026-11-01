@@ -319,7 +319,9 @@ const SECTIONS: LegalSection[] = [
           </a>
           ). Photos are part of the page. A map loads only if you accepted cookies, or when you tap
           &ldquo;Show map&rdquo; on it, which loads just that one; &ldquo;Open in Google Maps&rdquo; takes you to
-          Google instead. On turf pages a map waits for &ldquo;Show map&rdquo; either way.
+          Google instead. On turf pages a map waits for &ldquo;Show map&rdquo; either way. The map of turfs and
+          games at /map loads its street map from OpenFreeMap as soon as you open it, which shares your IP
+          address and the area you are looking at with OpenFreeMap; it sets no cookies.
         </p>
         <p>
           Some venue pages show reviews that were publicly posted on Google Maps, with the reviewer&rsquo;s

@@ -4,7 +4,7 @@ import { areaFor } from "../utils/area";
 import { turfPhotos } from "../utils/images";
 import { cardPrice, type CardSport } from "../utils/cardSport";
 import { priceRangeText } from "../utils/prices";
-import { formatClock, formatGameDay } from "../utils/game";
+import { formatClock, formatGameDay, sortGamesByDateTime } from "../utils/game";
 import { sportLabel } from "../utils/sport";
 
 /**
@@ -191,6 +191,12 @@ export function toMapGame(g: Game): MapGame | null {
   };
   if (g.host_profile_image_url) out.host_profile_image_url = g.host_profile_image_url;
   return out;
+}
+
+/** The games a tap picked (a pin, or every game in a bubble at one turf), soonest first. */
+export function pickedGames<G extends Pick<MapGame, "id" | "date" | "start_time">>(keys: readonly string[], games: readonly G[]): G[] {
+  const want = new Set(keys);
+  return sortGamesByDateTime(games.filter((g) => want.has(g.id)));
 }
 
 /** A pin's words: `text` on the pin, `label` for a screen reader. */

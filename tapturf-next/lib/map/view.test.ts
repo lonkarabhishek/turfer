@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   INDIA_BOUNDS,
   boundsParam,
+  bubbleLabel,
   chipsFor,
   cityBounds,
   countLine,
@@ -14,6 +15,7 @@ import {
   padBounds,
   parseBounds,
   parseMapQuery,
+  parseSnapshot,
   type Bounds,
 } from "./view";
 
@@ -118,4 +120,23 @@ test("countLine", () => {
   assert.equal(countLine(3826, "turfs"), "3,826 turfs in this area");
   assert.equal(countLine(2, "games"), "2 games in this area");
   assert.equal(countLine(0, "games"), "No games in this area");
+});
+
+test("bubbleLabel: a bubble that splits says zoom in; one at one turf says where, and promises no zoom", () => {
+  assert.equal(bubbleLabel(1240, "turfs", null), "1,240 turfs here. Zoom in");
+  assert.equal(bubbleLabel(3, "games", ["Turf Up", "Turf Up", " Turf Up"]), "3 games at Turf Up");
+  assert.equal(bubbleLabel(2, "turfs", ["Turf Up A", "Turf Up B"]), "2 turfs here");
+  assert.equal(bubbleLabel(2, "games", ["", ""]), "2 games here");
+  for (const l of [bubbleLabel(3, "games", ["Turf Up", "Turf Up"]), bubbleLabel(2, "turfs", ["A", "B"])]) assert.ok(!/zoom/i.test(l), l);
+});
+
+test("parseSnapshot: what Back restores, from history.state, never trusted as is", () => {
+  const good = { b: [73.7, 18.43, 73.96, 18.69], gps: true, sheet: "full", n: 36, top: 1400.4, pick: ["a001", "a002"] };
+  assert.deepEqual(parseSnapshot(good), { b: [73.7, 18.43, 73.96, 18.69], gps: true, sheet: "full", n: 36, top: 1400, pick: ["a001", "a002"] });
+  assert.deepEqual(parseSnapshot(structuredClone(good)), parseSnapshot(good), "survives the structured clone history.state is");
+  for (const bad of [null, undefined, "x", 3, {}, { b: [1, 2, 3] }, { b: [73.96, 18.43, 73.7, 18.69] }, { b: ["a", "b", "c", "d"] }]) assert.equal(parseSnapshot(bad), null, JSON.stringify(bad));
+  const odd = parseSnapshot({ b: [73.7, 18.43, 73.96, 18.69], gps: "yes", sheet: "huge", n: -5, top: -1, pick: [4, "", "ok"] })!;
+  assert.deepEqual(odd, { b: [73.7, 18.43, 73.96, 18.69], gps: false, sheet: "peek", n: 1, top: 0, pick: ["ok"] });
+  assert.equal(parseSnapshot({ ...good, pick: [] })!.pick, null);
+  assert.equal(parseSnapshot({ ...good, n: 1e9 })!.n, 10_000);
 });

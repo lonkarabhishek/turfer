@@ -184,3 +184,51 @@ export function countLine(n: number, show: MapShow): string {
   if (n === 0) return `No ${one}s in this area`;
   return `${n.toLocaleString("en-IN")} ${n === 1 ? one : `${one}s`} in this area`;
 }
+
+/**
+ * A count bubble's words for a screen reader: "40 turfs here. Zoom in";
+ * or, for one that zooming cannot split (`places`: where each of its pins
+ * is, e.g. a turf's weekly games), what a tap lists: "3 games at Turf Up",
+ * "2 turfs here".
+ */
+export function bubbleLabel(n: number, show: MapShow, places: readonly string[] | null): string {
+  const what = `${n.toLocaleString("en-IN")} ${show === "games" ? "games" : "turfs"}`;
+  if (!places) return `${what} here. Zoom in`;
+  const one = places[0]?.trim();
+  return one && places.every((p) => p.trim() === one) ? `${what} at ${one}` : `${what} here`;
+}
+
+/**
+ * Where the viewer was on the map's own history entry (history.state), so
+ * Back from a turf or game page finds the list as they left it: the view,
+ * whether it came from "Near me" (then it never goes into the URL), the
+ * phone sheet's stop, how many cards the list showed, how far it was
+ * scrolled and the picked card. It stays on the device.
+ */
+export type MapSnapshot = {
+  b: Bounds;
+  gps: boolean;
+  sheet: "peek" | "half" | "full";
+  n: number;
+  top: number;
+  pick: string[] | null;
+};
+
+/** The snapshot kept in history.state, or null when there is none or it is not one. */
+export function parseSnapshot(raw: unknown): MapSnapshot | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const b = Array.isArray(r.b) && r.b.length === 4 ? parseBounds(r.b.join(",")) : null;
+  if (!b) return null;
+  const n = typeof r.n === "number" && Number.isFinite(r.n) ? Math.min(Math.max(Math.round(r.n), 1), 10_000) : 0;
+  const top = typeof r.top === "number" && Number.isFinite(r.top) ? Math.max(0, Math.round(r.top)) : 0;
+  const pick = Array.isArray(r.pick) ? r.pick.filter((k): k is string => typeof k === "string" && k.length > 0 && k.length < 100).slice(0, 200) : [];
+  return {
+    b,
+    gps: r.gps === true,
+    sheet: r.sheet === "half" || r.sheet === "full" ? r.sheet : "peek",
+    n,
+    top,
+    pick: pick.length ? pick : null,
+  };
+}

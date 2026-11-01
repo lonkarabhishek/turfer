@@ -1,6 +1,6 @@
 import { AttributionControl, Map as MapLibre, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import Supercluster, { type ClusterProperties } from "supercluster";
-import { MAX_BOUNDS, type Bounds } from "@/lib/map/view";
+import { MAX_BOUNDS, bubbleLabel, type Bounds } from "@/lib/map/view";
 
 /**
  * /map's map: MapLibre GL (bundled from npm, loaded only by /map, after
@@ -22,11 +22,16 @@ export const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 
 /** Pins closer than this many px share a bubble. */
 const RADIUS = 56;
-/** From this zoom on every pin stands alone (turfs on one site stay one bubble that lists them). */
-const CLUSTER_MAX_ZOOM = 16;
+/**
+ * The map's closest zoom, and the bubbles' too, so pins on one spot never
+ * stack: a bubble that does not split by then (a turf's weekly games,
+ * turfs sharing a gate) lists its pins when tapped.
+ */
+const CLUSTER_MAX_ZOOM = 18;
 
 export type PinKind = "turf" | "game";
-export type Pin = { key: string; lat: number; lng: number; text: string; label: string };
+/** `place`: the turf's name, so a bubble at one turf can say so. */
+export type Pin = { key: string; lat: number; lng: number; text: string; label: string; place: string };
 
 export type Padding = { top: number; bottom: number; left: number; right: number };
 
@@ -41,8 +46,12 @@ export type EngineOptions = {
   zoomButtons: boolean;
   /** After every move, by the viewer (`byUser`) or by the page. */
   onView: (b: Bounds, zoom: number, byUser: boolean) => void;
-  /** A pin, a bubble that cannot split further (its turfs, by key), or null for none. */
-  onPick: (keys: string[] | null) => void;
+  /**
+   * A pin, a bubble that cannot split further (its pins, by key), or null
+   * for none; `from` is the marker tapped, `keyboard` when it was Enter or
+   * Space (focus then goes into the card, and back to the marker after).
+   */
+  onPick: (keys: string[] | null, from?: HTMLElement, keyboard?: boolean) => void;
   /** The street map could not load (blocked, offline). The pins and the list still work. */
   onStyleError: () => void;
 };
@@ -54,6 +63,8 @@ export type Engine = {
   setActive: (key: string | null) => void;
   setHot: (key: string | null) => void;
   setMe: (at: { lat: number; lng: number } | null) => void;
+  /** Keyboard focus on the map itself (its marker gone). */
+  focusMap: () => void;
   view: () => { bounds: Bounds; zoom: number };
   destroy: () => void;
 };
@@ -101,7 +112,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     fitBoundsOptions: { padding: opts.exact ? 0 : opts.padding() },
     maxBounds: [MAX_BOUNDS[0], MAX_BOUNDS[1], MAX_BOUNDS[2], MAX_BOUNDS[3]],
     minZoom: 2,
-    maxZoom: 18,
+    maxZoom: CLUSTER_MAX_ZOOM,
     renderWorldCopies: false,
     dragRotate: false,
     pitchWithRotate: false,
@@ -133,6 +144,8 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
   let active: string | null = null;
   let hot: string | null = null;
   let me: Marker | null = null;
+  /** Where a bubble opened from the keyboard was: after its zoom, focus goes to the marker nearest it. */
+  let refocus: [number, number] | null = null;
 
   const mark = (key: string, el: HTMLElement, at: [number, number]) => {
     const m = new Marker({ element: el, anchor: "center" }).setLngLat(at).addTo(map);
@@ -150,13 +163,15 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
     }
   };
 
-  const render = () => {
-    if (!index) return;
+  /** `settled`: after a move, when a bubble that had the keyboard hands it on. */
+  const render = (settled = false) => {
+    const idx = index;
+    if (!idx) return;
     const z = Math.floor(map.getZoom());
     const [w, s, e, n] = toBounds(map);
     const dx = (e - w) * 0.15;
     const dy = (n - s) * 0.15;
-    const feats = index.getClusters([Math.max(-180, w - dx), Math.max(-85, s - dy), Math.min(180, e + dx), Math.min(85, n + dy)], z);
+    const feats = idx.getClusters([Math.max(-180, w - dx), Math.max(-85, s - dy), Math.min(180, e + dx), Math.min(85, n + dy)], z);
     const old = markers;
     markers = new Map();
     for (const f of feats) {
@@ -172,6 +187,9 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         }
         const id = props.cluster_id;
         const count = props.point_count ?? 0;
+        const to = idx.getClusterExpansionZoom(id);
+        // One site: zooming cannot split it, so a tap lists its pins.
+        const leaves = to > CLUSTER_MAX_ZOOM ? idx.getLeaves(id, Infinity).map((l) => pins[(l.properties as Props).i]).filter((p): p is Pin => !!p) : null;
         const el = document.createElement("button");
         el.type = "button";
         el.className = `${MARK} tt-bubble`;
@@ -179,16 +197,16 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         face.className = `${BUBBLE[kind]} ${bubbleSize(count)}`;
         face.textContent = String(props.point_count_abbreviated ?? count);
         el.append(face);
-        el.setAttribute("aria-label", `${count.toLocaleString("en-IN")} ${kind === "game" ? "games" : "turfs"} here. Zoom in`);
+        el.setAttribute("aria-label", bubbleLabel(count, kind === "game" ? "games" : "turfs", leaves && leaves.map((p) => p.place)));
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          const to = index?.getClusterExpansionZoom(id) ?? z + 2;
-          if (to > CLUSTER_MAX_ZOOM || to > map.getMaxZoom()) {
-            // One site: zooming cannot split it, so its turfs are listed.
-            const leaves = index?.getLeaves(id, Infinity) ?? [];
-            opts.onPick(leaves.map((l) => pins[(l.properties as Props).i]?.key).filter(Boolean));
+          // A click from Enter or Space carries no pointer.
+          const keyboard = ev.detail === 0;
+          if (leaves) {
+            opts.onPick(leaves.map((p) => p.key), el, keyboard);
             return;
           }
+          if (keyboard) refocus = [lng, lat];
           map.easeTo({ center: [lng, lat], zoom: Math.min(to + 0.25, map.getMaxZoom()), duration: 450 }, { tapped: true });
         });
         mark(key, el, [lng, lat]);
@@ -213,17 +231,31 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
         el.append(face);
         el.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          opts.onPick([pin.key]);
+          opts.onPick([pin.key], el, ev.detail === 0);
         });
         mark(key, el, [lng, lat]);
       }
+    }
+    // The bubble that had the keyboard is about to go: its nearest marker takes over, else the map.
+    if (refocus && settled) {
+      const at = map.project(refocus);
+      let best: HTMLElement | null = null;
+      let d = Infinity;
+      for (const m of markers.values()) {
+        const p = map.project(m.getLngLat());
+        const dd = (p.x - at.x) ** 2 + (p.y - at.y) ** 2;
+        if (dd < d) [best, d] = [m.getElement(), dd];
+      }
+      refocus = null;
+      if (best) best.focus({ preventScroll: true });
+      else map.getCanvas().focus({ preventScroll: true });
     }
     for (const m of old.values()) m.remove();
     paintOn();
   };
 
   map.on("moveend", (e) => {
-    render();
+    render(true);
     // A drag, wheel, key or zoom button carries its event; a bubble's zoom says it was tapped.
     const by = e as { originalEvent?: unknown; tapped?: boolean };
     opts.onView(toBounds(map), map.getZoom(), !!by.originalEvent || by.tapped === true);
@@ -236,8 +268,17 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
 
   return {
     setPins(k, next) {
-      kind = k;
+      // The same pins again (the list's clock ticked, nothing changed): the markers stay, and so does focus.
+      const same =
+        k === kind &&
+        next.length === pins.length &&
+        next.every((p, i) => {
+          const q = pins[i];
+          return p.key === q.key && p.lat === q.lat && p.lng === q.lng && p.text === q.text && p.label === q.label && p.place === q.place;
+        });
       pins = next;
+      if (same && index) return;
+      kind = k;
       index = new Supercluster<Props>({ radius: RADIUS, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
       index.load(next.map((p, i) => ({ type: "Feature", geometry: { type: "Point", coordinates: [p.lng, p.lat] }, properties: { i } })));
       for (const m of markers.values()) m.remove();
@@ -268,6 +309,7 @@ export function createEngine(container: HTMLElement, opts: EngineOptions): Engin
       el.setAttribute("aria-label", "You are here");
       me = new Marker({ element: el, anchor: "center" }).setLngLat([at.lng, at.lat]).addTo(map);
     },
+    focusMap: () => map.getCanvas().focus({ preventScroll: true }),
     view: () => ({ bounds: toBounds(map), zoom: map.getZoom() }),
     destroy() {
       for (const m of markers.values()) m.remove();
