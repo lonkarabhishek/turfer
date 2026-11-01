@@ -6,7 +6,7 @@ import { MapPin, Star, TrendingUp, Users, X } from "lucide-react";
 import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { MapGame } from "@/lib/map/data";
-import { trendWords } from "@/lib/map/trending";
+import { trendWords, type TrendWindow } from "@/lib/map/trending";
 import { cardPrice, cardSports, type CardSport } from "@/lib/utils/cardSport";
 import { priceRangeText } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
@@ -25,17 +25,20 @@ import { GamePhoto } from "@/components/game/detail/GamePhoto";
  * shared their location, how far. One link to the turf's (or the game's)
  * page; the close button sits outside it. A bubble that cannot split (turfs
  * on one site, or one turf's games, soonest first) lists each of them the
- * same way. With Trending on, a trending turf's photo wears its rank.
+ * same way. With Trending on, a trending turf's photo wears its rank, and
+ * its name says it over `trendWindow` (24 hours when unset).
  */
 export function PickCard({
   turfs,
   games,
   sport,
+  trendWindow,
   onClose,
 }: {
   turfs: { turf: Turf; km: number | null; trend?: number | null }[];
   games: { game: MapGame; km: number | null }[];
   sport: CardSport | null;
+  trendWindow?: TrendWindow;
   onClose: () => void;
 }) {
   const label = games.length ? (games.length > 1 ? "Games here" : "Picked game") : turfs.length > 1 ? "Turfs here" : "Picked turf";
@@ -61,7 +64,7 @@ export function PickCard({
         <ul className="max-h-[min(19rem,45vh)] overflow-y-auto overscroll-contain divide-y divide-primary-100">
           {turfs.map(({ turf, km: d, trend }) => (
             <li key={turf.id}>
-              <TurfRow turf={turf} sport={sport} km={d} trend={trend ?? null} />
+              <TurfRow turf={turf} sport={sport} km={d} trend={trend ?? null} trendWindow={trendWindow} />
             </li>
           ))}
         </ul>
@@ -70,7 +73,7 @@ export function PickCard({
   );
 }
 
-function TurfRow({ turf, sport, km, trend }: { turf: Turf; sport: CardSport | null; km: number | null; trend: number | null }) {
+function TurfRow({ turf, sport, km, trend, trendWindow }: { turf: Turf; sport: CardSport | null; km: number | null; trend: number | null; trendWindow?: TrendWindow }) {
   const [broken, setBroken] = useState(false);
   const photo = turfPhotos(turf)[0];
   const price = cardPrice(turf, sport);
@@ -99,7 +102,7 @@ function TurfRow({ turf, sport, km, trend }: { turf: Turf; sport: CardSport | nu
       <div className="min-w-0 flex-1">
         <p className="text-[16px] font-semibold text-primary-900 leading-snug line-clamp-2 [overflow-wrap:anywhere]">
           {turf.name}
-          {trend != null && <span className="sr-only">, {trendWords(trend)}</span>}
+          {trend != null && <span className="sr-only">, {trendWords(trend, trendWindow)}</span>}
         </p>
         <p className="mt-0.5 flex items-center gap-1 text-[13px] text-primary-500 min-w-0">
           {turf.rating > 0 && (
