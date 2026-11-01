@@ -5,7 +5,7 @@ import path from "node:path";
 import { CONTACT_RULES, contactProblem, TIP_RULES, tipProblem, type ScreenRule } from "./screen";
 import { parseReport } from "./payload";
 import { photoErrorText, photoSizesOk, reviewPhotoUrl, shapeReviewPhoto, shapeReviewPhotos, REVIEW_PHOTOS } from "./photos";
-import { emptyDraft, readDraft, readDraftPhotos, sameAnswers } from "./draft";
+import { emptyDraft, newReportDraft, readDraft, readDraftPhotos, sameAnswers } from "./draft";
 import { flagAnswerText, FLAG_REASONS, parseFlag, toAdminFlags } from "./flags";
 import { shapeReviews } from "../turfPage/shape";
 
@@ -123,6 +123,16 @@ test("draft: photos come back, an added one only while the server still keeps it
   assert.deepEqual(later.map((p) => p.id), [P1], "two days on, a photo never posted is gone from the server: the draft lets it go");
   assert.equal(readDraft(JSON.stringify({ ...d, base: "x", photos: "junk" }), now)?.base, null);
   assert.deepEqual(readDraft(JSON.stringify({ ...d, photos: "junk" }), now)?.photos, []);
+});
+
+test("draft: an edit's draft picked up for a new report lets go of the gone report's photos, and edits nothing", () => {
+  const now = 1_800_000_000_000;
+  const added = { ...photo(P2, "fedcba9876543210fedcba98"), at: now - 1000 };
+  const edit = { ...emptyDraft(now), stars: 4, comment: "With a photo", photos: [{ ...photo(), at: null }, added], photosChanged: true, base: P1 };
+  const d = newReportDraft(edit);
+  assert.deepEqual([d.photos.map((p) => p.id), d.base, d.comment, d.stars], [[P2], null, "With a photo", 4], "what was typed and the photo added since stay");
+  const fresh = { ...emptyDraft(now), stars: 3, photos: [added] };
+  assert.equal(newReportDraft(fresh), fresh, "a new report's draft is as it was");
 });
 
 test("draft: sameAnswers tells an edit opened and closed again from one with a change", () => {

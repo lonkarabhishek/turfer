@@ -82,6 +82,17 @@ export function sameAnswers(a: Draft, b: Draft): boolean {
   return key(a) === key(b);
 }
 
+/**
+ * A draft picked up for a new report. One left from an edit (base) is of a
+ * report that is gone now (removed, here or on another phone): the photos
+ * that were on it went with it and would not post, so they come off, and
+ * it edits nothing. What was typed and photos added since stay.
+ */
+export function newReportDraft(d: Draft): Draft {
+  if (d.base === null) return d;
+  return { ...d, photos: d.photos.filter((p) => p.at !== null), base: null };
+}
+
 /** A draft's photos as stored: well formed, each once, at most 3, and an added one only while the server still keeps it. */
 export function readDraftPhotos(raw: unknown, now = Date.now()): DraftPhoto[] {
   if (!Array.isArray(raw)) return [];

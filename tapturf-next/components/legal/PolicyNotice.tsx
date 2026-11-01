@@ -78,7 +78,8 @@ export function PolicyNotice() {
   return (
     <div role="region" aria-label="Privacy policy update" className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+76px)] md:bottom-6 md:left-auto md:right-6 md:max-w-sm z-[45]">
       <div className="flex items-start gap-3 rounded-2xl bg-white border border-primary-200 shadow-elevated pl-4 pr-2 py-3">
-        <p className="text-[14px] leading-snug text-primary-800">
+        {/* With the earlier notices it can run past a phone's screen: it scrolls under the header, and Dismiss stays in sight. */}
+        <p className="max-h-[calc(100dvh-env(safe-area-inset-bottom)-172px)] md:max-h-[calc(100dvh-120px)] overflow-y-auto overscroll-contain text-[14px] leading-snug text-primary-800">
           <span className="font-semibold text-primary-900">We updated our privacy policy.</span> {text}{" "}
           <Link href={`/privacy#${PRIVACY_NOTICE.anchor}`} onClick={markSeen} className="font-semibold text-primary-900 underline underline-offset-2">
             What this means

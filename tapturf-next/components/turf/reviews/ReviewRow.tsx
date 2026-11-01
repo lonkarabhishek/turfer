@@ -60,7 +60,8 @@ export function ReviewRow({
   const again = google ? null : playAgainWords(r.play_again);
   const photos = !google && Array.isArray(r.photos) ? r.photos : [];
   const showVote = !google && !mine && !preview && !!onVote;
-  const showFlag = !google && !mine && !preview && !!onFlag;
+  // After hydration only (it does nothing before): kept out of the cached turf page's HTML. It sits in the Helpful row, so nothing moves.
+  const showFlag = hydrated && !google && !mine && !preview && !!onFlag;
 
   return (
     <div className="rounded-2xl border border-primary-100 bg-white p-4">

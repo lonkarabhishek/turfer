@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { removeReport, voteReview } from "@/lib/reviews/client";
-import { hasWaiting, loadDraft, takeWaiting } from "@/lib/reviews/draft";
+import { clearDraft, hasWaiting, loadDraft, takeWaiting } from "@/lib/reviews/draft";
 import { shapeReviewPhotos } from "@/lib/reviews/photos";
 import { PRICE_ASK_BELOW, type ListedPrices } from "@/lib/reviews/sheet";
 import type { AspectCount, PlayAgainCounts, ReportChannel, VoteResponse } from "@/lib/reviews/types";
@@ -154,6 +154,8 @@ export function TurfReviews(props: {
     if (!("token" in t)) return false;
     const a = await removeReport(t.token, turfId);
     if (a.status !== 200) return false;
+    // A draft of an edit (the sheet keeps one each time it opens) is of a report that is gone now.
+    clearDraft(turfId);
     setReviews((prev) => prev.filter((r) => r.id !== me.mine?.id));
     me.setState((s) => ({ ...s, mine: s.mine ? { ...s.mine, status: s.mine.status === "hidden" ? "hidden" : "removed" } : null }));
     return true;

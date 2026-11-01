@@ -7,7 +7,7 @@ import { Loader2, X } from "lucide-react";
 import { rowsFor, starWord, type PlayedWhen, type Score } from "@/lib/reviews/catalog";
 import { discardPhoto, getPhotoReady, problemOf, saveReport, type SaveProblem, type SaveRefusal } from "@/lib/reviews/client";
 import { DAILY_RULE, dailyMessage, PLAYED_HERE_LINE } from "@/lib/reviews/daily";
-import { clearDraft, emptyDraft, hasAnswers, loadDraft, markWaiting, sameAnswers, saveDraft, type Draft, type DraftPhoto, type Step } from "@/lib/reviews/draft";
+import { clearDraft, emptyDraft, hasAnswers, loadDraft, markWaiting, newReportDraft, sameAnswers, saveDraft, type Draft, type DraftPhoto, type Step } from "@/lib/reviews/draft";
 import { shapeReviewPhotos } from "@/lib/reviews/photos";
 import { contactProblem, tipProblem } from "@/lib/reviews/screen";
 import { listedFor, priceChips, tipPlaceholder, type ListedPrices } from "@/lib/reviews/sheet";
@@ -104,7 +104,8 @@ function freshDraft(turf: SheetTurf, open: SheetOpen, hint: RateHint | null, myP
 /**
  * The draft the sheet starts from, and whether it is one picked up from
  * before: the report being edited (or this phone's draft of that same
- * edit), else this phone's draft (theirs only), else a new one.
+ * edit), else this phone's draft (theirs only; one left from an edit of a
+ * report that is gone, without that report's photos), else a new one.
  */
 function startDraft(turf: SheetTurf, open: SheetOpen, hint: RateHint | null, myPrice: number | null, userId: string | null): { d: Draft; restored: boolean } {
   const saved = loadDraft(turf.id, userId);
@@ -116,14 +117,15 @@ function startDraft(turf: SheetTurf, open: SheetOpen, hint: RateHint | null, myP
     return { d, restored: false };
   }
   if (open.resume && saved) return { d: { ...saved, step: 3, by: userId }, restored: false };
-  const d: Draft = saved ? { ...saved, by: userId } : freshDraft(turf, open, hint, myPrice, userId);
+  const kept = saved && newReportDraft(saved);
+  const d: Draft = kept ? { ...kept, by: userId } : freshDraft(turf, open, hint, myPrice, userId);
   if (open.stars) {
     d.stars = open.stars;
     d.step = d.step === 3 ? 3 : 2;
   } else if (!d.stars) {
     d.step = 1;
   }
-  return { d, restored: !!saved && hasAnswers(saved) };
+  return { d, restored: !!kept && hasAnswers(kept) };
 }
 
 /** What the sheet sends: only the rows the sheet shows, the note only when there is or was one, the price only when new, the photos once there are or were some. */
