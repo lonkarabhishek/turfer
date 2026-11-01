@@ -3,7 +3,6 @@ import Link from "next/link";
 import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
-import { CITY_LIST_AND } from "@/lib/city";
 import { PRIVACY_UPDATED } from "@/lib/policy";
 import { CookieSettingsButton } from "@/components/consent/CookieSettingsButton";
 
@@ -38,8 +37,8 @@ const SECTIONS: LegalSection[] = [
       <>
         <p>
           TapTurf (&ldquo;TapTurf&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) runs the website and app at
-          tapturf.in from Nashik, Maharashtra, India. We help players find sports turfs and courts in{" "}
-          {CITY_LIST_AND}, and host or join pickup games.
+          tapturf.in from Nashik, Maharashtra, India. We help players find sports turfs and courts across India,
+          and host or join pickup games.
         </p>
         <p>
           This policy explains what we collect, why, who sees it and how to get it removed. It applies to

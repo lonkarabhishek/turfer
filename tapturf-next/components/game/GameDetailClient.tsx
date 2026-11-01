@@ -196,18 +196,19 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const handleShare = async () => {
     if (!game) return;
     const url = window.location.href;
-    // Which game, where and when (lib/utils/gameShare.ts); the share sheet adds the link itself.
+    // Which game, where and when (lib/utils/gameShare.ts), the link last and inside the text: a share
+    // sheet's Copy (and some apps) takes only the text, so a separate url would be lost.
     const closed = game.status === "cancelled" ? "cancelled" : status === "expired" || game.status === "completed" ? "ended" : undefined;
-    const text = gameShareText(game, { host: isHost, closed });
+    const text = gameShareText(game, { host: isHost, closed, url });
     if (navigator.share) {
       try {
-        await navigator.share({ title: text.split("\n")[0], text, url });
+        await navigator.share({ title: text.split("\n")[0], text });
       } catch {
         // Closed the share sheet.
       }
     } else {
       try {
-        await navigator.clipboard.writeText(gameShareText(game, { host: isHost, closed, url }));
+        await navigator.clipboard.writeText(text);
         setShared(true);
         setTimeout(() => setShared(false), 2000);
       } catch {

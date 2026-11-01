@@ -41,7 +41,7 @@ export async function Footer() {
               Tap<span className="text-accent-400">Turf</span>
             </h3>
             <p className="mt-3 text-sm text-primary-200 leading-relaxed">
-              Find, compare and book sports turfs in cities across India.
+              Find and compare sports turfs and courts across India. Call or WhatsApp the turf, no booking fee.
             </p>
             {top.length > 0 && (
               <div className="mt-4 flex items-center gap-1.5">
