@@ -29,6 +29,8 @@ export function AskLauncher() {
   // Tool pages end their cards with a full-width button the pill would
   // sit on, so they are desktop-only too.
   const barPages = pathname.startsWith("/turf/") || pathname.startsWith("/game/") || pathname.startsWith("/tools");
+  // On the map a phone's pill is just its icon, so it covers fewer pins.
+  const compact = pathname === "/map";
   const count = turns.filter((t) => t.res).length;
   const blog = pageContext.blog;
   // Only the short version counts: a question about the article still leaves the offer open.
@@ -54,13 +56,13 @@ export function AskLauncher() {
         aria-label="Ask TapTurf"
         className={`press-tight fixed right-4 bottom-[calc(4.75rem+var(--ask-lift,0px))] md:right-6 md:bottom-6 z-30 items-center gap-2 h-12 pl-3.5 pr-4 rounded-full bg-primary-900 text-white shadow-elevated hover:bg-accent-600 transition-[background-color,bottom] duration-200 cursor-pointer ${
           barPages ? "hidden md:inline-flex" : "inline-flex"
-        }`}
+        } ${compact ? "max-md:w-12 max-md:px-0 max-md:justify-center" : ""}`}
       >
         <span className="relative inline-flex">
           <Sparkles className="w-5 h-5 text-accent-400" strokeWidth={2.25} />
           {count > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent-400 ring-2 ring-primary-900" aria-hidden />}
         </span>
-        <span className="text-[14px] font-semibold">Ask</span>
+        <span className={`text-[14px] font-semibold ${compact ? "max-md:sr-only" : ""}`}>Ask</span>
       </button>
     </>
   );

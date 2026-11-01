@@ -1,6 +1,7 @@
 import { cityPoint, isCitySlug } from "../city";
 import { sportFromSlug, sportSlug } from "../turfList/query";
 import { haversineKm, type Coords } from "../utils/location";
+import { avgPriceWords } from "./clusters";
 
 /**
  * Where /map looks and what it lists: the view in the URL (?city=, the
@@ -189,13 +190,20 @@ export function countLine(n: number, show: MapShow): string {
  * A count bubble's words for a screen reader: "40 turfs here. Zoom in";
  * or, for one that zooming cannot split (`places`: where each of its pins
  * is, e.g. a turf's weekly games), what a tap lists: "3 games at Turf Up",
- * "2 turfs here".
+ * "2 turfs here". A turf bubble whose turfs list prices says their average
+ * (`price`: the average and how many it is over), as its tag does:
+ * "406 turfs here, average ₹1,150 an hour over the 120 with a listed
+ * price. Zoom in".
  */
-export function bubbleLabel(n: number, show: MapShow, places: readonly string[] | null): string {
-  const what = `${n.toLocaleString("en-IN")} ${show === "games" ? "games" : "turfs"}`;
-  if (!places) return `${what} here. Zoom in`;
-  const one = places[0]?.trim();
-  return one && places.every((p) => p.trim() === one) ? `${what} at ${one}` : `${what} here`;
+export function bubbleLabel(n: number, show: MapShow, places: readonly string[] | null, price?: { avg: number; n: number } | null): string {
+  let what = `${n.toLocaleString("en-IN")} ${show === "games" ? "games" : "turfs"}`;
+  const one = places?.[0]?.trim();
+  what += !places ? " here" : one && places.every((p) => p.trim() === one) ? ` at ${one}` : " here";
+  if (price && price.n > 0 && price.avg > 0) {
+    const avg = `${avgPriceWords(price.avg)} an hour`;
+    what += price.n >= n ? `, average ${avg}` : `, average ${avg} over the ${price.n.toLocaleString("en-IN")} with a listed price`;
+  }
+  return places ? what : `${what}. Zoom in`;
 }
 
 /**

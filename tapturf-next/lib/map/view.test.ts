@@ -130,6 +130,14 @@ test("bubbleLabel: a bubble that splits says zoom in; one at one turf says where
   for (const l of [bubbleLabel(3, "games", ["Turf Up", "Turf Up"]), bubbleLabel(2, "turfs", ["A", "B"])]) assert.ok(!/zoom/i.test(l), l);
 });
 
+test("bubbleLabel: a turf bubble's average hourly price, and how many turfs it is over", () => {
+  assert.equal(bubbleLabel(406, "turfs", null, { avg: 1147.3, n: 120 }), "406 turfs here, average ₹1,150 an hour over the 120 with a listed price. Zoom in");
+  assert.equal(bubbleLabel(4, "turfs", null, { avg: 1000, n: 4 }), "4 turfs here, average ₹1,000 an hour. Zoom in");
+  assert.equal(bubbleLabel(2, "turfs", ["Turf Up", "Turf Up"], { avg: 900, n: 1 }), "2 turfs at Turf Up, average ₹900 an hour over the 1 with a listed price");
+  assert.equal(bubbleLabel(1240, "turfs", null, null), "1,240 turfs here. Zoom in");
+  assert.equal(bubbleLabel(12, "turfs", null, { avg: 0, n: 0 }), "12 turfs here. Zoom in", "none listed: no price");
+});
+
 test("parseSnapshot: what Back restores, from history.state, never trusted as is", () => {
   const good = { b: [73.7, 18.43, 73.96, 18.69], gps: true, sheet: "full", n: 36, top: 1400.4, pick: ["a001", "a002"] };
   assert.deepEqual(parseSnapshot(good), { b: [73.7, 18.43, 73.96, 18.69], gps: true, sheet: "full", n: 36, top: 1400, pick: ["a001", "a002"] });

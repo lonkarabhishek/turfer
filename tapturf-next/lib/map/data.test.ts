@@ -7,7 +7,7 @@ import { cardPrice, cardSports } from "../utils/cardSport";
 import { turfPhotos } from "../utils/images";
 import { areaFor } from "../utils/area";
 import { SPORT_CHIPS } from "../turfList/query";
-import { fromMapTurf, gamePin, pickedGames, roundDeg, toMapGame, toMapTurf, turfPin } from "./data";
+import { fromMapTurf, gamePin, mapPoint, pickedGames, roundDeg, toMapGame, toMapTurf, turfHourly, turfPin } from "./data";
 
 /** A card row as getNearTurfs hands it over: forCard() of a full row, sport bands added when it has any. */
 function row(p: Partial<Turf> & Record<string, unknown> = {}): Turf {
@@ -132,6 +132,45 @@ test("turfPin: the low end of the card's price, or the sport", () => {
   // "Cricket" leads with the label it matched.
   assert.equal(turfPin(ROWS[4], { chip: "Pickleball" }).text, "Pickleball");
   for (const t of ROWS) assert.ok(!turfPin(t).text.includes("₹0"));
+});
+
+test("turfHourly: the pin's listed price per hour, for its bubble's average", () => {
+  assert.equal(turfHourly(ROWS[0]), 800, "the low end the pin shows");
+  assert.equal(turfHourly(ROWS[2]), null, "a reported price is not a listed one");
+  assert.equal(turfHourly(ROWS[3]), null);
+  assert.equal(turfHourly(ROWS[4]), null, "no price at all");
+  assert.equal(turfHourly(ROWS[5]), (800 * 60) / 90, "₹800 a 90-minute slot is about ₹533 an hour");
+  assert.equal(turfHourly(row({ price_unit: "per_slot", slot_minutes: null })), null, "a slot of no stated length has no hourly rate");
+  assert.equal(turfHourly(row({ price_unit: "per_person" })), null, "nor has a price per person");
+  assert.equal(turfHourly(row({ price_unit: null, slot_minutes: null })), 800, "no unit reads as per hour, as on the card");
+  // A chip's price rule: the bands' football range (per hour), never the card's; none for a sport it does not price.
+  assert.equal(turfHourly(ROWS[6], { chip: "Football" }), 1500);
+  assert.equal(turfHourly(ROWS[6], { chip: "Box Cricket" }), 1000);
+  assert.equal(turfHourly(ROWS[6], { chip: "Badminton" }), null);
+  assert.equal(
+    turfHourly(row({ price_unit: "per_slot", slot_minutes: 90, sports: ["Football", "Box Cricket"], sport_bands: { football: [1200, 1200] } }), { chip: "Football" }),
+    1200,
+    "a band's price is per hour whatever the card's unit",
+  );
+  // Always the number the pin shows, per hour.
+  for (const t of ROWS) {
+    for (const sport of [null, ...SPORT_CHIPS.map((chip) => ({ chip }))]) {
+      const h = turfHourly(t, sport);
+      if (h != null && cardPrice(t, sport).unit === "/hr") assert.equal(turfPin(t, sport).text, `₹${h.toLocaleString("en-IN")}`, `${t.name} ${sport?.chip}`);
+      if (h != null) assert.ok(h > 0);
+    }
+  }
+});
+
+test("mapPoint: the pin's key and point, or none", () => {
+  assert.deepEqual(mapPoint(ROWS[0]), { k: "turf-up-baner", y: 18.56106, x: 73.78902 });
+  assert.deepEqual(mapPoint(ROWS[1]), { k: "9c029dc9-f608-4de7-a42a-9c0070bb2b5c", y: 18.56106, x: 73.78902 });
+  assert.equal(mapPoint({ id: "a", lat: 0, lng: 0 }), null);
+  assert.equal(mapPoint({ id: "a", lat: null, lng: 73 }), null);
+  for (const t of ROWS) {
+    const w = toMapTurf(t)!;
+    assert.deepEqual(mapPoint(t), { k: w.k, y: w.y, x: w.x }, "the same point as the pin");
+  }
 });
 
 const GAME: Game = {

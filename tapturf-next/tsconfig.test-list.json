@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/turfList/query.test.ts", "lib/turfList/client.test.ts", "lib/map/data.test.ts", "lib/map/view.test.ts"]
+  "files": ["lib/turfList/query.test.ts", "lib/turfList/client.test.ts", "lib/map/data.test.ts", "lib/map/view.test.ts", "lib/map/clusters.test.ts", "lib/map/heat.test.ts"]
 }

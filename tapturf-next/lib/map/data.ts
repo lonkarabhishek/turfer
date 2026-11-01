@@ -74,15 +74,24 @@ function finiteCoord(v: unknown, max: number): number | null {
 }
 
 /**
- * One turf for the map, from a card row (forCard, with its sport bands
- * when it has any), or null when it has no usable location. A 0,0 point
- * (the sea off Africa) is no location either.
+ * A turf's key and point on the map (its pin's), or null when it has no
+ * usable location. A 0,0 point (the sea off Africa) is no location either.
  */
-export function toMapTurf(t: Turf): MapTurfWire | null {
+export function mapPoint(t: { id: string; slug?: string | null; lat?: unknown; lng?: unknown }): Pick<MapTurfWire, "k" | "y" | "x"> | null {
   const lat = finiteCoord(t.lat, 90);
   const lng = finiteCoord(t.lng, 180);
   if (lat == null || lng == null || (lat === 0 && lng === 0)) return null;
-  const w: MapTurfWire = { k: t.slug || t.id, n: t.name, y: roundDeg(lat), x: roundDeg(lng) };
+  return { k: t.slug || t.id, y: roundDeg(lat), x: roundDeg(lng) };
+}
+
+/**
+ * One turf for the map, from a card row (forCard, with its sport bands
+ * when it has any), or null when it has no usable location (mapPoint).
+ */
+export function toMapTurf(t: Turf): MapTurfWire | null {
+  const at = mapPoint(t);
+  if (!at) return null;
+  const w: MapTurfWire = { k: at.k, n: t.name, y: at.y, x: at.x };
   const place = areaFor(t) ?? t.address;
   if (place) w.p = place;
   if (t.city) w.c = t.city;
@@ -220,6 +229,27 @@ export function turfPin(t: Turf, sport?: CardSport | null): PinText {
     };
   }
   return { text: lead || "Turf", label: `${t.name}${lead ? `, ${lead}` : ""}, prices not listed yet` };
+}
+
+/**
+ * A turf's share of its bubble's average: the low end of the price its
+ * pin shows (cardPrice, so the sport chip's rule applies), per hour, when
+ * that price is listed. A reported price ("~₹700") is not listed and
+ * counts for nothing. A price per slot of a known length becomes its
+ * hourly rate (₹1,500 for a 90-minute slot is ₹1,000 an hour); one per
+ * slot of no stated length, or per person, has no hourly rate and counts
+ * for nothing. A band's price is per hour. On 1 Nov every listed price
+ * was per hour: 1,183 of the 1,212 active turfs with one said so, the
+ * other 29 named no unit, which the site reads as per hour, and none was
+ * per slot or per person.
+ */
+export function turfHourly(t: Turf, sport?: CardSport | null): number | null {
+  const price = cardPrice(t, sport);
+  if (price.kind !== "real" || price.min == null || !(price.min > 0)) return null;
+  if (price.unit === "/hr") return price.min;
+  const slot = /^\/(\d+)-min slot$/.exec(price.unit);
+  const minutes = slot ? Number(slot[1]) : 0;
+  return minutes > 0 ? (price.min * 60) / minutes : null;
 }
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

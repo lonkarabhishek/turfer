@@ -2,12 +2,14 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Loader2, LocateFixed, Map as MapIcon, RotateCw, X } from "lucide-react";
+import { Flame, Loader2, LocateFixed, Map as MapIcon, RotateCw, X } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { GameCard } from "@/components/game/GameCard";
 import { PickCard, asGame } from "./PickCard";
 import type { Engine, Padding, Pin } from "./engine";
-import { fromMapTurf, gamePin, pickedGames, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
+import { fromMapTurf, gamePin, pickedGames, turfHourly, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
+import { heatFeatures, parseHeat, type HeatWire } from "@/lib/map/heat";
+import { MAP_COLORS } from "@/lib/map/clusters";
 import {
   INDIA_BOUNDS,
   boundsParam,
@@ -69,9 +71,12 @@ function subscribeDesktop(cb: () => void) {
 
 /**
  * /map: every turf (or open game) on a street map of India, Airbnb style.
- * Pins cluster into count bubbles that split as the map zooms in, and
- * become price pills (cardPrice: a sport chip shows only that sport's
+ * Pins cluster into count bubbles that split as the map zooms in (a turf
+ * bubble also says the average hourly price of its turfs that list one),
+ * and become price pills (cardPrice: a sport chip shows only that sport's
  * price) or, for games, green "when" pills; a tap opens the place's card.
+ * "Popular" lays a heatmap of turf page views under the pins (GET
+ * /api/map/heat, fetched only when it is first turned on; off on every visit).
  * The list beside the map (desktop) or in the sheet over it (phones) is
  * what is in view, top rated first, or nearest first once the viewer taps
  * "Near me" (GPS only on that tap; the point stays on the device). The
@@ -142,6 +147,11 @@ export function MapExplorer() {
   const [more, setMore] = useState<{ key: string; n: number }>({ key: "", n: PAGE });
   /** The list's length from a snapshot, until the viewer moves the map or changes a filter. */
   const [restoreN, setRestoreN] = useState<number | null>(null);
+  /** The "Popular" layer: on (turfs only), its points once fetched (only after the first tap), and whether that failed. */
+  const [heatOn, setHeatOn] = useState(false);
+  const [heat, setHeat] = useState<HeatWire[] | null>(null);
+  const [heatFailed, setHeatFailed] = useState(false);
+  const [heatTry, setHeatTry] = useState(0);
 
   useEffect(() => {
     desktopRef.current = desktop;
@@ -348,12 +358,30 @@ export function MapExplorer() {
     () =>
       show === "games"
         ? shownGames.map((g) => ({ key: g.id, lat: g.turfs.lat, lng: g.turfs.lng, place: g.turfs.name, ...gamePin(g, now) }))
-        : shownTurfs.map((t) => ({ key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, ...turfPin(t, chip) })),
+        : shownTurfs.map((t) => ({ key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), ...turfPin(t, chip) })),
     [show, shownTurfs, shownGames, chip, now],
   );
   useEffect(() => {
     if (ready) engine.current?.setPins(show === "games" ? "game" : "turf", pins);
   }, [ready, show, pins]);
+
+  // The "Popular" layer's points: fetched the first time it is turned on (a cached JSON, about an hour old at most).
+  useEffect(() => {
+    if (!heatOn || heat) return;
+    const ctrl = new AbortController();
+    getJson("/api/map/heat", ctrl.signal, parseHeat)
+      .then(setHeat)
+      .catch(() => {
+        if (!ctrl.signal.aborted) setHeatFailed(true);
+      });
+    return () => ctrl.abort();
+  }, [heatOn, heat, heatTry]);
+  const heatShown = heatOn && show === "turfs";
+  // With a sport chip, only the turfs it shows glow.
+  const heatPoints = useMemo(() => (heatShown && heat ? heatFeatures(heat, sport ? (k) => byKey.has(k) : undefined) : null), [heatShown, heat, sport, byKey]);
+  useEffect(() => {
+    if (ready) engine.current?.setHeat(heatPoints);
+  }, [ready, heatPoints]);
 
   const picked = useMemo(() => {
     if (!pick) return null;
@@ -584,23 +612,47 @@ export function MapExplorer() {
         </button>
       </div>
       {chips.length > 0 && (
-        <div className="-mx-3 px-3 md:mx-0 md:px-0 mt-2 flex gap-2 overflow-x-auto scrollbar-hide pointer-events-auto" role="group" aria-label="Sport">
-          {[null, ...chips].map((c) => {
-            const on = sport === c;
-            return (
+        <div className="-mx-3 px-3 md:mx-0 md:px-0 mt-2 flex gap-2 overflow-x-auto scrollbar-hide pointer-events-auto">
+          {/* The "Popular" layer (turfs only), ahead of the sport chips. */}
+          {show === "turfs" && (
+            <>
               <button
-                key={c ?? "all"}
                 type="button"
-                aria-pressed={on}
-                onClick={() => setChip(c && sport === c ? null : c)}
-                className={`shrink-0 h-9 px-4 rounded-full text-[14px] font-medium transition-colors cursor-pointer focus-neon ${
-                  on ? "bg-primary-900 text-white" : "bg-white text-primary-900 shadow-soft border border-primary-200/80 md:shadow-none md:border-0 md:bg-primary-100 hover:bg-primary-100 md:hover:bg-primary-200"
+                aria-pressed={heatOn}
+                onClick={() => {
+                  setHeatOn((on) => !on);
+                  setHeatFailed(false);
+                }}
+                title="Where turfs get the most views"
+                style={heatOn ? { backgroundColor: MAP_COLORS.deep } : undefined}
+                className={`shrink-0 h-9 pl-3 pr-4 inline-flex items-center gap-1.5 rounded-full text-[14px] font-medium transition-colors cursor-pointer focus-neon ${
+                  heatOn ? "text-white" : "bg-white text-primary-900 shadow-soft border border-primary-200/80 md:shadow-none md:border-0 md:bg-primary-100 hover:bg-primary-100 md:hover:bg-primary-200"
                 }`}
               >
-                {c ?? "All sports"}
+                <Flame className="w-4 h-4" style={{ color: heatOn ? "#FFC266" : MAP_COLORS.hot }} strokeWidth={2.25} aria-hidden />
+                Popular
               </button>
-            );
-          })}
+              <span className="shrink-0 w-px my-1.5 bg-primary-200" aria-hidden />
+            </>
+          )}
+          <div className="shrink-0 flex gap-2" role="group" aria-label="Sport">
+            {[null, ...chips].map((c) => {
+              const on = sport === c;
+              return (
+                <button
+                  key={c ?? "all"}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setChip(c && sport === c ? null : c)}
+                  className={`shrink-0 h-9 px-4 rounded-full text-[14px] font-medium transition-colors cursor-pointer focus-neon ${
+                    on ? "bg-primary-900 text-white" : "bg-white text-primary-900 shadow-soft border border-primary-200/80 md:shadow-none md:border-0 md:bg-primary-100 hover:bg-primary-100 md:hover:bg-primary-200"
+                  }`}
+                >
+                  {c ?? "All sports"}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
       {locError && (
@@ -761,6 +813,61 @@ export function MapExplorer() {
         <div className="absolute inset-0">
           <div ref={mapEl} className="w-full h-full" />
         </div>
+
+        {/* Phones: a soft white fade under the floating bar, so a bubble that slides under it fades out
+            instead of peeking between the chips. Over the markers, under the bar; taps go through. */}
+        <div
+          aria-hidden
+          className="md:hidden absolute inset-x-0 top-0 z-[5] pointer-events-none bg-[linear-gradient(to_bottom,rgba(255,255,255,0.96)_0%,rgba(255,255,255,0.88)_62%,rgba(255,255,255,0)_100%)]"
+          style={{ height: barH ? barH + TOP_GAP + 18 : 120 }}
+        />
+
+        {heatShown && (
+          <div
+            className="absolute z-10 left-3 md:left-1/2 md:-translate-x-1/2 md:top-4 pointer-events-auto"
+            style={desktop ? undefined : { top: (barH || 96) + TOP_GAP + 10 }}
+          >
+            {heatFailed && !heat ? (
+              <p role="status" className="h-8 pl-3 pr-1.5 inline-flex items-center gap-1 rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                Couldn&apos;t load popular turfs.
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeatFailed(false);
+                    setHeatTry((n) => n + 1);
+                  }}
+                  className="h-6 px-2 rounded-full font-semibold text-primary-900 hover:bg-primary-100 cursor-pointer"
+                >
+                  Try again
+                </button>
+              </p>
+            ) : !heatPoints ? (
+              <p role="status" className="h-8 px-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                Finding popular turfs
+              </p>
+            ) : heatPoints.features.length === 0 ? (
+              <p role="status" className="h-8 px-3 inline-flex items-center rounded-full bg-white/95 shadow-soft text-[12px] text-primary-700">
+                Not enough views yet to show popular turfs{sport ? ` for ${sport}` : ""}.
+              </p>
+            ) : (
+              <p role="status" className="h-8 px-3 inline-flex items-center gap-2 rounded-full bg-white/95 shadow-soft text-[12px] font-medium text-primary-700 whitespace-nowrap">
+                <span className="sr-only">Popular turfs: turf page views over the last 30 days, from</span>
+                <span aria-hidden>Fewer views</span>
+                <span
+                  aria-hidden
+                  className="w-14 h-2 rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${MAP_COLORS.teal}66, ${MAP_COLORS.teal}, #FFBE50, #FF7848, ${MAP_COLORS.hot})` }}
+                />
+                <span aria-hidden>More</span>
+                <span className="sr-only">to more.</span>
+                <span className="text-primary-500" aria-hidden>
+                  · 30 days
+                </span>
+              </p>
+            )}
+          </div>
+        )}
 
         {(styleError || mapError) && (
           <p role="status" className="absolute left-3 right-3 md:left-auto md:right-3 md:w-80 top-[7.5rem] md:top-3 z-10 rounded-xl bg-white/95 shadow-soft px-3 py-2 text-[13px] text-primary-700">
