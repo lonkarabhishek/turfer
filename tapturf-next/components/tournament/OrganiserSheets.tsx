@@ -67,6 +67,11 @@ export function ResultSheet({ t, r, title, send, onClose }: { t: Tournament; r: 
           return (
             <div key={side} className="rounded-xl bg-primary-50 p-3">
               <p className="text-[14px] font-semibold text-primary-900 mb-2 truncate">{name}</p>
+              <div className="grid grid-cols-3 gap-2 mb-1 text-[11px] font-semibold text-primary-500" aria-hidden>
+                <span>Runs</span>
+                <span>Wickets</span>
+                <span>Overs</span>
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 <NumberInput value={String(d[k("Runs")])} onChange={(v) => setD({ ...d, [k("Runs")]: v })} placeholder="Runs" ariaLabel={`${name} runs`} />
                 <NumberInput value={String(d[k("Wkts")])} onChange={(v) => setD({ ...d, [k("Wkts")]: v })} placeholder="Wkts" max={10} ariaLabel={`${name} wickets`} />

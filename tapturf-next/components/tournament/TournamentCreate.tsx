@@ -7,6 +7,7 @@ import { CalendarDays, ChevronDown, Loader2, Plus, Radio, Trash2, Trophy } from 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { trackTool } from "@/lib/analytics/tools";
 import { fixtureCount, makeFixtures } from "@/lib/tournament/fixtures";
+import { rangeLabel } from "@/lib/tournament/format";
 import { readCreate, readShort, teamRange } from "@/lib/tournament/payload";
 import { newSecret, saveEntry } from "@/lib/tournament/store";
 import { DEFAULT_TOURNAMENT_POINTS, MAX_TEAMS, type Playoffs, type Points, type Settings, type Venue } from "@/lib/tournament/types";
@@ -271,7 +272,7 @@ export function TournamentCreate() {
           <span className="min-w-0">
             <span className="block text-[14px] font-semibold text-primary-900">Venue, dates and points</span>
             <span className="block text-[12px] text-primary-500 truncate">
-              {[venue?.name, starts ? `from ${starts}` : null, `win ${points.win}, tie ${points.tie}, no result ${points.nr}`].filter(Boolean).join(" · ")}
+              {[venue?.name, rangeLabel(starts || null, ends && (!starts || ends >= starts) ? ends : null), `win ${points.win}, tie ${points.tie}, no result ${points.nr}`].filter(Boolean).join(" · ")}
             </span>
           </span>
           <ChevronDown className={`w-5 h-5 text-primary-500 shrink-0 transition-transform ${more ? "rotate-180" : ""}`} aria-hidden />

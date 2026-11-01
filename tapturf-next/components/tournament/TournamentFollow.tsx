@@ -257,9 +257,9 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
       {/* ─── The tournament ─── */}
       <header className="relative overflow-hidden rounded-3xl bg-primary-900 text-white p-5 sm:p-7">
         <div aria-hidden className="pointer-events-none absolute -right-10 -top-10 w-44 h-44 rounded-full bg-accent-500/25 blur-2xl" />
-        <div className="relative flex items-start justify-between gap-3">
-          <p className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-white/10 text-[12px] font-bold text-accent-300">
-            <Trophy className="w-3.5 h-3.5" aria-hidden /> {formatLabel(t.settings)}
+        <div className="relative flex items-center justify-between gap-2">
+          <p className="min-w-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-white/10 text-[11px] sm:text-[12px] font-bold text-accent-300 whitespace-nowrap">
+            <Trophy className="hidden min-[360px]:block w-3.5 h-3.5 shrink-0" aria-hidden /> <span className="truncate">{formatLabel(t.settings)}</span>
           </p>
           <button
             type="button"
@@ -267,7 +267,7 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
               setOpen({ kind: "share" });
               trackTool("tool_cta_clicked", TOOL, { href: "share" });
             }}
-            className="press-tight shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-white text-primary-900 text-[14px] font-bold hover:bg-accent-50"
+            className="press-tight shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 sm:px-4 rounded-full bg-white text-primary-900 text-[14px] font-bold hover:bg-accent-50"
           >
             <Share2 className="w-4 h-4" aria-hidden /> Share
           </button>
@@ -345,7 +345,7 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
 
       {/* ─── Live now ─── */}
       {liveNow.length > 0 && (
-        <section aria-label="Live now" className="mt-4 space-y-2">
+        <section aria-label="Live now" className="mt-4 space-y-2 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-3">
           {liveNow.map((r) => (
             <Link
               key={r.fixture.id}
@@ -373,7 +373,8 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
                   );
                 })}
               </div>
-              {r.live?.headline && <p className="mt-2 text-[13px] text-primary-600 line-clamp-2">{r.live.headline}</p>}
+              {/* The chase's equation; in the first innings the headline is just the score above. */}
+              {r.live?.headline && r.live.a && r.live.b && <p className="mt-2 text-[13px] text-primary-600 line-clamp-2">{r.live.headline}</p>}
               <p className="mt-2 inline-flex items-center gap-1 text-[13px] font-bold text-red-700">
                 Ball by ball <ArrowRight className="w-3.5 h-3.5" aria-hidden />
               </p>
@@ -470,7 +471,8 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
           </div>
           <div className="space-y-5">
             {groups.map((g) => (
-              <div key={g.key}>
+              // On a wide screen the playoffs have their own column beside the table: not listed twice.
+              <div key={g.key} className={g.key.startsWith("p:") ? "lg:hidden" : undefined}>
                 <h3 className="text-[13px] font-bold uppercase tracking-wide text-primary-500 mb-2">{g.title}</h3>
                 <div className="space-y-2">
                   {g.items.map((r) => (
@@ -500,6 +502,10 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
 function PointsTable({ res, teams }: { res: Resolution; teams: Team[] }) {
   const byId = new Map(teams.map((x) => [x.id, x]));
   const thin = "hidden min-[360px]:table-cell";
+  // Before the first result every team is level: listed as entered, and nobody is marked as going through yet.
+  const started = res.table.some((s) => s.played > 0);
+  const rows = started ? res.table : [...res.table].sort((a, b) => a.id - b.id);
+  const qualify = started ? res.qualify : 0;
   return (
     <div className="rounded-2xl border border-primary-200 bg-white overflow-hidden">
       <div className="overflow-x-auto scrollbar-hide">
@@ -515,8 +521,8 @@ function PointsTable({ res, teams }: { res: Resolution; teams: Team[] }) {
             </tr>
           </thead>
           <tbody>
-            {res.table.map((s, i) => {
-              const q = i < res.qualify;
+            {rows.map((s, i) => {
+              const q = i < qualify;
               return (
                 <tr key={s.id} className={`border-b border-primary-100 last:border-0 ${q ? "bg-accent-50/40" : ""}`}>
                   <td className={`sticky left-0 pl-3 pr-2 py-2.5 ${q ? "bg-[#f6fdf8] shadow-[inset_3px_0_0_var(--color-accent-500)]" : "bg-white"}`}>
@@ -603,7 +609,7 @@ function FixtureCard({ r, title, teamOf, organiser, onResult, onEdit, onScore }:
             <div key={side} className="flex items-center gap-2.5 min-h-[32px]">
               <TeamMark team={team} size="sm" />
               <span className={`min-w-0 flex-1 truncate text-[15px] ${won ? "font-bold text-primary-900" : team ? "text-primary-800" : "text-primary-400 italic"}`}>
-                {r.seeds && <span className="mr-1.5 text-[11px] not-italic font-bold text-primary-400">{r.seeds[side === "a" ? 0 : 1]}</span>}
+                {r.seeds && team && <span className="mr-1.5 text-[11px] not-italic font-bold text-primary-400">{r.seeds[side === "a" ? 0 : 1]}</span>}
                 {team ? team.name : side === "a" ? r.homeLabel : r.awayLabel}
               </span>
               {s && (
@@ -616,7 +622,7 @@ function FixtureCard({ r, title, teamOf, organiser, onResult, onEdit, onScore }:
         })}
       </div>
       {r.state === "done" && r.text && <p className="mt-2 text-[13px] font-semibold text-accent-700">{r.text}</p>}
-      {live && r.live?.headline && <p className="mt-2 text-[13px] text-primary-600 line-clamp-2">{r.live.headline}</p>}
+      {live && r.live?.headline && r.live.a && r.live.b && <p className="mt-2 text-[13px] text-primary-600 line-clamp-2">{r.live.headline}</p>}
       {stalled && <p className="mt-2 text-[13px] text-amber-800">The live scorecard stopped updating.</p>}
       {(f.live && (live || (r.state === "done" && r.source === "live"))) || (organiser && playable) ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -716,7 +722,7 @@ function Ctas({ venue, code }: { venue: { id: string; slug: string | null; name:
           <CtaLink href="/tournament/new" primary>
             Start a live tournament <ArrowRight className="w-4 h-4" aria-hidden />
           </CtaLink>
-          <CtaLink href={venue ? turfPath(venue) : "/sport/box-cricket"}>{venue ? `About ${venue.name}` : "Find a box cricket turf"}</CtaLink>
+          <CtaLink href={venue ? turfPath(venue) : "/sport/box-cricket"}>{venue ? (venue.name.length > 22 ? "See the venue" : `About ${venue.name}`) : "Find a box cricket turf"}</CtaLink>
         </div>
       </div>
       {code && (

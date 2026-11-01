@@ -1,4 +1,4 @@
-import { signInToken } from "@/lib/account/client";
+import { hasSignIn, signInKnown, signInToken } from "@/lib/account/client";
 import type { CreateBody, CreateResponse, MineItem, Op, PatchResponse, TournamentError, TournamentGetResponse } from "@/lib/tournament/types";
 
 /**
@@ -23,8 +23,9 @@ async function call<T>(path: string, init: RequestInit = {}, token?: string | nu
   }
 }
 
-/** This device's sign-in token, or null. */
+/** This device's sign-in token, or null. Right after a page load the sign-in may not be known yet: it waits for it a moment. */
 async function token(): Promise<string | null> {
+  if (hasSignIn() === null) await signInKnown(5_000);
   const t = await signInToken();
   return "token" in t ? t.token : null;
 }
