@@ -77,7 +77,8 @@ const inflight = new Map<string, Promise<Tournament | null>>();
 /**
  * One tournament as followers see it, from Next's data cache: every change
  * purges its tag (purgeTournament), so the database sees about one read
- * per change however many people follow; 30 s caps how long a copy read
+ * per change however many people follow (and the organiser's own read
+ * after it, tournamentView fresh); 30 s caps how long a copy read
  * just before a change can outlive the purge. Throws when it could not be
  * read; null: no such tournament.
  */
@@ -143,10 +144,13 @@ const LIVE_READS = 40;
 /**
  * What GET /api/tournament/<code> serves: the tournament and, for each
  * fixture scored live without a hand result, its scorecard as it stands.
- * Throws when the tournament could not be read; null for none.
+ * fresh: the tournament straight from the database, not the shared copy or
+ * a read already under way that may predate a change (the organiser's
+ * read right after one). Throws when the tournament could not be read;
+ * null for none.
  */
-export async function tournamentView(code: string): Promise<TournamentGetResponse | null> {
-  const t = await getTournament(code);
+export async function tournamentView(code: string, fresh = false): Promise<TournamentGetResponse | null> {
+  const t = fresh ? await readTournament(code) : await getTournament(code);
   if (!t) return null;
   const now = Date.now();
   const linked = t.fixtures.filter((f) => f.live && !f.result).slice(-LIVE_READS);

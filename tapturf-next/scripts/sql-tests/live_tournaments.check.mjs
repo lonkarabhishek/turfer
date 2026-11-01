@@ -226,6 +226,8 @@ eq((await putLive("livelinkbbbb", "done", 2)).r, "ok", "finished");
 eq(await liveResult("livelinkbbbb", LR, 2, "wrong"), { r: "unavailable" }, "the key first");
 eq(await liveResult("livelinkbbbb", { ...LR, outcome: "draw" }, 2), { r: "bad" }, "a result that isn't one");
 eq(await liveResult("livelinkbbbb", { ...LR, a: { ...LR.a, name: "x".repeat(41) } }, 2), { r: "bad" }, "a name too long");
+const inningsOk = async (wickets) => (await q(`select private.tournament_innings_ok($1::jsonb) as r`, [JSON.stringify({ runs: 80, wickets, balls: 60, allOut: true })]))[0].r;
+eq([await inningsOk(10), await inningsOk(11), await inningsOk(30), await inningsOk(31), await inningsOk(-1), await inningsOk(1.5)], [true, true, true, false, false, false], "up to 30 down (the scorer's 30 a side, last man stands), no more");
 eq(await liveResult("nolinknolink", LR, 2), { r: "none" }, "a scorecard that isn't there");
 const revBefore = Number((await get(C)).rev);
 const writesOf = async (code) => (await q(`select writes from private.tournaments where code = $1`, [code]))[0].writes;

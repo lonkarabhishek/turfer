@@ -78,7 +78,10 @@ test("results: whole numbers within a match", () => {
   assert.deepEqual(readResult(ok), { a: { runs: 63, wickets: 4, balls: 36, allOut: false }, b: { runs: 54, wickets: 10, balls: 30, allOut: true }, result: "auto", battedFirst: "b" });
   assert.equal(readResult({ ...ok, result: "dls" }), null);
   assert.equal(readResult({ ...ok, a: { runs: 1.5, wickets: 0, balls: 6 } }), null);
-  assert.equal(readResult({ ...ok, a: { runs: 10, wickets: 11, balls: 6 } }), null);
+  // Up to 30 down: the live scorer takes 30 a side, last man stands.
+  assert.deepEqual(readResult({ ...ok, a: { runs: 10, wickets: 11, balls: 6 } })?.a, { runs: 10, wickets: 11, balls: 6, allOut: false });
+  assert.equal(readResult({ ...ok, a: { runs: 10, wickets: 30, balls: 6 } })?.a.wickets, 30);
+  assert.equal(readResult({ ...ok, a: { runs: 10, wickets: 31, balls: 6 } }), null);
 });
 
 test("changes: each op read from its whitelist", () => {

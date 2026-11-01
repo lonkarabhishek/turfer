@@ -13,7 +13,8 @@ import type { PatchResponse } from "@/lib/tournament/types";
 //            per change whatever the follower count.
 //   PATCH { secret, op, ... } -> { ok, rev, view }: one change by the
 //            organiser (lib/tournament/payload.ts readOp), and the
-//            tournament as it is after it, so their page needs no second read.
+//            tournament as it is after it (read from the database, past
+//            the shared copy), so their page needs no second read.
 
 type Ctx = { params: Promise<{ code: string }> };
 
@@ -58,7 +59,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if ("error" in done) return reply(done);
   let view = null;
   try {
-    view = await tournamentView(code);
+    view = await tournamentView(code, true);
   } catch (e) {
     console.warn("tournament: read after a change failed", code, e);
   }

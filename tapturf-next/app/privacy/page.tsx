@@ -405,8 +405,9 @@ const SECTIONS: LegalSection[] = [
           one-way hash of the network address is kept for 2 days to stop misuse.
         </li>
         <li>
-          A live tournament stays until you take it down, or ask us to; then its page says only that it was
-          taken down. The one-way hash of the network address is kept for 2 days to stop misuse.
+          A live tournament stays until you take it down from its page; then its page says only that it was
+          taken down, and the record (its names, fixtures and results) is kept unless you ask us to remove it.
+          The one-way hash of the network address is kept for 2 days to stop misuse.
         </li>
         <li>Emails you send us are kept as long as needed to deal with your request.</li>
       </ul>

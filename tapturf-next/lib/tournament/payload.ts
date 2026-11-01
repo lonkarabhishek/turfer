@@ -8,6 +8,7 @@ import {
   MAX_ROUND,
   MAX_SERIES,
   MAX_TEAMS,
+  MAX_WICKETS,
   MIN_TEAMS,
   NAME_MAX,
   SHORT_MAX,
@@ -120,7 +121,7 @@ export function readInnings(x: unknown): Innings | null {
   if (!x || typeof x !== "object") return null;
   const o = x as Record<string, unknown>;
   const runs = int(o.runs, 0, 999);
-  const wickets = int(o.wickets, 0, 10);
+  const wickets = int(o.wickets, 0, MAX_WICKETS);
   const balls = int(o.balls, 0, MAX_OVERS * 6 * 2);
   if (runs === null || wickets === null || balls === null) return null;
   return { runs, wickets, balls, allOut: o.allOut === true };

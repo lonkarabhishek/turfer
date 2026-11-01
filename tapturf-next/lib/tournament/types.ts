@@ -41,6 +41,8 @@ export const SHORT_MAX = 4;
 /** A bilateral series of at most this many matches. */
 export const MAX_SERIES = 9;
 export const MAX_OVERS = 50;
+/** The Live Cricket Scorer takes up to 30 a side, last man stands (lib/cricket/scoring.ts wicketLimit), so a side can lose 30. */
+export const MAX_WICKETS = 30;
 export const MAX_ROUND = 99;
 
 /** Followers poll this often while a match is being scored live and the page is on screen... */

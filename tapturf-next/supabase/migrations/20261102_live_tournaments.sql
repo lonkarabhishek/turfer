@@ -62,6 +62,7 @@
 -- ── Checks the tables use ─────────────────────────────────────────────
 
 -- One side's innings: whole runs, wickets and legal balls within a match, and the all-out tick.
+-- Up to 30 wickets: the Live Cricket Scorer takes up to 30 a side, last man stands.
 create or replace function private.tournament_innings_ok(j jsonb)
 returns boolean
 language sql
@@ -71,7 +72,7 @@ as $$
   select coalesce(
     jsonb_typeof(j) = 'object'
     and jsonb_typeof(j -> 'runs') = 'number' and (j ->> 'runs') ~ '^[0-9]{1,3}$'
-    and jsonb_typeof(j -> 'wickets') = 'number' and (j ->> 'wickets') ~ '^([0-9]|10)$'
+    and jsonb_typeof(j -> 'wickets') = 'number' and (j ->> 'wickets') ~ '^([0-9]|[12][0-9]|30)$'
     and jsonb_typeof(j -> 'balls') = 'number' and (j ->> 'balls') ~ '^[0-9]{1,3}$' and (j ->> 'balls')::integer <= 600
     and coalesce(jsonb_typeof(j -> 'allOut'), 'boolean') = 'boolean',
     false);

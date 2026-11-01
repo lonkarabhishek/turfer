@@ -8,7 +8,7 @@ import { emptyScoreDraft, readScoreDraft, scoreDraftOf, type ScoreDraft } from "
 import type { ResultChoice } from "@/lib/cricket/nrr";
 import { readShort } from "@/lib/tournament/payload";
 import type { Resolved } from "@/lib/tournament/standings";
-import { DEFAULT_TOURNAMENT_POINTS, type Op, type Points, type Settings, type Team, type Tournament, type Venue } from "@/lib/tournament/types";
+import { DEFAULT_TOURNAMENT_POINTS, MAX_WICKETS, type Op, type Points, type Settings, type Team, type Tournament, type Venue } from "@/lib/tournament/types";
 import { VenuePicker } from "./VenuePicker";
 
 /** A change sent; resolves to an error to show, or null when it went through. */
@@ -74,7 +74,7 @@ export function ResultSheet({ t, r, title, send, onClose }: { t: Tournament; r: 
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <NumberInput value={String(d[k("Runs")])} onChange={(v) => setD({ ...d, [k("Runs")]: v })} placeholder="Runs" ariaLabel={`${name} runs`} />
-                <NumberInput value={String(d[k("Wkts")])} onChange={(v) => setD({ ...d, [k("Wkts")]: v })} placeholder="Wkts" max={10} ariaLabel={`${name} wickets`} />
+                <NumberInput value={String(d[k("Wkts")])} onChange={(v) => setD({ ...d, [k("Wkts")]: v })} placeholder="Wkts" max={MAX_WICKETS} ariaLabel={`${name} wickets`} />
                 <OversInput value={String(d[k("Overs")])} onChange={(v) => setD({ ...d, [k("Overs")]: v })} placeholder="Overs" ariaLabel={`${name} overs`} />
               </div>
               {quota ? (

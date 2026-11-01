@@ -101,10 +101,17 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
     const q = new URLSearchParams(window.location.search);
     const isNew = q.get("new") === "1";
     const manage = q.get("manage") === "1";
+    // Now, not in the timer: coming from the Me tab the sign-in is known already, and the effect below reads this in the same commit.
+    if (manage) {
+      try {
+        sessionStorage.setItem(`tt_manage_${code}`, "1");
+      } catch {
+        /* no storage: the Me tab's link asks again */
+      }
+    }
     const timer = setTimeout(() => {
       setSecret(loadStore().list[code]?.secret ?? null);
       if (isNew) setFresh(true);
-      if (manage) sessionStorage.setItem(`tt_manage_${code}`, "1");
     }, 0);
     if (isNew || manage) {
       try {
@@ -195,7 +202,8 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
       const r = await changeTournament(code, secret, op);
       if (!("ok" in r.body)) return errorText(r.body.error, (r.body as { field?: string }).field);
       trackTool("tool_action", TOOL, { action: op.op });
-      if (r.body.view) take(r.body.view);
+      // A view from before this change (a read already under way) is not taken: read it again.
+      if (r.body.view && r.body.view.tournament.rev >= r.body.rev) take(r.body.view);
       else {
         const again = await readTournament(code, r.body.rev);
         if ("tournament" in again.body) take(again.body);
