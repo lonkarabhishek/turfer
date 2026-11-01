@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Gamepad2, Bell, User, LogOut, Inbox, Loader2, Camera, MapPin, Store, ChevronRight, AtSign } from "lucide-react";
+import { Gamepad2, Bell, User, LogOut, Inbox, Loader2, Camera, MapPin, Store, ChevronRight, AtSign, Award } from "lucide-react";
 import { useAuth, type SignedInWith } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { NameWithTick } from "@/components/account/VerifiedTick";
@@ -16,6 +16,8 @@ import { NotificationsList } from "./NotificationsList";
 import { ProfileSection } from "./ProfileSection";
 import { NotificationsPrompt } from "./NotificationsPrompt";
 import { useMeData } from "./useMeData";
+import { PassportTab } from "@/components/profile/PassportTab";
+import { StreakNudge } from "@/components/profile/StreakNudge";
 import type { AppUser } from "@/types/user";
 
 const TABS = [
@@ -23,6 +25,8 @@ const TABS = [
   { key: "requests", label: "Requests", icon: Inbox },
   { key: "notifications", label: "Alerts", icon: Bell },
   { key: "profile", label: "Profile", icon: User },
+  // On a phone, a wide tile of its own under the four.
+  { key: "passport", label: "Passport", icon: Award },
 ] as const;
 
 type TabKey = typeof TABS[number]["key"];
@@ -134,6 +138,7 @@ function Me({
     requests: requestsLoading ? null : data.pending,
     notifications: data.unread,
     profile: null,
+    passport: null,
   };
 
   const logoutButton = (className: string) => (
@@ -260,6 +265,8 @@ function Me({
                   );
                 })}
               </ul>
+              {/* The weekly streak, from played games (nothing for someone who never played). */}
+              <StreakNudge className="mt-3" />
             </div>
           </section>
 
@@ -271,7 +278,8 @@ function Me({
         <div className="mt-5 lg:mt-0 min-w-0">
           <NotificationsPrompt />
 
-          {/* Four sections: a row of tiles on a phone (each count in view), pills on a wide screen. */}
+          {/* Five sections: a row of four tiles on a phone (each count in view) with Passport wide under
+              them, pills on a wide screen. */}
           <div
             className="grid grid-cols-4 gap-1 p-1 mb-5 rounded-2xl bg-primary-100/70 sm:flex sm:gap-2 sm:p-0 sm:bg-transparent"
             role="tablist"
@@ -279,6 +287,7 @@ function Me({
           >
             {TABS.map(({ key, label, icon: Icon }) => {
               const active = tab === key;
+              const wide = key === "passport";
               const n = counts[key];
               const badge = n ? (n > 99 ? "99+" : String(n)) : null;
               // On the green tile: solid white, so the number reads (accent-700 on white is 7:1).
@@ -293,7 +302,7 @@ function Me({
                   role="tab"
                   aria-selected={active}
                   onClick={() => pick(key)}
-                  className={`relative flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 min-h-[58px] sm:min-h-[44px] px-1 sm:px-4 rounded-xl sm:rounded-full text-[12px] sm:text-[13px] font-bold whitespace-nowrap sm:border-2 transition-all focus-neon ${
+                  className={`relative flex ${wide ? "col-span-4 sm:col-span-1 flex-row gap-2 min-h-[48px] text-[13px]" : "flex-col gap-1 min-h-[58px] text-[12px]"} sm:flex-row items-center justify-center sm:gap-2 sm:min-h-[44px] px-1 sm:px-4 rounded-xl sm:rounded-full sm:text-[13px] font-bold whitespace-nowrap sm:border-2 transition-all focus-neon ${
                     active
                       ? "bg-accent-500 text-white sm:border-accent-500 shadow-neon"
                       : "text-primary-700 hover:bg-white/70 sm:bg-white sm:border-primary-200 sm:hover:border-accent-500"
@@ -340,6 +349,7 @@ function Me({
             )}
             {tab === "notifications" && <NotificationsList userId={user.id} onUnread={data.setUnread} />}
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
+            {tab === "passport" && <PassportTab />}
           </div>
 
           {/* On a phone they come last: nothing above the sections moves when Your turfs arrives, and

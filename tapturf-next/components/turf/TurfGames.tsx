@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { CalendarDays } from "lucide-react";
 import { GameCard } from "@/components/game/GameCard";
 import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
+import { PlayedHereNote } from "@/components/profile/PlayedHere";
 import { filterNonExpiredGames, sortGamesByDateTime } from "@/lib/utils/game";
 import type { Game } from "@/types/game";
 
@@ -54,6 +55,8 @@ export function TurfGames({
       <p className="text-[14px] text-primary-500 mb-5">
         Join a game that&apos;s already on, or host your own.
       </p>
+      {/* The signed-in player's own last game here (after the page loads; never in the HTML). */}
+      <PlayedHereNote turfId={turfId} />
 
       {games.length === 0 ? (
         <div className="rounded-2xl bg-primary-50 px-5 py-6 text-center mb-4">

@@ -6,10 +6,16 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { OwnerVerifyNote } from "@/components/account/OwnerVerifyNote";
+import { MedalTile, PassportNumbers, ReviewedList } from "@/components/profile/PassportParts";
+import { loadPublicPassport } from "@/lib/profile/publicProfile";
 
 // A TapTurf player's public profile: username, name, photo, join month
 // and the verified tick (a number and an email both confirmed; never
-// which one is missing), nothing else. Tags on live scorecards link here. Only for people
+// which one is missing), then what they can flaunt: how many games,
+// turfs, cities and sports, their best weekly streak, the medals they
+// earned and the turfs they reviewed (lib/profile/passport.ts
+// publicPassport: counts only, never where or when they played, or who
+// with). Tags on live scorecards link here. Only for people
 // who left "Let others find and tag me" on; an old username 308s to the
 // current one. Kept out of search engines and the sitemap.
 
@@ -75,6 +81,9 @@ export default async function PlayerProfilePage({ params }: Props) {
   const { u, name, photo, since, verified } = found.profile;
   if (raw !== u) permanentRedirect(`/u/${u}`);
   const month = sinceText(since);
+  const passport = await loadPublicPassport(u);
+  const counts = passport?.numbers;
+  const played = !!counts && (counts.games > 0 || counts.reviews > 0);
 
   return (
     <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
@@ -88,6 +97,57 @@ export default async function PlayerProfilePage({ params }: Props) {
         {verified && <p className="mt-1 text-[13px] font-medium text-sky-700">Verified · Phone and email confirmed</p>}
         {month && <p className="mt-3 text-[13px] text-primary-500">On TapTurf since {month}</p>}
       </div>
+
+      {passport && played && counts && (
+        <>
+          <section aria-labelledby="u-numbers" className="mt-8">
+            <h2 id="u-numbers" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
+              On TapTurf
+            </h2>
+            <PassportNumbers
+              cols={3}
+              label={`${name}'s numbers`}
+              items={[
+                { label: counts.games === 1 ? "Game" : "Games", value: counts.games },
+                { label: counts.turfs === 1 ? "Turf" : "Turfs", value: counts.turfs },
+                { label: counts.cities === 1 ? "City" : "Cities", value: counts.cities },
+                { label: counts.sports === 1 ? "Sport" : "Sports", value: counts.sports },
+                { label: "Hosted", value: counts.hosted },
+                { label: counts.reviews === 1 ? "Review" : "Reviews", value: counts.reviews },
+              ]}
+            />
+            {counts.bestStreak >= 2 && (
+              <p className="mt-3 text-center text-[14px] text-primary-600">
+                Best streak: <span className="font-semibold text-primary-900">{counts.bestStreak} weeks</span> in a row
+              </p>
+            )}
+          </section>
+
+          {passport.medals.length > 0 && (
+            <section aria-labelledby="u-medals" className="mt-8">
+              <h2 id="u-medals" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
+                Medals
+              </h2>
+              <ul className="grid grid-cols-3 gap-2">
+                {passport.medals.map((m) => (
+                  <li key={m.id}>
+                    <MedalTile art={m.art} name={m.name} line={m.blurb} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {passport.reviewed.length > 0 && (
+            <section aria-labelledby="u-reviewed" className="mt-8">
+              <h2 id="u-reviewed" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
+                Turfs {name.split(" ")[0]} reviewed
+              </h2>
+              <ReviewedList items={passport.reviewed} />
+            </section>
+          )}
+        </>
+      )}
 
       <OwnerVerifyNote username={u} />
 

@@ -11,6 +11,7 @@ import type { Turf } from "@/types/turf";
 import { turfPath } from "@/lib/utils/turfPath";
 import { PhotoImg } from "@/components/ui/PhotoImg";
 import { OwnerMark } from "./OwnerMark";
+import { PlayedBadge } from "@/components/profile/PlayedHere";
 
 interface TurfCardProps {
   turf: Turf;
@@ -174,6 +175,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               )}
             </div>
           )}
+          {/* The signed-in player's own "Played here" (after the page loads; never in the HTML). */}
+          <PlayedBadge turfId={turf.id} wide={!trending && !turf.claimed} />
           {rendered.length > 0 ? (
             <div
               className="flex h-full w-full"

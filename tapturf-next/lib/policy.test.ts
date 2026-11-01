@@ -13,18 +13,20 @@ test("policy notice: a new id, so people who dismissed the last one see it", () 
 });
 
 test("policy notice: says what changed and links to where the policy says it", () => {
-  assert.match(PRIVACY_NOTICE.text, /profile photo or pick a sports avatar/);
-  assert.match(PRIVACY_NOTICE.text, /Your picture is public/, "who sees it");
-  assert.match(PRIVACY_NOTICE.text, /checked automatically/);
-  assert.match(PRIVACY_NOTICE.text, /remove yours any time/, "and how to take it off");
+  assert.match(PRIVACY_NOTICE.text, /public profile now shows your TapTurf numbers/);
+  assert.match(PRIVACY_NOTICE.text, /never where or when you played/, "only counts");
+  assert.match(PRIVACY_NOTICE.text, /only you see it/, "the played-with list is private");
+  assert.match(PRIVACY_NOTICE.text, /off until you do/, "and the WhatsApp switch is off until turned on");
   assert.ok(privacyPage.includes(`id="${PRIVACY_NOTICE.anchor}"`), `the policy has #${PRIVACY_NOTICE.anchor}`);
-  // The paragraph it links to says the same, and how to remove it.
+  // The paragraph it links to says the same, and how to turn it off.
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   const paragraph = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
-  assert.match(paragraph, /Your picture is public/);
-  assert.match(paragraph, /checked automatically/);
-  assert.match(paragraph, /choose Remove/);
-  // The notice it replaced still reaches whoever missed it, with the one before that.
+  assert.match(paragraph, /Only you see your list/);
+  assert.match(paragraph, /It is off until you do/);
+  assert.match(paragraph, /Turn it off at any time/);
+  assert.match(privacyPage.replace(/\s+/g, " "), /Only counts: never which turfs you played at, when, or with whom/, "the profile's numbers, in the policy");
+  // The notices it replaced still reach whoever missed them.
+  assert.match(PRIVACY_NOTICE.earlier.text, /profile photo or pick a sports avatar/);
   assert.match(PRIVACY_NOTICE.earlier.text, /Managed by @your-username/);
   assert.match(PRIVACY_NOTICE.earlier.text, /quick game report/);
 });

@@ -1,0 +1,194 @@
+import { dayNumber, istDay, playedGames, type GameRow, type PlayedGame, type ReviewRow, type TurfRef } from "./history";
+import { medalsOf, type Medal, type MedalArt } from "./medals";
+import { streakOf, streakReachedOn, type Streak } from "./streak";
+
+/**
+ * A player's passport, worked out from their history: the numbers they
+ * can flaunt, a stamp for each turf, city and sport they played, the
+ * medals, the turfs they reviewed and the ones they played at but have not
+ * reviewed yet. The Me tab shows all of it (to its owner only); the public
+ * profile shows publicPassport: counts, earned medals and reviewed turfs,
+ * never where or when they played. Pure. Relative imports only
+ * (npm run test:profile).
+ */
+
+export type PassportNumbers = {
+  /** Games played (hosted ones included). */
+  games: number;
+  hosted: number;
+  turfs: number;
+  cities: number;
+  sports: number;
+  /** Turfs they reviewed (live player reviews). */
+  reviews: number;
+  /** When the account was made (ISO), as the profile has it. */
+  since: string | null;
+};
+
+export type TurfStamp = {
+  turfId: string;
+  slug: string | null;
+  name: string;
+  city: string | null;
+  cityLabel: string | null;
+  /** India's dates of the first and the latest game there. */
+  first: string;
+  last: string;
+  games: number;
+};
+
+/** A city or a sport: key (the city id, or the sport in lower case), what to call it, the first game's date and how many. */
+export type PlaceStamp = { key: string; label: string; first: string; games: number };
+
+export type ReviewedTurf = { turfId: string; slug: string | null; name: string; cityLabel: string | null; rating: number; day: string | null };
+
+export type Passport = {
+  numbers: PassportNumbers;
+  streak: Streak;
+  medals: Medal[];
+  stamps: { turfs: TurfStamp[]; cities: PlaceStamp[]; sports: PlaceStamp[] };
+  /** Newest first. */
+  reviewed: ReviewedTurf[];
+  /** Played there, no review yet: the latest game first. */
+  reviewMore: TurfStamp[];
+};
+
+export type PassportInput = {
+  userId: string;
+  /** The games they were in: a participant, or the host. */
+  games: readonly GameRow[];
+  turfs: readonly TurfRef[];
+  reviews: readonly ReviewRow[];
+  since: string | null;
+  now: number;
+};
+
+const sportKey = (s: string) => s.trim().toLowerCase();
+
+/** Each review once per turf (the newest), newest first. */
+function reviewsByTurf(reviews: readonly ReviewRow[]): ReviewRow[] {
+  const at = (r: ReviewRow) => Date.parse(r.created_at ?? "") || 0;
+  const newest = new Map<string, ReviewRow>();
+  for (const r of reviews) {
+    const had = newest.get(r.turf_id);
+    if (!had || at(r) > at(had)) newest.set(r.turf_id, r);
+  }
+  return [...newest.values()].sort((a, b) => at(b) - at(a) || (a.turf_id < b.turf_id ? -1 : 1));
+}
+
+export function buildPassport(input: PassportInput): Passport {
+  const played = playedGames(input.userId, input.games, input.now);
+  const turfById = new Map(input.turfs.map((t) => [t.id, t]));
+
+  const turfStamps = new Map<string, TurfStamp>();
+  const cities = new Map<string, PlaceStamp>();
+  const sports = new Map<string, PlaceStamp>();
+  const days = { games: [] as string[], hosted: [] as string[], turfs: [] as string[], cities: [] as string[], sports: [] as string[], reviews: [] as string[] };
+  const turfIds = new Set<string>();
+
+  for (const g of played) {
+    days.games.push(g.day);
+    if (g.hosted) days.hosted.push(g.day);
+    if (g.turfId && !turfIds.has(g.turfId)) {
+      turfIds.add(g.turfId);
+      days.turfs.push(g.day);
+    }
+    const turf = g.turfId ? turfById.get(g.turfId) : undefined;
+    if (turf) {
+      const s = turfStamps.get(turf.id);
+      if (s) {
+        s.games++;
+        s.last = g.day;
+      } else {
+        turfStamps.set(turf.id, { turfId: turf.id, slug: turf.slug, name: turf.name, city: turf.city, cityLabel: turf.cityLabel, first: g.day, last: g.day, games: 1 });
+      }
+      if (turf.city) {
+        const c = cities.get(turf.city);
+        if (c) c.games++;
+        else {
+          cities.set(turf.city, { key: turf.city, label: turf.cityLabel ?? turf.city, first: g.day, games: 1 });
+          days.cities.push(g.day);
+        }
+      }
+    }
+    if (g.sport) {
+      const k = sportKey(g.sport);
+      const s = sports.get(k);
+      if (s) s.games++;
+      else {
+        sports.set(k, { key: k, label: g.sport, first: g.day, games: 1 });
+        days.sports.push(g.day);
+      }
+    }
+  }
+
+  const reviewRows = reviewsByTurf(input.reviews);
+  days.reviews = reviewRows
+    .map((r) => (r.created_at ? istDay(Date.parse(r.created_at)) : null))
+    .filter((d): d is string => !!d && !Number.isNaN(dayNumber(d)))
+    .sort();
+  const reviewed: ReviewedTurf[] = [];
+  for (const r of reviewRows) {
+    const t = turfById.get(r.turf_id);
+    if (!t) continue;
+    const ms = Date.parse(r.created_at ?? "");
+    reviewed.push({ turfId: t.id, slug: t.slug, name: t.name, cityLabel: t.cityLabel, rating: r.rating, day: Number.isNaN(ms) ? null : istDay(ms) });
+  }
+  const reviewedIds = new Set(reviewRows.map((r) => r.turf_id));
+
+  const streak = streakOf(played, input.now);
+  const medals = medalsOf({
+    games: { have: played.length, days: days.games },
+    hosted: { have: days.hosted.length, days: days.hosted },
+    turfs: { have: turfIds.size, days: days.turfs },
+    cities: { have: cities.size, days: days.cities },
+    sports: { have: sports.size, days: days.sports },
+    reviews: { have: reviewRows.length, days: days.reviews },
+    streak: { best: streak.best, current: streak.current, reachedOn: (goal) => streakReachedOn(played, goal) },
+  });
+
+  const stampList = [...turfStamps.values()];
+  return {
+    numbers: {
+      games: played.length,
+      hosted: days.hosted.length,
+      turfs: turfIds.size,
+      cities: cities.size,
+      sports: sports.size,
+      reviews: reviewRows.length,
+      since: input.since,
+    },
+    streak,
+    medals,
+    stamps: { turfs: stampList, cities: [...cities.values()], sports: [...sports.values()] },
+    reviewed,
+    reviewMore: stampList.filter((s) => !reviewedIds.has(s.turfId)).sort((a, b) => dayNumber(b.last) - dayNumber(a.last) || (a.name < b.name ? -1 : 1)),
+  };
+}
+
+/** What the public profile may show: counts, the best streak, earned medals and reviewed turfs. No dates and no places played. */
+export type PublicPassport = {
+  numbers: Omit<PassportNumbers, "since"> & { bestStreak: number };
+  medals: { id: string; name: string; blurb: string; art: MedalArt }[];
+  reviewed: { turfId: string; slug: string | null; name: string; cityLabel: string | null; rating: number }[];
+};
+
+export function publicPassport(p: Passport): PublicPassport {
+  const { games, hosted, turfs, cities, sports, reviews } = p.numbers;
+  return {
+    numbers: { games, hosted, turfs, cities, sports, reviews, bestStreak: p.streak.best },
+    medals: p.medals.filter((m) => m.earned).map(({ id, name, blurb, art }) => ({ id, name, blurb, art })),
+    reviewed: p.reviewed.map(({ turfId, slug, name, cityLabel, rating }) => ({ turfId, slug, name, cityLabel, rating })),
+  };
+}
+
+/** The day of the latest game they played at each turf (India's date). */
+export function latestPlayedByTurf(played: readonly PlayedGame[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const g of played) {
+    if (!g.turfId) continue;
+    const had = out[g.turfId];
+    if (!had || dayNumber(g.day) > dayNumber(had)) out[g.turfId] = g.day;
+  }
+  return out;
+}

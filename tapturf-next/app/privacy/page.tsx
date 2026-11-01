@@ -124,12 +124,28 @@ const SECTIONS: LegalSection[] = [
         <p id="usernames" className="scroll-mt-24">
           <strong>Your username and public profile.</strong> You can pick a TapTurf username. Your username,
           name and photo then show on your public profile page, tapturf.in/u/your-username, with the month you
-          joined. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
+          joined, and, worked out from your TapTurf games and reviews: how many games you played and hosted,
+          at how many turfs, in how many cities and sports, your longest run of weeks in a row with a game,
+          the medals those earned and the turfs you reviewed (with your stars). Only counts: never which turfs
+          you played at, when, or with whom. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
           matches can find you by username or name and tag you as a player, and the tag links to your profile.
           If you run a turf on myTapturf, its page also says &ldquo;Managed by @your-username&rdquo; (see
           above). Turning it off hides your profile page and that line, and takes you out of search, within
           about a minute. New views of a live score stop showing your tag within about a minute too; a live
           score page someone already has open drops it at its next score update or when it is reloaded.
+        </p>
+        <p id="played-with" className="scroll-mt-24">
+          <strong>Played with, and your WhatsApp number.</strong> Your Me tab lists the people who were in the
+          same TapTurf games as you, once a game has happened (not one that is cancelled or still to come), with
+          their name, photo, how many games you played together and when you last did, and a link to their
+          public profile if they have one. Only you see your list; it is never public. Your phone number is
+          not shown there unless you turn on &ldquo;Let players I&rsquo;ve played with see my WhatsApp&rdquo;
+          on the Me tab. It is off until you do, and works only for a number you confirmed with a one-time
+          code. While it is on, people who played a TapTurf game with you see that number, with a WhatsApp
+          button, in their own Played with list, and nobody else does: not on your profile, in search or
+          anywhere else. Turn it off at any time and it is gone from their lists straight away. Your Me tab
+          and turf pages also show you, and only you, where and when you played (&ldquo;You played here
+          on&rdquo; a date), worked out from your own games.
         </p>
         <p id="live-links" className="scroll-mt-24">
           <strong>Live score links.</strong> The free Live Cricket Scorer and Live Scoreboard keep your match
@@ -203,7 +219,9 @@ const SECTIONS: LegalSection[] = [
           <strong>Other players.</strong> When you host a game, your name and profile photo appear on that
           game&rsquo;s page, and so does the WhatsApp number you give for that game, if any, so players can
           coordinate with you. Leave the number out if you would rather not share it. When you ask to join a game, the host sees
-          your name, photo and any note you wrote. Reviews show your name.
+          your name, photo and any note you wrote. Reviews show your name. People you played a game with see
+          your name and photo in their Played with list, and your WhatsApp number only if you turn that on
+          (see &ldquo;Played with, and your WhatsApp number&rdquo; above).
         </p>
         <p>
           <strong>Live scores.</strong> Anyone with a live link can see that score, names included.
@@ -213,8 +231,10 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are
-          public on your profile page and in player search, unless you turn off &ldquo;Let others find and tag
-          me&rdquo;. Your phone number and email are never shown there.
+          public on your profile page and in player search, and your profile also shows your game and review
+          counts, medals and reviewed turfs (see &ldquo;Your username and public profile&rdquo; above), unless
+          you turn off &ldquo;Let others find and tag me&rdquo;. Your phone number and email are never shown
+          there.
         </p>
         <p id="tick" className="scroll-mt-24">
           <strong>The verified tick.</strong> When you have confirmed both your phone number (with a one-time
