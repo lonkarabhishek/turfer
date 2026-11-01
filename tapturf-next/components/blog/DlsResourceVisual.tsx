@@ -21,7 +21,7 @@ export function DlsResourceVisual({
   const [wickets, setWickets] = useState(() => clampInt(defaults?.wicketsInHand, 0, 10, 10));
 
   const fill = lessonFill(overs, wickets);
-  const status = `${overs} ${overs === 1 ? "over" : "overs"} still to bat and ${wickets} ${wickets === 1 ? "wicket" : "wickets"} in hand: ${shareLabel(fill)}.`;
+  const status = `${overs} ${overs === 1 ? "over" : "overs"} still to bat and ${wickets} ${wickets === 1 ? "wicket" : "wickets"} in hand. On this 50-over lesson picture, ${shareLabel(fill)}. This is not how a T20 is scored on the official scale.`;
 
   return (
     <div className="my-8 rounded-3xl border border-primary-200 bg-gradient-to-br from-primary-50 via-white to-accent-50/40 p-5 sm:p-6 not-prose">
@@ -37,7 +37,7 @@ export function DlsResourceVisual({
           min={0}
           max={50}
           onChange={setOvers}
-          hint="0 to 50. A full one-day innings is 50. A T20 is 20, so twenty overs alone does not fill the bar."
+          hint="0 to 50 on this lesson picture only. The paragraph above says a T20 starts below 100% on the 50-over ICC scale, and the exact percentages are not printed on this page."
         />
         <Slider
           label="Wickets in hand"
@@ -50,7 +50,7 @@ export function DlsResourceVisual({
       </div>
 
       <div className="rounded-2xl bg-white border border-primary-100 p-4 sm:p-5">
-        <p className="text-[11px] font-semibold text-primary-500 mb-2">Resources left, as a picture</p>
+        <p className="text-[11px] font-semibold text-primary-500 mb-2">50-over lesson picture</p>
         <div className="h-6 rounded-full bg-primary-100 overflow-hidden" aria-hidden="true">
           <div
             className="h-full rounded-full bg-accent-500 motion-reduce:transition-none transition-[width] duration-200 ease-out"
@@ -64,7 +64,7 @@ export function DlsResourceVisual({
 
       <p className="mt-4 rounded-2xl border border-accent-200 bg-white px-4 py-3 text-[13px] leading-relaxed text-primary-800">
         <span className="font-semibold text-accent-700">Lesson only. </span>
-        This bar is a picture of the idea. It is not the DLS table, not an official resource percentage, and it does not give a target.
+        This bar is a 50-over lesson picture. It is not the DLS table, not an official resource percentage, not how a T20 is scored on the official scale, and it does not give a target.
       </p>
     </div>
   );
@@ -76,12 +76,12 @@ function lessonFill(overs: number, wickets: number): number {
 }
 
 function shareLabel(fill: number): string {
-  if (fill <= 0) return "nothing of the innings is left";
-  if (fill >= 0.97) return "a full 50-over share is left";
-  if (fill >= 0.7) return "most of a 50-over innings is left";
-  if (fill >= 0.4) return "a solid share of a 50-over innings is left";
-  if (fill >= 0.18) return "a smaller share of a 50-over innings is left";
-  return "very little of a 50-over innings is left";
+  if (fill <= 0) return "the lesson bar is empty";
+  if (fill >= 0.97) return "the lesson bar is full";
+  if (fill >= 0.7) return "the lesson bar is mostly full";
+  if (fill >= 0.4) return "the lesson bar is partly filled";
+  if (fill >= 0.18) return "the lesson bar is low";
+  return "the lesson bar is almost empty";
 }
 
 function clampInt(n: number | undefined, min: number, max: number, fallback: number): number {

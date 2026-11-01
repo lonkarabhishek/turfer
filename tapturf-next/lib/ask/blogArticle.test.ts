@@ -222,6 +222,8 @@ test("dls resource block is a lesson bar and states no target", () => {
   const line = a.prompt.split("\n").find((l) => l.startsWith("Resource picture:"));
   assert.ok(line, a.prompt);
   assert.match(line, /20 overs still to bat and 10 wickets in hand/);
+  assert.match(line, /50-over lesson picture/);
+  assert.match(line, /not the official scale for a T20/);
   assert.match(line, /not a DLS resource percentage/);
   assert.match(line, /does not calculate a target/);
   assert.doesNotMatch(line, /target is \d/);

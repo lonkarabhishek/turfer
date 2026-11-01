@@ -13,6 +13,8 @@ export const post: Post = {
   title: "What Is the DLS Method in Cricket?",
   description:
     "The DLS target on TV resets a rain-hit chase using overs left and wickets in hand. A plain guide, one made-up example, and why turf games usually skip it.",
+  seoDescription:
+    "What is the DLS method? It sets the DLS target after a stoppage from overs left and wickets in hand. A plain guide for TV fans.",
   hook: "Rain stops play and the chase changes. Here is what the DLS target on TV is actually using.",
   category: "Guides",
   city: null,
@@ -194,7 +196,7 @@ export const post: Post = {
         },
         {
           label: "Steven E. Stern, The Duckworth-Lewis-Stern method: extending the Duckworth-Lewis methodology to deal with modern scoring rates, Journal of the Operational Research Society, 2016",
-          url: "https://doi.org/10.1057/jors.2016.30",
+          url: "https://link.springer.com/article/10.1057/jors.2016.30",
         },
         {
           label: "Cricbuzz, Introducing Duckworth-Lewis-Stern method (2015 World Cup coverage)",
