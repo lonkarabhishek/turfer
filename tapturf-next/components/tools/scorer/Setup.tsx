@@ -89,10 +89,21 @@ function SwitchKnob({ on }: { on: boolean }) {
  * left out when the site has no live links; keepFrom names the previous
  * match when its link can move to this one.
  */
-export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match, live: SetupLive) => void; initialVenue?: string; live?: { on: boolean; keepFrom: string | null; loginFirst?: boolean } }) {
-  const [teamA, setTeamA] = useState("Team A");
-  const [teamB, setTeamB] = useState("Team B");
-  const [overs, setOvers] = useState(6);
+export function Setup({
+  onStart,
+  initialVenue = "",
+  initial,
+  live,
+}: {
+  onStart: (m: Match, live: SetupLive) => void;
+  initialVenue?: string;
+  /** A live tournament's fixture ("Score live"): its teams, overs and title filled in. */
+  initial?: { teamA: string; teamB: string; overs: number; title: string };
+  live?: { on: boolean; keepFrom: string | null; loginFirst?: boolean };
+}) {
+  const [teamA, setTeamA] = useState(initial?.teamA ?? "Team A");
+  const [teamB, setTeamB] = useState(initial?.teamB ?? "Team B");
+  const [overs, setOvers] = useState(initial?.overs ?? 6);
   const [players, setPlayers] = useState(8);
   const [first, setFirst] = useState<Side>("a");
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
@@ -100,7 +111,7 @@ export function Setup({ onStart, initialVenue = "", live }: { onStart: (m: Match
   const [showMore, setShowMore] = useState(false);
   const [namesA, setNamesA] = useState("");
   const [namesB, setNamesB] = useState("");
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initial?.title ?? "");
   const [venue, setVenue] = useState(initialVenue);
   // Until they choose, follow the page: on from a game reminder, or when the last match's link is going.
   const [liveChoice, setLiveChoice] = useState<boolean | null>(null);

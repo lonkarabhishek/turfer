@@ -211,7 +211,7 @@ export function isCity(value: string | null | undefined): value is CityId {
 export const RESERVED_CITY_SLUGS: readonly string[] = [
   "all", "unknown", "none", "pick", "geo", "reset",
   "admin", "api", "blog", "dashboard", "game", "games", "images", "live", "login", "my",
-  "privacy", "sport", "terms", "tools", "turf", "turf-near-me", "turfs",
+  "privacy", "sport", "terms", "tools", "tournament", "turf", "turf-near-me", "turfs",
 ];
 /** Source of a regex for RESERVED_CITY_SLUGS, for the inline ES5 scripts. Only [a-z-] inside. */
 export const CITY_RESERVED_RE = `^(?:${RESERVED_CITY_SLUGS.join("|")})$`;

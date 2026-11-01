@@ -6,6 +6,9 @@ import { makeFixtures } from "./fixtures";
 import { formatLabel, resolve } from "./standings";
 import type { Fixture, LiveNow, LiveResult, ManualResult, Settings, Team, Tournament } from "./types";
 
+/** A table row without its team id, as the offline tool's table has it. */
+const noId = (row: { id: number }) => Object.fromEntries(Object.entries(row).filter(([k]) => k !== "id"));
+
 const settings = (over: Partial<Settings> = {}): Settings => ({
   format: "league",
   legs: 1,
@@ -41,7 +44,7 @@ test("a table straight from the shared maths: same rows as the offline tool's", 
     r.fixtures.filter((x) => x.match).map((x) => x.match!),
     { ...DEFAULT_POINTS, oversPerSide: 6 },
   );
-  assert.deepEqual(r.table.map(({ id: _id, ...rest }) => rest), offline);
+  assert.deepEqual(r.table.map(noId), offline);
   assert.deepEqual(r.table.map((x) => x.team), NAMES, "lower ids won every match");
   assert.deepEqual(r.table.map((x) => x.points), [8, 6, 4, 2, 0]);
   assert.equal(r.leagueDone, true);

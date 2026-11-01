@@ -7,6 +7,7 @@ import { computeStandings, decideResult, describeResult, seriesStatus, DEFAULT_P
 import { emptyScoreDraft, readScoreDraft, scoreDraftOf, type ScoreDraft } from "@/lib/cricket/resultForm";
 import { trackTool } from "@/lib/analytics/tools";
 import { ToolCta } from "./ToolCta";
+import { GoLive, StartLiveCta } from "@/components/tournament/GoLive";
 import { Field, NumberInput, OversInput, PrimaryButton, SecondaryButton, Segmented, TextInput } from "./inputs";
 
 const TOOL = "tournament_scorer";
@@ -324,6 +325,9 @@ export function TournamentScorer({ cta }: { cta: { label: string; href: string }
         </ul>
       )}
 
+      {/* Live tournaments: this one as a page anyone can follow (only once the server can take them). */}
+      <GoLive local={t} tool={TOOL} />
+
       <ToolCta tool={TOOL} label={cta.label} href={cta.href} />
     </div>
   );
@@ -422,6 +426,7 @@ function Setup({ onStart }: { onStart: (t: Tournament) => void }) {
         <Trophy className="w-4 h-4" aria-hidden /> Start scoring
       </PrimaryButton>
       <p className="mt-2 text-[12px] text-primary-400 text-center">Saved in this browser only. No account needed.</p>
+      <StartLiveCta tool={TOOL} className="mt-4" />
     </div>
   );
 }

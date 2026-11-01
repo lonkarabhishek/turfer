@@ -6,6 +6,9 @@ import { fromLocal, type LocalTournament } from "./local";
 import { resolve } from "./standings";
 import type { Fixture } from "./types";
 
+/** A table row without its team id, as the offline tool's table has it. */
+const noId = (row: { id: number }) => Object.fromEntries(Object.entries(row).filter(([k]) => k !== "id"));
+
 const inn = (runs: number, balls = 36, wickets = 4, allOut = false) => ({ runs, wickets, balls, allOut });
 let n = 0;
 const m = (teamA: string, teamB: string, a: ReturnType<typeof inn>, b: ReturnType<typeof inn>, result: MatchInput["result"] = "auto", battedFirst: "a" | "b" = "a") => ({ id: String(++n), teamA, teamB, a, b, result, battedFirst, at: n });
@@ -38,7 +41,7 @@ test("a round robin goes live with the same table, NRR and all", () => {
   assert.equal(body.fixtures!.length, 6, "every pairing of four teams");
   assert.equal(body.fixtures!.filter((f) => f.result).length, 5);
   const offline = computeStandings(t.teams, t.matches, t.points);
-  const online = resolve(lt).table.map(({ id: _id, ...rest }) => rest);
+  const online = resolve(lt).table.map(noId);
   assert.deepEqual(online, offline, "the same rows, to the last ball");
 });
 
@@ -47,7 +50,7 @@ test("a pairing played twice: home and away, the extra on a second leg", () => {
   const { body, t: lt } = live(t);
   assert.equal(body.settings.legs, 2);
   assert.equal(body.fixtures!.length, 7, "6 for two legs, and the third A v B");
-  assert.deepEqual(resolve(lt).table.map(({ id: _id, ...rest }) => rest), computeStandings(t.teams, t.matches, t.points));
+  assert.deepEqual(resolve(lt).table.map(noId), computeStandings(t.teams, t.matches, t.points));
   // Ids and order run 1 up.
   assert.deepEqual(body.fixtures!.map((f) => f.id), [1, 2, 3, 4, 5, 6, 7]);
   assert.deepEqual(body.fixtures!.map((f) => f.seq), [0, 1, 2, 3, 4, 5, 6]);
@@ -68,7 +71,7 @@ test("no overs a side stays none, so NRR uses the overs faced", () => {
   const t = local({ points: { ...DEFAULT_POINTS, oversPerSide: null }, matches: [m("Titans", "Strikers", inn(40, 24, 10, true), inn(41, 18))] });
   const { body, t: lt } = live(t);
   assert.equal(body.settings.overs, null);
-  assert.deepEqual(resolve(lt).table.map(({ id: _id, ...rest }) => rest), computeStandings(t.teams, t.matches, t.points));
+  assert.deepEqual(resolve(lt).table.map(noId), computeStandings(t.teams, t.matches, t.points));
 });
 
 test("a nameless tournament gets a name; too few teams is refused", () => {

@@ -39,6 +39,8 @@ export type Resolved = {
   /** What an empty place says: "1st", "Winner SF1". */
   homeLabel: string;
   awayLabel: string;
+  /** A playoff's places ("1st", "4th"; "SF1", "SF2" in a final after semis), shown beside its teams; null in the league. */
+  seeds: [string, string] | null;
   state: FixtureState;
   source: "manual" | "live" | null;
   /** The result in the table's terms, home as A; null until there is one. */
@@ -94,10 +96,10 @@ export function resolve(t: Pick<Tournament, "settings" | "teams" | "fixtures">, 
   const cfg = { ...t.settings.points, oversPerSide: t.settings.overs };
   const ordered = [...t.fixtures].sort((a, b) => a.seq - b.seq || a.id - b.id);
 
-  const play = (f: Fixture, home: number | null, away: number | null, filled: boolean, labels: [string, string]): Resolved => {
+  const play = (f: Fixture, home: number | null, away: number | null, filled: boolean, labels: [string, string], seeds: [string, string] | null = null): Resolved => {
     const homeName = name(home);
     const awayName = name(away);
-    const base = { fixture: f, home, away, filled, homeName, awayName, homeLabel: homeName ?? labels[0], awayLabel: awayName ?? labels[1], live: live[String(f.id)] ?? null };
+    const base = { fixture: f, home, away, filled, homeName, awayName, homeLabel: homeName ?? labels[0], awayLabel: awayName ?? labels[1], seeds, live: live[String(f.id)] ?? null };
     if (homeName === null || awayName === null || home === away) return { ...base, state: "scheduled", source: null, match: null, outcome: null, text: null, winner: null };
     const got = resultOf(f, homeName, awayName, base.live);
     if (!got.r) return { ...base, state: got.state, source: got.source, match: null, outcome: null, text: null, winner: null };
@@ -141,7 +143,7 @@ export function resolve(t: Pick<Tournament, "settings" | "teams" | "fixtures">, 
       if (home === null && seeds[0] !== null) [home, filled] = [seeds[0], true];
       if (away === null && seeds[1] !== null) [away, filled] = [seeds[1], true];
     }
-    const r = play(f, home, away, filled, labels);
+    const r = play(f, home, away, filled, labels, slot === "f" && hasSemis ? ["SF1", "SF2"] : slot ? SLOT_LABELS[slot] : null);
     if (slot && !slots.has(slot)) slots.set(slot, r);
     playoffs.push(r);
   }

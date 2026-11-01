@@ -16,6 +16,7 @@ import { NotificationsList } from "./NotificationsList";
 import { ProfileSection } from "./ProfileSection";
 import { NotificationsPrompt } from "./NotificationsPrompt";
 import { useMeData } from "./useMeData";
+import { MyTournaments } from "@/components/tournament/MyTournaments";
 import type { AppUser } from "@/types/user";
 
 const TABS = [
@@ -340,6 +341,9 @@ function Me({
             {tab === "notifications" && <NotificationsList userId={user.id} onUnread={data.setUnread} />}
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
           </div>
+
+          {/* Live tournaments this account (or this phone) runs; nothing when there are none. */}
+          <MyTournaments className="mt-8" />
 
           {/* On a phone they come last: nothing above the sections moves when Your turfs arrives, and
               the bottom space lets Log out scroll clear of the Ask button. */}

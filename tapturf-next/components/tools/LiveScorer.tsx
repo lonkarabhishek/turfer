@@ -20,6 +20,10 @@ import { viewsLabel } from "@/lib/live/views";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { askLiveLogin, liveReturn, takeLiveAsk } from "./scorer/liveLogin";
 import { liveToken } from "./scorer/liveToken";
+import Link from "next/link";
+import { Trophy } from "lucide-react";
+import { bindScoreLink, takeTournamentAsk, useScoreLink } from "@/components/tournament/useScoreLink";
+import type { ScoreHandoff } from "@/lib/tournament/store";
 
 /** A live match touched within this long is reopened straight into scoring on reload. */
 const RESUME_MS = 12 * 60 * 60 * 1000;
@@ -54,6 +58,8 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   const [now, setNow] = useState(0);
   /** From a game reminder (?venue, ?from=game): start a new match there rather than resume. */
   const [prefill, setPrefill] = useState({ venue: "", live: false });
+  /** From a live tournament's "Score live" (?tournament, ?fixture): the new match is that fixture's, its teams and overs filled in. */
+  const [fixtureAsk, setFixtureAsk] = useState<ScoreHandoff | null>(null);
   /** The link last copied from the page card: one turned on since shows "Copy link" again. */
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const live = useLiveSync(liveLinks, { load: loadMatch, token: liveToken });
@@ -66,6 +72,8 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   // How many times the follower page was viewed, while the match's link is on: read only, the scorer is never counted.
   const viewLink = liveLinks && match ? live.info(match.id) : null;
   const views = useLiveViews(viewLink?.on && viewLink.link ? viewLink.link.code : null, { count: false, refresh: true });
+  // A tournament fixture this match is scored for, and whether the fixture is linked to its live link yet.
+  const scoreLink = useScoreLink(liveLinks ? (match?.id ?? null) : null, live.codeNow);
   const pushed = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
@@ -91,13 +99,15 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
   useEffect(() => {
     // Read here, not with useSearchParams: the page is static.
     const { venue, fromGame, rest: afterReminder } = readReminder(window.location.search);
-    const { returning, rest } = liveReturn(afterReminder);
-    trackTool("tool_opened", TOOL, fromGame ? { from: "game" } : {});
+    const { returning, rest: afterLogin } = liveReturn(afterReminder);
+    const fixture = takeTournamentAsk(afterLogin, Date.now());
+    const rest = fixture.rest;
+    trackTool("tool_opened", TOOL, fromGame ? { from: "game" } : fixture.ask ? { from: "tournament" } : {});
     // Restore after mount so the server and first client render agree.
     const t = setTimeout(() => {
       // Take the reminder out of the address, so a reload mid-match resumes it. Here, not above, so Strict Mode's
       // second run still reads it; and before openScorer, whose pushState would carry it on.
-      if (venue || fromGame || returning) {
+      if (venue || fromGame || returning || fixture.asked) {
         try {
           window.history.replaceState(window.history.state, "", window.location.pathname + rest + window.location.hash);
         } catch {
@@ -112,6 +122,12 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
         setPrefill({ venue, live: fromGame });
         setNewOpen(true);
       }
+      // A tournament fixture to score: a new match with its teams and overs, the live link on.
+      if (fixture.ask) {
+        setFixtureAsk(fixture.ask);
+        setPrefill({ venue: fixture.ask.venue, live: true });
+        setNewOpen(true);
+      }
       const ask = returning ? takeLiveAsk("cricket", t0) : null;
       loginAsk.current = ask;
       const m = ix.current ? loadMatch(ix.current) : null;
@@ -119,7 +135,7 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
         setMatch(m);
         const meta = ix.list.find((x) => x.id === m.id);
         // A login return opens its own match below.
-        if (!ask && !venue && !fromGame && meta && meta.status === "live" && t0 - meta.updatedAt < RESUME_MS) openScorer();
+        if (!ask && !venue && !fromGame && !fixture.ask && meta && meta.status === "live" && t0 - meta.updatedAt < RESUME_MS) openScorer();
       }
       setHydrated(true);
     }, 0);
@@ -230,6 +246,11 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
 
   const start = (m: Match, opts: SetupLive) => {
     const prev = match;
+    // A tournament fixture's match: the fixture is linked once its live link has a code (useScoreLink).
+    if (fixtureAsk) {
+      bindScoreLink(fixtureAsk, m.id);
+      setFixtureAsk(null);
+    }
     setMatch(m);
     persist(m);
     setNewOpen(false);
@@ -363,6 +384,15 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
               </span>
             </div>
           )}
+          {scoreLink && (
+            <Link href={`/tournament/${scoreLink.code}`} className="mt-2 flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2.5 hover:bg-white/15">
+              <Trophy className="w-4 h-4 text-amber-300 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-bold truncate">{scoreLink.title}</span>
+                <span className="block text-[12px] text-white/70">{scoreLink.linked ? "On the tournament page: the score and result go there" : "Goes on the tournament page once the live link is on"}</span>
+              </span>
+            </Link>
+          )}
           <div className="mt-3 flex flex-col sm:flex-row gap-2">
             <button type="button" onClick={() => resume(match.id)} className="press-tight inline-flex items-center justify-center gap-2 h-14 px-6 rounded-full bg-accent-500 text-white text-[17px] font-bold hover:bg-accent-600">
               <Play className="w-5 h-5" aria-hidden /> {inPlay ? "Continue scoring" : "Open scorecard"}
@@ -383,7 +413,21 @@ export function LiveScorer({ cta, liveLinks = false }: { cta: { label: string; h
       ) : (
         <div>
           {match && <h2 className="text-[18px] font-bold text-primary-900 mb-3">New match</h2>}
-          <Setup onStart={start} initialVenue={prefill.venue} live={liveLinks ? { on: prefill.live, keepFrom, loginFirst: !auth.user } : undefined} />
+          {fixtureAsk && (
+            <p className="mb-3 flex items-start gap-2 rounded-2xl bg-accent-50 border border-accent-500/30 px-3.5 py-2.5 text-[14px] text-accent-900">
+              <Trophy className="w-4 h-4 mt-0.5 shrink-0 text-accent-700" aria-hidden />
+              <span>
+                Scoring <strong>{fixtureAsk.title}</strong>. With the live link on, the tournament page shows the score as you go and the result when it ends.
+              </span>
+            </p>
+          )}
+          <Setup
+            key={fixtureAsk ? `t:${fixtureAsk.code}:${fixtureAsk.fixture}` : "new"}
+            onStart={start}
+            initialVenue={prefill.venue}
+            initial={fixtureAsk ? { teamA: fixtureAsk.teamA, teamB: fixtureAsk.teamB, overs: fixtureAsk.overs, title: fixtureAsk.title } : undefined}
+            live={liveLinks ? { on: prefill.live, keepFrom: fixtureAsk ? null : keepFrom, loginFirst: !auth.user } : undefined}
+          />
         </div>
       )}
 
