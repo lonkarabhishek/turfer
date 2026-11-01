@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, CircleCheck, MapPin, Users } from "lucide-react";
+import { CalendarClock, CircleCheck, MapPin, Repeat as RepeatIcon, Users } from "lucide-react";
 import type { Game } from "@/types/game";
 import { formatGameDay, formatPrice, formatTimeRange, gamePlace, getGameStatus, skillInfo, spotsInfo, turfInfo } from "@/lib/utils/game";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
@@ -130,6 +130,13 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
             <span className={`${chip} bg-amber-50 border border-amber-200 text-amber-900`}>
               <CalendarClock className="w-4 h-4" aria-hidden />
               {turf.title}
+            </span>
+          )}
+          {/* One game of a repeat (its page says how it repeats); each is joined on its own. */}
+          {game.series_id && (
+            <span className={`${chip} bg-primary-50 border border-primary-200 text-primary-900`}>
+              <RepeatIcon className="w-4 h-4 text-accent-700" aria-hidden />
+              Repeats
             </span>
           )}
         </div>

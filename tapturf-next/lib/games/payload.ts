@@ -1,4 +1,5 @@
-import type { CreateGameBody, GameChanges } from "./types";
+import { normalRepeat, repeatProblem, type Repeat } from "./repeat";
+import type { CreateGameBody, CreateSeriesBody, GameChanges } from "./types";
 
 /**
  * The games routes' bodies, checked before the database checks them again
@@ -117,6 +118,21 @@ export function parseChanges(body: Record<string, unknown> | null): { ok: GameCh
       ...(typeof b.description === "string" ? { description: b.description.trim() } : {}),
     },
   };
+}
+
+/**
+ * Starting a repeat: { game, repeat }, nothing else. The game as a create
+ * checks it (its date is the first day), the repeat as the database
+ * checks it (lib/games/repeat.ts repeatProblem), a weekly rule's days in order.
+ */
+export function parseSeries(body: Record<string, unknown> | null, today = istToday()): { ok: CreateSeriesBody } | { bad: string } {
+  if (!body || Object.keys(body).some((k) => k !== "game" && k !== "repeat")) return { bad: "body" };
+  const g = body.game;
+  const game = g && typeof g === "object" && !Array.isArray(g) ? parseCreate(g as Record<string, unknown>, today) : { bad: "body" as const };
+  if ("bad" in game) return game;
+  const problem = repeatProblem(body.repeat, game.ok.date);
+  if (problem) return { bad: problem };
+  return { ok: { game: game.ok, repeat: normalRepeat(body.repeat as Repeat) } };
 }
 
 /** A join request's note: trimmed, empty is none, at most NOTE_MAX characters. */

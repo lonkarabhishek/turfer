@@ -62,6 +62,22 @@ test("share: a game that is over invites nobody and says nothing of spots", () =
   assert.equal(gameShareText(game, { host: false, closed: "cancelled" }).split("\n")[0], "⚽ Football game on TapTurf (cancelled)");
 });
 
+test("share: a game of a repeat says how it repeats, under the date", () => {
+  assert.equal(
+    gameShareText(game, { host: true, repeat: "Every Tue and Thu", url: "https://www.tapturf.in/game/abc" }),
+    [
+      "⚽ Join my football game on TapTurf!",
+      "📍 Dribble Den, Begur, Bangalore",
+      "🗓️ Sat 7 Nov, 7 – 8 PM",
+      "🔁 Every Tue and Thu",
+      "👥 Intermediate · 4 of 12 spots left · ₹150 per player · Turf booked",
+      "https://www.tapturf.in/game/abc",
+    ].join("\n"),
+  );
+  assert.ok(!gameShareText(game, { host: true, repeat: "Every Tue and Thu", closed: "ended" }).includes("🔁"), "not once it is over");
+  assert.ok(!gameShareText(game, { host: true, repeat: null }).includes("🔁"), "nor for a single game");
+});
+
 test("share: every sport the create flow offers has its own icon", () => {
   const lead = (sport: string) => gameShareText({ sport, date: null, start_time: null, end_time: null }, { host: true });
   for (const [sport, icon] of [["Cricket", "🏏"], ["Box Cricket", "🏏"], ["Football", "⚽"], ["5v5 Football", "⚽"], ["Basketball", "🏀"], ["Tennis", "🎾"], ["Pickleball", "🏓"], ["Badminton", "🏸"]]) {

@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/games/payload.test.ts", "lib/games/routes.test.ts"]
+  "files": ["lib/games/payload.test.ts", "lib/games/routes.test.ts", "lib/games/repeat.test.ts"]
 }

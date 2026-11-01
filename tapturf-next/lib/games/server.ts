@@ -5,17 +5,19 @@ import { cleanVenueName } from "../utils/bookingApps";
 import { venueMoveNotice } from "../utils/gameVenue";
 import { anonDb } from "./db";
 import { legacyRpc } from "./legacy";
-import { isUuid, parseChanges, parseCreate, parseNote } from "./payload";
+import { isUuid, parseChanges, parseCreate, parseNote, parseSeries } from "./payload";
 import type { GameChanges } from "./types";
 
-// Games, join requests and notifications, for app/api/games,
-// app/api/game-requests and app/api/notifications (lib/games/types.ts has
-// the API). Every write and every private read goes: the verified caller
-// (lib/account/route.ts caller) -> the account it opens (resolveAccount,
-// never made here) -> a server-key function (20261030_games_lockdown.sql)
-// that takes that account's id and checks the rule itself. The browser
-// never names a user id. Until the database has the functions, the same
-// is done here (lib/games/legacy.ts). Relative imports only (npm run test:games).
+// Games, repeats, join requests and notifications, for app/api/games,
+// app/api/game-series, app/api/game-requests and app/api/notifications
+// (lib/games/types.ts has the API). Every write and every private read
+// goes: the verified caller (lib/account/route.ts caller) -> the account
+// it opens (resolveAccount, never made here) -> a server-key function
+// (20261030_games_lockdown.sql, 20261102_game_series.sql) that takes that
+// account's id and checks the rule itself. The browser never names a user
+// id. Until the database has the game functions, the same is done here
+// (lib/games/legacy.ts); repeats have no such fallback. Relative imports
+// only (npm run test:games).
 
 const allowRead = createAccountLimiter(60);
 const allowWrite = createAccountLimiter(20);
@@ -54,6 +56,7 @@ function refusal(d: Record<string, unknown>): NextResponse {
     case "own":
     case "closed":
     case "full":
+    case "many":
       return accountReply({ reason: d.r }, "not_allowed");
     case "joined":
     case "pending":
@@ -149,6 +152,63 @@ export async function cancelGame(req: Request, gameId: string): Promise<NextResp
   if ("reply" in w) return w.reply;
   if (!isUuid(gameId)) return accountError("bad");
   return run("game_cancel", { p_user_id: w.userId, p_game_id: gameId.toLowerCase() }, () => ({ r: "ok" }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Repeats (20261102_game_series.sql)                                  */
+/* ------------------------------------------------------------------ */
+
+const NOT_READY = () => accountReply({ reason: "not_ready" }, "unavailable");
+const count = (x: unknown) => (typeof x === "number" ? x : 0);
+
+/**
+ * A repeat function: its ok answer as `ok` makes it, else its refusal.
+ * No fallback: until the database has them there are no repeats, and
+ * the create flow does not offer one (GET says ready: false).
+ */
+async function runSeries(fn: string, args: Record<string, unknown>, ok: (d: Record<string, unknown>) => object): Promise<NextResponse> {
+  const res = await accountRpcIfThere(fn, args);
+  if ("missing" in res) return NOT_READY();
+  if ("unavailable" in res) return accountError("unavailable");
+  return res.data.r === "ok" ? accountReply(ok(res.data)) : refusal(res.data);
+}
+
+/** POST /api/game-series { game, repeat }: the caller starts a repeat; its first games go up. */
+export async function postSeries(req: Request): Promise<NextResponse> {
+  const w = await who(req, allowWrite);
+  if ("reply" in w) return w.reply;
+  const p = parseSeries(await readSmallJson(req, 6_000));
+  if ("bad" in p) return accountReply({ field: p.bad }, "bad");
+  return runSeries("game_series_create", { p_user_id: w.userId, p_game: p.ok.game, p_repeat: p.ok.repeat }, (d) => ({
+    r: "ok",
+    series: d.series,
+    games: list(d.games),
+    made: count(d.made),
+  }));
+}
+
+/** GET /api/game-series: the caller's repeats, newest first. ready: false (and none) until the database has them. */
+export async function getSeries(req: Request): Promise<NextResponse> {
+  const w = await who(req, allowRead);
+  if ("reply" in w) return w.reply;
+  const res = await accountRpcIfThere("game_series_mine", { p_user_id: w.userId });
+  if ("missing" in res) return accountReply({ ready: false, series: [] });
+  if ("unavailable" in res) return accountError("unavailable");
+  return res.data.r === "ok" ? accountReply({ ready: true, series: list(res.data.series) }) : refusal(res.data);
+}
+
+/** POST /api/game-series/[id]/stop { cancel }: the host stops it; cancel: its games not started yet too (their players are told). */
+export async function stopSeries(req: Request, seriesId: string): Promise<NextResponse> {
+  const w = await who(req, allowWrite);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(seriesId)) return accountError("bad");
+  const body = await readSmallJson(req, 500);
+  if (!body || typeof body.cancel !== "boolean" || Object.keys(body).some((k) => k !== "cancel")) return accountReply({ field: "cancel" }, "bad");
+  return runSeries("game_series_stop", { p_user_id: w.userId, p_series_id: seriesId.toLowerCase(), p_cancel: body.cancel }, (d) => ({
+    r: "ok",
+    series: d.series,
+    cancelled: count(d.cancelled),
+  }));
 }
 
 /* ------------------------------------------------------------------ */

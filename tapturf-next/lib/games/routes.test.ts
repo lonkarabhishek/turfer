@@ -12,6 +12,9 @@ import {
   postGame,
   postGameRequest,
   postNotifications,
+  getSeries,
+  postSeries,
+  stopSeries,
 } from "./server";
 import { dbProfile, googleSession, installNet, net, phoneToken, req, testEnv } from "../account/testkit";
 
@@ -254,6 +257,93 @@ test("notifications: the caller's own list and count, and marking read", async (
   assert.equal((await postNotifications(req("/api/notifications", { method: "POST", token: phoneToken(), body: { read: "some" } }))).status, 400);
   net.rpc.notifications_read = () => ({ r: "gone" });
   assert.equal((await postNotifications(req("/api/notifications", { method: "POST", token: phoneToken(), body: { read: REQ } }))).status, 400);
+});
+
+/* ---------------- repeats ---------------- */
+
+const SERIES = "ffffffff-ffff-4fff-8fff-000000000001";
+const dowOf = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
+const REPEAT = { rule: { freq: "weekly", interval: 1, days: [(dowOf(day(1)) + 2) % 7, dowOf(day(1))] }, ends: { type: "never" } };
+
+test("repeat: the host is the verified sign-in; the game and the repeat go on as checked, the days in order", async () => {
+  signedIn();
+  net.rpc.game_series_create = () => ({ r: "ok", series: { id: SERIES }, games: [{ id: GAME }], made: 1 });
+  const res = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: BODY, repeat: REPEAT } }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(await json(res), { r: "ok", series: { id: SERIES }, games: [{ id: GAME }], made: 1 });
+  const [call] = net.calls("game_series_create");
+  assert.deepEqual(call.args, {
+    p_key: "test-account-key",
+    p_user_id: "acc-1",
+    p_game: BODY,
+    p_repeat: { rule: { ...REPEAT.rule, days: [...REPEAT.rule.days].sort((a, b) => a - b) }, ends: REPEAT.ends },
+  });
+});
+
+test("repeat: a bad game or repeat, or naming the host, is refused before the database", async () => {
+  signedIn();
+  const bad: [Record<string, unknown>, string][] = [
+    [{ game: { ...BODY, creator_id: "acc-2" }, repeat: REPEAT }, "creator_id"],
+    [{ game: BODY, repeat: { ...REPEAT, host_id: "acc-2" } }, "repeat"],
+    [{ game: BODY, repeat: { ...REPEAT, rule: { freq: "weekly", interval: 9, days: [1] } } }, "interval"],
+    [{ game: BODY, repeat: { ...REPEAT, ends: { type: "after", count: 1 } } }, "ends"],
+    [{ game: BODY, repeat: REPEAT, user_id: "acc-2" }, "body"],
+    [{ game: "football", repeat: REPEAT }, "body"],
+    [{ game: BODY }, "repeat"],
+  ];
+  for (const [body, field] of bad) {
+    const res = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body }));
+    assert.deepEqual([res.status, await json(res)], [400, { field, error: "bad" }], JSON.stringify(body));
+  }
+  assert.equal(net.calls("game_series_create").length, 0);
+  assert.equal((await postSeries(req("/api/game-series", { method: "POST", body: { game: BODY, repeat: REPEAT } }))).status, 401, "no sign-in");
+});
+
+test("repeat: the database's no's, and a database without repeats yet", async () => {
+  for (const [answer, status, body] of [
+    [{ r: "many" }, 409, { reason: "many", error: "not_allowed" }],
+    [{ r: "limit" }, 429, { error: "limit" }],
+    [{ r: "venue" }, 400, { reason: "venue", error: "bad" }],
+    [{ r: "bad", field: "start_time" }, 400, { field: "start_time", error: "bad" }],
+  ] as const) {
+    signedIn();
+    net.rpc.game_series_create = () => answer;
+    const res = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: BODY, repeat: REPEAT } }));
+    assert.deepEqual([res.status, await json(res)], [status, body], JSON.stringify(answer));
+  }
+  signedIn();
+  net.rest = () => {
+    throw new Error("no fallback for repeats");
+  };
+  net.rpc.game_series_create = missing;
+  net.rpc.game_series_mine = missing;
+  net.rpc.game_series_stop = missing;
+  const made = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: BODY, repeat: REPEAT } }));
+  assert.deepEqual([made.status, await json(made)], [503, { reason: "not_ready", error: "unavailable" }], "not made any other way");
+  const listed = await getSeries(req("/api/game-series", { token: phoneToken() }));
+  assert.deepEqual([listed.status, await json(listed)], [200, { ready: false, series: [] }], "the create flow then offers no repeat");
+  assert.equal((await stopSeries(req(`/api/game-series/${SERIES}/stop`, { method: "POST", token: phoneToken(), body: { cancel: false } }), SERIES)).status, 503);
+  assert.equal(net.restCalls.length, 0);
+});
+
+test("repeat: the host's list, and stopping one (cancel is a yes or no; the database checks it's the host's)", async () => {
+  signedIn("acc-g");
+  net.rpc.game_series_mine = () => ({ r: "ok", series: [{ id: SERIES, upcoming: 6 }] });
+  assert.deepEqual(await json(await getSeries(req("/api/game-series", { token: googleSession() }))), { ready: true, series: [{ id: SERIES, upcoming: 6 }] });
+  assert.deepEqual(net.calls("game_series_mine")[0].args, { p_key: "test-account-key", p_user_id: "acc-g" });
+  net.rpc.game_series_stop = (a) => ({ r: "ok", series: { id: SERIES, active: false }, cancelled: a.p_cancel ? 5 : 0 });
+  const stopped = await stopSeries(req(`/api/game-series/${SERIES.toUpperCase()}/stop`, { method: "POST", token: googleSession(), body: { cancel: true } }), SERIES.toUpperCase());
+  assert.deepEqual(await json(stopped), { r: "ok", series: { id: SERIES, active: false }, cancelled: 5 });
+  assert.deepEqual(net.calls("game_series_stop")[0].args, { p_key: "test-account-key", p_user_id: "acc-g", p_series_id: SERIES, p_cancel: true });
+  for (const body of [{}, { cancel: "yes" }, { cancel: true, user_id: "acc-x" }]) {
+    assert.equal((await stopSeries(req(`/api/game-series/${SERIES}/stop`, { method: "POST", token: googleSession(), body }), SERIES)).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await stopSeries(req("/api/game-series/x/stop", { method: "POST", token: googleSession(), body: { cancel: false } }), "x")).status, 400);
+  net.rpc.game_series_stop = () => ({ r: "not_host" });
+  const notHost = await stopSeries(req(`/api/game-series/${SERIES}/stop`, { method: "POST", token: googleSession(), body: { cancel: false } }), SERIES);
+  assert.deepEqual([notHost.status, (await json(notHost)).reason], [409, "not_host"]);
+  assert.equal(net.calls("game_series_stop").length, 2, "the bad ones never reached the database");
 });
 
 /* ---------------- before the database has the functions ---------------- */

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addDays, fieldProblem, gameOver, hostFirst, isDay, isUuid, parseChanges, parseCreate, parseNote, CHANGE_FIELDS } from "./payload";
+import { addDays, fieldProblem, gameOver, hostFirst, isDay, isUuid, parseChanges, parseCreate, parseNote, parseSeries, CHANGE_FIELDS } from "./payload";
 import { gameProblem } from "./client";
 
 const TURF = "bbbbbbbb-bbbb-4bbb-8bbb-000000000001";
@@ -70,6 +70,20 @@ test("edit: only the sheet's fields; a move is a turf id", () => {
   assert.equal(fieldProblem([], CHANGE_FIELDS), "body");
 });
 
+test("a repeat: the game as a create checks it, its date the first day; the repeat as the database checks it", () => {
+  // 1 Nov 2026 is a Sunday.
+  const repeat = { rule: { freq: "weekly", interval: 2, days: [4, 2] }, ends: { type: "on", date: "2026-12-20" } };
+  assert.deepEqual(parseSeries({ game: GAME, repeat }, TODAY), { ok: { game: GAME, repeat: { rule: { freq: "weekly", interval: 2, days: [2, 4] }, ends: repeat.ends } } });
+  const monthly = { rule: { freq: "monthly", by: "weekday", nth: 1, weekday: 0 }, ends: { type: "after", count: 6 } };
+  assert.ok("ok" in parseSeries({ game: GAME, repeat: monthly }, TODAY), "the first Sunday, from Sunday 1 Nov");
+  assert.deepEqual(parseSeries({ game: { ...GAME, date: "2026-11-02" }, repeat: monthly }, TODAY), { bad: "month" }, "a Monday is no first Sunday");
+  assert.deepEqual(parseSeries({ game: { ...GAME, date: "2026-10-29" }, repeat }, TODAY), { bad: "date" });
+  assert.deepEqual(parseSeries({ game: { ...GAME, host_name: "x" }, repeat }, TODAY), { bad: "host_name" });
+  assert.deepEqual(parseSeries({ game: GAME, repeat, creator_id: "x" }, TODAY), { bad: "body" });
+  assert.deepEqual(parseSeries({ game: GAME, repeat: { ...repeat, ends: { type: "on", date: "2026-11-02" } } }, TODAY), { bad: "ends" }, "one game is no repeat");
+  assert.deepEqual(parseSeries(null, TODAY), { bad: "body" });
+});
+
 test("a join note: trimmed, 300 characters at most", () => {
   assert.deepEqual(parseNote("  I can keep goal  "), { ok: "I can keep goal" });
   assert.deepEqual(parseNote("   "), { ok: null });
@@ -111,4 +125,7 @@ test("what the page says when the server says no", () => {
   assert.equal(no(401, { error: "sign_in" }), "Your login ended. Please log in again.");
   assert.equal(no(429, { error: "limit" }), "That's a lot for one day. Try again later.");
   assert.equal(no(0, { error: "unavailable" }), "Couldn't reach TapTurf. Check your connection and try again.");
+  assert.equal(no(409, { error: "not_allowed", reason: "many" }), "You have 3 repeating games running. Stop one from the Me tab to start another.");
+  assert.equal(no(503, { error: "unavailable", reason: "not_ready" }), "Repeating games aren't on yet. Post this as a single game for now.");
+  assert.equal(no(400, { error: "bad", field: "days" }), "Pick at least one day of the week.");
 });

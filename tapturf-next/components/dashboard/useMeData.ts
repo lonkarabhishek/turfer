@@ -34,6 +34,8 @@ export type MeData = {
   setRequests: (r: GameRequest[]) => void;
   setUnread: (n: number) => void;
   reloadRequests: () => Promise<void>;
+  /** Read the games (and what follows from them) again: a repeat's games were cancelled. */
+  reloadGames: () => void;
 };
 
 const EMPTY_LINES = new Map<string, GameLine>();
@@ -52,6 +54,7 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   const [extraFor, setExtraFor] = useState<{ for: string; incoming: GameRequest[]; games: Map<string, GameLine> } | null>(null);
   const [unreadFor, setUnreadFor] = useState<{ for: string; n: number } | null>(null);
   const [turfsFor, setTurfsFor] = useState<{ for: string; n: number | null } | null>(null);
+  const [gamesRead, setGamesRead] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -72,7 +75,8 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
     return () => {
       alive = false;
     };
-  }, [userId, readToken]);
+    // gamesRead: reloadGames asks for it all again.
+  }, [userId, readToken, gamesRead]);
 
   // myTapturf's own read of the turfs this sign-in runs (its database function checks who is asking).
   // A Google sign-in rides on its Supabase session, so only a phone sign-in fetches a Firebase token:
@@ -101,7 +105,7 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
 
   const upcoming = useMemo(() => {
     const ids = new Set<string>();
-    for (const g of [...created, ...joined]) if (getGameStatus(g) !== "expired") ids.add(g.id);
+    for (const g of [...created, ...joined]) if (g.status !== "cancelled" && getGameStatus(g) !== "expired") ids.add(g.id);
     return ids.size;
   }, [created, joined]);
 
@@ -114,6 +118,7 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
     setState((s) => (s && s.for === userId ? { ...s, requests: data } : s));
   }, [userId, readToken]);
   const setUnread = useCallback((n: number) => setUnreadFor({ for: userId, n }), [userId]);
+  const reloadGames = useCallback(() => setGamesRead((n) => n + 1), []);
 
   return {
     loading: !mine,
@@ -130,5 +135,6 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
     setRequests,
     setUnread,
     reloadRequests,
+    reloadGames,
   };
 }

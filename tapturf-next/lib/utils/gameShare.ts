@@ -79,9 +79,11 @@ export function shareDetails(g: ShareGame): string | null {
  * join in"). closed: the game has ended or was cancelled, so the message
  * invites nobody and says nothing of spots or price. url goes last when
  * given (WhatsApp and the clipboard); leave it out for the share sheet,
- * which sends the link itself.
+ * which sends the link itself. repeat: the game is one of a repeat still
+ * running ("Every Tue and Thu", lib/games/repeat.ts repeatLabel), said
+ * under the date; a closed game leaves it out.
  */
-export function gameShareText(g: ShareGame, opts: { host: boolean; url?: string; closed?: "ended" | "cancelled" }): string {
+export function gameShareText(g: ShareGame, opts: { host: boolean; url?: string; closed?: "ended" | "cancelled"; repeat?: string | null }): string {
   const sport = sportLabel(g.sport);
   const lead = opts.closed
     ? `${sport} game on TapTurf (${opts.closed})`
@@ -95,6 +97,7 @@ export function gameShareText(g: ShareGame, opts: { host: boolean; url?: string;
     `${sportIcon(sport)} ${lead}`,
     where && `📍 ${where}`,
     when && `🗓️ ${when}`,
+    !opts.closed && opts.repeat && `🔁 ${opts.repeat}`,
     details && `👥 ${details}`,
     opts.url,
   ]

@@ -325,7 +325,15 @@ function Me({
 
           <div role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
             {tab === "games" && (
-              <MyGames createdGames={data.created} joinedGames={data.joined} loading={data.loading} view={view} onView={setView} waiting={waiting} />
+              <MyGames
+                createdGames={data.created}
+                joinedGames={data.joined}
+                loading={data.loading}
+                view={view}
+                onView={setView}
+                waiting={waiting}
+                onGamesChanged={data.reloadGames}
+              />
             )}
             {tab === "requests" && (
               <MyRequests

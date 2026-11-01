@@ -5,7 +5,21 @@ import Link from "next/link";
 import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
-import { getGameById, getGameParticipants, getGameRequests, getMyRequestForGame, sendJoinRequest, acceptRequest, declineRequest, updateGame } from "@/lib/queries/games";
+import {
+  getGameById,
+  getGameParticipants,
+  getGameRequests,
+  getMyRequestForGame,
+  getSeriesGames,
+  getSeriesInfo,
+  sendJoinRequest,
+  acceptRequest,
+  declineRequest,
+  stopSeries,
+  updateGame,
+} from "@/lib/queries/games";
+import { repeatLabel } from "@/lib/games/repeat";
+import type { SeriesInfo } from "@/lib/games/types";
 import {
   durationLabel,
   firstName,
@@ -44,6 +58,8 @@ import { GameVenueField } from "./detail/GameVenueField";
 import { GameAside } from "./detail/GameAside";
 import type { CtaModel } from "./detail/GameCta";
 import { GameSkeleton } from "./detail/GameSkeleton";
+import { GameRepeat } from "./detail/GameRepeat";
+import { SeriesStopSheet } from "./SeriesStopSheet";
 
 const field = "w-full min-h-12 border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-accent-600 focus:border-accent-600 bg-primary-50";
 const label = "block text-[14px] font-medium text-primary-700 mb-1";
@@ -83,6 +99,9 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const [bookedBeforePick, setBookedBeforePick] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  // The repeat this game is one of (its rule, and its other games still open), and the host's stop sheet.
+  const [series, setSeries] = useState<{ id: string; info: SeriesInfo | null; others: Pick<Game, "id" | "date" | "start_time" | "end_time">[] } | null>(null);
+  const [stopOpen, setStopOpen] = useState(false);
 
   const isHost = !!user && !!game && game.creator_id === user.id;
   const status = game ? getGameStatus(game) : "upcoming";
@@ -145,6 +164,33 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     };
   }, [game, user, isHost, gameId, readToken]);
 
+  // A game of a repeat: its rule and its next games (public reads, as the game is).
+  const seriesId = game?.series_id ?? null;
+  const loadSeries = async (id: string) => {
+    const [info, games] = await Promise.all([getSeriesInfo([id]), getSeriesGames(id)]);
+    return { id, info: info.get(id) ?? null, others: games.filter((g) => g.id !== gameId && getGameStatus(g) === "upcoming") };
+  };
+  useEffect(() => {
+    if (!seriesId) return;
+    let alive = true;
+    void loadSeries(seriesId).then((s) => alive && setSeries(s));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesId, gameId]);
+  const repeat = series && series.id === seriesId ? series : null;
+
+  const handleStopSeries = async (cancel: boolean) => {
+    if (!seriesId) return null;
+    const { error } = await stopSeries(getToken, seriesId, cancel);
+    if (error) return error;
+    setStopOpen(false);
+    setSeries(await loadSeries(seriesId));
+    if (cancel) await loadGame();
+    return null;
+  };
+
   // Pending or declined after a reload: one small read, only for a
   // signed-in viewer who is neither the host nor already playing.
   useEffect(() => {
@@ -203,7 +249,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     // Which game, where and when (lib/utils/gameShare.ts), the link last and inside the text: a share
     // sheet's Copy (and some apps) takes only the text, so a separate url would be lost.
     const closed = game.status === "cancelled" ? "cancelled" : status === "expired" || game.status === "completed" ? "ended" : undefined;
-    const text = gameShareText(game, { host: isHost, closed, url });
+    const text = gameShareText(game, { host: isHost, closed, url, repeat: repeat?.info?.active ? repeatLabel(repeat.info.rule) : null });
     if (navigator.share) {
       try {
         await navigator.share({ title: text.split("\n")[0], text });
@@ -398,6 +444,8 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               turf={turfInfo(game.turf_booked)}
             />
 
+            {repeat?.info && <GameRepeat info={repeat.info} others={repeat.others} isHost={isHost} onStop={() => setStopOpen(true)} />}
+
             <GameHostCard
               hostName={game.host_name}
               hostFirst={hostFirst}
@@ -464,6 +512,16 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       </div>
 
       <GameCtaBar m={model} />
+
+      {isHost && repeat?.info && (
+        <SeriesStopSheet
+          open={stopOpen}
+          label={repeatLabel(repeat.info.rule)}
+          left={repeat.others.length + (cta !== "cancelled" && status === "upcoming" ? 1 : 0)}
+          onStop={handleStopSeries}
+          onClose={() => setStopOpen(false)}
+        />
+      )}
 
       {/* Room for the bar (and, on phones, the bottom nav) under the page. */}
       <div className="h-32 md:h-24 lg:hidden" />
