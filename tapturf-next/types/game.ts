@@ -25,6 +25,8 @@ export interface Game {
   host_phone?: string;
   host_profile_image_url?: string;
   created_at: string;
+  /** The repeat that put this game up (20261102_game_series.sql), if any; absent before that file. */
+  series_id?: string | null;
   // Joined data from turfs table
   turfs?: {
     id: string;

@@ -1,13 +1,22 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Trophy, Clock, Users, Calendar } from "lucide-react";
+import { Plus, Trophy, Clock, Users, Calendar, Repeat as RepeatIcon } from "lucide-react";
 import { formatDate, formatTimeSlot, getGameStatus } from "@/lib/utils/game";
 import { Avatar } from "@/components/game/detail/Avatar";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { quietToken } from "@/lib/account/client";
+import { repeatLabel } from "@/lib/games/repeat";
+import type { GameSeries } from "@/lib/games/types";
+import { getMySeries, stopSeries } from "@/lib/queries/games";
+import { MySeries } from "./MySeries";
 import type { Game } from "@/types/game";
 
 export type GamesView = "created" | "joined";
+
+/** Cancelled, or over: the past list. */
+const isPast = (g: Game) => g.status === "cancelled" || getGameStatus(g) === "expired";
 
 /**
  * "Games" tab in the dashboard.
@@ -16,7 +25,9 @@ export type GamesView = "created" | "joined";
  * collapsed underneath. The lists come from the Me tab (useMeData), so
  * its Hosted and Joined numbers and this tab agree, and each opens its
  * list. A hosted game says how many players wait for an answer; a
- * joined one shows its host.
+ * joined one shows its host. Hosted leads with the repeats the host runs
+ * (MySeries, read here: only the host's own), and a game of a repeat says
+ * how it repeats; a cancelled game goes with the past ones.
  */
 export function MyGames({
   createdGames,
@@ -25,6 +36,7 @@ export function MyGames({
   view,
   onView: setView,
   waiting,
+  onGamesChanged,
 }: {
   createdGames: Game[];
   joinedGames: Game[];
@@ -33,7 +45,36 @@ export function MyGames({
   onView: (v: GamesView) => void;
   /** Pending requests per hosted game. */
   waiting: Map<string, number>;
+  /** Read the games again (a repeat was stopped and its games cancelled). */
+  onGamesChanged?: () => void;
 }) {
+  const { user, signedInWith, getToken } = useAuth();
+  const userId = user?.id ?? null;
+  const [series, setSeries] = useState<{ for: string; list: GameSeries[] } | null>(null);
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    void getMySeries(quietToken(signedInWith)).then(({ data }) => alive && setSeries({ for: userId, list: data }));
+    return () => {
+      alive = false;
+    };
+  }, [userId, signedInWith]);
+  const mySeries = useMemo(() => (series && series.for === userId ? series.list : []), [series, userId]);
+  // Each repeat's words, for its games' rows (a joined game of someone else's repeat just says it repeats).
+  const labels = useMemo(() => new Map(mySeries.map((s) => [s.id, repeatLabel(s.rule)])), [mySeries]);
+  const venues = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of createdGames) if (g.series_id && g.turfs?.name && !m.has(g.series_id)) m.set(g.series_id, g.turfs.name);
+    return m;
+  }, [createdGames]);
+  const stop = async (id: string, cancel: boolean) => {
+    const { error } = await stopSeries(getToken, id, cancel);
+    if (error) return error;
+    const { data } = await getMySeries(getToken);
+    if (userId) setSeries({ for: userId, list: data });
+    if (cancel) onGamesChanged?.();
+    return null;
+  };
 
   const games = view === "created" ? createdGames : joinedGames;
 
@@ -43,7 +84,7 @@ export function MyGames({
     const up: Game[] = [];
     const pastList: Game[] = [];
     for (const g of games) {
-      if (getGameStatus(g) === "expired") pastList.push(g);
+      if (isPast(g)) pastList.push(g);
       else up.push(g);
     }
     up.sort((a, b) => `${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`));
@@ -88,6 +129,8 @@ export function MyGames({
         })}
       </div>
 
+      {view === "created" && <MySeries series={mySeries} venues={venues} onStop={stop} />}
+
       {games.length === 0 ? (
         <EmptyState view={view} />
       ) : (
@@ -101,7 +144,9 @@ export function MyGames({
                 </p>
               </div>
               <div className="space-y-3">
-                {upcoming.map((g) => <GameRow key={g.id} game={g} highlight host={view === "joined"} waiting={view === "created" ? waiting.get(g.id) ?? 0 : 0} />)}
+                {upcoming.map((g) => (
+                  <GameRow key={g.id} game={g} highlight host={view === "joined"} waiting={view === "created" ? waiting.get(g.id) ?? 0 : 0} repeats={g.series_id ? labels.get(g.series_id) ?? "Repeats" : null} />
+                ))}
               </div>
             </section>
           )}
@@ -113,7 +158,7 @@ export function MyGames({
                 Past · {past.length}
               </p>
               <div className="space-y-3 opacity-80">
-                {past.map((g) => <GameRow key={g.id} game={g} host={view === "joined"} />)}
+                {past.map((g) => <GameRow key={g.id} game={g} host={view === "joined"} repeats={g.series_id ? labels.get(g.series_id) ?? "Repeats" : null} />)}
               </div>
             </section>
           )}
@@ -124,8 +169,8 @@ export function MyGames({
 }
 
 /** Compact game row — big touch target, plenty of white space. */
-function GameRow({ game, highlight = false, host = false, waiting = 0 }: { game: Game; highlight?: boolean; host?: boolean; waiting?: number }) {
-  const status = getGameStatus(game);
+function GameRow({ game, highlight = false, host = false, waiting = 0, repeats = null }: { game: Game; highlight?: boolean; host?: boolean; waiting?: number; repeats?: string | null }) {
+  const status = game.status === "cancelled" ? "cancelled" : getGameStatus(game);
   return (
     <Link href={`/game/${game.id}`} className="block group focus-neon rounded-2xl">
       <div
@@ -146,21 +191,27 @@ function GameRow({ game, highlight = false, host = false, waiting = 0 }: { game:
         )}
         <div className={highlight ? "pl-2" : ""}>
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1 bg-accent-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0">
                 {game.sport}
               </span>
+              {repeats && (
+                <span className="inline-flex items-center gap-1 min-w-0 text-[11px] font-semibold text-accent-700">
+                  <RepeatIcon className="w-3 h-3 shrink-0" aria-hidden />
+                  <span className="truncate">{repeats}</span>
+                </span>
+              )}
             </div>
             <span
-              className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+              className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${
                 status === "live"
                   ? "bg-hot-500/10 text-hot-600 border border-hot-500/40"
-                  : status === "expired"
+                  : status === "expired" || status === "cancelled"
                   ? "bg-primary-100 text-primary-500"
                   : "bg-accent-50 text-accent-700 border border-accent-500/40"
               }`}
             >
-              {status === "live" ? "Live now" : status === "expired" ? "Ended" : "Upcoming"}
+              {status === "live" ? "Live now" : status === "cancelled" ? "Cancelled" : status === "expired" ? "Ended" : "Upcoming"}
             </span>
           </div>
 

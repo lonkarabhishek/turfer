@@ -1,6 +1,10 @@
 import type { TokenCheck } from "../account/client";
 import type {
   CreateGameBody,
+  CreateSeriesBody,
+  SeriesCreatedResponse,
+  SeriesListResponse,
+  SeriesStoppedResponse,
   GameChanges,
   GameErrorBody,
   GameResponse,
@@ -14,7 +18,7 @@ import type {
 } from "./types";
 
 /**
- * Browser side of games, join requests and notifications: calls to the
+ * Browser side of games, repeats, join requests and notifications: calls to the
  * games routes (lib/games/types.ts) with this device's sign-in token. Never
  * a user id: the server works out the account from the token. status 0
  * means offline or no answer; a sign-in that is gone answers 401.
@@ -69,6 +73,10 @@ export const incomingRequestsCall = (getToken: GetToken) => call<RequestsRespons
 export const notificationsCall = (getToken: GetToken, limit = 50) => call<NotificationsResponse>(getToken, `/api/notifications?limit=${limit}`);
 export const unreadCall = (getToken: GetToken) => call<UnreadResponse>(getToken, "/api/notifications?count=unread");
 export const markReadCall = (getToken: GetToken, read: string | "all") => call<MarkedResponse>(getToken, "/api/notifications", json("POST", { read }));
+export const createSeriesCall = (getToken: GetToken, body: CreateSeriesBody) => call<SeriesCreatedResponse>(getToken, "/api/game-series", json("POST", body));
+export const mySeriesCall = (getToken: GetToken) => call<SeriesListResponse>(getToken, "/api/game-series");
+export const stopSeriesCall = (getToken: GetToken, seriesId: string, cancel: boolean) =>
+  call<SeriesStoppedResponse>(getToken, `/api/game-series/${at(seriesId)}/stop`, json("POST", { cancel }));
 
 const FIELD_TEXT: Record<string, string> = {
   date: "Pick a date from today on.",
@@ -81,6 +89,12 @@ const FIELD_TEXT: Record<string, string> = {
   host_phone: "Enter a 10-digit mobile number for players, or leave it empty.",
   turf_id: "Pick the turf again.",
   sport: "Pick a sport.",
+  repeat: "Check how it repeats.",
+  rule: "Check how it repeats.",
+  interval: "Repeat every 1 to 4 weeks.",
+  days: "Pick at least one day of the week.",
+  month: "Pick the monthly day again.",
+  ends: "Check when it ends: at least 2 games, within a year of the first.",
 };
 
 /**
@@ -111,6 +125,10 @@ export function gameProblem(a: GameAnswer<unknown>): string | null {
       return `${b.players ?? "More"} players are in already: max players can't be fewer.`;
     case "venue":
       return "That venue isn't listed on TapTurf any more. Pick another one.";
+    case "many":
+      return "You have 3 repeating games running. Stop one from the Me tab to start another.";
+    case "not_ready":
+      return "Repeating games aren't on yet. Post this as a single game for now.";
   }
   if (b.error === "bad") return (b.field && FIELD_TEXT[b.field]) || "Something there doesn't look right. Check it and try again.";
   if (b.error === "sign_in") return "Your login ended. Please log in again.";

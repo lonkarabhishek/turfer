@@ -5,18 +5,23 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Check, MapPin, Search, Share2, Copy,
   Trophy, CircleDot, Target, Circle, Feather,
-  Grip, Dumbbell, Loader2, Users, Zap, ChevronRight,
+  Grip, Dumbbell, Loader2, Users, Zap, ChevronRight, Repeat as RepeatIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { createGame } from "@/lib/queries/games";
+import { quietToken } from "@/lib/account/client";
+import { createGame, createSeries, getMySeries } from "@/lib/queries/games";
 import { getTurfPlace, searchTurfs } from "@/lib/queries/users";
 import { gameShareText } from "@/lib/utils/gameShare";
+import { formatGameDay } from "@/lib/utils/game";
+import { MAX_RUNNING, maxGames, nextDays, normalRepeat, repeatLabel, repeatParts, repeatProblem, ruleFor, type Repeat } from "@/lib/games/repeat";
 import { TimeSlotSheet } from "./TimeSlotSheet";
+import { RepeatSheet } from "./RepeatSheet";
 import { GameDraftBox } from "./GameDraftBox";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 import type { GamePrefill } from "@/lib/ai/gameDraft";
-import type { CreateGameData } from "@/types/game";
+import type { CreateGameData, Game } from "@/types/game";
 
 const SPORT_OPTIONS = [
   { name: "Cricket",      icon: <Target className="w-6 h-6" />,    defaultMax: 22 },
@@ -135,6 +140,12 @@ function tenDigits(raw: string): string {
   return d.slice(0, 10);
 }
 
+/** A repeat for a new first day: its rule follows the day (lib/games/repeat.ts ruleFor), "after N" no more than that rule's year holds. */
+function moveRepeat(r: Repeat, start: string, oldStart: string): Repeat {
+  const rule = ruleFor(r.rule, start, oldStart);
+  return { rule, ends: r.ends.type === "after" ? { ...r.ends, count: Math.min(r.ends.count, maxGames(rule, start)) } : r.ends };
+}
+
 /** The number to offer: the profile's Indian number, else the one given last time. */
 function defaultHostPhone(profilePhone: string | undefined): string {
   const m = /^\+91([6-9]\d{9})$/.exec(profilePhone ?? "");
@@ -148,7 +159,7 @@ function defaultHostPhone(profilePhone: string | undefined): string {
 }
 
 export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = {}) {
-  const { user, login, loading: authLoading, getToken } = useAuth();
+  const { user, login, loading: authLoading, getToken, signedInWith } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   // Prefill turf when the visitor arrived via "Create a game here" on
@@ -185,6 +196,12 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
   const [timeSheetOpen, setTimeSheetOpen] = useState(false);
+  // How the game repeats (null: it doesn't). Offered once the database has repeats (GET /api/game-series ready).
+  const [repeat, setRepeat] = useState<Repeat | null>(null);
+  const [repeatOpen, setRepeatOpen] = useState(false);
+  const [repeats, setRepeats] = useState<{ for: string; running: number } | null>(null);
+  // The games a new repeat put up, soonest first (the success step names them).
+  const [seriesGames, setSeriesGames] = useState<Game[] | null>(null);
   const [draftNote, setDraftNote] = useState<string | null>(null);
   // null until typed: then the profile's number or the last game's.
   const [hostPhoneTyped, setHostPhoneTyped] = useState<string | null>(null);
@@ -219,6 +236,30 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     // Default the date picker to today (IST).
     setDate(istDateISO(new Date()));
   }, []);
+
+  // Whether repeats are on (the database has them), and how many this host runs (3 at most).
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    void getMySeries(quietToken(signedInWith)).then(({ data, ready }) => {
+      if (alive && ready) setRepeats({ for: userId, running: data.filter((s) => s.active).length });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [userId, signedInWith]);
+  const repeatsOn = !!repeats && repeats.for === userId;
+  const repeatsFull = repeatsOn && repeats.running >= MAX_RUNNING;
+  const repeatBad = repeat ? repeatProblem(repeat, date) : null;
+
+  /** A new date: a repeat's rule follows it. */
+  const pickDate = (d: string) => {
+    if (repeat && d) setRepeat(moveRepeat(repeat, d, date));
+    setDate(d);
+    setStartTime("");
+    setDuration(null);
+  };
 
   // IST-anchored so a 1am IST reload doesn't offer "today = yesterday
   // UTC" as a bookable date. Same helper drives minTime below.
@@ -260,7 +301,10 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     } else if (p.maxPlayers) {
       setMaxPlayers(p.maxPlayers);
     }
-    if (p.date) setDate(p.date);
+    if (p.date) {
+      if (repeat) setRepeat(moveRepeat(repeat, p.date, date));
+      setDate(p.date);
+    }
     if (p.startTime) setStartTime(p.startTime);
     if (p.duration) setDuration(p.duration);
     if (p.turf) {
@@ -293,11 +337,24 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
       try { localStorage.setItem(HOST_PHONE_KEY, hostPhone); } catch { /* ignore */ }
     }
     // The server works out the host from this sign-in, and takes their name and photo from the account.
-    const { data, error } = await createGame(
-      getToken,
-      { turfId, date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked },
-      hostPhone ? `+91${hostPhone}` : ""
-    );
+    const game: CreateGameData = { turfId, date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked };
+    const phone = hostPhone ? `+91${hostPhone}` : "";
+    if (repeat) {
+      // A repeat: the server puts its first games up (the next 4 weeks), each a game of its own.
+      const { data, error } = await createSeries(getToken, game, phone, normalRepeat(repeat));
+      setSubmitting(false);
+      if (data && data.games.length > 0) {
+        setSeriesGames(data.games);
+        setCreatedGameId(data.games[0].id);
+        setStep(4);
+        getTurfPlace(turfId).then(setTurfPlace, () => {});
+      } else if (data) {
+        // Saved, but nothing could go up just now (the turf was unlisted meanwhile): the daily top-up tries again.
+        setSubmitError("Your repeat is saved, but its first game couldn't go up yet. It goes up within a day: see it on the Me tab.");
+      } else setSubmitError(error || "Failed to create the repeating game. Please try again.");
+      return;
+    }
+    const { data, error } = await createGame(getToken, game, phone);
 
     setSubmitting(false);
     if (data && !error) {
@@ -317,11 +374,11 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
 
   const handleWhatsAppShare = () => {
     if (!createdGameId) return;
-    // Which game, where and when (lib/utils/gameShare.ts), the link last.
+    // Which game, where and when (lib/utils/gameShare.ts), the link last. A repeat's first game, and how it repeats.
     const text = gameShareText(
       {
         sport,
-        date,
+        date: seriesGames?.[0]?.date ?? date,
         start_time: startTime,
         end_time: endTime,
         max_players: maxPlayers,
@@ -331,12 +388,16 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         turf_booked: turfBooked,
         turfs: { name: turfName, ...turfPlace },
       },
-      { host: true, url: `${window.location.origin}/game/${createdGameId}` },
+      { host: true, url: `${window.location.origin}/game/${createdGameId}`, repeat: seriesGames && repeat ? repeatLabel(repeat.rule) : null },
     );
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const step2Valid = date && startTime && endTime && turfId;
+  const step2Valid = date && startTime && endTime && turfId && !repeatBad;
+  // A repeat's summary ("Every Tue and Thu", "7 – 8 PM", "until 20 Dec") and its next dates, as the confirm step shows them.
+  const repeatLine = repeat && !repeatBad ? repeatParts(repeat, date, startTime || null, endTime) : null;
+  // Four shown; a fifth only says there are more.
+  const repeatNext = repeat && !repeatBad && startTime ? nextDays(repeat, date, startTime, 5) : [];
 
   if (authLoading) {
     return (
@@ -380,6 +441,15 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         onClose={() => setTimeSheetOpen(false)}
         onSelect={(s) => { setStartTime(s); setDuration(null); }}
       />
+      <RepeatSheet
+        open={repeatOpen}
+        start={date}
+        startTime={startTime}
+        endTime={endTime}
+        value={repeat}
+        onChange={setRepeat}
+        onClose={() => setRepeatOpen(false)}
+      />
 
       {/* ─── Step 4: Success ───────────────────────────────── */}
       {step === 4 ? (
@@ -396,9 +466,26 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
           <p className="text-sm text-primary-600 mb-1">
             <span className="font-semibold text-primary-800">{sport}</span> · {turfName}
           </p>
-          <p className="text-xs font-semibold text-primary-500 mb-8">
-            Share the link, get your squad in
-          </p>
+          {seriesGames && repeat ? (
+            <div className="w-full mb-8 mt-3 rounded-2xl bg-accent-50 border border-accent-500/30 px-4 py-3.5 text-left">
+              <p className="flex items-center gap-2 text-[15px] font-bold text-primary-900">
+                <RepeatIcon className="w-4 h-4 text-accent-600 shrink-0" aria-hidden />
+                {repeatLabel(repeat.rule)}
+              </p>
+              <p className="text-[13px] text-primary-700 mt-1.5 leading-relaxed">
+                {seriesGames.length === 1 ? "The first game is up: " : `${seriesGames.length} games are up: `}
+                {seriesGames.slice(0, 4).map((g) => formatGameDay(g.date).plain).join(" · ")}
+                {seriesGames.length > 4 && " …"}
+              </p>
+              <p className="text-[12px] text-primary-500 mt-1.5 leading-snug">
+                More go up 4 weeks ahead. Share each game; players join each one. Book the turf for each date yourself.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs font-semibold text-primary-500 mb-8">
+              Share the link, get your squad in
+            </p>
+          )}
 
           <div className="w-full space-y-3">
             <button
@@ -420,8 +507,13 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
               className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base transition-colors shadow-elevated focus-neon"
             >
               <Trophy className="w-5 h-5" aria-hidden="true" />
-              View my game
+              {seriesGames ? "View the first game" : "View my game"}
             </button>
+            {seriesGames && (
+              <Link href="/dashboard?tab=games" className="w-full flex items-center justify-center min-h-[48px] text-[15px] font-semibold text-accent-700 hover:text-accent-800 focus-neon rounded-full">
+                See all of them on the Me tab
+              </Link>
+            )}
           </div>
 
           {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
@@ -543,7 +635,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                   {/* Date row — invisible native input overlays the row so
                       iOS Safari opens its rolling wheel on tap. */}
                   <label className="relative flex items-center justify-between px-4 py-3.5 min-h-[56px] active:bg-primary-50 transition-colors cursor-pointer">
-                    <span className="text-[15px] font-medium text-primary-800">Date</span>
+                    <span className="text-[15px] font-medium text-primary-800">{repeat ? "Starts" : "Date"}</span>
                     <span className="flex items-center gap-1.5">
                       <span className="text-[15px] font-semibold text-accent-600">
                         {humanDate(date)}
@@ -554,7 +646,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                       type="date"
                       value={date}
                       min={todayStr}
-                      onChange={(e) => { setDate(e.target.value); setStartTime(""); setDuration(null); }}
+                      onChange={(e) => pickDate(e.target.value)}
                       aria-label="Date"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
@@ -617,6 +709,41 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                           })}
                         </div>
                       </div>
+                    </>
+                  )}
+
+                  {/* Repeat row — once the database has repeats; the sheet asks how, like a calendar */}
+                  {repeatsOn && (
+                    <>
+                      <div className="h-px bg-primary-200 ml-4" />
+                      <button
+                        type="button"
+                        onClick={() => setRepeatOpen(true)}
+                        disabled={repeatsFull && !repeat}
+                        aria-describedby={repeatsFull && !repeat ? "repeat-full" : undefined}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 min-h-[56px] text-left active:bg-primary-50 transition-colors focus-neon disabled:cursor-not-allowed"
+                      >
+                        <span className="flex items-center gap-2 text-[15px] font-medium text-primary-800 shrink-0">
+                          <RepeatIcon className="w-4 h-4 text-primary-500" aria-hidden="true" />
+                          Repeat
+                        </span>
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className={`text-[15px] font-semibold truncate ${repeatBad ? "text-hot-600" : repeatsFull && !repeat ? "text-primary-400" : "text-accent-600"}`}>
+                            {repeat ? repeatLabel(repeat.rule) : "Does not repeat"}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-primary-400 shrink-0" />
+                        </span>
+                      </button>
+                      {repeatsFull && !repeat && (
+                        <p id="repeat-full" className="px-4 pb-3.5 -mt-1.5 text-[12px] text-primary-500">
+                          You have {MAX_RUNNING} repeating games running. Stop one on the Me tab to start another.
+                        </p>
+                      )}
+                      {repeatBad && (
+                        <p className="px-4 pb-3.5 -mt-1.5 text-[12px] font-semibold text-hot-600">
+                          {repeatBad === "ends" ? "That repeat ends before a second game." : "Check how it repeats."} Tap Repeat to change it.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
@@ -702,16 +829,48 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     <p className="font-display text-lg text-primary-800 truncate leading-tight">
                       {sport} · {turfName}
                     </p>
-                    <p className="text-[12px] font-mono text-primary-600 mt-0.5">
-                      {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
-                      {startTime && endTime && (() => {
-                        const [sh, sm] = startTime.split(":").map(Number);
-                        const [eh, em] = endTime.split(":").map(Number);
-                        return ` · ${fmt(sh, sm)} → ${fmt(eh, em)}`;
-                      })()}
-                    </p>
+                    {repeatLine ? (
+                      <p className="text-[13px] font-semibold text-primary-700 mt-0.5 flex items-start gap-1.5">
+                        <RepeatIcon className="w-3.5 h-3.5 text-accent-600 shrink-0 mt-[3px]" aria-hidden="true" />
+                        <span>
+                          {repeatLine.map((p, i) => (
+                            <span key={i} className={i === 1 ? "whitespace-nowrap" : undefined}>
+                              {i > 0 && ", "}
+                              {p}
+                            </span>
+                          ))}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-[12px] font-mono text-primary-600 mt-0.5">
+                        {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                        {startTime && endTime && (() => {
+                          const [sh, sm] = startTime.split(":").map(Number);
+                          const [eh, em] = endTime.split(":").map(Number);
+                          return ` · ${fmt(sh, sm)} → ${fmt(eh, em)}`;
+                        })()}
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                {/* A repeat's next dates, before the host confirms */}
+                {repeatLine && repeatNext.length > 0 && (
+                  <div className="-mt-2 mb-4 bg-white border border-primary-200 rounded-2xl px-4 py-3.5">
+                    <p className="text-[11px] font-semibold text-primary-500 mb-2">Next games</p>
+                    <ul className="flex flex-wrap gap-1.5" aria-label="Next games">
+                      {repeatNext.slice(0, 4).map((d) => (
+                        <li key={d} className="inline-flex items-center h-8 px-3 rounded-full bg-primary-50 border border-primary-200 text-[13px] font-semibold text-primary-800 whitespace-nowrap">
+                          {formatGameDay(d).plain}
+                        </li>
+                      ))}
+                      {repeatNext.length > 4 && <li className="inline-flex items-center h-8 px-1 text-[13px] text-primary-500">and more</li>}
+                    </ul>
+                    <p className="text-[12px] text-primary-500 mt-2.5 leading-snug">
+                      Each goes up 4 weeks ahead as its own game. Book the turf for each date yourself (call or WhatsApp the turf): TapTurf doesn&apos;t take bookings.
+                    </p>
+                  </div>
+                )}
 
                 {/* GAME group */}
                 <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-2">
@@ -774,8 +933,8 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                   {/* Turf booked toggle — iOS switch */}
                   <div className="flex items-center justify-between px-4 py-3.5 min-h-[56px]">
                     <div>
-                      <p className="text-[15px] font-medium text-primary-800">Turf already booked</p>
-                      <p className="text-[12px] text-primary-500 mt-0.5">Confirmed slot</p>
+                      <p className="text-[15px] font-medium text-primary-800">{repeat ? "First game's turf booked" : "Turf already booked"}</p>
+                      <p className="text-[12px] text-primary-500 mt-0.5">{repeat ? "Mark the others from each game's page" : "Confirmed slot"}</p>
                     </div>
                     <button
                       onClick={() => setTurfBooked(!turfBooked)}
@@ -909,7 +1068,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                 {submitting ? (
                   <><Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Creating…</>
                 ) : (
-                  <><Zap className="w-5 h-5" strokeWidth={2.75} aria-hidden="true" /> Post game</>
+                  <><Zap className="w-5 h-5" strokeWidth={2.75} aria-hidden="true" /> {repeat ? "Post repeating game" : "Post game"}</>
                 )}
               </button>
             </div>

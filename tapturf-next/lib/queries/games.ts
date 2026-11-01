@@ -4,17 +4,21 @@ import { usableTurfPhotos } from "@/lib/utils/images";
 import {
   answerRequestCall,
   createGameCall,
+  createSeriesCall,
   gameProblem,
   incomingRequestsCall,
   myRequestsCall,
+  mySeriesCall,
   requestsForGameCall,
   sendRequestCall,
+  stopSeriesCall,
   updateGameCall,
   withdrawRequestCall,
   type GameAnswer,
   type GetToken,
 } from "@/lib/games/client";
-import type { GameChanges } from "@/lib/games/types";
+import type { Repeat } from "@/lib/games/repeat";
+import type { GameChanges, GameSeries, SeriesInfo } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
 // Public reads (games, lineups, turfs) use the anon key, as the pages
@@ -185,25 +189,76 @@ export async function getUserJoinedGames(userId: string) {
   return { data: (games as Game[]) || [], error: gamesError?.message || null };
 }
 
+/** The create flow's game as the API takes it. */
+function createBody(gameData: CreateGameData, hostPhone: string) {
+  return {
+    turf_id: gameData.turfId,
+    sport: gameData.sport,
+    skill_level: gameData.skillLevel,
+    max_players: gameData.maxPlayers,
+    date: gameData.date,
+    start_time: gameData.startTime,
+    end_time: gameData.endTime,
+    price_per_player: gameData.costPerPerson,
+    description: gameData.description || gameData.notes || null,
+    turf_booked: gameData.turfBooked || false,
+    host_phone: hostPhone,
+  };
+}
+
 /** The signed-in caller hosts a new game (they become its first player). hostPhone: "" or +91 and 10 digits. */
 export async function createGame(getToken: GetToken, gameData: CreateGameData, hostPhone: string) {
-  const r = outcome(
-    await createGameCall(getToken, {
-      turf_id: gameData.turfId,
-      sport: gameData.sport,
-      skill_level: gameData.skillLevel,
-      max_players: gameData.maxPlayers,
-      date: gameData.date,
-      start_time: gameData.startTime,
-      end_time: gameData.endTime,
-      price_per_player: gameData.costPerPerson,
-      description: gameData.description || gameData.notes || null,
-      turf_booked: gameData.turfBooked || false,
-      host_phone: hostPhone,
-    }),
-    "game",
-  );
+  const r = outcome(await createGameCall(getToken, createBody(gameData, hostPhone)), "game");
   return "error" in r ? { data: null, error: r.error } : { data: r.ok.game, error: null };
+}
+
+// ── Repeats ────────────────────────────────────────────
+
+/**
+ * The signed-in caller starts a repeat: the game, from its date on, as
+ * `repeat` says. Its first games go up at once (the host the first player
+ * of each), soonest first.
+ */
+export async function createSeries(getToken: GetToken, gameData: CreateGameData, hostPhone: string, repeat: Repeat) {
+  const r = outcome(await createSeriesCall(getToken, { game: createBody(gameData, hostPhone), repeat }), "series");
+  return "error" in r ? { data: null, error: r.error } : { data: { series: r.ok.series, games: r.ok.games }, error: null };
+}
+
+/** The signed-in host's repeats, newest first; ready false while the database has none to offer. */
+export async function getMySeries(getToken: GetToken) {
+  const a = await mySeriesCall(getToken);
+  const r = outcome(a, "series");
+  return "error" in r ? { data: [] as GameSeries[], ready: false, error: r.error } : { data: r.ok.series, ready: r.ok.ready === true, error: null };
+}
+
+/** The host stops a repeat; cancel: its games not started yet are called off too (their players are told). */
+export async function stopSeries(getToken: GetToken, seriesId: string, cancel: boolean) {
+  const r = outcome(await stopSeriesCall(getToken, seriesId, cancel), "series");
+  return "error" in r ? { data: null, error: r.error } : { data: r.ok, error: null };
+}
+
+/** A repeat's games still open from today (India), soonest first: a public read, as every game is. */
+export async function getSeriesGames(seriesId: string) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const { data, error } = await createClient()
+    .from("games")
+    .select("id, date, start_time, end_time, status, current_players, max_players")
+    .eq("series_id", seriesId)
+    .in("status", ["open", "full"])
+    .gte("date", today)
+    .order("date", { ascending: true })
+    .limit(12);
+  if (error || !data) return [] as Pick<Game, "id" | "date" | "start_time" | "end_time" | "status" | "current_players" | "max_players">[];
+  return data as Pick<Game, "id" | "date" | "start_time" | "end_time" | "status" | "current_players" | "max_players">[];
+}
+
+/** What the game pages show of these repeats (a public read, as the games are), by id; none while the database has no repeats. */
+export async function getSeriesInfo(ids: (string | null | undefined)[]): Promise<Map<string, SeriesInfo>> {
+  const want = [...new Set(ids.filter((x): x is string => !!x))].slice(0, 50);
+  if (want.length === 0) return new Map();
+  const { data, error } = await createClient().rpc("game_series_public", { p_ids: want });
+  if (error || !Array.isArray(data)) return new Map();
+  return new Map((data as SeriesInfo[]).map((s) => [s.id, s]));
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   gamePlace,
   getGameStatus,
   hostNote,
+  oneGamePerRepeat,
   skillInfo,
   speakTimeRange,
   spotsInfo,
@@ -196,6 +197,20 @@ test("live and ended follow India's clock", () => {
   assert.equal(getGameStatus({ date: "2026-10-29", start_time: "09:00", end_time: "10:30" }, NOW), "live");
   assert.equal(getGameStatus({ date: "2026-10-29", start_time: "07:00", end_time: "08:00" }, NOW), "expired");
   assert.equal(getGameStatus({ date: "2026-10-30", start_time: "10:00", end_time: "12:00" }, NOW), "upcoming");
+});
+
+test("listings show a repeat once, its soonest game", () => {
+  const list = [
+    { id: "a1", series_id: "A" },
+    { id: "x", series_id: null },
+    { id: "a2", series_id: "A" },
+    { id: "b1", series_id: "B" },
+    { id: "y" },
+    { id: "a3", series_id: "A" },
+    { id: "b2", series_id: "B" },
+  ];
+  assert.deepEqual(oneGamePerRepeat(list).map((g) => g.id), ["a1", "x", "b1", "y"], "single games all stay, in order");
+  assert.deepEqual(oneGamePerRepeat([]), []);
 });
 
 const OWN = (h: string) => `https://x.supabase.co/storage/v1/object/public/turf-photos/t1/${h.repeat(24)}.webp`;

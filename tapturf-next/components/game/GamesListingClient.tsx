@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { GameCard } from "./GameCard";
-import { filterNonExpiredGames, skillInfo } from "@/lib/utils/game";
+import { filterNonExpiredGames, oneGamePerRepeat, skillInfo } from "@/lib/utils/game";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { CityLine } from "@/components/city/CityLine";
 import { guessCityFromAddress, labelFor, type CityScope } from "@/lib/city";
@@ -25,7 +25,8 @@ function cityLabelOf(g: Game): string | undefined {
  * /games: the open games the server rendered for this page (one city's,
  * or every city's), filtered in memory by sport, skill and search. No
  * fetch on load. In a city view, games elsewhere sit below under their
- * own heading.
+ * own heading. A repeat shows once, its soonest game (that game's page
+ * lists its next ones).
  */
 export function GamesListingClient({
   initialGames,
@@ -68,8 +69,8 @@ export function GamesListingClient({
       .filter(Boolean)
       .some((field) => field!.toLowerCase().includes(q));
   };
-  const filteredGames = fresh(initialGames).filter(matches);
-  const filteredOthers = fresh(otherGames).filter(matches);
+  const filteredGames = oneGamePerRepeat(fresh(initialGames).filter(matches));
+  const filteredOthers = oneGamePerRepeat(fresh(otherGames).filter(matches));
 
   const handleHostClick = (e: React.MouseEvent) => {
     if (!user) {
@@ -188,12 +189,12 @@ export function GamesListingClient({
               <Zap className="w-4 h-4" strokeWidth={2.5} />
               Host a game
             </Link>
-            {otherGames.length > 0 && (
+            {filteredOthers.length > 0 && (
               <a
                 href="#other-city-games"
                 className="basis-full inline-flex items-center gap-1 h-11 text-[14px] font-semibold text-accent-700 hover:text-accent-800 focus-neon"
               >
-                {otherGames.length.toLocaleString("en-IN")} open in other cities <ArrowUpRight className="w-4 h-4" />
+                {filteredOthers.length.toLocaleString("en-IN")} open in other cities <ArrowUpRight className="w-4 h-4" />
               </a>
             )}
           </div>
