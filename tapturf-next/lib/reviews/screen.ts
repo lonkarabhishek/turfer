@@ -1,8 +1,13 @@
 /**
  * Text rules for a report's tip and private note, the same as the
  * database's (private.review_clean_text and private.review_text_problem in
- * supabase/migrations/20261027_game_reports.sql), so the sheet can say so
- * as the player types instead of after a round trip. Pure.
+ * supabase/migrations/20261027_game_reports.sql, and the tip's own
+ * private.review_tip_problem in 20261102_reviews_trust.sql), so the sheet
+ * can say so as the player types, the route refuses what the database
+ * would, and the database has the last word. The rules are one list
+ * (CONTACT_RULES, TIP_RULES), written the way both JavaScript and Postgres
+ * read them: npm run test:reviews checks the SQL says the same, and
+ * screen.cases.json runs through both (scripts/sql-tests/reviews_trust.check.mjs). Pure.
  */
 
 export const TIP_MAX = 500;
@@ -45,23 +50,61 @@ export function dialDigits(s: string): string {
     .replace(/([0-9])[\s.()/-]+(?=[0-9])/g, "$1");
 }
 
-const PHONE = /(^|[^0-9])(\+?91|0)?[6-9][0-9]{9}([^0-9]|$)/;
-const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/i;
-const LINK = /(https?:\/\/|www\.)/i;
-const SHORT = /(^|[^a-z0-9@.])(wa\.me|t\.me|bit\.ly)([^a-z0-9]|$)/i;
-const DOMAIN = /(^|[^a-z0-9@.])[a-z0-9][a-z0-9-]*\.(com|org|io|app|xyz|ly|gl|site|online|shop|store|info|biz|co\.in|net\.in|org\.in)([^a-z0-9]|$)/i;
-/** The short endings only in lower case after a 3-letter name, so "here.In the evening" passes. */
-const SHORT_TLD = /(^|[^A-Za-z0-9@.])[A-Za-z0-9][A-Za-z0-9-]{2,}\.(in|co|me|net)([^A-Za-z0-9]|$)/;
-const PATH = /(^|[^a-z0-9@.])[a-z0-9][a-z0-9-]*\.[a-z]{2,}\/[^ ]/i;
+/**
+ * One rule of the screen: a pattern as both JavaScript and Postgres read it
+ * (no lookbehind, no \d, no flags inside), whether case is ignored (~* in
+ * SQL), and what it reads: the text as typed, or its digits as they would
+ * be dialled (dialDigits).
+ */
+export type ScreenRule = { on: "text" | "dialled"; i: boolean; re: string };
 
 /**
- * "contact_info" when the text has an Indian mobile number (10 digits from
- * 6 to 9, with or without 91 or 0 in front, however it is spaced, dotted,
- * dashed, bracketed or in whichever script's digits), an email, a link or a
- * bare domain. Prices (₹1,200), times (7-9pm) and scores (120/3) pass.
+ * The note's rules, and the tip's first ones: private.review_text_problem,
+ * rule for rule and in order. An Indian mobile number (10 digits from 6 to
+ * 9, with or without 91 or 0 in front, however it is spaced, dotted,
+ * dashed, bracketed or in whichever script's digits), an email, a link, a
+ * short link, a bare domain, the short endings (only in lower case after a
+ * 3-letter name, so "here.In the evening" passes) and a path.
+ */
+export const CONTACT_RULES: readonly ScreenRule[] = [
+  { on: "dialled", i: false, re: String.raw`(^|[^0-9])(\+?91|0)?[6-9][0-9]{9}([^0-9]|$)` },
+  { on: "text", i: true, re: String.raw`[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}` },
+  { on: "text", i: true, re: String.raw`(https?://|www\.)` },
+  { on: "text", i: true, re: String.raw`(^|[^a-z0-9@.])(wa\.me|t\.me|bit\.ly)([^a-z0-9]|$)` },
+  { on: "text", i: true, re: String.raw`(^|[^a-z0-9@.])[a-z0-9][a-z0-9-]*\.(com|org|io|app|xyz|ly|gl|site|online|shop|store|info|biz|co\.in|net\.in|org\.in)([^a-z0-9]|$)` },
+  { on: "text", i: false, re: String.raw`(^|[^A-Za-z0-9@.])[A-Za-z0-9][A-Za-z0-9-]{2,}\.(in|co|me|net)([^A-Za-z0-9]|$)` },
+  { on: "text", i: true, re: String.raw`(^|[^a-z0-9@.])[a-z0-9][a-z0-9-]*\.[a-z]{2,}/[^ ]` },
+];
+
+/**
+ * The tip's own, on top of those: an @handle to message someone on
+ * (WhatsApp, Instagram, Telegram). A letter or _ after the @, so "@7pm" and
+ * "@ 800" pass; never inside a word, so an address is the email rule's.
+ * The private note keeps CONTACT_RULES only.
+ */
+export const TIP_RULES: readonly ScreenRule[] = [{ on: "text", i: true, re: String.raw`(^|[^a-z0-9._%+-])@[a-z_][a-z0-9._]{2,29}` }];
+
+const compile = (rules: readonly ScreenRule[]) => rules.map((r) => ({ on: r.on, re: new RegExp(r.re, r.i ? "i" : "") }));
+const CONTACT = compile(CONTACT_RULES);
+const TIP = [...CONTACT, ...compile(TIP_RULES)];
+
+function breaks(rules: ReturnType<typeof compile>, s: string): boolean {
+  let dialled: string | null = null;
+  return rules.some((r) => r.re.test(r.on === "dialled" ? (dialled ??= dialDigits(s)) : s));
+}
+
+/**
+ * "contact_info" when the text has a phone number, an email, a link or a
+ * bare domain (CONTACT_RULES): the private note's rule. Prices (₹1,200),
+ * times (7-9pm) and scores (120/3) pass.
  */
 export function contactProblem(s: string | null | undefined): "contact_info" | null {
   if (!s) return null;
-  if (PHONE.test(dialDigits(s))) return "contact_info";
-  return [EMAIL, LINK, SHORT, DOMAIN, SHORT_TLD, PATH].some((re) => re.test(s)) ? "contact_info" : null;
+  return breaks(CONTACT, s) ? "contact_info" : null;
+}
+
+/** The public tip's rule: contactProblem's, and an @handle too (TIP_RULES). */
+export function tipProblem(s: string | null | undefined): "contact_info" | null {
+  if (!s) return null;
+  return breaks(TIP, s) ? "contact_info" : null;
 }

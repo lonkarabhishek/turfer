@@ -1,7 +1,8 @@
 import type { NextResponse } from "next/server";
 import { accountError, accountReply, caller } from "../account/route";
-import { accountRpc, createAccountLimiter, readSmallJson, resolveAccount } from "../account/server";
+import { accountRpc, accountRpcIfThere, createAccountLimiter, readSmallJson, resolveAccount } from "../account/server";
 import { toDaily } from "./daily";
+import { parseFlag } from "./flags";
 import { isUuid, parseReport } from "./payload";
 
 // Game reports, for app/api/reviews and app/api/reviews/vote
@@ -14,11 +15,12 @@ import { isUuid, parseReport } from "./payload";
 const allowRead = createAccountLimiter(60);
 const allowWrite = createAccountLimiter(20);
 const allowVote = createAccountLimiter(40);
+const allowFlag = createAccountLimiter(10);
 
 type Who = { userId: string } | { reply: NextResponse };
 
-/** The account this sign-in opens, or the reply to send instead. */
-async function who(req: Request, allow: (req: Request) => boolean): Promise<Who> {
+/** The account this sign-in opens, or the reply to send instead. The photo routes share it. */
+export async function who(req: Request, allow: (req: Request) => boolean): Promise<Who> {
   const c = await caller(req, allow);
   if ("reply" in c) return c;
   const r = await resolveAccount(c.id);
@@ -83,6 +85,8 @@ export async function postReview(req: Request): Promise<NextResponse> {
   if ("reply" in w) return w.reply;
   const p = parseReport(await readSmallJson(req, 4_000));
   if ("bad" in p) return accountError("bad");
+  // What review_save would refuse, refused here as it would answer: the sheet reads it the same.
+  if ("contact" in p) return accountReply({ reason: "contact_info", field: p.contact }, "bad");
   const { turf_id, ...report } = p.ok;
   const res = await accountRpc("review_save", { p_user_id: w.userId, p_turf_id: turf_id, p_report: report });
   if ("unavailable" in res) return accountError("unavailable");
@@ -114,4 +118,23 @@ export async function postVote(req: Request): Promise<NextResponse> {
   const d = res.data;
   if (d.r !== "ok") return refusal(d);
   return accountReply({ r: "ok", on: d.on === true, upvotes: typeof d.upvotes === "number" ? d.upvotes : 0 });
+}
+
+/**
+ * POST /flag { review_id, reason, detail }: "Report this review", for the
+ * caller (20261102_reviews_trust.sql review_flag). Before that file the
+ * function isn't there: unavailable with reason not_ready (the page shows
+ * no Report button then anyway).
+ */
+export async function postFlag(req: Request): Promise<NextResponse> {
+  const w = await who(req, allowFlag);
+  if ("reply" in w) return w.reply;
+  const p = parseFlag(await readSmallJson(req, 1_500));
+  if ("bad" in p) return accountError("bad");
+  const res = await accountRpcIfThere("review_flag", { p_user_id: w.userId, p_review_id: p.ok.review_id, p_reason: p.ok.reason, p_detail: p.ok.detail });
+  if ("missing" in res) return accountReply({ reason: "not_ready" }, "unavailable");
+  if ("unavailable" in res) return accountError("unavailable");
+  const d = res.data;
+  if (d.r !== "ok") return refusal(d);
+  return accountReply({ r: "ok", already: d.already === true });
 }

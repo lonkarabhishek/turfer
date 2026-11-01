@@ -2,7 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { activeTurfCount, claimedTurfCount } from "@/lib/queries/admin";
-import { reviewRemovalNumbers } from "@/lib/queries/adminReviews";
+import { reviewFlagNumbers, reviewRemovalNumbers } from "@/lib/queries/adminReviews";
 import { signupPeople } from "@/lib/queries/adminUsers";
 import { claimCounts } from "@/lib/admin/claimed";
 import { claimedThisWeek, deltaText, signupGlance, type GlanceCount } from "@/lib/admin/glance";
@@ -157,13 +157,14 @@ async function TurfsCard() {
 
 /** What waits for the owner, each linking to where it is decided. */
 async function WaitingRow() {
-  const [claims, suggestions, removals] = await Promise.all([adminClaims(), pendingSuggestions(), reviewRemovalNumbers()]);
-  // Removal requests: none to show on a database from before them.
+  const [claims, suggestions, removals, flags] = await Promise.all([adminClaims(), pendingSuggestions(), reviewRemovalNumbers(), reviewFlagNumbers()]);
+  // Removal requests and reported reviews: none to show on a database from before them.
   // Short words on the chips, so three fit a line on a phone; screen readers hear what each is after them.
   const items: { n: number | null; one: string; many: string; what: string; href: string }[] = [
     { n: claims.ok ? claimCounts(claims.data.claims).waiting : null, one: "claim", many: "claims", what: "owner claims to approve", href: "#owner-claims" },
     { n: suggestions.ok ? suggestions.rows.length : suggestions.reason === "not_set_up" ? 0 : null, one: "suggestion", many: "suggestions", what: "player suggestions to approve", href: "/admin/suggestions" },
     { n: removals.ok ? removals.data.open : removals.reason === "not_set_up" ? 0 : null, one: "review removal", many: "review removals", what: "review removal requests", href: "/admin/reviews#removal-requests" },
+    { n: flags.ok ? flags.data.open : flags.reason === "not_set_up" ? 0 : null, one: "reported review", many: "reported reviews", what: "reviews players reported", href: "#review-reports" },
   ];
   const waiting = items.filter((i) => i.n !== null && i.n > 0);
   const unknown = items.filter((i) => i.n === null);

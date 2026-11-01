@@ -17,6 +17,8 @@ export function ReviewList({
   hydrated,
   turfSports,
   onVote,
+  onFlag,
+  flagged,
   onEdit,
   onRemove,
 }: {
@@ -26,6 +28,10 @@ export function ReviewList({
   hydrated: boolean;
   turfSports: readonly string[];
   onVote: (id: string) => void;
+  /** Report this review; left out where the database doesn't take reports yet. */
+  onFlag?: (r: ReviewWithUser) => void;
+  /** The reviews this viewer reported. */
+  flagged?: Set<string>;
   onEdit: () => void;
   /** Resolves to whether it worked. */
   onRemove: () => Promise<boolean>;
@@ -102,7 +108,7 @@ export function ReviewList({
       )}
       {others.map((r) => (
         <li key={r.id}>
-          <ReviewRow r={r} turfSports={turfSports} hydrated={hydrated} voted={voted.has(r.id)} onVote={onVote} />
+          <ReviewRow r={r} turfSports={turfSports} hydrated={hydrated} voted={voted.has(r.id)} onVote={onVote} onFlag={onFlag} flagged={flagged?.has(r.id)} />
         </li>
       ))}
     </ul>

@@ -1,4 +1,4 @@
-import type { MineResponse, MyReport, ReportBody, SaveResponse, VoteResponse } from "./types";
+import type { FlagResponse, MineResponse, MyReport, PhotoAddResponse, PhotoReadyResponse, ReportBody, SaveResponse, VoteResponse } from "./types";
 
 /**
  * Browser side of game reports: calls to /api/reviews with this device's
@@ -14,7 +14,8 @@ async function call<T>(token: string, path: string, init: RequestInit = {}): Pro
     const res = await fetch(path, {
       ...init,
       cache: "no-store",
-      headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${token}` },
+      // A form (a photo) sets its own type, with its boundary.
+      headers: { ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${token}` },
     });
     let body: unknown = null;
     try {
@@ -39,6 +40,25 @@ export const removeReport = (token: string, turfId: string) =>
 
 export const voteReview = (token: string, reviewId: string, on: boolean) =>
   call<VoteResponse>(token, "/api/reviews/vote", { method: "POST", body: JSON.stringify({ review_id: reviewId, on }) });
+
+/** Whether the sheet can offer photos (20261102_reviews_trust.sql), and how many are left today. */
+export const getPhotoReady = (token: string) => call<PhotoReadyResponse>(token, "/api/reviews/photos");
+
+/** A photo and its thumbnail, as the phone made them (lib/reviews/photoPrep.ts): checked, then kept, ready to post with the report. */
+export function addPhoto(token: string, turfId: string, full: Blob, thumb: Blob) {
+  const form = new FormData();
+  const ext = full.type === "image/webp" ? "webp" : "jpg";
+  form.append("full", full, `photo.${ext}`);
+  form.append("thumb", thumb, `thumb.${ext}`);
+  return call<PhotoAddResponse>(token, `/api/reviews/photos?turf=${encodeURIComponent(turfId)}`, { method: "POST", body: form });
+}
+
+/** A photo taken out of the sheet before the report was posted. */
+export const discardPhoto = (token: string, id: string) => call<{ r: "ok" }>(token, `/api/reviews/photos?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+
+/** "Report this review". */
+export const flagReview = (token: string, reviewId: string, reason: string, detail: string | null) =>
+  call<FlagResponse>(token, "/api/reviews/flag", { method: "POST", body: JSON.stringify({ review_id: reviewId, reason, detail }) });
 
 /** What went wrong, in the sheet's words (lib/reviews/server.ts refusal). */
 export type SaveProblem = "own_turf" | "contact_info" | "limit" | "daily" | "new" | "sign_in" | "gone" | "bad" | "unavailable" | "exists";

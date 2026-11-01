@@ -3,6 +3,7 @@ import type { ReviewSummary, ReviewWithUser } from "../../types/review";
 import type { TurfSuggestion } from "../queries/suggestions";
 import { isAspect, isWhen } from "../reviews/catalog";
 import { parseAspects } from "../reviews/payload";
+import { shapeReviewPhotos } from "../reviews/photos";
 import type { AspectCount, PlayAgainCounts, ReportFields } from "../reviews/types";
 import { scrubBookingApps } from "../utils/bookingApps";
 
@@ -60,6 +61,12 @@ export function shapeReportFields(r: Raw): ReportFields {
   if ("play_again" in r) out.play_again = r.play_again === -1 || r.play_again === 0 || r.play_again === 1 ? r.play_again : null;
   if ("verified_via" in r) out.verified_via = r.verified_via === "game" || r.verified_via === "booking" ? r.verified_via : null;
   if ("edited_at" in r) out.edited_at = str(r.edited_at);
+  // 20261102_reviews_trust.sql: the badge, worked out by the database, and the photos (only when there are some).
+  if ("played_here" in r) out.played_here = r.played_here === true;
+  if ("photos" in r) {
+    const photos = shapeReviewPhotos(r.photos);
+    if (photos.length) out.photos = photos;
+  }
   return out;
 }
 

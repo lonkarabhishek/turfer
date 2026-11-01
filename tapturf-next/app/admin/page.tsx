@@ -42,6 +42,7 @@ import { ListingCheckTool, ReviewSummaryTool } from "@/components/admin/AiTools"
 import { LinkRefusals } from "@/components/admin/LinkRefusals";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
+import { ReviewFlags } from "@/components/admin/ReviewFlags";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -116,6 +117,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           Photos owners add go live at once and are checked automatically; anything that isn&rsquo;t the venue is kept off the page until you put it back.
         </p>
         <OwnerPhotos />
+      </Fold>
+
+      {/* Players' reports of reviews (read in the browser: the list fills in the line and how many wait, and opens it). */}
+      <Fold id="review-reports" title="Reported reviews" line="Reviews players reported from the turf page">
+        <p className="text-[13px] text-primary-500 mb-3">
+          A reported review stays up until you decide. Hide takes it off the page, its photos too; Keep leaves it. Its author is never told who reported it.
+        </p>
+        <ReviewFlags />
       </Fold>
 
       {/* Signup windows, the tick, Ask and the suggestions queue (requests + notifications are in the reviews snapshot to keep the layout de-duped). */}

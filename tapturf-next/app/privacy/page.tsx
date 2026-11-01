@@ -103,16 +103,39 @@ const SECTIONS: LegalSection[] = [
         <p id="reports" className="scroll-mt-24">
           <strong>When you rate a turf.</strong> We store your stars, the parts you tapped, the sport and time
           of day you picked, whether you&rsquo;d play again, the rate you paid, your tip, and any private note
-          to the owner. Your name, stars, taps, tip and rate are public. A private note is seen only by the
+          to the owner. Your name, stars, taps, tip and rate are public. A tip can&rsquo;t hold a phone
+          number, an email, a link or an @handle. A private note is seen only by the
           turf&rsquo;s verified owner and TapTurf, without your name unless you choose to show it; a note
-          without your name reaches the owner only together with notes from at least two other players. We
-          note whether you played a TapTurf game at the turf, and may later show it on your report. Reports
+          without your name reaches the owner only together with notes from at least two other players. If
+          you played a TapTurf game at the turf (you hosted it, or were in it before it started) and it was
+          over, your report says &ldquo;Played here (verified)&rdquo;; we work that out from your games each
+          time the page is made, and never show which game or who else played. Reports
           go live at once. You can post one new report a day, or one for each turf where you played a
           TapTurf game that day. A turf&rsquo;s verified owner can ask TapTurf to remove a report that breaks
           the rules; it stays up while we decide, and if we remove it only you still see it, marked hidden.
           We never tell you that an owner asked, or who. We may use your TapTurf games and your Call or
           WhatsApp taps to ask how your game went; taps are never shown to anyone else. You can edit or
           remove your report from the turf page at any time.
+        </p>
+        <p id="review-photos" className="scroll-mt-24">
+          <strong>Photos on your report, if you add any.</strong> You can add up to three photos from your
+          game. Each is made smaller on your phone, which also leaves out the details your camera adds, such
+          as where it was taken, and our server takes them out again. Before it is kept, our server has it
+          checked automatically for anything that must not show under a review, such as sexual or violent
+          images, a photo of a document or a number, an ad or a screenshot; a photo that fails the check is
+          not kept. We keep the check&rsquo;s answer to look into misuse. Your photos are public once your
+          report is posted: they show with it on the turf page. To remove one, edit your report and take
+          it out; removing your report takes its photos with it, and so does TapTurf hiding it. A removed
+          photo is deleted from our storage, as is one you added but never posted, after two days. You can
+          add ten photos a day.
+        </p>
+        <p id="report-review" className="scroll-mt-24">
+          <strong>If you report a review.</strong> When you tap Report on someone else&rsquo;s review, we
+          keep the account you reported it from, the review, the reason you picked, any line you add and
+          when. Only TapTurf&rsquo;s team sees these, to decide whether the review breaks the rules; the
+          review stays up while we do, and its author is never told that anyone reported it, or who. You
+          can report a review once (again only after it changes), and ten a day. If someone reports yours
+          and we hide it, only you still see it, marked hidden.
         </p>
         <p id="owners" className="scroll-mt-24">
           <strong>If you claim a turf on myTapturf.</strong> We keep the TapTurf account you claimed it from,
@@ -277,8 +300,8 @@ const SECTIONS: LegalSection[] = [
           <li>Supabase, which hosts our database, handles Google sign-in sessions and counts who is watching a live score.</li>
           <li>Google Firebase, which sends and verifies phone one-time codes.</li>
           <li>
-            Anthropic, whose AI checks a profile photo you upload before it shows, checks the photos turf owners
-            add, and answers questions in Ask TapTurf.
+            Anthropic, whose AI checks a profile photo you upload before it shows, checks the photos you add
+            to a report and the photos turf owners add, and answers questions in Ask TapTurf.
           </li>
           <li>Vercel, which hosts the website.</li>
           <li>Google Analytics, for usage statistics, only if you accept cookies (section 5).</li>
@@ -406,6 +429,15 @@ const SECTIONS: LegalSection[] = [
           Your profile picture stays until you change or remove it. A photo uploaded on the Me tab that you
           replace or remove is deleted from our storage; the automatic check&rsquo;s answer for it stays with your
           account, and goes with it. One uploaded before 30 October 2026 is deleted when you ask us.
+        </li>
+        <li>
+          A photo on your report stays until you take it out, remove the report, or TapTurf hides it; then it
+          is deleted from our storage. One you added but never posted is deleted after two days. The
+          automatic check&rsquo;s answer stays with the record of the photo.
+        </li>
+        <li>
+          A report of a review you sent, and what TapTurf decided, is kept so we can see how reviews are
+          reported and spot misuse; it is never shown to the review&rsquo;s author.
         </li>
         <li>
           When you change your username, the old one stays reserved for you: links to it still reach your
