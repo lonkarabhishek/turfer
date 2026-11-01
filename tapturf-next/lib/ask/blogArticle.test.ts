@@ -214,6 +214,23 @@ test("every post: each related-turfs card the page shows is a venue [V] in the p
   for (const line of cc) assert.match(line, /^\[V\d+\] CC Turf [^,]+, [^:]+$/);
 });
 
+test("dls resource block is a lesson bar and states no target", () => {
+  const p = bySlug("what-is-dls-method-cricket");
+  const block = p.blocks.find((b) => b.type === "dls-resources");
+  assert.ok(block && block.type === "dls-resources");
+  const a = readArticle(p);
+  const line = a.prompt.split("\n").find((l) => l.startsWith("Resource picture:"));
+  assert.ok(line, a.prompt);
+  assert.match(line, /20 overs still to bat and 10 wickets in hand/);
+  assert.match(line, /50-over lesson picture/);
+  assert.match(line, /not the official scale for a T20/);
+  assert.match(line, /not a DLS resource percentage/);
+  assert.match(line, /does not calculate a target/);
+  assert.doesNotMatch(line, /target is \d/);
+  // The article's made-up example stays in the prose. The widget line must not repeat it as a result.
+  assert.doesNotMatch(line, /132/);
+});
+
 test("every post: a price calculator is a line with its preset and the per-player cost the page shows", () => {
   let calcs = 0;
   for (const p of ALL_POSTS) {

@@ -552,6 +552,20 @@ function read(post: Post): { article: Article; index: Index } {
         units.prose(line);
         break;
       }
+      case "dls-resources": {
+        // Same clamps as DlsResourceVisual. The line describes the picture only: no resource percentage and no target.
+        const clamp = (n: number | undefined, min: number, max: number, fallback: number) => {
+          if (typeof n !== "number" || !Number.isFinite(n)) return fallback;
+          return Math.max(min, Math.min(max, Math.round(n)));
+        };
+        const overs = clamp(b.defaults?.oversLeft, 0, 50, 20);
+        const wickets = clamp(b.defaults?.wicketsInHand, 0, 10, 10);
+        const caption = tidy(b.caption) ? `${bare(tidy(b.caption))}. ` : "";
+        const line = `Resource picture: ${caption}Set to ${overs} overs still to bat and ${wickets} wickets in hand on a 50-over lesson picture. The bar fills when either number goes up and empties when it goes down. It is not the official scale for a T20. Lesson only: it is not a DLS resource percentage and it does not calculate a target.`;
+        body.push(line);
+        units.prose(line);
+        break;
+      }
       // Buttons say nothing to answer from.
       default:
         break;
