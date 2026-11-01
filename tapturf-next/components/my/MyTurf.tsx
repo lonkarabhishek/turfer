@@ -132,7 +132,7 @@ export function MyTurf({ id }: { id: string }) {
         </div>
       </section>
 
-      <PlayerReports reviews={data.reviews} turfSports={t.sports ?? []} />
+      <PlayerReports reviews={data.reviews} turfSports={t.sports ?? []} turfId={t.id} />
 
       <Health turf={t} photos={visiblePhotos ?? t.photos} />
 

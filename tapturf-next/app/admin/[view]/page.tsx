@@ -39,6 +39,7 @@ import { AskDigestCard } from "@/components/admin/AskDigest";
 import { getFlaggedListings } from "@/lib/queries/adminListing";
 import { isAskConfigured } from "@/lib/ai/ask";
 import { SuggestionQueue } from "@/components/admin/SuggestionQueue";
+import { ReviewRemovals } from "@/components/admin/ReviewRemovals";
 import { turfPath } from "@/lib/utils/turfPath";
 import { LIVE_FILTERS, adminLiveStatus, getAdminLiveLinks, type AdminLiveLink, type LiveFilter } from "@/lib/queries/adminTools";
 import { methodLabel, recordedLater, starterName } from "@/lib/admin/live";
@@ -672,20 +673,30 @@ async function renderView(v: View, filter: string, city: string | null = null): 
       return {
         count: reviews.length,
         node: (
-          <Table head={["Turf", "Rating", "Comment", "By", "Source", "Date"]} empty={reviews.length === 0}>
-            {reviews.map((r) => (
-              <tr key={r.id} className="align-top">
-                <td className="px-4 py-3">
-                  {r.turf_id ? <Link href={`/turf/${r.turf_id}`} className="text-primary-900 hover:text-accent-600">{r.turfName ?? "Turf"}</Link> : "-"}
-                </td>
-                <td className="px-4 py-3 tabular-nums">★ {r.rating}</td>
-                <td className="px-4 py-3 text-primary-600 max-w-[360px]">{r.comment || <span className="text-primary-400">-</span>}</td>
-                <td className="px-4 py-3 text-primary-900">{r.author_name || (r.user_id && names.get(r.user_id)) || "-"}</td>
-                <td className="px-4 py-3"><Badge className="bg-primary-100 text-primary-700">{r.source ?? "app"}</Badge></td>
-                <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
-              </tr>
-            ))}
-          </Table>
+          <>
+            {/* Owners' requests to take a report off (read in the browser, after the page). */}
+            <section id="removal-requests" className="mb-6 rounded-2xl bg-white border border-primary-200 p-5 scroll-mt-20">
+              <h2 className="font-semibold text-primary-900 mb-1">Review removal requests</h2>
+              <p className="text-[13px] text-primary-500 mb-4">
+                Every player report goes live at once. A turf&rsquo;s owner can ask you to take one off; it stays up until you decide, and its author is never told who asked.
+              </p>
+              <ReviewRemovals />
+            </section>
+            <Table head={["Turf", "Rating", "Comment", "By", "Source", "Date"]} empty={reviews.length === 0}>
+              {reviews.map((r) => (
+                <tr key={r.id} className="align-top">
+                  <td className="px-4 py-3">
+                    {r.turf_id ? <Link href={`/turf/${r.turf_id}`} className="text-primary-900 hover:text-accent-600">{r.turfName ?? "Turf"}</Link> : "-"}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">★ {r.rating}</td>
+                  <td className="px-4 py-3 text-primary-600 max-w-[360px]">{r.comment || <span className="text-primary-400">-</span>}</td>
+                  <td className="px-4 py-3 text-primary-900">{r.author_name || (r.user_id && names.get(r.user_id)) || "-"}</td>
+                  <td className="px-4 py-3"><Badge className="bg-primary-100 text-primary-700">{r.source ?? "app"}</Badge></td>
+                  <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
+                </tr>
+              ))}
+            </Table>
+          </>
         ),
       };
     }

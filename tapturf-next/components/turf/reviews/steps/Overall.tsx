@@ -2,17 +2,20 @@
 
 import { Star } from "lucide-react";
 import { STAR_WORDS } from "@/lib/reviews/catalog";
+import { PLAYED_HERE_LINE } from "@/lib/reviews/daily";
 import { buzz } from "../ui";
 
 /**
  * Screen 1, "How was your game?": the overall stars first, so the parts
- * can't pull them up or down. Skipped when the star was tapped on the page.
+ * can't pull them up or down, and that a report is for a turf they played
+ * at. Skipped when the star was tapped on the page.
  */
 export function Overall({ turfName, stars, onPick }: { turfName: string; stars: number; onPick: (n: number) => void }) {
   return (
     <div className="pt-2 pb-4">
       <h2 className="text-[22px] font-bold text-primary-900 leading-tight">How was your game?</h2>
       <p className="mt-1 text-[14px] text-primary-500">{turfName} · about 20 seconds</p>
+      <p className="mt-1 text-[13px] text-primary-600">{PLAYED_HERE_LINE}</p>
       <div role="radiogroup" aria-label="Overall" className="mt-6 grid grid-cols-5 gap-2">
         {STAR_WORDS.map((word, i) => {
           const n = i + 1;

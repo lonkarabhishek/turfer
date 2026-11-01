@@ -1,6 +1,7 @@
 import type { NextResponse } from "next/server";
 import { accountError, accountReply, caller } from "../account/route";
 import { accountRpc, createAccountLimiter, readSmallJson, resolveAccount } from "../account/server";
+import { toDaily } from "./daily";
 import { isUuid, parseReport } from "./payload";
 
 // Game reports, for app/api/reviews and app/api/reviews/vote
@@ -26,6 +27,8 @@ async function who(req: Request, allow: (req: Request) => boolean): Promise<Who>
   return { userId: r.ok.id };
 }
 
+const whole = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? x : null);
+
 /** A refusal from the review functions, as the routes send it. */
 function refusal(d: Record<string, unknown>): NextResponse {
   switch (d.r) {
@@ -42,6 +45,8 @@ function refusal(d: Record<string, unknown>): NextResponse {
     case "google":
       return accountReply({ reason: d.r }, "not_allowed");
     case "limit":
+      // One new report a day, or one per turf played at today (20261101_reviews_policy.sql).
+      if (d.why === "daily") return accountReply({ reason: "daily", allowed: whole(d.allowed) ?? 1, played: whole(d.played) ?? 0 }, "limit");
       return accountError("limit");
     case "bad":
       return accountError("bad");
@@ -52,7 +57,7 @@ function refusal(d: Record<string, unknown>): NextResponse {
 
 const turfParam = (req: Request) => new URL(req.url).searchParams.get("turf");
 
-/** GET ?turf=: the caller's own report (any status, with its note), their Helpful votes here, whether they manage it, a hint and their price. */
+/** GET ?turf=: the caller's own report (any status, with its note), their Helpful votes here, whether they manage it, a hint, their price and today's new reports. */
 export async function getReviews(req: Request): Promise<NextResponse> {
   const w = await who(req, allowRead);
   if ("reply" in w) return w.reply;
@@ -68,6 +73,7 @@ export async function getReviews(req: Request): Promise<NextResponse> {
     blocked: d.blocked === "own_turf" ? "own_turf" : null,
     hint: d.hint ?? null,
     my_price: typeof d.my_price === "number" ? d.my_price : null,
+    daily: toDaily(d.daily),
   });
 }
 
