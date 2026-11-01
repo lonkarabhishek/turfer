@@ -68,7 +68,7 @@ export function CityBreakdown({
                 headRef.current?.focus();
                 onCity(null);
               }}
-              className="inline-flex items-center gap-1 h-8 px-3 rounded-full border border-primary-200 font-semibold text-primary-700 hover:bg-primary-50">
+              className="inline-flex items-center gap-1 h-10 px-3 rounded-full border border-primary-200 font-semibold text-primary-700 hover:bg-primary-50">
               <X className="w-3.5 h-3.5" aria-hidden /> All cities
             </button>
           )}
@@ -103,7 +103,7 @@ export function CityBreakdown({
 
       {/* One toggle that stays put, so focus stays on it. */}
       {(all ? rows.length > FIRST : hidden > 0) && (
-        <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2">
+        <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className="mt-1 min-h-10 text-[13px] font-semibold text-primary-700 underline underline-offset-2">
           {all ? `Show the top ${FIRST}` : `Show all ${rows.length} cities`}
         </button>
       )}

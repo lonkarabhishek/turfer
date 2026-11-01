@@ -20,6 +20,7 @@ import {
 import { NO_CITY, cityLabel, inCity, joinedBetween, type Person } from "@/lib/admin/people";
 import { CityBreakdown } from "./CityBreakdown";
 import { SignupPeople } from "./SignupPeople";
+import { Fold } from "./Fold";
 
 /**
  * Sign-ups over time, zoomable: 3 months, then monthly, weekly, daily and
@@ -213,235 +214,238 @@ export function SignupsTrend({
         zoomOut(from.closest("svg") ? { bar: w.start } : from.closest("nav") ? "crumb" : null);
       }}
     >
-      {/* Zoom level */}
-      <div role="group" aria-label="Group sign-ups by" className="grid grid-cols-5 sm:flex gap-1 rounded-full bg-primary-100 p-1 sm:w-fit">
-        {LEVELS.map((l) => (
-          <button
-            key={l}
-            type="button"
-            aria-pressed={w.level === l}
-            aria-label={LEVEL_NAMES[l]}
-            onClick={() => pickLevel(l)}
-            className={`h-8 px-1 sm:px-3 rounded-full text-[12px] sm:text-[13px] font-semibold whitespace-nowrap transition-colors ${w.level === l ? "bg-white text-primary-900 shadow-sm" : "text-primary-500 hover:text-primary-800"}`}
-          >
-            <span className="sm:hidden" aria-hidden>
-              {LEVEL_SHORT[l]}
-            </span>
-            <span className="hidden sm:inline">{LEVEL_NAMES[l]}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Where we are, and moving around */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <nav aria-label="Zoom path" className="min-w-0 flex-1">
-          <ol className="flex flex-wrap items-center gap-1 text-[13px] text-primary-500">
-            {stack.map((s, i) => (
-              <li key={i} className="flex items-center gap-1 min-w-0">
-                {i > 0 && <span aria-hidden>›</span>}
-                {i === stack.length - 1 ? (
-                  <span ref={crumbRef} tabIndex={-1} className="font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded" aria-current="page">
-                    {s.label}
-                  </span>
-                ) : (
-                  <button type="button" onClick={() => go(stack.slice(0, i + 1), "crumb")} className="underline underline-offset-2 hover:text-primary-900">
-                    {s.label}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
-        <div className="flex items-center gap-1">
-          {/* aria-disabled, not disabled: a button that turns off under focus would drop focus to the page. */}
-          <button type="button" onClick={() => move(-1)} aria-disabled={!canMove(-1)} aria-label="Earlier" className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button type="button" onClick={() => move(1)} aria-disabled={!canMove(1)} aria-label="Later" className="w-9 h-9 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <button type="button" onClick={() => canZoomOut && zoomOut()} aria-disabled={!canZoomOut} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-[13px] font-semibold text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
-            <ZoomOut className="w-4 h-4" aria-hidden /> Zoom out
-          </button>
-        </div>
-      </div>
-
-      {/* The number */}
-      <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-1">
-        <p ref={heroRef} tabIndex={-1} className="text-[40px] leading-none font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded">
-          {sum.total.toLocaleString("en-IN")}
-        </p>
-        {city !== null && (
-          <button
-            type="button"
-            // The chip goes away: keep focus on the number, which now counts everyone.
-            onClick={() => {
-              heroRef.current?.focus();
-              setCity(null);
-            }}
-            className="mb-1 inline-flex items-center gap-1 h-8 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold" aria-label={`Showing ${city === NO_CITY ? "people with no known city" : cityLabel(city)} only. Show every city`}>
-            {city === NO_CITY ? "No known city" : cityLabel(city)} <X className="w-3.5 h-3.5" aria-hidden />
-          </button>
-        )}
-        <div className="pb-1 text-[13px] text-primary-500">
-          {delta !== null && sum.previousName && (
-            <p>
-              <span className={`font-semibold ${delta > 0 ? "text-accent-700" : delta < 0 ? "text-hot-600" : "text-primary-700"}`}>
-                {delta > 0 ? "+" : delta < 0 ? "−" : "±"}
-                {Math.abs(delta).toLocaleString("en-IN")}
-                {sum.previous ? ` (${delta >= 0 ? "+" : "−"}${Math.round((Math.abs(delta) / sum.previous) * 100)}%)` : ""}
-              </span>{" "}
-              vs {sum.previousName}
-              {w.end > now ? ", same point in time" : ""}
-            </p>
-          )}
-          {peak >= 0 && (
-            <p>
-              Busiest: {buckets[peak].long}, {plural(max, "sign-up", "sign-ups")}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* The chart */}
-      <div ref={boxRef} className="relative mt-4" onPointerLeave={() => setHover(null)}>
-        {/* viewBox and width 100%: before it is measured, the first draw scales into the card instead of spilling out. */}
-        <svg
-          width={width}
-          height={PLOT_H + AXIS_H}
-          viewBox={`0 0 ${width} ${PLOT_H + AXIS_H}`}
-          style={{ width: "100%", height: "auto" }}
-          role="group"
-          aria-label={`Sign-ups${scope} by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
-          className="block overflow-visible select-none"
-        >
-          {/* Grid and y axis */}
-          {ticks.map((v) => (
-            <g key={v}>
-              <line x1={Y_AXIS_W} x2={width} y1={y(v)} y2={y(v)} stroke={v === 0 ? BASELINE : GRID} strokeWidth={1} shapeRendering="crispEdges" />
-              <text x={Y_AXIS_W - 8} y={y(v)} dy="0.35em" textAnchor="end" fontSize={11} fill={AXIS_TEXT} style={{ fontVariantNumeric: "tabular-nums" }}>
-                {v}
-              </text>
-            </g>
+      {/* The chart and By city fold away on a phone (open on a wider screen; the viewer's choice is kept), so the people list starts near the top. */}
+      <Fold inner openWide id="signups-chart" title="Sign-ups over time and by city" line={`${plural(sum.total, "sign-up", "sign-ups")} · ${w.label}${city === null ? "" : city === NO_CITY ? " · no known city" : ` · ${cityLabel(city)}`}`}>
+        {/* Zoom level */}
+        <div role="group" aria-label="Group sign-ups by" className="grid grid-cols-5 sm:flex gap-1 rounded-full bg-primary-100 p-1 sm:w-fit">
+          {LEVELS.map((l) => (
+            <button
+              key={l}
+              type="button"
+              aria-pressed={w.level === l}
+              aria-label={LEVEL_NAMES[l]}
+              onClick={() => pickLevel(l)}
+              className={`h-10 px-1 sm:px-3 rounded-full text-[12px] sm:text-[13px] font-semibold whitespace-nowrap transition-colors ${w.level === l ? "bg-white text-primary-900 shadow-sm" : "text-primary-500 hover:text-primary-800"}`}
+            >
+              <span className="sm:hidden" aria-hidden>
+                {LEVEL_SHORT[l]}
+              </span>
+              <span className="hidden sm:inline">{LEVEL_NAMES[l]}</span>
+            </button>
           ))}
+        </div>
 
-          {/* Bars, each its whole band as the hit target */}
-          {buckets.map((b, i) => {
-            const cx = Y_AXIS_W + band * i + band / 2;
-            const h = Math.max(0, y(0) - y(b.count));
-            const fill = hover === i ? BAR_HOVER : b.current ? BAR_CURRENT : BAR;
-            const what = `${b.long}: ${plural(b.count, "sign-up", "sign-ups")}${b.current ? " so far" : ""}${deeper ? `. Press Enter to zoom in to ${LEVEL_NAMES[deeper].toLowerCase()}` : ""}`;
-            return (
-              <g
-                // Keyed by level too, so a zoom draws new bars and focusing one fires onFocus (the tooltip).
-                key={`${w.level}:${b.start}`}
-                ref={(el) => {
-                  barsRef.current[i] = el;
-                }}
-                role="button"
-                tabIndex={i === tabStop ? 0 : -1}
-                aria-label={what}
-                aria-disabled={!deeper}
-                onPointerEnter={() => setHover(i)}
-                onPointerMove={() => hover !== i && setHover(i)}
-                onFocus={() => {
-                  setHover(i);
-                  setActive(i);
-                }}
-                onBlur={() => setHover((x) => (x === i ? null : x))}
-                // A bar that had focus (a click, or a screen reader's activation) keeps focus in the plot after the zoom.
-                onClick={(e) => zoomIn(b, document.activeElement === e.currentTarget)}
-                onKeyDown={(e) => onBarKey(e, i)}
-                className={`outline-none ${deeper ? "cursor-zoom-in" : ""}`}
-              >
-                <rect x={Y_AXIS_W + band * i} y={0} width={band} height={PLOT_H} fill="transparent" />
-                {b.count > 0 && <path d={barPath(cx - barW / 2, y(b.count), barW, h)} fill={fill} />}
-                {hover === i && <rect x={Y_AXIS_W + band * i + 1} y={1} width={Math.max(0, band - 2)} height={PLOT_H - 2} fill="none" stroke={BASELINE} strokeWidth={1} rx={4} />}
-                {i === peak && b.count > 0 && hover !== i && (
-                  <text x={cx} y={y(b.count) - 6} textAnchor="middle" fontSize={11} fontWeight={600} fill="#1D1D1F">
-                    {b.count}
-                  </text>
-                )}
-                {axisLabel[i] && (
-                  <text x={cx} y={PLOT_H + 18} textAnchor="middle" fontSize={11} fill={AXIS_TEXT}>
-                    {b.axis}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+        {/* Where we are, and moving around */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <nav aria-label="Zoom path" className="min-w-0 flex-1">
+            <ol className="flex flex-wrap items-center gap-1 text-[13px] text-primary-500">
+              {stack.map((s, i) => (
+                <li key={i} className="flex items-center gap-1 min-w-0">
+                  {i > 0 && <span aria-hidden>›</span>}
+                  {i === stack.length - 1 ? (
+                    <span ref={crumbRef} tabIndex={-1} className="font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded" aria-current="page">
+                      {s.label}
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => go(stack.slice(0, i + 1), "crumb")} className="underline underline-offset-2 hover:text-primary-900">
+                      {s.label}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+          <div className="flex items-center gap-1">
+            {/* aria-disabled, not disabled: a button that turns off under focus would drop focus to the page. */}
+            <button type="button" onClick={() => move(-1)} aria-disabled={!canMove(-1)} aria-label="Earlier" className="w-10 h-10 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={() => move(1)} aria-disabled={!canMove(1)} aria-label="Later" className="w-10 h-10 inline-flex items-center justify-center rounded-full border border-primary-200 text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={() => canZoomOut && zoomOut()} aria-disabled={!canZoomOut} className="h-10 px-3 inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-[13px] font-semibold text-primary-700 hover:bg-primary-50 aria-disabled:opacity-35 aria-disabled:hover:bg-transparent aria-disabled:cursor-default">
+              <ZoomOut className="w-4 h-4" aria-hidden /> Zoom out
+            </button>
+          </div>
+        </div>
 
-        {/* Tooltip */}
-        {hovered && hover !== null && (
-          <div
-            // The bar's own label already says this to screen readers.
-            aria-hidden
-            className="pointer-events-none absolute z-10 rounded-xl bg-primary-900 text-white px-3 py-2 shadow-elevated text-left"
-            // Its bottom sits just above the bar top, so it never covers the bar it is about.
-            style={{
-              left: Math.min(Math.max(Y_AXIS_W + band * hover + band / 2 - 105, 0), Math.max(0, width - 210)),
-              top: y(hovered.count) - 10,
-              width: 210,
-              transform: "translateY(-100%)",
-            }}
+        {/* The number */}
+        <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-1">
+          <p ref={heroRef} tabIndex={-1} className="text-[40px] leading-none font-semibold text-primary-900 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 rounded">
+            {sum.total.toLocaleString("en-IN")}
+          </p>
+          {city !== null && (
+            <button
+              type="button"
+              // The chip goes away: keep focus on the number, which now counts everyone.
+              onClick={() => {
+                heroRef.current?.focus();
+                setCity(null);
+              }}
+              className="mb-1 inline-flex items-center gap-1 h-10 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold" aria-label={`Showing ${city === NO_CITY ? "people with no known city" : cityLabel(city)} only. Show every city`}>
+              {city === NO_CITY ? "No known city" : cityLabel(city)} <X className="w-3.5 h-3.5" aria-hidden />
+            </button>
+          )}
+          <div className="pb-1 text-[13px] text-primary-500">
+            {delta !== null && sum.previousName && (
+              <p>
+                <span className={`font-semibold ${delta > 0 ? "text-accent-700" : delta < 0 ? "text-hot-600" : "text-primary-700"}`}>
+                  {delta > 0 ? "+" : delta < 0 ? "−" : "±"}
+                  {Math.abs(delta).toLocaleString("en-IN")}
+                  {sum.previous ? ` (${delta >= 0 ? "+" : "−"}${Math.round((Math.abs(delta) / sum.previous) * 100)}%)` : ""}
+                </span>{" "}
+                vs {sum.previousName}
+                {w.end > now ? ", same point in time" : ""}
+              </p>
+            )}
+            {peak >= 0 && (
+              <p>
+                Busiest: {buckets[peak].long}, {plural(max, "sign-up", "sign-ups")}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* The chart */}
+        <div ref={boxRef} className="relative mt-4" onPointerLeave={() => setHover(null)}>
+          {/* viewBox and width 100%: before it is measured, the first draw scales into the card instead of spilling out. */}
+          <svg
+            width={width}
+            height={PLOT_H + AXIS_H}
+            viewBox={`0 0 ${width} ${PLOT_H + AXIS_H}`}
+            style={{ width: "100%", height: "auto" }}
+            role="group"
+            aria-label={`Sign-ups${scope} by ${LEVEL_NAMES[w.level].toLowerCase()}, ${w.label}. Use the table below for every value.`}
+            className="block overflow-visible select-none"
           >
-            <p className="text-[18px] font-semibold leading-tight">
-              {hovered.count.toLocaleString("en-IN")}
-              <span className="ml-1 text-[12px] font-normal text-white/70">{hovered.count === 1 ? "sign-up" : "sign-ups"}{hovered.current ? " so far" : ""}</span>
-            </p>
-            <p className="text-[12px] text-white/80 leading-snug">{hovered.long}</p>
-            {deeper && <p className="mt-1 text-[11px] text-accent-300">Tap to see {LEVEL_NAMES[deeper].toLowerCase()}</p>}
+            {/* Grid and y axis */}
+            {ticks.map((v) => (
+              <g key={v}>
+                <line x1={Y_AXIS_W} x2={width} y1={y(v)} y2={y(v)} stroke={v === 0 ? BASELINE : GRID} strokeWidth={1} shapeRendering="crispEdges" />
+                <text x={Y_AXIS_W - 8} y={y(v)} dy="0.35em" textAnchor="end" fontSize={11} fill={AXIS_TEXT} style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {v}
+                </text>
+              </g>
+            ))}
+
+            {/* Bars, each its whole band as the hit target */}
+            {buckets.map((b, i) => {
+              const cx = Y_AXIS_W + band * i + band / 2;
+              const h = Math.max(0, y(0) - y(b.count));
+              const fill = hover === i ? BAR_HOVER : b.current ? BAR_CURRENT : BAR;
+              const what = `${b.long}: ${plural(b.count, "sign-up", "sign-ups")}${b.current ? " so far" : ""}${deeper ? `. Press Enter to zoom in to ${LEVEL_NAMES[deeper].toLowerCase()}` : ""}`;
+              return (
+                <g
+                  // Keyed by level too, so a zoom draws new bars and focusing one fires onFocus (the tooltip).
+                  key={`${w.level}:${b.start}`}
+                  ref={(el) => {
+                    barsRef.current[i] = el;
+                  }}
+                  role="button"
+                  tabIndex={i === tabStop ? 0 : -1}
+                  aria-label={what}
+                  aria-disabled={!deeper}
+                  onPointerEnter={() => setHover(i)}
+                  onPointerMove={() => hover !== i && setHover(i)}
+                  onFocus={() => {
+                    setHover(i);
+                    setActive(i);
+                  }}
+                  onBlur={() => setHover((x) => (x === i ? null : x))}
+                  // A bar that had focus (a click, or a screen reader's activation) keeps focus in the plot after the zoom.
+                  onClick={(e) => zoomIn(b, document.activeElement === e.currentTarget)}
+                  onKeyDown={(e) => onBarKey(e, i)}
+                  className={`outline-none ${deeper ? "cursor-zoom-in" : ""}`}
+                >
+                  <rect x={Y_AXIS_W + band * i} y={0} width={band} height={PLOT_H} fill="transparent" />
+                  {b.count > 0 && <path d={barPath(cx - barW / 2, y(b.count), barW, h)} fill={fill} />}
+                  {hover === i && <rect x={Y_AXIS_W + band * i + 1} y={1} width={Math.max(0, band - 2)} height={PLOT_H - 2} fill="none" stroke={BASELINE} strokeWidth={1} rx={4} />}
+                  {i === peak && b.count > 0 && hover !== i && (
+                    <text x={cx} y={y(b.count) - 6} textAnchor="middle" fontSize={11} fontWeight={600} fill="#1D1D1F">
+                      {b.count}
+                    </text>
+                  )}
+                  {axisLabel[i] && (
+                    <text x={cx} y={PLOT_H + 18} textAnchor="middle" fontSize={11} fill={AXIS_TEXT}>
+                      {b.axis}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Tooltip */}
+          {hovered && hover !== null && (
+            <div
+              // The bar's own label already says this to screen readers.
+              aria-hidden
+              className="pointer-events-none absolute z-10 rounded-xl bg-primary-900 text-white px-3 py-2 shadow-elevated text-left"
+              // Its bottom sits just above the bar top, so it never covers the bar it is about.
+              style={{
+                left: Math.min(Math.max(Y_AXIS_W + band * hover + band / 2 - 105, 0), Math.max(0, width - 210)),
+                top: y(hovered.count) - 10,
+                width: 210,
+                transform: "translateY(-100%)",
+              }}
+            >
+              <p className="text-[18px] font-semibold leading-tight">
+                {hovered.count.toLocaleString("en-IN")}
+                <span className="ml-1 text-[12px] font-normal text-white/70">{hovered.count === 1 ? "sign-up" : "sign-ups"}{hovered.current ? " so far" : ""}</span>
+              </p>
+              <p className="text-[12px] text-white/80 leading-snug">{hovered.long}</p>
+              {deeper && <p className="mt-1 text-[11px] text-accent-300">Tap to see {LEVEL_NAMES[deeper].toLowerCase()}</p>}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12px] text-primary-500">
+          <p>
+            {deeper ? "Tap a bar to zoom in." : "This is the finest view. Zoom out to see more."}
+            {buckets.some((b) => b.current && b.count > 0) && (
+              <span className="ml-2 inline-flex items-center gap-1">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: BAR_CURRENT }} aria-hidden /> still going on
+              </span>
+            )}
+          </p>
+          <button type="button" onClick={() => setShowTable((v) => !v)} aria-expanded={showTable} aria-controls={`${id}-table`} className="min-h-10 font-semibold text-primary-700 underline underline-offset-2">
+            {showTable ? "Hide table" : "Show as table"}
+          </button>
+        </div>
+
+        {showTable && (
+          <div id={`${id}-table`} className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-primary-200">
+            <table className="w-full text-[13px]">
+              <caption className="sr-only">{`Sign-ups${scope}, ${w.label}`}</caption>
+              <thead className="sticky top-0 bg-primary-50">
+                <tr>
+                  <th scope="col" className="text-left font-semibold text-primary-600 px-3 py-2">
+                    {LEVEL_NAMES[w.level]}
+                  </th>
+                  <th scope="col" className="text-right font-semibold text-primary-600 px-3 py-2">
+                    Sign-ups
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {buckets.map((b) => (
+                  <tr key={b.start} className="border-t border-primary-100">
+                    <th scope="row" className="text-left font-normal text-primary-800 px-3 py-1.5">
+                      {b.long}
+                      {b.current ? " (so far)" : ""}
+                    </th>
+                    <td className="text-right px-3 py-1.5 text-primary-900" style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {b.count.toLocaleString("en-IN")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12px] text-primary-500">
-        <p>
-          {deeper ? "Tap a bar to zoom in." : "This is the finest view. Zoom out to see more."}
-          {buckets.some((b) => b.current && b.count > 0) && (
-            <span className="ml-2 inline-flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: BAR_CURRENT }} aria-hidden /> still going on
-            </span>
-          )}
-        </p>
-        <button type="button" onClick={() => setShowTable((v) => !v)} aria-expanded={showTable} aria-controls={`${id}-table`} className="font-semibold text-primary-700 underline underline-offset-2">
-          {showTable ? "Hide table" : "Show as table"}
-        </button>
-      </div>
-
-      {showTable && (
-        <div id={`${id}-table`} className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-primary-200">
-          <table className="w-full text-[13px]">
-            <caption className="sr-only">{`Sign-ups${scope}, ${w.label}`}</caption>
-            <thead className="sticky top-0 bg-primary-50">
-              <tr>
-                <th scope="col" className="text-left font-semibold text-primary-600 px-3 py-2">
-                  {LEVEL_NAMES[w.level]}
-                </th>
-                <th scope="col" className="text-right font-semibold text-primary-600 px-3 py-2">
-                  Sign-ups
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {buckets.map((b) => (
-                <tr key={b.start} className="border-t border-primary-100">
-                  <th scope="row" className="text-left font-normal text-primary-800 px-3 py-1.5">
-                    {b.long}
-                    {b.current ? " (so far)" : ""}
-                  </th>
-                  <td className="text-right px-3 py-1.5 text-primary-900" style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {b.count.toLocaleString("en-IN")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <CityBreakdown people={inWindow} city={city} onCity={setCity} label={w.label} />
+        <CityBreakdown people={inWindow} city={city} onCity={setCity} label={w.label} />
+      </Fold>
 
       <SignupPeople
         people={people}
@@ -460,9 +464,10 @@ export function SignupsTrend({
 
 function Shell({ children, onKeyDown }: { children: React.ReactNode; onKeyDown?: (e: KeyboardEvent<HTMLElement>) => void }) {
   return (
-    <section aria-labelledby="signups-trend-title" onKeyDown={onKeyDown} className="rounded-2xl bg-white border border-primary-200 p-5">
+    <section aria-labelledby="signups-trend-title" onKeyDown={onKeyDown} className="rounded-2xl bg-white border border-primary-200 p-3 sm:p-5">
+      {/* The admin home's fold around this card shows the title. */}
       <div className="mb-3">
-        <h2 id="signups-trend-title" className="font-semibold text-primary-900">
+        <h2 id="signups-trend-title" className="sr-only">
           Sign-ups
         </h2>
         <p className="text-[13px] text-primary-500">New accounts over time and who they are, India time</p>

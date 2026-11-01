@@ -120,7 +120,7 @@ export function BatchTool({
             onClick={() => {
               stopRef.current = true;
             }}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50"
+            className="shrink-0 inline-flex min-h-10 items-center gap-1.5 rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50"
           >
             <Square className="w-3.5 h-3.5" /> Stop after this batch
           </button>
@@ -129,7 +129,7 @@ export function BatchTool({
             type="button"
             onClick={run}
             disabled={progress?.configured === false || remaining === 0}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800 disabled:opacity-40"
+            className="shrink-0 inline-flex min-h-10 items-center gap-1.5 rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800 disabled:opacity-40"
           >
             <Play className="w-3.5 h-3.5" /> {remaining === 0 ? "All done" : remaining != null && remaining < (progress?.total ?? 0) ? "Continue" : "Run"}
           </button>

@@ -18,7 +18,7 @@ export function RetryButton({ label = "Retry", className = "" }: { label?: strin
       type="button"
       onClick={() => start(() => router.refresh())}
       disabled={pending}
-      className={`inline-flex items-center gap-1 rounded-full border border-primary-200 bg-white px-3 py-1 text-[12px] font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-60 ${className}`}
+      className={`inline-flex min-h-10 items-center gap-1 rounded-full border border-primary-200 bg-white px-3 py-1 text-[12px] font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-60 ${className}`}
     >
       <RotateCw className={`h-3.5 w-3.5 ${pending ? "animate-spin" : ""}`} aria-hidden />
       {pending ? "Retrying" : label}
@@ -86,9 +86,20 @@ export class SectionBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
-/** What a section shows while its numbers are read (nothing for one that is usually empty: height 0). */
-export function SectionLoading({ title, height = 96 }: { title: string; height?: number }) {
+/**
+ * What a section shows while its numbers are read (nothing for one that is usually empty: height 0).
+ * A folding one (components/admin/Fold.tsx) holds its summary row's place, at 56 px while it starts closed.
+ */
+export function SectionLoading({ title, height = 96, folded = false }: { title: string; height?: number; folded?: boolean }) {
   if (height === 0) return null;
+  if (folded) {
+    return (
+      <div className="mb-3 rounded-2xl border border-primary-100 bg-primary-50/60 px-4 py-2.5 animate-pulse" style={{ minHeight: height }} aria-busy="true">
+        <p className="text-[15px] font-semibold leading-snug text-primary-400">{title}</p>
+        <p className="text-[13px] leading-snug text-primary-400">Loading</p>
+      </div>
+    );
+  }
   return (
     <div className="mb-8 rounded-2xl border border-primary-100 bg-primary-50/60 px-5 py-4 animate-pulse" style={{ minHeight: height }} aria-busy="true">
       <p className="text-xs font-bold text-primary-400">{title}</p>

@@ -187,7 +187,7 @@ export function SignupPeople({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Name, phone, city or @username"
               aria-label="Search the people who signed up"
-              className="w-full h-10 rounded-full border border-primary-200 bg-white pl-9 pr-9 text-[14px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500"
+              className="w-full h-10 rounded-full border border-primary-200 bg-white pl-9 pr-10 text-[14px] text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500"
             />
             {query && (
               <button
@@ -196,7 +196,7 @@ export function SignupPeople({
                   setQuery("");
                   inputRef.current?.focus();
                 }}
-                aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-primary-100">
+                aria-label="Clear search" className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-primary-100">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -273,7 +273,7 @@ export function SignupPeople({
 
 function Frame({ children, onKeyDown }: { children: ReactNode; onKeyDown?: React.KeyboardEventHandler<HTMLDivElement> }) {
   return (
-    <div id="people" onKeyDown={onKeyDown} className="mt-6 border-t border-primary-100 pt-5 scroll-mt-20">
+    <div id="people" onKeyDown={onKeyDown} className="mt-4 border-t border-primary-100 pt-4 sm:mt-6 sm:pt-5 scroll-mt-20">
       {children}
     </div>
   );
@@ -319,6 +319,8 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
             {c && <span className={c.guessed ? "text-primary-500" : "text-primary-800"}> · {c.guessed ? `Probably ${cityLabel(c.id)}` : cityLabel(c.id)}</span>}
             {extra.length > 0 && <span className="hidden md:inline text-primary-400"> · {extra.join(" · ")}</span>}
           </p>
+          {/* On a phone what they did gets its own line, so it isn't the part a narrow row cuts. */}
+          {extra.length > 0 && <p className="md:hidden text-[12px] font-medium text-primary-700 truncate">{extra.join(" · ")}</p>}
           {halves && (
             <span className="mt-1 flex flex-wrap gap-1">
               <HalfChip kind="phone" half={halves.phone} />

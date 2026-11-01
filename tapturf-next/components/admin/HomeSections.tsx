@@ -1,3 +1,4 @@
+import { cache } from "react";
 import Link from "next/link";
 import {
   activeTurfCount,
@@ -14,6 +15,7 @@ import {
   turfsByCitySection,
 } from "@/lib/queries/admin";
 import { getAdminGames } from "@/lib/queries/adminDetail";
+import { getAdminClaims } from "@/lib/queries/adminClaims";
 import { reviewRemovalNumbers } from "@/lib/queries/adminReviews";
 import { getPendingSuggestions } from "@/lib/queries/adminSuggestions";
 import { getAskTranscripts } from "@/lib/queries/adminAsks";
@@ -23,12 +25,17 @@ import { getLatestLiveLink, getLiveViews, getToolUsage } from "@/lib/queries/adm
 import { latestLinkSub, starterName, viewTotals } from "@/lib/admin/live";
 import { viewsLabel } from "@/lib/live/views";
 import { personId, tickTotals, tickedOnly } from "@/lib/admin/people";
+import { claimCounts } from "@/lib/admin/claimed";
+import { refusalsOf } from "@/lib/admin/links";
+import { linkRefusals } from "@/lib/queries/adminLinks";
+import { claimsLine, signupGlance } from "@/lib/admin/glance";
 import { reasonText, type Reason, type Section } from "@/lib/admin/section";
 import { StatTile } from "./StatTile";
 import { DailyChart } from "./DailyChart";
 import { SignupsTrend } from "./SignupsTrend";
 import { BreakdownList } from "./BreakdownList";
 import { SectionError, SomeFailed } from "./SectionStatus";
+import type { FoldSummary } from "./AdminSection";
 import { turfPath } from "@/lib/utils/turfPath";
 
 /**
@@ -42,6 +49,12 @@ const DASH = "-";
 const valueOf = <T,>(s: Section<T>, f: (d: T) => string | number): string | number => (s.ok ? f(s.data) : DASH);
 const subOf = <T,>(s: Section<T>, f: (d: T) => string | undefined): string | undefined => (s.ok ? f(s.data) : reasonText(s.reason));
 const failures = (...sections: Section<unknown>[]) => sections.filter((s) => !s.ok).length;
+
+// Reads a section, its fold line and the glance share, made once per render (the readers themselves aren't cached).
+export const pendingSuggestions = cache(() => getPendingSuggestions(500));
+export const adminClaims = cache(() => getAdminClaims());
+const homeGames = cache(() => getAdminGames("all", 200));
+const topHosts = cache(() => getTopHosts(10));
 
 const readTime = () => Date.now();
 
@@ -237,7 +250,7 @@ export async function ToolsSection() {
       </section>
       <div className="-mt-1 mb-4 flex flex-wrap items-center justify-end gap-3">
         <SomeFailed count={(live ? 0 : 1) + (uses ? 0 : 3) + (latest.ok ? 0 : 1)} />
-        <Link href="/admin/tools" className="text-xs font-semibold text-accent-600 hover:text-accent-700">
+        <Link href="/admin/tools" className="inline-flex min-h-10 items-center text-xs font-semibold text-accent-600 hover:text-accent-700">
           Who used the tools, and what
         </Link>
       </div>
@@ -250,7 +263,7 @@ export async function ToolsSection() {
  * (requests + notifications are further down in the reviews snapshot).
  */
 export async function SignupWindowsSection() {
-  const [people, tickRows, asks, suggestions] = await Promise.all([peopleNumbers(), adminTickRows(), getAskTranscripts(7), getPendingSuggestions(500)]);
+  const [people, tickRows, asks, suggestions] = await Promise.all([peopleNumbers(), adminTickRows(), getAskTranscripts(7), pendingSuggestions()]);
   const ticks = tickTotals(tickRows);
   const asks7d = asks.ok ? asks.rows.length : null;
   const askVisitors = asks.ok ? new Set(asks.rows.map((r) => r.ip_hash)).size : 0;
@@ -342,7 +355,6 @@ export async function BookingsSection() {
   const [bookings, people] = await Promise.all([bookingNumbers(), peopleNumbers()]);
   return (
     <section className="mb-2">
-      <p className="text-[11px] font-bold text-primary-500 mb-3">Bookings & revenue</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatTile
           label="Booking revenue"
@@ -378,8 +390,7 @@ export async function ReviewsSection() {
   // Owners' requests to take a report off; none to show on a database from before them.
   const waiting = removals.ok ? removals.data.open : 0;
   return (
-    <section className="mb-8 mt-4">
-      <p className="text-[11px] font-bold text-primary-500 mb-3">Reviews & notifications</p>
+    <section className="mb-8">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatTile
           label="Total reviews"
@@ -404,7 +415,7 @@ export async function ReviewsSection() {
 
 /** Games: upcoming / live first, then the latest past games. */
 export async function GamesListSection() {
-  const res = await getAdminGames("all", 200);
+  const res = await homeGames();
   const adminGames = res.ok ? res.data : [];
   const gameCounts = adminGames.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});
   const gamesShown = [
@@ -425,9 +436,9 @@ export async function GamesListSection() {
             : DASH}
         </p>
         <div className="flex gap-3 text-xs font-semibold">
-          <Link href="/admin/games?f=upcoming" className="text-accent-600 hover:text-accent-700">Upcoming</Link>
-          <Link href="/admin/games?f=expired" className="text-accent-600 hover:text-accent-700">Expired</Link>
-          <Link href="/admin/games" className="text-accent-600 hover:text-accent-700">All games</Link>
+          <Link href="/admin/games?f=upcoming" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">Upcoming</Link>
+          <Link href="/admin/games?f=expired" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">Expired</Link>
+          <Link href="/admin/games" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">All games</Link>
         </div>
       </div>
       <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
@@ -495,7 +506,7 @@ export async function BreakdownsSection() {
 
 /** Top hosts (the people who signed up are in the Sign-ups section). */
 export async function TopHostsSection() {
-  const hosts = await getTopHosts(10);
+  const hosts = await topHosts();
   return (
     <section className="mb-8">
       <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">
@@ -527,4 +538,124 @@ export async function TopHostsSection() {
       </div>
     </section>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Fold lines: what each section's summary row says while it is closed */
+/* ------------------------------------------------------------------ */
+
+// Each awaits the same (cached) reads as its section, so none is read twice and they start together.
+
+const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
+/** A number for a line, "-" when its read failed. */
+const num = <T,>(s: Section<T>, f: (d: T) => number): string => (s.ok ? f(s.data).toLocaleString("en-IN") : DASH);
+
+export async function signupsSummary(): Promise<FoldSummary> {
+  const { people, readAt } = await signupPeople();
+  if (people === null) return { line: "Couldn't load the people who signed up" };
+  const today = signupGlance(people.map((p) => p.joinedAt).sort((a, b) => a - b), readAt).today.total;
+  return { line: `${count(people.length, "person", "people")}, newest first · ${today.toLocaleString("en-IN")} today · tap a name for what they did` };
+}
+
+export async function contactsSummary(): Promise<FoldSummary> {
+  const [c7] = await Promise.all([getContactClickStats(7), getContactClickStats(30)]);
+  return { line: c7.ok ? `${count(c7.data.calls, "call")} and ${count(c7.data.whatsapps, "WhatsApp")} in 7 days` : reasonText(c7.reason) };
+}
+
+export async function headlineSummary(): Promise<FoldSummary> {
+  const [people, games, turfs, claimed] = await Promise.all([peopleNumbers(), gameNumbers(), activeTurfCount(), claimedTurfCount()]);
+  return { line: `${num(people, (p) => p.uniquePeople)} people · ${num(games, (g) => g.totalGames)} games · ${num(turfs, (n) => n)} active turfs, ${num(claimed, (n) => n)} claimed` };
+}
+
+export async function loginsSummary(): Promise<FoldSummary> {
+  const logins = await getRecentLogins(300);
+  if (!logins.ok) return { line: loginsUnavailable(logins.reason) };
+  const nums = loginStats(logins.rows);
+  return { line: `${count(nums.today, "sign-in")} in 24 hours · ${nums.week.toLocaleString("en-IN")} in 7 days` };
+}
+
+export async function toolsSummary(): Promise<FoldSummary> {
+  const [{ live, uses }] = await Promise.all([getToolUsage(), getLatestLiveLink(), getLiveViews()]);
+  const n = (r: Record<string, number> | undefined, ...keys: string[]) => keys.reduce((s, k) => s + (r?.[k] ?? 0), 0);
+  const scoreboards = live ? count(live.total, "live scoreboard") : `${DASH} live scoreboards`;
+  const scorecards = uses ? count(n(uses.started, "live_scorer", "live_scoreboard"), "scorecard") : `${DASH} scorecards`;
+  const tosses = uses ? count(n(uses.started, "toss"), "coin toss", "coin tosses") : `${DASH} coin tosses`;
+  return { line: `${scoreboards} · ${scorecards} · ${tosses}` };
+}
+
+export async function signupWindowsSummary(): Promise<FoldSummary> {
+  const [people, tickRows, asks, suggestions] = await Promise.all([peopleNumbers(), adminTickRows(), getAskTranscripts(7), pendingSuggestions()]);
+  const ticks = tickTotals(tickRows);
+  const pending = suggestions.ok ? suggestions.rows.length : 0;
+  const parts = [
+    `${num(people, (p) => p.uniqueSignups7d)} unique sign-ups in 7 days`,
+    `${ticks ? ticks.verified.toLocaleString("en-IN") : DASH} with the tick`,
+    `${asks.ok ? asks.rows.length.toLocaleString("en-IN") : DASH} Ask chats`,
+    suggestions.ok ? (pending ? `${count(pending, "suggestion")} to approve` : "no suggestions waiting") : `${DASH} suggestions`,
+  ];
+  return { line: parts.join(" · "), waiting: pending };
+}
+
+export async function claimsSummary(): Promise<FoldSummary> {
+  const claims = await adminClaims();
+  if (!claims.ok) return { line: reasonText(claims.reason) };
+  const c = claimCounts(claims.data.claims);
+  return { line: claimsLine(c), waiting: c.waiting };
+}
+
+/** Null when there is nothing to follow up (the section shows nothing then either). */
+export async function linkRefusalsSummary(): Promise<FoldSummary> {
+  const [res] = await Promise.all([linkRefusals(), signupPeople()]);
+  if (!res.ok) return res.reason === "not_set_up" ? null : { line: reasonText(res.reason) };
+  const n = refusalsOf(res.data).length;
+  return n ? { line: `${count(n, "case")} in the last 90 days, to sort out by hand` } : null;
+}
+
+export async function dailyGamesSummary(): Promise<FoldSummary> {
+  const games = await gameNumbers();
+  return { line: games.ok ? `${count(games.data.games7d, "game")} this week · ${games.data.games30d.toLocaleString("en-IN")} in 30 days` : reasonText(games.reason) };
+}
+
+export async function activitySummary(): Promise<FoldSummary> {
+  const [active, , notes] = await Promise.all([activeUserNumbers(), gameNumbers(), notificationNumbers()]);
+  return { line: `${num(active, (a) => a.active7)} active in 7 days · ${num(notes, (n) => n.unread)} unread notifications` };
+}
+
+export async function bookingsSummary(): Promise<FoldSummary> {
+  const [bookings] = await Promise.all([bookingNumbers(), peopleNumbers()]);
+  if (!bookings.ok) return { line: reasonText(bookings.reason) };
+  const b = bookings.data;
+  return { line: `${count(b.totalBookings, "booking")} · ₹${b.bookingRevenue.toLocaleString("en-IN")} revenue${b.pendingBookings ? ` · ${b.pendingBookings.toLocaleString("en-IN")} pending` : ""}` };
+}
+
+export async function reviewsSummary(): Promise<FoldSummary> {
+  const [reviews, notes, , removals] = await Promise.all([reviewNumbers(), notificationNumbers(), gameNumbers(), reviewRemovalNumbers()]);
+  const waiting = removals.ok ? removals.data.open : 0;
+  return {
+    line: `${num(reviews, (r) => r.totalReviews)} reviews · ${num(notes, (n) => n.total)} notifications${waiting ? ` · ${count(waiting, "removal request")} waiting` : ""}`,
+    waiting,
+  };
+}
+
+export async function gamesListSummary(): Promise<FoldSummary> {
+  const res = await homeGames();
+  if (!res.ok) return { line: reasonText(res.reason) };
+  const by = res.data.reduce<Record<string, number>>((m, g) => ((m[g.state] = (m[g.state] ?? 0) + 1), m), {});
+  const line = (["upcoming", "live", "expired", "cancelled"] as const)
+    .filter((k) => by[k])
+    .map((k) => `${by[k]} ${k}`)
+    .join(" · ");
+  return { line: line || "No games hosted yet" };
+}
+
+export async function breakdownsSummary(): Promise<FoldSummary> {
+  const [, , turfs] = await Promise.all([gamesByCitySection(), gameNumbers(), turfsByCitySection()]);
+  return { line: `Games by city, sport and status · active turfs in ${num(turfs, (t) => t.filter((c) => c.label !== "unknown").length)} cities` };
+}
+
+export async function topHostsSummary(): Promise<FoldSummary> {
+  const hosts = await topHosts();
+  if (!hosts.ok) return { line: reasonText(hosts.reason) };
+  const top = hosts.data[0];
+  return { line: top ? `${top.name || "Someone"} leads with ${count(top.games, "game")}` : "No games hosted yet" };
 }

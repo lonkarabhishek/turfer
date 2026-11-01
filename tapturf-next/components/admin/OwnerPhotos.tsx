@@ -8,6 +8,7 @@ import { istDateTime } from "@/lib/admin/people";
 import { toAdminPhotos, type AdminOwnerPhoto } from "@/lib/my/photoTypes";
 import { imageUrlForCard } from "@/lib/utils/images";
 import { adminFetch } from "@/lib/admin/adminFetch";
+import { useFoldReport } from "./Fold";
 
 type Action = "restore" | "remove" | "check";
 
@@ -29,6 +30,8 @@ export function OwnerPhotos() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ id: string; text: string } | null>(null);
+  // The fold around this panel: how many photos, and the ones kept off waiting for you.
+  const report = useFoldReport();
 
   // Through the admin page's gate (lib/admin/fetchGate.ts): one session refresh, not one per call.
   const load = useCallback(async () => {
@@ -47,6 +50,12 @@ export function OwnerPhotos() {
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    if (!rows) return;
+    const held = rows.filter((p) => p.status === "held").length;
+    report?.({ line: `${rows.length} ${rows.length === 1 ? "photo" : "photos"} · ${held ? `${held} kept off, put back or remove` : "none kept off"}`, waiting: held });
+  }, [rows, report]);
 
   const act = async (p: AdminOwnerPhoto, action: Action) => {
     if (action === "remove" && !window.confirm(`Remove this photo from ${p.turfName}?`)) return;
@@ -93,7 +102,7 @@ export function OwnerPhotos() {
             <div className="flex flex-wrap items-start gap-3">
               <Thumb url={p.url} dim={p.status !== "live"} />
               <div className="min-w-0 flex-1 space-y-1">
-                <Link href={`/turf/${p.slug ?? p.turfId}`} target="_blank" className="font-semibold text-primary-900 hover:underline">
+                <Link href={`/turf/${p.slug ?? p.turfId}`} target="_blank" className="inline-block -my-2.5 py-2.5 font-semibold text-primary-900 hover:underline">
                   {p.turfName}
                 </Link>
                 <p className="text-[13px] text-primary-500">
@@ -108,19 +117,19 @@ export function OwnerPhotos() {
                 </p>
                 {failed?.id === p.id && <p className="text-[13px] text-red-700">{failed.text}</p>}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 max-sm:basis-full">
                 {checkable(p) && (
-                  <button type="button" disabled={busy === p.id} onClick={() => void act(p, "check")} className="h-9 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+                  <button type="button" disabled={busy === p.id} onClick={() => void act(p, "check")} className="h-10 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">
                     {busy === p.id ? "Checking…" : "Check now"}
                   </button>
                 )}
                 {p.status === "held" && (
-                  <button type="button" disabled={busy === p.id} onClick={() => void act(p, "restore")} className="h-9 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+                  <button type="button" disabled={busy === p.id} onClick={() => void act(p, "restore")} className="h-10 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">
                     Put it back
                   </button>
                 )}
                 {p.status !== "removed" && (
-                  <button type="button" disabled={busy === p.id} onClick={() => void act(p, "remove")} className="h-9 px-3 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+                  <button type="button" disabled={busy === p.id} onClick={() => void act(p, "remove")} className="h-10 px-3 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">
                     Remove
                   </button>
                 )}
