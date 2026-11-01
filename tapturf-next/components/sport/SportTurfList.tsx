@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { PlayedRowMark } from "@/components/profile/PlayedHere";
 import { forCard } from "@/lib/utils/cardTurf";
 import { areaFor } from "@/lib/utils/area";
 import { labelFor, isCity } from "@/lib/city";
@@ -71,6 +72,8 @@ export function SportTurfList({
                       </span>
                       {where && <span className="block text-[13px] text-primary-500 truncate">{where}</span>}
                     </span>
+                    {/* The signed-in player's own "Played 16 Oct" (after the page loads; never in the HTML). */}
+                    <PlayedRowMark turfId={t.id} />
                     {t.rating > 0 && t.total_reviews > 0 && (
                       <span className="shrink-0 inline-flex items-center gap-1 text-[13px] text-primary-700">
                         <Star className="w-3.5 h-3.5 fill-current" />

@@ -9,6 +9,7 @@ import { UsernamePrompt } from "@/components/account/UsernamePrompt";
 import { EmailPrompt } from "@/components/account/EmailPrompt";
 import { PhonePrompt } from "@/components/account/PhonePrompt";
 import { PolicyNotice } from "@/components/legal/PolicyNotice";
+import { ViewerSignal } from "@/components/profile/ViewerSignal";
 
 /**
  * The outer <Suspense> used to wrap the WHOLE app tree so LoginModal's
@@ -31,6 +32,7 @@ export function AuthWrapper({ children }: { children: ReactNode }) {
       <EmailPrompt />
       <PhonePrompt />
       <PolicyNotice />
+      <ViewerSignal />
     </AuthProvider>
   );
 }

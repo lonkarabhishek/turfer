@@ -69,19 +69,25 @@ export function streakReachedOn(played: readonly PlayedGame[], goal: number): st
 }
 
 /** The nudge: a short title and what to do, from played games only. Null for someone who never played. */
-export type StreakNudge = { title: string; detail: string; tone: "hot" | "calm" };
+// until: the small print of a streak at risk ("Until Sunday, 1 Nov"). On that Sunday itself the
+// line says it is the last day instead, and there is no small print.
+export type StreakNudge = { title: string; detail: string; tone: "hot" | "calm"; until: string | null };
 
-export function streakNudge(s: Streak, played: number): StreakNudge | null {
+export function streakNudge(s: Streak, played: number, now: number): StreakNudge | null {
   if (played === 0) return null;
-  if (s.current >= 2 && s.thisWeek) return { title: `${s.current}-week streak`, detail: "You played this week. Play next week to keep it going.", tone: "calm" };
-  if (s.current >= 2) return { title: `${s.current}-week streak`, detail: "Play this week to keep it.", tone: "hot" };
-  if (s.current === 1 && s.thisWeek) return { title: "You played this week", detail: "Play next week too to start a streak.", tone: "calm" };
-  if (s.current === 1) return { title: "You played last week", detail: "Play this week to make it a 2-week streak.", tone: "hot" };
-  if (s.best >= 2) return { title: `Best streak: ${s.best} weeks`, detail: "Play this week to start a new one.", tone: "calm" };
-  return { title: "No streak yet", detail: "Play this week and next to start one.", tone: "calm" };
+  const lastDay = istDay(now) === s.sunday;
+  const hot = (title: string, detail: string, today: string): StreakNudge =>
+    lastDay ? { title, detail: today, tone: "hot", until: null } : { title, detail, tone: "hot", until: `Until ${sundayWords(s)}` };
+  const calm = (title: string, detail: string): StreakNudge => ({ title, detail, tone: "calm", until: null });
+  if (s.current >= 2 && s.thisWeek) return calm(`${s.current}-week streak`, "You played this week. Play next week to keep it going.");
+  if (s.current >= 2) return hot(`${s.current}-week streak`, "Play this week to keep it.", `Last day: play today to keep your ${s.current}-week streak.`);
+  if (s.current === 1 && s.thisWeek) return calm("You played this week", "Play next week too to start a streak.");
+  if (s.current === 1) return hot("You played last week", "Play this week to make it a 2-week streak.", "Last day: play today to make it a 2-week streak.");
+  if (s.best >= 2) return calm(`Best streak: ${s.best} weeks`, "Play this week to start a new one.");
+  return calm("No streak yet", "Play this week and next to start one.");
 }
 
-/** "Sunday 2 Nov": the last day to keep a streak, for the nudge's small print. */
+/** "Sunday, 1 Nov": the last day to keep a streak, for the nudge's small print. */
 export function sundayWords(s: Pick<Streak, "sunday">): string {
   const n = dayNumber(s.sunday);
   if (Number.isNaN(n)) return "";

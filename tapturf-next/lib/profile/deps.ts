@@ -10,7 +10,7 @@ import type { ProfileDeps } from "./routes";
 
 const limits = {
   read: createAccountLimiter(30),
-  // The badges' read: at most once per tab session per person (lib/profile/client.ts keeps it).
+  // The badges' read: at most once per tab session per person (lib/profile/playedStore.ts keeps it).
   badge: createAccountLimiter(60),
   write: createAccountLimiter(12),
 };

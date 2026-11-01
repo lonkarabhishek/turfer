@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Loader2, MessageCircle, Users } from "lucide-react";
+import { ChevronDown, Loader2, MessageCircle, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { PROFILE_PATH, spacedPhone } from "@/lib/account/display";
@@ -32,41 +32,45 @@ export function PlayedWithList({ people, now }: { people: PlayedWithPerson[]; no
   return (
     <ul className="divide-y divide-primary-100 rounded-2xl border border-primary-200 bg-white">
       {people.map((p) => {
+        // One text block beside the photo: name, @username when there is one, then the last game together.
         const who = (
           <>
             <UserAvatar src={p.photo} name={p.name} size={44} />
             <span className="min-w-0">
-              <span className="block text-[15px] font-semibold text-primary-900 truncate">{p.name}</span>
-              {p.username && <span className="block text-[13px] font-medium text-accent-700 truncate">@{p.username}</span>}
+              <span className="block text-[15px] font-semibold text-primary-900 leading-snug truncate">{p.name}</span>
+              {p.username && <span className="block text-[13px] font-medium text-accent-700 leading-snug truncate">@{p.username}</span>}
+              <span className="block mt-0.5 text-[12px] text-primary-500 leading-snug">Last played together {shortDay(p.last, now)}</span>
             </span>
           </>
         );
         return (
           <li key={p.key} className="px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               {p.username ? (
-                <Link href={`/u/${p.username}`} className="flex items-center gap-3 min-w-0 flex-1 rounded-xl focus-neon hover:opacity-90">
+                <Link href={`/u/${p.username}`} className="flex items-start gap-3 min-w-0 flex-1 rounded-xl focus-neon hover:opacity-90">
                   {who}
                 </Link>
               ) : (
-                <div className="flex items-center gap-3 min-w-0 flex-1">{who}</div>
+                <div className="flex items-start gap-3 min-w-0 flex-1">{who}</div>
               )}
-              <span className="shrink-0 text-right">
-                <span className="block text-[15px] font-semibold text-primary-900 tabular-nums">{p.together}</span>
+              <span className="shrink-0 pt-0.5 text-right">
+                <span className="block text-[15px] font-semibold text-primary-900 leading-snug tabular-nums">{p.together}</span>
                 <span className="block text-[11px] text-primary-500">{p.together === 1 ? "game" : "games"}</span>
               </span>
             </div>
-            <p className="mt-1 pl-[56px] text-[12px] text-primary-500">Last played together {shortDay(p.last, now)}</p>
             {p.whatsapp && (
               <a
                 href={whatsappLink(p.whatsapp)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 ml-[56px] inline-flex items-center gap-1.5 min-h-[40px] rounded-full bg-accent-600 px-3.5 text-[13px] font-semibold text-white hover:bg-accent-700 focus-neon"
+                className="mt-2 ml-[56px] inline-flex items-center gap-2 min-h-[44px] rounded-full bg-[#25D366] hover:bg-[#20c25c] pl-3 pr-4 py-1 text-[#052E16] focus-neon"
                 aria-label={`WhatsApp ${p.name} on ${spacedWhatsapp(p.whatsapp)}`}
               >
-                <MessageCircle className="w-4 h-4" aria-hidden />
-                <span className="tabular-nums">{spacedWhatsapp(p.whatsapp)}</span>
+                <MessageCircle className="w-[18px] h-[18px] shrink-0" strokeWidth={2.25} aria-hidden />
+                <span className="text-left leading-tight">
+                  <span className="block text-[14px] font-semibold">WhatsApp</span>
+                  <span className="block text-[11px] font-medium tabular-nums opacity-80">{spacedWhatsapp(p.whatsapp)}</span>
+                </span>
               </a>
             )}
           </li>
@@ -138,12 +142,28 @@ export function WhatsAppSwitch({ initial }: { initial: WhatsAppState | null }) {
           <>Not available yet. Your number stays private.</>
         ) : (
           <>
-            Off unless you turn it on. When it&rsquo;s on, people who played a TapTurf game with you (a game that has happened) see your number
-            {number && state.phone !== "none" ? <>, <span className="whitespace-nowrap tabular-nums">{number}</span>,</> : ""} and a WhatsApp button in their Played with
-            list. Nobody else does: it isn&rsquo;t on your public profile or anywhere else. Turn it off any time and it&rsquo;s gone from their lists.
+            Off by default. Only people you&rsquo;ve actually played a game with see your number
+            {number && state.phone !== "none" ? <> (<span className="whitespace-nowrap tabular-nums">{number}</span>)</> : ""} here, never on your public
+            profile. Turn it off any time.
           </>
         )}
       </p>
+      {state !== null && (
+        <details className="group mt-1">
+          <summary className="inline-flex items-center gap-1 min-h-[32px] cursor-pointer list-none text-[12px] font-semibold text-accent-700 [&::-webkit-details-marker]:hidden">
+            How this works
+            <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <p className="pb-1 text-[12px] leading-relaxed text-primary-500">
+            When it&rsquo;s on, people who were in a TapTurf game with you, once that game has happened, see your number and a WhatsApp
+            button in their own Played with list. Nobody else does: not on your profile, in search or anywhere else. It works only for a
+            number you confirmed with a one-time code, and when you turn it off it&rsquo;s gone from their lists straight away.{" "}
+            <Link href="/privacy#played-with" className="font-semibold text-accent-700 underline underline-offset-2">
+              Privacy
+            </Link>
+          </p>
+        </details>
+      )}
       {state?.phone === "none" && (
         <p className="mt-1.5 text-[12px] font-medium text-primary-700">
           Add your phone number in{" "}

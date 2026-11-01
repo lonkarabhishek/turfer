@@ -10,7 +10,7 @@ import { MedalArt } from "./MedalArt";
  * public profile renders them on the server.
  */
 
-export type NumberItem = { label: string; value: number | string; href?: string };
+export type NumberItem = { label: string; value: number | string; href?: string; sr?: string };
 
 export function PassportNumbers({ items, cols = 4, label }: { items: NumberItem[]; cols?: 3 | 4; label: string }) {
   return (
@@ -19,7 +19,10 @@ export function PassportNumbers({ items, cols = 4, label }: { items: NumberItem[
         const inner = (
           <>
             <span className="block font-display text-[26px] sm:text-[30px] leading-none font-semibold text-primary-900 tabular-nums">{it.value}</span>
-            <span className="mt-1.5 block text-[12px] font-medium text-primary-500 leading-tight">{it.label}</span>
+            <span className="mt-1.5 block text-[12px] font-medium text-primary-500 leading-tight">
+              {it.label}
+              {it.sr && <span className="sr-only"> {it.sr}</span>}
+            </span>
           </>
         );
         return (
@@ -38,16 +41,25 @@ export function PassportNumbers({ items, cols = 4, label }: { items: NumberItem[
   );
 }
 
-/** One medal: its art, its name, and a line under it (when it was earned, what it is for, or what it takes). */
-export function MedalTile({ art, name, line, locked = false, progress }: { art: Art; name: string; line: string; locked?: boolean; progress?: number }) {
+/**
+ * One medal: its art, its name, and a line under it (what it was for, or
+ * what it takes), with the day it was earned as small print when known.
+ */
+export function MedalTile({ art, name, line, date, locked = false, progress }: { art: Art; name: string; line: string; date?: string | null; locked?: boolean; progress?: number }) {
   return (
     <div className={`flex flex-col items-center text-center rounded-2xl px-2 pt-3 pb-3 h-full ${locked ? "bg-primary-50" : "bg-white border border-primary-200"}`}>
       <MedalArt art={art} locked={locked} size={60} />
-      <p className={`mt-2 text-[13px] font-semibold leading-tight ${locked ? "text-primary-600" : "text-primary-900"}`}>
+      <p className={`mt-2 text-[13px] font-semibold leading-tight text-balance ${locked ? "text-primary-600" : "text-primary-900"}`}>
         {name}
         {locked && <span className="sr-only"> (not earned yet)</span>}
       </p>
-      <p className="mt-1 text-[12px] leading-snug text-primary-500">{line}</p>
+      <p className="mt-1 text-[12px] leading-snug text-primary-500 text-balance">{line}</p>
+      {date && (
+        <p className="mt-1 text-[11px] font-medium text-primary-500 tabular-nums">
+          <span className="sr-only">Earned </span>
+          {date}
+        </p>
+      )}
       {locked && typeof progress === "number" && progress > 0 && (
         <span className="mt-2 block w-full max-w-[84px] h-1 rounded-full bg-primary-200 overflow-hidden" aria-hidden>
           <span className="block h-full rounded-full bg-accent-500" style={{ width: `${Math.round(progress * 100)}%` }} />

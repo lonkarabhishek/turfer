@@ -32,15 +32,15 @@ function deps(o: { who?: "phone" | "out"; extras?: "missing" | "on"; whatsapp?: 
   const seen: Seen = { rosters: [], people: [], whatsapp: [] };
   const d: ProfileDeps = {
     who: async () => (o.who === "out" ? { reply: Response.json({ error: "sign_in" }, { status: 401 }) } : { userId: ME, since: "2026-09-12T09:00:00Z" }),
-    history: async (_id, gamesOnly) => {
+    history: async () => {
       if (o.fail) throw new Error("down");
       return {
         games: GAMES,
-        turfs: gamesOnly ? [] : [
+        turfs: [
           { id: "t1", slug: "turf-one", name: "Turf One", city: "pune", cityLabel: "Pune" },
           { id: "t2", slug: "box-arena", name: "Box Arena", city: "pune", cityLabel: "Pune" },
         ],
-        reviews: gamesOnly ? [] : [{ turf_id: "t1", rating: 5, created_at: "2026-10-22T06:00:00Z" }],
+        reviews: [{ turf_id: "t1", rating: 5, created_at: "2026-10-22T06:00:00Z" }],
       };
     },
     rosters: async (games) => {
@@ -86,6 +86,11 @@ test("passport: the verified caller's own, private, with the people they played 
     ["Priya Sharma", 1, "priya", null],
   ], "Kiran and Neha never played a game with them");
   assert.deepEqual(body.whatsapp, { on: false, phone: "ok" });
+  // The summary every other page uses, from the same rows: the Me card, the home and the badges agree with it.
+  assert.equal(body.played.games, body.passport.numbers.games);
+  assert.equal(body.played.people, 2);
+  assert.deepEqual(body.played.toReview, ["t2"], "played at Box Arena, reviewed only Turf One");
+  assert.deepEqual(body.played.medals, ["first-game", "first-host", "first-review"]);
   assert.deepEqual(seen.whatsapp, [[ME, null]], "read, never changed");
   const text = JSON.stringify(body);
   assert.doesNotMatch(text, /acc-/, "no account ids");
@@ -111,7 +116,7 @@ test("passport and played: signed out gets the sign-in reply; a failed read is 5
   }
 });
 
-test("played: the latest day per turf and the streak, from games only", async () => {
+test("played: the latest day per turf, the streak, the counts, the medals and what to review", async () => {
   const { d, seen } = deps();
   const res = await getPlayed(get("/api/me/played"), d);
   assert.equal(res.headers.get("cache-control"), "private, no-store");
@@ -122,6 +127,8 @@ test("played: the latest day per turf and the streak, from games only", async ()
   assert.equal(body.sports, 1);
   assert.equal(body.streak.current, 2);
   assert.equal(body.streak.thisWeek, true);
+  assert.deepEqual(body.medals, ["first-game", "first-host", "first-review"], "earned, best first (one tier: the catalog's order)");
+  assert.deepEqual(body.toReview, ["t2"]);
   assert.deepEqual(seen.rosters, [["g1", "g2"]], "the played games' rosters, to count");
   assert.deepEqual(seen.people, [], "nobody's name is read");
   assert.doesNotMatch(JSON.stringify(body), /acc-/, "and no ids go back");

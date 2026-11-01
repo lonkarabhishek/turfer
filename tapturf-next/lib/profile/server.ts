@@ -51,27 +51,21 @@ async function rows<T>(q: PromiseLike<{ data: unknown; error: { message: string 
 
 export type History = { games: GameRow[]; turfs: TurfRef[]; reviews: ReviewRow[] };
 
-/**
- * Everything the passport is worked out from, for one account; gamesOnly:
- * just the games (the "You played here" badges). Throws when it can't be read.
- */
-export async function readHistory(userId: string, gamesOnly = false): Promise<History> {
+/** Everything the passport is worked out from, for one account. Throws when it can't be read. */
+export async function readHistory(userId: string): Promise<History> {
   const s = db();
   const [joined, hosted, reviews] = await Promise.all([
     rows<{ game_id: string }>(s.from("game_participants").select("game_id").eq("user_id", userId).limit(MAX_ROWS), "participants"),
     rows<GameRow>(s.from("games").select(GAME_COLUMNS).eq("creator_id", userId).limit(MAX_ROWS), "hosted games"),
-    gamesOnly
-      ? Promise.resolve([] as ReviewRow[])
-      : rows<ReviewRow>(
-          s.from("reviews").select("turf_id, rating, created_at").eq("user_id", userId).is("source", null).eq("status", "live").limit(MAX_ROWS),
-          "reviews",
-        ),
+    rows<ReviewRow>(
+      s.from("reviews").select("turf_id, rating, created_at").eq("user_id", userId).is("source", null).eq("status", "live").limit(MAX_ROWS),
+      "reviews",
+    ),
   ]);
   const have = new Set(hosted.map((g) => g.id));
   const more = [...new Set(joined.map((p) => p.game_id))].filter((id) => id && !have.has(id));
   const others = (await Promise.all(chunks(more).map((ids) => rows<GameRow>(s.from("games").select(GAME_COLUMNS).in("id", ids), "games")))).flat();
   const games = [...hosted, ...others];
-  if (gamesOnly) return { games, turfs: [], reviews: [] };
   const turfIds = [...new Set([...games.map((g) => g.turf_id), ...reviews.map((r) => r.turf_id)].filter((x): x is string => !!x))];
   const turfRows = (
     await Promise.all(chunks(turfIds).map((ids) => rows<{ id: string; slug: string | null; name: string | null; city: string | null }>(s.from("turfs").select("id, slug, name, city").in("id", ids), "turfs")))

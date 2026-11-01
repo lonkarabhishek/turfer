@@ -1,5 +1,5 @@
 import { dayNumber, istDay, playedGames, type GameRow, type PlayedGame, type ReviewRow, type TurfRef } from "./history";
-import { medalsOf, type Medal, type MedalArt } from "./medals";
+import { bestFirst, medalsOf, type Medal, type MedalArt } from "./medals";
 import { streakOf, streakReachedOn, type Streak } from "./streak";
 
 /**
@@ -35,6 +35,8 @@ export type TurfStamp = {
   first: string;
   last: string;
   games: number;
+  /** The sport played there most (the first one played, on a tie), for the stamp's glyph. */
+  sport: string | null;
 };
 
 /** A city or a sport: key (the city id, or the sport in lower case), what to call it, the first game's date and how many. */
@@ -85,6 +87,8 @@ export function buildPassport(input: PassportInput): Passport {
   const sports = new Map<string, PlaceStamp>();
   const days = { games: [] as string[], hosted: [] as string[], turfs: [] as string[], cities: [] as string[], sports: [] as string[], reviews: [] as string[] };
   const turfIds = new Set<string>();
+  // Games per sport at each turf, in the order first played (the stamp's sport).
+  const turfSports = new Map<string, Map<string, { label: string; n: number }>>();
 
   for (const g of played) {
     days.games.push(g.day);
@@ -100,7 +104,14 @@ export function buildPassport(input: PassportInput): Passport {
         s.games++;
         s.last = g.day;
       } else {
-        turfStamps.set(turf.id, { turfId: turf.id, slug: turf.slug, name: turf.name, city: turf.city, cityLabel: turf.cityLabel, first: g.day, last: g.day, games: 1 });
+        turfStamps.set(turf.id, { turfId: turf.id, slug: turf.slug, name: turf.name, city: turf.city, cityLabel: turf.cityLabel, first: g.day, last: g.day, games: 1, sport: null });
+      }
+      if (g.sport) {
+        const at = turfSports.get(turf.id) ?? new Map<string, { label: string; n: number }>();
+        turfSports.set(turf.id, at);
+        const had = at.get(sportKey(g.sport));
+        if (had) had.n++;
+        else at.set(sportKey(g.sport), { label: g.sport, n: 1 });
       }
       if (turf.city) {
         const c = cities.get(turf.city);
@@ -148,6 +159,11 @@ export function buildPassport(input: PassportInput): Passport {
   });
 
   const stampList = [...turfStamps.values()];
+  for (const st of stampList) {
+    let top: { label: string; n: number } | null = null;
+    for (const x of turfSports.get(st.turfId)?.values() ?? []) if (!top || x.n > top.n) top = x;
+    st.sport = top?.label ?? null;
+  }
   return {
     numbers: {
       games: played.length,
@@ -166,7 +182,11 @@ export function buildPassport(input: PassportInput): Passport {
   };
 }
 
-/** What the public profile may show: counts, the best streak, earned medals and reviewed turfs. No dates and no places played. */
+/**
+ * What the public profile may show: counts, the best streak, earned medals
+ * (best first: the first one leads the profile) and reviewed turfs. No
+ * dates and no places played.
+ */
 export type PublicPassport = {
   numbers: Omit<PassportNumbers, "since"> & { bestStreak: number };
   medals: { id: string; name: string; blurb: string; art: MedalArt }[];
@@ -177,7 +197,7 @@ export function publicPassport(p: Passport): PublicPassport {
   const { games, hosted, turfs, cities, sports, reviews } = p.numbers;
   return {
     numbers: { games, hosted, turfs, cities, sports, reviews, bestStreak: p.streak.best },
-    medals: p.medals.filter((m) => m.earned).map(({ id, name, blurb, art }) => ({ id, name, blurb, art })),
+    medals: bestFirst(p.medals.filter((m) => m.earned)).map(({ id, name, blurb, art }) => ({ id, name, blurb, art })),
     reviewed: p.reviewed.map(({ turfId, slug, name, cityLabel, rating }) => ({ turfId, slug, name, cityLabel, rating })),
   };
 }

@@ -6,7 +6,9 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { OwnerVerifyNote } from "@/components/account/OwnerVerifyNote";
+import { MedalArt } from "@/components/profile/MedalArt";
 import { MedalTile, PassportNumbers, ReviewedList } from "@/components/profile/PassportParts";
+import { ShareProfile } from "@/components/profile/ShareProfile";
 import { loadPublicPassport } from "@/lib/profile/publicProfile";
 
 // A TapTurf player's public profile: username, name, photo, join month
@@ -15,7 +17,8 @@ import { loadPublicPassport } from "@/lib/profile/publicProfile";
 // turfs, cities and sports, their best weekly streak, the medals they
 // earned and the turfs they reviewed (lib/profile/passport.ts
 // publicPassport: counts only, never where or when they played, or who
-// with). Tags on live scorecards link here. Only for people
+// with), led by a one-line brag and their best medal under the name. Its
+// owner, signed in, gets "Share my profile". Tags on live scorecards link here. Only for people
 // who left "Let others find and tag me" on; an old username 308s to the
 // current one. Kept out of search engines and the sitemap.
 
@@ -84,6 +87,15 @@ export default async function PlayerProfilePage({ params }: Props) {
   const passport = await loadPublicPassport(u);
   const counts = passport?.numbers;
   const played = !!counts && (counts.games > 0 || counts.reviews > 0);
+  const many = (n: number, one: string, more: string) => `${n} ${n === 1 ? one : more}`;
+  // "5 games · 5 turfs · 2 cities", once there is a game.
+  const brag =
+    counts && counts.games > 0
+      ? [many(counts.games, "game", "games"), counts.turfs ? many(counts.turfs, "turf", "turfs") : null, counts.cities ? many(counts.cities, "city", "cities") : null]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
+  const top = passport?.medals[0] ?? null;
 
   return (
     <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
@@ -94,8 +106,20 @@ export default async function PlayerProfilePage({ params }: Props) {
           {verified && <VerifiedTick size="lg" className="ml-1.5 align-[-0.1em]" />}
         </h1>
         <p className="mt-1 text-[15px] text-primary-500">@{u}</p>
-        {verified && <p className="mt-1 text-[13px] font-medium text-sky-700">Verified · Phone and email confirmed</p>}
+        {(brag || top) && (
+          <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary-50 pl-1.5 pr-3.5 py-1 text-[14px] font-semibold text-primary-800 tabular-nums">
+            {top && (
+              <>
+                <MedalArt art={top.art} size={28} />
+                <span className="sr-only">Top medal: {top.name}. </span>
+              </>
+            )}
+            {brag ?? top?.name}
+          </p>
+        )}
+        {verified && <p className="mt-2 text-[13px] font-medium text-sky-700">Verified · Phone and email confirmed</p>}
         {month && <p className="mt-3 text-[13px] text-primary-500">On TapTurf since {month}</p>}
+        <ShareProfile username={u} className="mt-4" />
       </div>
 
       {passport && played && counts && (
@@ -108,7 +132,7 @@ export default async function PlayerProfilePage({ params }: Props) {
               cols={3}
               label={`${name}'s numbers`}
               items={[
-                { label: counts.games === 1 ? "Game" : "Games", value: counts.games },
+                { label: "Played", value: counts.games, sr: counts.games === 1 ? "game" : "games" },
                 { label: counts.turfs === 1 ? "Turf" : "Turfs", value: counts.turfs },
                 { label: counts.cities === 1 ? "City" : "Cities", value: counts.cities },
                 { label: counts.sports === 1 ? "Sport" : "Sports", value: counts.sports },

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { PlayedRowMark } from "@/components/profile/PlayedHere";
 import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
 import { forCard } from "@/lib/utils/cardTurf";
@@ -242,6 +243,8 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                     <p className="text-[14px] font-semibold text-primary-800 truncate">{t.name}</p>
                     <p className="text-[12px] text-primary-500 truncate">{t.address}</p>
                   </div>
+                  {/* The signed-in player's own "Played 16 Oct" (after the page loads; never in the HTML). */}
+                  <PlayedRowMark turfId={t.id} />
                 </Link>
               </li>
             ))}

@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { Award, Gamepad2, Loader2, MessageSquareText, PenLine, RefreshCw, Stamp, Users } from "lucide-react";
+import { Award, ChevronDown, Gamepad2, Loader2, MessageSquareText, PenLine, RefreshCw, Stamp, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getPassport } from "@/lib/profile/client";
+import { keepPlayed } from "@/lib/profile/playedStore";
 import { shortDay } from "@/lib/profile/history";
-import { nextMedal, toGo } from "@/lib/profile/medals";
+import { bestFirst, lockedShortlist, toGo, type Medal } from "@/lib/profile/medals";
 import { STREAK_WEEKS_SHOWN } from "@/lib/profile/streak";
 import { turfPath } from "@/lib/utils/turfPath";
 import type { PassportResponse } from "@/lib/profile/types";
 import { MedalArt } from "./MedalArt";
 import { MedalTile, PassportNumbers, ReviewedList } from "./PassportParts";
 import { PlayedWithList, WhatsAppSwitch } from "./PlayedWith";
-import { RoundStamps, TurfStamps } from "./Stamps";
+import { ShareProfile } from "./ShareProfile";
+import { RoundStamps, StampPage, TurfStamps } from "./Stamps";
 import { StreakLine } from "./StreakNudge";
 
 /**
@@ -22,8 +24,10 @@ import { StreakLine } from "./StreakNudge";
  * review, and the people played with (and the WhatsApp switch). Only the
  * signed-in person's own (GET /api/me/passport); only real games count:
  * one that hasn't happened yet or was cancelled counts for nothing.
+ * onLoaded: the Me card shows the same numbers while this tab is open, and
+ * the played summary it brings refreshes every badge and tile.
  */
-export function PassportTab() {
+export function PassportTab({ onLoaded }: { onLoaded?: (r: PassportResponse) => void }) {
   const { user, getToken } = useAuth();
   const [data, setData] = useState<{ for: string; r: PassportResponse } | { for: string; failed: true } | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -37,7 +41,12 @@ export function PassportTab() {
       if (!alive) return;
       if (!("token" in tok)) return setData({ for: userId, failed: true });
       const a = await getPassport(tok.token);
-      if (alive) setData("ok" in a ? { for: userId, r: a.ok } : { for: userId, failed: true });
+      if (!alive) return;
+      setData("ok" in a ? { for: userId, r: a.ok } : { for: userId, failed: true });
+      if ("ok" in a) {
+        if (a.ok.played) keepPlayed(userId, a.ok.played);
+        onLoaded?.(a.ok);
+      }
     })();
     return () => {
       alive = false;
@@ -84,33 +93,104 @@ export function PassportTab() {
   return <Passport r={mine.r} />;
 }
 
+// The aside goes under the title when both don't fit on one line (a 320 px phone).
 function Heading({ id, icon, title, aside }: { id: string; icon: React.ReactNode; title: string; aside?: string }) {
   return (
-    <div className="flex items-end justify-between gap-3 mb-3">
-      <h2 id={id} className="flex items-center gap-2 font-display text-[20px] font-semibold text-primary-900 leading-tight">
+    <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-0.5 mb-3">
+      <h2 id={id} className="flex items-center gap-2 font-display text-[20px] font-semibold text-primary-900 leading-tight whitespace-nowrap">
         <span className="text-accent-600" aria-hidden>
           {icon}
         </span>
         {title}
       </h2>
-      {aside && <p className="text-[13px] text-primary-500 tabular-nums shrink-0">{aside}</p>}
+      {aside && <p className="text-[13px] text-primary-500 tabular-nums">{aside}</p>}
     </div>
   );
 }
 
+/** "Sep 2026". */
 function sinceWords(iso: string | null): string | null {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+  return d.toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
+// Two medals a row on the narrowest phones, three from 360 px, four on a wider screen.
+const MEDAL_GRID = "grid grid-cols-2 min-[360px]:grid-cols-3 sm:grid-cols-4 gap-2";
+
+function LockedTile({ m }: { m: Medal }) {
+  return <MedalTile art={m.art} name={m.name} line={toGo(m) ?? m.blurb} locked progress={m.progress} />;
+}
+
+/**
+ * Earned medals (what each was for, and when), then "Next up", then the
+ * three locked ones closest to done; the rest behind "See all". Before a
+ * first game: the three starters.
+ */
+function Medals({ medals, games, now }: { medals: Medal[]; games: number; now: number }) {
+  const [all, setAll] = useState(false);
+  const restId = useId();
+  const earned = bestFirst(medals.filter((m) => m.earned));
+  const { next, shown, rest } = lockedShortlist(medals, games);
+  return (
+    <>
+      {earned.length > 0 && (
+        <ul className={MEDAL_GRID} aria-label="Earned">
+          {earned.map((m) => (
+            <li key={m.id}>
+              <MedalTile art={m.art} name={m.name} line={m.blurb} date={m.earnedOn ? shortDay(m.earnedOn, now) : null} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {next && (
+        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-primary-900 px-4 py-3 text-white">
+          <MedalArt art={next.art} size={44} />
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium text-white/70">Next up</p>
+            <p className="text-[14px] font-semibold leading-snug text-balance">{next.need}</p>
+          </div>
+        </div>
+      )}
+      {shown.length > 0 && (
+        <ul className={`${MEDAL_GRID} mt-3`} aria-label={games === 0 ? "Your first medals to earn" : "Closest to done"}>
+          {shown.map((m) => (
+            <li key={m.id}>
+              <LockedTile m={m} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {rest.length > 0 && (
+        <>
+          <ul id={restId} hidden={!all} className={all ? `${MEDAL_GRID} mt-2` : "hidden"} aria-label="Still to earn">
+            {rest.map((m) => (
+              <li key={m.id}>
+                <LockedTile m={m} />
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            aria-expanded={all}
+            aria-controls={restId}
+            onClick={() => setAll((v) => !v)}
+            className="mt-3 inline-flex items-center gap-1.5 min-h-[44px] px-1 text-[14px] font-semibold text-accent-700 hover:text-accent-800 focus-neon rounded-lg"
+          >
+            {all ? "Show fewer" : `See all ${medals.length} medals`}
+            <ChevronDown className={`w-4 h-4 transition-transform ${all ? "rotate-180" : ""}`} aria-hidden />
+          </button>
+        </>
+      )}
+    </>
+  );
 }
 
 function Passport({ r }: { r: PassportResponse }) {
   const [now] = useState(() => Date.now());
   const { passport: p, playedWith, whatsapp } = r;
   const n = p.numbers;
-  const earned = p.medals.filter((m) => m.earned).sort((a, b) => (b.earnedOn ?? "").localeCompare(a.earnedOn ?? ""));
-  const locked = p.medals.filter((m) => !m.earned);
-  const next = nextMedal(p.medals);
+  const earned = p.medals.filter((m) => m.earned);
   const since = sinceWords(n.since);
   const section = "scroll-mt-24 mt-9";
 
@@ -119,20 +199,25 @@ function Passport({ r }: { r: PassportResponse }) {
       {/* ─── The numbers ─────────────────────────────────── */}
       <section aria-labelledby="pp-numbers">
         <Heading id="pp-numbers" icon={<Award className="w-5 h-5" />} title="Your numbers" aside={since ? `Since ${since}` : undefined} />
-        <p className="-mt-1 mb-3 text-[13px] text-primary-500">Only games that have happened count, not ones still to come or cancelled.</p>
-        <PassportNumbers
-          label="Your numbers"
-          items={[
-            { label: "Played", value: n.games, href: "/dashboard?tab=games" },
-            { label: "Hosted", value: n.hosted, href: "/dashboard?tab=games" },
-            { label: "Turfs", value: n.turfs, href: "#stamps" },
-            { label: "Cities", value: n.cities, href: "#stamps" },
-            { label: "Sports", value: n.sports, href: "#stamps" },
-            { label: "Reviews", value: n.reviews, href: "#reviewed" },
-            { label: "Week streak", value: p.streak.current, href: "#streak" },
-            { label: "Best streak", value: p.streak.best, href: "#streak" },
-          ]}
-        />
+        {/* A wall of zeros says nothing: before a first game, the empty card alone. */}
+        {n.games > 0 && (
+          <>
+            <p className="-mt-1 mb-3 text-[13px] text-primary-500">Only games that have happened count, not ones still to come or cancelled.</p>
+            <PassportNumbers
+              label="Your numbers"
+              items={[
+                { label: "Played", value: n.games, href: "/dashboard?tab=games" },
+                { label: "Hosted", value: n.hosted, href: "/dashboard?tab=games" },
+                { label: "Turfs", value: n.turfs, href: "#stamps" },
+                { label: "Cities", value: n.cities, href: "#stamps" },
+                { label: "Sports", value: n.sports, href: "#stamps" },
+                { label: "Reviews", value: n.reviews, href: "#reviewed" },
+                { label: "Streak", value: p.streak.current, href: "#streak", sr: "weeks in a row now" },
+                { label: "Best", value: p.streak.best, href: "#streak", sr: "streak, weeks in a row" },
+              ]}
+            />
+          </>
+        )}
         {n.games === 0 && (
           <div className="mt-4 rounded-2xl border border-accent-500/30 bg-accent-50 px-4 py-4">
             <p className="text-[15px] font-semibold text-primary-900">Your passport is empty, for now</p>
@@ -143,6 +228,7 @@ function Passport({ r }: { r: PassportResponse }) {
             </Link>
           </div>
         )}
+        <ShareProfile className="mt-4 w-full sm:w-auto" />
       </section>
 
       {/* ─── The streak ──────────────────────────────────── */}
@@ -179,27 +265,7 @@ function Passport({ r }: { r: PassportResponse }) {
       {/* ─── Medals ──────────────────────────────────────── */}
       <section id="medals" aria-labelledby="pp-medals" className={section}>
         <Heading id="pp-medals" icon={<Award className="w-5 h-5" />} title="Medals" aside={`${earned.length} of ${p.medals.length}`} />
-        {next && (
-          <div className="mb-3 flex items-center gap-3 rounded-2xl bg-primary-900 px-4 py-3 text-white">
-            <MedalArt art={next.art} size={44} />
-            <div className="min-w-0">
-              <p className="text-[12px] font-medium text-white/70">Next up</p>
-              <p className="text-[14px] font-semibold leading-snug">{next.need}</p>
-            </div>
-          </div>
-        )}
-        <ul className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {earned.map((m) => (
-            <li key={m.id}>
-              <MedalTile art={m.art} name={m.name} line={m.earnedOn ? shortDay(m.earnedOn, now) : m.blurb} />
-            </li>
-          ))}
-          {locked.map((m) => (
-            <li key={m.id}>
-              <MedalTile art={m.art} name={m.name} line={toGo(m) ?? m.blurb} locked progress={m.progress} />
-            </li>
-          ))}
-        </ul>
+        <Medals medals={p.medals} games={n.games} now={now} />
       </section>
 
       {/* ─── Stamps ──────────────────────────────────────── */}
@@ -215,7 +281,7 @@ function Passport({ r }: { r: PassportResponse }) {
             Every turf you play a TapTurf game at gets a stamp here, with the date of your first game there.
           </p>
         ) : (
-          <>
+          <StampPage>
             <TurfStamps stamps={p.stamps.turfs} now={now} />
             {p.stamps.cities.length > 0 && (
               <>
@@ -229,7 +295,7 @@ function Passport({ r }: { r: PassportResponse }) {
                 <RoundStamps stamps={p.stamps.sports} now={now} kind="sport" />
               </>
             )}
-          </>
+          </StampPage>
         )}
       </section>
 

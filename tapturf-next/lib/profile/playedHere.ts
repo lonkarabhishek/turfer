@@ -15,8 +15,17 @@ export function playedHereText(day: string, now: number): string {
   return `You played here on ${shortDay(day, now)}`;
 }
 
+function when(day: string, now: number): string {
+  const diff = dayNumber(istDay(now)) - dayNumber(day);
+  return diff === 0 ? "today" : diff === 1 ? "yesterday" : shortDay(day, now);
+}
+
 /** The badge's short form: "Played here · 12 Oct". */
 export function playedHereShort(day: string, now: number): string {
-  const diff = dayNumber(istDay(now)) - dayNumber(day);
-  return `Played here · ${diff === 0 ? "today" : diff === 1 ? "yesterday" : shortDay(day, now)}`;
+  return `Played here · ${when(day, now)}`;
+}
+
+/** A plain list row's: "Played 12 Oct". */
+export function playedHereRow(day: string, now: number): string {
+  return `Played ${when(day, now)}`;
 }

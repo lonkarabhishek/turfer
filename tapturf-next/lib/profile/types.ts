@@ -11,7 +11,7 @@ import type { Streak } from "./streak";
  * refusal carries `error` (an AccountError).
  *
  *   GET   /api/me/passport          -> PassportResponse (the Me tab)
- *   GET   /api/me/played            -> PlayedResponse (the "You played here" badges, the home's streak)
+ *   GET   /api/me/played            -> PlayedResponse (the "You played here" badges, the home's tiles and streak, the Me card)
  *   PATCH /api/me/whatsapp { on }   -> WhatsAppResponse
  */
 
@@ -26,6 +26,8 @@ export type PassportResponse = {
   playedWith: PlayedWithPerson[];
   /** null: the database has no WhatsApp sharing yet (before 20261101_played_with.sql), or could not say. */
   whatsapp: WhatsAppState | null;
+  /** The same summary /api/me/played gives, so every number on the page agrees once the passport is in. */
+  played: PlayedResponse;
 };
 
 export type PlayedResponse = {
@@ -36,6 +38,10 @@ export type PlayedResponse = {
   games: number;
   people: number;
   sports: number;
+  /** Earned medals' ids (lib/profile/medals.ts), best first. */
+  medals: string[];
+  /** Turfs they played at and haven't reviewed (a "Rate it" next to "You played here"). */
+  toReview: string[];
 };
 
 /** whatsapp null: sharing is not available yet. A refusal for a number that isn't proved: error not_allowed, with the state. */

@@ -47,7 +47,8 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
   const [tonight, setTonight] = useState<Game[]>([]);
   const [requests, setRequests] = useState<GameRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  // Played games only (the passport's count), so Squad and Sports match the list each tile opens.
+  // Played games only (the passport's counts), so each tile says what the passport and the public
+  // profile say, and matches what it opens. A dash until they are in.
   const played = usePlayed();
 
   useEffect(() => {
@@ -147,9 +148,9 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
 
             {/* ─── Stats row: each opens where its number comes from ─── */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
-              <StatTile href="/dashboard?tab=games" icon={<Trophy className="w-4 h-4" />} value={stats?.totalGames ?? 0} label="Games" sr="your games" />
-              <StatTile href="/dashboard?tab=passport#played-with" icon={<Users className="w-4 h-4" />} value={played?.people ?? stats?.peopleMet ?? 0} label="Squad" sr="the people you played with" />
-              <StatTile href="/dashboard?tab=passport#stamps" icon={<Target className="w-4 h-4" />} value={played?.sports ?? stats?.sportsPlayed ?? 0} label="Sports" sr="your passport stamps" />
+              <StatTile href="/dashboard?tab=passport" icon={<Trophy className="w-4 h-4" />} value={played?.games ?? "–"} label="Played" sr=", open your passport" />
+              <StatTile href="/dashboard?tab=passport#played-with" icon={<Users className="w-4 h-4" />} value={played?.people ?? "–"} label="Played with" sr=", open the list" />
+              <StatTile href="/dashboard?tab=passport#stamps" icon={<Target className="w-4 h-4" />} value={played?.sports ?? "–"} label="Sports" sr=", open your stamps" />
             </div>
 
             {/* ─── The weekly streak, from played games ─────── */}
@@ -451,7 +452,7 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
 // Reusable bits
 // ────────────────────────────────────────────────────────────
 
-function StatTile({ href, icon, value, label, sr }: { href: string; icon: React.ReactNode; value: number; label: string; sr: string }) {
+function StatTile({ href, icon, value, label, sr }: { href: string; icon: React.ReactNode; value: number | string; label: string; sr: string }) {
   return (
     <Link
       href={href}
@@ -464,7 +465,7 @@ function StatTile({ href, icon, value, label, sr }: { href: string; icon: React.
       <span className="text-[10px] font-semibold text-primary-500">
         {label}
       </span>
-      <span className="sr-only">: see {sr}</span>
+      <span className="sr-only">{sr}</span>
     </Link>
   );
 }

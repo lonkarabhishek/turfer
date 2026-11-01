@@ -1,18 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Flame } from "lucide-react";
-import { streakNudge, sundayWords, type Streak } from "@/lib/profile/streak";
+import { streakNudge, type Streak } from "@/lib/profile/streak";
 import { usePlayed } from "./usePlayed";
 
 /**
  * The weekly streak, as one line: "3-week streak. Play this week to keep
  * it." Honest: from played games only (a game counts once it is over),
- * India weeks, Monday to Sunday. Nothing for someone who never played.
+ * India weeks, Monday to Sunday. On the streak's last Sunday it says so.
+ * Nothing for someone who never played.
  */
 
 export function StreakLine({ streak, games, compact = false }: { streak: Streak; games: number; compact?: boolean }) {
-  const n = streakNudge(streak, games);
+  // Only ever drawn after the page loads (the played read, the passport), so the clock is the browser's.
+  const [now] = useState(Date.now);
+  const n = streakNudge(streak, games, now);
   if (!n) return null;
   const hot = n.tone === "hot";
   return (
@@ -24,7 +28,7 @@ export function StreakLine({ streak, games, compact = false }: { streak: Streak;
         <span className={`block font-semibold text-primary-900 leading-tight ${compact ? "text-[14px]" : "text-[15px]"}`}>{n.title}</span>
         <span className={`block text-primary-600 leading-snug ${compact ? "text-[12px]" : "text-[13px]"}`}>
           {n.detail}
-          {hot && <span className="text-primary-500"> Until {sundayWords(streak)}.</span>}
+          {n.until && <span className="text-primary-500 whitespace-nowrap"> {n.until}.</span>}
         </span>
       </span>
     </span>
@@ -34,7 +38,8 @@ export function StreakLine({ streak, games, compact = false }: { streak: Streak;
 /** From the signed-in person's played games, as a link to their passport. Nothing until it is in. */
 export function StreakNudge({ href = "/dashboard?tab=passport", className = "" }: { href?: string; className?: string }) {
   const played = usePlayed();
-  if (!played || !streakNudge(played.streak, played.games)) return null;
+  const [now] = useState(Date.now);
+  if (!played || !streakNudge(played.streak, played.games, now)) return null;
   return (
     <Link
       href={href}

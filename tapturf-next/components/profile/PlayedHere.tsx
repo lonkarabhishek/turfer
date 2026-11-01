@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { CircleCheck } from "lucide-react";
-import { playedHereShort, playedHereText } from "@/lib/profile/playedHere";
+import { playedHereRow, playedHereShort, playedHereText } from "@/lib/profile/playedHere";
 import { usePlayed } from "./usePlayed";
 
 /**
  * "You played here on 12 Oct", for the signed-in person only, from their
  * own played games (usePlayed). Nothing in the server HTML or the
  * hydration pass, so cached lists and turf pages stay the same for
- * everyone else.
+ * everyone else. The turf page's own line is PlayedHereNote.tsx (it opens
+ * the review sheet, which lists don't load).
  */
 
 /**
@@ -33,16 +34,17 @@ export function PlayedBadge({ turfId, wide = false }: { turfId: string; wide?: b
   );
 }
 
-/** The turf page's line, under "Games at this turf". */
-export function PlayedHereNote({ turfId }: { turfId: string }) {
+/** A row of a plain turf list (a city's "All turfs"): "Played 16 Oct" at its end, beside the name. */
+export function PlayedRowMark({ turfId }: { turfId: string }) {
   const played = usePlayed();
   const [now] = useState(Date.now);
   const day = played?.turfs[turfId];
   if (!day) return null;
   return (
-    <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-accent-50 border border-accent-500/30 pl-2 pr-3.5 py-1.5 text-[14px] font-semibold text-accent-800">
-      <CircleCheck className="w-4 h-4 shrink-0 text-accent-600" aria-hidden />
-      {playedHereText(day, now)}
-    </p>
+    <span className="ml-auto shrink-0 inline-flex items-center gap-1 pl-1 text-[12px] font-semibold text-accent-700 whitespace-nowrap">
+      <CircleCheck className="w-3.5 h-3.5 text-accent-600" aria-hidden />
+      <span aria-hidden>{playedHereRow(day, now)}</span>
+      <span className="sr-only">{playedHereText(day, now)}.</span>
+    </span>
   );
 }
