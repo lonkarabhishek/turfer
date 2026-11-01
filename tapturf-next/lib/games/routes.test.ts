@@ -35,20 +35,24 @@ function signedIn(id = "acc-1") {
 
 type Row = Record<string, unknown>;
 
-/** A tiny PostgREST for the fallback: eq, neq, in, gt filters; HEAD counts; POST and PATCH. */
+/** A tiny PostgREST for the fallback: eq, neq, in, gt filters (on a column or column->>key); HEAD counts; POST and PATCH. */
 function restDb(tables: Record<string, Row[]>) {
   return (method: string, url: URL, body: unknown): Response => {
     const table = url.pathname.split("/").pop() as string;
     const rows = (tables[table] ??= []);
     const filters = [...url.searchParams].filter(([k]) => !["select", "limit", "order", "on_conflict", "offset", "columns"].includes(k));
+    const at = (r: Row, k: string) => {
+      const [col, key] = k.split("->>");
+      return key === undefined ? r[col] : (r[col] as Row | null | undefined)?.[key];
+    };
     const match = (r: Row) =>
       filters.every(([k, v]) => {
         const [op, ...rest] = v.split(".");
         const val = rest.join(".");
-        if (op === "eq") return String(r[k]) === val;
-        if (op === "neq") return String(r[k]) !== val;
-        if (op === "in") return val.replace(/[()"]/g, "").split(",").includes(String(r[k]));
-        if (op === "gt") return String(r[k]) > val;
+        if (op === "eq") return String(at(r, k)) === val;
+        if (op === "neq") return String(at(r, k)) !== val;
+        if (op === "in") return val.replace(/[()"]/g, "").split(",").includes(String(at(r, k)));
+        if (op === "gt") return String(at(r, k)) > val;
         throw new Error(`filter ${op}`);
       });
     if (method === "HEAD") return new Response(null, { status: 200, headers: { "content-range": `*/${rows.filter(match).length}` } });
@@ -279,6 +283,40 @@ test("fallback: no function yet (PGRST202): the same rule, checked on the server
   const again = await postGameRequest(req(`/api/games/${GAME}/requests`, { method: "POST", token: phoneToken(), body: {} }), GAME);
   assert.deepEqual([again.status, (await json(again)).reason], [409, "pending"]);
   assert.equal(net.restCalls.filter((c) => c.method !== "GET" && c.method !== "HEAD").length, before);
+});
+
+test("fallback: the daily limit counts sends, so asking again after a withdraw or a decline reaches it", async () => {
+  const tables: Record<string, Row[]> = {
+    users: [{ id: "acc-2", name: "Ravi Kumar", profile_image_url: null }],
+    games: [{ id: GAME, creator_id: "acc-1", status: "open", sport: "Football", date: day(1), start_time: "19:00:00", end_time: "20:00:00", max_players: 10 }],
+    game_participants: [{ id: "p1", game_id: GAME, user_id: "acc-1" }],
+    game_requests: [],
+    notifications: [],
+  };
+  const as = (id: string) => {
+    signedIn(id);
+    net.rest = restDb(tables);
+    net.rpc.game_request_send = missing;
+    net.rpc.game_request_withdraw = missing;
+    net.rpc.game_request_answer = missing;
+  };
+  const ask = () => postGameRequest(req(`/api/games/${GAME}/requests`, { method: "POST", token: phoneToken(), body: {} }), GAME);
+  for (let i = 0; i < 30; i++) {
+    as("acc-2");
+    assert.equal((await ask()).status, 200, `send ${i + 1}`);
+    const id = String(tables.game_requests[0].id);
+    if (i % 2) {
+      as("acc-1");
+      assert.equal((await patchRequest(req(`/api/game-requests/${id}`, { method: "PATCH", token: phoneToken(), body: { action: "decline" } }), id)).status, 200);
+    } else {
+      assert.equal((await deleteRequest(req(`/api/game-requests/${id}`, { method: "DELETE", token: phoneToken() }), id)).status, 200);
+    }
+  }
+  as("acc-2");
+  const over = await ask();
+  assert.deepEqual([over.status, (await json(over)).error], [429, "limit"], "the 31st send of the day is refused");
+  assert.equal(tables.game_requests.length, 1, "though there was only ever one row");
+  assert.equal(tables.notifications.filter((n) => n.type === "game_request").length, 30, "the host was told 30 times, no more");
 });
 
 test("fallback: a player cannot edit or answer for the host; the host can, and a move tells the players", async () => {

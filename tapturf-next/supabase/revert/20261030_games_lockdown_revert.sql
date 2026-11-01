@@ -6,7 +6,12 @@
 -- (pg_policies and information_schema.role_table_grants, read that day):
 -- this reopens the tables to anyone holding the anon key, as before.
 -- GRANT and ALTER POLICY only: nothing is removed. The step 1 functions
--- stay (the app before them never calls them).
+-- and its index on notifications stay (the app before them never calls
+-- them; step 1 makes no unique index, so nothing there refuses a write
+-- the older app makes). Requests withdrawn under the newer app stay as
+-- rows with status withdrawn: the older app's lists show them with that
+-- status, and asking to join that game again adds a fresh row, as it
+-- always did.
 
 grant all on public.games, public.game_requests, public.game_participants, public.notifications to anon, authenticated;
 

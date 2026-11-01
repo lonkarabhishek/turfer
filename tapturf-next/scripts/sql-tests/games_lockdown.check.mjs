@@ -67,7 +67,8 @@ await q(`update public.notifications set is_read = true`);
 await db.exec(sql);
 await db.exec(sql); // safe to run again
 passed++;
-ok((await one(`select to_regclass('public.game_requests_one_per_player_uidx') r`)).r !== null, "one request row per player per game (no pairs today)");
+eq(await q(`select indexname from pg_indexes where tablename = 'game_requests' and indexdef ilike 'create unique%(game_id, user_id)%'`), [],
+  "no unique index on requests: the app before this one, rolled back, still adds a fresh row to ask again");
 
 const rpc = async (fn, args) => (await one(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(", ")}) r`, args)).r;
 const create = (user, game, key = KEY) => rpc("game_create", [key, user, JSON.stringify(game)]);
@@ -317,10 +318,37 @@ await refused(asRole("anon", () => q(`select private.game_notify('${RAVI}', 'x',
       values ('${SOME}', '${HOST}', '${T(1)}', 'x', 'Football', 4, '${ist(2)}', '19:00', '20:00', 0);
     insert into public.game_requests (game_id, user_id, status) values ('${SOME}', '${RAVI}', 'declined'), ('${SOME}', '${RAVI}', 'declined');`);
   await dup.exec(sql);
-  eq((await dup.query(`select to_regclass('public.game_requests_one_per_player_uidx') r`)).rows[0].r, null, "two rows for one pair: the index is skipped, not the file");
+  passed++; // two rows for one pair: the file applies
   const again2 = (await dup.query(`select public.game_request_send($1, $2, $3, null) r`, [KEY, RAVI, SOME])).rows[0].r;
   eq(again2.r, "ok", "and asking again still works (the newest row)");
   await dup.close();
+}
+
+/* ---------------- the daily send limit counts sends, not rows ---------------- */
+{
+  const lim = await makeDb(PGlite);
+  const lr = async (fn, args) => (await lim.query(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(", ")}) r`, args)).rows[0].r;
+  const ln = async (s, p) => (await lim.query(s, p)).rows[0].n;
+  await lim.exec(`insert into public.users (id, name) values ('${HOST}', 'Asha'), ('${RAVI}', 'Ravi'), ('${PRIYA}', 'Priya');
+    insert into public.turfs (id, name, is_active) values ('${T(1)}', 'Kings Turf', true);`);
+  await lim.exec(sql);
+  const LG = (await lr("game_create", [KEY, HOST, JSON.stringify({ ...GAME, max_players: 10 })])).game.id;
+  // Asking again reuses the row (its created_at moves to now), so a row count let these loops run on.
+  for (const [who, name, undo] of [[RAVI, "withdraw", (id) => lr("game_request_withdraw", [KEY, RAVI, id])], [PRIYA, "decline", (id) => lr("game_request_answer", [KEY, HOST, id, false])]]) {
+    let sent = 0, last;
+    for (let i = 0; i < 40; i++) {
+      last = await lr("game_request_send", [KEY, who, LG, null]);
+      if (last.r !== "ok") break;
+      sent++;
+      eq((await undo(last.request.id)).r, "ok", `(${name} ${sent})`);
+    }
+    eq([sent, last.r], [30, "limit"], `a send then ${name} loop is refused at the 31st send of the day`);
+    eq(await ln(`select count(*)::int n from public.game_requests where user_id = $1`, [who]), 1, `on the one row it kept reusing (${name})`);
+  }
+  eq(await ln(`select count(*)::int n from public.notifications where user_id = $1 and type = 'game_request'`, [HOST]), 60, "the host is told 30 times by each, no more");
+  await lim.exec(`update public.notifications set created_at = now() - interval '25 hours'`);
+  eq((await lr("game_request_send", [KEY, PRIYA, LG, null])).r, "ok", "a day on, the player can ask again");
+  await lim.close();
 }
 
 /* ---------------- step 2: the lockdown ---------------- */
@@ -385,5 +413,9 @@ eq(await q(`select grantee, table_name, privilege_type from information_schema.r
              where table_schema = 'public' and table_name in ('games', 'game_requests', 'game_participants', 'notifications') order by 1, 2, 3`), grantsBefore, "and every grant");
 await asRole("anon", () => q(`insert into public.notifications (user_id, type, title, message) values ('${RAVI}', 'x', 'x', 'x')`));
 passed++;
+// The app before the lockdown, rolled back: a player who withdrew under the new one asks again with a fresh row.
+eq((await one(`select status from public.game_requests where id = $1`, [R4])).status, "withdrawn", "(Neha's request stays withdrawn)");
+await asRole("anon", () => q(`insert into public.game_requests (game_id, user_id, note, status, requester_name) values ('${G1}', '${NEHA}', null, 'pending', 'Neha Joshi')`));
+eq((await one(`select count(*)::int n from public.game_requests where game_id = $1 and user_id = $2`, [G1, NEHA])).n, 2, "after the revert the older app's ask again is not refused");
 
 console.log(`games_lockdown: ${passed} checks passed`);

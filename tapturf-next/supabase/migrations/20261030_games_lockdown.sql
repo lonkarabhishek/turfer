@@ -24,8 +24,9 @@
 --     pending requests are told (game_cancelled). No screen uses it yet.
 --   * game_request_send: not the host, not already in, no pending or
 --     accepted request; the game open, not over, not full; a note of at
---     most 300 characters. One row per player per game: a declined or
---     withdrawn one goes back to pending. The host is told. 30 a day.
+--     most 300 characters. A player's declined or withdrawn request
+--     goes back to pending (the same row). The host is told. 30 sends a
+--     day, asking again included.
 --   * game_request_withdraw: the requester's own pending request only. It
 --     becomes withdrawn (nothing is removed); every reader skips it.
 --   * game_request_answer: the host of the request's game only, a pending
@@ -48,32 +49,20 @@
 -- with today's grants), then step 2 within minutes: until step 2 the
 -- tables are still open to anyone holding the anon key.
 --
--- Additive: one guarded unique index, one index, new functions. No grant
--- or policy changes here. Written without the destructive SQL keywords;
--- nothing is removed or merged. Safe to run again.
+-- Additive: one index, new functions. No grant or policy changes here.
+-- Written without the destructive SQL keywords; nothing is removed or
+-- merged. Safe to run again. No unique index on game_requests (game_id,
+-- user_id): the functions serialise each player's sends with advisory
+-- locks, and the app before this one, should it roll back, inserts a
+-- fresh row to ask again after a withdraw (kept here as status
+-- withdrawn), which such an index would refuse.
 
 set local lock_timeout = '5s';
 
--- ── 1. One request row per player per game ─────────────────
+-- ── 1. Index ───────────────────────────────────────────────
 
--- None had two on 30 Oct. The functions take an advisory lock per
--- (game, player) and never rely on it, so a pair that appears before this
--- runs only skips the index (a NOTICE says so).
-do $$
-begin
-  if to_regclass('public.game_requests_one_per_player_uidx') is not null then
-    return;
-  end if;
-  if exists (select 1 from public.game_requests r
-              where r.game_id is not null and r.user_id is not null
-              group by r.game_id, r.user_id having count(*) > 1) then
-    raise notice 'games lockdown: some players have more than one request for a game; game_requests_one_per_player_uidx is not made (nothing depends on it)';
-    return;
-  end if;
-  create unique index game_requests_one_per_player_uidx on public.game_requests (game_id, user_id);
-end;
-$$;
-
+-- A player's notifications newest first: their list, their badge, and
+-- the hosts' notes counted for the daily send limit.
 create index if not exists notifications_user_created_idx on public.notifications (user_id, created_at desc);
 
 -- ── 2. Helpers (closed to the API roles) ───────────────────
@@ -479,7 +468,16 @@ begin
   if v_game.status = 'full' or v_players >= v_game.max_players then
     return jsonb_build_object('r', 'full');
   end if;
-  if (select count(*) from public.game_requests r where r.user_id = p_user_id and r.created_at > now() - interval '1 day') >= 30 then
+  -- Sends, not rows: asking again reuses the row, but every send tells the
+  -- host once, so the hosts' notes about this player's requests are counted.
+  if (select count(*)
+        from public.game_requests r
+        join public.games g on g.id = r.game_id
+        join public.notifications n on n.user_id = g.creator_id
+       where r.user_id = p_user_id
+         and n.type = 'game_request'
+         and n.created_at > now() - interval '1 day'
+         and n.metadata ->> 'requestId' = r.id::text) >= 30 then
     return jsonb_build_object('r', 'limit');
   end if;
   v_name := coalesce(nullif(btrim(v_user.name::text), ''), 'Player');

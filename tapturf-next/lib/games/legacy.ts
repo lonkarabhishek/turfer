@@ -160,7 +160,13 @@ const FALLBACKS: Record<string, (a: Row) => Promise<Answer>> = {
     if (had?.status === "pending") return { r: "pending" };
     if (had?.status === "accepted") return { r: "joined" };
     if (g.status === "full" || (await players(String(g.id))) >= Number(g.max_players)) return { r: "full" };
-    if (count(await db().from("game_requests").select("id", { count: "exact", head: true }).eq("user_id", a.p_user_id).gt("created_at", dayAgo()), "limit") >= 30) return { r: "limit" };
+    // Sends, not rows (asking again reuses the row): the hosts' notes about this player's requests.
+    // Every send sets its row's created_at, so the rows sent in the last day are the ones to look at.
+    const since = dayAgo();
+    const sent = rows<{ id: string }>(await db().from("game_requests").select("id").eq("user_id", a.p_user_id).gt("created_at", since).limit(100), "sent");
+    if (sent.length && count(await db().from("notifications").select("id", { count: "exact", head: true }).eq("type", "game_request").gt("created_at", since).in("metadata->>requestId", sent.map((r) => r.id)), "limit") >= 30) {
+      return { r: "limit" };
+    }
     const name = user.name?.trim() || "Player";
     const fields = { status: "pending", note: note.ok, requester_name: name, requester_avatar: user.profile_image_url };
     const req = had
