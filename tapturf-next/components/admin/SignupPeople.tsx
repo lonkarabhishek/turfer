@@ -319,8 +319,14 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
             {c && <span className={c.guessed ? "text-primary-500" : "text-primary-800"}> · {c.guessed ? `Probably ${cityLabel(c.id)}` : cityLabel(c.id)}</span>}
             {extra.length > 0 && <span className="hidden md:inline text-primary-400"> · {extra.join(" · ")}</span>}
           </p>
-          {/* On a phone what they did gets its own line, so it isn't the part a narrow row cuts. */}
-          {extra.length > 0 && <p className="md:hidden text-[12px] font-medium text-primary-700 truncate">{extra.join(" · ")}</p>}
+          {/* On a phone what they did gets its own line, wrapping rather than cut; under 640 px the joined time comes onto it, so the line has the row's whole width. */}
+          <p className={`${extra.length > 0 ? "md:hidden" : "sm:hidden"} text-[12px] text-primary-700 break-words`}>
+            <span className="sm:hidden font-semibold text-primary-800">
+              <Joined p={p} now={now} />
+              {extra.length > 0 && <span className="font-normal text-primary-400"> · </span>}
+            </span>
+            {extra.length > 0 && <span className="font-medium">{extra.join(" · ")}</span>}
+          </p>
           {halves && (
             <span className="mt-1 flex flex-wrap gap-1">
               <HalfChip kind="phone" half={halves.phone} />
@@ -328,14 +334,9 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
             </span>
           )}
         </div>
-        <div className="shrink-0 text-right">
+        <div className="hidden sm:block shrink-0 text-right">
           <p className="text-[13px] font-semibold text-primary-800">
-            {ago(p.joinedAt, now)}
-            {p.imported && (
-              <span className="ml-0.5 text-hot-500" aria-label="bulk import time">
-                *
-              </span>
-            )}
+            <Joined p={p} now={now} />
           </p>
           <p className="hidden sm:block font-mono text-[11px] text-primary-400">{istDateTime(p.joinedAt)}</p>
         </div>
@@ -343,6 +344,20 @@ function Row({ p, now, open, onToggle, panelId }: { p: Person; now: number; open
       </button>
       {open && <Details p={p} now={now} id={panelId} />}
     </li>
+  );
+}
+
+/** How long ago they joined, starred when it is a bulk import's time. */
+function Joined({ p, now }: { p: Person; now: number }) {
+  return (
+    <>
+      {ago(p.joinedAt, now)}
+      {p.imported && (
+        <span className="ml-0.5 text-hot-500" aria-label="bulk import time">
+          *
+        </span>
+      )}
+    </>
   );
 }
 

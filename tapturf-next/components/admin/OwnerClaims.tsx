@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { digits10, editorLabel, keyLabel, toClaims, typedNameDiffers, type AdminClaim, type ClaimStatus } from "@/lib/admin/claims";
 import { METHOD_NAMES, ago, istDateTime, whatsappLink } from "@/lib/admin/people";
 import { adminFetch } from "@/lib/admin/adminFetch";
@@ -25,6 +26,7 @@ export function OwnerClaims() {
   const [now, setNow] = useState(0);
   // The fold around this panel: its line and waiting count follow each reload (after an approve, too).
   const report = useFoldReport();
+  const router = useRouter();
 
   // Through the admin page's gate (lib/admin/fetchGate.ts): one session refresh, not one per call.
   const load = useCallback(async () => {
@@ -72,6 +74,8 @@ export function OwnerClaims() {
     setBusy(null);
     if (!ok) setFailed(key);
     void load();
+    // The page's own numbers (the glance at the top: claimed, this week, waiting) read anew, so they agree with this panel.
+    if (ok) router.refresh();
   };
 
   if (error)

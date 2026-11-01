@@ -137,7 +137,7 @@ export function SuggestionQueue({ initial }: { initial: Row[] }) {
           type="button"
           onClick={() => void review()}
           disabled={busy !== null || unreviewed === 0}
-          className="inline-flex items-center gap-1.5 rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800 disabled:opacity-40"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-primary-900 text-white text-xs font-bold px-4 py-2 hover:bg-primary-800 disabled:opacity-40"
         >
           {busy === "review" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Check all with Claude
@@ -223,7 +223,7 @@ export function SuggestionQueue({ initial }: { initial: Row[] }) {
                   type="button"
                   onClick={() => void review([s.id])}
                   disabled={busy !== null}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-3 py-1.5 hover:bg-primary-50 disabled:opacity-40"
+                  className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-3 py-1.5 hover:bg-primary-50 disabled:opacity-40"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> Check with Claude
                 </button>
@@ -234,7 +234,7 @@ export function SuggestionQueue({ initial }: { initial: Row[] }) {
                   type="button"
                   onClick={() => void moderate(s, "approve")}
                   disabled={busy !== null}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-accent-600 text-white text-xs font-bold px-4 py-2 hover:bg-accent-700 disabled:opacity-40"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-accent-600 text-white text-xs font-bold px-4 py-2 hover:bg-accent-700 disabled:opacity-40"
                 >
                   {busy === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                   {entries.length && chosen.size ? `Approve and apply ${chosen.size}` : "Approve (no changes)"}
@@ -243,7 +243,7 @@ export function SuggestionQueue({ initial }: { initial: Row[] }) {
                   type="button"
                   onClick={() => void moderate(s, "reject")}
                   disabled={busy !== null}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50 disabled:opacity-40"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-primary-200 text-primary-800 text-xs font-bold px-4 py-2 hover:bg-primary-50 disabled:opacity-40"
                 >
                   <X className="w-3.5 h-3.5" /> Reject
                 </button>

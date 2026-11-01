@@ -256,7 +256,8 @@ function UsersTable({ users, lastActive, now }: { users: AdminUser[]; lastActive
       </div>
     );
   }
-  const head = ["Name", "City", "Joined", "Last active", "Sign-in", "Hosted", "Requests", "Email", "Phone", ""];
+  // "confirmed" sits with the name, as on a phone's card: a column of its own pushed the table past a laptop's width.
+  const head = ["Name", "City", "Joined", "Last active", "Sign-in", "Hosted", "Requests", "Email", "Phone"];
   // A phone's card, three lines under the name: where and when (order 2), how they sign in and what they
   // did (4), how to reach them (6). The row's ::after and ::before (orders 3 and 5) are the line breaks.
   const cell = "px-4 py-3 max-sm:p-0 max-sm:text-[13px] max-sm:before:text-primary-400";
@@ -279,11 +280,11 @@ function UsersTable({ users, lastActive, now }: { users: AdminUser[]; lastActive
                   key={u.id}
                   className="max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-0.5 max-sm:px-4 max-sm:py-3 max-sm:after:order-3 max-sm:after:basis-full max-sm:before:order-5 max-sm:before:basis-full"
                 >
-                  <td className="px-4 py-3 text-primary-900 sm:whitespace-nowrap max-sm:order-1 max-sm:basis-full max-sm:p-0 max-sm:pb-0.5 max-sm:text-[15px] max-sm:font-semibold">
+                  <td className="px-4 py-3 text-primary-900 max-sm:order-1 max-sm:basis-full max-sm:p-0 max-sm:pb-0.5 max-sm:text-[15px] max-sm:font-semibold">
                     {u.name || <span className="text-primary-400">-</span>}
                     {u.duplicateOf > 1 && <Badge className="ml-1.5 bg-amber-100 text-amber-800">{u.duplicateOf} accounts</Badge>}
                     {u.verified && (
-                      <span title={u.verifiedHow ?? undefined} className="sm:hidden">
+                      <span title={u.verifiedHow ?? undefined}>
                         <Badge className="ml-1.5 bg-accent-50 text-accent-700">confirmed</Badge>
                       </span>
                     )}
@@ -314,13 +315,6 @@ function UsersTable({ users, lastActive, now }: { users: AdminUser[]; lastActive
                   <td className={`${cell} text-primary-700 max-sm:order-6 max-sm:break-all ${u.email ? "" : "max-sm:hidden"}`}>{u.email || <span className="text-primary-400">-</span>}</td>
                   <td className={`${cell} text-primary-700 whitespace-nowrap max-sm:order-6 ${u.phone ? "" : "max-sm:hidden"}`}>
                     {u.phone || <span className="text-primary-400">-</span>}
-                  </td>
-                  <td className="px-4 py-3 max-sm:hidden">
-                    {u.verified && (
-                      <span title={u.verifiedHow ?? undefined}>
-                        <Badge className="bg-accent-50 text-accent-700">confirmed</Badge>
-                      </span>
-                    )}
                   </td>
                 </tr>
               );

@@ -71,8 +71,7 @@ export function Fold({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const targetInside = () => {
-      const hash = window.location.hash.slice(1);
+    const targetInside = (hash: string) => {
       try {
         const t = hash ? document.getElementById(decodeURIComponent(hash)) : null;
         return t && el.contains(t) ? t : null;
@@ -81,7 +80,7 @@ export function Fold({
       }
     };
     const reveal = () => {
-      const t = targetInside();
+      const t = targetInside(window.location.hash.slice(1));
       if (!t) return false;
       if (!el.open) {
         el.open = true;
@@ -94,8 +93,21 @@ export function Fold({
       const stored = readMemory(key);
       el.open = !stored && openWide && window.matchMedia("(min-width: 768px)").matches ? true : foldOpen(defaultOpen, waiting, stored);
     }
+    // A next/link to something inside on this page (the Verified tick tile, /admin?people=verified#people) fires no
+    // hashchange and leaves this fold mounted: open it on the tap, so the jump after the navigation lands inside.
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!(a instanceof HTMLAnchorElement) || a.target === "_blank") return;
+      if (a.origin !== window.location.origin || a.pathname !== window.location.pathname) return;
+      if (targetInside(a.hash.slice(1))) el.open = true;
+    };
     window.addEventListener("hashchange", reveal);
-    return () => window.removeEventListener("hashchange", reveal);
+    document.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("hashchange", reveal);
+      document.removeEventListener("click", onClick);
+    };
   }, [key]);
 
   // A part inside counted something waiting: open, unless the viewer chose here already.
