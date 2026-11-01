@@ -7,7 +7,7 @@ import { TurfCard } from "@/components/turf/TurfCard";
 import { GameCard } from "@/components/game/GameCard";
 import { PickCard, asGame } from "./PickCard";
 import type { Engine, Padding, Pin } from "./engine";
-import { fromMapTurf, gamePin, pickedGames, turfHourly, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
+import { fromMapTurf, gamePin, mapTurfPin, pickedGames, type MapGame, type MapTurfWire } from "@/lib/map/data";
 import { heatFeatures, parseHeat, type HeatWire } from "@/lib/map/heat";
 import { enoughTrending, parseTrending, trendFirst, trendWords, type TrendWire } from "@/lib/map/trending";
 import { MAP_COLORS } from "@/lib/map/clusters";
@@ -22,6 +22,7 @@ import {
   inView,
   mapSearch,
   matchesChip,
+  nearBounds,
   padBounds,
   parseMapQuery,
   parseSnapshot,
@@ -93,13 +94,14 @@ function subscribeDesktop(cb: () => void) {
  * what is in view, top rated first, or nearest first once the viewer taps
  * "Near me" (GPS only on that tap; the point stays on the device). The
  * view, the toggle and the chip live in the URL (?b=, ?show=games,
- * ?sport=; ?city= and the turf list's Map button open on a city), written
- * with replaceState, so a reload or a shared link opens the same map and
- * Back leaves the page; except a view found with "Near me", which is
- * centred on the viewer and never goes into the URL. Opening a card keeps
- * the rest (sheet, list length and scroll, picked card, that view, Popular
- * and Trending) in this page's history entry, so Back finds the list as it
- * was.
+ * ?sport=; ?city= and the turf list's Map button open on a city, and a
+ * turf page's "Open full map", ?turf=, around that turf with its card
+ * open), written with replaceState, so a reload or a shared link opens the
+ * same map and Back leaves the page; except a view found with "Near me",
+ * which is centred on the viewer and never goes into the URL. Opening a
+ * card keeps the rest (sheet, list length and scroll, picked card, that
+ * view, Popular and Trending) in this page's history entry, so Back finds
+ * the list as it was.
  *
  * Data: GET /api/map/turfs and /api/map/games (lib/map/data.ts), each one
  * CDN-cached JSON. The map library and the street map load only here, after
@@ -340,6 +342,8 @@ export function MapExplorer() {
             padding,
             covered,
             zoomButtons: window.matchMedia(DESKTOP).matches,
+            // A turf page's "Open full map": that turf's pin stands out of the bubbles while this page is open.
+            alone: q?.turf ?? null,
             onView: (b, _zoom, byUser) => {
               setView(b);
               if (byUser) {
@@ -347,7 +351,7 @@ export function MapExplorer() {
                 setRestoreN(null);
               }
               // A view found with "Near me" is centred on the viewer: it never goes into the URL (or a shared link, or analytics).
-              if (touched.current) writeUrl(gps.current ? { b: null, city: null } : { b, city: null });
+              if (touched.current) writeUrl(gps.current ? { b: null, city: null, turf: null } : { b, city: null, turf: null });
             },
             onPick: (keys, from, keyboard) => {
               const some = keys && keys.length ? keys : null;
@@ -386,13 +390,22 @@ export function MapExplorer() {
     return () => ro.disconnect();
   }, [ready]);
 
-  // A ?city= link without a view: around that city's turfs, once they are here.
+  // A ?city= link without a view: around that city's turfs, once they are here. A ?turf= link (a turf page's
+  // "Open full map"): that turf's card open, around it and its nearest neighbours as its page's map showed it.
+  // Back from a card's page restores its own snapshot instead.
   useEffect(() => {
     if (!ready || !turfs || fitted.current) return;
     fitted.current = true;
     const q = query.current;
-    if (!q?.city || q.b || touched.current || snap.current) return;
-    const b = cityBounds(q.city, turfs);
+    if (!q || touched.current || snap.current) return;
+    const here = q.turf ? turfs.find((t) => t.id === q.turf) : undefined;
+    if (here) {
+      const at = { lat: here.lat as number, lng: here.lng as number };
+      if (!q.b) engine.current?.fitTo(nearBounds(at, turfs.filter((t) => t !== here).map((t) => ({ lat: t.lat as number, lng: t.lng as number }))), false);
+      setPick([here.id]);
+      return;
+    }
+    const b = q.city && !q.b ? cityBounds(q.city, turfs) : null;
     if (b) engine.current?.fitTo(b, false);
   }, [ready, turfs]);
 
@@ -427,9 +440,9 @@ export function MapExplorer() {
       show === "games"
         ? shownGames.map((g) => ({ key: g.id, lat: g.turfs.lat, lng: g.turfs.lng, place: g.turfs.name, ...gamePin(g, now) }))
         : shownTurfs.map((t) => {
-            const pin = turfPin(t, chip);
+            const pin = mapTurfPin(t, chip);
             const r = rankByKey?.get(t.id) ?? null;
-            return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), ...pin, label: r ? `${pin.label}, ${trendWords(r)}` : pin.label, trend: r };
+            return { ...pin, label: r ? `${pin.label}, ${trendWords(r)}` : pin.label, trend: r };
           }),
     [show, shownTurfs, shownGames, chip, now, rankByKey],
   );

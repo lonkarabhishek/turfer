@@ -1,13 +1,14 @@
 import { cityPoint, isCitySlug } from "../city";
 import { sportFromSlug, sportSlug } from "../turfList/query";
-import { haversineKm, type Coords } from "../utils/location";
+import { formatDistance, haversineKm, type Coords } from "../utils/location";
 import { avgPriceWords } from "./clusters";
 
 /**
  * Where /map looks and what it lists: the view in the URL (?city=, the
- * Map button's ?b= bounds, ?show=games, ?sport=), a city's view from its
- * turfs, and what is inside the view. Pure, relative imports only, so
- * `npm run test:list` compiles it on its own.
+ * Map button's ?b= bounds, ?show=games, ?sport=, a turf page's ?turf=), a
+ * city's view from its turfs, a turf's view among its neighbours, and
+ * what is inside the view. Pure, relative imports only, so `npm run
+ * test:list` compiles it on its own.
  */
 
 /** West, south, east, north, in degrees. */
@@ -32,6 +33,12 @@ export type MapQuery = {
   show: MapShow;
   /** A sport chip (lib/turfList/query.ts SPORT_CHIPS), or null for every sport. */
   sport: string | null;
+  /**
+   * A turf's key (its slug, else its id: /turf/<key>), or null. A turf
+   * page's "Open full map": the map opens around that turf with its card
+   * open (unless `b` says the view), until the viewer moves it.
+   */
+  turf: string | null;
 };
 
 const round4 = (x: number) => Math.round(x * 1e4) / 1e4;
@@ -53,6 +60,15 @@ export function boundsParam(b: Bounds): string {
   return b.map(round4).join(",");
 }
 
+/** A turf's key as a turf page's URL has it: a slug ("turf-up-baner") or an id (a UUID), lower case. */
+const TURF_KEY = /^[a-z0-9](?:[a-z0-9-]{0,158}[a-z0-9])?$/;
+
+/** ?turf=, or null when it is not a turf's key. */
+export function parseTurfKey(raw: string | null | undefined): string | null {
+  const k = raw?.trim().toLowerCase() ?? "";
+  return TURF_KEY.test(k) ? k : null;
+}
+
 export function parseMapQuery(search: string): MapQuery {
   const p = new URLSearchParams(search);
   const city = p.get("city")?.trim().toLowerCase() ?? null;
@@ -61,10 +77,11 @@ export function parseMapQuery(search: string): MapQuery {
     b: parseBounds(p.get("b")),
     show: p.get("show") === "games" ? "games" : "turfs",
     sport: sportFromSlug(p.get("sport")),
+    turf: parseTurfKey(p.get("turf")),
   };
 }
 
-const MAP_PARAMS = ["city", "b", "show", "sport"];
+const MAP_PARAMS = ["city", "b", "show", "sport", "turf"];
 
 /**
  * The query string for a view: "?b=...&show=games&sport=football", or ""
@@ -78,13 +95,19 @@ export function mapSearch(q: MapQuery, keep = ""): string {
   if (q.b) p.set("b", boundsParam(q.b));
   if (q.show === "games") p.set("show", "games");
   if (q.sport) p.set("sport", sportSlug(q.sport));
+  if (q.turf) p.set("turf", q.turf);
   const s = p.toString().replace(/%2C/g, ",");
   return s ? `?${s}` : "";
 }
 
 /** The turf list's Map button: /map on that city (and its view, when its turfs give one), or all of India. */
 export function mapHref(city: string | null, b?: Bounds | null): string {
-  return `/map${mapSearch({ city, b: b ?? null, show: "turfs", sport: null })}`;
+  return `/map${mapSearch({ city, b: b ?? null, show: "turfs", sport: null, turf: null })}`;
+}
+
+/** A turf page's "Open full map": /map around that turf, its card open. */
+export function turfMapHref(key: string): string {
+  return `/map${mapSearch({ city: null, b: null, show: "turfs", sport: null, turf: parseTurfKey(key) })}`;
 }
 
 export function inBounds(p: { lat: number; lng: number }, b: Bounds): boolean {
@@ -148,6 +171,58 @@ export function cityBounds(city: string, points: readonly { city?: string | null
   }
   const c = cityPoint(city);
   return c ? atLeast([c.lng, c.lat, c.lng, c.lat], CENTRE_SPAN) : null;
+}
+
+/** A turf's view takes in its nearest NEAR_COUNT neighbours that are within NEAR_MAX_KM, with a little room. */
+const NEAR_COUNT = 5;
+const NEAR_MAX_KM = 4;
+/** Never closer than this around the turf (its streets and the next block or two), km. */
+const NEAR_MIN_KM = 0.8;
+/** A turf with no neighbour that close: its neighbourhood, km. */
+const NEAR_ALONE_KM = 1.2;
+/** "7 other turfs within 3 km". */
+export const NEARBY_KM = 3;
+
+/**
+ * A turf page's map, and /map?turf=: centred on the turf (`at`), out to
+ * its fifth nearest neighbour (`others`, every other turf on the map)
+ * when that one is within NEAR_MAX_KM, else to the farthest that is, a
+ * little past it; between NEAR_MIN_KM and NEAR_MAX_KM each way, and
+ * NEAR_ALONE_KM with none that close. Square on the ground: the map fits
+ * it with its padding, and a wide map shows more each side.
+ */
+export function nearBounds(at: Coords, others: readonly Coords[]): Bounds {
+  const d: number[] = [];
+  for (const p of others) {
+    const km = haversineKm(at, p);
+    if (Number.isFinite(km) && km <= NEAR_MAX_KM) d.push(km);
+  }
+  d.sort((a, b) => a - b);
+  const r = d.length ? Math.min(NEAR_MAX_KM, Math.max(NEAR_MIN_KM, d[Math.min(NEAR_COUNT, d.length) - 1] * 1.15)) : NEAR_ALONE_KM;
+  const dy = r / 111.32;
+  const dx = r / (111.32 * Math.max(0.2, Math.cos((at.lat * Math.PI) / 180)));
+  return [at.lng - dx, at.lat - dy, at.lng + dx, at.lat + dy];
+}
+
+/**
+ * The line under a turf page's map about the turfs around it: "7 other
+ * turfs within 3 km", "1 other turf within 3 km"; with none that close,
+ * how far the nearest is ("The nearest other turf is 8.6 km away"); with
+ * none at all, "No other turfs on the map yet". The distance reads as
+ * elsewhere on the site (formatDistance: "8.6 km", "14 km").
+ */
+export function nearbyLine(at: Coords, others: readonly Coords[]): string {
+  let n = 0;
+  let nearest = Infinity;
+  for (const p of others) {
+    const km = haversineKm(at, p);
+    if (!Number.isFinite(km)) continue;
+    if (km <= NEARBY_KM) n++;
+    nearest = Math.min(nearest, km);
+  }
+  if (n) return `${n.toLocaleString("en-IN")} other ${n === 1 ? "turf" : "turfs"} within ${NEARBY_KM} km`;
+  if (!Number.isFinite(nearest)) return "No other turfs on the map yet";
+  return `The nearest other turf is ${formatDistance(nearest)} away`;
 }
 
 /** A sport chip matches a stored sport that contains it, as the /turfs chips do ("Cricket" takes Box Cricket and Cricket Nets). */
