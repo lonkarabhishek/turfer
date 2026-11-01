@@ -50,6 +50,13 @@ export type Block =
       defaults?: { pricePerHour?: number; players?: number; hours?: number };
       caption?: string;
     }
+  // Lesson picture for the DLS explainer. Overs left and wickets in hand
+  // fill a bar. It is not a target calculator and must not show a score.
+  | {
+      type: "dls-resources";
+      caption?: string;
+      defaults?: { oversLeft?: number; wicketsInHand?: number };
+    }
   // NEW: Full-width image with alt (uses next/image, lazy).
   | { type: "image"; src: string; alt: string; caption?: string }
   // Cited sources for news and data posts. Each item links out (https only).

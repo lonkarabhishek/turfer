@@ -6,6 +6,7 @@ import { getBlogTurf } from "@/content/blog/data/turfs";
 import { blogTurfHref } from "@/content/blog/data/turfSlugs";
 import { slugify } from "@/lib/utils/slugify";
 import { PriceCalculator } from "./PriceCalculator";
+import { DlsResourceVisual } from "./DlsResourceVisual";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 
 /**
@@ -334,6 +335,9 @@ export function BlockRenderer({ block }: { block: Block }) {
 
     case "price-calc":
       return <PriceCalculator defaults={block.defaults} caption={block.caption} />;
+
+    case "dls-resources":
+      return <DlsResourceVisual defaults={block.defaults} caption={block.caption} />;
 
     case "image": {
       // Article images are always full-width, aspect 16/9. Next Image

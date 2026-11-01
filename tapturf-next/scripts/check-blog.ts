@@ -162,6 +162,9 @@ function textsOf(post: Post): string[] {
       case "price-calc":
         out.push(b.caption ?? "");
         break;
+      case "dls-resources":
+        out.push(b.caption ?? "");
+        break;
       case "image":
         out.push(b.alt, b.caption ?? "");
         break;

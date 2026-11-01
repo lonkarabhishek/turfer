@@ -67,9 +67,12 @@ import { post as turfsInKharadiPune } from "./posts/turfs-in-kharadi-pune";
 import { post as howToSplitCricketTeamsFairly } from "./posts/how-to-split-cricket-teams-fairly";
 // 2026-11-01: tool how-to, cricket NRR calculator.
 import { post as howToCalculateNetRunRateCricket } from "./posts/how-to-calculate-net-run-rate-cricket";
+// 2026-11-01: guide, what the DLS target on TV means.
+import { post as whatIsDlsMethodCricket } from "./posts/what-is-dls-method-cricket";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  whatIsDlsMethodCricket,
   howToCalculateNetRunRateCricket,
   turfsInKharadiPune,
   howToSplitCricketTeamsFairly,
