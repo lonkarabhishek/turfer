@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Map as MapIcon } from "lucide-react";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { getAllActiveTurfs, getCardTurfs } from "@/lib/queries/turfs";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
@@ -13,6 +14,7 @@ import { Fold } from "@/components/ui/Fold";
 import { plural } from "@/lib/home/format";
 import { DEFAULT_FILTERS, FIRST_PAGE, availableSports, pageOf } from "@/lib/turfList/query";
 import { LIST_PREPAINT_JS } from "@/lib/turfList/client";
+import { cityBounds, mapHref } from "@/lib/map/view";
 
 const PILL =
   "h-11 px-4 inline-flex items-center gap-1.5 rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] font-medium text-primary-900 press-tight focus-neon";
@@ -71,9 +73,19 @@ export async function TurfsView({ requested }: { requested: string | null }) {
       <AskPageContext city={scope.kind === "city" ? scope.id : null} listing />
       <h1 className="text-[32px] md:text-[40px] text-primary-900 font-display leading-tight">Find your turf</h1>
       <CityLine {...cityLineFor(scope, "#turfs-by-city", "/turfs")} />
-      <Link href="/turf-near-me" className="inline-block text-[15px] font-medium text-accent-600 hover:text-accent-700">
-        Turfs near me, sorted by distance
-      </Link>
+      {/* The map opens on this city's turfs (their view in the link, so it starts there), or on all of India. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Link href="/turf-near-me" className="inline-block text-[15px] font-medium text-accent-600 hover:text-accent-700">
+          Turfs near me, sorted by distance
+        </Link>
+        <Link
+          href={mapHref(cityId, cityId ? cityBounds(cityId, turfs) : null)}
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white text-[14px] font-semibold text-primary-900 hover:border-primary-900 press-tight focus-neon"
+        >
+          <MapIcon className="w-4 h-4" aria-hidden />
+          Map<span className="sr-only"> of turfs{scope.kind === "city" ? ` in ${scope.label}` : ""}</span>
+        </Link>
+      </div>
       <p className="mt-1 mb-6 text-[15px] text-primary-600">
         {scope.kind === "city" ? (
           <>

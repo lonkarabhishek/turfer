@@ -37,13 +37,15 @@ function RouteTracker() {
       sent.current = null;
       return;
     }
-    const query = searchParams?.toString();
+    // /map's query is only where its map looks (and could be where the visitor is): never sent.
+    const bare = pathname === "/map";
+    const query = bare ? "" : searchParams?.toString();
     const path = query ? `${pathname}?${query}` : pathname;
     if (sent.current === path || !startAnalytics()) return;
     sent.current = path;
     gaEvent("page_view", {
       page_path: path,
-      page_location: window.location.href,
+      page_location: bare ? `${window.location.origin}${pathname}` : window.location.href,
       page_title: document.title,
     });
   }, [consent, pathname, searchParams]);
