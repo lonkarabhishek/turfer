@@ -38,8 +38,9 @@ const problemOf = (a: Answer<unknown>) => {
  * The profile photo sheet (the Me tab): upload a photo (cropped to a
  * square here, checked on the server before it shows), "Use my Google
  * photo" for a Google sign-in, one of the drawn players (by sport, each
- * with its name and role, three to a row), or back to initials. Before the database has photos it says so and offers
- * nothing (lib/account/photoRoutes.ts GET).
+ * with its name and role, three to a row), or back to initials. Before
+ * the database has photos it says so and offers nothing
+ * (lib/account/photoRoutes.ts GET).
  */
 export function PhotoSheet({ user, onClose, onSaved }: { user: AppUser; onClose: () => void; onSaved: (text: string) => void }) {
   const { getToken, applyProfile } = useAuth();

@@ -48,7 +48,7 @@ test("avatars: 18 to 24 players, each with its own id, name, role and colour", (
   for (const p of AVATAR_PRESETS) {
     assert.match(p.id, DB_ID);
     assert.ok(isPresetId(p.id));
-    // Short enough for two lines under a 64 px circle in the picker.
+    // Short enough for two lines under a 76 px circle in the picker.
     assert.ok(p.name.length <= 16 && p.role.length <= 20, p.id);
   }
   assert.equal(avatarLabel(AVATAR_PRESETS[0]), "Sixer Sid, batter");
