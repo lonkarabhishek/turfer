@@ -14,7 +14,7 @@ export const post: Post = {
   slug: "how-to-calculate-net-run-rate-cricket",
   title: "How to Calculate Net Run Rate in Cricket, With Examples",
   description:
-    "Net run rate is runs scored per over minus runs conceded per over, added up across the whole tournament. The ICC formula, the all-out rule and a worked turf league example.",
+    "NRR is runs scored per over minus runs conceded per over, totalled across the tournament. The ICC formula, the all-out rule and a worked turf league example.",
   seoDescription:
     "NRR is runs per over scored minus runs per over conceded, totalled across the tournament. The ICC formula, the all-out rule and a worked 6-over example.",
   hook: "Two teams level on points and one place in the final. Work out net run rate correctly before the argument starts.",
