@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LIVE_LINKS_KEY, LIVE_SEEN_KEY, VIEWS_REFRESH_MS, decideView } from "@/lib/live/views";
+import { LIVE_LINKS_KEY, LIVE_SEEN_KEY, VIEWS_REFRESH_MS, decideView, newViewTag, readSeen, unseeView } from "@/lib/live/views";
 
 /** Links this page load has already counted: a remount (a new tab of the page's own, Strict Mode) never counts again. */
 const countedHere = new Set<string>();
 
-/** This opening as a view to count ({unique}), or null; keeps the browser's note when it is one. */
-function takeView(code: string): { unique: boolean } | null {
+/**
+ * This opening as a view to count ({unique, v}: v the view's own random
+ * tag), or null; keeps the browser's note when it is one, at once, so a
+ * second tab opened meanwhile does not count it too. undo takes the note
+ * back when the server did not count the view: the next visit tries again.
+ */
+function takeView(code: string): { body: { unique: boolean; v: string }; undo: () => void } | null {
   if (countedHere.has(code)) return null;
   let links: string | null = null;
   let seen: string | null = null;
@@ -20,12 +25,21 @@ function takeView(code: string): { unique: boolean } | null {
   const view = decideView({ code, now: Date.now(), ua: navigator.userAgent, webdriver: navigator.webdriver === true, links, seen });
   if (!view) return null;
   countedHere.add(code);
+  const was = readSeen(seen)[code];
+  const at = view.next[code].at;
   try {
     localStorage.setItem(LIVE_SEEN_KEY, JSON.stringify(view.next));
   } catch {
     /* as above */
   }
-  return { unique: view.unique };
+  const undo = () => {
+    try {
+      localStorage.setItem(LIVE_SEEN_KEY, JSON.stringify(unseeView(readSeen(localStorage.getItem(LIVE_SEEN_KEY)), code, at, was)));
+    } catch {
+      /* as above */
+    }
+  };
+  return { body: { unique: view.unique, v: newViewTag() }, undo };
 }
 
 /**
@@ -60,10 +74,16 @@ export function useLiveViews(code: string | null, opts: { count: boolean; refres
       started = true;
       const view = count ? takeView(code) : null;
       if (!view) return void read();
-      fetch(`/api/live/${code}/views`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(view), cache: "no-store" })
+      fetch(`/api/live/${code}/views`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(view.body), cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
-        // Not counted (a limit, before the file is applied): the count as it stands, if there is one.
-        .then((j: { views?: unknown } | null) => (typeof j?.views === "number" ? show(j) : read()), () => {});
+        .then(
+          (j: { counted?: unknown; views?: unknown } | null) => {
+            // Not counted (a limit, before the file is applied): the note goes back, and the count as it stands shows, if there is one.
+            if (j?.counted !== true) view.undo();
+            return typeof j?.views === "number" ? show(j) : read();
+          },
+          () => view.undo(),
+        );
     };
     start();
     document.addEventListener("visibilitychange", start);

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { createHash } from "node:crypto";
 import { getAskTurfs } from "@/lib/queries/turfCache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { isCity, labelFor } from "@/lib/city";
+import { CITIES, CITY_ALIASES, NOT_IN_TEXT, isCity, labelFor } from "@/lib/city";
 import { forCard } from "@/lib/utils/cardTurf";
 import {
   AskFilters,
@@ -70,7 +70,21 @@ import { getPostBySlug } from "@/content/blog";
 import { articleSearchChips, englishChip, hinglishChip, isSummaryAsk, looksLikeSearch } from "@/lib/ask/blog";
 import { answerBlog, type BlogResult } from "@/lib/ai/blogAnswer";
 import { cleanVenueName, mentionsBookingApp, scrubBookingApps } from "@/lib/utils/bookingApps";
-import { liveAskChips, liveAskGate, liveAskKind, liveCodeOf, liveFacts, liveFallback, liveFollowups, liveReply, type LiveFacts } from "@/lib/ask/live";
+import {
+  liveAnswerKind,
+  liveAskChips,
+  liveAskGate,
+  liveAskKind,
+  liveCodeOf,
+  liveFacts,
+  liveFallback,
+  liveFollowups,
+  liveGoesOn,
+  liveOwnNames,
+  livePlaces,
+  liveReply,
+  type LiveFacts,
+} from "@/lib/ask/live";
 import { answerLive } from "@/lib/ai/liveAnswer";
 import { verifyLiveCode } from "@/lib/live/codes";
 import { getLive, liveWriteKey } from "@/lib/live/server";
@@ -171,6 +185,8 @@ const HISTORY_V10 = [...EXTRA_KEYS, "players"];
 
 /** A model answer about a live match gives up by then: the chat waits 25 s. */
 const LIVE_DEADLINE_MS = 15_000;
+/** The cities a message on a live page may name for a search ("games in Pune"), as free text names them. */
+const LIVE_CITY_NAMES = [...CITIES.filter((c) => !NOT_IN_TEXT.has(c.id)).map((c) => c.label), ...Object.keys(CITY_ALIASES)];
 
 /**
  * The live link's facts as followers see it now: the same read GET
@@ -296,25 +312,23 @@ export async function GET(req: Request) {
 
   // On a live score page a question about the match is answered from the
   // match itself, read as followers get it (lib/ask/live.ts): the usual
-  // questions in words built here, any other by the model from those facts
-  // only. A turf or game search, a tool or a host goes on to the reading
-  // below, as anywhere else.
-  const liveKind = liveCode ? liveAskKind(q) : "search";
-  if (liveCode && liveKind !== "search") {
+  // questions in words built here, a named player from that player's
+  // lines, any other by the model from those facts only. A turf or game
+  // search, a tool or a host goes on to the reading below, as anywhere
+  // else: one that says so or names a day with a game, a place the turfs
+  // have ("games tonight in Baner"), or one the quick reader reads as one.
+  if (liveCode) {
     const t0 = performance.now();
-    const kind = liveKind;
-    let answers = true;
-    if (kind === "other") {
-      // One the quick reader knows ("Calculate our NRR", "Host a game Saturday 7pm"): not about the match.
-      const turfs = await turfsLoad.catch(() => [] as Turf[]);
-      const quick = quickAnswer(q, { areas: areasFromTurfs(turfs), turfs }, { prefCity, city: ctx.city, turf: ctx.turf }, version);
-      if (quick && quick.intent !== "other") answers = false;
-    }
+    const turfs = await turfsLoad.catch(() => [] as Turf[]);
+    const areas = areasFromTurfs(turfs);
+    const { facts, match } = await liveFactsFor(liveCode);
+    const asked = liveAskKind(q, { places: livePlaces(areas, LIVE_CITY_NAMES), ...liveOwnNames(facts) });
+    const answers = asked !== "search" && !liveGoesOn(q, asked, quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }, version)?.intent ?? null);
     if (answers) {
-      const { facts, match } = await liveFactsFor(liveCode);
+      const kind = liveAnswerKind(asked, facts, q);
       const said =
         kind !== "other" || (!facts.cricket && !facts.board)
-          ? { reply: kind === "other" ? liveFallback(facts) : liveReply(kind, facts, q), via: "keywords" as const }
+          ? { reply: kind === "other" ? liveFallback(facts, q) : liveReply(kind, facts, q), via: "keywords" as const }
           : await answerLive(q, facts, history.map((h) => ({ user: h.user, reply: h.reply })), usage, started + LIVE_DEADLINE_MS);
       ms.handler = Math.round(performance.now() - t0);
       ms.total = Date.now() - started;

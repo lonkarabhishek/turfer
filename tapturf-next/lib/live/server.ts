@@ -298,12 +298,15 @@ export async function recordLiveStarter(code: string, signer: LiveSigner, tool: 
 /* ------------------------------------------------------------------ */
 
 /**
- * A keyed hash of the network and the browser's agent: who a view is
- * from, for the per-instance view limits only. Kept in memory, never
+ * A keyed hash of a view's own random tag (lib/live/views.ts newViewTag),
+ * or of the network and the browser's agent for a view without one: which
+ * view this is, for the per-instance view limits only. Two people on one
+ * Wi-Fi with the same phone send different tags. Kept in memory, never
  * stored or sent anywhere.
  */
-export function liveViewerHash(req: Request, key: string): string {
-  return createHash("sha256").update(`${key}|view|${clientNetwork(req)}|${req.headers.get("user-agent") ?? ""}`).digest("hex").slice(0, 32);
+export function liveViewerHash(req: Request, key: string, tag: string | null): string {
+  const who = tag ? `tag|${tag}` : `${clientNetwork(req)}|${req.headers.get("user-agent") ?? ""}`;
+  return createHash("sha256").update(`${key}|view|${who}`).digest("hex").slice(0, 32);
 }
 
 /** Before 20261101_live_views.sql is applied the functions are not there: no count, said once per instance. */
@@ -337,8 +340,7 @@ export async function addLiveView(code: string, unique: boolean): Promise<ViewCo
   }
 }
 
-/** A link's counts (live_view_count), 0 before its first view; null when they cannot be read. Never throws. */
-export async function readLiveViews(code: string): Promise<ViewCount | null> {
+async function readViews(code: string): Promise<ViewCount | null> {
   const key = liveWriteKey();
   if (!key) return null;
   try {
@@ -349,6 +351,22 @@ export async function readLiveViews(code: string): Promise<ViewCount | null> {
     console.warn("live: view read threw", code, e);
     return null;
   }
+}
+
+/** How long a link's counts are kept in Next's data cache: GET /api/live/<code>/views reads the database at most this often per link per region, whatever the URL. */
+const LIVE_VIEWS_CACHE_S = 30;
+
+/**
+ * A link's counts (live_view_count), 0 before its first view; null when
+ * they cannot be read (cached too: a count, not a score, so it may lag).
+ * From the data cache, so a request the CDN has not seen (a new query
+ * string) costs no database read. Never throws.
+ */
+export function readLiveViews(code: string): Promise<ViewCount | null> {
+  return unstable_cache(() => readViews(code), ["live-views", code], { revalidate: LIVE_VIEWS_CACHE_S })().catch((e) => {
+    console.warn("live: view read cache failed", code, e);
+    return null;
+  });
 }
 
 /**

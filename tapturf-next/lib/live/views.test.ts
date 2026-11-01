@@ -3,19 +3,26 @@ import assert from "node:assert/strict";
 import {
   LIVE_LINKS_KEY,
   SEEN_MAX,
+  UNIQUES_PER_NET_LINK,
   VIEWS_PER_MIN,
+  VIEWS_PER_NET_LINK,
   VIEW_AGAIN_MS,
   VIEW_GAP_MS,
+  VIEW_LINK_WINDOW_MS,
+  VIEW_TAG_RE,
   createViewLimiter,
   decideView,
   isBotAgent,
   isPrefetch,
+  newViewTag,
   parseViewBody,
   planView,
   readSeen,
   scorerHolds,
   toViewCount,
+  unseeView,
   viewDay,
+  viewFromPage,
   viewsLabel,
   type SeenNote,
 } from "./views";
@@ -156,28 +163,125 @@ test("what the follower page decides when it is on screen", () => {
   assert.equal(decideView({ ...base, seen: "{broken" })?.unique, true, "a broken note: a fresh one");
 });
 
-test("the server's per-instance limits: a repeat within seconds, a network's minute", () => {
+test("the server's per-instance limits: the same view within seconds, a network's minute", () => {
   let now = T;
   const take = createViewLimiter(() => now);
-  assert.deepEqual(take("net1", "who1", CODE), { count: true });
-  // The same browser again at once (a reload loop, a page that ignores its note): not counted.
-  assert.deepEqual(take("net1", "who1", CODE), { count: false, why: "again" });
+  assert.deepEqual(take("net1", "who1", CODE, true), { count: true, unique: true });
+  // The same view sent again at once: not counted.
+  assert.deepEqual(take("net1", "who1", CODE, true), { count: false, why: "again" });
   now += VIEW_GAP_MS - 1;
-  assert.deepEqual(take("net1", "who1", CODE), { count: false, why: "again" });
-  assert.deepEqual(take("net1", "who1", OTHER), { count: true }, "another link is its own");
-  // Another phone behind the same carrier address, even one of the same model, is counted.
-  assert.deepEqual(take("net1", "who2", CODE), { count: true });
+  assert.deepEqual(take("net1", "who1", CODE, false), { count: false, why: "again" });
+  assert.deepEqual(take("net1", "who1", OTHER, true), { count: true, unique: true }, "another link is its own");
+  // Another phone behind the same carrier address, even one of the same model (its own tag), is counted.
+  assert.deepEqual(take("net1", "who2", CODE, true), { count: true, unique: true });
   now += 1;
-  assert.deepEqual(take("net1", "who1", CODE), { count: true }, "past the gap");
+  assert.deepEqual(take("net1", "who1", CODE, false), { count: true, unique: false }, "past the gap");
 
-  // A network's minute.
+  // A network's minute, across links.
   now = T;
   const flood = createViewLimiter(() => now);
-  for (let i = 0; i < VIEWS_PER_MIN; i++) assert.equal(flood("busy", `w${i}`, CODE).count, true);
-  assert.deepEqual(flood("busy", "wlast", CODE), { count: false, why: "slow" });
-  assert.equal(flood("calm", "c0", CODE).count, true, "other networks go on");
+  const links = Array.from({ length: Math.ceil(VIEWS_PER_MIN / VIEWS_PER_NET_LINK) + 1 }, (_, i) => `l${String(i).padStart(11, "0")}`);
+  for (let i = 0; i < VIEWS_PER_MIN; i++) assert.equal(flood("busy", `w${i}`, links[Math.floor(i / VIEWS_PER_NET_LINK)], false).count, true, `view ${i}`);
+  assert.deepEqual(flood("busy", "wlast", links[links.length - 1], false), { count: false, why: "slow" });
+  assert.equal(flood("calm", "c0", CODE, false).count, true, "other networks go on");
   now += 60_000;
-  assert.equal(flood("busy", "wlast", CODE).count, true, "the next minute");
+  assert.equal(flood("busy", "wlast", links[links.length - 1], false).count, true, "the next minute");
+});
+
+test("one network and one link: a script changing its agent or tag on every view counts VIEWS_PER_NET_LINK in ten minutes", () => {
+  let now = T;
+  const take = createViewLimiter(() => now);
+  // A ground's Wi-Fi: twenty people opening a just-shared link within seconds, every one with the same phone, each its own view.
+  for (let i = 0; i < VIEWS_PER_NET_LINK; i++) assert.deepEqual(take("ground", `tag${i}`, CODE, true), { count: true, unique: true }, `person ${i}`);
+  assert.deepEqual(take("ground", "one-more", CODE, true), { count: false, why: "many" });
+  // Two hundred more, a second apart, each a new agent or tag (the reviewer's rotating agent): none counted.
+  let counted = 0;
+  for (let i = 0; i < 200; i++) {
+    now += 1_000;
+    const r = take("ground", `rot${i}`, CODE, true);
+    if (r.count) counted++;
+    else assert.equal(r.why, "many");
+  }
+  assert.equal(counted, 0);
+  assert.equal(take("ground", "rot-y", OTHER, true).count, true, "another link from the same network is its own");
+  assert.equal(take("home", "h1", CODE, true).count, true, "another network is its own");
+  now = T + VIEW_LINK_WINDOW_MS;
+  assert.equal(take("ground", "later", CODE, true).count, true, "the next ten minutes");
+});
+
+test("unique is believed for UNIQUES_PER_NET_LINK of a link per network a day; past it a view counts, as not unique", () => {
+  let now = T;
+  const take = createViewLimiter(() => now);
+  let uniques = 0;
+  let views = 0;
+  // A view a minute for half a day from one address, every one claiming unique.
+  for (let i = 0; i < 12 * 60; i++) {
+    const r = take("nat", `t${i}`, CODE, true);
+    if (r.count) {
+      views++;
+      if (r.unique) uniques++;
+    }
+    now += 60_000;
+  }
+  assert.equal(uniques, UNIQUES_PER_NET_LINK);
+  assert.ok(views > UNIQUES_PER_NET_LINK, "views still count");
+  assert.deepEqual(take("other-net", "o1", CODE, true), { count: true, unique: true });
+  // A view that is not unique never uses one up.
+  const fresh = createViewLimiter(() => now);
+  for (let i = 0; i < 5; i++) assert.equal(fresh("n", `x${i}`, CODE, false).count, true);
+  assert.deepEqual(fresh("n", "y", CODE, true), { count: true, unique: true });
+});
+
+test("only this site's own page counts a view: JSON, same origin", () => {
+  const URL_ = "https://tapturf.in/api/live/k7m2q9x4a1b3/views";
+  const h = (o: Record<string, string>) => new Headers({ "content-type": "application/json", ...o });
+  assert.equal(viewFromPage(h({ "sec-fetch-site": "same-origin" }), URL_), true, "the follower hook");
+  assert.equal(viewFromPage(h({ "sec-fetch-site": "same-origin", "content-type": "application/json; charset=utf-8" }), URL_), true);
+  assert.equal(viewFromPage(h({ origin: "https://tapturf.in", host: "tapturf.in" }), URL_), true, "an older browser: no Sec-Fetch-Site, its Origin");
+  assert.equal(viewFromPage(h({ origin: "http://localhost:3000", host: "localhost:3000" }), "http://localhost:3000/api/live/x/views"), true);
+  for (const bad of <Record<string, string>[]>[
+    { "sec-fetch-site": "cross-site", origin: "https://evil.example" },
+    // The reviewer's no-cors POST: a simple request another site's page may send without asking.
+    { "sec-fetch-site": "cross-site", origin: "https://evil.example", "content-type": "text/plain;charset=UTF-8" },
+    { "sec-fetch-site": "same-site", origin: "https://www.tapturf.in" },
+    { "sec-fetch-site": "none" },
+    { origin: "https://evil.example", host: "tapturf.in" },
+    { origin: "null", host: "tapturf.in" },
+    {},
+    { "sec-fetch-site": "same-origin", "content-type": "text/plain" },
+    { "sec-fetch-site": "same-origin", "content-type": "application/x-www-form-urlencoded" },
+    { "sec-fetch-site": "same-origin", "content-type": "application/jsonp" },
+  ]) {
+    assert.equal(viewFromPage(h(bad), URL_), false, JSON.stringify(bad));
+  }
+  const noType = new Headers({ "sec-fetch-site": "same-origin" });
+  assert.equal(viewFromPage(noType, URL_), false, "no content type");
+});
+
+test("a view the server did not count is taken back from the note, so the next visit tries again", () => {
+  const before: SeenNote = { [OTHER]: { d: "2026-11-01", at: T - 60 * MIN } };
+  const first = planView(before, CODE, T);
+  assert.ok(first.send && first.unique);
+  const back = unseeView(first.next, CODE, T, undefined);
+  assert.deepEqual(back, before, "never counted: as if it had not been opened");
+  const again = planView(back, CODE, T + 1);
+  assert.ok(again.send && again.unique, "the next visit is a view again, and unique still");
+  // Counted earlier today, then a later view dropped: back to the earlier one, so not unique next time.
+  const earlier: SeenNote = { [CODE]: { d: "2026-11-01", at: T - VIEW_AGAIN_MS } };
+  const later = planView(earlier, CODE, T);
+  assert.ok(later.send && !later.unique);
+  assert.deepEqual(unseeView(later.next, CODE, T, earlier[CODE]), earlier);
+  // Another tab counted since: its note stands.
+  const otherTab: SeenNote = { [CODE]: { d: "2026-11-01", at: T + 5_000 } };
+  assert.deepEqual(unseeView(otherTab, CODE, T, undefined), otherTab);
+});
+
+test("a view's tag is random and carries nothing; the body keeps only a well formed one", () => {
+  const tags = new Set(Array.from({ length: 50 }, () => newViewTag()));
+  assert.equal(tags.size, 50);
+  for (const t of tags) assert.match(t, VIEW_TAG_RE);
+  assert.deepEqual(parseViewBody({ unique: true, v: "0123456789abcdef" }), { unique: true, tag: "0123456789abcdef" });
+  for (const v of [undefined, "", "0123456789ABCDEF", "0123456789abcde", "0123456789abcdef0", 12, { a: 1 }]) assert.equal(parseViewBody({ unique: true, v })?.tag, null, String(v));
 });
 
 test("counts as the database answers them, and as the page says them", () => {
@@ -188,9 +292,9 @@ test("counts as the database answers them, and as the page says them", () => {
   assert.equal(viewsLabel(0), "0 views");
   assert.equal(viewsLabel(1234), "1,234 views");
   assert.equal(viewsLabel(123456), "1,23,456 views");
-  assert.deepEqual(parseViewBody({ unique: true }), { unique: true });
-  assert.deepEqual(parseViewBody({ unique: "yes" }), { unique: false });
-  assert.deepEqual(parseViewBody({}), { unique: false });
+  assert.deepEqual(parseViewBody({ unique: true }), { unique: true, tag: null });
+  assert.deepEqual(parseViewBody({ unique: "yes" }), { unique: false, tag: null });
+  assert.deepEqual(parseViewBody({}), { unique: false, tag: null });
   assert.equal(parseViewBody(null), null);
   assert.equal(parseViewBody([true]), null);
 });

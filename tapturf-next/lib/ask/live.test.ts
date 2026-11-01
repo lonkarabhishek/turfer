@@ -3,7 +3,26 @@ import assert from "node:assert/strict";
 import { apply, check, newMatch, type Match, type MatchEvent } from "../cricket/scoring";
 import { applyBoard, newBoard } from "../board/index";
 import type { Board, BoardEvent } from "../board/types";
-import { factLines, istTime, liveAskChips, liveAskGate, liveAskKind, liveCodeOf, liveFacts, liveFallback, liveFollowups, liveReply, numbersOk, type LiveAskKind } from "./live";
+import { quickAnswer } from "../ai/quick";
+import {
+  factLines,
+  istTime,
+  liveAnswerKind,
+  liveAskChips,
+  liveAskGate,
+  liveAskKind,
+  liveCodeOf,
+  liveFacts,
+  liveFallback,
+  liveFollowups,
+  liveGoesOn,
+  liveOwnNames,
+  livePlaces,
+  liveReply,
+  numbersOk,
+  type LiveAskKind,
+  type LiveFacts,
+} from "./live";
 
 /* Titans (a): Amit a1, Rahul a2, Karan a3 ... ; Strikers (b): Sameer b1, Vikas b2 ...; 2 overs a side. */
 const ball = (runs = 0, wicket?: { kind: "bowled" }): MatchEvent => ({ type: "ball", runs, extra: "none", ...(wicket ? { wicket } : {}) });
@@ -82,13 +101,147 @@ test("what a message on a live page asks", () => {
     ["can I book a slot for tomorrow", "search"],
     ["any open games this weekend", "search"],
     ["host a game saturday 7pm", "search"],
-    // About this match, though it names a turf.
+    // Games and players wanted, with a day, a sport or a place: searches, though they say games, need or ground (the review's).
+    ["any games tonight in Baner?", "search"],
+    ["football games in Kothrud tomorrow", "search"],
+    ["is there a game tomorrow at 7 in Wakad", "search"],
+    ["cricket game tomorrow", "search"],
+    ["need 2 players for cricket tonight", "search"],
+    ["players needed for game tonight", "search"],
+    ["players needed for a game tonight", "search"],
+    ["cheap ground for 10 players", "search"],
+    ["Any games tonight in Pune?", "search"],
+    ["any pickup games near kothrud?", "search"],
+    ["games this weekend", "search"],
+    ["football games in baner", "search"],
+    ["Is there a game I can join?", "search"],
+    ["any cricket games on sunday", "search"],
+    ["Where can I play cricket tonight", "search"],
+    // About this match, though it names a turf, a day or games.
     ["which turf is this match at", "other"],
+    ["Is the game tonight?", "score"],
+    ["who won today", "result"],
+    // A board's games are its score.
+    ["any games left in this set", "score"],
+    ["how many games has she won", "result"],
     // Anything else about the match: the model, from the facts.
     ["is Amit playing well?", "other"],
     ["hello", "other"],
   ];
   for (const [q, kind] of cases) assert.equal(liveAskKind(q), kind, q);
+});
+
+// As app/api/ask/route.ts reads a message on a live page: the kind, with the turfs' places and this match's own names; the quick reader's search; then the kind for this match.
+const AREAS = { pune: ["Baner", "Kothrud", "Wakad"], nashik: ["Gangapur Road"] };
+// Sagar: a town as well as a first name.
+const PLACES = livePlaces(AREAS, ["Pune", "Mumbai", "Hyderabad", "Bombay", "Sagar"]);
+function onLivePage(q: string, f: LiveFacts): LiveAskKind | "search" | "other" {
+  const asked = liveAskKind(q, { places: PLACES, ...liveOwnNames(f) });
+  if (asked === "search" || liveGoesOn(q, asked, quickAnswer(q, { areas: AREAS, turfs: [] }, {}, 9)?.intent ?? null)) return "search";
+  return liveAnswerKind(asked, f, q);
+}
+
+test("on a live page a game or turf search goes on to the usual Ask; the match's own questions stay", () => {
+  const f = facts(chase);
+  for (const q of [
+    "any games tonight in Baner?",
+    "football games in Kothrud tomorrow",
+    "is there a game tomorrow at 7 in Wakad",
+    "need 2 players for cricket tonight",
+    "players needed for game tonight",
+    "who is playing football tonight in Baner",
+    "cheap ground for 10 players",
+    "any pickup games near kothrud?",
+    "Is there a game I can join?",
+    "Where can I play cricket tonight",
+    // Read by the quick reader: a place and a sport, a tool, a host.
+    "football Baner tonight",
+    "box cricket Kothrud",
+    "Calculate our NRR",
+    "Host a game Saturday 7pm",
+  ]) {
+    assert.equal(onLivePage(q, f), "search", q);
+  }
+  // A place alone after in/near/at is a search; a place the quick reader can't read stays the model's otherwise.
+  assert.equal(liveAskKind("who is playing football tonight in Baner"), "teams", "without the places, as the chat reads it");
+  assert.equal(liveAskKind("who is playing football tonight in Baner", { places: PLACES }), "search");
+  assert.equal(liveAskKind("anything happening in bombay", { places: PLACES }), "search");
+  for (const chip of [...liveAskChips(chase), ...liveAskChips(done), ...liveAskChips(start), "Who's playing?", "where is this match", "what's happening", "is the match over"]) {
+    assert.notEqual(onLivePage(chip, f), "search", chip);
+  }
+});
+
+test("a match's own names are never a search: teams named for a turf or a place", () => {
+  const m = newMatch({ teamA: "Turf Kings", teamB: "Baner Blasters", overs: 2, players: { a: ["Sagar", "Ajay"], b: ["Kunal", "Rohit"] }, venue: "Kothrud Sports Arena" }, { id: "m2", now: 0 });
+  const f = facts(run(m, bat("a1"), bat("a2"), bowl("b1"), ball(4)));
+  assert.equal(liveAskKind("how many runs have Turf Kings got", {}), "search", "without its names, 'turf' reads as a search");
+  assert.equal(onLivePage("how many runs have Turf Kings got", f), "score");
+  assert.equal(liveAskKind("are Baner Blasters winning at Kothrud Sports Arena?", { places: PLACES }), "search", "without its names, two places");
+  assert.equal(onLivePage("are Baner Blasters winning at Kothrud Sports Arena?", f), "result");
+  assert.equal(liveAskKind("how many runs from Sagar", { places: PLACES }), "search", "a place, to a page that doesn't know the players");
+  assert.equal(onLivePage("how many runs from Sagar", f), "player", "a player of this match");
+  assert.equal(onLivePage("is it raining at Kothrud Sports Arena", f), "other");
+  // A team's name is theirs only whole: Baner alone is still the place.
+  assert.equal(onLivePage("who is playing football tonight in Baner", f), "search");
+  assert.equal(onLivePage("any games tonight in Baner?", f), "search");
+  assert.deepEqual(liveOwnNames(f), { own: ["Turf Kings", "Baner Blasters", "Kothrud Sports Arena"], players: ["Sagar", "Ajay", "Kunal", "Rohit"] });
+});
+
+test("the quick reader's reading sends a usual question on only for a search, a host or a tool, never one about this match", () => {
+  assert.equal(liveGoesOn("Calculate our NRR", "other", "tool"), true);
+  assert.equal(liveGoesOn("about turf park", "other", "question"), true, "about nothing in the match: any reading it has, as before");
+  assert.equal(liveGoesOn("Any games tonight in Pune?", "score", "find_game"), true);
+  assert.equal(liveGoesOn("Host a game Saturday 7pm", "score", "create_game"), true);
+  assert.equal(liveGoesOn("score of the games tonight in Pune", "score", "find_game"), false, "it says score");
+  assert.equal(liveGoesOn("is this match in Pune", "teams", "find_turf"), false, "it points at this match");
+  assert.equal(liveGoesOn("What's the score?", "score", null), false);
+  assert.equal(liveGoesOn("who's playing", "teams", "question"), false);
+  assert.equal(liveGoesOn("hello", "other", "other"), false);
+});
+
+test("a question naming a player is that player's, from every innings' cards", () => {
+  const f = facts(chase);
+  const asked = (q: string) => [onLivePage(q, f), liveReply(onLivePage(q, f) as LiveAskKind, f, q)];
+  // The review's: each was the side's wickets, score or overs before.
+  assert.deepEqual(asked("How many wickets did Vikas take?"), ["player", "Vikas bowled for Strikers in the 1st innings: 1/2 in 1.0 overs. Vikas is batting for Strikers: 0 off 0 balls, on strike."]);
+  const rahul = "Rahul batted for Titans in the 1st innings: 7 off 7 balls, 1 six, strike rate 100.00, out b Vikas.";
+  assert.deepEqual(asked("how did Rahul get out"), ["player", rahul]);
+  assert.deepEqual(asked("Rahul kitne pe out hua?"), ["player", rahul]);
+  assert.deepEqual(asked("How many runs did Rahul score?"), ["player", rahul]);
+  assert.deepEqual(asked("How many balls has Amit faced?"), ["player", "Amit batted for Titans in the 1st innings: 6 off 3 balls, 1 four, strike rate 200.00, not out. Amit is bowling for Titans: 0/7 in 0.3 overs."]);
+  assert.deepEqual(asked("how many overs did Sameer bowl"), ["player", "Sameer bowled for Strikers in the 1st innings: 0/12 in 1.0 overs. Sameer is batting for Strikers: 7 off 3 balls, 1 four, strike rate 233.33."]);
+  // Who is bowling or batting with someone: the bowler and the batters answer it.
+  assert.equal(onLivePage("Who's bowling to Vikas?", f), "bowling");
+  assert.equal(onLivePage("who is batting with Sameer", f), "batting");
+  // Anything else about a player is the model's, from the facts; without it, the player's own lines.
+  assert.equal(onLivePage("is Amit playing well?", f), "other");
+  assert.equal(liveFallback(f, "is Amit playing well?"), liveReply("player", f, "how is Amit"));
+  assert.equal(liveFallback(f, "Did Dev bat?"), "Dev plays for Titans and hasn't batted or bowled yet.");
+  // Words that are names too, and team names, are not players.
+  assert.equal(onLivePage("who will win", f), "result");
+  assert.equal(onLivePage("what's the score", f), "score");
+  for (const q of ["How many wickets did Vikas take?", "how did Rahul get out", "How many balls has Amit faced?", "how many overs did Sameer bowl"]) {
+    assert.ok(numbersOk(liveReply("player", f, q), f), `${q}: every number is in the facts`);
+  }
+
+  // Once it is over, every innings still answers.
+  const end = facts(done, "done");
+  assert.equal(liveReply("player", end, "How many runs did Rahul score?"), `${rahul} Rahul bowled for Titans in the 2nd innings: 0/3 in 1.0 overs.`);
+  assert.equal(liveReply("player", end, "how many wickets did vikas take"), "Vikas bowled for Strikers in the 1st innings: 1/2 in 1.0 overs. Vikas batted for Strikers in the 2nd innings: 1 off 5 balls, strike rate 20.00, not out.");
+});
+
+test("the facts carry every innings' batting and bowling cards and both sides' players", () => {
+  const f = facts(chase);
+  assert.ok(f.lines.includes("1st innings batting, Titans: Amit 6 off 3 balls, 1 four, strike rate 200.00, not out; Rahul 7 off 7 balls, 1 six, strike rate 100.00, out b Vikas; Karan 1 off 2 balls, strike rate 50.00, not out."));
+  assert.ok(f.lines.includes("1st innings bowling, Strikers: Sameer 0/12 in 1.0; Vikas 1/2 in 1.0."));
+  assert.ok(f.lines.includes("2nd innings bowling, Titans: Amit 0/7 in 0.3."));
+  assert.ok(f.lines.includes("Players: Titans: Amit, Rahul, Karan, Dev, Om, Jay; Strikers: Sameer, Vikas, Nikhil, Arjun, Ravi, Sunny."));
+  assert.ok(!f.lines.some((l) => l.startsWith("2nd innings batting")), "the two at the crease are said once, above");
+  const end = facts(done, "done");
+  assert.ok(end.lines.includes("2nd innings batting, Strikers: Sameer 9 off 7 balls, 1 four, strike rate 128.57, not out; Vikas 1 off 5 balls, strike rate 20.00, not out."));
+  assert.ok(end.lines.includes("2nd innings bowling, Titans: Amit 0/7 in 1.0; Rahul 0/3 in 1.0."));
+  // So the model may say a first-innings number during the chase.
+  assert.equal(numbersOk("Rahul made 7 off 7 before Vikas bowled him.", f), true);
 });
 
 test("facts from a chase, every number as the page shows it", () => {
@@ -200,6 +353,19 @@ test("a board: the score, who is ahead, the clock as of now, and no cricket word
   assert.equal(liveReply("teams", f), "Red FC vs Blue FC, football.");
   assert.ok(numbersOk(liveReply("time", f), f));
   assert.deepEqual(liveAskChips(b), ["What's the score?", "Who's winning?", "How long is left?", "Who's playing?"]);
+
+  // Everyday words read as cricket's on a board: the model answers from the facts, or the clock does. "Not cricket" only for cricket's own words.
+  const kinds = (q: string) => liveAnswerKind(liveAskKind(q) as LiveAskKind | "other", f, q);
+  assert.equal(kinds("How many goals needed to equalise?"), "other");
+  assert.equal(kinds("How many points do they need?"), "other");
+  assert.equal(kinds("Is Ravi out?"), "other");
+  assert.equal(kinds("who's the striker"), "other", "a striker is football's too");
+  assert.equal(kinds("How long until it's over?"), "time");
+  assert.equal(liveReply(kinds("How long until it's over?") as LiveAskKind, f), "1st half, 10:00 on the clock. Red FC 1-0 Blue FC, 1st half.");
+  for (const q of ["Who's batting?", "how many wickets", "how many overs left", "what's the run rate"]) assert.match(liveReply(kinds(q) as LiveAskKind, f, q), /^This is a football match, not cricket\./, q);
+  assert.equal(liveFallback(f, "How many goals needed to equalise?"), "Red FC 1-0 Blue FC, 1st half. Latest: 6' Goal! Ravi (1-0). Ask me the score, who's ahead or how long is left.");
+  assert.ok(f.lines.includes("Players: Ravi (Red FC) 6'."), "the scorers, for the model");
+  assert.deepEqual(liveOwnNames(f), { own: ["Red FC", "Blue FC"], players: ["Ravi"] });
 });
 
 test("the model's reply is used only when every number in it is in the facts", () => {

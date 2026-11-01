@@ -4,9 +4,9 @@ import { clockMs, deriveBoard } from "../board/index";
 import type { Board, BoardView } from "../board/types";
 import { isLiveBoard, sanitizeLive } from "../live/match";
 import { liveIdleClosed, type LiveStatus } from "../live/types";
-import { PREDICT, normAsk, type LiveAskKind } from "./liveKind";
+import { PREDICT, normAsk, type LiveAskKind, type LiveOwnNames } from "./liveKind";
 
-export { liveAskGate, liveAskKind, liveCodeOf, liveFollowups, type LiveAskKind } from "./liveKind";
+export { liveAskGate, liveAskKind, liveCodeOf, liveFollowups, liveGoesOn, livePlaces, type LiveAskKind, type LiveOwnNames } from "./liveKind";
 
 /**
  * Ask TapTurf on a live score page (/live/<code>): the page sends its
@@ -14,12 +14,14 @@ export { liveAskGate, liveAskKind, liveCodeOf, liveFollowups, type LiveAskKind }
  * about the match is answered from the match itself, as followers are
  * served it. Everything said is worked out here from the match JSON
  * (liveFacts): the teams, the score, overs, wickets, who is batting and
- * bowling, the run rates, the target and the rate needed, the result, the
- * last update and whether the link stopped. The usual questions
- * (lib/ask/liveKind.ts liveAskKind) get a sentence built here (liveReply);
- * any other one may go to the model, which only phrases these facts and
- * may use no number they don't have (numbersOk). A turf or game search
- * typed on the page goes on to the usual search.
+ * bowling, every innings' batting and bowling cards, the run rates, the
+ * target and the rate needed, the result, the last update and whether the
+ * link stopped. The usual questions (lib/ask/liveKind.ts liveAskKind, then
+ * liveAnswerKind once the match is known) get a sentence built here
+ * (liveReply), a question naming a player that player's lines; any other
+ * one may go to the model, which only phrases these facts and may use no
+ * number they don't have (numbersOk). A turf or game search typed on the
+ * page goes on to the usual search.
  *
  * Asking on a live page needs an account (liveAskGate): visitors get no
  * free answers there, as they do elsewhere. Pure, relative imports only,
@@ -39,8 +41,10 @@ export { liveAskGate, liveAskKind, liveCodeOf, liveFollowups, type LiveAskKind }
  */
 export type LiveAskState = "waiting" | "live" | "done" | "closed" | "stopped" | "expired" | "missing" | "unknown";
 
-export type BatFact = { name: string; runs: number; balls: number; fours: number; sixes: number; sr: string | null; onStrike: boolean; atCrease: boolean; out: string | null };
-export type InningsFact = { team: string; runs: number; wickets: number; score: string; overs: string; maxOvers: number; ballsLeft: number; crr: string | null; ended: boolean };
+export type BatFact = { name: string; runs: number; balls: number; fours: number; sixes: number; sr: string | null; onStrike: boolean; atCrease: boolean; out: string | null; notOut: boolean };
+export type BowlFact = { name: string; figures: string; overs: string };
+/** One innings with its batting and bowling cards (bowlingTeam bowled it). */
+export type InningsFact = { team: string; bowlingTeam: string; runs: number; wickets: number; score: string; overs: string; maxOvers: number; ballsLeft: number; crr: string | null; ended: boolean; batters: BatFact[]; bowlers: BowlFact[] };
 
 export type CricketFacts = {
   teamA: string;
@@ -66,8 +70,8 @@ export type CricketFacts = {
   thisOver: { number: number; balls: string[]; runs: number; complete: boolean } | null;
   topScorer: string | null;
   bestBowler: string | null;
-  batters: BatFact[];
-  bowlers: { name: string; figures: string; overs: string }[];
+  /** Each side's players as named, with those who joined mid-match. */
+  squads: { team: string; players: string[] }[];
   freeHit: boolean;
 };
 
@@ -90,6 +94,8 @@ export type BoardFacts = {
   headline: string;
   notices: string[];
   recent: string[];
+  /** Scorers and cards, as the page lists them ("Ravi", "Red FC", "2 goals"). */
+  players: { name: string; team: string; text: string }[];
 };
 
 export type LiveFacts = {
@@ -133,11 +139,25 @@ function batFact(b: BatterLine): BatFact {
     onStrike: b.onStrike,
     atCrease: b.status === "batting",
     out: b.status === "out" ? b.howOut : null,
+    notOut: b.status === "notOut",
   };
 }
 
 function inningsFact(i: InningsView): InningsFact {
-  return { team: i.battingName, runs: i.runs, wickets: i.wickets, score: i.score, overs: i.overs, maxOvers: i.maxBalls / 6, ballsLeft: i.ballsLeft, crr: i.legalBalls > 0 ? rate(i.crr) : null, ended: i.ended !== null };
+  return {
+    team: i.battingName,
+    bowlingTeam: i.bowlingName,
+    runs: i.runs,
+    wickets: i.wickets,
+    score: i.score,
+    overs: i.overs,
+    maxOvers: i.maxBalls / 6,
+    ballsLeft: i.ballsLeft,
+    crr: i.legalBalls > 0 ? rate(i.crr) : null,
+    ended: i.ended !== null,
+    batters: i.batters.map(batFact),
+    bowlers: i.bowlers.map((b) => ({ name: b.name, figures: b.figures, overs: b.overs })),
+  };
 }
 
 /** A ball chip as words: "." is a dot ball. */
@@ -169,8 +189,7 @@ function cricketFacts(v: MatchView): CricketFacts {
     thisOver: over && over.balls.length ? { number: over.number, balls: over.balls.map((b) => chipWord(b.chip)), runs: over.runs, complete: over.complete } : null,
     topScorer: v.awards.topScorer?.text ?? null,
     bestBowler: v.awards.bestBowler?.text ?? null,
-    batters: cur.batters.map(batFact),
-    bowlers: cur.bowlers.map((b) => ({ name: b.name, figures: b.figures, overs: b.overs })),
+    squads: (["a", "b"] as const).map((s) => ({ team: v.teams[s].name, players: v.teams[s].players.map((p) => p.name) })),
     freeHit: v.status === "live" && v.freeHit,
   };
 }
@@ -212,6 +231,7 @@ function boardFacts(b: Board, v: BoardView, updatedAt: number | null, now: numbe
     headline: v.headline,
     notices: v.notices.slice(0, 3),
     recent: v.timeline.slice(-3).map((l) => [l.when, l.text, l.score ? `(${l.score})` : null].filter(Boolean).join(" ")),
+    players: v.players.slice(0, 20).map((p) => ({ name: p.name, team: v.teams[p.side].name, text: p.text })),
   };
 }
 
@@ -251,10 +271,17 @@ const STATE_LINE: Record<LiveAskState, string> = {
   unknown: "the score could not be read just now.",
 };
 
-function batText(b: BatFact): string {
+/** How a batter stands: ", out b Vikas", ", run out (Sameer)", ", not out", ", on strike". */
+const batHow = (b: BatFact) => (b.out ? (/^run out/.test(b.out) ? `, ${b.out}` : `, out ${b.out}`) : b.notOut ? ", not out" : b.onStrike ? ", on strike" : "");
+
+/** "4 off 2 balls, 1 four, strike rate 200.00, not out". */
+function batLine(b: BatFact): string {
   const bits = [`${b.runs} off ${plural(b.balls, "ball")}`, b.fours ? plural(b.fours, "four") : null, b.sixes ? plural(b.sixes, "six", "sixes") : null, b.sr ? `strike rate ${b.sr}` : null];
-  return `${b.name} ${bits.filter(Boolean).join(", ")}${b.out ? `, out ${b.out}` : b.onStrike ? ", on strike" : ""}`;
+  return `${bits.filter(Boolean).join(", ")}${batHow(b)}`;
 }
+
+const batText = (b: BatFact) => `${b.name} ${batLine(b)}`;
+const ordinal = (n: number) => (n === 0 ? "1st" : "2nd");
 
 /** The facts as lines for the model, in the page's own words and numbers. */
 export function factLines(f: LiveFacts): string[] {
@@ -266,7 +293,7 @@ export function factLines(f: LiveFacts): string[] {
     if (c.title) out.push(`Title: ${c.title}.`);
     if (c.venue) out.push(`Venue: ${c.venue}.`);
     c.innings.forEach((i, n) =>
-      out.push(`${n === 0 ? "1st" : "2nd"} innings: ${i.team} ${i.score} after ${i.overs} of ${i.maxOvers} overs${i.crr ? `, run rate ${i.crr}` : ""}${i.ended ? ", innings over" : ""}.`),
+      out.push(`${ordinal(n)} innings: ${i.team} ${i.score} after ${i.overs} of ${i.maxOvers} overs${i.crr ? `, run rate ${i.crr}` : ""}${i.ended ? ", innings over" : ""}.`),
     );
     if (c.inningsBreak) out.push(`Innings break: ${c.current.team} need ${c.chase?.target ?? c.innings[0].runs + 1} to win.`);
     if (c.chase) out.push(`Chase: target ${c.chase.target}; ${c.current.team} need ${plural(c.chase.runsNeeded, "run")} off ${plural(c.chase.ballsLeft, "ball")}${c.chase.rrr ? `, required rate ${c.chase.rrr}` : ""}.`);
@@ -277,12 +304,17 @@ export function factLines(f: LiveFacts): string[] {
     if (c.thisOver) out.push(`Over ${c.thisOver.number}${c.thisOver.complete ? "" : " so far"}: ${c.thisOver.balls.join(", ")} (${plural(c.thisOver.runs, "run")}).`);
     if (c.partnership) out.push(`Partnership: ${c.partnership}.`);
     if (c.lastWicket) out.push(`Last wicket: ${c.lastWicket}.`);
-    // At the crease is said above, while the match is on.
-    const batted = c.batters.filter((b) => !(b.atCrease && (c.striker || c.nonStriker)) && (b.balls > 0 || b.out));
-    if (batted.length) out.push(`Also batted in this innings: ${batted.slice(0, 9).map(batText).join("; ")}.`);
-    if (c.bowlers.length) out.push(`Bowlers in this innings: ${c.bowlers.slice(0, 8).map((b) => `${b.name} ${b.figures} in ${b.overs}`).join("; ")}.`);
+    // Every innings' cards, so a player of either side can be asked about. At the crease is said above, while the match is on.
+    c.innings.forEach((i, n) => {
+      const atCrease = i === c.current && !!(c.striker || c.nonStriker);
+      const batted = i.batters.filter((b) => !(atCrease && b.atCrease) && (b.balls > 0 || b.out));
+      if (batted.length) out.push(`${ordinal(n)} innings batting, ${i.team}: ${batted.slice(0, 31).map(batText).join("; ")}.`);
+      if (i.bowlers.length) out.push(`${ordinal(n)} innings bowling, ${i.bowlingTeam}: ${i.bowlers.slice(0, 31).map((b) => `${b.name} ${b.figures} in ${b.overs}`).join("; ")}.`);
+    });
     if (c.topScorer) out.push(`Top scorer: ${c.topScorer}.`);
     if (c.bestBowler) out.push(`Best bowling: ${c.bestBowler}.`);
+    const squads = c.squads.filter((s) => s.players.length);
+    if (squads.length) out.push(`Players: ${squads.map((s) => `${s.team}: ${s.players.slice(0, 31).join(", ")}`).join("; ")}.`);
   }
   const b = f.board;
   if (b) {
@@ -293,6 +325,7 @@ export function factLines(f: LiveFacts): string[] {
     if (b.period) out.push(`Period: ${b.period}.`);
     if (b.clock) out.push(`Clock: ${b.clock}${b.clockRunning ? ", running" : ", stopped"}.`);
     if (b.notices.length) out.push(`Notices: ${b.notices.join("; ")}.`);
+    if (b.players.length) out.push(`Players: ${b.players.map((p) => `${p.name} (${p.team}) ${p.text}`).join("; ")}.`);
     if (b.recent.length) out.push(`Latest: ${b.recent.join("; ")}.`);
     if (b.result) out.push(`Result: ${b.result}.`);
   }
@@ -323,10 +356,53 @@ function cricketScore(c: CricketFacts): string {
   return `${c.current.team} are ${c.current.score} after ${overText(c.current)}${crrText(c.current)}.`;
 }
 
+// Names that are words too: never taken for a player on their own ("who will win", "the chase").
+const NOT_NAMES = new Set(["will", "may", "mark", "chase", "win", "run", "out", "over", "ball", "bat", "best", "top", "king", "lucky", "happy", "sunny", "max", "ace", "star"]);
+const simpleName = (s: string) => normAsk(s).replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * The players of this match a message names, by full name or else by
+ * first name (three letters or more); the team names are left out first
+ * ("Rahul XI" is a team). At most three.
+ */
+function playersNamed(c: CricketFacts, q: string): string[] {
+  let t = ` ${simpleName(q)} `;
+  for (const team of [c.teamA, c.teamB]) {
+    const n = simpleName(team);
+    if (n) t = t.split(` ${n} `).join(" _ ");
+  }
+  const all = [...new Set(c.squads.flatMap((s) => s.players))];
+  const said = (n: string, min: number) => n.length >= min && !NOT_NAMES.has(n) && t.includes(` ${n} `);
+  const full = all.filter((p) => said(simpleName(p), 2));
+  return (full.length ? full : all.filter((p) => said(simpleName(p).split(" ")[0], 3))).slice(0, 3);
+}
+
+/** What each named player did, from every innings' cards: batting and bowling, in their own lines. */
+function playerReply(c: CricketFacts, names: string[]): string {
+  if (!names.length) return cricketScore(c);
+  return names
+    .map((name) => {
+      const said: string[] = [];
+      c.innings.forEach((i, n) => {
+        const now = i === c.current && !c.result;
+        const b = i.batters.find((x) => x.name === name);
+        if (b && (b.balls > 0 || b.out || b.atCrease)) said.push(now && b.atCrease ? `${name} is batting for ${i.team}: ${batLine(b)}` : `${name} batted for ${i.team} in the ${ordinal(n)} innings: ${batLine(b)}`);
+        const w = i.bowlers.find((x) => x.name === name);
+        if (w) said.push(now && c.bowler?.name === name ? `${name} is bowling for ${i.bowlingTeam}: ${w.figures} in ${w.overs} overs` : `${name} bowled for ${i.bowlingTeam} in the ${ordinal(n)} innings: ${w.figures} in ${w.overs} overs`);
+      });
+      if (said.length) return `${said.join(". ")}.`;
+      const team = c.squads.find((s) => s.players.includes(name))?.team;
+      return `${name}${team ? ` plays for ${team} and` : ""} hasn't batted or bowled yet.`;
+    })
+    .join(" ");
+}
+
 function cricketReply(kind: LiveAskKind, c: CricketFacts, f: LiveFacts, q: string): string {
   const cur = c.current;
   const over = !!c.result;
   switch (kind) {
+    case "player":
+      return playerReply(c, playersNamed(c, q));
     case "need":
       if (over) return cricketScore(c);
       if (c.inningsBreak) return `${cur.team} need ${c.chase?.target ?? c.innings[0].runs + 1} to win off ${plural(cur.maxOvers, "over")}. The chase hasn't started yet.`;
@@ -436,6 +512,36 @@ function teamsReply(teams: string, title: string, venue: string, format: string)
   return `${teams}, ${format}${title ? `, ${title}` : ""}${venue ? `, at ${venue}` : ""}.`;
 }
 
+// The kinds whose words are cricket's: on another sport's board they say "not cricket" only for a word only cricket has.
+const CRICKET_KINDS: ReadonlySet<LiveAskKind> = new Set<LiveAskKind>(["need", "rate", "partnership", "over", "batting", "bowling", "wickets", "overs"]);
+// "Striker" and "over" are football's too; "need", "out" anyone's.
+const CRICKET_WORDS = /\b(cricket|wickets?|wkts?|run ?rate|crr|rrr|required rate|bowl(s|er|ers|ing|ed)?|bat(ting|ter|ters|sman|smen)|overs|innings|partnership|balls? (left|remaining))\b/;
+const WHO = /^(who|who's|whos|kaun|kon)\b/;
+
+/**
+ * The kind to answer, now that the match is known. A question naming one
+ * of its players (cricket) is that player's, from every innings' cards:
+ * "How many wickets did Vikas take?" is not the side's wickets. Not "Who's
+ * bowling to Amit?": the batters and the bowler answer that. On another
+ * sport's board, a cricket kind read from an everyday word ("goals
+ * needed", "until it's over", "is Ravi out") goes to the model (other),
+ * or to the clock (overs).
+ */
+export function liveAnswerKind(kind: LiveAskKind | "other", f: LiveFacts, q: string): LiveAskKind | "other" {
+  if (kind === "other") return kind;
+  const t = normAsk(q);
+  if (f.cricket && playersNamed(f.cricket, q).length && !(WHO.test(t) && (kind === "batting" || kind === "bowling"))) return "player";
+  if (f.board && CRICKET_KINDS.has(kind) && !CRICKET_WORDS.test(t)) return kind === "overs" ? "time" : "other";
+  return kind;
+}
+
+/** This match's own names for liveAskKind (teams, title, venue; players): a message using them is not a search for a place. */
+export function liveOwnNames(f: LiveFacts): LiveOwnNames {
+  if (f.cricket) return { own: [f.cricket.teamA, f.cricket.teamB, f.cricket.title, f.cricket.venue].filter(Boolean), players: f.cricket.squads.flatMap((s) => s.players) };
+  if (f.board) return { own: [f.board.teamA, f.board.teamB], players: f.board.players.map((p) => p.name) };
+  return {};
+}
+
 /** The answer to one of the usual questions, from the facts alone. */
 export function liveReply(kind: LiveAskKind, f: LiveFacts, q = ""): string {
   const none = NO_SCORE[f.state];
@@ -445,8 +551,9 @@ export function liveReply(kind: LiveAskKind, f: LiveFacts, q = ""): string {
   return f.state === "closed" ? `This live link stopped updating at ${f.updated}, after 2 hours without a new score, so this is the last score it had. ${said}` : said;
 }
 
-/** Without the model, or when its answer can't be used: where the match stands, and what can be asked. */
-export function liveFallback(f: LiveFacts): string {
+/** Without the model, or when its answer can't be used: what a named player did, else where the match stands, and what can be asked. */
+export function liveFallback(f: LiveFacts, q = ""): string {
+  if (f.cricket && playersNamed(f.cricket, q).length) return liveReply("player", f, q);
   const said = liveReply("summary", f);
   if (NO_SCORE[f.state] || (!f.cricket && !f.board)) return said;
   return `${said} Ask me the score, ${f.board ? "who's ahead or how long is left" : "who's batting or bowling, or how many are needed"}.`;

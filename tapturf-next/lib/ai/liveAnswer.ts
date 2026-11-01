@@ -34,7 +34,7 @@ const SYSTEM = `You answer one message from a player on TapTurf's live score pag
  * the fallback.
  */
 export async function answerLive(question: string, facts: LiveFacts, history: { user: string; reply: string }[], usage: AskUsage, deadline: number): Promise<{ reply: string; via: "claude" | "keywords" }> {
-  const fallback = { reply: liveFallback(facts), via: "keywords" as const };
+  const fallback = { reply: liveFallback(facts, question), via: "keywords" as const };
   if (!isAskConfigured()) return fallback;
   const before = history
     .slice(-2)

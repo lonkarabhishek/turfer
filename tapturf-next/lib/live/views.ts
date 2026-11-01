@@ -15,13 +15,16 @@ import { MAX_TRACKED, windowCounter } from "../limits";
  * browser opening the same link again within VIEW_AGAIN_MS is one view
  * (a reload, Back, coming back to the tab). Unique: the first view of the
  * link from this browser on this day (India's day). The browser keeps a
- * note of the links it has counted (LIVE_SEEN_KEY: code, day, time), and
- * sends only a yes or no for unique: no id, nothing about the viewer.
+ * note of the links it has counted (LIVE_SEEN_KEY: code, day, time), takes
+ * it back when the server did not count the view (so the next visit tries
+ * again), and sends only a yes or no for unique and a random tag made for
+ * that one view (newViewTag): nothing about the viewer.
  *
- * The server (POST /api/live/<code>/views) checks the agent again and
- * sheds load per instance (createViewLimiter); its own memory of a
- * browser is a keyed hash of the network and agent for a few seconds,
- * never stored. Pure, relative imports only (npm run test:live).
+ * The server (POST /api/live/<code>/views) counts only its own page's
+ * JSON (viewFromPage), checks the agent again and sheds load per instance
+ * (createViewLimiter); its memory of a view is a keyed hash of the tag
+ * and of the network for a few minutes, never stored. Pure, relative
+ * imports only (npm run test:live).
  */
 
 /** The browser's note of the live links it counted, in localStorage. Kept outside the scorer's keys. */
@@ -81,6 +84,18 @@ export function planView(seen: SeenNote, code: string, now: number): ViewPlan {
     .sort((a, b) => b[1].at - a[1].at)
     .slice(0, SEEN_MAX);
   return { send: true, unique, next: Object.fromEntries(kept) };
+}
+
+/**
+ * The note with a view the server did not count taken back: the link's
+ * entry as it was before that view (was), so the next visit tries again,
+ * unique still if it was. Left as it is when the note no longer holds
+ * that view (counted at `at`): another tab counted since.
+ */
+export function unseeView(seen: SeenNote, code: string, at: number, was: SeenNote[string] | undefined): SeenNote {
+  if (seen[code]?.at !== at) return seen;
+  const rest = Object.fromEntries(Object.entries(seen).filter(([c]) => c !== code));
+  return was ? { ...rest, [code]: was } : rest;
 }
 
 /** Whether this browser holds the link (the scorer's own record of it, LIVE_LINKS_KEY), on or off: its views are not counted. */
@@ -145,34 +160,82 @@ export function viewsLabel(n: number): string {
   return `${n.toLocaleString("en-IN")} ${n === 1 ? "view" : "views"}`;
 }
 
-/** The view a POST body asks for: {unique: true} or anything else (not unique). */
-export function parseViewBody(raw: unknown): { unique: boolean } | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  return { unique: (raw as { unique?: unknown }).unique === true };
+/** A view's own random tag (newViewTag): 16 hex characters, made for that one view and never kept. */
+export const VIEW_TAG_RE = /^[0-9a-f]{16}$/;
+
+/** A fresh tag for one view: random, nothing about the browser in it. */
+export function newViewTag(): string {
+  const b = new Uint8Array(8);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(b);
+  else for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-/** Views from one browser (network and agent) to one link closer than this are not counted again here. */
+/** The view a POST body asks for: {unique: true} or anything else (not unique), with the view's tag (v) when it has one. */
+export function parseViewBody(raw: unknown): { unique: boolean; tag: string | null } | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as { unique?: unknown; v?: unknown };
+  return { unique: o.unique === true, tag: typeof o.v === "string" && VIEW_TAG_RE.test(o.v) ? o.v : null };
+}
+
+/**
+ * Whether a view comes from this site's own page (the follower hook's
+ * fetch): JSON, and same-origin by Sec-Fetch-Site, or by the Origin's
+ * host where a browser sends no Sec-Fetch-Site. Another site's page can
+ * send a text/plain POST without asking first; one in JSON it must ask
+ * about, and this site never says yes.
+ */
+export function viewFromPage(headers: Pick<Headers, "get">, url: string): boolean {
+  if (!/^application\/json\s*(;|$)/i.test(headers.get("content-type") ?? "")) return false;
+  const site = headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  const origin = headers.get("origin");
+  if (!origin) return false;
+  let host = "";
+  let own = "";
+  try {
+    host = new URL(origin).host;
+    own = new URL(url).host;
+  } catch {
+    return false;
+  }
+  return host === (headers.get("x-forwarded-host") ?? headers.get("host") ?? own) || host === own;
+}
+
+/** The same view (its tag, or a browser's network and agent without one) to one link closer than this is not counted again here. */
 export const VIEW_GAP_MS = 10_000;
 /** Views per network per minute, per instance. A carrier's network puts many phones behind one address. */
 export const VIEWS_PER_MIN = 120;
+/** Views of one link per network in VIEW_LINK_WINDOW_MS, per instance: a ground's Wi-Fi or one carrier address full of a local match's followers. */
+export const VIEWS_PER_NET_LINK = 20;
+export const VIEW_LINK_WINDOW_MS = 10 * 60_000;
+/** Unique viewers of one link per network a day, per instance; a view past it counts, as not unique. */
+export const UNIQUES_PER_NET_LINK = 50;
+
+export type ViewTake = { count: true; unique: boolean } | { count: false; why: "again" | "slow" | "many" };
 
 /**
  * Per-instance limits for counting views, before any database call, so a
- * looping or hostile page costs this function and not the database. who
- * is a keyed hash of the network and agent (never stored). A view from
- * the same who for the same link within VIEW_GAP_MS is not counted
- * ("again": a page reloaded in a loop, or one that ignores its note), and
- * past the network's minute views are shed ("slow"). Unique is the
- * browser's own note (planView): this does not judge it, since phones of
- * one model behind one carrier address share a who all day.
+ * looping or hostile page costs this function and not the database. net
+ * is a keyed hash of the network, who of the view's tag (or the network
+ * and agent), never stored. The same who for the same link within
+ * VIEW_GAP_MS is not counted ("again": the same view sent twice); past the
+ * network's minute views are shed ("slow"), and past VIEWS_PER_NET_LINK
+ * for one link ("many"): a script changing its agent or tag on every
+ * view gets no further. Unique is the browser's own note (planView),
+ * believed for the first UNIQUES_PER_NET_LINK of a link per network a
+ * day; phones of one model behind one carrier address share an agent, so
+ * this never judges it by the agent.
  */
 export function createViewLimiter(now: () => number = Date.now) {
   const perNet = windowCounter(VIEWS_PER_MIN, 60_000, now);
+  const perLink = windowCounter(VIEWS_PER_NET_LINK, VIEW_LINK_WINDOW_MS, now);
+  const uniques = windowCounter(UNIQUES_PER_NET_LINK, 24 * 60 * 60_000, now);
   // Last view per who and link, in two generations of VIEW_GAP_MS, so old entries go without a sweep.
   let recent = new Map<string, number>();
   let older = new Map<string, number>();
   let since = now();
-  return (net: string, who: string, code: string): { count: true } | { count: false; why: "again" | "slow" } => {
+  return (net: string, who: string, code: string, unique: boolean): ViewTake => {
     const t = now();
     if (t - since >= VIEW_GAP_MS) {
       older = recent;
@@ -183,7 +246,8 @@ export function createViewLimiter(now: () => number = Date.now) {
     const last = recent.get(k) ?? older.get(k);
     if (last !== undefined && t - last < VIEW_GAP_MS) return { count: false, why: "again" };
     if (!perNet(net)) return { count: false, why: "slow" };
+    if (!perLink(`${net}|${code}`)) return { count: false, why: "many" };
     if (recent.size < MAX_TRACKED) recent.set(k, t);
-    return { count: true };
+    return { count: true, unique: unique && uniques(`${net}|${code}`) };
   };
 }
