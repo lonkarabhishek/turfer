@@ -9,7 +9,7 @@ import { PickCard, asGame } from "./PickCard";
 import type { Engine, Padding, Pin } from "./engine";
 import { fromMapTurf, gamePin, pickedGames, turfHourly, turfPin, type MapGame, type MapTurfWire } from "@/lib/map/data";
 import { heatFeatures, parseHeat, type HeatWire } from "@/lib/map/heat";
-import { enoughTrending, parseTrending, trendFirst, trendWords, type TrendWire } from "@/lib/map/trending";
+import { enoughTrending, parseTrendWindow, parseTrending, trendFirst, trendLegend, trendSpan, trendWords, type TrendWindow, type TrendWire } from "@/lib/map/trending";
 import { MAP_COLORS } from "@/lib/map/clusters";
 import type { Rect } from "@/lib/map/pins";
 import {
@@ -85,10 +85,12 @@ function subscribeDesktop(cb: () => void) {
  * pills; a tap opens the place's card.
  * "Popular" lays a heatmap of turf page views under the pins (GET
  * /api/map/heat, fetched only when it is first turned on; off on every visit).
- * "Trending" marks the turfs most viewed in the last 24 hours, by rank, on
- * their pins, their bubbles and their cards, and leads the list with them
- * (GET /api/map/trending, fetched only when it is turned on; off on every
- * visit; when too few turfs trend it says there are not enough views yet).
+ * "Trending" marks the turfs most viewed in the last 24 hours, 7 days or 30
+ * days (the server picks by how many views the site has; the legend says
+ * which), by rank, on their pins, their bubbles and their cards, and leads
+ * the list with them (GET /api/map/trending, fetched only when it is turned
+ * on; off on every visit; when too few turfs trend it says there are not
+ * enough views yet).
  * The list beside the map (desktop) or in the sheet over it (phones) is
  * what is in view, top rated first, or nearest first once the viewer taps
  * "Near me" (GPS only on that tap; the point stays on the device). The
@@ -170,6 +172,8 @@ export function MapExplorer() {
   /** "Trending" (turfs only): on, its ranks once fetched (empty when too few turfs trend), whether that failed, and when they came. */
   const [trendOn, setTrendOn] = useState(false);
   const [trend, setTrend] = useState<TrendWire[] | null>(null);
+  /** The window those ranks are over (the server picks it), once they came. */
+  const [trendWin, setTrendWin] = useState<TrendWindow | null>(null);
   const [trendFailed, setTrendFailed] = useState(false);
   const [trendTry, setTrendTry] = useState(0);
   const trendAt = useRef(0);
@@ -406,10 +410,11 @@ export function MapExplorer() {
   useEffect(() => {
     if (!trendOn || trend) return;
     const ctrl = new AbortController();
-    getJson("/api/map/trending", ctrl.signal, (j) => enoughTrending(parseTrending(j)))
+    getJson("/api/map/trending", ctrl.signal, (j) => ({ list: enoughTrending(parseTrending(j)), win: parseTrendWindow(j) }))
       .then((t) => {
         trendAt.current = Date.now();
-        setTrend(t);
+        setTrendWin(t.win);
+        setTrend(t.list);
       })
       .catch(() => {
         if (!ctrl.signal.aborted) setTrendFailed(true);
@@ -429,9 +434,9 @@ export function MapExplorer() {
         : shownTurfs.map((t) => {
             const pin = turfPin(t, chip);
             const r = rankByKey?.get(t.id) ?? null;
-            return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), ...pin, label: r ? `${pin.label}, ${trendWords(r)}` : pin.label, trend: r };
+            return { key: t.id, lat: t.lat as number, lng: t.lng as number, place: t.name, hourly: turfHourly(t, chip), ...pin, label: r ? `${pin.label}, ${trendWords(r, trendWin ?? undefined)}` : pin.label, trend: r };
           }),
-    [show, shownTurfs, shownGames, chip, now, rankByKey],
+    [show, shownTurfs, shownGames, chip, now, rankByKey, trendWin],
   );
   useEffect(() => {
     if (ready) engine.current?.setPins(show === "games" ? "game" : "turf", pins);
@@ -744,7 +749,7 @@ export function MapExplorer() {
                 type="button"
                 aria-pressed={trendOn}
                 onClick={toggleTrend}
-                title="The turfs most viewed in the last 24 hours"
+                title={trendWin ? `The turfs most viewed in ${trendSpan(trendWin)}` : "The turfs most viewed lately"}
                 style={trendOn ? { backgroundColor: MAP_COLORS.trend } : undefined}
                 className={`shrink-0 h-9 pl-3 pr-4 inline-flex items-center gap-1.5 rounded-full text-[14px] font-medium transition-colors cursor-pointer focus-neon ${
                   trendOn ? "text-white" : "bg-white text-primary-900 shadow-soft border border-primary-200/80 md:shadow-none md:border-0 md:bg-primary-100 hover:bg-primary-100 md:hover:bg-primary-200"
@@ -835,7 +840,7 @@ export function MapExplorer() {
                 ))
               : turfList.slice(0, limit).map(({ item: t, km }) => (
                   <li key={t.id} onMouseEnter={() => engine.current?.setHot(t.id)} onMouseLeave={() => engine.current?.setHot(null)}>
-                    <TurfCard turf={t} distanceKm={km} cityLabel={cityOf(t)} sport={chip} trendRank={rankByKey?.get(t.id) ?? null} />
+                    <TurfCard turf={t} distanceKm={km} cityLabel={cityOf(t)} sport={chip} trendRank={rankByKey?.get(t.id) ?? null} trendOver={trendSpan(trendWin ?? "24h")} />
                   </li>
                 ))}
           </ul>
@@ -1022,9 +1027,9 @@ export function MapExplorer() {
                     <TrendingUp className="w-3 h-3" strokeWidth={3} />
                   </span>
                   <span className="sr-only">
-                    Trending: the {sport ? `${sport} ` : ""}turfs most viewed in the last 24 hours, marked on the map and first in the list.
+                    Trending: the {sport ? `${sport} ` : ""}turfs most viewed in {trendSpan(trendWin ?? "24h")}, marked on the map and first in the list.
                   </span>
-                  <span aria-hidden>Most viewed · last 24 h</span>
+                  <span aria-hidden>{trendLegend(trendWin ?? "24h")}</span>
                   {!trendInView && (
                     <button type="button" onClick={showTrending} className="-mr-1.5 h-6 px-2 rounded-full font-semibold text-primary-900 hover:bg-primary-100 cursor-pointer">
                       Show them
@@ -1047,6 +1052,7 @@ export function MapExplorer() {
               turfs={picked.turfs.map((t) => ({ turf: t, km: me ? haversineKm(me, { lat: t.lat as number, lng: t.lng as number }) : null, trend: rankByKey?.get(t.id) ?? null }))}
               games={picked.games.map((g) => ({ game: g, km: me ? haversineKm(me, g.turfs) : null }))}
               sport={chip}
+              trendWindow={trendWin ?? undefined}
               onClose={closePick}
             />
           </div>

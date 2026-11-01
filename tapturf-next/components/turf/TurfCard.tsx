@@ -31,16 +31,18 @@ interface TurfCardProps {
   sport?: CardSport | null;
   /**
    * /map with Trending on: the turf's rank among the most viewed in the
-   * last 24 hours (lib/map/trending.ts), shown as a small coral tag.
-   * Unset everywhere else.
+   * last 24 hours, 7 days or 30 days (lib/map/trending.ts), shown as a
+   * small coral tag. Unset everywhere else.
    */
   trendRank?: number | null;
+  /** The window that rank is over, in words, as lib/map/trending.ts trendSpan says it ("the last 7 days"); the last 24 hours when unset. */
+  trendOver?: string;
 }
 
 // Slide duration when a swipe or arrow moves to the next photo.
 const FADE_MS = 500;
 
-export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport, trendRank }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport, trendRank, trendOver = "the last 24 hours" }: TurfCardProps) {
   // Cover first (unless it is a tiny thumb), then the rest, with our own
   // copies ahead of Google links: a turf whose Google cover has expired
   // but has photos in our storage leads with one of those.
@@ -284,7 +286,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                 </>
               )}
               {/* As the map's pins say it (lib/map/trending.ts trendWords, not imported: this card is on every list). */}
-              {!!trendRank && <span className="sr-only">, trending, number {trendRank} by views in the last 24 hours</span>}
+              {!!trendRank && <span className="sr-only">, trending, number {trendRank} by views in {trendOver}</span>}
             </h3>
             {turf.rating > 0 && (
               <span className="flex items-center gap-1 text-[14px] text-primary-900 shrink-0">
