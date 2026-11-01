@@ -3,10 +3,13 @@
 // (20261027_game_reports.sql and 20261029_reviews_lockdown_step2.sql), and
 // checks: no hold (held reports let through, rivals and rushes live at once,
 // an edit of a held report goes live, hidden and removed kept), the daily rule
-// (one new report a day; one per turf played at today; edits and posting again
-// don't count; India's day), owners' removal requests (only an active owner of
-// that turf, one open per report, 10 a day, never shown to the author), the
-// site owner's decisions (only them; Remove hides, Keep leaves it), and that
+// (one new report a day; one per turf played at today, in a game posted before
+// it started; edits, also of an earlier day's report, and posting again on the
+// same turf don't count; posting again one taken down earlier does; India's
+// day), owners' removal requests (only an active owner of that turf, not a
+// former one, one open per report, 10 a day, never shown to the author), the
+// site owner's decisions (only them; Remove hides a live report and closes the
+// request on one its author took down, Keep leaves it), and that
 // nothing is ever taken out of a table. Never touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/reviews_policy.check.mjs supabase/migrations
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
@@ -58,18 +61,22 @@ const T = (i) => `bbbbbbbb-bbbb-4bbb-8bbb-${String(i).padStart(12, "0")}`;
 const G = (i) => `dddddddd-dddd-4ddd-8ddd-${String(i).padStart(12, "0")}`;
 const phone = (i) => `+9190000000${String(i).padStart(2, "0")}`;
 const tok = (i) => `phone:90000000${String(i).padStart(2, "0")}`;
-for (let i = 1; i <= 30; i++) await q(`insert into public.users (id, name, phone, created_at) values ($1, $2, $3, now() - interval '1 year')`, [U(i), `Player ${i}`, phone(i)]);
+for (const i of [...Array.from({ length: 30 }, (_, n) => n + 1), 31, 32, 33, 34, 40, 41]) {
+  await q(`insert into public.users (id, name, phone, created_at) values ($1, $2, $3, now() - interval '1 year')`, [U(i), `Player ${i}`, phone(i)]);
+}
 await q(`insert into public.users (id, name, created_at) values ('${U(99)}', 'Site Owner', now() - interval '1 year')`);
 for (let i = 1; i <= 9; i++) await q(`insert into public.turfs (id, name, slug, city, sports) values ($1, $2, $3, 'pune', '["Football", "Box Cricket"]')`, [T(i), `Turf ${i}`, `turf-${i}`]);
 await q(`insert into public.turfs (id, name, slug, city, sports, owner_id) values ('${T(10)}', 'Owner Id Turf', 'owner-id-turf', 'pune', '["Football"]', '${U(25)}')`);
 // Owners: U20 active on T1 (account claim), U21 active on T1 (an old claim under the key alone),
-// U22 pending on T1, U23 rejected on T1, U24 active on T2 only, U25 owner_id of T10 only.
+// U22 pending on T1, U23 rejected on T1, U24 active on T2 only, U25 owner_id of T10 only, and an
+// active claim on T1 for U41 under the sign-in that now opens U40 (taken off U41: a former owner).
 await q(`insert into public.turf_owners (turf_id, user_key, status, via, user_id) values
   ('${T(1)}', 'p:9000000020', 'active', 'phone_match', '${U(20)}'),
   ('${T(1)}', 'p:9000000021', 'active', 'admin', null),
   ('${T(1)}', 'p:9000000022', 'pending', 'admin', '${U(22)}'),
   ('${T(1)}', 'p:9000000023', 'rejected', 'admin', '${U(23)}'),
-  ('${T(2)}', 'p:9000000024', 'active', 'phone_match', '${U(24)}')`);
+  ('${T(2)}', 'p:9000000024', 'active', 'phone_match', '${U(24)}'),
+  ('${T(1)}', 'p:9000000040', 'active', 'phone_match', '${U(41)}')`);
 
 const rpc = async (fn, args) => (await one(`select public.${fn}(${args.map((_, i) => `$${i + 1}`).join(", ")}) r`, args)).r;
 const save = async (user, turf, report) => {
@@ -131,6 +138,12 @@ eq((await save(U(13), T(4), { rating: 4 })).review.status, "live", "and posting 
 await nextDay();
 
 /* ---------------- 2. one new report a day ---------------- */
+// Reports from an earlier day, for the edit and post-again cases below: U31's and U32's on T1,
+// and U33's on T3, which U33 took down.
+for (const i of [31, 32]) await save(U(i), T(1), { rating: 4 });
+await save(U(33), T(3), { rating: 2 });
+await remove(U(33), T(3));
+await nextDay();
 // U2 has played no TapTurf game today: one new report.
 const a1 = await save(U(2), T(1), { rating: 4 });
 eq([a1.r, a1.review.status], ["ok", "live"], "the day's first new report posts");
@@ -146,11 +159,23 @@ eq(edits, ["ok", "ok", "ok", "ok"], "edits of their own report never count");
 await remove(U(2), T(1));
 eq((await save(U(2), T(1), { rating: 5 })).r, "ok", "taking it off and posting it again on the same turf the same day doesn't count twice");
 eq((await save(U(2), T(2), { rating: 3 })).r, "limit", "still one turf a day");
+// An edit of a report from an earlier day, on another turf than the day's new one, doesn't count either, in either order.
+eq([(await save(U(31), T(2), { rating: 3 })).r, (await save(U(31), T(1), { rating: 2, comment: "Edited a day on" })).r], ["ok", "ok"],
+  "the day's new report, then an edit of one from an earlier day: both go through");
+eq([(await save(U(32), T(1), { rating: 2, comment: "Edited first" })).r, (await save(U(32), T(2), { rating: 3 })).r], ["ok", "ok"],
+  "an edit of one from an earlier day, then the day's new report: both go through");
+// Posting again one they took down on an earlier day is a new report: it counts.
+eq((await save(U(33), T(1), { rating: 4 })).r, "ok", "the day's new report");
+eq(await save(U(33), T(3), { rating: 3 }), { r: "limit", why: "daily", allowed: 1, played: 0 },
+  "then posting again, on another turf, one they took down on an earlier day: limit");
+eq(await status(U(33), T(3)), "removed", "and it stays taken down");
 
+// Games below were posted two days ahead (created_at), unless a case says otherwise.
+const AHEAD = "now() - interval '2 days'";
 // U3 played at two turfs today: hosted at T1 (morning) and joined at T2 (a participant row).
-await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time, status) values
-  ('${G(1)}', '${U(3)}', '${T(1)}', 'Football', date '${today}', '00:00', '01:00', 'completed'),
-  ('${G(2)}', '${U(4)}', '${T(2)}', 'Football', date '${today}', '00:00', '01:00', 'open')`);
+await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time, status, created_at) values
+  ('${G(1)}', '${U(3)}', '${T(1)}', 'Football', date '${today}', '00:00', '01:00', 'completed', ${AHEAD}),
+  ('${G(2)}', '${U(4)}', '${T(2)}', 'Football', date '${today}', '00:00', '01:00', 'open', ${AHEAD})`);
 await q(`insert into public.game_participants (game_id, user_id) values ('${G(2)}', '${U(3)}')`);
 eq((await mine(U(3), T(5))).daily, { allowed: 2, posted: 0, played: 2, full: false }, "played at two turfs today: two new reports");
 eq([(await save(U(3), T(1), { rating: 5 })).r, (await save(U(3), T(2), { rating: 4 })).r], ["ok", "ok"], "both post");
@@ -158,20 +183,27 @@ eq(await save(U(3), T(5), { rating: 3 }), { r: "limit", why: "daily", allowed: 2
 // The host of the T2 game played there too (one turf): one report, at any turf.
 eq((await mine(U(4), T(2))).daily, { allowed: 1, posted: 0, played: 1, full: false }, "one turf played at today: one report");
 // An accepted join request counts as joining; a pending one doesn't.
-await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time) values
-  ('${G(3)}', '${U(9)}', '${T(3)}', 'Football', date '${today}', '00:00', '01:00'),
-  ('${G(4)}', '${U(9)}', '${T(4)}', 'Football', date '${today}', '00:00', '01:00')`);
+await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time, created_at) values
+  ('${G(3)}', '${U(9)}', '${T(3)}', 'Football', date '${today}', '00:00', '01:00', ${AHEAD}),
+  ('${G(4)}', '${U(9)}', '${T(4)}', 'Football', date '${today}', '00:00', '01:00', ${AHEAD})`);
 await q(`insert into public.game_requests (game_id, user_id, status) values ('${G(3)}', '${U(5)}', 'accepted'), ('${G(4)}', '${U(5)}', 'pending'), ('${G(4)}', '${U(6)}', 'declined')`);
 await q(`insert into public.game_participants (game_id, user_id) values ('${G(1)}', '${U(5)}')`);
 eq((await mine(U(5), T(9))).daily.allowed, 2, "an accepted request (T3) and a participant row (T1): two turfs; a pending request doesn't count");
 eq((await mine(U(6), T(9))).daily.allowed, 1, "a declined request: one");
 // Not played: a game later than now, a cancelled one, or one on another day.
-await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time, status) values
-  ('${G(5)}', '${U(7)}', '${T(5)}', 'Football', ((now() + interval '2 hours') at time zone 'Asia/Kolkata')::date, ((now() + interval '2 hours') at time zone 'Asia/Kolkata')::time, '23:59', 'open'),
-  ('${G(6)}', '${U(7)}', '${T(6)}', 'Football', date '${today}', '00:00', '01:00', 'cancelled'),
-  ('${G(7)}', '${U(7)}', '${T(7)}', 'Football', date '${today}' - 1, '07:00', '08:00', 'completed'),
-  ('${G(8)}', '${U(7)}', '${T(8)}', 'Football', date '${today}', '00:00', '01:00', 'open')`);
+await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time, status, created_at) values
+  ('${G(5)}', '${U(7)}', '${T(5)}', 'Football', ((now() + interval '2 hours') at time zone 'Asia/Kolkata')::date, ((now() + interval '2 hours') at time zone 'Asia/Kolkata')::time, '23:59', 'open', ${AHEAD}),
+  ('${G(6)}', '${U(7)}', '${T(6)}', 'Football', date '${today}', '00:00', '01:00', 'cancelled', ${AHEAD}),
+  ('${G(7)}', '${U(7)}', '${T(7)}', 'Football', date '${today}' - 1, '07:00', '08:00', 'completed', ${AHEAD}),
+  ('${G(8)}', '${U(7)}', '${T(8)}', 'Football', date '${today}', '00:00', '01:00', 'open', ${AHEAD})`);
 eq((await mine(U(7), T(9))).daily, { allowed: 1, posted: 0, played: 1, full: false }, "a game that hasn't started, a cancelled one and yesterday's don't count (only T8)");
+// Back-dated: a game posted now for earlier today (as game_create allows) doesn't count; one posted ahead does.
+await q(`insert into public.games (id, creator_id, turf_id, sport, date, start_time, end_time, created_at) values
+  ('${G(9)}', '${U(34)}', '${T(5)}', 'Football', date '${today}', '00:00', '01:00', now()),
+  ('${G(10)}', '${U(34)}', '${T(6)}', 'Football', date '${today}', '00:00', '01:00', ${AHEAD})`);
+eq((await mine(U(34), T(9))).daily, { allowed: 1, posted: 0, played: 1, full: false }, "a game posted after its start time doesn't count (only T6)");
+await q(`update public.games set created_at = ((date + start_time) at time zone 'Asia/Kolkata') where id = '${G(9)}'`);
+eq((await mine(U(34), T(9))).daily.played, 2, "posted right at its start, it counts");
 // India's day: a report posted just before midnight IST is yesterday's.
 await save(U(8), T(1), { rating: 4 });
 await q(`update private.review_saves set saved_at = ((date '${today}')::timestamp at time zone 'Asia/Kolkata') - interval '1 minute' where user_id = $1`, [U(8)]);
@@ -184,7 +216,7 @@ eq((await mine(U(20), T(1))).daily, null, "review_mine: no daily for a manager o
 eq(Object.keys(await mine(U(2), T(2))).sort(), ["blocked", "daily", "hint", "mine", "my_price", "r", "voted"], "review_mine keeps every key and adds daily");
 // The 5 new reports and 20 saves a day stay.
 await nextDay();
-for (let i = 0; i < 6; i++) await q(`insert into public.games (creator_id, turf_id, sport, date, start_time, end_time) values ('${U(14)}', '${T(1 + i)}', 'Football', date '${today}', '00:00', '01:00')`);
+for (let i = 0; i < 6; i++) await q(`insert into public.games (creator_id, turf_id, sport, date, start_time, end_time, created_at) values ('${U(14)}', '${T(1 + i)}', 'Football', date '${today}', '00:00', '01:00', ${AHEAD})`);
 const many = [];
 for (let i = 0; i < 6; i++) many.push((await save(U(14), T(1 + i), { rating: 4 })).r);
 eq(many, ["ok", "ok", "ok", "ok", "ok", "limit"], "played at 6 turfs today: still 5 new reports a day at most");
@@ -209,7 +241,7 @@ const r21 = await ask(tok(21), target, "abusive");
 eq([r21.ok, r21.already], [true, undefined], "another active owner of the turf (an old claim under the key) may ask too");
 ok((await one(`select asked_account from private.review_removal_requests where id = $1`, [r21.id])).asked_account === U(21), "with their account");
 for (const [t, why] of [[tok(22), "a pending claim"], [tok(23), "a rejected claim"], [tok(24), "an owner of another turf"], [tok(25), "turfs.owner_id without a claim"],
-  [tok(2), "a player"], ["phone:9000000099", "the site owner (they decide requests, they don't make them)"], [null, "no sign-in"], ["garbage", "a token that opens nothing"]]) {
+  [tok(40), "a sign-in taken off the account its active claim names (a former owner)"], [tok(2), "a player"], ["phone:9000000099", "the site owner (they decide requests, they don't make them)"], [null, "no sign-in"], ["garbage", "a token that opens nothing"]]) {
   eq(await ask(t, target), { error: "forbidden" }, `refused: ${why}`);
 }
 eq(await ask(tok(20), googleId), { error: "not_found" }, "a Google row: not_found");
@@ -232,6 +264,7 @@ ok(mineReq.requests.some((x) => x.review_id === target && x.reason === "not_play
 eq((await rpc("owner_review_removals", [tok(21), T(1)])).requests.map((x) => x.review_id), [target], "another owner of the turf sees only their own");
 eq(await rpc("owner_review_removals", [tok(24), T(1)]), { error: "forbidden" }, "an owner of another turf: forbidden");
 eq(await rpc("owner_review_removals", [tok(22), T(1)]), { error: "forbidden" }, "a pending claim: forbidden");
+eq(await rpc("owner_review_removals", [tok(40), T(1)]), { error: "forbidden" }, "a former owner's sign-in: forbidden");
 // The author is never told: nothing about a request in what they or anyone else reads.
 const authorSees = JSON.stringify([await mine(U(24), T(1)), await page("turf-1"), await rpc("review_save", [KEY, U(24), T(1), JSON.stringify({ rating: 1, comment: "Rival's report", base: target })])]);
 ok(!authorSees.includes(r1.id) && !authorSees.includes(r21.id) && !/removal|not_played/.test(authorSees), "the author's own read, the page and a save say nothing of the request");
@@ -279,6 +312,18 @@ eq(after.requests.slice(0, 9).every((x) => x.status === "open"), true, "open one
 ok(after.requests.some((x) => x.id === r1b.id && x.status === "removed" && x.decided_at), "then the decided ones, with when");
 await db.exec(`set test.owner = 'no'`);
 eq((await rpc("owner_review_removals", [tok(20), T(1)])).requests.find((x) => x.review_id === target).status, "removed", "the owner sees what TapTurf decided");
+// Its author took it down while the request waited: Remove hides nothing (it stays theirs to post again) and just closes it.
+const takenDown = await reviewId(U(15), T(1));
+await remove(U(15), T(1));
+await db.exec(`set test.owner = 'yes'`);
+const waiting = (await rpc("admin_review_removals", [null])).requests.find((x) => x.review?.id === takenDown);
+eq([waiting.status, waiting.review.status], ["open", "removed"], "the queue shows the request open and the report taken down");
+const closed = await decide(waiting.id, "remove");
+eq([closed.ok, closed.status, closed.closed], [true, "kept", 1], "Remove on a report its author took down: nothing to hide, the request closes as kept");
+eq(await status(U(15), T(1)), "removed", "the report stays taken down, not hidden");
+eq((await save(U(15), T(1), { rating: 3 })).review.status, "live", "and its author can post it again, live");
+await db.exec(`set test.owner = 'no'`);
+eq((await rpc("owner_review_removals", [tok(20), T(1)])).requests.find((x) => x.review_id === takenDown).status, "kept", "the owner sees it kept, so they may ask again");
 
 /* ---------------- nothing is ever taken out ---------------- */
 const counts = await one(`select (select count(*)::int from public.reviews) reviews, (select count(*)::int from private.review_removal_requests) requests,

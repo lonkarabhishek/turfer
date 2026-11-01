@@ -14,6 +14,8 @@ const STATUS: Record<AdminRemoval["status"], { label: string; tone: string }> = 
   removed: { label: "Removed", tone: "bg-primary-100 text-primary-600" },
   kept: { label: "Kept up", tone: "bg-accent-50 text-accent-700" },
 };
+// Kept, or closed with nothing to take off: the report isn't up (its author took it down, or it's gone).
+const CLOSED = { label: "Closed", tone: "bg-primary-100 text-primary-700" };
 
 const when = (iso: string | null) => {
   const t = iso ? Date.parse(iso) : NaN;
@@ -24,7 +26,8 @@ const when = (iso: string | null) => {
  * Owners' requests to take a player's report off, for /admin/reviews: open
  * ones first, oldest first, then the latest decided. Remove hides the report
  * (as for abuse), Keep leaves it up; either closes every open request on that
- * report. The report's author is never told who asked.
+ * report. One that isn't live any more (its author took it down) can only be
+ * closed. The report's author is never told who asked.
  */
 export function ReviewRemovals() {
   const [rows, setRows] = useState<AdminRemoval[] | null>(null);
@@ -91,8 +94,10 @@ export function ReviewRemovals() {
   return (
     <ul className="space-y-3">
       {rows.map((x) => {
-        const s = STATUS[x.status];
         const v = x.review;
+        // Only a live report can be taken off; a request on one that isn't just closes.
+        const live = v?.status === "live";
+        const s = x.status === "kept" && !live ? CLOSED : STATUS[x.status];
         const played = v ? playedLine(v.sport, v.playedWhen as PlayedWhen | null) : "";
         return (
           <li key={x.id} className={`rounded-2xl border p-4 ${x.status === "open" ? "border-amber-200 bg-white" : "border-primary-100 bg-primary-50/50"}`}>
@@ -146,21 +151,23 @@ export function ReviewRemovals() {
 
             {x.status === "open" && (
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy === x.id}
-                  onClick={() => void decide(x, "remove")}
-                  className="min-h-10 px-4 rounded-full bg-hot-500 text-white text-[13px] font-bold hover:bg-hot-600 disabled:opacity-50"
-                >
-                  Remove report
-                </button>
+                {live && (
+                  <button
+                    type="button"
+                    disabled={busy === x.id}
+                    onClick={() => void decide(x, "remove")}
+                    className="min-h-10 px-4 rounded-full bg-hot-500 text-white text-[13px] font-bold hover:bg-hot-600 disabled:opacity-50"
+                  >
+                    Remove report
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={busy === x.id}
                   onClick={() => void decide(x, "keep")}
                   className="min-h-10 px-4 rounded-full border border-primary-200 bg-white text-primary-900 text-[13px] font-bold hover:bg-primary-50 disabled:opacity-50"
                 >
-                  Keep it up
+                  {live ? "Keep it up" : "Close request"}
                 </button>
               </div>
             )}

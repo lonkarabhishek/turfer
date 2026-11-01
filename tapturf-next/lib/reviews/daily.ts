@@ -28,11 +28,13 @@ export function toDaily(x: unknown): DailyAllowance | null {
 
 /**
  * What the sheet says when a new report would be over the day's limit: the
- * rule, or, for someone who played at two or more turfs today and posted for
- * each, that they have. Then that the answers wait on this phone.
+ * rule, or, for someone who played at two or more turfs today, that they have
+ * posted that many. The count is all the rule checks (not which turfs the
+ * reports were on), so the words say no more than that. Then that the
+ * answers wait on this phone.
  */
 export function dailyMessage(d: { allowed?: number | null; played?: number | null } | null): string {
   const allowed = d?.allowed ?? 1;
-  const head = allowed >= 2 && (d?.played ?? 0) >= 2 ? `You've posted a review for each of the ${allowed} turfs you played at today.` : DAILY_RULE;
+  const head = allowed >= 2 && (d?.played ?? 0) >= 2 ? `You've posted today's ${allowed} reviews (you played at ${allowed} turfs today).` : DAILY_RULE;
   return `${head} Your answers stay on this phone, so you can post tomorrow.`;
 }

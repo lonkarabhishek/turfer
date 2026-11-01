@@ -25,11 +25,13 @@ test("copy: the honest line and the daily rule, as the site owner asked", () => 
   }
 });
 
-test("daily message: the rule, or that they posted for each turf they played at; then the draft waits", () => {
+test("daily message: the rule, or that they posted as many as the turfs they played at; then the draft waits", () => {
   assert.equal(dailyMessage(null), `${DAILY_RULE} Your answers stay on this phone, so you can post tomorrow.`);
   assert.equal(dailyMessage({ allowed: 1, played: 0 }), dailyMessage(null));
   assert.equal(dailyMessage({ allowed: 1, played: 1 }), dailyMessage(null), "one turf played at: still one a day");
-  assert.equal(dailyMessage({ allowed: 2, played: 2 }), "You've posted a review for each of the 2 turfs you played at today. Your answers stay on this phone, so you can post tomorrow.");
+  // Only the count: the day's reports may be on turfs other than the ones played at, so it never says "each of".
+  assert.equal(dailyMessage({ allowed: 2, played: 2 }), "You've posted today's 2 reviews (you played at 2 turfs today). Your answers stay on this phone, so you can post tomorrow.");
+  assert.doesNotMatch(dailyMessage({ allowed: 3, played: 3 }), /each of|for each/);
   assert.equal(dailyMessage({ allowed: 3 }), dailyMessage(null), "without played: the rule");
 });
 

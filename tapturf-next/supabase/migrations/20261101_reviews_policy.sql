@@ -9,12 +9,13 @@
 --    live). hidden (the site owner) and removed (the author) stay as they are.
 -- 2. One new report a day (India time), or one for each turf the player
 --    played a TapTurf game at that day (private.review_daily: a game dated
---    today that has started and wasn't cancelled, which they hosted or
---    joined). Edits never count, nor posting again on a turf they already
---    posted on today. review_save answers r: limit with why: daily, allowed
---    and played (an app from before this file shows its plain limit line);
---    review_mine gains a daily key, so the sheet can say it before anything
---    is typed. The 5 new reports and 20 saves a day stay as they were.
+--    today, posted before it started, that has started and wasn't cancelled,
+--    which they hosted or joined). Edits never count, nor posting again on a
+--    turf they already posted on today. review_save answers r: limit with
+--    why: daily, allowed and played (an app from before this file shows its
+--    plain limit line); review_mine gains a daily key, so the sheet can say it
+--    before anything is typed. The 5 new reports and 20 saves a day stay as
+--    they were.
 -- 3. Removal requests, the "review of reviews". An owner with an active
 --    claim on the turf asks TapTurf to take a player's report off
 --    (owner_review_removal_ask: a reason from a short list and an optional
@@ -62,10 +63,12 @@ comment on column public.reviews.status is
 
 -- How many new reports the account may post today (India time) and how many it has.
 -- allowed: 1, or the number of turfs it played a TapTurf game at today (dated today,
--- started by now, not cancelled; hosted, or joined: a participant row or an accepted
--- request). posted: the other turfs it posted a new report on today (a first one, or
--- one posted again), so posting again on this turf adds nothing. full: a new report
--- here would be refused.
+-- started by now, posted before its start, not cancelled; hosted, or joined: a
+-- participant row or an accepted request). A game posted after its start time doesn't
+-- count, so one made at 00:05 for 00:00 earns no extra report; a game posted ahead of
+-- time and moved earlier still can. posted: the other turfs it posted a new report on
+-- today (a first one, or one posted again), so posting again on this turf adds nothing.
+-- full: a new report here would be refused.
 create or replace function private.review_daily(p_user uuid, p_turf uuid)
 returns jsonb
 language sql
@@ -83,6 +86,7 @@ as $$
      where g.date = d.day
        and coalesce(g.status, 'open') <> 'cancelled'
        and ((g.date + g.start_time) at time zone 'Asia/Kolkata') <= now()
+       and g.created_at <= ((g.date + g.start_time) at time zone 'Asia/Kolkata')
        and (g.creator_id = p_user
             or exists (select 1 from public.game_participants p where p.game_id = g.id and p.user_id = p_user)
             or exists (select 1 from public.game_requests q where q.game_id = g.id and q.user_id = p_user and q.status = 'accepted'))
@@ -686,7 +690,9 @@ grant execute on function public.admin_review_removals(text) to anon, authentica
 
 -- The site owner's answer: remove (the report is hidden, as for abuse: off the page, out
 -- of every count, and its author sees it as hidden, never who asked) or keep. Either
--- closes every open request on that report. {ok, status: removed | kept, turf_id,
+-- closes every open request on that report. Remove hides only a live report: on one its
+-- author already took down it hides nothing and closes them as kept, so the author can
+-- still post it again. {ok, status: removed | kept, turf_id,
 -- review_id, closed}, with already: true when it was decided before; or error:
 -- forbidden, bad, not_found.
 create or replace function public.admin_review_removal_decide(p_firebase_token text, p_id uuid, p_decision text)
@@ -721,8 +727,14 @@ begin
   if p_decision = 'remove' then
     -- The page refreshes within a minute, not at the next sweep.
     perform set_config('tapturf.cache_urgent', 'on', true);
+    -- Only a live report is hidden: one its author took down stays theirs to post again.
     update public.reviews r set status = 'hidden'
-     where r.id = v_req.review_id and r.source is null and r.status <> 'hidden';
+     where r.id = v_req.review_id and r.source is null and r.status = 'live';
+    -- Nothing was there to take off (its author took it down, or it's gone): the requests
+    -- just close, as kept, so an owner can ask again if it's posted again.
+    if not exists (select 1 from public.reviews r where r.id = v_req.review_id and r.source is null and r.status = 'hidden') then
+      v_status := 'kept';
+    end if;
   end if;
   update private.review_removal_requests q
      set status = v_status, decided_at = now()
