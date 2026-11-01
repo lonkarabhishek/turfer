@@ -207,9 +207,10 @@ export function nearBounds(at: Coords, others: readonly Coords[]): Bounds {
 /**
  * The line under a turf page's map about the turfs around it: "7 other
  * turfs within 3 km", "1 other turf within 3 km"; with none that close,
- * how far the nearest is ("The nearest other turf is 8.6 km away"); with
- * none at all, "No other turfs on the map yet". The distance reads as
- * elsewhere on the site (formatDistance: "8.6 km", "14 km").
+ * how far the nearest is ("Nearest other turf: 8.6 km", short enough for
+ * two lines beside "Open full map" on a 320 px phone); with none at all,
+ * "No other turfs on the map yet". The distance reads as elsewhere on the
+ * site (formatDistance: "8.6 km", "14 km").
  */
 export function nearbyLine(at: Coords, others: readonly Coords[]): string {
   let n = 0;
@@ -222,7 +223,7 @@ export function nearbyLine(at: Coords, others: readonly Coords[]): string {
   }
   if (n) return `${n.toLocaleString("en-IN")} other ${n === 1 ? "turf" : "turfs"} within ${NEARBY_KM} km`;
   if (!Number.isFinite(nearest)) return "No other turfs on the map yet";
-  return `The nearest other turf is ${formatDistance(nearest)} away`;
+  return `Nearest other turf: ${formatDistance(nearest)}`;
 }
 
 /** A sport chip matches a stored sport that contains it, as the /turfs chips do ("Cricket" takes Box Cricket and Cricket Nets). */

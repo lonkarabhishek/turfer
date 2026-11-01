@@ -21,7 +21,7 @@ export type MiniMapProps = {
   turfs: Promise<MapTurfWire[] | null>;
   /** Asks for them again ("Try again"). */
   again: () => Promise<MapTurfWire[] | null>;
-  /** Opened from the keyboard: focus goes to the map. */
+  /** Opened from the keyboard: focus goes to the map, from the card's box (TurfOnMap) where the opening left it. */
   keyboard: boolean;
 };
 
@@ -105,7 +105,8 @@ export function MiniMap({ pin, turfs, again, keyboard }: MiniMapProps) {
           onStyleError: () => setStyleError(true),
         });
         setReady(true);
-        if (keyboard) engine.current.focusMap();
+        // Not once the viewer has moved on while it loaded: focus is then no longer on the card's box (data-open).
+        if (keyboard && document.activeElement === mapEl.current.closest("[data-open]")) engine.current.focusMap();
       } catch (e) {
         console.warn("map: could not start", e);
         setMapError(true);
@@ -139,7 +140,7 @@ export function MiniMap({ pin, turfs, again, keyboard }: MiniMapProps) {
     engine.current?.setActive(pin.key);
   }, [ready, pins, pin.key]);
 
-  const line = all === undefined ? "Finding the turfs nearby" : all === null ? "Couldn't load the turfs nearby." : nearbyLine(pin, othersOf(all, pin.key));
+  const line = all === undefined ? "Finding the turfs nearby" : all === null ? "Couldn't load nearby turfs." : nearbyLine(pin, othersOf(all, pin.key));
 
   return (
     <>
@@ -158,9 +159,9 @@ export function MiniMap({ pin, turfs, again, keyboard }: MiniMapProps) {
         )}
       </div>
 
-      {/* The card's foot: what the map shows around the turf (a failed read says so, with a retry), and the whole map. */}
+      {/* The card's foot: what the map shows around the turf (a failed read says so, with a retry: three lines on a 320 px phone), and the whole map. */}
       <div className="absolute inset-x-0 bottom-0 h-14 pl-4 pr-2 flex items-center gap-3 bg-white border-t border-black/5">
-        <p aria-live="polite" className="min-w-0 flex-1 text-[13.5px] leading-[1.2] text-primary-700 line-clamp-2">
+        <p aria-live="polite" className="min-w-0 flex-1 text-[13.5px] leading-[1.2] text-primary-700 line-clamp-3">
           {line}
           {all === null && (
             <button

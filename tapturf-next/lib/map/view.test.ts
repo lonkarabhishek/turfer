@@ -175,8 +175,8 @@ test("nearbyLine: how many other turfs are within 3 km, else how far the nearest
   assert.equal(nearbyLine(at, [0.6, 0.9, 1.5, 2.9, 3.4, 8].map((km, i) => towards(at, km, i * 40))), "4 other turfs within 3 km");
   assert.equal(nearbyLine(at, [towards(at, 2, 90)]), "1 other turf within 3 km");
   assert.equal(nearbyLine(at, Array.from({ length: 1200 }, (_, i) => towards(at, 0.5 + (i % 20) * 0.1, i))), "1,200 other turfs within 3 km");
-  assert.equal(nearbyLine(at, [towards(at, 8.6, 30), towards(at, 12, 200)]), "The nearest other turf is 8.6 km away");
-  assert.equal(nearbyLine(at, [towards(at, 14.2, 30)]), "The nearest other turf is 14 km away");
+  assert.equal(nearbyLine(at, [towards(at, 8.6, 30), towards(at, 12, 200)]), "Nearest other turf: 8.6 km");
+  assert.equal(nearbyLine(at, [towards(at, 14.2, 30)]), "Nearest other turf: 14 km");
   assert.equal(nearbyLine(at, []), "No other turfs on the map yet");
   assert.equal(nearbyLine(at, [{ lat: NaN, lng: 73 }]), "No other turfs on the map yet", "a point that is no point");
 });
