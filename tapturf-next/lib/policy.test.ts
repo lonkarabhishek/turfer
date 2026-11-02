@@ -13,7 +13,7 @@ test("policy notice: a new id, so people who dismissed the last one see it", () 
 });
 
 test("policy notice: the map's use, and where the policy says it", () => {
-  assert.match(PRIVACY_NOTICE.text, /When you use the map signed in, we now note which account used it and on which days/);
+  assert.match(PRIVACY_NOTICE.text, /When you use the map signed in, we now note which account used it, on which days and when \(the first and last time each day\)/);
   assert.match(PRIVACY_NOTICE.text, /Only TapTurf's team sees that/, "who sees it");
   assert.match(PRIVACY_NOTICE.text, /never where you looked on it or your location/, "what is never kept");
   assert.ok(privacyPage.includes(`id="${PRIVACY_NOTICE.anchor}"`), `the policy has #${PRIVACY_NOTICE.anchor}`);
@@ -21,7 +21,7 @@ test("policy notice: the map's use, and where the policy says it", () => {
   const map = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
   assert.match(map, /per day/, "counts per day");
   assert.match(map, /never where on the map you looked, your location/, "no location from the map");
-  assert.match(map, /If you are signed in, we also keep which account used the map and on which days/, "which account, and when");
+  assert.match(map, /If you are signed in, we also keep which account used the map, on which days and when \(the first and last time each day\)/, "which account, and when");
   assert.match(map, /whichever cookie choice you make/);
   const page = privacyPage.replace(/\s+/g, " ");
   assert.match(page, /when it last opened the map \(so a reload is not counted as another view\)/, "the browser's note, under Stored on your device");

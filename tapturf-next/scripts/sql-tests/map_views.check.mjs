@@ -6,7 +6,7 @@
 // account that exists, never a made-up one; the day is India's; two at once all
 // count; the per-account rows; the admin read answers only the site owner, with
 // today, 7 and 30 days, every one of 30 days and the signed-in people newest
-// first (bounded, never a phone or an email); nobody reads the tables directly.
+// first (bounded, whether each account is still there, never a phone or an email); nobody reads the tables directly.
 // Never touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/map_views.check.mjs supabase/migrations
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
@@ -150,16 +150,25 @@ eq({ name: asha.name, username: asha.username, views: Number(asha.views), taps: 
 const ravi = u.people.find((p) => p.user_id === RAVI);
 eq({ name: ravi.name, username: ravi.username, views: Number(ravi.views), minis: Number(ravi.minis), days: ravi.days }, { name: "Ravi Kumar", username: null, views: 3, minis: 1, days: 2 }, "Ravi: no username");
 ok(Date.parse(asha.first_at) < Date.parse(asha.last_at), "first use before last");
-eq(Object.keys(asha).sort(), ["days", "first_at", "last_at", "minis", "name", "taps", "user_id", "username", "views"], "the person's fields, and only those");
+eq(Object.keys(asha).sort(), ["days", "first_at", "known", "last_at", "minis", "name", "taps", "user_id", "username", "views"], "the person's fields, and only those");
+ok(u.people.every((p) => p.known === true), "every account here is in users");
 const text = JSON.stringify(u);
 ok(!/@example\.com|\+9190000/.test(text), "no email or phone anywhere in the answer");
 eq((await usage(1)).people.map((p) => p.user_id), [MEERA], "bounded by p_limit, the most recent kept");
 eq((await usage(1)).people_total, 3, "with how many there are in all");
 eq((await usage(0)).people.length, 1, "at least one");
 eq((await usage(5000)).people.length, 3, "never over 1000 (here, all three)");
-// An erased account's rows still read, with no name.
-await q(`insert into private.map_account_days (user_id, day, views) values ($1, $2::date, 1)`, [GONE, today]);
-eq((await usage()).people.find((p) => p.user_id === GONE)?.name, null, "an account no longer in users shows no name");
+// An erased account's rows still read, with no name, and say it is gone; an account with a blank name (users.name is
+// not null in production, but an old row can hold '') and no username is still there.
+const NONAME = "aaaaaaaa-aaaa-4aaa-8aaa-000000000004";
+await q(`insert into public.users (id, name, email, phone) values ($1, '', null, '+919000000004')`, [NONAME]);
+await q(`insert into private.map_account_days (user_id, day, views) values ($1, $2::date, 1), ($3, $2::date, 1)`, [GONE, today, NONAME]);
+const later = await usage();
+const gone = later.people.find((p) => p.user_id === GONE);
+eq([gone?.name, gone?.username, gone?.known], [null, null, false], "an account no longer in users shows no name and is not known");
+const noname = later.people.find((p) => p.user_id === NONAME);
+eq([noname?.name, noname?.username, noname?.known], ["", null, true], "an account with a blank name and no username is known (it has a row in the people list)");
+ok(!/\+9190000/.test(JSON.stringify(later)), "still no phone");
 
 // Before anything was counted: zeros, an empty list, no since.
 const fresh = new PGlite();

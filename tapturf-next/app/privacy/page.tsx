@@ -224,8 +224,8 @@ const SECTIONS: LegalSection[] = [
           that one of these happened (and, for opening the map, whether it was the first time that day); never
           where on the map you looked, your location (&ldquo;Near me&rdquo; stays on your device) or anything
           about your device, and we don&rsquo;t store your IP address for it. If you are signed in, we also keep
-          which account used the map and on which days, with how many times it opened the map, its cards and
-          turf pages&rsquo; maps then. This runs whichever cookie choice you make, and your browser keeps only a
+          which account used the map, on which days and when (the first and last time each day), with how many
+          times it opened the map, its cards and turf pages&rsquo; maps then. This runs whichever cookie choice you make, and your browser keeps only a
           note of when it last opened the map (see &ldquo;Stored on your device&rdquo;). Only TapTurf&rsquo;s team
           sees these records, to learn how many people use the map.
         </p>

@@ -35,9 +35,10 @@
 --    visitors, signed-in views and people, taps, minis), the 30-day daily
 --    series (every day, 0 for a day with none), and the signed-in people
 --    who used the map, most recent first (at most p_limit, 300, never over
---    1000): the account, its name and username, its views, taps and minis,
---    on how many days, and its first and last use. Never a phone number or
---    an email. people_total says how many there are in all.
+--    1000): the account, whether it is still in public.users (known), its
+--    name and username, its views, taps and minis, on how many days, and
+--    its first and last use. Never a phone number or an email.
+--    people_total says how many there are in all.
 --
 -- Erasing an account: user_id has no foreign key (like private.tool_use_log
 -- and the other private per-user tables, so nothing here cascades from
@@ -180,6 +181,7 @@ begin
       select jsonb_agg(to_jsonb(p) order by p.last_at desc, p.user_id)
         from (
           select a.user_id,
+                 u.id is not null as known,
                  u.name::text as name,
                  n.username::text as username,
                  sum(a.views)::bigint as views,
@@ -191,7 +193,7 @@ begin
             from private.map_account_days a
             left join public.users u on u.id = a.user_id
             left join public.usernames n on n.user_id = a.user_id
-           group by a.user_id, u.name, n.username
+           group by a.user_id, u.id, u.name, n.username
            order by max(a.last_at) desc, a.user_id
            limit v_limit
         ) p

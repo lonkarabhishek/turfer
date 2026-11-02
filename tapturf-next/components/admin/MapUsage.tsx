@@ -148,7 +148,7 @@ function PeopleList({ people, now }: { people: MapPerson[]; now: number }) {
         return (
           <li key={p.id}>
             {/* Their row in the people list (an erased account has none). */}
-            {p.name !== null || p.username !== null ? (
+            {p.known ? (
               <a href={`/admin?person=${p.id}#people`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-50 focus-neon">
                 {inner}
                 <ChevronRight className="h-4 w-4 shrink-0 text-primary-300" aria-hidden />

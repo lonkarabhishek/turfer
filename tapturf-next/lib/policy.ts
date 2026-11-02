@@ -10,7 +10,7 @@ export const PRIVACY_UPDATED = "2026-11-02";
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {
   id: "2026-11-02-map",
-  text: "When you use the map signed in, we now note which account used it and on which days, with how many times it opened the map and its turf and game cards. Only TapTurf's team sees that. We also count how the map is used each day; never where you looked on it or your location.",
+  text: "When you use the map signed in, we now note which account used it, on which days and when (the first and last time each day), with how many times it opened the map and its turf and game cards. Only TapTurf's team sees that. We also count how the map is used each day; never where you looked on it or your location.",
   anchor: "map",
   // The notice this one replaced (review photos and reporting), with the one before it (played with, which
   // already carried the profile photos notice, Managed by, game reports, the verified tick and free tool use):

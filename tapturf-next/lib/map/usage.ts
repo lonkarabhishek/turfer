@@ -13,6 +13,8 @@ export type MapCounts = { views: number; visitors: number; signedViews: number; 
 export type MapDay = { day: string; views: number; visitors: number; signedViews: number; taps: number; minis: number };
 export type MapPerson = {
   id: string;
+  /** The account is still there, so it has a row in the people list (false once erased; with no name or username it is still true). */
+  known: boolean;
   name: string | null;
   username: string | null;
   views: number;
@@ -86,7 +88,7 @@ export function toMapUsage(data: unknown): MapUsage | null {
       const o = obj(x);
       const id = str(o.user_id);
       if (!id) return null;
-      return { id: id.toLowerCase(), name: str(o.name), username: str(o.username), views: num(o.views), taps: num(o.taps), minis: num(o.minis), days: num(o.days), firstAt: time(o.first_at), lastAt: time(o.last_at) };
+      return { id: id.toLowerCase(), known: o.known !== false, name: str(o.name), username: str(o.username), views: num(o.views), taps: num(o.taps), minis: num(o.minis), days: num(o.days), firstAt: time(o.first_at), lastAt: time(o.last_at) };
     })
     .filter((x): x is MapPerson => x !== null);
   const since = str(d.since);

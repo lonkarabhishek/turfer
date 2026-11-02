@@ -213,6 +213,7 @@ test("track: a card opened is a tap (a double tap is one); other links are not; 
   const { b, m } = boot();
   try {
     m.account.setSignInToken(null);
+    m.track.countMapView(NOON - MIN);
     m.track.countMapTap("https://www.tapturf.in/turf/o2-turf-pune", NOON);
     m.track.countMapTap("https://www.tapturf.in/turf/o2-turf-pune", NOON + 500);
     m.track.countMapTap("https://www.tapturf.in/game/7b9c2f9e-0000-4000-8000-000000000001", NOON + 600);
@@ -220,10 +221,29 @@ test("track: a card opened is a tap (a double tap is one); other links are not; 
     m.track.countMapTap("https://openfreemap.org/", NOON + 800);
     m.track.countMapTap("https://www.tapturf.in/turf/o2-turf-pune", NOON + 5_000);
     const kinds = await Promise.all(sent(b).map(async (x) => (await beaconBody(x)).k));
-    assert.deepEqual(kinds, ["tap", "tap", "tap"], "two turf taps (one a double tap) and a game");
+    assert.deepEqual(kinds, ["view", "tap", "tap", "tap"], "the view, then two turf taps (one a double tap) and a game");
     m.track.countMiniMapOpen();
-    assert.equal((await beaconBody(sent(b)[3])).k, "mini");
-    assert.equal(b.local.getItem(MAP_SEEN_KEY), null, "taps keep no note");
+    assert.equal((await beaconBody(sent(b)[4])).k, "mini");
+    assert.deepEqual(JSON.parse(b.local.getItem(MAP_SEEN_KEY) ?? "null"), { d: "2026-11-02", at: NOON - MIN }, "taps keep no note of their own");
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("track: a card tapped before the view went (the list up before the map) brings the view along, once", async () => {
+  const { b, m } = boot();
+  try {
+    m.account.setSignInToken(null);
+    m.track.countMapTap("https://www.tapturf.in/turf/o2-turf-pune", NOON);
+    const first = await Promise.all(sent(b).map((x) => beaconBody(x)));
+    assert.deepEqual(first.map((x) => [x.k, x.u]), [["view", true], ["tap", undefined]], "the view (the first of the day), then the tap");
+    assert.deepEqual(JSON.parse(b.local.getItem(MAP_SEEN_KEY) ?? "null"), { d: "2026-11-02", at: NOON }, "the view's note");
+    m.track.countMapTap("https://www.tapturf.in/game/7b9c2f9e-0000-4000-8000-000000000001", NOON + MIN);
+    m.track.countMapView(NOON + 2 * MIN);
+    const kinds = await Promise.all(sent(b).map(async (x) => (await beaconBody(x)).k));
+    assert.deepEqual(kinds, ["view", "tap", "tap"], "another tap, and the map's own wait finishing later: no second view");
+    m.track.countMapTap("tel:+919000000001", NOON + 40 * MIN);
+    assert.equal(sent(b).length, 3, "a link that isn't a card brings nothing");
   } finally {
     b.uninstall();
   }
@@ -260,7 +280,7 @@ test("track: signed in, a keepalive fetch carries the sign-in and no beacon goes
     n.m.account.setSignInToken(async () => ({ unknown: true }));
     n.m.track.countMapTap("/turf/o2-turf-pune", NOON);
     await tick();
-    assert.equal(sent(n.b).length, 1, "no token to be had: a guest's, as a beacon");
+    assert.equal(sent(n.b).length, 2, "no token to be had: a guest's, as beacons (the view the tap brought, and the tap)");
     assert.equal(n.b.fetches.length, 0);
   } finally {
     n.b.uninstall();

@@ -118,10 +118,14 @@ export function countMapViewWhenShown(): () => void {
   };
 }
 
-/** A link tapped on /map: counted when it opens a turf's or a game's page (a card, in the list or over the map). */
+/**
+ * A link tapped on /map: counted when it opens a turf's or a game's page (a card, in the list or over the map).
+ * A card tapped on the list before the map came up brings its view along (the note makes that nothing once counted).
+ */
 export function countMapTap(href: string, now = Date.now()): void {
   try {
     if (!person() || !mapCardKind(href, window.location.origin)) return;
+    countMapView(now);
     if (lastTap && lastTap.href === href && now - lastTap.at >= 0 && now - lastTap.at < TAP_AGAIN_MS) return;
     lastTap = { href, at: now };
     send("tap");
