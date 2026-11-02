@@ -43,6 +43,7 @@ import { LinkRefusals } from "@/components/admin/LinkRefusals";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { ReviewFlags } from "@/components/admin/ReviewFlags";
+import { MapSection, mapSummary } from "@/components/admin/MapUsage";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -165,6 +166,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {/* Live tournaments (/tournament/<code>): how many, matches being scored live now, views; the list is /admin/tournaments. */}
       <AdminSection id="tournaments" title="Tournaments" height={140} summary={tournamentsSummary}>
         <TournamentsSection />
+      </AdminSection>
+
+      {/* How many people use the map (/map), signed-in ones by name; counted from 2 Nov 2026 (20261102_map_views.sql). */}
+      <AdminSection id="map" title="Map" height={140} summary={mapSummary}>
+        <MapSection />
       </AdminSection>
 
       {/* AI tools (each reads its progress in the browser, once the page is idle). */}

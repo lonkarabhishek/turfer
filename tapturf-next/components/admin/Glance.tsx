@@ -9,6 +9,7 @@ import { claimedThisWeek, deltaText, signupGlance, type GlanceCount } from "@/li
 import { reasonText } from "@/lib/admin/section";
 import { adminClaims, pendingSuggestions } from "./HomeSections";
 import { SectionBoundary } from "./SectionStatus";
+import { MapGlance } from "./MapUsage";
 
 /**
  * The top of the admin home, sized for a phone: sign-ups today, in 7 and in
@@ -40,6 +41,14 @@ export function AtAGlance() {
         <SectionBoundary title="What's waiting">
           <Suspense fallback={null}>
             <WaitingRow />
+          </Suspense>
+        </SectionBoundary>
+      </div>
+      {/* How many use the map (components/admin/MapUsage.tsx); nothing before it is counted. */}
+      <div className="md:col-span-2 empty:hidden">
+        <SectionBoundary title="The map at a glance">
+          <Suspense fallback={null}>
+            <MapGlance />
           </Suspense>
         </SectionBoundary>
       </div>
