@@ -7,7 +7,7 @@ import { getTurfsBySport } from "@/lib/queries/turfs";
 import { getSportBands } from "@/lib/queries/sportBands";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, citySportHref, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
-import { CITY_IDS, isCity, labelFor } from "@/lib/city";
+import { CITY_IDS, isCity, isCitySlug, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { plural } from "@/lib/home/format";
@@ -111,6 +111,10 @@ export default async function SportPage({
 
   const [turfs, bands] = await Promise.all([turfsFor(info), getSportBands()]);
   const perCity = citiesFor(turfs, info);
+  // Each of those cities' own page, /<city>, in the same order. A reserved
+  // slug (a turfs.city of "blog") is never a city page: getLiveCities
+  // leaves it out the same way.
+  const cityPages = perCity.filter((c) => isCitySlug(c.id));
   const place = placeFor(perCity);
   // Badminton, pickleball and tennis: their near-me page, while they have venues.
   const nearMe = courtNearMeLink(info.slug, turfs.length);
@@ -203,6 +207,28 @@ export default async function SportPage({
             Browse all turfs
           </Link>
         </div>
+      )}
+
+      {/* By city, every sport: the city pages themselves, which the pills
+          up top (/<city>/<sport>) left two hops away. The bottom padding
+          keeps the last row clear of the phone's Ask button at the end. */}
+      {cityPages.length > 0 && (
+        <section className="mt-12 pb-16">
+          <h2 className="text-[20px] font-display text-primary-900">Turfs by city</h2>
+          <p className="text-[14px] text-primary-500 mt-1">All sports, not just {info.name.toLowerCase()}</p>
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {cityPages.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/${c.id}`}
+                  className="min-h-10 py-2 px-4 inline-flex items-center rounded-full bg-accent-50 hover:bg-accent-100 text-[14px] font-medium text-accent-700"
+                >
+                  Turfs in {c.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );
