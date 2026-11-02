@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { imageUrlForCard } from "@/lib/utils/images";
+import { cardPhotoSrc } from "@/lib/utils/images";
 import { PhotoImg } from "@/components/ui/PhotoImg";
 import { ChevronRight, Flame, MapPin, Star } from "lucide-react";
 import { labelFor, type CityId } from "@/lib/city";
@@ -65,7 +65,7 @@ function SpotlightCard({ pick, loading }: { pick: SpotlightTurf; loading: "eager
         <div className="relative md:w-[46%] shrink-0 aspect-[16/10] md:aspect-auto md:min-h-[260px] bg-primary-100 overflow-hidden">
           {pick.photo && photoOk ? (
             <PhotoImg
-              src={imageUrlForCard(pick.photo)}
+              src={cardPhotoSrc(pick.photo)}
               alt={`${pick.name}, most trending turf in ${cityLabel}`}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               loading={loading}

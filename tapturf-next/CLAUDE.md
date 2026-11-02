@@ -79,6 +79,7 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 - Honest snippets: no booking claims (players call or WhatsApp the turf), no invented numbers or urgency. Google ratings may appear in visible text as "on Google", never in structured data.
 - Every `<script type="application/ld+json">` uses `jsonLdHtml` from `lib/seo/jsonLd.ts` (escapes `<`, `>`, `&`), never raw `JSON.stringify`.
 - A turf's JSON-LD carries `aggregateRating` only from TapTurf players' own live reports, at `AGGREGATE_RATING_MIN_REPORTS` (5, `lib/seo/defaults.ts`) or more. Listing pages carry no ratings.
+- Turf photos on Google: only photos owners added on myTapturf (`turf-photos/owner/<turf>/<24 hex>[-card].<webp|jpg>`) are served from tapturf.in (`/photos/turf/...`, `app/photos/turf/[...path]/route.ts`, `lib/utils/images.ts` sitePhotoUrl), lead og:image and the turf JSON-LD image, and go in the image sitemap. The mirror job's copies of Google Maps photos keep their Supabase links (Supabase sends `x-robots-tag: none`), the site owner's call (2 Nov 2026). Tests: `npm run test:turf`, `npm run test:seo`.
 - `/turf/<uuid>` answers 308 to `/turf/<slug>` from the page itself (`permanentRedirect` in `app/turf/[id]/page.tsx`). Edge redirects are not on; `scripts/turf-redirects.mjs` says how to turn them on.
 
 ## Commits & Deploys

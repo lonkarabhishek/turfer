@@ -37,6 +37,17 @@ export const ROBOTS_INDEX = {
   },
 } as const satisfies NonNullable<Metadata["robots"]>;
 
+/**
+ * Turf pages: ROBOTS_INDEX with max-image-preview:large in the robots
+ * meta as well (until 2 Nov only Googlebot's meta said it), so other
+ * search engines may show a turf's photo large too. For every page, add
+ * "max-image-preview": "large" to ROBOTS_INDEX itself.
+ */
+export const ROBOTS_INDEX_TURF = {
+  ...ROBOTS_INDEX,
+  "max-image-preview": "large",
+} as const satisfies NonNullable<Metadata["robots"]>;
+
 /** Kept out of the index (thin or past pages), links still followed. */
 export const ROBOTS_NOINDEX_FOLLOW = {
   index: false,

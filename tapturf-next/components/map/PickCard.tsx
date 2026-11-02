@@ -10,7 +10,7 @@ import { trendWords, type TrendWindow } from "@/lib/map/trending";
 import { cardPrice, cardSports, type CardSport } from "@/lib/utils/cardSport";
 import { priceRangeText } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
-import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
+import { cardPhotoSrc, turfPhotos } from "@/lib/utils/images";
 import { turfPath } from "@/lib/utils/turfPath";
 import { formatDistance } from "@/lib/utils/location";
 import { formatGameDay, formatPrice, formatTimeRange, gamePlace, spotsInfo } from "@/lib/utils/game";
@@ -86,7 +86,7 @@ function TurfRow({ turf, sport, km, trend, trendWindow }: { turf: Turf; sport: C
     <Link href={turfPath(turf)} className="flex gap-3 p-3 pr-11 hover:bg-primary-50 focus-neon rounded-2xl">
       <div className="relative shrink-0 w-[92px] h-[92px] rounded-xl overflow-hidden bg-primary-100">
         {photo && !broken ? (
-          <PhotoImg src={imageUrlForCard(photo)} alt="" className="w-full h-full object-cover" decoding="async" onBroken={() => setBroken(true)} />
+          <PhotoImg src={cardPhotoSrc(photo)} alt="" className="w-full h-full object-cover" decoding="async" onBroken={() => setBroken(true)} />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <MapPin className="w-6 h-6 text-primary-300" aria-hidden />

@@ -1,7 +1,7 @@
 import type { Turf } from "../../types/turf";
 import type { ReviewSummary, ReviewWithUser } from "../../types/review";
 import { summarisePagePrice } from "./prices";
-import { isOwnPhoto, normalizeImageUrl, orderPhotos } from "./images";
+import { isOwnPhoto, normalizeImageUrl, orderPhotos, ownerPhotosFirst, sitePhotoUrl } from "./images";
 import { googleMapsUrl, publicLink, scrubBookingApps } from "./bookingApps";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "../city";
 import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
@@ -39,10 +39,12 @@ export function generateTurfJsonLd(turf: Turf, extra: TurfJsonLdExtra = {}) {
   const phone = getPhone(turf);
   // Our own copies first; when we have any, the Google links (which
   // expire, see orderPhotos) are left out. No photos, no image field.
-  // orderPhotos leaves out booking apps' photos.
+  // orderPhotos leaves out booking apps' photos. Owners' photos lead,
+  // as tapturf.in serves them (sitePhotoUrl): Supabase's copies are
+  // marked noindex.
   const photos = orderPhotos(turf.images ?? []);
   const own = photos.filter(isOwnPhoto);
-  const image = (own.length ? own : photos).slice(0, 5).map((img) => normalizeImageUrl(img));
+  const image = ownerPhotosFirst(own.length ? own : photos).slice(0, 5).map((img) => sitePhotoUrl(normalizeImageUrl(img)));
   // Locality follows the turf's own city, then its address; with
   // neither on record the address carries no locality rather than a
   // guessed one (a wrong locality is worse for rich results than none).

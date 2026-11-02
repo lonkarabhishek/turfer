@@ -7,7 +7,7 @@ import { ArrowRight, Clock, ExternalLink, LocateFixed, Loader2, MapPin, Star, Us
 import { googleMapsUrl } from "@/lib/utils/bookingApps";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
 import { OwnerMark } from "@/components/turf/OwnerMark";
-import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
+import { cardPhotoSrc, turfPhotos } from "@/lib/utils/images";
 import { summarisePrice, type PriceSummary } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { formatDistance } from "@/lib/utils/location";
@@ -52,7 +52,7 @@ export function TurfMiniCard({
       <div className="relative aspect-[4/3] bg-primary-100">
         {img ? (
           <HideOnErrorImg
-            src={imageUrlForCard(img)}
+            src={cardPhotoSrc(img)}
             alt={turf.name}
             className="w-full h-full object-cover"
             loading={priority ? "eager" : "lazy"}

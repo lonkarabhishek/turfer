@@ -1,4 +1,5 @@
 import { isBookingAppUrl } from "./bookingApps";
+import { SITE_URL } from "../seo/defaults";
 
 /**
  * Ask Google user-content (lh3/lh4/... .googleusercontent.com) for a
@@ -36,6 +37,59 @@ const MIRRORED = /\/storage\/v1\/object\/public\/turf-photos\/[^?#]+\/[0-9a-f]{2
 /** A photo in our own turf-photos bucket (mirrored or uploaded by an owner). */
 export function isOwnPhoto(url: string): boolean {
   return /\/storage\/v1\/object\/public\/turf-photos\//i.test(url);
+}
+
+/**
+ * Owners' turf photos as tapturf.in serves them (app/photos/turf/[...path]/route.ts).
+ *
+ * Supabase Storage answers every object with "x-robots-tag: none", so
+ * Google indexes none of the photos in the turf-photos bucket. The route
+ * answers the same bytes from tapturf.in without that header, for the
+ * photos turf owners added on myTapturf only: that bucket, and only names
+ * of the shape owner_photo_start hands out (owner_photo_object_ok in
+ * supabase/migrations/20261025_owner_photos.sql):
+ * owner/<turf uuid>/<24 hex>[-card].<webp|jpg>.
+ * The site owner's call (2 Nov 2026): Google gets the photos owners
+ * uploaded (11 on 2 turfs that day), not the copies of Google Maps photos
+ * the old mirror job made (every other name in the bucket, 15,415 on
+ * 3,039 turfs), which keep their Supabase links, as do photos on other
+ * hosts (Google user content, Drive, Yappe...).
+ */
+export const SITE_PHOTO_PATH = "/photos/turf/";
+const OWNER_PHOTO_KEY = /^owner\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{24}(?:-card)?\.(?:webp|jpg)$/;
+
+/** The turf-photos bucket's public URL on our Supabase project (the build's NEXT_PUBLIC_SUPABASE_URL; production's when unset, as in unit tests). */
+export const TURF_PHOTOS_BUCKET = `${(process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hwfsbpzercuoshodmnuf.supabase.co").replace(/\/+$/, "")}/storage/v1/object/public/turf-photos/`;
+
+/** The bucket object a photo route request names (its pathname and search), or null: any query, encoded character, other folder or name. */
+export function sitePhotoKey(pathname: string, search = ""): string | null {
+  if (search || !pathname.startsWith(SITE_PHOTO_PATH)) return null;
+  const key = pathname.slice(SITE_PHOTO_PATH.length);
+  return OWNER_PHOTO_KEY.test(key) ? key : null;
+}
+
+/** A photo a turf owner added on myTapturf, in our bucket on our project: one tapturf.in serves. */
+export function isOwnerPhoto(url: string): boolean {
+  return typeof url === "string" && url.startsWith(TURF_PHOTOS_BUCKET) && OWNER_PHOTO_KEY.test(url.slice(TURF_PHOTOS_BUCKET.length));
+}
+
+/**
+ * tapturf.in's URL for an owner's photo, every other URL as it is.
+ * `origin` "" gives the path alone, for <img> on our own pages (a
+ * preview or local build then loads its own route).
+ */
+export function sitePhotoUrl(url: string, origin: string = SITE_URL): string {
+  return isOwnerPhoto(url) ? `${origin}${SITE_PHOTO_PATH}${url.slice(TURF_PHOTOS_BUCKET.length)}` : url;
+}
+
+/** A photo sitePhotoUrl moved to tapturf.in (the full URL or the path). */
+export function isSitePhoto(url: string): boolean {
+  return url.startsWith(`${SITE_URL}${SITE_PHOTO_PATH}`) || url.startsWith(SITE_PHOTO_PATH);
+}
+
+/** Owners' photos first, then the rest, each in the order given: what share cards and the turf JSON-LD pick from. */
+export function ownerPhotosFirst(urls: readonly string[]): string[] {
+  return [...urls.filter(isOwnerPhoto), ...urls.filter((u) => !isOwnerPhoto(u))];
 }
 
 /**
@@ -90,6 +144,11 @@ export function imageUrlForCard(url: string): string {
   if (GOOGLE_USER_CONTENT.test(url)) return upsizeGoogleUserContent(url, 800, 600);
   if (/^https?:\/\/drive\.google\.com\/thumbnail\?/i.test(url)) return url.replace(/([?&]sz=)w\d+/i, "$1w800");
   return url;
+}
+
+/** What a public card or gallery tile shows: the card size (imageUrlForCard knows the bucket's -card names), owners' photos from tapturf.in. */
+export function cardPhotoSrc(url: string): string {
+  return sitePhotoUrl(imageUrlForCard(url), "");
 }
 
 /**
@@ -230,6 +289,22 @@ export function usableTurfPhotos(
   const cover = firstImageUrl(raw.cover_image);
   const kept = filterReviewedPhotos(images, cover, raw.image_review, raw.cover_image);
   return turfPhotos({ cover_image: kept.cover, images: kept.images }).slice(0, Math.max(0, max));
+}
+
+/**
+ * The image sitemap's photos of a turf row: up to `max` of the photos its
+ * owners added, as tapturf.in serves them, the cover first
+ * (usableTurfPhotos order). No mirrored copy and no photo on another host
+ * goes in, so a turf with no owner photo lists none.
+ */
+export function sitemapPhotos(
+  raw: { cover_image?: string | null; images?: unknown; image_review?: unknown } | null | undefined,
+  max = 5,
+): string[] {
+  return usableTurfPhotos(raw, Number.POSITIVE_INFINITY)
+    .map((u) => sitePhotoUrl(u))
+    .filter(isSitePhoto)
+    .slice(0, Math.max(0, max));
 }
 
 /**

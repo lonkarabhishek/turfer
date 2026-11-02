@@ -9,6 +9,8 @@ import { readSitemapGames, readSitemapTurfs } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
 import { isGameExpired } from "@/lib/utils/game";
 import { turfPath } from "@/lib/utils/turfPath";
+import { sitemapPhotos } from "@/lib/utils/images";
+import { activeTurfRows } from "@/lib/queries/turfs";
 import { PRIVACY_UPDATED } from "@/lib/policy";
 import { SEO_TEMPLATE_DATE } from "@/lib/seo/defaults";
 
@@ -155,13 +157,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   );
 
-  const turfPages: MetadataRoute.Sitemap = (turfs ?? []).map((turf) => ({
-    url: `${BASE}${turfPath(turf)}`,
-    // The row's last edit, or the day the turf templates changed if later.
-    lastModified: latest([turf.updated_at]),
-    changeFrequency: "weekly",
-    priority: 0.7,
-  }));
+  // The photos each turf's owners added, as tapturf.in serves them (up to
+  // 5, the cover first; no mirrored copy, none on another host), for
+  // Google Images. From the list rows the list pages already hold
+  // (lib/queries/turfs.ts), not another read of the table; a turf missing
+  // from them just lists no photo.
+  const photosOf = new Map((await activeTurfRows()).map((r) => [String(r.id), sitemapPhotos(r)]));
+  const turfPages: MetadataRoute.Sitemap = (turfs ?? []).map((turf) => {
+    const images = photosOf.get(turf.id);
+    return {
+      url: `${BASE}${turfPath(turf)}`,
+      // The row's last edit, or the day the turf templates changed if later.
+      lastModified: latest([turf.updated_at]),
+      changeFrequency: "weekly",
+      priority: 0.7,
+      ...(images?.length ? { images } : {}),
+    };
+  });
 
   // Only games still to come (India time); past ones are noindex.
   const gamePages: MetadataRoute.Sitemap = (games ?? [])

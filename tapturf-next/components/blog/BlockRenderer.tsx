@@ -8,6 +8,7 @@ import { slugify } from "@/lib/utils/slugify";
 import { PriceCalculator } from "./PriceCalculator";
 import { DlsResourceVisual } from "./DlsResourceVisual";
 import { HideOnErrorImg } from "@/components/ui/HideOnErrorImg";
+import { sitePhotoUrl } from "@/lib/utils/images";
 
 /**
  * Renders a single content block. Server component (except where a
@@ -294,7 +295,7 @@ export function BlockRenderer({ block }: { block: Block }) {
                 <div className="relative w-28 h-28 shrink-0 bg-primary-100">
                   {t.coverImage ? (
                     <HideOnErrorImg
-                      src={t.coverImage}
+                      src={sitePhotoUrl(t.coverImage, "")}
                       alt={`${t.name} turf photo`}
                       className="w-full h-full object-cover"
                       loading="lazy"

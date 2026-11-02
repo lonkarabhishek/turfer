@@ -13,12 +13,13 @@ import { getTurfManagers } from "@/lib/queries/turfManagers";
 import { NO_MANAGERS } from "@/lib/turfPage/managers";
 import { ownerPriceNote, ownerPriceText } from "@/lib/turfPage/owner";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
+import { turfPhotos } from "@/lib/utils/images";
 import { playerPriceRange, positivePrice, priceRangeText, summarisePagePrice } from "@/lib/utils/prices";
 import { getPhone, getWhatsAppPhone, turfContact } from "@/lib/utils/seo";
 import { normPlace, turfMeta } from "@/lib/seo/turfMeta";
 import { sharedNameKey } from "@/lib/seo/turfFacts";
 import { getTurfFacts, sharedNameSet } from "@/lib/queries/turfFacts";
-import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
+import { OG_BASE, ROBOTS_INDEX_TURF, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { googleMapsUrl, scrubBookingApps } from "@/lib/utils/bookingApps";
 import { playersSayOf } from "@/lib/reviews/playersSay";
 import { areaFor } from "@/lib/utils/area";
@@ -109,6 +110,8 @@ export async function generateMetadata({
     },
     twitter: TWITTER_CARD,
     alternates: { canonical: turfUrl(turf) },
+    // Index and follow as everywhere, plus the large image preview in the robots meta (lib/seo/defaults.ts).
+    robots: ROBOTS_INDEX_TURF,
   };
 }
 
@@ -315,8 +318,8 @@ export default async function TurfDetailPage({
           {!claimed && <ClaimHint />}
         </div>
 
-        {/* Image gallery */}
-        <TurfImageGallery images={turf.images} />
+        {/* Image gallery: alt text from the turf's own name, type and place; the cover (as the share card picks it) says so. */}
+        <TurfImageGallery images={turf.images} alt={meta.photoAlt} cover={turfPhotos(turf)[0] ?? null} />
 
         {/* Main content + sidebar */}
         <div className="mt-10 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-12">

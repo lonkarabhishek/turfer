@@ -24,6 +24,7 @@ import { DESCRIPTION_MAX_CHARS, titleFits } from "./width";
 import { sportBySlug } from "../sports";
 import { gameDates } from "./gameDates";
 import type { Turf } from "../../types/turf";
+import { TURF_PHOTOS_BUCKET } from "../utils/images";
 
 const sport = (slug: string) => sportBySlug(slug)!;
 
@@ -230,6 +231,12 @@ test("listing share card: the top venue's own photo, else the site card", () => 
   const own = "https://x.supabase.co/storage/v1/object/public/turf-photos/a/aaaaaaaaaaaaaaaaaaaaaaaa.webp";
   const turfs = [{ images: ["https://lh3.googleusercontent.com/p/x=w1", own], cover_image: null }] as unknown as Turf[];
   assert.equal(listingOgImage(turfs, "Turfs in Pune").url, own);
+  // A mirrored copy on our project: Supabase's link, as before.
+  const mirrored = `${TURF_PHOTOS_BUCKET}5b9f50b1-dcce-45a9-9c8f-c847812b18d0/0123456789abcdef01234567.webp`;
+  assert.equal(listingOgImage([{ images: [mirrored], cover_image: null }] as unknown as Turf[], "x").url, mirrored);
+  // An owner's photo leads, from tapturf.in (sitePhotoUrl).
+  const key = "owner/5b9f50b1-dcce-45a9-9c8f-c847812b18d0/0123456789abcdef01234567.jpg";
+  assert.equal(listingOgImage([{ images: [mirrored, `${TURF_PHOTOS_BUCKET}${key}`], cover_image: mirrored }] as unknown as Turf[], "x").url, `https://www.tapturf.in/photos/turf/${key}`);
   assert.deepEqual(listingOgImage([{ images: ["https://lh3.googleusercontent.com/p/x=w1"], cover_image: null }] as unknown as Turf[], "x"), { ...DEFAULT_OG_IMAGE });
   assert.deepEqual(listingOgImage([], "x"), { ...DEFAULT_OG_IMAGE });
 });

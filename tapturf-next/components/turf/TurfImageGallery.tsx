@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, X, Camera, Maximize2 } from "lucide-react";
-import { imageUrlForCard, orderPhotos } from "@/lib/utils/images";
+import { cardPhotoSrc, orderPhotos, sitePhotoUrl } from "@/lib/utils/images";
 import { PhotoImg } from "@/components/ui/PhotoImg";
 
 function GalleryImage({
@@ -22,14 +22,15 @@ function GalleryImage({
   onBroken: (src: string) => void;
 }) {
   // Inline photos never render wider than ~900px, so ask for 800x600;
-  // the lightbox shows the full-size original. `src` stays the stored
-  // URL so broken-photo tracking matches the images array. No error
-  // state of its own: slots are keyed by URL, so the photo that moves
-  // into a dropped one's place mounts fresh instead of inheriting a grey
-  // "failed" box.
+  // the lightbox shows the full-size original. Owners' photos load from
+  // tapturf.in (cardPhotoSrc, sitePhotoUrl), where Google may index them. `src`
+  // stays the stored URL so broken-photo tracking matches the images
+  // array. No error state of its own: slots are keyed by URL, so the
+  // photo that moves into a dropped one's place mounts fresh instead of
+  // inheriting a grey "failed" box.
   return (
     <PhotoImg
-      src={imageUrlForCard(src)}
+      src={cardPhotoSrc(src)}
       alt={alt}
       className={className}
       loading={priority ? "eager" : "lazy"}
@@ -41,7 +42,17 @@ function GalleryImage({
   );
 }
 
-export function TurfImageGallery({ images: allImages }: { images: string[] }) {
+export function TurfImageGallery({
+  images: allImages,
+  alt,
+  cover,
+}: {
+  images: string[];
+  /** What the photos show (turfMeta photoAlt): "Turf Up, box cricket & football turf in Hinjewadi, Pune". */
+  alt: string;
+  /** The turf's cover (turfPhotos' first, as the share card picks it): its alt says so. */
+  cover: string | null;
+}) {
   // A photo that fails to load (expired / rate-limited Google link) is
   // removed from the gallery instead of leaving a blank box. Our own
   // copies come first, Google links last (see orderPhotos).
@@ -117,6 +128,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
   const hasMultiple = images.length > 1;
   // Indices can point past the end after a broken photo is dropped.
   const safeIdx = Math.min(currentIndex, images.length - 1);
+  const altOf = (src: string, idx: number) => (src === cover ? `${alt}, cover photo` : `${alt}, photo ${idx + 1} of ${images.length}`);
 
   return (
     <>
@@ -139,7 +151,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
               <GalleryImage
                 onBroken={markBroken}
                 src={img}
-                alt={`Turf photo ${idx + 1}`}
+                alt={altOf(img, idx)}
                 className="w-full h-full object-cover"
                 priority={idx === 0}
               />
@@ -187,7 +199,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
             key={images[0]}
             onBroken={markBroken}
             src={images[0]}
-            alt="Turf main photo"
+            alt={altOf(images[0], 0)}
             className="w-full h-full object-cover transition-transform duration-500 group-hover/gallery:scale-[1.02] min-h-[240px] md:min-h-full"
             priority
           />
@@ -207,7 +219,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
                   key={img}
                   onBroken={markBroken}
                   src={img}
-                  alt={`Turf photo ${slot + 1}`}
+                  alt={altOf(img, slot)}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover/gallery:scale-[1.02] cursor-pointer"
                 />
               ) : (
@@ -278,8 +290,8 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
 
             <PhotoImg
               key={images[safeIdx]}
-              src={images[safeIdx]}
-              alt={`Photo ${safeIdx + 1}`}
+              src={sitePhotoUrl(images[safeIdx], "")}
+              alt={altOf(images[safeIdx], safeIdx)}
               className="max-w-full max-h-full object-contain select-none"
               onBroken={() => markBroken(images[safeIdx])}
               onClick={(e) => e.stopPropagation()}
@@ -319,7 +331,7 @@ export function TurfImageGallery({ images: allImages }: { images: string[] }) {
                   aria-current={i === currentIndex}
                 >
                   <PhotoImg
-                    src={imageUrlForCard(img)}
+                    src={cardPhotoSrc(img)}
                     alt=""
                     className="w-full h-full object-cover"
                     loading="lazy"
