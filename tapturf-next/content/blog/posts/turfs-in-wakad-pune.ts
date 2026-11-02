@@ -80,6 +80,12 @@ export const post: Post = {
       type: "p",
       text: "The Shankar Kalat Nagar and Datta Mandir Road stretch is the busiest pocket: it holds the three most-reviewed venues in this list. Football is listed at 10 venues and box cricket at 10. Impetus Sporting lists two grounds, an 8-a-side football pitch and a 9-a-side cricket format. Two venues list pickleball, two list badminton, and The Ring Reachers' Sports Academy also lists basketball, volleyball and skating.",
     },
+    {
+      type: "cta",
+      text: "Wakad and every other area: all listed Pune turfs, with timings and photos.",
+      href: "/pune",
+      label: "See all Pune turfs",
+    },
 
     { type: "h2", text: "What does a turf in Wakad cost per hour?" },
     {

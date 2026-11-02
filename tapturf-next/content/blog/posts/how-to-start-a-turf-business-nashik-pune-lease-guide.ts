@@ -133,6 +133,18 @@ export const post: Post = {
       alt: "Bar chart showing Kerala turf closures: 129 of 1,235 registered turfs statewide, 8 of 300 in Kozhikode, 40 of 300 in Malappuram and 25 of 120 in Thrissur",
       caption: "Oversupply is a real risk. The Turf Owners Association Kerala says 129 of 1,235 registered turfs shut in five years, citing electricity and upkeep costs, fewer bookings and night-play limits (Mathrubhumi English, 9 Feb 2025).",
     },
+    {
+      type: "cta",
+      text: "Scouting a plot in Nashik? See the turfs already listed there.",
+      href: "/nashik",
+      label: "Turfs in Nashik",
+    },
+    {
+      type: "cta",
+      text: "Scouting in Pune? See the turfs already listed there.",
+      href: "/pune",
+      label: "Turfs in Pune",
+    },
 
     { type: "h2", text: "Leasing: how much rent can a turf afford?", id: "rent-vs-break-even" },
     {

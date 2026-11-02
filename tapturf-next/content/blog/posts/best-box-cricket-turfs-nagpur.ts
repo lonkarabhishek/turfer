@@ -214,6 +214,12 @@ export const post: Post = {
         "East: CC Turf Pardi, Run Bhumi in Sangharsh Nagar, Shree Balaji in Nandanvan.",
       ],
     },
+    {
+      type: "cta",
+      text: "Not only box cricket: every listed turf and court in Nagpur.",
+      href: "/nagpur",
+      label: "All Nagpur turfs",
+    },
 
     { type: "h2", text: "Before you book" },
     {

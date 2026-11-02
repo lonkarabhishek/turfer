@@ -63,6 +63,9 @@ export const post: Post = {
       "Pune — 125+ turfs across Kothrud, Aundh, Wakad, Kharadi, Hinjewadi, Baner and beyond.",
       "Mumbai — turfs across Mira Road, Andheri, Dombivli, Bandra, Chembur and more.",
     ] },
+    { type: "cta", text: "Every active turf in Nashik, in one list.", href: "/nashik", label: "Nashik turfs" },
+    { type: "cta", text: "Every listed turf in Pune, from Kothrud to Kharadi.", href: "/pune", label: "Pune turfs" },
+    { type: "cta", text: "Every listed turf in Mumbai, from Mira Road to Chembur.", href: "/mumbai", label: "Mumbai turfs" },
 
     { type: "h2", text: "Filtering by sport" },
     { type: "p", text: "The listing page has one-tap filters for the sports people actually play: football, box cricket, cricket, badminton, pickleball, basketball, tennis, volleyball, yoga. Pick one and the list is sport-scoped instantly." },

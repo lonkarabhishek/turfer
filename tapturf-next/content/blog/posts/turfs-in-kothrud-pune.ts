@@ -78,6 +78,12 @@ export const post: Post = {
       type: "p",
       text: "Football is everywhere here: all 18 venues list it, and listed formats run from 5-a-side to 8-a-side. Box cricket is listed at 15. Four venues also list pickleball (Hindu Gymkhana Kothrud, Kaizen Sports, Rama Sports and Eklavya Sports And Cultural Academy) and three list cricket nets. Two listings carry The Foothill Arena name, one on Paud Road and one on Gandhi Bhavan Road.",
     },
+    {
+      type: "cta",
+      text: "Not in Kothrud? Every listed turf in Pune, with timings and photos.",
+      href: "/pune",
+      label: "Turfs in Pune",
+    },
 
     { type: "h2", text: "What does a turf in Kothrud cost per hour?" },
     {

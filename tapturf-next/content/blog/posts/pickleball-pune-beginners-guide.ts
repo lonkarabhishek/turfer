@@ -73,6 +73,7 @@ export const post: Post = {
       "83bd2e75-0853-46e5-ade7-c5d2d9c60f16",
     ] },
     { type: "callout", title: "New venue?", text: "If your club or venue offers pickleball and isn't listed on TapTurf yet, drop us a WhatsApp. We add new sports courts weekly." },
+    { type: "cta", text: "Courts as well as turfs: every listed venue in Pune, with timings and photos.", href: "/pune", label: "Turfs and courts in Pune" },
 
     { type: "h2", text: "Your first session, planned" },
     { type: "ol", items: [
