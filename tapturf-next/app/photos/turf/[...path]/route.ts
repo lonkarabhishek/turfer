@@ -17,9 +17,13 @@ import { TURF_PHOTOS_BUCKET, sitePhotoKey } from "@/lib/utils/images";
 //   never its x-robots-tag, cookies or other headers, and no request
 //   header is passed on.
 // - A photo's bytes never change under its name (mirrored names are a
-//   hash of the source, owner uploads never overwrite), so Vercel's CDN and
-//   browsers keep it a year: a function call per photo per CDN region,
-//   then none. Tagged for a purge if a photo must go at once:
+//   hash of the source, owner uploads never overwrite). Mirrored photos
+//   are never deleted, so Vercel's CDN and browsers keep them a year: a
+//   function call per photo per CDN region, then none. An owner's photo
+//   (owner/...) can be removed (by the owner, the site owner or the
+//   check's sweep) and nothing purges the CDN then, so it is kept a day
+//   there and an hour in browsers: a removed one is a 404 within a day,
+//   and Google drops it. Tagged for a purge if a photo must go at once:
 //   vercel cache dangerously-delete --tag turf-photo-<turf id>.
 // - A missing photo is a 404 kept 5 minutes; Supabase failing is a 502 kept nowhere.
 //
@@ -29,6 +33,7 @@ import { TURF_PHOTOS_BUCKET, sitePhotoKey } from "@/lib/utils/images";
 // extension are outside its matcher).
 
 const YEAR = "public, max-age=31536000, s-maxage=31536000, immutable";
+const OWNER_PHOTO = "public, max-age=3600, s-maxage=86400";
 const TYPES: Record<string, string> = { webp: "image/webp", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
 const UPSTREAM_TIMEOUT_MS = 15_000;
 
@@ -61,7 +66,7 @@ async function serve(req: Request, method: "GET" | "HEAD"): Promise<Response> {
   const upType = (up.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const headers = new Headers({
     "Content-Type": Object.values(TYPES).includes(upType) ? upType : TYPES[key.slice(key.lastIndexOf(".") + 1)],
-    "Cache-Control": YEAR,
+    "Cache-Control": key.startsWith("owner/") ? OWNER_PHOTO : YEAR,
     "X-Content-Type-Options": "nosniff",
     "Vercel-Cache-Tag": `turf-photos,turf-photo-${key.replace(/^owner\//, "").slice(0, 36)}`,
   });
