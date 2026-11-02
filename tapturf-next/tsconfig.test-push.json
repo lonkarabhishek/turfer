@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/push",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": ["es2023", "dom"],
+    "types": ["node"],
+    "paths": { "@/*": ["./*"] }
+  },
+  "files": ["lib/push/payload.test.ts", "lib/push/routes.test.ts", "lib/push/sw.test.ts", "lib/cache/secret.ts"]
+}

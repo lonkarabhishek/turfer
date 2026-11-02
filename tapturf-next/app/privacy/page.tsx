@@ -201,6 +201,18 @@ const SECTIONS: LegalSection[] = [
           kept: opening its page adds one to its view count (and, once a day per browser, to its count of
           viewers), which identifies nobody.
         </p>
+        <p id="push" className="scroll-mt-24">
+          <strong>Notifications on your phone.</strong> If you turn on &ldquo;Notifications on this phone&rdquo;
+          on the Me tab and allow them when your phone asks, your browser gives us a push address for that phone
+          or browser (a web address at Apple&rsquo;s, Google&rsquo;s, Mozilla&rsquo;s or Microsoft&rsquo;s push
+          service) and two keys that let only TapTurf send to it and keep each message private on the way. We
+          keep them with your account, with the kind of device (iPhone, Android phone, computer and so on, from
+          how your browser describes itself; nothing else about it) and when a notification last reached it. You
+          can turn them on on more than one phone. Each notification (someone asking to join your game, your
+          request accepted or declined, a game moved or cancelled) goes through that push service to your phone,
+          encrypted so the service cannot read it. Turn the switch off, or log out on that phone, and we stop
+          sending there; if someone else signs in to TapTurf on that phone, it stops for you too.
+        </p>
         <p id="tools" className="scroll-mt-24">
           <strong>When you use our free tools.</strong> Each time you start or finish something in a free tool
           (a toss, a match on the Live Cricket Scorer or Live Scoreboard, a scorecard, a tournament, a team
@@ -236,6 +248,7 @@ const SECTIONS: LegalSection[] = [
     body: (
       <ul>
         <li>To run your account and show your games, requests and notifications.</li>
+        <li>To send those notifications to your phone, if you turn that on.</li>
         <li>To show hosts who wants to join their game, and to show players how to reach the host.</li>
         <li>To publish reviews and venue corrections you submit.</li>
         <li>To show a live score to the people you send its link to, and how many are watching.</li>
@@ -304,6 +317,10 @@ const SECTIONS: LegalSection[] = [
             to a report and the photos turf owners add, and answers questions in Ask TapTurf.
           </li>
           <li>Vercel, which hosts the website.</li>
+          <li>
+            Apple, Google, Mozilla and Microsoft, whose push services carry notifications to your phone, encrypted
+            so they cannot read them, only if you turn them on (&ldquo;Notifications on your phone&rdquo; above).
+          </li>
           <li>Google Analytics, for usage statistics, only if you accept cookies (section 5).</li>
           <li>Google Maps, for the maps on turf and game pages, only if you accept cookies or tap &ldquo;Show map&rdquo; (section 5).</li>
           <li>Hostinger, which hosts our email.</li>
@@ -410,10 +427,13 @@ const SECTIONS: LegalSection[] = [
         free tools, and which live scores and tournaments it opened in the last two days (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
         &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link or a live tournament it also keeps the key that lets only this browser update
-        it; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
+        it; our server stores just a one-way hash of the key. While you are signed in, your browser also runs
+        a small TapTurf script (a service worker) whose only job is to show our notifications and open the page
+        you tap; it keeps nothing and does not change how pages load. If you turn on notifications, the
+        browser keeps its push address for us and notes which account turned them on. None of this is sent to us except the sign-in
         token, which identifies you to our server, the city you picked and whether you picked it or let your
         location find it (for the city note described under &ldquo;Your city&rdquo;), that one summary when
-        you create an account, the random tag with each use of a free tool, and a match while its live link is on. Clearing site data in your browser removes all of it. A live link that was
+        you create an account, the random tag with each use of a free tool, a match while its live link is on, and the push address when you turn notifications on. Clearing site data in your browser removes all of it. A live link that was
         on then stops updating, as any live link does after 2 hours without a new score, and is cleared 30 days
         after its last update, or sooner if you email us.
       </p>
@@ -460,6 +480,11 @@ const SECTIONS: LegalSection[] = [
           A live tournament stays until you take it down from its page; then its page says only that it was
           taken down, and the record (its names, fixtures and results) is kept unless you ask us to remove it.
           The one-way hash of the network address is kept for 2 days to stop misuse.
+        </li>
+        <li>
+          A phone&rsquo;s push address and keys stay with your account, marked off once you turn notifications
+          off there, log out there, or its push service says it has ended; we never send to it again unless you
+          turn them on there again. They go with your account, or sooner if you ask.
         </li>
         <li>Emails you send us are kept as long as needed to deal with your request.</li>
       </ul>

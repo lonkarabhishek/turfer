@@ -27,6 +27,7 @@
     "test:reviews": "tsc -p tsconfig.test-reviews.json && node --test .test-out/reviews/lib/reviews/reviews.test.js .test-out/reviews/lib/reviews/routes.test.js .test-out/reviews/lib/reviews/policy.test.js .test-out/reviews/lib/reviews/trust.test.js .test-out/reviews/lib/reviews/photoRoutes.test.js",
     "test:games": "tsc -p tsconfig.test-games.json && node --test .test-out/games/lib/games/payload.test.js .test-out/games/lib/games/routes.test.js .test-out/games/lib/games/repeat.test.js",
     "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js",
+    "test:push": "tsc -p tsconfig.test-push.json && node --test .test-out/push/lib/push/payload.test.js .test-out/push/lib/push/routes.test.js .test-out/push/lib/push/sw.test.js",
     "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js",
     "test:seo": "tsc -p tsconfig.test-seo.json && node --test .test-out/seo/lib/seo/turfMeta.test.js .test-out/seo/lib/seo/listingMeta.test.js .test-out/seo/lib/seo/blogMeta.test.js .test-out/seo/lib/utils/seo.test.js .test-out/seo/lib/near/courtNearMe.test.js .test-out/seo/lib/seo/mapMeta.test.js",
     "test:consent": "tsc -p tsconfig.test-consent.json && node --test .test-out/consent/lib/consent.test.js .test-out/consent/lib/analytics/consentGates.test.js .test-out/consent/lib/policy.test.js",
@@ -46,6 +47,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "supercluster": "^9.1.0",
+    "web-push": "^3.6.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -53,6 +55,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",

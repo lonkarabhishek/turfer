@@ -10,6 +10,7 @@ import { cancelGoogleLink, errorOf, firebaseToken, getMe, postMe, profileOf, set
 import { loginErrorText } from "@/lib/auth/callback";
 import { clearAllDrafts } from "@/lib/reviews/draft";
 import { forgetToolDevice } from "@/lib/analytics/tools";
+import { pushSignOut } from "@/lib/push/client";
 
 /** What a write says when the server couldn't confirm a Google sign-in's account (confirmedUser gave null). */
 export const ACCOUNT_NOT_CONFIRMED = "Couldn't load your TapTurf account. Check your connection and try again.";
@@ -792,6 +793,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Phone notifications stop on this browser first, while the sign-in can still tell the server (lib/push).
+    const via = sourceRef.current;
+    await pushSignOut(via === "oauth" ? supabaseToken : via === "phone" ? firebaseToken : async (): Promise<TokenCheck> => ({ none: true }), userRef.current?.id ?? null);
     // Intentional logout, clear BOTH sources, and any Google account being added (its cookie).
     void cancelGoogleLink();
     for (const k of ["auth_token", "user", GOOGLE_PROFILE_KEY, FB_MISSING_KEY, PROFILE_CHECKED_KEY]) store(k, null);

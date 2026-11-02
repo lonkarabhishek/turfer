@@ -9,6 +9,7 @@ import { getUnreadCount } from "@/lib/queries/notifications";
 import { quietToken } from "@/lib/account/client";
 import { firebaseAuthStarted } from "@/lib/firebase/client";
 import { notify } from "@/lib/notifications/browser";
+import { syncPush } from "@/lib/push/client";
 import { unreadWait, wakeWait } from "@/lib/notifications/unreadPoll";
 import { HeaderMenu } from "@/components/layout/HeaderMenu";
 import { UserAvatar } from "@/components/account/UserAvatar";
@@ -99,6 +100,11 @@ export function Header() {
       else schedule(wait);
     };
 
+    // A push just came in (public/sw.js tells open tabs): the count, now.
+    const onPush = (e: MessageEvent) => {
+      if ((e.data as { type?: unknown } | null)?.type === "tapturf-push" && visible() && idle === undefined) poll();
+    };
+
     if (phone) {
       const first = () => {
         idle = undefined;
@@ -108,6 +114,7 @@ export function Header() {
     } else poll();
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
+    navigator.serviceWorker?.addEventListener("message", onPush);
     return () => {
       alive = false;
       clearTimeout(timer);
@@ -117,6 +124,37 @@ export function Header() {
       }
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
+      navigator.serviceWorker?.removeEventListener("message", onPush);
+    };
+  }, [userId, signedInWith]);
+
+  // Phone notifications (lib/push): the service worker, for signed-in visits only, once the page has
+  // loaded and gone idle; this browser's subscription checked with the server at most once a day.
+  // Like the badge, a phone sign-in's token is not fetched for it where the Firebase SDK isn't running yet
+  // on live and tools pages or a data-saving connection: there only the worker is registered.
+  useEffect(() => {
+    if (!userId || !signedInWith) return;
+    let idle: number | undefined;
+    let gone = false;
+    const start = () => {
+      idle = undefined;
+      if (gone) return;
+      const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+      const mayAsk = signedInWith !== "phone" || firebaseAuthStarted() || (!quietPath() && !conn?.saveData);
+      void syncPush(quietToken(signedInWith), userId, mayAsk).catch(() => {});
+    };
+    const later = () => {
+      idle = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(start, { timeout: 10_000 }) : (setTimeout(start, 3000) as unknown as number);
+    };
+    if (document.readyState === "complete") later();
+    else window.addEventListener("load", later, { once: true });
+    return () => {
+      gone = true;
+      window.removeEventListener("load", later);
+      if (idle !== undefined) {
+        if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idle);
+        else clearTimeout(idle);
+      }
     };
   }, [userId, signedInWith]);
 

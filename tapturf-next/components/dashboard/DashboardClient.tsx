@@ -15,6 +15,7 @@ import { MyRequests } from "./MyRequests";
 import { NotificationsList } from "./NotificationsList";
 import { ProfileSection } from "./ProfileSection";
 import { NotificationsPrompt } from "./NotificationsPrompt";
+import { PushSwitch } from "@/components/push/PushSwitch";
 import { useMeData } from "./useMeData";
 import { PassportEntry } from "@/components/profile/PassportEntry";
 import { PassportTab } from "@/components/profile/PassportTab";
@@ -312,7 +313,8 @@ function Me({
 
         {/* ─── Your sections ───────────────────────────────────── */}
         <div className="mt-5 lg:mt-0 min-w-0">
-          <NotificationsPrompt />
+          {/* Alerts has the switch itself at its top. */}
+          {tab !== "notifications" && <NotificationsPrompt />}
 
           {/* Five sections: a row of four tiles on a phone (each count in view; the card above opens the
               passport), pills on a wide screen. */}
@@ -389,7 +391,12 @@ function Me({
                 reloadRequests={data.reloadRequests}
               />
             )}
-            {tab === "notifications" && <NotificationsList userId={user.id} onUnread={data.setUnread} />}
+            {tab === "notifications" && (
+              <>
+                <PushSwitch className="mb-5" />
+                <NotificationsList userId={user.id} onUnread={data.setUnread} />
+              </>
+            )}
             {tab === "profile" && <ProfileSection user={user} onEditPhoto={() => setPhotoOpen(true)} />}
             {tab === "passport" && <PassportTab onLoaded={setPassport} />}
           </div>
