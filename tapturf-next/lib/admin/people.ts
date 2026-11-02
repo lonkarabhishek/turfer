@@ -1,5 +1,6 @@
 import { cityInfo } from "../city";
 import { linksById, type SignInLinkRow, type SignInLinks } from "./links";
+import type { MapUse } from "../map/usage";
 
 /**
  * The people behind the sign-ups chart: one row from admin_people
@@ -89,6 +90,8 @@ export type Person = {
   links: SignInLinks | null;
   /** A Google sign-in that never came back, so no TapTurf account was made (id is the sign-in's own id). */
   noAccount: boolean;
+  /** Their use of the map while signed in (admin_map_usage): null when they never used it, absent when that can't be said. */
+  map?: MapUse | null;
 };
 
 /** What a sign-in confirmed: their email (by Google, or the old app's confirm link) and their phone (by a code TapTurf checked). */

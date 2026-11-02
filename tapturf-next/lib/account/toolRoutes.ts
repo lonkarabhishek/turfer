@@ -17,8 +17,9 @@ const allow = createAccountLimiter(30);
 /**
  * The account a verified sign-in opens, or null: a missing, invalid or
  * uncheckable token, or one that opens no account, makes it a guest's use.
+ * The map's counts use it too (lib/map/viewRoute.ts).
  */
-async function verifiedAccount(req: Request): Promise<string | null> {
+export async function verifiedAccount(req: Request): Promise<string | null> {
   const id = await identify(req);
   if (!("ok" in id)) return null;
   const r = await resolveAccount(id.ok);

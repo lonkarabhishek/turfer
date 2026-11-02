@@ -4,6 +4,8 @@ import { googleOnlyPeople } from "@/lib/admin/links";
 import { googleUnfinishedRows, signInLinkRows } from "@/lib/queries/adminLinks";
 import { ownerRead } from "@/lib/admin/db";
 import { readAllPages, rowsOf, type Section } from "@/lib/admin/section";
+import { adminMapUsage } from "@/lib/queries/adminMap";
+import { mapUseById } from "@/lib/map/usage";
 
 export type AdminUserRow = {
   id: string;
@@ -92,7 +94,7 @@ export async function adminConfirmed(): Promise<Map<string, Confirmed> | null> {
 export const signupPeople = cache(async (): Promise<{ people: Person[] | null; readAt: number }> => {
   // The typed emails come separately (admin_people's columns can't grow); without them the list still loads.
   // So do the ways in added from the profile, and the Google sign-ins that made no account.
-  const [rows, contacts, verified, links, unfinished, ticks] = await Promise.all([
+  const [rows, contacts, verified, links, unfinished, ticks, map] = await Promise.all([
     ownerRead("admin_people", ({ supabase, token }, signal) =>
       readAllPages<DetailsRow>((from, to) => supabase.rpc("admin_people", { p_firebase_token: token }).range(from, to).abortSignal(signal), "admin_people"),
     ),
@@ -105,14 +107,20 @@ export const signupPeople = cache(async (): Promise<{ people: Person[] | null; r
     googleUnfinishedRows(),
     // The tick and its halves; without it the list says it couldn't read them.
     adminTickRows(),
+    // Who used the map signed in (the Map section reads the same); without it the list doesn't say.
+    adminMapUsage(),
   ]);
   if (!rows.ok) return { people: null, readAt: Date.now() };
   try {
     // A Google sign-in that never came back used to get an empty account from the auth trigger;
     // now it gets none, so it is counted here instead and the sign-ups series keeps its meaning.
-    const people = [...toPeople(rows.data, contacts.ok ? contacts.data : [], verified, links, ticks), ...googleOnlyPeople(unfinished)].sort(
-      (a, b) => b.joinedAt - a.joinedAt || (a.id < b.id ? -1 : 1),
-    );
+    const mapUse = mapUseById(map.ok ? map.data : null);
+    const people = [...toPeople(rows.data, contacts.ok ? contacts.data : [], verified, links, ticks), ...googleOnlyPeople(unfinished)]
+      .sort((a, b) => b.joinedAt - a.joinedAt || (a.id < b.id ? -1 : 1))
+      .map((p) => {
+        const m = p.noAccount ? undefined : mapUse.get(p.id);
+        return m === undefined ? p : { ...p, map: m };
+      });
     return { people, readAt: Math.max(Date.now(), people[0]?.joinedAt ?? 0) };
   } catch (e) {
     console.warn("admin_people: couldn't build the list", e);

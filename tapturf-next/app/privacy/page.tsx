@@ -217,6 +217,18 @@ const SECTIONS: LegalSection[] = [
           that turns one on is recorded with that link. Only TapTurf&rsquo;s team sees these records,
           to learn who uses the tools and how.
         </p>
+        <p id="map" className="scroll-mt-24">
+          <strong>When you use the map.</strong> We count how the map of turfs and games (/map) is used, per day:
+          how many times it is opened, by how many browsers that day, how many turf and game cards are opened from
+          it, and how often &ldquo;This turf on the map&rdquo; is opened on a turf page. Your browser sends only
+          that one of these happened (and, for opening the map, whether it was the first time that day); never
+          where on the map you looked, your location (&ldquo;Near me&rdquo; stays on your device) or anything
+          about your device, and we don&rsquo;t store your IP address for it. If you are signed in, we also keep
+          which account used the map and on which days, with how many times it opened the map, its cards and
+          turf pages&rsquo; maps then. This runs whichever cookie choice you make, and your browser keeps only a
+          note of when it last opened the map (see &ldquo;Stored on your device&rdquo;). Only TapTurf&rsquo;s team
+          sees these records, to learn how many people use the map.
+        </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
           location&rdquo; sends your approximate coordinates to our server once so we can sort turfs by
@@ -407,7 +419,7 @@ const SECTIONS: LegalSection[] = [
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
         prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
         WhatsApp number you last gave players for a game, the matches and tournaments you score with our
-        free tools, and which live scores and tournaments it opened in the last two days (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        free tools, and which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
         &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link or a live tournament it also keeps the key that lets only this browser update
         it; our server stores just a one-way hash of the key. None of this is sent to us except the sign-in
@@ -450,6 +462,10 @@ const SECTIONS: LegalSection[] = [
         <li>
           Records of your free tool use stay with your account and are deleted with it, or sooner if you ask. Those kept
           with a browser&rsquo;s random tag are not tied to any account.
+        </li>
+        <li>
+          Records of your map use stay with your account and are deleted with it, or sooner if you ask. The daily
+          counts of the map&rsquo;s use name nobody and are kept as totals.
         </li>
         <li>
           A live link stops updating after 2 hours without a new score; people with the link then see the last

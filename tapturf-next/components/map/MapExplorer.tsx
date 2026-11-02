@@ -11,6 +11,7 @@ import { fromMapTurf, gamePin, mapTurfPin, pickedGames, type MapGame, type MapTu
 import { heatFeatures, parseHeat, type HeatWire } from "@/lib/map/heat";
 import { enoughTrending, parseTrendWindow, parseTrending, trendFirst, trendLegend, trendSpan, trendWords, type TrendWindow, type TrendWire } from "@/lib/map/trending";
 import { MAP_COLORS } from "@/lib/map/clusters";
+import { countMapTap, countMapViewWhenShown } from "@/lib/map/track";
 import type { Rect } from "@/lib/map/pins";
 import {
   INDIA_BOUNDS,
@@ -384,6 +385,9 @@ export function MapExplorer() {
       setReady(false);
     };
   }, [parsed, padding, covered, writeUrl]);
+
+  // One view of /map for the admin's counts, once the map (or, where it can't show, the list) is up and on screen; never in its way (lib/map/track.ts).
+  useEffect(() => (ready || mapError ? countMapViewWhenShown() : undefined), [ready, mapError]);
 
   // The map credit's height, as it folds and unfolds.
   useEffect(() => {
@@ -880,8 +884,12 @@ export function MapExplorer() {
     <div
       ref={frameRef}
       onClickCapture={(e) => {
-        // A link out (a card, a picked card): Back should find the map as it is now.
-        if ((e.target as Element).closest?.("a[href]")) keepSnapshot(limit);
+        // A link out (a card, a picked card): Back should find the map as it is now. A card's is counted for the admin (lib/map/track.ts).
+        const a = (e.target as Element).closest?.("a[href]");
+        if (a) {
+          keepSnapshot(limit);
+          countMapTap((a as HTMLAnchorElement).href);
+        }
       }}
       className="tt-map fixed inset-x-0 top-[calc(3.5rem+1px)] md:top-[calc(4rem+1px)] bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:bottom-0 z-20 flex bg-[#f2f3f0] overflow-hidden"
     >

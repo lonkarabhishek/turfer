@@ -26,6 +26,7 @@ import {
   type Person,
   type RecordedCity,
 } from "@/lib/admin/people";
+import { mapUseText } from "@/lib/map/usage";
 import { NameWithTick, VerifiedTick } from "@/components/account/VerifiedTick";
 import { UserAvatar } from "@/components/account/UserAvatar";
 
@@ -286,6 +287,7 @@ function highlights(p: Person): string[] {
   if (p.taps) out.push(count(p.taps, "turf contact", "turf contacts"));
   if (p.asks) out.push(count(p.asks, "Ask search", "Ask searches"));
   if (p.reviews) out.push(count(p.reviews, "review", "reviews"));
+  if (p.map) out.push("used the map");
   return out.slice(0, 3);
 }
 
@@ -706,6 +708,22 @@ function Details({ p, now, id }: { p: Person; now: number; id: string }) {
             none
           )}
         </Item>
+        {/* Signed in on the map (counted from 2 Nov 2026); not shown when that couldn't be read. */}
+        {p.map !== undefined && (
+          <Item label="Used the map">
+            {p.map ? (
+              <>
+                {mapUseText(p.map)}
+                <span className="text-primary-500">
+                  {p.map.days > 1 ? ` on ${count(p.map.days, "day", "days")}` : ""}
+                  {p.map.lastAt !== null ? `, last ${ago(p.map.lastAt, now)}` : ""}
+                </span>
+              </>
+            ) : (
+              none
+            )}
+          </Item>
+        )}
         {p.claims.length > 0 && (
           <Item label="myTapturf">
             <ul className="space-y-0.5">

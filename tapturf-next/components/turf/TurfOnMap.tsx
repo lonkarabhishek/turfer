@@ -75,6 +75,7 @@ export function TurfOnMap({ pin, where }: { pin: MapTurfPin; where: string | nul
   const [failed, setFailed] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const counted = useRef(false);
 
   // Open: focus on the box, from a tap or a key alike (MiniMap moves it into the map from the keyboard). Failed: back on the button, unless the viewer has moved on.
   useLayoutEffect(() => {
@@ -84,6 +85,10 @@ export function TurfOnMap({ pin, where }: { pin: MapTurfPin; where: string | nul
   }, [open, failed]);
 
   const show = (e: MouseEvent) => {
+    // Counted for the admin once per page, a "Try again" after a failed load not again (lib/map/track.ts, loaded
+    // on the tap like the map itself, so the turf page's own payload is as it was).
+    if (!counted.current) void import("@/lib/map/track").then((m) => m.countMiniMapOpen(), () => {});
+    counted.current = true;
     setFailed(false);
     // A click from Enter or Space carries no pointer: focus then goes to the map.
     setOpen({ turfs: getTurfs(), keyboard: e.detail === 0 });
