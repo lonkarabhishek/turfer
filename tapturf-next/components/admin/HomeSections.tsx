@@ -9,6 +9,7 @@ import {
   gamesByCitySection,
   getContactClickStats,
   getTopHosts,
+  groundSizeTurfCount,
   notificationNumbers,
   peopleNumbers,
   reviewNumbers,
@@ -139,7 +140,7 @@ export async function ContactsSection() {
 
 /** People, games and turfs: the top-line tiles. */
 export async function HeadlineSection() {
-  const [people, games, turfs, claimed] = await Promise.all([peopleNumbers(), gameNumbers(), activeTurfCount(), claimedTurfCount()]);
+  const [people, games, turfs, claimed, sized] = await Promise.all([peopleNumbers(), gameNumbers(), activeTurfCount(), claimedTurfCount(), groundSizeTurfCount()]);
   return (
     <section className="mb-4">
       {/* Five tiles: 1 + 2 + 2 on a phone, 3 + 2 on a tablet, one row on a wide screen. */}
@@ -172,7 +173,22 @@ export async function HeadlineSection() {
           sub={subOf(claimed, (n) => (n === 0 ? "None yet. Owners claim theirs at /my" : turfs.ok ? `of ${turfs.data} active turfs` : "Managed on myTapturf"))}
         />
       </div>
-      <SomeFailed count={failures(people, games, turfs, claimed)} className="mt-2" />
+      {/* Turfs whose owner gave their ground sizes on myTapturf; the list (with the sizes) is /admin/turfs?f=sizes. */}
+      <p className="mt-3 text-[13px] text-primary-600">
+        Ground sizes:{" "}
+        {sized.ok ? (
+          sized.data == null ? (
+            <span className="text-primary-400">not on yet (20261102_turf_dimensions.sql)</span>
+          ) : (
+            <Link href="/admin/turfs?f=sizes" className="font-semibold text-accent-700 hover:underline">
+              {sized.data.toLocaleString("en-IN")} turf{sized.data === 1 ? "" : "s"} owner-reported
+            </Link>
+          )
+        ) : (
+          <span className="text-primary-400">{reasonText(sized.reason)}</span>
+        )}
+      </p>
+      <SomeFailed count={failures(people, games, turfs, claimed, sized)} className="mt-2" />
     </section>
   );
 }

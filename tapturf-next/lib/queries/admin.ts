@@ -117,6 +117,20 @@ export const claimedTurfCount = cache(() =>
 );
 
 /**
+ * Active turfs whose owner gave their ground sizes on myTapturf
+ * (turfs.ground_sizes, 20261102_turf_dimensions.sql), counted on ids. null
+ * before that file (no such column yet): the line says they are not on yet.
+ */
+export const groundSizeTurfCount = cache(() =>
+  anonRead("turfs with ground sizes", async (s, signal) => {
+    const res = await s.from("turfs").select("id", { count: "exact", head: true }).eq("is_active", true).not("ground_sizes", "is", null).abortSignal(signal);
+    // A head read's error has no body: a missing column answers 400 with no code.
+    if (res.error && (res.error.code === "42703" || (res.status === 400 && !res.error.code))) return null;
+    return countOf(res, "turfs with ground sizes");
+  }),
+);
+
+/**
  * Active turfs by city: the city_turf_counts view (one row a city) and the
  * active count for the turfs without a city ("unknown"). Before, every
  * active turf's city was paged in seven reads, and a failed page threw out

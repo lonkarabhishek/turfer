@@ -12,6 +12,7 @@ import { guessCityFromAddress, isCity, type CityId } from "@/lib/city";
 import type { PriceBand, Turf } from "@/types/turf";
 import { CARD_COLUMNS, readCardRows } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
+import { toGroundSizes } from "@/lib/turfSize/sizes";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -50,6 +51,10 @@ export function transformTurf(raw: any): Turf {
     raw.image_review,
     raw.cover_image,
   );
+
+  // Owners' ground sizes (turf pages only: turf_page returns the whole row). Only when there are some,
+  // so a turf without them, and every list row, is the object it was.
+  const groundSizes = toGroundSizes(raw.ground_sizes);
 
   // Parse contact_info - can be string or object
   let contactInfo = raw.contact_info;
@@ -153,6 +158,7 @@ export function transformTurf(raw: any): Turf {
     claimed: raw.claimed === true,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
+    ...(groundSizes ? { ground_sizes: groundSizes } : {}),
   };
 }
 

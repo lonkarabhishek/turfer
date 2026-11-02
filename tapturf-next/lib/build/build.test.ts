@@ -359,6 +359,8 @@ type FakeState = {
   managers: Record<string, unknown>;
   /** Turfs with price bands (readSportBandRows). */
   bands: Row[];
+  /** turf_ground_size_peers' answer (readGroundPeers). */
+  peers: unknown[];
   /** Answers before the defaults (an outage, a rebuild...). */
   override?: (path: string, u: URL, body: Row, s: FakeState) => Response | Promise<Response> | undefined;
   calls: string[];
@@ -385,6 +387,7 @@ function fakeDb(over: Partial<FakeState> = {}) {
       { id: rows[0].id, pricing_bands: [{ band: "morning", days: "all", format: "6-a-side", price_per_hour: 1200 }], price_owner_confirmed: null },
       { id: rows[5].id, pricing_bands: [{ band: "evening", days: "weekend", format: "box cricket", price_per_hour: 1500 }], price_owner_confirmed: true },
     ],
+    peers: [[rows[2].id, "nashik", [[120, 60, 40], [90, 45, null]]], [rows[9].id, "pune", [[150, 80, 45]]]],
     calls: [],
     ...over,
   };
@@ -428,6 +431,8 @@ function fakeDb(over: Partial<FakeState> = {}) {
         const row = s.rows.find((r) => (r.slug ?? r.id) === k);
         return json(row ? { turf: row, claimed: k === "turf-1" } : { found: false });
       }
+      case "/rest/v1/rpc/turf_ground_size_peers":
+        return json(s.peers);
       case "/rest/v1/rpc/turf_managers":
         return json(s.managers[String(body.p_turf_id)] ?? { managers: [{ u: "owner_one", v: true }], more: 0 });
       default:
@@ -458,7 +463,7 @@ test("step: every dataset, one request at a time, the turf pages it could read, 
   try {
     assert.equal(r.manifest.db, DB);
     assert.equal(r.manifest.v, 7);
-    assert.deepEqual(Object.keys(r.manifest.datasets).sort(), ["cities", "games", "list", "sitemap", "sport-bands", "trending", "turf-facts", "turf-pages"]);
+    assert.deepEqual(Object.keys(r.manifest.datasets).sort(), ["cities", "games", "ground-peers", "list", "sitemap", "sport-bands", "trending", "turf-facts", "turf-pages"]);
     assert.equal(r.list.parts!.length, 3);
     assert.equal(r.list.rows, null);
     const pages = r.read("turf-pages") as BuildDatasets["turf-pages"];
@@ -473,6 +478,9 @@ test("step: every dataset, one request at a time, the turf pages it could read, 
     assert.doesNotMatch(JSON.stringify(r.read("turf-facts")), /9000000000/);
     // The sport bands as read: the pages shape them as they shape their own read.
     assert.deepEqual(r.read("sport-bands"), r.s.bands);
+    // The ground size peers as read, once.
+    assert.deepEqual(r.read("ground-peers"), r.s.peers);
+    assert.equal(r.s.calls.filter((c) => c === "rpc/turf_ground_size_peers").length, 1);
     assert.equal(r.summary.moved, false);
   } finally {
     r.cleanup();
@@ -711,6 +719,32 @@ test("step: sport bands that cannot be read never fail it: noted, and the sport 
   }
 });
 
+test("step: ground size peers before their migration are none; peers that cannot be read never fail it", async () => {
+  const peered = (p: string) => p === "/rest/v1/rpc/turf_ground_size_peers";
+  const before = await step({ override: (p) => (peered(p) ? json({ code: "PGRST202", message: "Could not find the function public.turf_ground_size_peers" }, 404) : undefined) });
+  try {
+    assert.deepEqual(before.read("ground-peers"), [], "no function yet: no turf has sizes");
+    assert.ok(!before.logs.some((l) => /ground size peers/.test(l)));
+  } finally {
+    before.cleanup();
+  }
+  for (const [res, most] of [[() => json({ code: "42501", message: "permission denied for function turf_ground_size_peers" }, 401), 0], [() => json({ code: "57014", message: "canceling statement due to statement timeout" }, 503), 2 * 60_000]] as const) {
+    let reads = 0;
+    const r = await step({ override: (p) => (peered(p) ? (reads++, res()) : undefined) });
+    try {
+      assert.deepEqual(r.read("ground-peers"), { failed: true });
+      assert.ok(r.logs.some((l) => /^build data: ground size peers not recorded \(turf_ground_size_peers: .*\); turf pages build without benchmarks/.test(l)));
+      // Everything else as it would be.
+      assert.equal((r.read("turf-pages") as BuildDatasets["turf-pages"]).keys.length, 300);
+      assert.deepEqual(r.read("sport-bands"), r.s.bands);
+      assert.ok(r.summary.ms <= most + 1000, `${r.summary.ms} ms`);
+      assert.ok(most === 0 ? reads === 1 : reads > 5, `${reads} peer reads`);
+    } finally {
+      r.cleanup();
+    }
+  }
+});
+
 test("buildData: sport bands the step could not read come back as failed, never as none", () => {
   const dir = folder({ "sport-bands": FAILED });
   try {
@@ -734,6 +768,9 @@ test("step: previews record no turf pages, and the sport bands as every build do
       try {
         assert.equal(r.manifest.datasets["turf-pages"], undefined);
         assert.ok(!r.s.calls.includes("rpc/turf_page"));
+        // No turf page prerenders: no benchmarks to read for them.
+        assert.equal(r.manifest.datasets["ground-peers"], undefined);
+        assert.ok(!r.s.calls.includes("rpc/turf_ground_size_peers"));
         // The court near-me pages prerender in previews and local builds too, and read the bands.
         assert.ok(r.manifest.datasets["sport-bands"]);
         assert.deepEqual(r.read("sport-bands"), r.s.bands);

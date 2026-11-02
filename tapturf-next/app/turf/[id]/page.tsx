@@ -28,6 +28,8 @@ import { labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing, slotRatesHint } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
+import { GroundSize } from "@/components/turf/GroundSize";
+import { getGroundPeers } from "@/lib/queries/groundSizes";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
 import { TurfOnMapCard } from "@/components/turf/TurfOnMapCard";
@@ -133,6 +135,9 @@ export default async function TurfDetailPage({
   // the page (no names; a read that failed for now keeps this copy a
   // minute, not a day).
   const managers = claimed ? await getTurfManagers(turf.id) : NO_MANAGERS;
+  // Other turfs' ground sizes, for the Ground size card's benchmarks: read
+  // only for a turf whose owner gave sizes (a day-long copy, never fails the page).
+  const peers = turf.ground_sizes ? await getGroundPeers() : [];
   // The owner's own prices on a claimed turf, dated in India by when they
   // last set them (null otherwise). Dated against this render: the page
   // lives a day at most, so "last set" may turn a day late, never early.
@@ -336,6 +341,8 @@ export default async function TurfDetailPage({
 
             <TurfAmenities turf={turf} />
             <TurfDetails turf={turf} />
+            {/* The owner's ground sizes, drawn and benchmarked (none: nothing). */}
+            {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} />}
             <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}

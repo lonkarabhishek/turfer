@@ -93,6 +93,22 @@ export function readSportBandRows(db: SupabaseClient): Promise<SportBandRow[]> {
   );
 }
 
+/**
+ * Every active turf's owner ground sizes, numbers only (public.turf_ground_size_peers,
+ * 20261102_turf_dimensions.sql), for the Ground size card's "longer than 72% of turfs"
+ * lines (lib/turfSize/benchmark.ts peersFrom reads the answer). A database from before
+ * that file has no such function: no turf has sizes there, so none ([]). Any other error throws.
+ */
+export async function readGroundPeers(db: SupabaseClient): Promise<unknown[]> {
+  const { data, error } = (await db.rpc("turf_ground_size_peers")) as Answer<unknown>;
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") return [];
+    throw new Error(`turf_ground_size_peers: ${error.message}`);
+  }
+  if (!Array.isArray(data)) throw new Error("turf_ground_size_peers sent no list");
+  return data;
+}
+
 export type SitemapTurf = { id: string; slug: string | null; updated_at: string | null; city: string | null; sports: unknown };
 export type SitemapGame = { id: string; updated_at: string | null; date: string | null; start_time: string | null; status: string | null };
 

@@ -4,6 +4,8 @@ import { generateBreadcrumbJsonLd, generateTurfJsonLd, getPhone, getWhatsAppPhon
 import { AGGREGATE_RATING_MIN_REPORTS } from "../seo/defaults";
 import { jsonLdHtml } from "../seo/jsonLd";
 import { TURF_PHOTOS_BUCKET } from "./images";
+import { groundSentence } from "../turfSize/benchmark";
+import type { GroundSizes } from "../turfSize/sizes";
 import type { Turf } from "../../types/turf";
 import type { ReviewWithUser } from "../../types/review";
 
@@ -197,4 +199,41 @@ test("an owner's landline (mirrored into contact_info, no WhatsApp): Call only, 
   const m = turf({ owner_phone: "+919876543210", contact_info: { phone: "+919876543210" }, whatsapp_phone: null });
   assert.deepEqual([getPhone(m), getWhatsAppPhone(m)], ["+919876543210", "+919876543210"]);
   assert.deepEqual(turfContact(m), { call: true, whatsapp: true });
+});
+
+test("ground sizes: an amenityFeature per ground, last, in the card's sentence; none without sizes", () => {
+  const sizes = (grounds: GroundSizes["grounds"], unit: GroundSizes["unit"] = "ft"): GroundSizes => ({ grounds, unit, updated_at: "2026-11-02T08:00:00Z", source: "owner" });
+  const without = generateTurfJsonLd(turf()) as Record<string, unknown>;
+  assert.equal("amenityFeature" in without, false);
+
+  // One ground: "Ground size", and every other byte as without sizes (the feature is the last key).
+  const one = generateTurfJsonLd(turf({ ground_sizes: sizes([{ name: "Main box", sport: "both", length_ft: 160, width_ft: 90, height_ft: 50 }]) })) as Record<string, unknown>;
+  assert.equal(Object.keys(one).at(-1), "amenityFeature");
+  const { amenityFeature, ...rest } = one;
+  assert.equal(jsonLdHtml(rest), jsonLdHtml(without));
+  assert.deepEqual(JSON.parse(jsonLdHtml(one)).amenityFeature, [
+    {
+      "@type": "LocationFeatureSpecification",
+      name: "Ground size",
+      value: "Main box is 160 ft long, 90 ft wide and 50 ft high (48.8 × 27.4 × 15.2 m): great for adult cricket and football, lots of singles and doubles.",
+    },
+  ]);
+  assert.deepEqual(amenityFeature, JSON.parse(jsonLdHtml(one)).amenityFeature);
+
+  // Two grounds, one unnamed, typed in metres; a name with markup in it stays inside the script.
+  const grounds = [
+    { name: "Box <1> & co", sport: "cricket" as const, length_ft: 130, width_ft: 65, height_ft: 35 },
+    { name: null, sport: "football" as const, length_ft: 95, width_ft: 50, height_ft: null },
+  ];
+  const two = generateTurfJsonLd(turf({ ground_sizes: sizes(grounds, "m") }));
+  const html = jsonLdHtml(two);
+  assert.equal(/[<>&]/.test(html), false);
+  const features = (JSON.parse(html) as { amenityFeature: { "@type": string; name: string; value: string }[] }).amenityFeature;
+  assert.deepEqual(features.map((f) => [f["@type"], f.name]), [
+    ["LocationFeatureSpecification", "Ground size: Box <1> & co"],
+    ["LocationFeatureSpecification", "Ground size: Ground 2"],
+  ]);
+  assert.equal(features[0].value, "Box <1> & co is 39.6 m long, 19.8 m wide and 10.7 m high (130 × 65 × 35 ft): OK for adult cricket.");
+  assert.equal(features[1].value, "Ground 2 is 29 m long and 15.2 m wide (95 × 50 ft), with no net height given: OK for small-sided football.");
+  assert.deepEqual(features.map((f) => f.value), grounds.map((g, i) => groundSentence(g, i, 2, "m", { cricket: g.sport === "cricket", football: g.sport === "football" })));
 });

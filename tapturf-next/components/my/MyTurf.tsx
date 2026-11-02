@@ -12,6 +12,8 @@ import { OwnerPhotos } from "./OwnerPhotos";
 import { OwnerPhotoNudge } from "./OwnerPhotoNudge";
 import { PlayerReports } from "./PlayerReports";
 import { ManagerNameNote } from "./ManagerNameNote";
+import { GroundSizes, type GroundSizeState } from "./GroundSizes";
+import { GroundSizeNudge } from "./GroundSizeNudge";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
@@ -26,6 +28,8 @@ export function MyTurf({ id }: { id: string }) {
   const [visiblePhotos, setVisiblePhotos] = useState<number | null>(null);
   // Photos the turf's owners added (the Photos section counts them too): fewer than 3 shows the nudge.
   const [ownerPhotos, setOwnerPhotos] = useState<number | null>(null);
+  // Whether the turf has a ground size (the Ground size section says, once it has looked): none shows the nudge.
+  const [groundSize, setGroundSize] = useState<GroundSizeState>(null);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +90,8 @@ export function MyTurf({ id }: { id: string }) {
       <ManagerNameNote className="mt-3" turfName={t.name} turfId={t.id} pageHref={turfPath(t)} />
       {/* Fewer than 3 photos of their own: ask for them (only those can show on Google), down to Photos. */}
       <OwnerPhotoNudge className="mt-3" mine={ownerPhotos} />
+      {/* No ground size yet: ask for it, down to Ground size. */}
+      <GroundSizeNudge className="mt-3" state={groundSize} />
 
       {/* Period */}
       <div className="mt-6 inline-flex rounded-full bg-primary-100 p-1" role="tablist" aria-label="Period">
@@ -139,10 +145,14 @@ export function MyTurf({ id }: { id: string }) {
 
       <PlayerReports reviews={data.reviews} turfSports={t.sports ?? []} turfId={t.id} />
 
-      <Health turf={t} photos={visiblePhotos ?? t.photos} />
+      <Health turf={t} photos={visiblePhotos ?? t.photos} groundSize={groundSize} />
 
       <section id="photos" className="mt-10 scroll-mt-20">
         <OwnerPhotos turfId={t.id} turfName={t.name} onChanged={load} onCount={setVisiblePhotos} onMine={setOwnerPhotos} />
+      </section>
+
+      <section id="ground-size" className="mt-10 scroll-mt-20">
+        <GroundSizes turfId={t.id} turfSports={t.sports ?? []} onState={setGroundSize} />
       </section>
 
       <EditListing turf={t} onSaved={load} />
@@ -204,13 +214,14 @@ const LABELS: Record<string, string> = {
   photos_added: "new photos",
   photo_removed: "removed a photo",
   cover_image: "cover photo",
+  ground_sizes: "ground size",
 };
 function fieldLabel(f: string) {
   return LABELS[f] ?? f.replace(/_/g, " ").replace(/^(has|is) /, "");
 }
 
-/** What the listing still lacks, most useful first. */
-function Health({ turf: t, photos }: { turf: OwnerTurf; photos: number }) {
+/** What the listing still lacks, most useful first. The ground size counts once the database has ground sizes (groundSize not null). */
+function Health({ turf: t, photos, groundSize }: { turf: OwnerTurf; photos: number; groundSize: GroundSizeState }) {
   const prices = [t.morning_price, t.afternoon_price, t.evening_price, t.weekend_morning_price, t.weekend_afternoon_price, t.weekend_evening_price];
   const facilities = [t.has_floodlights, t.is_covered, t.parking_available, t.washroom_available, t.changing_room_available, t.has_cafeteria, t.has_drinking_water, t.equipment_provided];
   const items: { ok: boolean; text: string; hint: string; href?: string }[] = [
@@ -222,6 +233,7 @@ function Health({ turf: t, photos }: { turf: OwnerTurf; photos: number }) {
     { ok: (t.description?.length ?? 0) >= 80, text: "A short description", hint: "Two or three lines in your own words." },
     { ok: !!t.whatsapp_phone, text: "WhatsApp number", hint: "Most players book on WhatsApp." },
     { ok: photos >= 3, text: "At least 3 photos", hint: "Add them in Photos below.", href: "#photos" },
+    ...(groundSize ? [{ ok: groundSize === "set", text: "Ground size", hint: "Length, width and net height, in Ground size below.", href: "#ground-size" }] : []),
   ];
   const done = items.filter((i) => i.ok).length;
   const pct = Math.round((done / items.length) * 100);
