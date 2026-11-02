@@ -1,4 +1,5 @@
 import { isBookingAppUrl } from "./bookingApps";
+import { SITE_URL } from "../seo/defaults";
 
 /**
  * Ask Google user-content (lh3/lh4/... .googleusercontent.com) for a
@@ -36,6 +37,48 @@ const MIRRORED = /\/storage\/v1\/object\/public\/turf-photos\/[^?#]+\/[0-9a-f]{2
 /** A photo in our own turf-photos bucket (mirrored or uploaded by an owner). */
 export function isOwnPhoto(url: string): boolean {
   return /\/storage\/v1\/object\/public\/turf-photos\//i.test(url);
+}
+
+/**
+ * Our turf photos as tapturf.in serves them (app/photos/turf/[...path]/route.ts).
+ *
+ * Supabase Storage answers every object with "x-robots-tag: none", so
+ * Google indexed none of the photos in the turf-photos bucket (15,422 on
+ * active turfs, 2 Nov 2026) although every turf page named them in its
+ * <img> tags, og:image and JSON-LD. The route answers the same bytes from
+ * tapturf.in without that header. It serves that bucket only, and only
+ * names of this shape (every object in it on 2 Nov):
+ * [owner/]<turf uuid>/<8 to 64 of a-z 0-9>[-card].<webp|jpg|jpeg|png>.
+ * Photos on other hosts (Google user content, Drive, Yappe...) are not
+ * ours to re-host and keep their own links.
+ */
+export const SITE_PHOTO_PATH = "/photos/turf/";
+const PHOTO_KEY = /^(?:owner\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9]{8,64}(?:-card)?\.(?:webp|jpe?g|png)$/;
+
+/** The turf-photos bucket's public URL on our Supabase project (the build's NEXT_PUBLIC_SUPABASE_URL; production's when unset, as in unit tests). */
+export const TURF_PHOTOS_BUCKET = `${(process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hwfsbpzercuoshodmnuf.supabase.co").replace(/\/+$/, "")}/storage/v1/object/public/turf-photos/`;
+
+/** The bucket object a photo route request names (its pathname and search), or null: any query, encoded character, other folder or name. */
+export function sitePhotoKey(pathname: string, search = ""): string | null {
+  if (search || !pathname.startsWith(SITE_PHOTO_PATH)) return null;
+  const key = pathname.slice(SITE_PHOTO_PATH.length);
+  return PHOTO_KEY.test(key) ? key : null;
+}
+
+/**
+ * tapturf.in's URL for a photo in our turf-photos bucket, every other URL
+ * as it is. `origin` "" gives the path alone, for <img> on our own pages
+ * (a preview or local build then loads its own route).
+ */
+export function sitePhotoUrl(url: string, origin: string = SITE_URL): string {
+  if (typeof url !== "string" || !url.startsWith(TURF_PHOTOS_BUCKET)) return url;
+  const key = url.slice(TURF_PHOTOS_BUCKET.length);
+  return PHOTO_KEY.test(key) ? `${origin}${SITE_PHOTO_PATH}${key}` : url;
+}
+
+/** A photo sitePhotoUrl moved to tapturf.in (the full URL or the path). */
+export function isSitePhoto(url: string): boolean {
+  return url.startsWith(`${SITE_URL}${SITE_PHOTO_PATH}`) || url.startsWith(SITE_PHOTO_PATH);
 }
 
 /**
@@ -90,6 +133,11 @@ export function imageUrlForCard(url: string): string {
   if (GOOGLE_USER_CONTENT.test(url)) return upsizeGoogleUserContent(url, 800, 600);
   if (/^https?:\/\/drive\.google\.com\/thumbnail\?/i.test(url)) return url.replace(/([?&]sz=)w\d+/i, "$1w800");
   return url;
+}
+
+/** What a public card or gallery tile shows: the card size (imageUrlForCard knows the bucket's -card names), ours from tapturf.in. */
+export function cardPhotoSrc(url: string): string {
+  return sitePhotoUrl(imageUrlForCard(url), "");
 }
 
 /**
@@ -230,6 +278,22 @@ export function usableTurfPhotos(
   const cover = firstImageUrl(raw.cover_image);
   const kept = filterReviewedPhotos(images, cover, raw.image_review, raw.cover_image);
   return turfPhotos({ cover_image: kept.cover, images: kept.images }).slice(0, Math.max(0, max));
+}
+
+/**
+ * The image sitemap's photos of a turf row: up to `max` of our own, as
+ * tapturf.in serves them, the cover first (usableTurfPhotos order). A
+ * photo on another host never goes in, so a turf with none of ours lists
+ * no photo.
+ */
+export function sitemapPhotos(
+  raw: { cover_image?: string | null; images?: unknown; image_review?: unknown } | null | undefined,
+  max = 5,
+): string[] {
+  return usableTurfPhotos(raw, Number.POSITIVE_INFINITY)
+    .map((u) => sitePhotoUrl(u))
+    .filter(isSitePhoto)
+    .slice(0, Math.max(0, max));
 }
 
 /**

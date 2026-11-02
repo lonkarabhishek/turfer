@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { imageUrlForCard } from "@/lib/utils/images";
+import { cardPhotoSrc, sitePhotoUrl } from "@/lib/utils/images";
 import type { SportFamily } from "@/lib/utils/sport";
 import { SportArt } from "./SportArt";
 
@@ -40,7 +40,9 @@ export function GamePhoto({
   const list = photos ?? [];
   const [index, setIndex] = useState(0);
   const url = list[index];
-  const small = url ? imageUrlForCard(url) : null;
+  // Ours from tapturf.in (cardPhotoSrc, sitePhotoUrl), where Google may index them.
+  const small = url ? cardPhotoSrc(url) : null;
+  const full = url ? sitePhotoUrl(url, "") : null;
   return (
     <div className={`overflow-hidden bg-accent-100 ${className}`}>
       <SportArt family={family} className="absolute inset-0 w-full h-full" />
@@ -48,8 +50,8 @@ export function GamePhoto({
         <FadeImg
           key={url}
           src={small}
-          srcSet={hero && small !== url ? `${small} 800w, ${url} 1600w` : undefined}
-          sizes={hero && small !== url ? sizes : undefined}
+          srcSet={hero && small !== full ? `${small} 800w, ${full} 1600w` : undefined}
+          sizes={hero && small !== full ? sizes : undefined}
           eager={eager}
           hero={hero}
           className={`game-photo absolute inset-0 w-full h-full object-cover ${imgClassName}`}

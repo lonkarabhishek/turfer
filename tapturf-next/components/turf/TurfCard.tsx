@@ -6,7 +6,7 @@ import { Flame, MapPin, Star, ChevronLeft, ChevronRight, TrendingUp } from "luci
 import { priceRangeText } from "@/lib/utils/prices";
 import { cardPrice, cardSports, sportLineParts, type CardSport, type SportLineParts } from "@/lib/utils/cardSport";
 import { areaFor } from "@/lib/utils/area";
-import { imageUrlForCard, turfPhotos } from "@/lib/utils/images";
+import { cardPhotoSrc, turfPhotos } from "@/lib/utils/images";
 import type { Turf } from "@/types/turf";
 import { turfPath } from "@/lib/utils/turfPath";
 import { PhotoImg } from "@/components/ui/PhotoImg";
@@ -203,7 +203,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               {rendered.map((src, i) => (
                 <PhotoImg
                   key={src}
-                  src={imageUrlForCard(src)}
+                  src={cardPhotoSrc(src)}
                   alt={i === 0 ? turf.name : `${turf.name} photo ${i + 1}`}
                   className="w-full h-full shrink-0 object-cover"
                   // The photo on screen and the next one load straight away, so

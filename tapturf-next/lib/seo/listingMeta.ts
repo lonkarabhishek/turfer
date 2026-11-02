@@ -12,7 +12,7 @@
 import type { Turf } from "../../types/turf";
 import { sportVenues, venueWord, type SportPage } from "../sports";
 import { areaFor } from "../utils/area";
-import { isOwnPhoto, turfPhotos } from "../utils/images";
+import { isOwnPhoto, sitePhotoUrl, turfPhotos } from "../utils/images";
 import { summarisePrice } from "../utils/prices";
 import { DEFAULT_OG_IMAGE } from "./defaults";
 import { displayArea } from "./turfMeta";
@@ -83,10 +83,10 @@ function facetsFrom(on: { timings: boolean; photos: boolean; ratings?: boolean }
   return [...new Set([have, have.slice(0, 2), have.slice(0, 1)].map(join))].filter(Boolean);
 }
 
-/** The top venue's own photo (our storage, not an expiring Google link), else the site card. */
+/** The top venue's own photo (our storage, not an expiring Google link, as tapturf.in serves it), else the site card. */
 export function listingOgImage(turfs: readonly Turf[], alt: string): { url: string; alt: string; width?: number; height?: number } {
   const own = turfs[0] ? turfPhotos(turfs[0]).find(isOwnPhoto) : undefined;
-  return own ? { url: own, alt } : { ...DEFAULT_OG_IMAGE };
+  return own ? { url: sitePhotoUrl(own), alt } : { ...DEFAULT_OG_IMAGE };
 }
 
 // ── /<city> ──

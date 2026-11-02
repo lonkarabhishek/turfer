@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { generateBreadcrumbJsonLd, generateTurfJsonLd, getPhone, getWhatsAppPhone, turfContact } from "./seo";
 import { AGGREGATE_RATING_MIN_REPORTS } from "../seo/defaults";
 import { jsonLdHtml } from "../seo/jsonLd";
+import { TURF_PHOTOS_BUCKET } from "./images";
 import type { Turf } from "../../types/turf";
 import type { ReviewWithUser } from "../../types/review";
 
@@ -114,6 +115,17 @@ test("name is the clean name, the listed one stays as alternateName", () => {
   const messy = generateTurfJsonLd(turf({ name: "Bellator Sports Arena 🏟️ Cricket box ! pickleball", city: "gurgaon", area: "Sector 49" })) as Record<string, unknown>;
   assert.equal(messy.name, "Bellator Sports Arena");
   assert.equal(messy.alternateName, "Bellator Sports Arena 🏟️ Cricket box ! pickleball");
+});
+
+test("image: our photos from tapturf.in (Supabase's copies say noindex), others only when we have none", () => {
+  const own = (n: number) => `${TURF_PHOTOS_BUCKET}e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "0")}.webp`;
+  const site = (n: number) => `https://www.tapturf.in/photos/turf/e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "0")}.webp`;
+  const lh3 = "https://lh3.googleusercontent.com/p/AF1QipA=w1600-h1200";
+  const ld = generateTurfJsonLd(turf({ images: [lh3, own(1), own(2), own(3), own(4), own(5), own(6)] })) as Record<string, unknown>;
+  assert.deepEqual(ld.image, [site(1), site(2), site(3), site(4), site(5)]);
+  // Only another host's photos: those, as before.
+  assert.deepEqual((generateTurfJsonLd(turf({ images: [lh3] })) as Record<string, unknown>).image, [lh3]);
+  assert.equal("image" in (generateTurfJsonLd(turf()) as Record<string, unknown>), false);
 });
 
 test("fallback description names the venue type and place, and books nothing", () => {

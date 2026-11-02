@@ -6,6 +6,7 @@ import { sharedNameKey, turfFactsFrom, type TurfFactRow } from "./turfFacts";
 import { bannedCopy, DEFAULT_OG_IMAGE } from "./defaults";
 import { DESCRIPTION_MAX_CHARS, textWidthPx, TITLE_MAX_CHARS, TITLE_MAX_PX, titleFits, withBrand } from "./width";
 import type { Turf } from "../../types/turf";
+import { TURF_PHOTOS_BUCKET } from "../utils/images";
 
 const googlePhoto = (i: number) => `https://lh3.googleusercontent.com/p/AF1Qip${i}=w1600-h1200`;
 const ownPhoto = (i: number) => `https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/turf-photos/t/${String(i).padStart(24, "a")}.webp`;
@@ -394,6 +395,36 @@ test("share card: our own photo first, else the first photo, else the site card"
   assert.equal(google.ogImage.url, googlePhoto(1));
   const none = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune" }), contact: { call: true, whatsapp: true } });
   assert.deepEqual(none.ogImage, { ...DEFAULT_OG_IMAGE });
+});
+
+test("share card: our photo from tapturf.in, where Google may index it (Supabase's copy says noindex)", () => {
+  const key = "5b9f50b1-dcce-45a9-9c8f-c847812b18d0/0123456789abcdef01234567.webp";
+  const m = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", images: [googlePhoto(1), `${TURF_PHOTOS_BUCKET}${key}`] }), contact: { call: true, whatsapp: true } });
+  assert.equal(m.ogImage.url, `https://www.tapturf.in/photos/turf/${key}`);
+  // Only other hosts: the share card keeps that photo, as before.
+  const google = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", images: [googlePhoto(1)] }), contact: { call: true, whatsapp: true } });
+  assert.equal(google.ogImage.url, googlePhoto(1));
+});
+
+test("photo alt text: name, type and place from the row, the type left out when the name says it", () => {
+  const c = { call: true, whatsapp: true };
+  assert.equal(
+    turfMeta({ turf: turf({ name: "Goal Zone", area: "Baner", city: "pune", sports: ["Box Cricket", "Football", "Pickleball"] }), contact: c }).photoAlt,
+    "Goal Zone, box cricket & football turf with pickleball court in Baner, Pune",
+  );
+  assert.equal(turfMeta({ turf: turf({ name: "Smash Arena", area: "Kothrud", city: "pune", sports: ["Badminton"] }), contact: c }).photoAlt, "Smash Arena, badminton court in Kothrud, Pune");
+  // The name has the area: only the city after it.
+  assert.equal(turfMeta({ turf: turf({ name: "Turf Up Hinjewadi", area: "Hinjewadi", city: "pune", sports: ["Football"] }), contact: c }).photoAlt, "Turf Up Hinjewadi, football turf in Pune");
+  // The name has the type: no "football turf" twice.
+  assert.equal(turfMeta({ turf: turf({ name: "Hotfut Football Turf", area: "Madhapur", city: "hyderabad", sports: ["Football"] }), contact: c }).photoAlt, "Hotfut Football Turf, Madhapur, Hyderabad");
+  // No sports, no place: what the row knows, nothing guessed.
+  assert.equal(turfMeta({ turf: turf({ name: "Goal Zone", city: null, address: "", sports: [] }), contact: c }).photoAlt, "Goal Zone, sports venue");
+  // Real rows: starts with the H1's name, and none of the words a snippet may not use.
+  for (const r of PROTOTYPE_ROWS) {
+    const m = turfMeta({ turf: turf({ name: r.name, address: r.address, area: r.area, city: r.city, sports: r.sports }), contact: c });
+    assert.ok(m.photoAlt.startsWith(m.name), m.photoAlt);
+    assert.equal(bannedCopy(m.photoAlt), null, m.photoAlt);
+  }
 });
 
 test("hours: compact, and lower-case day keys count", () => {
