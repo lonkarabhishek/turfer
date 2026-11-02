@@ -45,8 +45,8 @@ function toTile(t: Turf, cityLabel?: string): HomeTile {
   // Our own copy first: Google photo links expire, and a tile has one photo.
   const photoRaw = turfPhotos(t)[0] ?? null;
   // Cards are 236px wide on phones; 480x360 is plenty for lh3 photos
-  // and imageUrlForCard handles Drive thumbnails and other hosts. Ours
-  // load from tapturf.in (cardPhotoSrc).
+  // and imageUrlForCard handles Drive thumbnails and other hosts. Owners'
+  // photos load from tapturf.in (cardPhotoSrc).
   const photo = photoRaw ? upsizeGoogleUserContent(cardPhotoSrc(photoRaw), 480, 360) : null;
   const sp = t.sports.map(sportPageForLabel).find(Boolean);
   const price = summarisePrice(t);

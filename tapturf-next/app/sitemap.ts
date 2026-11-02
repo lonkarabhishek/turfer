@@ -157,10 +157,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   );
 
-  // Each turf's own photos as tapturf.in serves them (up to 5, the cover
-  // first; none on another host), for Google Images. From the list rows
-  // the list pages already hold (lib/queries/turfs.ts), not another read
-  // of the table; a turf missing from them just lists no photo.
+  // The photos each turf's owners added, as tapturf.in serves them (up to
+  // 5, the cover first; no mirrored copy, none on another host), for
+  // Google Images. From the list rows the list pages already hold
+  // (lib/queries/turfs.ts), not another read of the table; a turf missing
+  // from them just lists no photo.
   const photosOf = new Map((await activeTurfRows()).map((r) => [String(r.id), sitemapPhotos(r)]));
   const turfPages: MetadataRoute.Sitemap = (turfs ?? []).map((turf) => {
     const images = photosOf.get(turf.id);

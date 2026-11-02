@@ -152,6 +152,31 @@ export function photoTiles(list: OwnerPhotoList): PhotoGrid {
   };
 }
 
+/** Photos of their own a turf's owners should add: below this, myTapturf asks for more (ownerPhotoNudge). */
+export const OWNER_PHOTOS_WANTED = 3;
+
+/** Photos the turf's owners added that are on the page or on their way (being checked); held ones don't show, so don't count. */
+export function ownerPhotoCount(list: OwnerPhotoList): number {
+  return list.mine.filter((m) => m.status === "live" || m.status === "checking").length;
+}
+
+/**
+ * The card at the top of /my/turf/<id> while a turf has fewer than
+ * OWNER_PHOTOS_WANTED photos its owners added, or null. Only those can
+ * show on Google: tapturf.in serves owners' photos where Google may index
+ * them, not the ones TapTurf copied from public listings
+ * (lib/utils/images.ts sitePhotoUrl). "Can": nothing here promises Google
+ * shows them.
+ */
+export function ownerPhotoNudge(mine: number): { title: string; body: string; progress: string | null } | null {
+  if (!Number.isFinite(mine) || mine >= OWNER_PHOTOS_WANTED) return null;
+  return {
+    title: "Add your own photos",
+    body: "Turfs with real photos get more calls, and your photos can show on Google.",
+    progress: mine > 0 ? `You’ve added ${mine} so far.` : null,
+  };
+}
+
 /** "6 photos on your page · 2 added by you" */
 export function photoCountLine(visible: number, mine: number): string {
   if (visible === 0) return "No photos on your page yet.";

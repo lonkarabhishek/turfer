@@ -397,12 +397,18 @@ test("share card: our own photo first, else the first photo, else the site card"
   assert.deepEqual(none.ogImage, { ...DEFAULT_OG_IMAGE });
 });
 
-test("share card: our photo from tapturf.in, where Google may index it (Supabase's copy says noindex)", () => {
-  const key = "5b9f50b1-dcce-45a9-9c8f-c847812b18d0/0123456789abcdef01234567.webp";
-  const m = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", images: [googlePhoto(1), `${TURF_PHOTOS_BUCKET}${key}`] }), contact: { call: true, whatsapp: true } });
-  assert.equal(m.ogImage.url, `https://www.tapturf.in/photos/turf/${key}`);
+test("share card: an owner's photo first, from tapturf.in, where Google may index it (Supabase's copy says noindex)", () => {
+  const c = { call: true, whatsapp: true };
+  const ownerKey = "owner/5b9f50b1-dcce-45a9-9c8f-c847812b18d0/0123456789abcdef01234567.jpg";
+  const mirrored = `${TURF_PHOTOS_BUCKET}5b9f50b1-dcce-45a9-9c8f-c847812b18d0/abcdef0123456789abcdef01.webp`;
+  // Ahead of the mirrored cover and the rest.
+  const m = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", cover_image: mirrored, images: [googlePhoto(1), mirrored, `${TURF_PHOTOS_BUCKET}${ownerKey}`] }), contact: c });
+  assert.equal(m.ogImage.url, `https://www.tapturf.in/photos/turf/${ownerKey}`);
+  assert.equal(m.ogImage.alt, "Goal Zone, Pune");
+  // No owner photo: the mirrored copy, Supabase's link as before.
+  assert.equal(turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", cover_image: mirrored, images: [googlePhoto(1), mirrored] }), contact: c }).ogImage.url, mirrored);
   // Only other hosts: the share card keeps that photo, as before.
-  const google = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", images: [googlePhoto(1)] }), contact: { call: true, whatsapp: true } });
+  const google = turfMeta({ turf: turf({ name: "Goal Zone", city: "pune", images: [googlePhoto(1)] }), contact: c });
   assert.equal(google.ogImage.url, googlePhoto(1));
 });
 

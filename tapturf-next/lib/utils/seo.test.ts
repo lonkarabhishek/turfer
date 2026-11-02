@@ -117,14 +117,19 @@ test("name is the clean name, the listed one stays as alternateName", () => {
   assert.equal(messy.alternateName, "Bellator Sports Arena 🏟️ Cricket box ! pickleball");
 });
 
-test("image: our photos from tapturf.in (Supabase's copies say noindex), others only when we have none", () => {
-  const own = (n: number) => `${TURF_PHOTOS_BUCKET}e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "0")}.webp`;
-  const site = (n: number) => `https://www.tapturf.in/photos/turf/e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "0")}.webp`;
+test("image: owners' photos first, from tapturf.in (Supabase's copies say noindex); mirrored copies as before; others only when we have none", () => {
+  const mirrored = (n: number) => `${TURF_PHOTOS_BUCKET}e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "0")}.webp`;
+  const owner = (n: number) => `${TURF_PHOTOS_BUCKET}owner/e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "a")}.jpg`;
+  const site = (n: number) => `https://www.tapturf.in/photos/turf/owner/e852b2cf-ae73-4f53-8412-2f8e60271a71/${String(n).padStart(24, "a")}.jpg`;
   const lh3 = "https://lh3.googleusercontent.com/p/AF1QipA=w1600-h1200";
-  const ld = generateTurfJsonLd(turf({ images: [lh3, own(1), own(2), own(3), own(4), own(5), own(6)] })) as Record<string, unknown>;
-  assert.deepEqual(ld.image, [site(1), site(2), site(3), site(4), site(5)]);
+  const image = (images: string[]) => (generateTurfJsonLd(turf({ images })) as Record<string, unknown>).image;
+  // No owner photo: our mirrored copies, Supabase's links, exactly as before.
+  assert.deepEqual(image([lh3, mirrored(1), mirrored(2), mirrored(3), mirrored(4), mirrored(5), mirrored(6)]), [mirrored(1), mirrored(2), mirrored(3), mirrored(4), mirrored(5)]);
+  // Owners' photos lead, then the mirrored ones, five in all.
+  assert.deepEqual(image([lh3, mirrored(1), mirrored(2), owner(1), mirrored(3), owner(2), mirrored(4)]), [site(1), site(2), mirrored(1), mirrored(2), mirrored(3)]);
+  assert.deepEqual(image([owner(1), owner(2), owner(3), owner(4), owner(5), owner(6), mirrored(1)]), [site(1), site(2), site(3), site(4), site(5)]);
   // Only another host's photos: those, as before.
-  assert.deepEqual((generateTurfJsonLd(turf({ images: [lh3] })) as Record<string, unknown>).image, [lh3]);
+  assert.deepEqual(image([lh3]), [lh3]);
   assert.equal("image" in (generateTurfJsonLd(turf()) as Record<string, unknown>), false);
 });
 

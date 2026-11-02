@@ -40,7 +40,7 @@ export function GamePhoto({
   const list = photos ?? [];
   const [index, setIndex] = useState(0);
   const url = list[index];
-  // Ours from tapturf.in (cardPhotoSrc, sitePhotoUrl), where Google may index them.
+  // Owners' photos from tapturf.in (cardPhotoSrc, sitePhotoUrl), where Google may index them.
   const small = url ? cardPhotoSrc(url) : null;
   const full = url ? sitePhotoUrl(url, "") : null;
   return (

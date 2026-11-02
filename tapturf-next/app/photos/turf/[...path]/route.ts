@@ -1,30 +1,30 @@
 import { TURF_PHOTOS_BUCKET, sitePhotoKey } from "@/lib/utils/images";
 
-// GET /photos/turf/<turf id>/<name>.webp (and <name>-card.webp, and
-// owner/<turf id>/<name>.jpg) -> that object of the public turf-photos
-// bucket, from tapturf.in. Supabase answers every object with
-// "x-robots-tag: none", so Google indexed none of our turf photos; this
+// GET /photos/turf/owner/<turf id>/<24 hex>.jpg (and .webp, and the
+// -card copies) -> that photo a turf owner added on myTapturf, from the
+// public turf-photos bucket, at tapturf.in. Supabase answers every object
+// with "x-robots-tag: none", so Google indexes none of the bucket; this
 // answers the same bytes without it (lib/utils/images.ts sitePhotoUrl
-// points pages here).
+// points pages here). Owners' photos only, the site owner's call (2 Nov
+// 2026): the copies of Google Maps photos the old mirror job made are
+// never served from tapturf.in and keep their Supabase links.
 //
-// - Only that bucket and only names of the bucket's own shape
-//   (sitePhotoKey): any query, encoded character, other bucket or folder
-//   is a 404 before anything is fetched, so this is no proxy for anything
-//   else. The upstream URL is the bucket's base plus that name. (Next
-//   itself 308s a doubled or back slash to the cleaned path first.)
+// - Only that bucket and only the names owner_photo_start hands out
+//   (sitePhotoKey): a mirrored photo's name, any query, encoded
+//   character, other bucket or folder is a 404 before anything is
+//   fetched, so this is no proxy for anything else. The upstream URL is
+//   the bucket's base plus that name. (Next itself 308s a doubled or
+//   back slash to the cleaned path first.)
 // - Of Supabase's answer only the bytes, the type (an image type, else
 //   the one the name says), the length, ETag and Last-Modified go out:
 //   never its x-robots-tag, cookies or other headers, and no request
 //   header is passed on.
-// - A photo's bytes never change under its name (mirrored names are a
-//   hash of the source, owner uploads never overwrite). Mirrored photos
-//   are never deleted, so Vercel's CDN and browsers keep them a year: a
-//   function call per photo per CDN region, then none. An owner's photo
-//   (owner/...) can be removed (by the owner, the site owner or the
-//   check's sweep) and nothing purges the CDN then, so it is kept a day
-//   there and an hour in browsers: a removed one is a 404 within a day,
-//   and Google drops it. Tagged for a purge if a photo must go at once:
-//   vercel cache dangerously-delete --tag turf-photo-<turf id>.
+// - A photo's bytes never change under its name (owner uploads never
+//   overwrite), but it can be removed (by the owner, the site owner or
+//   the check's sweep) and nothing purges the CDN then, so it is kept a
+//   day there and an hour in browsers: a removed one is a 404 within a
+//   day, and Google drops it. Tagged for a purge if a photo must go at
+//   once: vercel cache dangerously-delete --tag turf-photo-<turf id>.
 // - A missing photo is a 404 kept 5 minutes; Supabase failing is a 502 kept nowhere.
 //
 // A plain dynamic handler (no revalidate or dynamic export), so Next
@@ -32,9 +32,8 @@ import { TURF_PHOTOS_BUCKET, sitePhotoKey } from "@/lib/utils/images";
 // /api/turf-list/...). The proxy never runs here (paths with a file
 // extension are outside its matcher).
 
-const YEAR = "public, max-age=31536000, s-maxage=31536000, immutable";
 const OWNER_PHOTO = "public, max-age=3600, s-maxage=86400";
-const TYPES: Record<string, string> = { webp: "image/webp", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
+const TYPES: Record<string, string> = { webp: "image/webp", jpg: "image/jpeg" };
 const UPSTREAM_TIMEOUT_MS = 15_000;
 
 function notFound(cache: string): Response {
@@ -49,7 +48,7 @@ async function serve(req: Request, method: "GET" | "HEAD"): Promise<Response> {
   // fetch again. (Next hands a bare "?" over as no query at all.)
   const { pathname, search } = new URL(req.url);
   const key = sitePhotoKey(pathname, search);
-  // A name that can never be one of ours stays a 404: a day.
+  // A name that is no owner's photo stays a 404: a day.
   if (!key) return notFound("public, max-age=86400, s-maxage=86400");
   let up: Response;
   try {
@@ -66,7 +65,7 @@ async function serve(req: Request, method: "GET" | "HEAD"): Promise<Response> {
   const upType = (up.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const headers = new Headers({
     "Content-Type": Object.values(TYPES).includes(upType) ? upType : TYPES[key.slice(key.lastIndexOf(".") + 1)],
-    "Cache-Control": key.startsWith("owner/") ? OWNER_PHOTO : YEAR,
+    "Cache-Control": OWNER_PHOTO,
     "X-Content-Type-Options": "nosniff",
     "Vercel-Cache-Tag": `turf-photos,turf-photo-${key.replace(/^owner\//, "").slice(0, 36)}`,
   });

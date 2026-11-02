@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PHOTO, checkFile, fitWithin, ownerPhotoMessage, photoCountLine, photoLabel, photoTiles } from "./photoMath";
-import { toAdminPhotos, toPhotoList, type OwnerPhotoList } from "./photoTypes";
-import { imageUrlForCard } from "../utils/images";
+import { OWNER_PHOTOS_WANTED, PHOTO, checkFile, fitWithin, ownerPhotoCount, ownerPhotoMessage, ownerPhotoNudge, photoCountLine, photoLabel, photoTiles } from "./photoMath";
+import { toAdminPhotos, toPhotoList, type OwnerPhoto, type OwnerPhotoList } from "./photoTypes";
+import { imageUrlForCard, sitePhotoKey, sitePhotoUrl } from "../utils/images";
 
 const BASE = "https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/turf-photos/";
 const TURF = "94caa616-0000-4000-8000-000000000001";
@@ -73,6 +73,14 @@ test("naming contract: imageUrlForCard finds an owner photo's card", () => {
   assert.equal(imageUrlForCard(`${BASE}owner/${TURF}/${HEX}-card.webp`), `${BASE}owner/${TURF}/${HEX}-card.webp`, "a card is left alone");
 });
 
+test("naming contract: every name owner_photo_start hands out is one tapturf.in serves, where Google may index it", () => {
+  for (const name of [`${HEX}.webp`, `${HEX}-card.webp`, `${HEX}.jpg`, `${HEX}-card.jpg`]) {
+    const key = `owner/${TURF}/${name}`;
+    assert.equal(sitePhotoUrl(`${BASE}${key}`), `https://www.tapturf.in/photos/turf/${key}`, key);
+    assert.equal(sitePhotoKey(`/photos/turf/${key}`), key, key);
+  }
+});
+
 const list = (over: Partial<OwnerPhotoList> = {}): OwnerPhotoList => ({
   images: [],
   cover: null,
@@ -125,6 +133,30 @@ test("photoTiles: edges", () => {
   g = photoTiles(list());
   assert.equal(g.visible, 0);
   assert.deepEqual(g.tiles, []);
+});
+
+test("owner photo nudge: until the owners have added 3 of their own (live or being checked; held ones don't count)", () => {
+  const mine = (...statuses: OwnerPhoto["status"][]) =>
+    ownerPhotoCount(list({ mine: statuses.map((status, i) => ({ id: `p${i}`, url: `${BASE}owner/${TURF}/${String(i).padStart(24, "0")}.jpg`, status, at: null, checked: status !== "checking", note: null })) }));
+  assert.equal(OWNER_PHOTOS_WANTED, 3);
+  assert.equal(mine(), 0);
+  assert.equal(mine("live", "checking", "held"), 2);
+  assert.equal(mine("live", "live", "live"), 3);
+  // Photos TapTurf added from public listings are in images, not mine: they never count.
+  assert.equal(ownerPhotoCount(list({ images: [`${BASE}${TURF}/${HEX}.webp`, `${BASE}${TURF}/${"b".repeat(24)}.webp`, `${BASE}${TURF}/${"c".repeat(24)}.webp`] })), 0);
+  assert.deepEqual(ownerPhotoNudge(0), {
+    title: "Add your own photos",
+    body: "Turfs with real photos get more calls, and your photos can show on Google.",
+    progress: null,
+  });
+  assert.equal(ownerPhotoNudge(1)?.progress, "You’ve added 1 so far.");
+  assert.equal(ownerPhotoNudge(2)?.progress, "You’ve added 2 so far.");
+  assert.equal(ownerPhotoNudge(3), null);
+  assert.equal(ownerPhotoNudge(20), null);
+  assert.equal(ownerPhotoNudge(Number.NaN), null);
+  // Honest: "can show", never a promise, and no booking claim.
+  const n = ownerPhotoNudge(0)!;
+  assert.doesNotMatch(`${n.title} ${n.body}`, /will show|guarantee|book/i);
 });
 
 test("photoCountLine", () => {

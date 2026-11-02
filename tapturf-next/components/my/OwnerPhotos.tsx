@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Check, Loader2, Plus, RotateCw } from "lucide-react";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { imageUrlForCard, normalizeImageUrl } from "@/lib/utils/images";
-import { PHOTO, ownerPhotoMessage, photoCountLine, photoTiles, type PhotoTile } from "@/lib/my/photoMath";
+import { PHOTO, ownerPhotoCount, ownerPhotoMessage, photoCountLine, photoTiles, type PhotoTile } from "@/lib/my/photoMath";
 import { addOwnerPhotos, loadOwnerPhotos, makeCover, removeOwnerPhoto, type AddPhase, type AddStep, type FileState } from "@/lib/my/photos";
 import type { AddResult, OwnerPhoto, OwnerPhotoList } from "@/lib/my/photoTypes";
 
@@ -43,9 +43,22 @@ function resultNote(r: AddResult): Note | null {
 /**
  * The Photos section of /my/turf/<id>: the turf's photos as players see
  * them, adding photos from the phone, Make cover, and Remove for photos
- * owners added. onCount reports how many photos the public page shows.
+ * owners added. onCount reports how many photos the public page shows,
+ * onMine how many its owners added (ownerPhotoCount).
  */
-export function OwnerPhotos({ turfId, turfName, onChanged, onCount }: { turfId: string; turfName: string; onChanged: () => void; onCount?: (visible: number) => void }) {
+export function OwnerPhotos({
+  turfId,
+  turfName,
+  onChanged,
+  onCount,
+  onMine,
+}: {
+  turfId: string;
+  turfName: string;
+  onChanged: () => void;
+  onCount?: (visible: number) => void;
+  onMine?: (mine: number) => void;
+}) {
   const [list, setList] = useState<OwnerPhotoList | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -67,10 +80,11 @@ export function OwnerPhotos({ turfId, turfName, onChanged, onCount }: { turfId: 
       setList(r);
       setLoadFailed(false);
       onCount?.(photoTiles(r).visible);
+      onMine?.(ownerPhotoCount(r));
     } catch {
       setLoadFailed(true);
     }
-  }, [turfId, onCount]);
+  }, [turfId, onCount, onMine]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 0);

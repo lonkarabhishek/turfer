@@ -22,8 +22,8 @@ function GalleryImage({
   onBroken: (src: string) => void;
 }) {
   // Inline photos never render wider than ~900px, so ask for 800x600;
-  // the lightbox shows the full-size original. Ours load from tapturf.in
-  // (cardPhotoSrc, sitePhotoUrl), where Google may index them. `src`
+  // the lightbox shows the full-size original. Owners' photos load from
+  // tapturf.in (cardPhotoSrc, sitePhotoUrl), where Google may index them. `src`
   // stays the stored URL so broken-photo tracking matches the images
   // array. No error state of its own: slots are keyed by URL, so the
   // photo that moves into a dropped one's place mounts fresh instead of

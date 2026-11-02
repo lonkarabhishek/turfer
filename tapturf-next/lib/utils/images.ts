@@ -40,20 +40,23 @@ export function isOwnPhoto(url: string): boolean {
 }
 
 /**
- * Our turf photos as tapturf.in serves them (app/photos/turf/[...path]/route.ts).
+ * Owners' turf photos as tapturf.in serves them (app/photos/turf/[...path]/route.ts).
  *
  * Supabase Storage answers every object with "x-robots-tag: none", so
- * Google indexed none of the photos in the turf-photos bucket (15,422 on
- * active turfs, 2 Nov 2026) although every turf page named them in its
- * <img> tags, og:image and JSON-LD. The route answers the same bytes from
- * tapturf.in without that header. It serves that bucket only, and only
- * names of this shape (every object in it on 2 Nov):
- * [owner/]<turf uuid>/<8 to 64 of a-z 0-9>[-card].<webp|jpg|jpeg|png>.
- * Photos on other hosts (Google user content, Drive, Yappe...) are not
- * ours to re-host and keep their own links.
+ * Google indexes none of the photos in the turf-photos bucket. The route
+ * answers the same bytes from tapturf.in without that header, for the
+ * photos turf owners added on myTapturf only: that bucket, and only names
+ * of the shape owner_photo_start hands out (owner_photo_object_ok in
+ * supabase/migrations/20261025_owner_photos.sql):
+ * owner/<turf uuid>/<24 hex>[-card].<webp|jpg>.
+ * The site owner's call (2 Nov 2026): Google gets the photos owners
+ * uploaded (11 on 2 turfs that day), not the copies of Google Maps photos
+ * the old mirror job made (every other name in the bucket, 15,415 on
+ * 3,039 turfs), which keep their Supabase links, as do photos on other
+ * hosts (Google user content, Drive, Yappe...).
  */
 export const SITE_PHOTO_PATH = "/photos/turf/";
-const PHOTO_KEY = /^(?:owner\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9]{8,64}(?:-card)?\.(?:webp|jpe?g|png)$/;
+const OWNER_PHOTO_KEY = /^owner\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{24}(?:-card)?\.(?:webp|jpg)$/;
 
 /** The turf-photos bucket's public URL on our Supabase project (the build's NEXT_PUBLIC_SUPABASE_URL; production's when unset, as in unit tests). */
 export const TURF_PHOTOS_BUCKET = `${(process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hwfsbpzercuoshodmnuf.supabase.co").replace(/\/+$/, "")}/storage/v1/object/public/turf-photos/`;
@@ -62,23 +65,31 @@ export const TURF_PHOTOS_BUCKET = `${(process.env.NEXT_PUBLIC_SUPABASE_URL || "h
 export function sitePhotoKey(pathname: string, search = ""): string | null {
   if (search || !pathname.startsWith(SITE_PHOTO_PATH)) return null;
   const key = pathname.slice(SITE_PHOTO_PATH.length);
-  return PHOTO_KEY.test(key) ? key : null;
+  return OWNER_PHOTO_KEY.test(key) ? key : null;
+}
+
+/** A photo a turf owner added on myTapturf, in our bucket on our project: one tapturf.in serves. */
+export function isOwnerPhoto(url: string): boolean {
+  return typeof url === "string" && url.startsWith(TURF_PHOTOS_BUCKET) && OWNER_PHOTO_KEY.test(url.slice(TURF_PHOTOS_BUCKET.length));
 }
 
 /**
- * tapturf.in's URL for a photo in our turf-photos bucket, every other URL
- * as it is. `origin` "" gives the path alone, for <img> on our own pages
- * (a preview or local build then loads its own route).
+ * tapturf.in's URL for an owner's photo, every other URL as it is.
+ * `origin` "" gives the path alone, for <img> on our own pages (a
+ * preview or local build then loads its own route).
  */
 export function sitePhotoUrl(url: string, origin: string = SITE_URL): string {
-  if (typeof url !== "string" || !url.startsWith(TURF_PHOTOS_BUCKET)) return url;
-  const key = url.slice(TURF_PHOTOS_BUCKET.length);
-  return PHOTO_KEY.test(key) ? `${origin}${SITE_PHOTO_PATH}${key}` : url;
+  return isOwnerPhoto(url) ? `${origin}${SITE_PHOTO_PATH}${url.slice(TURF_PHOTOS_BUCKET.length)}` : url;
 }
 
 /** A photo sitePhotoUrl moved to tapturf.in (the full URL or the path). */
 export function isSitePhoto(url: string): boolean {
   return url.startsWith(`${SITE_URL}${SITE_PHOTO_PATH}`) || url.startsWith(SITE_PHOTO_PATH);
+}
+
+/** Owners' photos first, then the rest, each in the order given: what share cards and the turf JSON-LD pick from. */
+export function ownerPhotosFirst(urls: readonly string[]): string[] {
+  return [...urls.filter(isOwnerPhoto), ...urls.filter((u) => !isOwnerPhoto(u))];
 }
 
 /**
@@ -135,7 +146,7 @@ export function imageUrlForCard(url: string): string {
   return url;
 }
 
-/** What a public card or gallery tile shows: the card size (imageUrlForCard knows the bucket's -card names), ours from tapturf.in. */
+/** What a public card or gallery tile shows: the card size (imageUrlForCard knows the bucket's -card names), owners' photos from tapturf.in. */
 export function cardPhotoSrc(url: string): string {
   return sitePhotoUrl(imageUrlForCard(url), "");
 }
@@ -281,10 +292,10 @@ export function usableTurfPhotos(
 }
 
 /**
- * The image sitemap's photos of a turf row: up to `max` of our own, as
- * tapturf.in serves them, the cover first (usableTurfPhotos order). A
- * photo on another host never goes in, so a turf with none of ours lists
- * no photo.
+ * The image sitemap's photos of a turf row: up to `max` of the photos its
+ * owners added, as tapturf.in serves them, the cover first
+ * (usableTurfPhotos order). No mirrored copy and no photo on another host
+ * goes in, so a turf with no owner photo lists none.
  */
 export function sitemapPhotos(
   raw: { cover_image?: string | null; images?: unknown; image_review?: unknown } | null | undefined,

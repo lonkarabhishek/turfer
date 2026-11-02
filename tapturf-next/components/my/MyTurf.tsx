@@ -9,6 +9,7 @@ import { labelFor, isCity } from "@/lib/city";
 import { ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { EditListing } from "./EditListing";
 import { OwnerPhotos } from "./OwnerPhotos";
+import { OwnerPhotoNudge } from "./OwnerPhotoNudge";
 import { PlayerReports } from "./PlayerReports";
 import { ManagerNameNote } from "./ManagerNameNote";
 import { turfPath } from "@/lib/utils/turfPath";
@@ -23,6 +24,8 @@ export function MyTurf({ id }: { id: string }) {
   const [failed, setFailed] = useState(false);
   // Photos the public page shows (the Photos section counts them); until then, the stored count.
   const [visiblePhotos, setVisiblePhotos] = useState<number | null>(null);
+  // Photos the turf's owners added (the Photos section counts them too): fewer than 3 shows the nudge.
+  const [ownerPhotos, setOwnerPhotos] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -81,6 +84,8 @@ export function MyTurf({ id }: { id: string }) {
       </div>
       {/* "Managed by @you" on the public page (under the name and in the Claimed turf panel): whether it shows, or how to make it show. */}
       <ManagerNameNote className="mt-3" turfName={t.name} turfId={t.id} pageHref={turfPath(t)} />
+      {/* Fewer than 3 photos of their own: ask for them (only those can show on Google), down to Photos. */}
+      <OwnerPhotoNudge className="mt-3" mine={ownerPhotos} />
 
       {/* Period */}
       <div className="mt-6 inline-flex rounded-full bg-primary-100 p-1" role="tablist" aria-label="Period">
@@ -137,7 +142,7 @@ export function MyTurf({ id }: { id: string }) {
       <Health turf={t} photos={visiblePhotos ?? t.photos} />
 
       <section id="photos" className="mt-10 scroll-mt-20">
-        <OwnerPhotos turfId={t.id} turfName={t.name} onChanged={load} onCount={setVisiblePhotos} />
+        <OwnerPhotos turfId={t.id} turfName={t.name} onChanged={load} onCount={setVisiblePhotos} onMine={setOwnerPhotos} />
       </section>
 
       <EditListing turf={t} onSaved={load} />

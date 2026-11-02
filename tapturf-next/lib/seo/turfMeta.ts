@@ -20,7 +20,7 @@ import { courtType, sportPageForLabel } from "../sports";
 import { areaFor } from "../utils/area";
 import { formatLabel } from "../utils/formats";
 import { dailyHoursSummary, normaliseOpeningHours } from "../utils/hours";
-import { orderPhotos, sitePhotoUrl, turfPhotos } from "../utils/images";
+import { orderPhotos, ownerPhotosFirst, sitePhotoUrl, turfPhotos } from "../utils/images";
 import { priceUnitSuffix, showsPriceBands, summarisePagePrice } from "../utils/prices";
 import { DEFAULT_OG_IMAGE } from "./defaults";
 import { DESCRIPTION_MAX_CHARS, titleFits, truncateWords } from "./width";
@@ -313,7 +313,7 @@ export interface TurfMeta {
   description: string;
   /** "Box cricket & football turf with pickleball court". */
   type: string;
-  /** Share card: the turf's best photo (ours from tapturf.in, sitePhotoUrl), else the site card. */
+  /** Share card: an owner's photo (from tapturf.in, sitePhotoUrl), else the turf's best photo, else the site card. */
   ogImage: { url: string; alt: string; width?: number; height?: number };
   /**
    * What a photo of the turf shows, for the gallery's alt text: "Turf Up,
@@ -433,9 +433,10 @@ export function turfMeta({ turf, contact, reports, nameShared = false }: TurfMet
   let description = build(chosen, shape);
   if (description.length > DESCRIPTION_MAX_CHARS) description = `${truncateWords(description, DESCRIPTION_MAX_CHARS - 1)}.`;
 
-  const first = turfPhotos(turf)[0];
+  // An owner's own photo when the turf has one (tapturf.in serves those, where Google may index them), else the best photo as always.
+  const shared = ownerPhotosFirst(turfPhotos(turf))[0];
   const alt = place.full ? `${name}, ${place.full}` : name;
-  const ogImage = first ? { url: sitePhotoUrl(first), alt } : { ...DEFAULT_OG_IMAGE };
+  const ogImage = shared ? { url: sitePhotoUrl(shared), alt } : { ...DEFAULT_OG_IMAGE };
   const short = describeTurfType(turf.sports ?? []).short;
   const what = short && containsPlace(name, short) ? null : type.charAt(0).toLowerCase() + type.slice(1);
   const photoAlt = what ? `${name}, ${what}${place.full ? ` in ${place.full}` : ""}` : alt;
