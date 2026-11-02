@@ -77,20 +77,44 @@ export const post: Post = {
       type: "p",
       text: "Pune has the most cages of any city we cover and the lowest floor: a ₹200 hour exists, if you can play at the time it's offered. The middle of the market is ₹800 off-peak and ₹1,125 at peak, and nothing listed goes above ₹1,999. Pune venues also publish prices more readily than anywhere except Hyderabad, which makes it the easiest city to shop around in.",
     },
+    {
+      type: "cta",
+      text: "Shop around: every listed turf in Pune, box cricket and more.",
+      href: "/pune",
+      label: "Turfs in Pune",
+    },
     { type: "h3", text: "Hyderabad: the most transparent" },
     {
       type: "p",
       text: "79 of 83 Hyderabad cages list a rate, the highest share anywhere. The typical numbers match Pune off-peak (₹800) and run slightly higher at peak (₹1,200), but the ceiling is much higher: a few large cages list ₹2,400 to ₹3,500 for an evening hour. Hyderabad also has 30 venues open 24 hours, so there is more cheap night-time supply than the medians suggest.",
+    },
+    {
+      type: "cta",
+      text: "Every listed turf in Hyderabad, not only box cricket.",
+      href: "/hyderabad",
+      label: "Hyderabad turfs",
     },
     { type: "h3", text: "Nagpur: a small sample, priced in the middle" },
     {
       type: "p",
       text: "Eight published rates, ranging from ₹800 to ₹2,500, with the typical hour around ₹1,200. The 38 venues that don't list usually quote something close to that on the phone, but we can't verify it, so treat ₹1,200 as a starting assumption rather than a fact.",
     },
+    {
+      type: "cta",
+      text: "Most Nagpur venues quote on the phone. Find one near you.",
+      href: "/nagpur",
+      label: "Turfs in Nagpur",
+    },
     { type: "h3", text: "Mumbai: double, and mostly unlisted" },
     {
       type: "p",
       text: "Among the six Mumbai venues that publish, the typical off-peak hour is ₹1,400 and peak is ₹1,900, roughly twice Pune. The cheapest listed hour is ₹700 in Bhandup and the dearest is ₹3,500 at a Bandra school ground. Space is the reason: Mumbai cages are on rooftops and in industrial estates, and rent follows.",
+    },
+    {
+      type: "cta",
+      text: "Rates are mostly unlisted, so it takes a call. Start with every listed turf in Mumbai.",
+      href: "/mumbai",
+      label: "Mumbai turfs",
     },
 
     { type: "h2", text: "What the price actually depends on" },

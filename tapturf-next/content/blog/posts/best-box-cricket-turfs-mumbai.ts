@@ -215,6 +215,12 @@ export const post: Post = {
         "Navi Mumbai: CAP Club Panvel.",
       ],
     },
+    {
+      type: "cta",
+      text: "Football as well as box cricket: every listed turf in Mumbai, with timings and photos.",
+      href: "/mumbai",
+      label: "See Mumbai's turfs",
+    },
 
     { type: "h2", text: "Mumbai-specific things to check" },
     {

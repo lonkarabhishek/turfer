@@ -81,6 +81,12 @@ export const post: Post = {
       type: "p",
       text: "Football is listed at all 10 venues and box cricket at nine. Four Lions Undri lists cricket and a 10-a-side football ground rather than box cricket. Kanade Sports Club and Yadnya Sports & Wellness Club also list cricket nets. Badminton is listed at three venues (Full On Sportz, Hotfut Undri and Arena Xtreme Sports Club) and pickleball at one, Kick and Pitch. Kanade Sports Club is the biggest venue on file, with seven grounds and formats from 6-a-side up to 11-a-side, and Brio Turf lists three grounds.",
     },
+    {
+      type: "cta",
+      text: "Undri is one part of the city. Every listed turf in Pune is on one page.",
+      href: "/pune",
+      label: "Every Pune turf",
+    },
 
     { type: "h2", text: "What does a turf in Undri cost per hour?" },
     {

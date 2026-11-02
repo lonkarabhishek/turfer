@@ -47,6 +47,12 @@ export const post: Post = {
       type: "p",
       text: "A mix of great and average. The good ones are excellent and cheaper than west Pune. The average ones have thinning turf, poor floodlight coverage in the corners, and unreliable staff. Visit before you commit to a season.",
     },
+    {
+      type: "cta",
+      text: "Every listed turf in Pune, across all these areas, with timings and photos.",
+      href: "/pune",
+      label: "Every turf in Pune",
+    },
 
     { type: "h2", text: "5v5 vs 7v7 vs full-side, how to choose" },
     {

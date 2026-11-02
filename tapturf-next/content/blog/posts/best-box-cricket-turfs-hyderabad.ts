@@ -215,6 +215,12 @@ export const post: Post = {
       type: "p",
       text: "Read that table as a trade-off. Madhapur has the most choice and the lowest average rating. Kukatpally and Kondapur have fewer cages but all of them are good. If you live in between, pick on rating; if you live in Madhapur, use the ranking above rather than the nearest cage.",
     },
+    {
+      type: "cta",
+      text: "Football and cricket too: every listed turf in Hyderabad, with timings and photos.",
+      href: "/hyderabad",
+      label: "Turfs in Hyderabad",
+    },
 
     { type: "h2", text: "Playing after midnight" },
     {
