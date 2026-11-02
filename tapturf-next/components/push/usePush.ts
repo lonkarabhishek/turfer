@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import {
   currentSubscription,
+  endStopped,
   notificationPermission,
   pushStatus,
   pushSupport,
@@ -59,6 +60,8 @@ async function check(userId: string, getToken: GetToken): Promise<void> {
   if (support !== "push") return set({ userId, view: support, devices: st.devices });
   const permission = notificationPermission();
   if (permission === "denied") return set({ userId, view: "blocked", devices: st.devices });
+  // One the server stopped (the push service ended it, say): ended here too, so turning on makes a new one.
+  if (sub && !st.on && st.gone) await endStopped(sub);
   set({ userId, view: sub && st.on && permission === "granted" ? "on" : "off", devices: st.devices });
 }
 
@@ -126,9 +129,12 @@ export function usePush() {
   const test = () => {
     if (!userId || state.busy) return;
     set({ busy: "test", note: null });
-    void sendPushTest(getToken).then((r) => {
+    void sendPushTest(getToken).then(async (r) => {
+      // One of the account's phones has ended: whether it is this one, the server says (and check ends it here too).
+      const ended = ("ok" in r && r.ok.gone > 0) || ("error" in r && r.error === "none");
+      if (ended) await check(userId, getToken).catch(() => {});
+      if (ended && state.view !== "on") return set({ busy: null, view: "off", note: { tone: "bad", text: TEXT.stopped } });
       if ("ok" in r && r.ok.sent > 0) return set({ busy: null, note: { tone: "ok", text: TEXT.sent } });
-      if (("ok" in r && r.ok.gone > 0) || ("error" in r && r.error === "none")) return set({ busy: null, view: "off", note: { tone: "bad", text: TEXT.stopped } });
       set({ busy: null, note: { tone: "bad", text: "error" in r && r.error === "limit" ? TEXT.testLimit : TEXT.testFailed } });
     });
   };

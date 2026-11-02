@@ -5,7 +5,8 @@
 // Checks: the tables are closed to the API roles and the functions check the
 // server key; push_subscribe (bad input, the kind of device, the same address
 // again, an address moving to another account, 10 at once, 20 new a day),
-// push_unsubscribe and push_state (own only); the trigger (posts {id} with the
+// push_unsubscribe and push_state (own only, and why the server stopped one:
+// an address the push service ended never comes back); the trigger (posts {id} with the
 // secret only for an account with an active subscription, through the game
 // functions too; never fails the insert: no secret, pg_net failing or missing;
 // a rolled back insert posts nothing); push_targets (claimed once, old, none,
@@ -147,9 +148,9 @@ await q(`update private.push_subscriptions set fail_count = 3, last_ok_at = now(
 eq(await rpc("push_subscribe", [KEY, RAVI, EP(1), P256(7), AUTH(7), "iphone"]), { r: "ok", devices: 1 }, "another account turning it on at the same address");
 row = await one(`select * from private.push_subscriptions where endpoint = $1`, [EP(1)]);
 eq([row.user_id, row.status, row.fail_count, row.last_ok_at], [RAVI, "active", 0, null], "moves it to that account, as a new subscription");
-eq((await rpc("push_state", [KEY, ASHA, EP(1)])), { r: "ok", on: false, devices: 1 }, "Asha's no longer");
-eq((await rpc("push_state", [KEY, RAVI, EP(1)])), { r: "ok", on: true, devices: 1 }, "Ravi's is on");
-eq((await rpc("push_state", [KEY, RAVI, null])), { r: "ok", on: false, devices: 1 }, "no address: only how many");
+eq((await rpc("push_state", [KEY, ASHA, EP(1)])), { r: "ok", on: false, gone: null, devices: 1 }, "Asha's no longer (and nothing said about Ravi's)");
+eq((await rpc("push_state", [KEY, RAVI, EP(1)])), { r: "ok", on: true, gone: null, devices: 1 }, "Ravi's is on");
+eq((await rpc("push_state", [KEY, RAVI, null])), { r: "ok", on: false, gone: null, devices: 1 }, "no address: only how many");
 eq((await rpc("push_state", [KEY, null, EP(1)])).r, "bad", "push_state needs an account");
 
 // 10 at once: an 11th makes room by the one used least lately.
@@ -281,6 +282,7 @@ for (let i = 1; i <= 8; i++) {
   eq([s.fail_count, s.status], [i, i < 8 ? "active" : "gone"], i < 8 ? `still on after ${i} failures` : "the 8th failure in a row: gone");
 }
 eq((await sub(5)).gone_reason, "failing", "gone, failing");
+eq(await rpc("push_state", [KEY, ASHA, EP(5)]), { r: "ok", on: false, gone: "failing", devices: 0 }, "push_state says why: failing");
 await subscribe(ASHA, 5, "mac");
 eq([(await sub(5)).fail_count, (await sub(5)).status], [0, "active"], "turned on again: a fresh start");
 
@@ -294,6 +296,24 @@ for (let i = 1; i <= 5; i++) {
 }
 eq((await rpc("push_test_targets", [KEY, ASHA])).r, "limit", "the 6th test in an hour is refused");
 eq((await one(`select count(*)::int n from private.push_sends where kind = 'test' and user_id = $1 and created_at > now() - interval '1 hour'`, [ASHA])).n, 5, "(5 tests recorded)");
+
+/* ---------------- an address the push service ended (404, 410) ---------------- */
+// The browser may still hold it: posted again (the switch, the daily check), it must not look on.
+eq(await rpc("push_state", [KEY, ASHA, EP(3)]), { r: "ok", on: false, gone: "expired", devices: 1 }, "push_state says why: expired");
+eq(await rpc("push_state", [KEY, RAVI, EP(1)]), { r: "ok", on: false, gone: "off", devices: 0 }, "push_state says why: off");
+eq(await rpc("push_state", [KEY, PRIYA, EP(101)]), { r: "ok", on: false, gone: "replaced", devices: 10 }, "push_state says why: replaced");
+eq((await rpc("push_state", [KEY, KIRAN, EP(3)])).gone, null, "someone else's address: nothing said");
+const expiredRow = await one(`select * from private.push_subscriptions where endpoint = $1`, [EP(3)]);
+eq(await subscribe(ASHA, 3), { r: "expired" }, "the same address posted again: refused, expired");
+eq(await rpc("push_subscribe", [KEY, KIRAN, EP(3), P256(3), AUTH(3), "android"]), { r: "expired" }, "by any account");
+eq(await rpc("push_subscribe", [KEY, ASHA, EP(3), P256(9), AUTH(9), "iphone"]), { r: "expired" }, "with new keys too");
+eq(await one(`select * from private.push_subscriptions where endpoint = $1`, [EP(3)]), expiredRow, "and the row is as it was: gone, expired");
+eq(await rpc("push_state", [KEY, ASHA, EP(3)]), { r: "ok", on: false, gone: "expired", devices: 1 }, "(still not on)");
+eq(await subscribe(ASHA, 30, "iphone"), { r: "ok", devices: 2 }, "the new address that phone makes: on");
+eq(await rpc("push_state", [KEY, ASHA, EP(30)]), { r: "ok", on: true, gone: null, devices: 2 }, "(on)");
+const nNew = await notify(ASHA);
+eq((await rpc("push_targets", [KEY, nNew])).targets.map((x) => x.endpoint), [EP(30), EP(5)], "and sends go to it, never to the ended one");
+eq((await subscribe(PRIYA, 101)).r, "ok", "one replaced by an 11th comes back when its phone turns it on again");
 
 /* ---------------- the lockdown functions still work ---------------- */
 const mine = await rpc("notifications_mine", [KEY, ASHA, 5]);

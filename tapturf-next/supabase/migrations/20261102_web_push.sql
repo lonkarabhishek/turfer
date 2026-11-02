@@ -17,7 +17,8 @@
 --    once; an 11th replaces the one used least lately). Never removed: a
 --    subscription that ends becomes status gone, with why (off: turned off or
 --    logged out on that phone; expired: the push service answered 404 or
---    410; failing: 8 failures in a row; replaced: the 11th). The same address
+--    410, and that address is never turned on again: the phone makes a new
+--    one; failing: 8 failures in a row; replaced: the 11th). The same address
 --    turned on by another account (another sign-in on that phone) moves to
 --    it. 20 new addresses a day per account.
 -- 2. private.push_sends: one row per notification sent out (claimed once, so
@@ -140,7 +141,9 @@ revoke all on function private.push_targets_of(uuid) from public, anon, authenti
 -- Turn notifications on for one push address (the browser's subscription;
 -- the route checks the address is at a push service). p_device: the kind of
 -- device (anything else is other). Answers {r: ok, devices} (the account's
--- active ones) or r: unavailable, bad, limit (20 new addresses a day).
+-- active ones) or r: unavailable, bad, limit (20 new addresses a day),
+-- expired (the push service has ended that address: the browser makes a new
+-- one, lib/push/client.ts turnPushOn).
 create or replace function public.push_subscribe(p_key text, p_user_id uuid, p_endpoint text, p_p256dh text, p_auth text, p_device text default null)
 returns jsonb
 language plpgsql
@@ -165,6 +168,10 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('push_subscribe:' || p_user_id::text, 0));
   perform pg_advisory_xact_lock(hashtextextended('push_endpoint:' || p_endpoint, 0));
   select * into v_row from private.push_subscriptions s where s.endpoint = p_endpoint for update;
+  -- The push service said this address is over (404 or 410): it never comes back.
+  if found and v_row.status = 'gone' and v_row.gone_reason = 'expired' then
+    return jsonb_build_object('r', 'expired');
+  end if;
   -- A new address counts toward the day's 20; the same one again, or one moving here from another account, doesn't.
   if not found and (select count(*) from private.push_subscriptions s
                      where s.user_id = p_user_id and s.created_at > now() - interval '1 day') >= 20 then
@@ -220,7 +227,10 @@ revoke all on function public.push_unsubscribe(text, uuid, text) from public;
 grant execute on function public.push_unsubscribe(text, uuid, text) to anon, authenticated;
 
 -- Whether this push address is on for the caller, and how many of theirs are.
--- {r: ok, on, devices}, or r: unavailable, bad.
+-- gone: why the server stopped it, when it was the caller's (off, expired,
+-- failing, replaced), else null; the browser then ends it too and never sends
+-- it again by itself (lib/push/client.ts). {r: ok, on, gone, devices}, or r:
+-- unavailable, bad.
 create or replace function public.push_state(p_key text, p_user_id uuid, p_endpoint text default null)
 returns jsonb
 language plpgsql
@@ -228,6 +238,8 @@ stable
 security definer
 set search_path = ''
 as $$
+declare
+  v_row private.push_subscriptions;
 begin
   if not private.account_key_ok(p_key) then
     return jsonb_build_object('r', 'unavailable');
@@ -235,9 +247,10 @@ begin
   if p_user_id is null or char_length(p_endpoint) > 1024 then
     return jsonb_build_object('r', 'bad');
   end if;
+  select * into v_row from private.push_subscriptions s where s.endpoint = p_endpoint and s.user_id = p_user_id;
   return jsonb_build_object('r', 'ok',
-    'on', p_endpoint is not null and exists (select 1 from private.push_subscriptions s
-                                              where s.endpoint = p_endpoint and s.user_id = p_user_id and s.status = 'active'),
+    'on', coalesce(v_row.status = 'active', false),
+    'gone', case when v_row.status = 'gone' then v_row.gone_reason end,
     'devices', (select count(*) from private.push_subscriptions s where s.user_id = p_user_id and s.status = 'active'));
 end;
 $$;

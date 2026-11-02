@@ -6,7 +6,7 @@ import { accountRpcIfThere, createAccountLimiter, PRIVATE_HEADERS, readSmallJson
 import { isUuid } from "../games/payload";
 import { PUSH_TTL_S, VAPID_PUBLIC_KEY, VAPID_SUBJECT } from "./config";
 import { deviceFamily, endpointOk, notificationPayload, parseSubscription, testPayload, urgencyFor, type PushNotificationRow } from "./payload";
-import type { PushPayload } from "./types";
+import type { PushGone, PushPayload } from "./types";
 
 // Web Push, for app/api/push/** (lib/push/types.ts has the API). The
 // caller's own subscriptions go: the verified caller (lib/account/route.ts
@@ -127,6 +127,8 @@ async function sendAll(targets: PushTarget[], payload: PushPayload, privateKey: 
 }
 
 const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
+const GONE: readonly unknown[] = ["off", "expired", "failing", "replaced"] satisfies PushGone[];
+const goneOf = (x: unknown): PushGone | null => (GONE.includes(x) ? (x as PushGone) : null);
 const NOT_READY = () => accountReply({ reason: "not_ready" }, "unavailable");
 
 type Who = { userId: string } | { reply: NextResponse };
@@ -161,7 +163,7 @@ export async function postStatus(req: Request): Promise<NextResponse> {
   if ("missing" in res) return accountReply({ ready: false, on: false, devices: 0 });
   if ("unavailable" in res) return accountError("unavailable");
   if (res.data.r !== "ok") return accountError("bad");
-  return accountReply({ ready: true, on: res.data.on === true, devices: num(res.data.devices) });
+  return accountReply({ ready: true, on: res.data.on === true, devices: num(res.data.devices), gone: goneOf(res.data.gone) });
 }
 
 /** POST /api/push/subscribe: this browser's subscription, on for the caller. */
@@ -181,6 +183,8 @@ export async function postSubscribe(req: Request): Promise<NextResponse> {
   if ("missing" in res) return NOT_READY();
   if ("unavailable" in res) return accountError("unavailable");
   if (res.data.r === "ok") return accountReply({ r: "ok", devices: num(res.data.devices) });
+  // The push service has ended that address (404, 410): the browser makes a new one.
+  if (res.data.r === "expired") return accountReply({ reason: "expired" }, "not_allowed");
   return accountError(res.data.r === "limit" ? "limit" : "bad");
 }
 

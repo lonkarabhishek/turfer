@@ -58,20 +58,16 @@ self.addEventListener("notificationclick", (event) => {
   const target = new URL(path, self.location.origin).href;
   event.waitUntil(
     (async () => {
+      // A tap allows one focus() or openWindow(), so only one of them is ever tried.
       const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       // Already on that page: bring it forward.
       const there = list.find((c) => c.url === target);
       if (there) return there.focus();
-      // Any TapTurf window: take it to the page.
-      for (const c of list) {
-        try {
-          const shownNow = await c.focus();
-          if (await shownNow.navigate(target)) return;
-        } catch {
-          // Not ours to move (opened before this worker): try the next, else open one.
-        }
-      }
-      return self.clients.openWindow(target);
+      // A TapTurf window this worker controls (only those can be moved): forward, then to the page.
+      const [mine] = await self.clients.matchAll({ type: "window" });
+      if (!mine) return self.clients.openWindow(target);
+      const shownNow = await mine.focus();
+      return shownNow && shownNow.navigate(target);
     })(),
   );
 });

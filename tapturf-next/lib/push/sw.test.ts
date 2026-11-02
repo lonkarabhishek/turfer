@@ -19,12 +19,18 @@ function worker(windows: Win[] = []) {
   const opened: string[] = [];
   let skipped = false;
   let claimed = false;
+  // As in Chromium, a tap allows one focus() or openWindow(): a second is refused.
+  let interactions = 0;
+  const interact = (what: string) => {
+    if (interactions++ > 0) throw new Error(`InvalidAccessError: Not allowed to ${what}`);
+  };
   const client = (w: Win) => ({
     get url() {
       return w.url;
     },
     postMessage: (m: unknown) => w.messages.push(JSON.parse(JSON.stringify(m))),
     focus: async () => {
+      interact("focus a window");
       w.focused = true;
       return client(w);
     },
@@ -47,8 +53,12 @@ function worker(windows: Win[] = []) {
       claim: async () => {
         claimed = true;
       },
-      matchAll: async () => windows.map(client),
-      openWindow: async (u: string) => void opened.push(u),
+      // Only the windows this worker controls, unless asked for all.
+      matchAll: async (o?: { includeUncontrolled?: boolean }) => windows.filter((w) => o?.includeUncontrolled || !w.uncontrolled).map(client),
+      openWindow: async (u: string) => {
+        interact("open a window");
+        opened.push(u);
+      },
     },
   };
   vm.runInNewContext(SOURCE, { self, URL, console });
@@ -66,6 +76,7 @@ function worker(windows: Win[] = []) {
           : { json: () => (typeof data === "string" ? JSON.parse(data) : data), text: () => (typeof data === "string" ? data : JSON.stringify(data)) },
     });
   const click = (url: unknown) => {
+    interactions = 0;
     let closed = false;
     return fire("notificationclick", { notification: { data: { url }, close: () => (closed = true) } }).then(() => closed);
   };
@@ -132,7 +143,21 @@ test("sw: else takes an open TapTurf tab to the page, else opens one", async () 
   const stuck: Win = { url: `${ORIGIN}/turfs`, focused: false, navigatedTo: null, messages: [], uncontrolled: true };
   w = worker([stuck]);
   await w.click("/game/g3");
-  assert.deepEqual(w.opened, [`${ORIGIN}/game/g3`], "a tab it can't move: a new one");
+  assert.deepEqual(w.opened, [`${ORIGIN}/game/g3`], "a tab it can't move (after a hard reload): a new one, the tap's one window used for it");
+  assert.equal(stuck.focused, false, "(that tab isn't focused first, which would use it up)");
+  const hard: Win = { url: `${ORIGIN}/turfs`, focused: false, navigatedTo: null, messages: [], uncontrolled: true };
+  const mine: Win = { url: `${ORIGIN}/games`, focused: false, navigatedTo: null, messages: [] };
+  w = worker([hard, mine]);
+  await w.click("/game/g4");
+  assert.equal(mine.navigatedTo, `${ORIGIN}/game/g4`, "with one it can move as well: that one goes to the page");
+  assert.equal(mine.focused, true);
+  assert.equal(hard.focused, false);
+  assert.deepEqual(w.opened, []);
+  const onIt: Win = { url: `${ORIGIN}/game/g5`, focused: false, navigatedTo: null, messages: [], uncontrolled: true };
+  w = worker([onIt]);
+  await w.click("/game/g5");
+  assert.equal(onIt.focused, true, "a tab already on the page is brought forward even if this worker doesn't control it");
+  assert.deepEqual(w.opened, []);
   w = worker([]);
   await w.click("https://evil.example/");
   assert.deepEqual(w.opened, [`${ORIGIN}/dashboard?tab=notifications`], "nothing open: the page (never another site)");

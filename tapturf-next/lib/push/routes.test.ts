@@ -158,9 +158,23 @@ test("status: the caller's own, from the account the sign-in opens", async () =>
   net.rpc.push_state = () => ({ r: "ok", on: true, devices: 2 });
   const b = browser(`${LOCAL}/push/a1`);
   const res = await postStatus(req("/api/push/status", { method: "POST", token: phoneToken(), body: { endpoint: b.endpoint, user_id: "acc-9" } }));
-  assert.deepEqual(await json(res), { ready: true, on: true, devices: 2 });
+  assert.deepEqual(await json(res), { ready: true, on: true, devices: 2, gone: null });
   assert.deepEqual(net.calls("push_state")[0].args, { p_key: "test-account-key", p_user_id: "acc-7", p_endpoint: b.endpoint });
   assert.equal(res.headers.get("cache-control"), "private, no-store");
+});
+
+test("status: why the server stopped this address of the caller's (the browser ends it then), and nothing else passed on", async () => {
+  signedIn("acc-7");
+  withKey();
+  const b = browser(`${LOCAL}/push/a1`);
+  for (const gone of ["expired", "replaced", "failing", "off"]) {
+    net.rpc.push_state = () => ({ r: "ok", on: false, gone, devices: 1 });
+    const res = await postStatus(req("/api/push/status", { method: "POST", token: phoneToken(), body: { endpoint: b.endpoint } }));
+    assert.deepEqual(await json(res), { ready: true, on: false, devices: 1, gone });
+  }
+  net.rpc.push_state = () => ({ r: "ok", on: false, gone: "something else", devices: 1 });
+  const res = await postStatus(req("/api/push/status", { method: "POST", token: phoneToken(), body: { endpoint: b.endpoint } }));
+  assert.equal((await json(res)).gone, null);
 });
 
 test("status: signed out, refused", async () => {
@@ -205,6 +219,16 @@ test("subscribe: refused before push is ready, signed out, or with a bad address
     assert.equal((await json(res)).field, field);
   }
   assert.equal(net.calls("push_subscribe").length, 0, "the database is never asked");
+});
+
+test("subscribe: an address the push service has ended (expired) is refused with its reason, so the browser makes a new one", async () => {
+  signedIn("acc-3");
+  withKey();
+  const b = browser(`${LOCAL}/push/a5`);
+  net.rpc.push_subscribe = () => ({ r: "expired" });
+  const res = await postSubscribe(req("/api/push/subscribe", { method: "POST", token: phoneToken(), body: sub(b) }));
+  assert.equal(res.status, 409);
+  assert.deepEqual(await json(res), { reason: "expired", error: "not_allowed" });
 });
 
 test("subscribe: the database's 20 a day, and a database without the functions", async () => {

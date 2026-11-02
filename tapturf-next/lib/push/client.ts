@@ -176,11 +176,25 @@ async function call<T>(getToken: GetToken, path: string, body: unknown): Promise
   }
 }
 
-/** Whether push can be turned on yet and whether this address is on for the caller; null when the server couldn't say. */
+/** Whether push can be turned on yet and whether this address is on for the caller (or why the server stopped it); null when the server couldn't say. */
 export async function pushStatus(getToken: GetToken, endpoint: string | null): Promise<PushStatusResponse | null> {
   const a = await call<PushStatusResponse>(getToken, "/api/push/status", { endpoint });
   const b = a.body as Partial<PushStatusResponse>;
-  return a.status === 200 && typeof b.ready === "boolean" ? { ready: b.ready, on: b.on === true, devices: typeof b.devices === "number" ? b.devices : 0 } : null;
+  return a.status === 200 && typeof b.ready === "boolean"
+    ? { ready: b.ready, on: b.on === true, devices: typeof b.devices === "number" ? b.devices : 0, gone: typeof b.gone === "string" ? b.gone : null }
+    : null;
+}
+
+/**
+ * This browser's subscription, which the server has stopped (status gone:
+ * the push service ended it, it kept failing, or another phone took its
+ * place): ended here too, so nothing looks on that isn't, an open tab rings
+ * again (pushOnHere) and turning on makes a new one.
+ */
+export async function endStopped(sub: PushSubscription): Promise<void> {
+  await sub.unsubscribe().catch(() => false);
+  store(OWNER_KEY, null);
+  store(SYNCED_KEY, null);
 }
 
 export type TurnOnResult = { ok: { devices: number } } | { error: "denied" | "dismissed" | "not_ready" | "limit" | "sign_in" | "unavailable" };
@@ -188,9 +202,10 @@ export type TurnOnResult = { ok: { devices: number } } | { error: "denied" | "di
 /**
  * "Notifications on this phone": asks the phone (call it straight from the
  * tap, before anything else: an iPhone asks only from the tap itself),
- * subscribes with our VAPID key and tells the server. When the server
- * doesn't take it, the subscription is undone, so nothing looks on that
- * isn't.
+ * subscribes with our VAPID key and tells the server. One the browser still
+ * has that the push service has ended (the server answers expired) is
+ * replaced by a new one. When the server doesn't take it, the subscription
+ * is undone, so nothing looks on that isn't.
  */
 export async function turnPushOn(getToken: GetToken, userId: string): Promise<TurnOnResult> {
   let permission: NotificationPermission;
@@ -202,19 +217,31 @@ export async function turnPushOn(getToken: GetToken, userId: string): Promise<Tu
   if (permission === "denied") return { error: "denied" };
   if (permission !== "granted") return { error: "dismissed" };
   if (!(await registration()) && !(await registerPushWorker())) return { error: "unavailable" };
+  let ready: ServiceWorkerRegistration;
+  let had: PushSubscription | null;
   let sub: PushSubscription;
+  const fresh = () => ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) });
   try {
-    const ready = await waitFor(navigator.serviceWorker.ready, 15_000);
-    let had = await ready.pushManager.getSubscription();
+    ready = await waitFor(navigator.serviceWorker.ready, 15_000);
+    had = await ready.pushManager.getSubscription();
     if (had && !ourKey(had)) {
       await had.unsubscribe().catch(() => false);
       had = null;
     }
-    sub = had ?? (await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
+    sub = had ?? (await fresh());
   } catch {
     return { error: "unavailable" };
   }
-  const a = await call<PushChangedResponse>(getToken, "/api/push/subscribe", sub.toJSON());
+  let a = await call<PushChangedResponse>(getToken, "/api/push/subscribe", sub.toJSON());
+  if (had && a.status === 409 && (a.body as PushErrorBody).reason === "expired") {
+    await had.unsubscribe().catch(() => false);
+    try {
+      sub = await fresh();
+    } catch {
+      return { error: "unavailable" };
+    }
+    a = await call<PushChangedResponse>(getToken, "/api/push/subscribe", sub.toJSON());
+  }
   if (a.status === 200 && (a.body as PushChangedResponse).r === "ok") {
     store(OWNER_KEY, userId);
     store(SYNCED_KEY, `${userId}:${today()}`);
@@ -253,9 +280,11 @@ const today = () => new Date().toISOString().slice(0, 10);
  * loaded): registers the worker and, at most once a day, checks this
  * browser's subscription with the server. One this account turned on
  * that the server doesn't have (the browser renewed it) is sent again; one
- * from another account that used this browser is ended, so nobody gets
- * another account's notifications here. mayAsk false: only the worker
- * (no sign-in token is fetched, so no sign-in SDK starts just for this).
+ * the server stopped (gone: expired, failing, replaced, off) is ended here,
+ * never sent again (only the switch turns it back on); one from another
+ * account that used this browser is ended, so nobody gets another
+ * account's notifications here. mayAsk false: only the worker (no sign-in
+ * token is fetched, so no sign-in SDK starts just for this).
  */
 export async function syncPush(getToken: GetToken, userId: string, mayAsk = true): Promise<void> {
   if (pushSupport() !== "push" || userId === loggedOut) return;
@@ -268,7 +297,7 @@ export async function syncPush(getToken: GetToken, userId: string, mayAsk = true
   if (!st?.ready) return;
   if (st.on) {
     store(OWNER_KEY, userId);
-  } else if (owner === userId && notificationPermission() === "granted" && ourKey(sub)) {
+  } else if (!st.gone && owner === userId && notificationPermission() === "granted" && ourKey(sub)) {
     const a = await call<PushChangedResponse>(getToken, "/api/push/subscribe", sub.toJSON());
     if (a.status !== 200) return;
   } else {
