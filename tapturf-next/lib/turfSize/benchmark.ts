@@ -17,9 +17,11 @@
 //   mistimed shot can still go for six), good for football and for
 //   under-14/16 cricket;
 //   long, wide and high: great for adult cricket and football.
+// Short and narrow without high nets: only OK, for small-sided football (a
+// small cage is not "good for football" just for being a cage).
 // No height given (an open ground): judged on length and width, and it says so.
 
-import { type Dim, type Ground, tenth } from "./sizes";
+import { type Dim, type Ground, type Unit, fromFeet, shown, sizeLine, tenth } from "./sizes";
 
 /** Feet. Below `low` is the first word, above `high` the last, from low to high inclusive the middle one. */
 export const SIZE_BANDS: Record<Dim, { low: number; high: number; words: readonly [string, string, string] }> = {
@@ -149,6 +151,19 @@ export function benchmarkNote(b: Benchmark, cityLabel: (id: string) => string): 
   return `Compared with the ${b.n} other turf${b.n === 1 ? "" : "s"}${where} whose owners shared their size on TapTurf.`;
 }
 
+/**
+ * The note under the card for every comparison it shows: the turfs they
+ * compare with, when all of them compare with the same ones. Each size picks
+ * its own (net height counts only turfs that gave one, and may fall back to
+ * India), so when they differ the note says each line names its place. null
+ * without any comparison.
+ */
+export function benchmarksNote(bs: readonly Benchmark[], cityLabel: (id: string) => string): string | null {
+  if (bs.length === 0) return null;
+  const same = bs.every((b) => b.place === bs[0].place && b.city === bs[0].city && b.n === bs[0].n);
+  return same ? benchmarkNote(bs[0], cityLabel) : "Compared with other turfs whose owners shared their size on TapTurf, in the place each line names.";
+}
+
 /** The middle turf of the place a benchmark compares with (length and width), for the dashed outline; null without one. */
 export function middleTurf(turf: { id: string; city: string | null }, peers: readonly PeerTurf[], b: Benchmark | undefined): { length: number; width: number } | null {
   if (!b) return null;
@@ -200,17 +215,11 @@ const CRICKET_CHIP: Record<Tone, string> = {
   poor: "Not great for adult cricket",
 };
 
-/**
- * The one-line summary, chips and short reasons for one ground. Cricket is
- * judged only where the ground or the turf is for cricket, football the same.
- */
-export function suitability(g: Ground, sports: { cricket: boolean; football: boolean }): Suitability {
+/** A ground's bands, and how it does for adult cricket, junior cricket and football. */
+function grades(g: Ground) {
   const L = levelOf("length", g.length_ft);
   const W = levelOf("width", g.width_ft);
   const H: Level | null = g.height_ft == null ? null : levelOf("height", g.height_ft);
-  const chips: Chip[] = [];
-  const reasons: string[] = [];
-
   // Adult cricket: the boundary (length) first, then the nets (height), then the room to run (width).
   let adult: Tone;
   if (L === 0) adult = "poor";
@@ -219,13 +228,34 @@ export function suitability(g: Ground, sports: { cricket: boolean; football: boo
   else if (L === 2 || H === 2) adult = "good";
   else adult = "ok";
   const juniors = L === 0 && H !== 0;
-  const football: Tone = L === 2 && W > 0 ? "great" : "good";
+  // Short and narrow: room for a small game only, unless the nets are high (short and high is good for football).
+  const football: Tone = L === 2 && W > 0 ? "great" : L === 0 && W === 0 && H !== 2 ? "ok" : "good";
+  return { L, W, H, adult, juniors, football };
+}
+
+const FOOTBALL_CHIP: Record<Tone, string> = {
+  great: "Great for football",
+  good: "Good for football",
+  ok: "OK for small-sided football",
+  poor: "Not great for football",
+};
+const SMALL_FOOTBALL = "Short and narrow: suits small-sided football with fewer players.";
+
+/**
+ * The one-line summary, chips and short reasons for one ground. Cricket is
+ * judged only where the ground or the turf is for cricket, football the same.
+ */
+export function suitability(g: Ground, sports: { cricket: boolean; football: boolean }): Suitability {
+  const gr = grades(g);
+  const { L, W, H, adult, juniors, football } = gr;
+  const chips: Chip[] = [];
+  const reasons: string[] = [];
 
   if (sports.cricket) {
     chips.push({ id: "cricket", text: CRICKET_CHIP[adult], tone: adult });
     if (juniors) chips.push({ id: "juniors", text: "Good for juniors (U14-16)", tone: "good" });
   }
-  if (sports.football) chips.push({ id: "football", text: football === "great" ? "Great for football" : "Good for football", tone: football });
+  if (sports.football) chips.push({ id: "football", text: FOOTBALL_CHIP[football], tone: football });
   if (sports.cricket && W === 2) chips.push({ id: "running", text: "Lots of singles and doubles", tone: "great" });
 
   if (sports.cricket) {
@@ -242,31 +272,65 @@ export function suitability(g: Ground, sports: { cricket: boolean; football: boo
       else if (H === 1) reasons.push("Medium net height: the highest lofted shots may hit the net.");
     }
     reasons.push(W === 2 ? "Wide: more room to run singles and doubles." : W === 1 ? "Medium width: room for some singles and doubles." : "Narrow: fewer singles and doubles.");
+    if (sports.football && football === "ok") reasons.push(SMALL_FOOTBALL);
   } else if (sports.football) {
-    reasons.push(L === 2 ? "Long: room for a bigger game." : L === 1 ? "Medium length: a good size for small-sided football." : "Short: suits small-sided football.");
-    if (W === 0) reasons.push("Narrow: less room out wide.");
+    if (football === "ok") reasons.push(SMALL_FOOTBALL);
+    else {
+      reasons.push(L === 2 ? "Long: room for a bigger game." : L === 1 ? "Medium length: a good size for small-sided football." : "Short: suits small-sided football.");
+      if (W === 0) reasons.push("Narrow: less room out wide.");
+    }
   }
   if (sports.football && sports.cricket && H === 0 && L > 0) reasons.push("Low nets matter less for football, where the ball mostly stays down.");
   if (H === null) reasons.push("No net height given, so this is judged on length and width only.");
 
   const shape = H === null ? `${SHAPE.length[L]} and ${SHAPE.width[W]}` : `${SHAPE.length[L]}, ${SHAPE.width[W]} and ${SHAPE.height[H]}`;
-  return { summary: verdict(shape, sports, adult, juniors, football), chips, reasons };
+  const v = verdict(sports, gr);
+  return { summary: v ? `${shape}: ${v}.` : `${shape}.`, chips, reasons };
 }
 
-function verdict(shape: string, sports: { cricket: boolean; football: boolean }, adult: Tone, juniors: boolean, football: Tone): string {
-  const fb = football === "great" ? "great for football" : "good for football";
-  let v: string | null = null;
+/** What a ground suits, as said after the colon ("great for adult cricket and football"); null when neither sport is judged. */
+function verdict(sports: { cricket: boolean; football: boolean }, { adult, juniors, football }: ReturnType<typeof grades>): string | null {
+  const fb = football === "ok" ? FOOTBALL_CHIP.ok : FOOTBALL_CHIP[football].toLowerCase();
   if (sports.cricket && sports.football) {
-    if (adult === "great") v = "great for adult cricket and football";
-    else if (adult === "good") v = football === "great" ? "good for adult cricket, great for football" : "good for adult cricket and football";
-    else if (adult === "ok") v = `OK for adult cricket, ${fb}`;
-    else v = juniors ? `${fb} and junior cricket` : `${fb}, not great for cricket`;
-  } else if (sports.cricket) {
-    v = adult === "poor" ? (juniors ? "good for junior cricket, short for adults" : "not great for cricket") : CRICKET_CHIP[adult].toLowerCase().replace(/^ok/, "OK");
-  } else if (sports.football) {
-    v = fb;
+    if (adult === "great") return "great for adult cricket and football";
+    if (adult === "good") return football === "great" ? "good for adult cricket, great for football" : "good for adult cricket and football";
+    if (adult === "ok") return `OK for adult cricket, ${fb}`;
+    if (juniors) return football === "ok" ? `good for junior cricket, ${fb}` : `${fb} and junior cricket`;
+    return `${fb}, not great for cricket`;
   }
-  return v ? `${shape}: ${v}.` : `${shape}.`;
+  if (sports.cricket) return adult === "poor" ? (juniors ? "good for junior cricket, short for adults" : "not great for cricket") : CRICKET_CHIP[adult].toLowerCase().replace(/^ok/, "OK");
+  if (sports.football) return fb;
+  return null;
+}
+
+/** One ground in a sentence, in the pieces the card styles: who, its size in the owner's unit, the same in the other unit, and the rest. */
+export type GroundSentence = { subject: string; size: string; other: string; rest: string };
+
+/**
+ * "Box 1 is 120 ft long, 70 ft wide and 40 ft high (36.6 × 21.3 × 12.2 m):
+ * great for adult cricket, lots of singles and doubles." The plain-text line
+ * the turf page's card shows for each ground and its JSON-LD carries
+ * (amenityFeature, lib/utils/seo.ts), so a crawler that reads no SVG and runs
+ * no script still gets the size and what it suits. No benchmarks: they
+ * change as other turfs add sizes.
+ */
+export function groundSentenceParts(g: Ground, index: number, count: number, unit: Unit, sports: { cricket: boolean; football: boolean }): GroundSentence {
+  const u = (ft: number) => `${shown(fromFeet(ft, unit))} ${unit}`;
+  const gr = grades(g);
+  const suits = [verdict(sports, gr), sports.cricket && gr.W === 2 ? "lots of singles and doubles" : null].filter((x): x is string => !!x);
+  return {
+    subject: g.name ?? (count > 1 ? `Ground ${index + 1}` : "The ground"),
+    size: g.height_ft == null ? `${u(g.length_ft)} long and ${u(g.width_ft)} wide` : `${u(g.length_ft)} long, ${u(g.width_ft)} wide and ${u(g.height_ft)} high`,
+    other: `(${sizeLine(g, unit === "m" ? "ft" : "m")})`,
+    rest: `${g.height_ft == null ? ", with no net height given" : ""}${suits.length ? `: ${suits.join(", ")}` : ""}.`,
+  };
+}
+
+/** The pieces as the one line of text the card reads as. */
+export const sentenceText = (p: GroundSentence): string => `${p.subject} is ${p.size} ${p.other}${p.rest}`;
+
+export function groundSentence(g: Ground, index: number, count: number, unit: Unit, sports: { cricket: boolean; football: boolean }): string {
+  return sentenceText(groundSentenceParts(g, index, count, unit, sports));
 }
 
 /* ------------------------------------------------------------------ */

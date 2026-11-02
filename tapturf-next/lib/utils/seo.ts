@@ -10,6 +10,8 @@ import { turfUrl } from "./turfPath";
 import { areaFor } from "./area";
 import { displayArea, turfMeta } from "../seo/turfMeta";
 import { AGGREGATE_RATING_MIN_REPORTS } from "../seo/defaults";
+import { groundSentence, sportsFor } from "../turfSize/benchmark";
+import { groundTitle } from "../turfSize/sizes";
 
 // Relative imports only, so node --test runs this (lib/utils/seo.test.ts).
 
@@ -146,7 +148,23 @@ export function generateTurfJsonLd(turf: Turf, extra: TurfJsonLdExtra = {}) {
       });
       return spec ? { openingHoursSpecification: spec } : {};
     })(),
+    // The owner's ground sizes (myTapturf), one feature per ground, in the
+    // sentence the page's Ground size card shows. Last, and only for a turf
+    // with sizes: every other turf's markup stays as it was.
+    ...(turf.ground_sizes && { amenityFeature: groundSizeFeatures(turf) }),
   };
+}
+
+/** "Ground size" ("Ground size: Box 1" for a turf with more than one) and its sentence (lib/turfSize/benchmark.ts groundSentence). */
+function groundSizeFeatures(turf: Turf) {
+  const sizes = turf.ground_sizes;
+  if (!sizes) return [];
+  const count = sizes.grounds.length;
+  return sizes.grounds.map((g, i) => ({
+    "@type": "LocationFeatureSpecification",
+    name: count > 1 ? `Ground size: ${groundTitle(g, i, count)}` : "Ground size",
+    value: groundSentence(g, i, count, sizes.unit, sportsFor(g, turf.sports ?? [])),
+  }));
 }
 
 /** Home › {City} › {name}: the city page is the turf's parent (Home › Turfs when the row has no city). */

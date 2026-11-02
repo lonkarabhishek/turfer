@@ -7,6 +7,9 @@ import {
   benchmarkNote,
   benchmarkOf,
   benchmarkText,
+  benchmarksNote,
+  groundSentence,
+  groundSentenceParts,
   halves,
   levelOf,
   meterPos,
@@ -14,9 +17,11 @@ import {
   peersFrom,
   sideView,
   sizeWord,
+  sentenceText,
   sportsFor,
   suitability,
   topView,
+  type Benchmark,
   type PeerTurf,
 } from "./benchmark";
 import type { Ground } from "./sizes";
@@ -72,7 +77,53 @@ test("benchmark: the grades in between", () => {
   // Short and low: no juniors chip either.
   const shortLow = suitability(g(80, 40, 18), BOTH);
   assert.deepEqual(shortLow.chips.map((c) => c.id), ["cricket", "football"]);
-  assert.equal(shortLow.summary, "Short, narrow and low: good for football, not great for cricket.");
+  assert.equal(shortLow.summary, "Short, narrow and low: OK for small-sided football, not great for cricket.");
+});
+
+test("benchmark: a short, narrow ground is only OK for football, unless its nets are high", () => {
+  for (const [l, w, h] of [[30, 20, 8], [80, 50, 15], [99, 54, 30]] as const) {
+    const s = suitability(g(l, w, h), BOTH);
+    assert.deepEqual(s.chips.find((c) => c.id === "football"), { id: "football", text: "OK for small-sided football", tone: "ok" }, `${l}x${w}x${h}`);
+    assert.ok(s.reasons.includes("Short and narrow: suits small-sided football with fewer players."), `${l}x${w}x${h}`);
+  }
+  assert.equal(suitability(g(30, 20, 8), BOTH).summary, "Short, narrow and low: OK for small-sided football, not great for cricket.");
+  assert.equal(suitability(g(90, 50, 30), BOTH).summary, "Short, narrow and mid-height: good for junior cricket, OK for small-sided football.");
+  const fb = suitability(g(80, 50, 15), { cricket: false, football: true });
+  assert.equal(fb.summary, "Short, narrow and low: OK for small-sided football.");
+  assert.deepEqual(fb.reasons, ["Short and narrow: suits small-sided football with fewer players."]);
+  assert.equal(suitability(g(90, 50, null), BOTH).chips.find((c) => c.id === "football")?.tone, "ok", "short, narrow and open");
+  // The site owner's rule: short with high nets is good for football; short but not narrow too.
+  assert.equal(suitability(g(90, 50, 45), BOTH).chips.find((c) => c.id === "football")?.text, "Good for football");
+  assert.equal(suitability(g(90, 60, 20), BOTH).chips.find((c) => c.id === "football")?.text, "Good for football");
+  assert.equal(suitability(g(90, 60, 20), { cricket: false, football: true }).reasons[0], "Short: suits small-sided football.");
+});
+
+test("benchmark: each ground in one plain sentence, the card's and the JSON-LD's", () => {
+  // The site owner's examples, as the stand-in turfs have them.
+  assert.equal(groundSentence(g(170, 75, 20), 0, 1, "ft", BOTH), "The ground is 170 ft long, 75 ft wide and 20 ft high (51.8 × 22.9 × 6.1 m): great for football, not great for cricket.");
+  assert.equal(groundSentence(g(90, 50, 45, "cricket"), 0, 1, "ft", { cricket: true, football: false }), "The ground is 90 ft long, 50 ft wide and 45 ft high (27.4 × 15.2 × 13.7 m): good for junior cricket, short for adults.");
+  assert.equal(
+    groundSentence({ ...g(160, 90, 50, "both"), name: "Main box" }, 0, 1, "ft", BOTH),
+    "Main box is 160 ft long, 90 ft wide and 50 ft high (48.8 × 27.4 × 15.2 m): great for adult cricket and football, lots of singles and doubles.",
+  );
+  assert.equal(groundSentence(g(80, 45, 42), 0, 1, "ft", BOTH), "The ground is 80 ft long, 45 ft wide and 42 ft high (24.4 × 13.7 × 12.8 m): good for football and junior cricket.");
+  // An open ground says so.
+  assert.equal(
+    groundSentence({ ...g(200, 120, null), name: "Main ground" }, 0, 1, "ft", BOTH),
+    "Main ground is 200 ft long and 120 ft wide (61 × 36.6 m), with no net height given: good for adult cricket, great for football, lots of singles and doubles.",
+  );
+  // Typed in metres: metres first. An unnamed ground of two is "Ground 2".
+  assert.equal(
+    groundSentence({ ...g(120, 70, 40), name: "Box 1" }, 0, 2, "m", BOTH),
+    "Box 1 is 36.6 m long, 21.3 m wide and 12.2 m high (120 × 70 × 40 ft): OK for adult cricket, good for football.",
+  );
+  assert.ok(groundSentence(g(95, 50, 30), 1, 2, "ft", BOTH).startsWith("Ground 2 is 95 ft long"));
+  // Neither sport judged: the size alone.
+  assert.equal(groundSentence(g(44, 20, 30), 0, 1, "ft", { cricket: false, football: false }), "The ground is 44 ft long, 20 ft wide and 30 ft high (13.4 × 6.1 × 9.1 m).");
+  // The pieces the card styles read as the same line.
+  const parts = groundSentenceParts({ ...g(160, 90, 50), name: "Main box" }, 0, 1, "ft", BOTH);
+  assert.deepEqual(parts, { subject: "Main box", size: "160 ft long, 90 ft wide and 50 ft high", other: "(48.8 × 27.4 × 15.2 m)", rest: ": great for adult cricket and football, lots of singles and doubles." });
+  assert.equal(sentenceText(parts), groundSentence({ ...g(160, 90, 50), name: "Main box" }, 0, 1, "ft", BOTH));
 });
 
 test("benchmark: an open ground is judged on length and width, and says so", () => {
@@ -148,6 +199,19 @@ test("benchmark: the city once 10 turfs there have sizes, else India; the turf i
   assert.equal(c.height, undefined);
 });
 
+test("benchmark: the note names one set of turfs only when every line compares with it", () => {
+  // 12 in Nashik (3 with nets) and 20 in Pune with nets: length and width compare with Nashik, height with India.
+  const nashik: PeerTurf[] = Array.from({ length: 12 }, (_, i) => ({ id: `n${i}`, city: "nashik", length: 100 + i * 4, width: 50 + i, height: i < 3 ? 30 + i : null }));
+  const pune: PeerTurf[] = Array.from({ length: 20 }, (_, i) => ({ id: `p${i}`, city: "pune", length: 90 + i * 3, width: 45 + i, height: 20 + i }));
+  const b = benchmarkOf(g(150, 70, 45), { id: "me", city: "nashik" }, [...nashik, ...pune]);
+  assert.deepEqual([b.length?.place, b.length?.n, b.height?.place, b.height?.n], ["city", 12, "india", 23]);
+  const shown = [b.length, b.width, b.height].filter((x): x is Benchmark => !!x);
+  assert.equal(benchmarksNote(shown, label), "Compared with other turfs whose owners shared their size on TapTurf, in the place each line names.");
+  assert.equal(benchmarkText("height", b.height!, label), "Higher than any other turf across India");
+  // Length and width alone (an open ground): the one set.
+  assert.equal(benchmarksNote([b.length!, b.width!], label), "Compared with the 12 other turfs in Nashik whose owners shared their size on TapTurf.");
+});
+
 test("benchmark: the words, both ways and in the middle", () => {
   const peers: PeerTurf[] = Array.from({ length: 30 }, (_, i) => ({ id: `t${i}`, city: "nashik", length: 100 + i, width: 50 + i, height: 20 + i }));
   const me = { id: "me", city: "nashik" };
@@ -161,6 +225,8 @@ test("benchmark: the words, both ways and in the middle", () => {
   assert.equal(benchmarkText("width", mid.width!, label), "About as wide as most turfs in Nashik");
   assert.equal(benchmarkText("height", mid.height!, label), "Higher than 60% of turfs in Nashik");
   assert.equal(benchmarkNote(mid.length!, label), "Compared with the 30 other turfs in Nashik whose owners shared their size on TapTurf.");
+  assert.equal(benchmarksNote([mid.length!, mid.width!, mid.height!], label), "Compared with the 30 other turfs in Nashik whose owners shared their size on TapTurf.");
+  assert.equal(benchmarksNote([], label), null);
   assert.deepEqual(middleTurf(me, peers, mid.length), { length: 115, width: 65 });
   assert.equal(middleTurf(me, peers, undefined), null);
 });
