@@ -130,7 +130,10 @@ export const post: Post = {
     { type: "cta", text: "Cheapest median on the map.", href: "/nashik", label: "Turfs in Nashik" },
     { type: "cta", text: "291 listed turfs, 172 with a price.", href: "/pune", label: "Turfs in Pune" },
     { type: "cta", text: "The biggest priced list on TapTurf.", href: "/hyderabad", label: "Turfs in Hyderabad" },
+    { type: "cta", text: "The second-biggest priced list, at a ₹1,100 median.", href: "/bangalore", label: "Turfs in Bangalore" },
+    { type: "cta", text: "A ₹1,250 median, though few venues list a price.", href: "/mumbai", label: "Turfs in Mumbai" },
     { type: "cta", text: "Costliest median on the map.", href: "/delhi", label: "Turfs in Delhi" },
+    { type: "cta", text: "A ₹1,000 median, the same as Pune and Kochi.", href: "/chennai", label: "Turfs in Chennai" },
 
     { type: "h2", text: "Thinking of opening a turf?" },
     {

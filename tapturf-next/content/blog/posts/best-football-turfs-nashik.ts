@@ -54,6 +54,12 @@ export const post: Post = {
       type: "p",
       text: "College Road and Gangapur Road have the highest density of proper football turfs. If you're in Indira Nagar, Deolali, or Panchavati, you'll find a handful of good options that fill up more slowly, a quiet advantage if you're booking last-minute. Nashik Road has cheaper turfs but the pitch quality is uneven; visit before you commit to a season.",
     },
+    {
+      type: "cta",
+      text: "Every listed turf in Nashik, with timings and photos.",
+      href: "/nashik",
+      label: "All Nashik turfs",
+    },
 
     { type: "h2", text: "What you should pay in 2026" },
     {

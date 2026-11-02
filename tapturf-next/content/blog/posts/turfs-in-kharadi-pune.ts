@@ -82,6 +82,12 @@ export const post: Post = {
       type: "p",
       text: "Box cricket and football are each listed at eight venues. Sportsage Turf is the exception: it lists cricket, badminton, volleyball and tennis rather than box cricket or football, on two 7-a-side grounds. Badminton is listed at five venues (Arya Sports Club, Hotfut Kharadi, Playshire Sports Club, Sportsage Turf and Sportygen x Arya Sports Hub). Turf Up lists four 6-a-side grounds, the most in Kharadi.",
     },
+    {
+      type: "cta",
+      text: "Kharadi is one corner of the city. See every listed turf in Pune, with timings and photos.",
+      href: "/pune",
+      label: "All turfs in Pune",
+    },
 
     { type: "h2", text: "What does a turf in Kharadi cost per hour?" },
     {

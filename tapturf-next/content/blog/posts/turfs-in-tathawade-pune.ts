@@ -86,6 +86,12 @@ export const post: Post = {
       type: "p",
       text: "Box cricket is listed at nine venues, and four of them (Adhiraj Sports Turf, Neton Sports, SP Sports Academy and Turf and TurfX Sports Arena) list no football. Football is listed at six. Sportscity is the odd one out: it lists cricket, cricket nets, football, basketball and pickleball, but not box cricket. Badminton is listed at Neton Sports and Ace Sports Arena, and basketball at Ace Sports Arena and Sportscity. TurfX Sports Arena also lists cricket nets, and UJ Turf lists pool and snooker alongside its turf.",
     },
+    {
+      type: "cta",
+      text: "Looking beyond Tathawade? Every listed turf in Pune, with timings and photos.",
+      href: "/pune",
+      label: "Turfs across Pune",
+    },
 
     { type: "h2", text: "What does a turf in Tathawade cost per hour?" },
     {

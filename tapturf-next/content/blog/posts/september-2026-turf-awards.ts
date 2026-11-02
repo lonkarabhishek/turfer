@@ -119,6 +119,12 @@ export const post: Post = {
         "SK Sports Club, Bhagur: 4.9 from 27 reviews, the Rising Star runner-up.",
       ],
     },
+    {
+      type: "cta",
+      text: "The winners and every other listed turf in Nashik.",
+      href: "/nashik",
+      label: "Turfs in Nashik",
+    },
 
     // ── Pune ──────────────────────────────────────────────────
     { type: "h2", text: "Pune", id: "pune" },
@@ -183,6 +189,12 @@ export const post: Post = {
         "Hindu Gymkhana Kothrud: 4.7 from 387 reviews, cricket nets, box cricket, football and pickleball.",
       ],
     },
+    {
+      type: "cta",
+      text: "The full field: every listed turf in Pune.",
+      href: "/pune",
+      label: "All Pune turfs",
+    },
 
     // ── Mumbai ────────────────────────────────────────────────
     { type: "h2", text: "Mumbai", id: "mumbai" },
@@ -236,6 +248,12 @@ export const post: Post = {
         "Goalster at St. Joseph's Sports Complex, Bandra West: 4.7 from 237 reviews, football, cricket and pickleball.",
         "Turfstation Juhu: 4.2 from 1,685 reviews, the second most-reviewed turf in the city.",
       ],
+    },
+    {
+      type: "cta",
+      text: "Beyond the awards: every listed turf in Mumbai.",
+      href: "/mumbai",
+      label: "Mumbai's turfs",
     },
 
     // ── TapTurf players' picks ───────────────────────────────

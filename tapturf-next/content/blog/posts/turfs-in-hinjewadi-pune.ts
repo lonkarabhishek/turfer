@@ -76,6 +76,12 @@ export const post: Post = {
       type: "p",
       text: "Box cricket and football dominate. 13 venues list box cricket and 13 list football. Infinity Cricket Ground near Phase 3 and Alard Sports in Marunji list cricket. For other sports the choice is thin: Reboot Sports Arena lists badminton and table tennis, and Amrit Sports Village in Mukai Nagar lists pickleball and cricket nets.",
     },
+    {
+      type: "cta",
+      text: "Hinjewadi is one part of the city. Every listed turf in Pune, with timings and photos.",
+      href: "/pune",
+      label: "Browse turfs in Pune",
+    },
 
     { type: "h2", text: "What does a turf in Hinjewadi cost per hour?" },
     {
