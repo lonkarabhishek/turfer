@@ -5,6 +5,7 @@ import { createdSince, gameState, istMinute, latestGames, requestsByGame, type G
 import { isVerified, userCity, type Confirmed, type UserCity } from "@/lib/admin/people";
 import { both, okSection, readAllPages, rowsOf, type Section } from "@/lib/admin/section";
 import { isCity } from "@/lib/city";
+import { toGroundSizes } from "@/lib/turfSize/sizes";
 
 /**
  * Row-level lists behind the /admin number tiles (server-only).
@@ -253,7 +254,7 @@ export async function getAdminRequests(filter: RequestFilter = "all") {
 
 // ── Turfs ───────────────────────────────────────────────
 
-export const TURF_FILTERS = { all: "All active", hyderabad: "Hyderabad", bangalore: "Bangalore", mumbai: "Mumbai", pune: "Pune", delhi: "Delhi", chennai: "Chennai", nashik: "Nashik", nagpur: "Nagpur", nophone: "No phone", claimed: "Claimed" } as const;
+export const TURF_FILTERS = { all: "All active", hyderabad: "Hyderabad", bangalore: "Bangalore", mumbai: "Mumbai", pune: "Pune", delhi: "Delhi", chennai: "Chennai", nashik: "Nashik", nagpur: "Nagpur", nophone: "No phone", claimed: "Claimed", sizes: "Ground sizes" } as const;
 export type TurfFilter = keyof typeof TURF_FILTERS;
 
 type TurfListRow = {
@@ -270,27 +271,33 @@ type TurfListRow = {
   updated_at: string | null;
   /** An owner manages it on myTapturf (20261025_turf_claimed.sql). */
   claimed: boolean | null;
+  /** The owner's ground sizes (20261102_turf_dimensions.sql): read for the sizes filter only, so the list works before that file. */
+  ground_sizes?: unknown;
 };
 
 /** Every active turf (paged: there are more than the 1,000 one request returns), by name. */
 export async function getAdminTurfs(filter: TurfFilter = "all") {
+  const cols: string = `id, name, slug, city, address, rating, total_reviews, owner_phone, contact_info, images, updated_at, claimed${filter === "sizes" ? ", ground_sizes" : ""}`;
   return anonRead("turfs list", async (s, signal) => {
     const all = await readAllPages<TurfListRow>((from, to) => {
       let q = s
         .from("turfs")
-        .select("id, name, slug, city, address, rating, total_reviews, owner_phone, contact_info, images, updated_at, claimed")
+        .select(cols)
         .eq("is_active", true)
         .order("name", { ascending: true })
         .order("id", { ascending: true });
-      // isCity is only slug-shaped: "all", "nophone" and "claimed" pass it too, and would ask for a city of that name.
-      if (filter !== "all" && filter !== "nophone" && filter !== "claimed" && isCity(filter)) q = q.eq("city", filter);
+      // isCity is only slug-shaped: "all", "nophone", "claimed" and "sizes" pass it too, and would ask for a city of that name.
+      if (filter !== "all" && filter !== "nophone" && filter !== "claimed" && filter !== "sizes" && isCity(filter)) q = q.eq("city", filter);
       if (filter === "claimed") q = q.eq("claimed", true);
-      return q.range(from, to).abortSignal(signal);
+      if (filter === "sizes") q = q.not("ground_sizes", "is", null);
+      // The columns are chosen at run time, so the client cannot type the rows itself.
+      return q.range(from, to).abortSignal(signal) as unknown as PromiseLike<{ data: TurfListRow[] | null; error: unknown }>;
     }, "turfs");
     let rows = all.map((t) => ({
       ...t,
       phone: t.owner_phone || (t.contact_info?.phone ?? null),
       photos: Array.isArray(t.images) ? t.images.length : 0,
+      sizes: toGroundSizes(t.ground_sizes),
     }));
     if (filter === "nophone") rows = rows.filter((t) => !t.phone);
     return rows;

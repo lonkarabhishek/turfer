@@ -51,6 +51,7 @@ import { keyLabel } from "@/lib/admin/claims";
 import { SectionError } from "@/components/admin/SectionStatus";
 import type { Reason } from "@/lib/admin/section";
 import { getAdminTournaments } from "@/lib/queries/adminTournaments";
+import { groundTitle, sizeLine } from "@/lib/turfSize/sizes";
 
 const TOURNAMENT_FILTERS = { all: "All", live: "Live now", on: "On", removed: "Taken down" } as const;
 
@@ -637,10 +638,12 @@ async function renderView(v: View, filter: string, city: string | null = null): 
       const res = await getAdminTurfs(filter as TurfFilter);
       if (!res.ok) return failedView(res.reason, "the turfs");
       const turfs = res.data;
+      // The sizes filter: the owner's grounds too (feet, as stored), dated.
+      const sized = filter === "sizes";
       return {
         count: turfs.length,
         node: (
-          <Table head={["Turf", "City", "Rating", "Phone", "Photos", "Updated"]} empty={turfs.length === 0}>
+          <Table head={["Turf", "City", "Rating", "Phone", "Photos", ...(sized ? ["Ground size"] : []), "Updated"]} empty={turfs.length === 0}>
             {turfs.map((t) => (
               <tr key={t.id}>
                 <td className="px-4 py-3">
@@ -655,6 +658,26 @@ async function renderView(v: View, filter: string, city: string | null = null): 
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">{t.phone || <Badge className="bg-hot-500/10 text-hot-600">missing</Badge>}</td>
                 <td className="px-4 py-3 tabular-nums">{t.photos}</td>
+                {sized && (
+                  <td className="px-4 py-3 text-[13px] text-primary-700">
+                    {t.sizes ? (
+                      <>
+                        {t.sizes.grounds.map((g, i) => (
+                          <div key={i} className="whitespace-nowrap tabular-nums">
+                            {groundTitle(g, i, t.sizes!.grounds.length)}: {sizeLine(g, "ft")}
+                            {g.height_ft == null ? ", open" : ""}
+                            {g.sport ? ` · ${g.sport}` : ""}
+                          </div>
+                        ))}
+                        <div className="text-[12px] text-primary-400">
+                          Typed in {t.sizes.unit === "m" ? "metres" : "feet"}, {fmtDateTime(t.sizes.updated_at)}
+                        </div>
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                )}
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(t.updated_at)}</td>
               </tr>
             ))}

@@ -1,3 +1,5 @@
+import type { GroundSizes } from "../lib/turfSize/sizes";
+
 export interface Turf {
   id: string;
   /** URL slug, /turf/<slug>; see lib/utils/turfPath.ts. */
@@ -111,6 +113,8 @@ export interface Turf {
   good_to_know_updated_at?: string | null;
   /** "What players say": made from written reviews by the admin pass. */
   review_summary?: { summary: string; likes: string[]; gripes: string[]; based_on: number; sources: string[] } | null;
+  /** Owners' ground sizes from myTapturf (lib/turfSize/sizes.ts). Turf pages only, and only when the owner gave some. */
+  ground_sizes?: GroundSizes;
 
   // System
   is_active: boolean;

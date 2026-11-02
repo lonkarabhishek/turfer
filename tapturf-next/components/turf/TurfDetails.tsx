@@ -47,7 +47,8 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     });
   }
 
-  if (turf.length_feet && turf.width_feet) {
+  // Research's one size, unless the owner gave theirs (the Ground size card below shows those).
+  if (turf.length_feet && turf.width_feet && !turf.ground_sizes) {
     const dim = `${turf.length_feet}ft × ${turf.width_feet}ft`;
     const heightStr = turf.height_feet ? ` × ${turf.height_feet}ft (H)` : "";
     details.push({

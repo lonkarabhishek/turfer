@@ -29,6 +29,9 @@
  *   never failed a page either (getSportBands): when it fails, the step
  *   notes that, and those pages decide without bands, as when their own
  *   read failed.
+ * - Production only: the ground size peers (the Ground size card's
+ *   benchmarks), the same way as the bands, with 2 minutes of their own;
+ *   when they fail, turf pages build without benchmarks.
  * - Production only: the turf pages to prerender, 3 at a time, for 4
  *   minutes. A key is recorded only with everything its page reads; one
  *   the step could not read renders on its first visit instead. A failed
@@ -59,6 +62,7 @@ import {
   readCardRows,
   readCityCountRows,
   readGameTurfs,
+  readGroundPeers,
   readOpenGames,
   readSitemapGames,
   readSitemapTurfs,
@@ -82,6 +86,8 @@ const REQUIRED_MS = 6 * 60_000;
 const FACTS_MS = 2 * 60_000;
 /** How long the sport bands may take; after that the sport pages build without them. */
 const BANDS_MS = 2 * 60_000;
+/** How long the ground size peers may take; after that turf pages build without benchmarks. */
+const PEERS_MS = 2 * 60_000;
 /** How long turf pages are read; keys not done by then render on their first visit. */
 const TURF_PAGES_MS = 4 * 60_000;
 const TURF_PAGE_READS = 3;
@@ -293,11 +299,20 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
     return FAILED;
   });
 
-  // 3. Turf pages (production builds prerender them), 3 at a time.
+  // 3. Turf pages (production builds prerender them), 3 at a time, after
+  // the ground size peers their Ground size cards compare with, on their
+  // own clock like the bands (none at all is an answer: no owner gave sizes yet).
   let turfPages: BuildDatasets["turf-pages"] | null = null;
+  let peers: BuildDatasets["ground-peers"] | null = null;
   let skipped = 0;
   let turfRetries = 0;
   if (env.VERCEL_ENV === "production") {
+    const peersCtx = begin(PEERS_MS);
+    peers = await required(peersCtx, "ground size peers", () => readGroundPeers(peersCtx.db)).catch((e: unknown): BuildDatasets["ground-peers"] => {
+      if (!(e instanceof StepFailed)) throw e;
+      log(`build data: ground size peers not recorded (${message(e.cause ?? e)}); turf pages build without benchmarks, as when their own read failed`);
+      return FAILED;
+    });
     const pagesCtx = begin(TURF_PAGES_MS, 1);
     const keys = topTurfKeys(listRows(list), PRERENDERED_TURF_PAGES);
     const res = await readEach(keys, (k) => readTurfPage(pagesCtx.db, k, log), { concurrency: TURF_PAGE_READS, maxTries: TURF_PAGE_TRIES, deadline: pagesCtx.deadline, now, sleep });
@@ -343,6 +358,7 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
   write("sitemap", sitemap);
   write("trending", trending);
   write("games", games);
+  if (peers) write("ground-peers", peers);
   if (turfPages) write("turf-pages", turfPages);
   const manifest: Manifest = { db: url, createdAt: t0, v: list.parts ? list.meta?.v ?? null : null, datasets };
   writeFileSync(join(dir, `${MANIFEST}.tmp`), JSON.stringify(manifest));

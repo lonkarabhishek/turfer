@@ -22,9 +22,9 @@
 // - A dataset the step did not record means a live read (and the tripwire
 //   in lib/supabase/guard.ts says so). A malformed file, a manifest from
 //   another database or one more than an hour old fails the build.
-// - A read the step tried and lost (the turf facts, the sport bands, a
-//   turf's managers) is recorded as FAILED: the page then does what it does
-//   when its own read fails, and reads nothing.
+// - A read the step tried and lost (the turf facts, the sport bands, the
+//   ground size peers, a turf's managers) is recorded as FAILED: the page
+//   then does what it does when its own read fails, and reads nothing.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -58,6 +58,13 @@ export type BuildDatasets = {
   trending: TrendingRow[];
   /** /games (every open game) and the home's open games from that day, each with its turfs. */
   games: { available: GameRead; open: GameRead };
+  /**
+   * Production builds (turf pages prerender only there): readGroundPeers as
+   * read, for the Ground size card's benchmarks (lib/queries/groundSizes.ts).
+   * Its read never failed a page: when it fails, pages build without
+   * benchmarks.
+   */
+  "ground-peers": unknown[] | Failed;
   /**
    * The turf pages to prerender (keys), each one's turf_page answer by key
    * and, for a claimed turf, its turf_managers answer by turf id (null: the
