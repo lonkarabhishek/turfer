@@ -8,7 +8,7 @@ let seen: InApp | null | undefined;
 
 function read(): InApp | null {
   if (seen !== undefined) return seen;
-  // Added to the home screen (as NotificationsPrompt checks): a real browser, not an app's.
+  // Added to the home screen (as lib/push/client.ts isStandalone checks): a real browser, not an app's.
   const standalone = (navigator as { standalone?: boolean }).standalone === true || !!window.matchMedia?.("(display-mode: standalone)").matches;
   return (seen = inAppBrowser(navigator.userAgent, standalone));
 }

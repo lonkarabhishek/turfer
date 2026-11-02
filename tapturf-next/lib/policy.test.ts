@@ -50,6 +50,22 @@ test("policy notice: says what changed and links to where the policy says it", (
   assert.match(PRIVACY_NOTICE.earlier.text, /quick game report/);
 });
 
+test("policy: notifications on your phone say what is kept, who carries them and how to stop them", () => {
+  const at = privacyPage.indexOf('id="push"');
+  assert.ok(at >= 0, "the policy has #push (the Me tab's switch links to it)");
+  const push = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
+  assert.match(push, /push address/);
+  assert.match(push, /two keys/);
+  assert.match(push, /the kind of device/);
+  assert.match(push, /nothing else about it/);
+  assert.match(push, /encrypted so the service cannot read it/);
+  assert.match(push, /Turn the switch off, or log out on that phone, and we stop sending there/);
+  const page = privacyPage.replace(/\s+/g, " ");
+  assert.match(page, /Apple, Google, Mozilla and Microsoft, whose push services carry notifications/, "the push services, in the list of who handles data");
+  assert.match(page, /a small TapTurf script \(a service worker\)/, "the worker, under what the device keeps");
+  assert.match(page, /push address and keys stay with your account, marked off/, "and how long they are kept");
+});
+
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {
   assert.equal(privacyNoticeText(PRIVACY_NOTICE.earlier.id), PRIVACY_NOTICE.text, "dismissed the last one: only what is new");
   for (const seen of [null, "2026-10-25-cities", "something else"]) {

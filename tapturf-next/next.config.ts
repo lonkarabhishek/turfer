@@ -40,6 +40,21 @@ const nextConfig: NextConfig = {
       { source: "/near-me",       destination: "/turf-near-me", permanent: true },
     ];
   },
+  // The Web Push service worker (public/sw.js, registered only for someone
+  // signed in): a browser checks it on every visit instead of keeping a
+  // copy, so a fix reaches every phone at once, and it may cover the whole
+  // site. It has no fetch handler, so it never changes how a page loads.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

@@ -1,0 +1,16 @@
+[
+  { "what": "a join request opens the game (the host sees the requests there)", "type": "game_request", "metadata": { "gameId": "dddddddd-dddd-4ddd-8ddd-000000000001", "requestId": "eeeeeeee-eeee-4eee-8eee-000000000001" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000001" },
+  { "what": "accepted", "type": "game_request_accepted", "metadata": { "gameId": "dddddddd-dddd-4ddd-8ddd-000000000002", "requestId": "eeeeeeee-eeee-4eee-8eee-000000000002" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000002" },
+  { "what": "declined", "type": "game_request_declined", "metadata": { "gameId": "dddddddd-dddd-4ddd-8ddd-000000000003" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000003" },
+  { "what": "a moved game", "type": "game_venue_changed", "metadata": { "gameId": "dddddddd-dddd-4ddd-8ddd-000000000004", "turfId": "bbbbbbbb-bbbb-4bbb-8bbb-000000000001", "fromTurfId": "bbbbbbbb-bbbb-4bbb-8bbb-000000000002" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000004" },
+  { "what": "a cancelled game", "type": "game_cancelled", "metadata": { "gameId": "dddddddd-dddd-4ddd-8ddd-000000000005" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000005" },
+  { "what": "older rows say game_id", "type": "game_request", "metadata": { "game_id": "dddddddd-dddd-4ddd-8ddd-000000000006" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000006" },
+  { "what": "an upper case id is written in lower case", "type": "game_request_accepted", "metadata": { "gameId": "DDDDDDDD-DDDD-4DDD-8DDD-00000000000A" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-00000000000a" },
+  { "what": "an empty gameId falls back to game_id", "type": "game_request", "metadata": { "gameId": "", "game_id": "dddddddd-dddd-4ddd-8ddd-000000000007" }, "url": "/game/dddddddd-dddd-4ddd-8ddd-000000000007" },
+  { "what": "not a game id: the Alerts", "type": "game_request", "metadata": { "gameId": "../../admin" }, "url": "/dashboard?tab=notifications" },
+  { "what": "a path in the id: the Alerts", "type": "game_request", "metadata": { "gameId": "dddddddd-dddd-4ddd-8ddd-000000000001/../../x" }, "url": "/dashboard?tab=notifications" },
+  { "what": "a number: the Alerts", "type": "game_request", "metadata": { "gameId": 12 }, "url": "/dashboard?tab=notifications" },
+  { "what": "no metadata: the Alerts", "type": "game_request", "metadata": null, "url": "/dashboard?tab=notifications" },
+  { "what": "metadata not an object: the Alerts", "type": "game_cancelled", "metadata": ["dddddddd-dddd-4ddd-8ddd-000000000001"], "url": "/dashboard?tab=notifications" },
+  { "what": "a type with no game: the Alerts", "type": "welcome", "metadata": {}, "url": "/dashboard?tab=notifications" }
+]

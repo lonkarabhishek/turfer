@@ -1,16 +1,17 @@
 "use client";
 
+import { pushOnHere } from "@/lib/push/client";
+
 /**
  * Browser Notification helpers — the light-touch layer.
  * Handles permission state + fires native OS notifications while the
  * tab is open (or backgrounded but not fully unloaded).
  *
- * Full-blown Web Push (via service worker + VAPID) is a bigger lift
- * requiring a server-side sender; this layer at least lets a phone
- * ring/vibrate when a request comes in while the user has TapTurf
- * open in a tab. For iOS Safari, the site must be installed to the
- * home screen first — the manifest at /manifest.webmanifest enables
- * the "Add to Home Screen" prompt.
+ * Phones get notifications with TapTurf closed through Web Push
+ * (lib/push, the "Notifications on this phone" switch on the Me tab).
+ * Where that is on, the push itself rings, so notify() stays quiet and
+ * nothing rings twice; elsewhere it still rings an open tab. An iPhone
+ * never shows these: only pushes, in TapTurf added to the Home Screen.
  */
 
 export type PermissionState = "unsupported" | "default" | "granted" | "denied";
@@ -36,15 +37,18 @@ export async function requestPermission(): Promise<PermissionState> {
 export function notify(title: string, body: string, tag?: string): void {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-  try {
-    new Notification(title, {
-      body,
-      tag: tag ?? "tapturf",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      silent: false,
-    });
-  } catch {
-    /* some browsers throw if invoked from a background tab; ignore */
-  }
+  void pushOnHere().then((pushed) => {
+    if (pushed) return;
+    try {
+      new Notification(title, {
+        body,
+        tag: tag ?? "tapturf",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        silent: false,
+      });
+    } catch {
+      /* some browsers throw if invoked from a background tab; ignore */
+    }
+  });
 }
