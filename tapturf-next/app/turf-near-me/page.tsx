@@ -38,9 +38,12 @@ const CARDS_PER_CITY = 8;
 // cards (54 then) made this page 4.2 MB with 392 sliders, and on a phone
 // the photos could not be swiped until all of it had loaded (20 Oct).
 const CARD_CITIES = 6;
-// "Turfs by city" links every live city's page, one turf or 500: each is
-// indexable and in the sitemap (app/[city]/page.tsx noindexes only a city
-// with no active turf), and until 3 Nov each had its own section here.
+// "Turfs by city" links every live city's page, one turf or 500, so players
+// in small cities still find theirs and crawlers can follow through to
+// their turfs: a city with fewer than 3 turfs is noindex, follow and out of
+// the sitemap (app/[city]/page.tsx, cityPageIndexable; the owner asked on
+// 4 Nov to keep those discovery paths), the rest are indexable. Until 3 Nov
+// each city had its own section here.
 const CITY_PAGE_MIN = 1;
 
 type CityBlock = {
