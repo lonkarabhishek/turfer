@@ -569,9 +569,6 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                   Pick your sport
                 </p>
 
-                <GameDraftBox userId={user.id} initial={draftText || null} onPrefill={applyPrefill} />
-                {draftNote && step === 1 && <p className="mb-4 text-[13px] text-primary-700">{draftNote}</p>}
-
                 <div className="grid grid-cols-2 gap-3">
                   {SPORT_OPTIONS.map((s) => {
                     const active = sport === s.name;
@@ -606,6 +603,9 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     );
                   })}
                 </div>
+
+                <GameDraftBox userId={user.id} initial={draftText || null} onPrefill={applyPrefill} />
+                {draftNote && step === 1 && <p className="mt-3 text-[13px] text-primary-700">{draftNote}</p>}
               </div>
             )}
 

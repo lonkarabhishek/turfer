@@ -12,7 +12,7 @@ const EXAMPLES = [
 ];
 
 /**
- * One line in, the wizard filled out. Sits above the sport grid on
+ * One line in, the wizard filled out. Sits below the sport grid on
  * step one. Also fires on its own when the page is opened with
  * ?draft=... (the Ask chat sends people here that way).
  */
@@ -59,7 +59,7 @@ export function GameDraftBox({ userId, initial, onPrefill }: { userId: string; i
   }, [initial]);
 
   return (
-    <div className="mb-6 rounded-2xl border-2 border-primary-200 bg-white p-3.5">
+    <div className="mt-6 rounded-2xl border-2 border-primary-200 bg-white p-3.5">
       <p className="text-[11px] font-semibold text-primary-500 mb-2 inline-flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5 text-accent-500" /> Or just describe it
       </p>
