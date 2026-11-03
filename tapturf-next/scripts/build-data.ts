@@ -32,7 +32,8 @@
  * - Production only: the ground size peers (the Ground size card's
  *   benchmarks), the same way as the bands, with 2 minutes of their own;
  *   when they fail, turf pages build without benchmarks.
- * - Production only: the turf pages to prerender, 3 at a time, for 4
+ * - Production only: the turf pages to prerender (the 300 most reviewed
+ *   and every turf of the home market, Nashik), 3 at a time, for 4
  *   minutes. A key is recorded only with everything its page reads; one
  *   the step could not read renders on its first visit instead. A failed
  *   turf_managers read does not cost the key: the page builds as it
@@ -69,7 +70,7 @@ import {
   readSportBandRows,
   readTrendingRows,
   readTurfFactRows,
-  topTurfKeys,
+  prerenderTurfKeys,
   ymd,
 } from "../lib/build/reads";
 import { datasetFile, FAILED, isFailed, MANIFEST, type BuildDatasets, type DatasetName, type Manifest } from "../lib/build/data";
@@ -314,7 +315,8 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
       return FAILED;
     });
     const pagesCtx = begin(TURF_PAGES_MS, 1);
-    const keys = topTurfKeys(listRows(list), PRERENDERED_TURF_PAGES);
+    // The most reviewed, then every other turf of the home market (Nashik).
+    const keys = prerenderTurfKeys(listRows(list), PRERENDERED_TURF_PAGES);
     const res = await readEach(keys, (k) => readTurfPage(pagesCtx.db, k, log), { concurrency: TURF_PAGE_READS, maxTries: TURF_PAGE_TRIES, deadline: pagesCtx.deadline, now, sleep });
     // The health gate: time ran out with the database failing. Keys that
     // used up their tries before then render on their first visit, and a

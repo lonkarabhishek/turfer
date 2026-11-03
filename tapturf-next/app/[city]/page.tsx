@@ -12,7 +12,7 @@ import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { citySportLinks, venueWord } from "@/lib/sports";
 import { CITIES, cityPointsOf, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
-import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
+import { cityPageIndexable, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
@@ -46,10 +46,17 @@ export async function generateMetadata(
   const label = labelFor(city);
   // The rows the page reads anyway (one read per render, React cache),
   // and which of them show timings or a number to call (a day-long copy).
-  const [turfs, turfFacts] = await Promise.all([getAllActiveTurfs(city), getTurfFacts()]);
+  const [turfs, turfFacts, liveCities] = await Promise.all([getAllActiveTurfs(city), getTurfFacts(), getLiveCities()]);
   const facts = cityFacts(label, turfs, citySportLinks(city, turfs), listingReach(turfs, reachOf(turfFacts)));
-  const title = cityTitle(facts);
+  // The slug: /pune alone has its own title (lib/seo/listingMeta.ts BOOKING_TITLE_CITY).
+  const title = cityTitle(facts, city);
   const description = cityDescription(facts);
+  // A city with fewer turfs than MIN_TURFS_TO_INDEX (city_turf_counts, the
+  // count the sitemap uses) stays out of the index and the sitemap, as thin
+  // city + sport pages do; its links are still followed. Every other city
+  // sets no robots and keeps the layout's.
+  const live = liveCities.find((c) => c.id === city);
+  const thin = !!live && !cityPageIndexable(live);
 
   return {
     title: { absolute: title },
@@ -73,6 +80,7 @@ export async function generateMetadata(
     },
     twitter: TWITTER_CARD,
     alternates: { canonical: `https://www.tapturf.in/${city}` },
+    ...(thin ? { robots: ROBOTS_NOINDEX_FOLLOW } : {}),
   };
 }
 

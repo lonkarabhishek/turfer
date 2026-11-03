@@ -3,6 +3,7 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { turfFactsFrom, type TurfFacts } from "@/lib/seo/turfFacts";
 import { readTurfFactRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
+import { markThinRender } from "@/lib/queries/turfs";
 
 // While building: the facts the build-data step made from the same read,
 // or its note that the read failed (a failed read here, no read of our own).
@@ -25,8 +26,9 @@ async function readTurfFacts(): Promise<TurfFacts> {
  * and concurrent renders share one read. A failed read gives the last
  * copy, or null: the snippets then promise only what the list rows show
  * (no "Call or WhatsApp", timings from start/end only), and the turf
- * title keeps its usual order. Never throws: a snippet is not worth a
- * failed page.
+ * title keeps its usual order, and that page is kept a minute only
+ * (markThinRender, not while building) rather than its usual 10 minutes
+ * to a day. Never throws: a snippet is not worth a failed page.
  */
 const getTurfFactsCached = unstable_cache(readTurfFacts, ["turf-facts-v1"], { revalidate: 86400 });
 const MEMO_MS = 3_600_000;
@@ -36,6 +38,11 @@ let failLoggedAt = -Infinity;
 
 export function getTurfFacts(): Promise<TurfFacts | null> {
   if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.facts);
+  // In each caller's own render: a page that got no facts at all is kept a minute.
+  return readShared().then((facts) => (facts ? facts : markThinRender().then(() => null)));
+}
+
+function readShared(): Promise<TurfFacts | null> {
   pending ??= getTurfFactsCached()
     .then((facts) => {
       memo = { at: Date.now(), facts };

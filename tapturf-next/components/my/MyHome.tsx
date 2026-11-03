@@ -21,7 +21,7 @@ const place = (t: { area: string | null; city: string | null }) =>
 export function MyHome() {
   const { user, loading } = useAuth();
   const params = useSearchParams();
-  const claimId = params.get("claim");
+  const claimId = params?.get("claim") ?? null;
   const [home, setHome] = useState<OwnerHome | null>(null);
   const [error, setError] = useState("");
 

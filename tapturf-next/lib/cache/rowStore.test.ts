@@ -413,6 +413,106 @@ test("no copy anywhere: the error, then the same error at once while waiting (no
   assert.equal((await store.read(db.meta())).rows.length, 1200);
 });
 
+/** The shared cache holding the given versions whole (each the fake database's rows at that version), and every ask of it. */
+async function sharedCacheOf(versions: number[]) {
+  const cached = new Map<string, ListPart<Row>>();
+  for (const v of versions) {
+    const f = fakeDb();
+    f.db.v = v;
+    for (let i = 0; i < 3; i++) cached.set(`${v}/${i}`, (await f.readPart(i, v))!);
+  }
+  const asks: [number, number][] = [];
+  const readCachedPart = async (i: number, v: number) => {
+    asks.push([i, v]);
+    return cached.get(`${v}/${i}`) ?? null;
+  };
+  return { cached, asks, readCachedPart };
+}
+
+test("no copy here and none of the last few versions cached (2 Nov /nashik): an older whole version further back, stale", async () => {
+  // The shared cache holds v12 whole (the last version any process loaded); the database is at v30, failing.
+  const sc = await sharedCacheOf([12]);
+  const { db, store, logs } = setup({ readCachedPart: sc.readCachedPart });
+  db.v = 30;
+  db.onPart = () => {
+    throw new Error("Turf list part 1 read failed: TimeoutError: The operation was aborted due to timeout");
+  };
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.v, r.stale, r.rows.length], [12, true, 1200], "v12 from the cache, marked stale");
+  assert.deepEqual(sc.asks.slice(0, 4), [[0, 30], [0, 29], [0, 28], [0, 27]], "the near versions first, one at a time");
+  const far = sc.asks.slice(4);
+  // Then part 0 of eight versions at a time, newest first: v26..v19, v18..v11 (v12 found), then v12's other parts.
+  assert.deepEqual(far.slice(0, 16).map(([i, v]) => [i, v]), [...Array.from({ length: 16 }, (_, k) => [0, 26 - k])]);
+  assert.deepEqual(far.slice(16), [[1, 12], [2, 12]], "the whole of v12, part 0 not read twice");
+  assert.equal(failures(logs)[0].extra.have, 12);
+  assert.equal(failures(logs)[0].level, "warn", "served: a warning, not an error");
+  // Kept: while waiting, no cache read and no database read.
+  const asks = sc.asks.length;
+  const reads = db.partReads;
+  assert.equal((await store.read(db.meta())).rows, r.rows);
+  assert.equal(sc.asks.length, asks);
+  assert.equal(db.partReads, reads);
+});
+
+test("the far search: the newest whole version wins, a version with a missing part is skipped, never past farVersions", async () => {
+  const sc = await sharedCacheOf([5, 9]);
+  sc.cached.delete("9/2"); // v9 has part 0 but not all its parts
+  const { db, store } = setup({ readCachedPart: sc.readCachedPart });
+  db.v = 20;
+  db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.v, r.stale], [5, true], "v9 is not whole: v5");
+  // farVersions bounds it: a version too far back is never asked for.
+  const sc2 = await sharedCacheOf([2]);
+  const clock = { t: 1_000_000 };
+  const f = fakeDb();
+  const store2 = createRowStore<Row>({ cols: COLS, readPart: f.readPart, readLive: f.readLive, readCachedPart: sc2.readCachedPart, farVersions: 10, now: () => clock.t, random: () => 0, log: () => {} });
+  f.db.v = 20;
+  f.db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  await assert.rejects(store2.read(f.db.meta()), /TimeoutError/);
+  assert.equal(Math.min(...sc2.asks.map(([, v]) => v)), 7, "v20..v17 near, then v16..v7: no further");
+});
+
+test("a far search that found nothing is not made again for that version for 5 minutes; the near versions still are", async () => {
+  const sc = await sharedCacheOf([]);
+  const { db, store, clock } = setup({ readCachedPart: sc.readCachedPart });
+  db.v = 60;
+  db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  const first = sc.asks.length;
+  assert.equal(first, 4 + 48, "4 near, 48 far");
+  clock.t += 30_000; // past the wait: the next load reads the database again, fails, looks again
+  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  assert.equal(sc.asks.length - first, 4, "only the near versions this time");
+  clock.t += 300_000;
+  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  assert.equal(sc.asks.length - first - 4, 52, "after 5 minutes, the far search again");
+});
+
+test("a failed table read with no copy here: an old snapshot's newest whole version in the shared cache, stale; never for a snapshot missing a column", async () => {
+  const sc = await sharedCacheOf([7]);
+  const { db, store } = setup({ readCachedPart: sc.readCachedPart });
+  db.v = 7;
+  db.failLive = true;
+  // The builder is stuck (not built for 3 hours): the table is read, and fails.
+  const r = await store.read(db.meta({ age_s: 20_000 }));
+  assert.deepEqual([r.v, r.stale, r.rows.length], [7, true, 1200]);
+  assert.equal(db.partReads, 0, "never the snapshot from the database");
+  // A snapshot without a column the app selects is not served from the cache either.
+  const sc2 = await sharedCacheOf([7]);
+  const s2 = setup({ readCachedPart: sc2.readCachedPart });
+  s2.db.v = 7;
+  s2.db.failLive = true;
+  await assert.rejects(s2.store.read(s2.db.meta({ cols: "id, rating" })), /Paged fetch failed/);
+  assert.equal(sc2.asks.length, 0);
+});
+
 test("at most one part read in flight, and a load a newer version overtakes hands its callers over", async () => {
   const { db, store } = setup();
   let inFlight = 0;

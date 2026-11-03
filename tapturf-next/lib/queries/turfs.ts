@@ -450,6 +450,18 @@ export async function markStaleRender(): Promise<void> {
   }
 }
 
+/**
+ * The same for a render that got none of a read's data (it failed with no
+ * copy to fall back on: no turf facts, no sport bands), so the thinner
+ * page is kept a minute, not its usual 10 minutes to a day. Not while
+ * `next build` prerenders: pages built without a read the build-data step
+ * could not make keep their usual life, as that step intends.
+ */
+export async function markThinRender(): Promise<void> {
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+  await markStaleRender();
+}
+
 const INSTANCE = Math.random().toString(36).slice(2, 8);
 let liveReadNo = 0;
 

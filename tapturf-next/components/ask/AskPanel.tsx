@@ -27,7 +27,7 @@ const WELCOME_CHIPS = askChips(null, 0);
  */
 export function AskPanel() {
   const { open, closePanel, turns, busy, send, retry, reset, requestLocation, locating, pageContext, draft, setDraft, signedIn, pending, freeLeft, signIn } = useAsk();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const inputRef = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const [welcome, setWelcome] = useState<string[]>(WELCOME_CHIPS);

@@ -6,7 +6,8 @@ import { ChevronRight, LocateFixed } from "lucide-react";
 import { getAllActiveTurfs, turfRowsStale } from "@/lib/queries/turfs";
 import { cityPointsOf, isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
-import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
+import { citySportHref, citySportLinks, SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
+import { prerenderedListCities } from "@/lib/build/reads";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
@@ -26,12 +27,26 @@ import { courtNearMeLink } from "@/lib/near/courtNearMe";
 // queries people actually search. Built from the listings only.
 export const revalidate = 3600;
 
-// None built at deploy: about 750 city and sport pairs, many of them
-// 404s or thin pages, each rendered against the database on every build
-// and preview. Each now renders on its first visit (from the cached turf
-// rows) and is cached from then on.
-export function generateStaticParams(): { city: string; sport: string }[] {
-  return [];
+// Production builds render the indexable pages (3 or more venues, the
+// sitemap's rule) of the 8 biggest cities by live count and Nashik, the
+// home market (lib/build/reads.ts prerenderedListCities), from the
+// build-data step's rows: after a deploy their first visit, often
+// Googlebot's, used to be a live database read. Every other pair (about
+// 750 in all, many of them 404s or thin) renders on its first visit (from
+// the cached turf rows) and is cached from then on; previews and local
+// builds render none. A read that fails here builds none, as before.
+export async function generateStaticParams(): Promise<{ city: string; sport: string }[]> {
+  if (process.env.VERCEL_ENV !== "production") return [];
+  try {
+    const cities = new Set(prerenderedListCities(await getLiveCities()));
+    const out: { city: string; sport: string }[] = [];
+    for (const sp of SPORT_PAGES) {
+      for (const c of await getCitiesForSport(sp.slug)) if (cities.has(c.id)) out.push({ city: c.id, sport: sp.slug });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 // Once per render: generateMetadata and the page share it (React cache).

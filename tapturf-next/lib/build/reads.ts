@@ -184,7 +184,42 @@ export const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).p
 export const PRERENDERED_TURF_PAGES = 300;
 
 /**
- * Their URL keys (the slug, or the id for a turf without one), most
+ * The home market, where TapTurf started: production builds also build
+ * every active turf page there (prerenderTurfKeys) and its indexable
+ * city + sport pages (prerenderedListCities), so the first visit after a
+ * deploy (often Googlebot's) reads nothing from the database.
+ */
+export const HOME_MARKET = "nashik";
+
+/** City + sport pages built at deploy: those of the biggest cities by live count (and the home market). */
+export const PRERENDERED_LIST_CITIES = 8;
+
+/**
+ * The cities whose indexable city + sport pages production builds render
+ * (app/[city]/[sport]/page.tsx): the `limit` biggest by active turfs in
+ * `live` (city_turf_counts, biggest first; ties keep that order), plus
+ * the home market when it is live and not among them.
+ */
+export function prerenderedListCities(live: readonly { id: string; n: number }[], limit = PRERENDERED_LIST_CITIES): string[] {
+  const top = [...live].sort((a, b) => b.n - a.n).slice(0, Math.max(0, limit)).map((c) => c.id);
+  return top.includes(HOME_MARKET) || !live.some((c) => c.id === HOME_MARKET) ? top : [...top, HOME_MARKET];
+}
+
+/**
+ * The turf pages production builds render, as keys (topTurfKeys): the
+ * `limit` most reviewed, then every other turf of the home market in the
+ * same order. The build-data step reads exactly these.
+ */
+export function prerenderTurfKeys(rows: readonly Row[], limit = PRERENDERED_TURF_PAGES): string[] {
+  const top = topTurfKeys(rows, limit);
+  const seen = new Set(top);
+  const home = topTurfKeys(rows.filter((r) => r.city === HOME_MARKET && r.is_active !== false), rows.length).filter((k) => !seen.has(k));
+  return [...top, ...home];
+}
+
+/**
+ * The URL keys of the `limit` most reviewed turfs in `rows` (the slug, or
+ * the id for a turf without one), most
  * reviewed first (no count last), then by id: the order getTopTurfKeys
  * reads from the table, here from list rows.
  */

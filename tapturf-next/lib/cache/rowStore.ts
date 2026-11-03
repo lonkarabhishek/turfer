@@ -41,7 +41,10 @@
 //   stale (the caller then shortens the page's life, so it is read again
 //   within a minute or two). With no copy at all it looks in the shared
 //   cache (readCachedPart, never the database) for the wanted version, whole,
-//   then for the few before it, and only then throws. "Wanted" is the
+//   then for the few before it, then (3 Nov) for the newest whole one of
+//   the farVersions before those (part 0 of a batch at a time, a few
+//   seconds at most, not again for that version for 5 minutes once it
+//   found nothing), and only then throws. "Wanted" is the
 //   newest build the load was asked for or found (part 0 can name a newer
 //   one than the meta), so a caller for that build never gets an older copy
 //   unmarked. One log line per failed load, never one per caller: a warning
@@ -61,7 +64,9 @@
 //   or no build for 3 hours) means the table is read directly, as before.
 //   That copy is reused for an hour, but never across a build: every list
 //   post builds first, so a purge always gets a fresh read. A failed table
-//   read serves the last copy, as above.
+//   read serves the last copy, as above; with none, when the snapshot is
+//   only old (it carries every column), its newest whole version in the
+//   shared cache, marked stale.
 
 export type ListMeta = {
   /** Snapshot version; moves only when the rows or the columns changed. */
@@ -130,6 +135,15 @@ export type RowStoreOptions<R> = {
   maxPartReads?: number;
   /** Versions below the wanted one also tried in the shared cache when this process has no copy. */
   olderVersions?: number;
+  /**
+   * When none of those is cached whole: this many versions further back,
+   * part 0 of farBatch of them at once, newest first, for farSearchMs at
+   * most, at most once per farRetryMs for one wanted version.
+   */
+  farVersions?: number;
+  farBatch?: number;
+  farSearchMs?: number;
+  farRetryMs?: number;
   /** Loads failing for this long with none succeeding: the failed-load line is logged as an error, not a warning. */
   escalateAfterMs?: number;
   random?: () => number;
@@ -198,6 +212,10 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   const retryAfterMs = Math.max(0, opts.retryAfterMs ?? 20_000);
   const maxPartReads = Math.max(1, Math.floor(opts.maxPartReads ?? 1));
   const olderVersions = Math.max(0, Math.floor(opts.olderVersions ?? 3));
+  const farVersions = Math.max(0, Math.floor(opts.farVersions ?? 48));
+  const farBatch = Math.max(1, Math.floor(opts.farBatch ?? 8));
+  const farSearchMs = Math.max(0, opts.farSearchMs ?? 4_000);
+  const farRetryMs = Math.max(0, opts.farRetryMs ?? 300_000);
   const escalateAfterMs = Math.max(0, opts.escalateAfterMs ?? 600_000);
   const random = opts.random ?? Math.random;
   const now = opts.now ?? Date.now;
@@ -218,6 +236,8 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   // After a failed read: no new read until `until`.
   let cool: { until: number; err: unknown } | null = null;
   let cachePending: { want: number; p: Promise<Copy | null> } | null = null;
+  // The far search found nothing for this wanted version: not again until `until`.
+  let farMissed: { want: number; until: number } | null = null;
   let metaLoggedAt = -Infinity;
   // The first failed load since the last load that succeeded.
   let failingSince: number | null = null;
@@ -300,10 +320,13 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     return fresh(snap!);
   }
 
-  // Version v, complete, from the shared cache only.
-  async function cachedCopy(read: NonNullable<RowStoreOptions<R>["readCachedPart"]>, v: number): Promise<Copy | null> {
-    const first = await read(0, v);
-    if (!first || first.v !== v || !Array.isArray(first.rows) || !headerOk(first)) return null;
+  type CacheRead = NonNullable<RowStoreOptions<R>["readCachedPart"]>;
+  const headOf = (first: ListPart<R> | null, v: number): first is ListPart<R> => !!first && first.v === v && Array.isArray(first.rows) && headerOk(first);
+
+  // Version v, complete, from the shared cache only (part 0 too, unless the far search read it already).
+  async function cachedCopy(read: CacheRead, v: number, head?: ListPart<R> | null): Promise<Copy | null> {
+    const first = head === undefined ? await read(0, v) : head;
+    if (!headOf(first, v)) return null;
     const rows: R[] = [...first.rows];
     for (let i = 1; i < first.parts; i++) {
       const p = await read(i, v);
@@ -316,17 +339,43 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   // The newest of `want` and the few versions below it that the shared
   // cache holds whole (`want` itself too: while this process waits after a
   // failed read, a render that can read that cache still gets the version).
+  // When none of them is (2 Nov: /nashik went 500 on "no copy to serve" in a
+  // process that had no copy of its own), the far search: the versions
+  // before those, part 0 of farBatch at a time, newest first, the first
+  // whole one taken. Every version a process ever loaded is in that cache
+  // (its parts never change and are kept with no timer), so an older copy
+  // is usually there; it serves marked stale, and the page is read again
+  // within a minute or two. A far search that found nothing is not made
+  // again for the same version for farRetryMs: a process keeps failing
+  // fast rather than send dozens of cache reads every retry.
   function fromCache(want: number): Promise<Copy | null> {
     const read = opts.readCachedPart;
     if (!read) return Promise.resolve(null);
     if (cachePending && cachePending.want === want) return cachePending.p;
+    const take = (c: Copy) => {
+      if (!snap || c.v > snap.v) setSnap(c);
+      return snap;
+    };
     const p = (async () => {
-      for (let v = want; v >= Math.max(1, want - olderVersions); v--) {
+      const nearLow = Math.max(1, want - olderVersions);
+      for (let v = want; v >= nearLow; v--) {
         const c = await cachedCopy(read, v).catch(() => null);
-        if (!c) continue;
-        if (!snap || c.v > snap.v) setSnap(c);
-        return snap;
+        if (c) return take(c);
       }
+      const farLow = Math.max(1, nearLow - farVersions);
+      if (nearLow - 1 < farLow || (farMissed && farMissed.want === want && now() < farMissed.until)) return null;
+      const until = now() + farSearchMs;
+      for (let hi = nearLow - 1; hi >= farLow && now() <= until; hi -= farBatch) {
+        const vs: number[] = [];
+        for (let v = hi; v > hi - farBatch && v >= farLow; v--) vs.push(v);
+        const heads = await Promise.all(vs.map((v) => read(0, v).catch(() => null)));
+        for (let k = 0; k < vs.length; k++) {
+          if (!headOf(heads[k], vs[k])) continue;
+          const c = await cachedCopy(read, vs[k], heads[k]).catch(() => null);
+          if (c) return take(c);
+        }
+      }
+      farMissed = { want, until: now() + farRetryMs };
       return null;
     })().finally(() => {
       if (cachePending?.p === p) cachePending = null;
@@ -360,9 +409,15 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     return fresh(live);
   }
 
-  async function liveFallback(err: unknown): Promise<RowsRead<R>> {
-    if (!latest) throw err;
-    return stale(latest);
+  // A table read failed: this process's copy, else, when the snapshot is
+  // only old (`want`: its version, the builder stuck for 3 hours; it
+  // carries every column), the newest whole version of it in the shared
+  // cache, marked stale either way.
+  async function liveFallback(err: unknown, want = 0): Promise<RowsRead<R>> {
+    if (latest) return stale(latest);
+    const c = want > 0 ? await fromCache(want) : null;
+    if (c) return stale(c);
+    throw err;
   }
 
   function start(
@@ -434,9 +489,10 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     const built = v > 0 && typeof meta?.built === "number" && Number.isFinite(meta.built) ? meta.built : 0;
     if (live && live.v >= v && live.built >= built && now() - live.at < liveTtlMs) return Promise.resolve(fresh(live));
     if (pending.live && pending.live.v >= v && pending.live.built >= built) return pending.live.p;
-    if (cooling()) return liveFallback(cool!.err);
     const reason = why ?? "no snapshot";
-    return start("live", v, built, () => loadLive(v, built, reason), liveFallback, { src: "table", reason, v, built });
+    const oldSnapshot = reason === "snapshot stale" ? v : 0;
+    if (cooling()) return liveFallback(cool!.err, oldSnapshot);
+    return start("live", v, built, () => loadLive(v, built, reason), (err) => liveFallback(err, oldSnapshot), { src: "table", reason, v, built });
   }
 
   return {

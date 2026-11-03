@@ -18,7 +18,7 @@ import { useCookieBanner } from "@/lib/consent";
  */
 export function AskLauncher() {
   const { open, openPanel, turns, pageContext } = useAsk();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   // The cookie card covers the bottom edge on phones: no offer under it.
   const banner = useCookieBanner();
   // Not on owner (myTapturf), admin or login pages, nor while adding Google to an account (its buttons fill the bottom).

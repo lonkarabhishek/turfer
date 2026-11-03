@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ALL_POSTS } from "@/content/blog";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
-import { getLiveCities } from "@/lib/queries/cities";
+import { cityPageIndexable, getLiveCities } from "@/lib/queries/cities";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
 import { readSitemapGames, readSitemapTurfs } from "@/lib/build/reads";
@@ -77,9 +77,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 0.9,
     },
-    // City landing pages, one per live city (biggest first). Key for local SEO.
-    // As new as their newest turf, not the time of the fetch.
-    ...liveCities.map((c) => ({
+    // City landing pages, one per live city with enough turfs to be
+    // indexed (biggest first; a thinner one is noindex, cityPageIndexable).
+    // Key for local SEO. As new as their newest turf, not the time of the fetch.
+    ...liveCities.filter(cityPageIndexable).map((c) => ({
       url: `${BASE}/${c.id}`,
       lastModified: latest((turfs ?? []).filter((t) => t.city === c.id).map((t) => t.updated_at)),
       changeFrequency: "daily" as const,

@@ -121,8 +121,37 @@ export function cityFacts(
   };
 }
 
-/** "44 Turfs in Surat: Box Cricket & Football, Timings & Photos". */
-export function cityTitle(f: CityFacts): string {
+/**
+ * The one listing title that may say "booking" (BANNED_COPY in
+ * defaults.ts bans it everywhere else): /pune, the site owner's call on 3
+ * Nov 2026. It leads with the words people search, "Turf Booking in Pune",
+ * and says how a player books: they call or WhatsApp the turf (TapTurf
+ * takes no booking). Keyed to the slug, never the label; tests strip
+ * exactly BOOKING_TITLE_PHRASE before the banned-words check.
+ */
+export const BOOKING_TITLE_CITY = "pune";
+export const BOOKING_TITLE_PHRASE = "Turf Booking in Pune";
+
+/**
+ * "Turf Booking in Pune: 295 Turfs, Call or WhatsApp", with the count the
+ * usual title states. Null (the usual title then) without a count, when no
+ * turf there can be called or WhatsApped, or when it would not fit.
+ */
+function bookingTitle(f: CityFacts): string | null {
+  if (f.count <= 0 || f.contactable <= 0) return null;
+  const t = `${BOOKING_TITLE_PHRASE}: ${inr(f.count)} ${f.count === 1 ? "Turf" : "Turfs"}, Call or WhatsApp`;
+  return titleFits(t) ? t : null;
+}
+
+/**
+ * "44 Turfs in Surat: Box Cricket & Football, Timings & Photos". `city`
+ * is the page's slug: only BOOKING_TITLE_CITY's title differs from this.
+ */
+export function cityTitle(f: CityFacts, city?: string): string {
+  if (city === BOOKING_TITLE_CITY) {
+    const booking = bookingTitle(f);
+    if (booking) return booking;
+  }
   // A read that came back empty states no count (the next render has the rows).
   if (f.count <= 0) return `Turfs in ${f.label}: Football & Box Cricket`;
   const head = `${inr(f.count)} ${f.count === 1 ? "Turf" : "Turfs"} in ${f.label}`;

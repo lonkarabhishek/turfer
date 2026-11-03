@@ -56,7 +56,7 @@ export function DashboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // The tab is in the address, so a reload, a Back from Google and every return to the profile land on it.
-  const asked = searchParams.get("tab");
+  const asked = searchParams?.get("tab") ?? null;
   const initialTab: TabKey = TABS.find((t) => t.key === asked)?.key ?? "games";
   const [tab, setTab] = useState<TabKey>(initialTab);
   // A link to another tab while the dashboard is open (the phone ask, the header's Alerts) changes

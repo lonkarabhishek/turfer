@@ -63,8 +63,10 @@ export const revalidate = 86400;
 // and are cached (all of them are in the sitemap either way). Previews
 // and local builds build none, so they never render against the
 // production database. With the build-data step (npm run build), exactly
-// the keys it recorded everything for: one it could not read in time
-// renders on its first visit instead.
+// the keys it recorded everything for, which since 3 Nov also include
+// every active Nashik turf (the home market, lib/build/reads.ts
+// prerenderTurfKeys): one it could not read in time renders on its first
+// visit instead.
 export async function generateStaticParams() {
   if (process.env.VERCEL_ENV !== "production") return [];
   const keys = buildData("turf-pages")?.keys ?? (await getTopTurfKeys(PRERENDERED_TURF_PAGES));

@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { cacheKeyed, toBands } from "@/lib/queries/turfs";
+import { cacheKeyed, markThinRender, toBands } from "@/lib/queries/turfs";
 import { readSportBandRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
 import { sportBandMap, sportBandTimeMap, type SportBandMap, type SportBandTimeMap } from "@/lib/utils/cardSport";
@@ -38,7 +38,8 @@ async function readSportBandTimes(): Promise<SportBandTimeMap> {
  * band the data team changed is fine (the turf page itself is current). A
  * warm instance keeps it an hour in memory, and concurrent renders share
  * one read. A failed read gives the last copy, or null: the cards then
- * decide without bands, as before bands were read (sportPrice). For a
+ * decide without bands, as before bands were read (sportPrice), and that
+ * page is kept a minute only (markThinRender, not while building). For a
  * minute after one the instance answers that way without reading again:
  * the /turfs chips ask on every request, and each read of a database that
  * is down waits out the guard's timeout and counts toward its breaker,
@@ -66,7 +67,10 @@ export function memoised<T>(name: string, cached: () => Promise<T>): () => Promi
   let memo: { at: number; value: T } | null = null;
   let pending: Promise<T | null> | null = null;
   let failedAt = -Infinity;
-  return () => {
+  // A render that got no copy at all is kept a minute only (markThinRender), in its own render.
+  const thin = (value: T | null) => (value === null ? markThinRender().then(() => null) : value);
+  return () => get().then(thin);
+  function get(): Promise<T | null> {
     if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.value);
     if (Date.now() - failedAt < RETRY_MS) return Promise.resolve(memo?.value ?? null);
     pending ??= cached()
@@ -83,7 +87,7 @@ export function memoised<T>(name: string, cached: () => Promise<T>): () => Promi
         pending = null;
       });
     return pending;
-  };
+  }
 }
 
 /** A card row with its venue's sport bands, when it has any (the row itself is never changed). */

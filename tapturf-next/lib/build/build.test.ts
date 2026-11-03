@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { buildData, FAILED, FIRST_LIFE_S, firstLifeOf, isFailed, manifestProblem, MANIFEST, MANIFEST_MAX_AGE_MS, recorded, type BuildDatasets, type Manifest } from "./data";
 import { buildDataDir } from "./env";
 import { backoffMs, createPatientFetch, readEach, retryAfterMs } from "./patient";
-import { CARD_COLUMNS, livePicks, topTurfKeys, type TrendingRow } from "./reads";
+import { CARD_COLUMNS, HOME_MARKET, livePicks, prerenderedListCities, prerenderTurfKeys, topTurfKeys, type TrendingRow } from "./reads";
 import { buildTripwire, createGuardedFetch } from "../supabase/guard";
 import { unusable, type ListMeta } from "../cache/rowStore";
 import { runBuildData, StepFailed, UNREACHABLE } from "../../scripts/build-data";
@@ -323,6 +323,35 @@ test("topTurfKeys: most reviewed first, no count last, then id; the slug or the 
   assert.deepEqual(topTurfKeys(rows, 0), []);
 });
 
+test("prerenderTurfKeys: the most reviewed, then every other turf of the home market (Nashik), each once", () => {
+  assert.equal(HOME_MARKET, "nashik");
+  const rows = [
+    { id: "a", slug: "a", city: "pune", total_reviews: 50 },
+    { id: "b", slug: "b", city: "nashik", total_reviews: 40 },
+    { id: "c", slug: "c", city: "mumbai", total_reviews: 30 },
+    { id: "d", slug: null, city: "nashik", total_reviews: 2 },
+    { id: "e", slug: "e", city: "nashik", total_reviews: null },
+    { id: "f", slug: "f", city: "nashik", total_reviews: 9 },
+    { id: "g", slug: "g", city: "nashik", total_reviews: 1, is_active: false },
+    { id: "h", slug: "h", city: "pune", total_reviews: 1 },
+  ];
+  assert.deepEqual(prerenderTurfKeys(rows, 2), ["a", "b", "f", "d", "e"], "top 2, then Nashik's others most reviewed first; never an inactive row");
+  assert.deepEqual(prerenderTurfKeys(rows, 0), ["b", "f", "d", "e"]);
+  assert.deepEqual(prerenderTurfKeys(rows.filter((r) => r.city !== "nashik"), 2), ["a", "c"], "no Nashik turfs: the top only");
+});
+
+test("prerenderedListCities: the 8 biggest by live count (ties keep the list's order), plus Nashik when it is live and not among them", () => {
+  const live = ["hyderabad", "bangalore", "pune", "mumbai", "delhi", "chennai", "ahmedabad", "surat", "kolkata", "nashik"].map((id, i) => ({ id, n: 400 - i * 10 }));
+  assert.deepEqual(prerenderedListCities(live), ["hyderabad", "bangalore", "pune", "mumbai", "delhi", "chennai", "ahmedabad", "surat", "nashik"]);
+  // Nashik among the 8: no extra city.
+  assert.deepEqual(prerenderedListCities(live, 10), live.map((c) => c.id));
+  // A tie keeps the incoming (biggest-first, curated) order.
+  assert.deepEqual(prerenderedListCities([{ id: "x", n: 5 }, { id: "y", n: 5 }, { id: "z", n: 9 }], 2), ["z", "x"]);
+  // Nashik not live: not added.
+  assert.deepEqual(prerenderedListCities(live.filter((c) => c.id !== "nashik"), 2), ["hyderabad", "bangalore"]);
+  assert.deepEqual(prerenderedListCities([]), []);
+});
+
 test("livePicks: judged at the render, the latest start winning", () => {
   const day = 86_400_000;
   const t = Date.UTC(2026, 9, 29);
@@ -370,7 +399,8 @@ function fakeDb(over: Partial<FakeState> = {}) {
   const rows: Row[] = Array.from({ length: 1200 }, (_, i) => ({
     id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
     slug: i === 7 ? null : `turf-${i}`,
-    city: i % 2 ? "pune" : "nashik",
+    // The home market (Nashik) only among the 300 most reviewed: the step reads 300 turf pages (see the Nashik test below).
+    city: i % 2 ? "pune" : i < 300 ? "nashik" : "mumbai",
     total_reviews: 1200 - i,
     sports: ["Football"],
     updated_at: "2026-10-20T00:00:00+00:00",
@@ -484,6 +514,35 @@ test("step: every dataset, one request at a time, the turf pages it could read, 
     assert.equal(r.summary.moved, false);
   } finally {
     r.cleanup();
+  }
+});
+
+test("step: production builds also read every turf page of the home market (Nashik), after the 300 most reviewed", async () => {
+  // 40 Nashik turfs with few reviews (rows 1100 to 1139), one of them gone (found: false).
+  const rows: Row[] = Array.from({ length: 1200 }, (_, i) => ({
+    id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    slug: `turf-${i}`,
+    city: i >= 1100 && i < 1140 ? "nashik" : "pune",
+    total_reviews: 1200 - i,
+    sports: ["Football"],
+    updated_at: "2026-10-20T00:00:00+00:00",
+  }));
+  const r = await step({ rows, pages: { "turf-1105": { found: false } } });
+  try {
+    const pages = r.read("turf-pages") as BuildDatasets["turf-pages"];
+    assert.equal(pages.keys.length, 300 + 39);
+    assert.deepEqual(pages.keys.slice(0, 300), rows.slice(0, 300).map((x) => x.slug));
+    assert.deepEqual(pages.keys.slice(300), rows.slice(1100, 1140).map((x) => x.slug).filter((k) => k !== "turf-1105"));
+    assert.equal(r.s.calls.filter((c) => c === "rpc/turf_page").length, 340, "each key read once");
+  } finally {
+    r.cleanup();
+  }
+  // Previews build no turf pages, Nashik's included.
+  const p = await step({ rows }, { VERCEL_ENV: "preview" });
+  try {
+    assert.equal(p.s.calls.filter((c) => c === "rpc/turf_page").length, 0);
+  } finally {
+    p.cleanup();
   }
 });
 
