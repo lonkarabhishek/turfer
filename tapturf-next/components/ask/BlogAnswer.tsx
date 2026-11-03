@@ -9,6 +9,7 @@ import { BlogVisualView } from "./BlogVisual";
 import { blogCardView, isPlainClick, jumpToSection, sectionHref, type CardView, type JumpEnv } from "./blogUi";
 import type { BlogAnswer, BlogLink } from "@/lib/ask/blogTypes";
 import { turfPath } from "@/lib/utils/turfPath";
+import { blogTurfHref } from "@/content/blog/data/turfSlugs";
 
 /**
  * What shows under a reply about a blog post: the short version (its
@@ -149,7 +150,8 @@ function Sources({ view, slug, here }: { view: CardView; slug: string; here: boo
         <Group label="Venues">
           {turfs.map((t) => (
             <li key={t.id}>
-              <Link href={turfPath({ id: t.id })} onClick={closePanel} className={ROW}>
+              {/* A post names a venue by its database id or its slug: the slug URL either way (as the post's own cards link it). */}
+              <Link href={blogTurfHref(t.id) ?? turfPath({ id: t.id })} onClick={closePanel} className={ROW}>
                 <MapPin className={ICON} aria-hidden />
                 {/* The name first; the area takes what room is left. */}
                 <span className="max-w-[65%] shrink-0 truncate font-medium">{t.name}</span>

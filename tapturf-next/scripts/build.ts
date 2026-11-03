@@ -11,8 +11,13 @@
  *   answers carry owners' numbers.
  * - A failed step fails the build (exit 1) before `next build` starts:
  *   production keeps the last deploy.
+ * - From the step's sitemap read, the proxy's map of old id links
+ *   (/turf/<uuid> -> /turf/<slug>) is written into lib/turfIds.json for
+ *   `next build` to bundle (lib/build/turfIds.ts), and the committed file is
+ *   put back when the build ends, as the folder is removed.
  * - TAPTURF_BUILD_DATA=off skips the step: `next build` reads the database
- *   itself, as before (a local build without a database).
+ *   itself, as before (a local build without a database), and the proxy's
+ *   map stays empty (the turf page redirects old links itself).
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -20,6 +25,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { buildDataStrict, TRIPWIRE_FILE } from "../lib/build/env";
+import { writeTurfIds } from "../lib/build/turfIds";
 import { runBuildData, StepFailed } from "./build-data";
 
 const SIGNALS = { SIGINT: 2, SIGTERM: 15 } as const;
@@ -27,8 +33,11 @@ type Signal = keyof typeof SIGNALS;
 
 let child: ChildProcess | null = null;
 let folder: string | null = null;
+let restoreTurfIds: (() => void) | null = null;
 
 function cleanup() {
+  restoreTurfIds?.();
+  restoreTurfIds = null;
   if (!folder) return;
   rmSync(folder, { recursive: true, force: true });
   folder = null;
@@ -82,6 +91,9 @@ async function main(): Promise<number> {
     console.error(e.message);
     return 1;
   }
+  const ids = writeTurfIds(dir, process.cwd());
+  restoreTurfIds = ids.restore;
+  console.log(`build data: ${ids.count} old /turf/<id> links redirect at the proxy (${(ids.bytes / 1024).toFixed(0)} KB map)`);
   const code = await nextBuild({ ...process.env, TAPTURF_BUILD_DATA: dir }, args);
   const paths = tripped(dir);
   if (paths.length) console.warn(`build: pages read the database while building from the step's files: ${paths.join(", ")}`);

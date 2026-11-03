@@ -7,35 +7,37 @@ import { labelFor, type CityId } from "@/lib/city";
 import { getLiveCities } from "@/lib/queries/cities";
 import { citySportLinks, sportBySlug, sportVenues, turfPlaysSport } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
-import { slugify } from "@/lib/utils/slugify";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { forCard } from "@/lib/utils/cardTurf";
 import { NearMeFinder } from "@/components/near/NearMeFinder";
+import { ByCityLinks } from "@/components/sport/ByCityLinks";
+import { cityPageLinks } from "@/lib/byCity";
+import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import type { Turf } from "@/types/turf";
-import { turfPath, turfUrl } from "@/lib/utils/turfPath";
+import { turfUrl } from "@/lib/utils/turfPath";
 import { plural } from "@/lib/home/format";
 import { nearMeDescription } from "@/lib/seo/listingMeta";
 import { DEFAULT_OG_IMAGE, OG_BASE, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
 // "Turf near me": the page for people who don't know a turf's name yet.
-// Everything a crawler needs is in the HTML (every turf linked, grouped
-// by city and area, plus a FAQ); the location button is a layer on top.
+// The location button finds the nearest turfs (NearMeFinder). In the HTML,
+// for crawlers and anyone without location: the biggest cities' top turfs
+// as cards with their areas, then every city's own page (each lists every
+// turf there), plus a FAQ. Until 3 Nov it linked every turf in India by
+// city and area: 3.8 MB of HTML, past the 2 MB Googlebot reads.
 export const revalidate = 3600;
 
 const PAGE_URL = "https://www.tapturf.in/turf-near-me";
 // Keyword first; absolute so the layout template doesn't add a second brand.
 const TITLE = "Turf Near Me: Find Football & Box Cricket Turfs | TapTurf";
-/** Turf link lists: styled from the parent so each of the ~240 rows stays tiny. */
-const LIST =
-  "mt-3 text-[15px] text-primary-800 [&_a]:flex [&_a]:items-center [&_a]:justify-between [&_a]:gap-3 [&_a]:py-1.5 [&_a:hover]:text-accent-600 [&_span]:min-w-0 [&_span]:truncate [&_small]:text-[13px] [&_small]:text-primary-500 [&_i]:not-italic [&_i]:shrink-0 [&_i]:text-[13px] [&_i]:text-primary-600 [&_i]:tabular-nums";
 
-/** Photo cards per city; every other turf is still linked by area. */
+/** Photo cards per city. */
 const CARDS_PER_CITY = 8;
-// Photo cards (each a client slider) only for the biggest cities; the
-// rest list their top turfs as plain links. Every city as cards (54 then) made
-// this page 4.2 MB with 392 sliders, and on a phone the photos could not
-// be swiped until all of it had loaded (20 Oct).
+// Photo cards (each a client slider) only for the biggest cities; every
+// city, these too, is linked under them ("Turfs by city"). Every city as
+// cards (54 then) made this page 4.2 MB with 392 sliders, and on a phone
+// the photos could not be swiped until all of it had loaded (20 Oct).
 const CARD_CITIES = 6;
 
 type CityBlock = {
@@ -143,6 +145,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TurfNearMePage() {
   const { blocks, total, floodlit, areaCount, footballCount, boxCricketCount } = await load();
   const cities = cityLine(blocks);
+  // The cities shown with cards, and every city's page where it is indexable.
+  const cardBlocks = blocks.slice(0, CARD_CITIES);
+  const byCity = cityPageLinks(blocks.map((b) => ({ id: b.id, label: b.label, count: b.turfs.length })), MIN_TURFS_TO_INDEX);
   const topAreas = blocks
     .flatMap((b) => b.areas.slice(0, 2).map((a) => `${a.area} (${b.label})`))
     .slice(0, 6);
@@ -202,7 +207,8 @@ export default async function TurfNearMePage() {
       mainEntity: {
         "@type": "ItemList",
         numberOfItems: total,
-        itemListElement: blocks
+        // The turfs shown as cards, in their order.
+        itemListElement: cardBlocks
           .flatMap((b) => b.turfs.slice(0, CARDS_PER_CITY))
           .map((t, i) => ({
             "@type": "ListItem",
@@ -247,7 +253,8 @@ export default async function TurfNearMePage() {
           </p>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <NearMeFinder total={total} cities={blocks.map((b) => ({ id: b.id, label: b.label }))} />
+          {/* With location off its chips go to a city's section here, or to the city's page. */}
+          <NearMeFinder total={total} cities={blocks.map((b, bi) => ({ id: b.id, label: b.label, href: bi < CARD_CITIES ? undefined : `/${b.id}` }))} />
         </div>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-12 md:pb-16 text-center">
           <ul className="mt-8 flex flex-wrap justify-center gap-2 text-[13px] text-primary-600">
@@ -261,10 +268,10 @@ export default async function TurfNearMePage() {
         </div>
       </section>
 
-      {/* Jump to a city */}
+      {/* Jump to a city: the ones with cards here, then every city */}
       <nav id="cities" aria-label="Cities" className="max-w-7xl mx-auto px-4 sm:px-6 -mt-2 mb-4 scroll-mt-20">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide justify-start sm:justify-center">
-          {blocks.map((b) => (
+          {cardBlocks.map((b) => (
             <a
               key={b.id}
               href={`#${b.id}`}
@@ -274,10 +281,18 @@ export default async function TurfNearMePage() {
               <span className="text-primary-500 tabular-nums">{b.turfs.length}</span>
             </a>
           ))}
+          {blocks.length > cardBlocks.length && (
+            <a
+              href="#turfs-by-city"
+              className="shrink-0 h-10 px-4 inline-flex items-center rounded-full ring-1 ring-primary-200 hover:bg-primary-50 text-[14px] font-medium text-primary-700"
+            >
+              All {plural(blocks.length, "city", "cities")}
+            </a>
+          )}
         </div>
       </nav>
 
-      {blocks.map((b, bi) => (
+      {cardBlocks.map((b, bi) => (
         // A Suspense boundary per city: React hydrates each on its own and
         // first where the player touches, so the top cards swipe before
         // the rest of the page has hydrated.
@@ -300,88 +315,28 @@ export default async function TurfNearMePage() {
             </Link>
           </div>
 
-          {bi < CARD_CITIES ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-              {b.turfs.slice(0, CARDS_PER_CITY).map((t, i) => (
-                <TurfCard key={t.id} turf={forCard(t)} priority={bi === 0 && i < 2} />
-              ))}
-            </div>
-          ) : (
-            <ol className={`${LIST} rounded-2xl bg-white ring-1 ring-primary-200 p-5 sm:columns-2 gap-x-8`}>
-              {b.turfs.slice(0, CARDS_PER_CITY).map((t) => (
-                <li key={t.id} className="break-inside-avoid">
-                  <Link href={turfPath(t)}>
-                    <span>
-                      {t.name}
-                      {areaFor(t) && <small>, {areaFor(t)}</small>}
-                    </span>
-                    {t.rating > 0 && t.total_reviews > 0 && <i>★ {t.rating.toFixed(1)}</i>}
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
+            {b.turfs.slice(0, CARDS_PER_CITY).map((t, i) => (
+              <TurfCard key={t.id} turf={forCard(t)} priority={bi === 0 && i < 2} />
+            ))}
+          </div>
 
-          {/* By area: every turf in the city, linked (the biggest cities;
-              the rest name their areas and link to the city page, which
-              lists every turf, so this page stays light on a phone). */}
+          {/* By area: the city's areas with their counts, and the city's
+              page, which lists every turf there, so this page stays light
+              on a phone. */}
           <h3 className="font-display text-[20px] md:text-[22px] text-primary-900 mt-12 mb-4">
             Find a turf by area in {b.label}
           </h3>
-          {bi >= CARD_CITIES ? (
-            <p className="text-[15px] leading-relaxed text-primary-700">
-              {b.areas.length > 0 && (
-                <>
-                  {b.areas.map((a) => `${a.area} (${a.turfs.length})`).join(", ")}.{" "}
-                </>
-              )}
-              <Link href={`/${b.id}`} className="font-semibold text-accent-600 hover:text-accent-700">
-                {b.turfs.length === 1 ? `See the turf in ${b.label}` : `See all ${b.turfs.length} turfs in ${b.label}`}
-              </Link>
-            </p>
-          ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {b.areas.map(({ area, turfs }) => (
-              <div key={area} id={`${b.id}-${slugify(area)}`} className="rounded-2xl bg-primary-50 p-5 scroll-mt-20">
-                <h4 className="flex items-baseline justify-between gap-3 text-[16px] font-semibold text-primary-900">
-                  Turfs near {area}
-                  <span className="text-[13px] font-normal text-primary-500 tabular-nums">{turfs.length}</span>
-                </h4>
-                <ul className={LIST}>
-                  {turfs.map((t) => (
-                    <li key={t.id}>
-                      <Link href={turfPath(t)}>
-                        <span>{t.name}</span>
-                        {t.rating > 0 && t.total_reviews > 0 && <i>★ {t.rating.toFixed(1)}</i>}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            {b.more.length > 0 && (
-              <div className="rounded-2xl bg-primary-50 p-5 sm:col-span-2 lg:col-span-3">
-                <h4 className="flex items-baseline justify-between gap-3 text-[16px] font-semibold text-primary-900">
-                  More turfs in {b.label}
-                  <span className="text-[13px] font-normal text-primary-500 tabular-nums">{b.more.length}</span>
-                </h4>
-                <ul className={`${LIST} sm:columns-2 lg:columns-3 gap-x-8`}>
-                  {b.more.map(({ turf: t, area }) => (
-                    <li key={t.id} className="break-inside-avoid">
-                      <Link href={turfPath(t)}>
-                        <span>
-                          {t.name}
-                          {area && <small>, {area}</small>}
-                        </span>
-                        {t.rating > 0 && t.total_reviews > 0 && <i>★ {t.rating.toFixed(1)}</i>}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <p className="text-[15px] leading-relaxed text-primary-700">
+            {b.areas.length > 0 && (
+              <>
+                {b.areas.map((a) => `${a.area} (${a.turfs.length})`).join(", ")}.{" "}
+              </>
             )}
-          </div>
-          )}
+            <Link href={`/${b.id}`} className="font-semibold text-accent-600 hover:text-accent-700">
+              {b.turfs.length === 1 ? `See the turf in ${b.label}` : `See all ${b.turfs.length} turfs in ${b.label}`}
+            </Link>
+          </p>
 
           {/* By sport in this city */}
           {b.sports.length > 0 && (
@@ -402,6 +357,18 @@ export default async function TurfNearMePage() {
         </section>
         </Suspense>
       ))}
+
+      {/* Every city's page, biggest first: each lists every turf there. */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <ByCityLinks
+          id="turfs-by-city"
+          title="Turfs by city"
+          sub="Biggest first. Each city's page lists every turf there, by area and sport."
+          byCity={byCity}
+          unit={["turf", "turfs"]}
+          className="mt-16"
+        />
+      </div>
 
       {/* FAQ: visible text matches the FAQPage JSON-LD */}
       <section className="max-w-3xl mx-auto px-4 sm:px-6 mt-20">

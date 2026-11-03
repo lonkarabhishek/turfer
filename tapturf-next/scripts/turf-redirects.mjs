@@ -4,12 +4,13 @@
  * from its old id URL to its slug URL (/turf/<uuid> -> /turf/<slug>).
  * Nothing reads that file today, and it is not committed.
  *
- * Old id URLs are already handled: app/turf/[id]/page.tsx calls
- * permanentRedirect, so /turf/<uuid> answers 308 to /turf/<slug> on every
- * request (since commit 859cdd4). That costs one function run per old link,
- * which is fine at today's traffic.
+ * Old id URLs are already handled: since 3 Nov the proxy answers
+ * /turf/<uuid> with a 308 to /turf/<slug> from a map made at build time
+ * (proxy.ts, lib/turfIds.ts, lib/build/turfIds.ts), and app/turf/[id]/page.tsx
+ * still calls permanentRedirect for anything the map lacks (since commit
+ * 859cdd4). This script is the other way, kept for reference.
  *
- * To serve these at the edge later, before any page renders: once the
+ * To serve these as Vercel bulk redirects instead: once the
  * owner confirms the Vercel plan includes bulk redirects (it can be a paid
  * add-on), run this script, commit redirects/turf-ids.csv, and add
  *   "bulkRedirectsPath": "redirects/turf-ids.csv"
