@@ -37,6 +37,26 @@ export async function ownerRpc<T>(fn: string, args: Record<string, unknown> = {}
   return data as T;
 }
 
+/** What the owner says is over the ground (turfs.roof, 20261103_turf_facts.sql). */
+export type Roof = "covered" | "partly" | "open";
+
+/**
+ * The turf's roof as last said (null: not said), read straight from the
+ * table: it is public, as every turf column its page shows. Undefined when
+ * the database has no roof column yet (before 20261103_turf_facts.sql) or
+ * the read failed: the editor then keeps its Yes / No / Not sure question.
+ */
+export async function readRoof(turfId: string): Promise<{ roof: Roof | null } | undefined> {
+  try {
+    const { data, error } = await createClient().from("turfs").select("roof").eq("id", turfId).maybeSingle();
+    if (error || !data) return undefined;
+    const roof = (data as { roof?: unknown }).roof;
+    return { roof: roof === "covered" || roof === "partly" || roof === "open" ? roof : null };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Ask the server to rebuild the public turf page after an edit. */
 export async function refreshTurfPage(turfId: string) {
   try {

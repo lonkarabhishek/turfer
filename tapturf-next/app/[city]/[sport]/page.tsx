@@ -3,12 +3,17 @@ import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, LocateFixed } from "lucide-react";
-import { getAllActiveTurfs, turfRowsStale } from "@/lib/queries/turfs";
+import { getAllActiveTurfs, getCardTurfs, turfRowsStale } from "@/lib/queries/turfs";
 import { cityPointsOf, isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
-import { SportTurfList } from "@/components/sport/SportTurfList";
+import { SportTurfRest } from "@/components/sport/SportTurfList";
+import { TurfListingClient } from "@/components/search/TurfListingClient";
+import { getTrendingPicks } from "@/lib/queries/trending";
+import { trendingFor } from "@/lib/queries/turfList";
+import { DEFAULT_FILTERS, FIRST_PAGE, pageOf } from "@/lib/turfList/query";
+import { LIST_PREPAINT_JS } from "@/lib/turfList/client";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
@@ -19,7 +24,7 @@ import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/li
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
-import { getSportBands } from "@/lib/queries/sportBands";
+import { getSportBands, listWithSportBands } from "@/lib/queries/sportBands";
 import { courtNearMeLink } from "@/lib/near/courtNearMe";
 
 // "Football turfs in Pune" style landing pages: the city + sport
@@ -135,11 +140,17 @@ export default async function CitySportPage({
   // first. The points come from the live list (the page read it already,
   // isLiveCity), so this city is placed even when its own sport page is
   // too thin to be in the sport's list.
-  const [sportCities, live, bands] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands()]);
+  const [sportCities, live, bands, cards, picks] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands(), getCardTurfs(cityId), getTrendingPicks()]);
   const otherCities = pickOtherCities(sportCities, cityId, cityPointsOf(live)).flatMap((c) => {
     const href = citySportHref(c.id, s.slug, c.n);
     return href ? [{ ...c, href }] : [];
   });
+  // The list's first cards: this city's card rows (the same rows as `turfs`) with their sport
+  // bands, the page's sport by its exact labels (`pageSport`), ranked as GET /api/turfs/list
+  // ranks every later batch. The page's turfs those cards leave out stay plain links under it.
+  const first = pageOf(listWithSportBands(cards.turfs, bands), { ...DEFAULT_FILTERS, at: null, pageSport: s.slug }, trendingFor(cityId, picks), 0, FIRST_PAGE, cards.v);
+  const onCards = new Set(first.items.map((i) => i.turf.id));
+  const rest = turfs.filter((t) => !onCards.has(t.id));
   const otherSports = citySportLinks(cityId, data.cityTurfs).filter((sp) => sp.slug !== s.slug);
   // Badminton, pickleball and tennis: their near-me page, under the other cities.
   const nearMe = courtNearMeLink(s.slug, turfs.length);
@@ -233,7 +244,18 @@ export default async function CitySportPage({
         )}
       </header>
 
-      <SportTurfList turfs={turfs} venues={venues.toLowerCase()} placeLabel={cityLabel} sport={{ labels: s.labels }} bands={bands} />
+      {/* Search, Filters, sorts and "Show more" over this page's turfs, as on /turfs (no sport chips:
+          the page is the sport). Before the first paint, a URL with a search, sort or Filters choice
+          dims the server's cards until the right ones arrive. */}
+      <script dangerouslySetInnerHTML={{ __html: LIST_PREPAINT_JS }} />
+      <TurfListingClient
+        initial={first}
+        sports={[]}
+        scope={{ kind: "city", id: cityId, label: cityLabel, requested: null }}
+        spotlight={null}
+        sportPage={{ slug: s.slug, name: s.name, labels: s.labels, venue: s.venue }}
+      />
+      <SportTurfRest turfs={rest} venues={venues.toLowerCase()} placeLabel={cityLabel} />
 
       {/* FAQ: visible text matches the FAQPage JSON-LD */}
       <section className="mt-14 max-w-3xl">

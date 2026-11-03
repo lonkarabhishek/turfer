@@ -159,6 +159,8 @@ export function transformTurf(raw: any): Turf {
     created_at: raw.created_at,
     updated_at: raw.updated_at,
     ...(groundSizes ? { ground_sizes: groundSizes } : {}),
+    // The owner's roof answer (turf pages only: turf_page returns the whole row). Only when said, so every other row is the object it was.
+    ...(raw.roof === "covered" || raw.roof === "partly" || raw.roof === "open" ? { roof: raw.roof } : {}),
   };
 }
 
@@ -593,6 +595,8 @@ export type CardTurfs = {
   stale: boolean;
   /** forCard() of every active turf in scope, top rated first: exactly getAllActiveTurfs(city), cut down. Frozen. */
   turfs: readonly Turf[];
+  /** The raw rows (card columns, all of India) these came from: what the list route's filter facts are made of (lib/queries/listFacts.ts). Never sent to a page. */
+  rows: readonly Row[];
 };
 
 // One projection per copy of the rows (the store hands out the same frozen
@@ -620,7 +624,7 @@ export async function getCardTurfs(city: CityId | null): Promise<CardTurfs> {
     // A city with no turfs (any slug can be asked for) is not kept: the map stays one entry per real city.
     if (turfs.length) cardMemo.byScope.set(key, turfs);
   }
-  return { v: got.v, stale: got.stale, turfs };
+  return { v: got.v, stale: got.stale, turfs, rows: got.rows };
 }
 
 /**

@@ -215,6 +215,9 @@ const LABELS: Record<string, string> = {
   photo_removed: "removed a photo",
   cover_image: "cover photo",
   ground_sizes: "ground size",
+  // A roof answer sets both: one change.
+  roof: "roof",
+  is_covered: "roof",
 };
 function fieldLabel(f: string) {
   return LABELS[f] ?? f.replace(/_/g, " ").replace(/^(has|is) /, "");

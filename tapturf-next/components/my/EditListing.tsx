@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
-import { ownerRpc, refreshTurfPage, type OwnerTurf } from "@/lib/my/client";
+import { ownerRpc, readRoof, refreshTurfPage, type OwnerTurf, type Roof } from "@/lib/my/client";
 import { numberInput, numberKind, numberPatch, saveMessage, shownCallNumber, type NumberField, type SaveError } from "@/lib/my/numbers";
 import { formatLabel } from "@/lib/utils/formats";
 
@@ -23,6 +23,13 @@ const SLOTS: [string, PriceKey, PriceKey][] = [
   ["Morning", "morning_price", "weekend_morning_price"],
   ["Afternoon", "afternoon_price", "weekend_afternoon_price"],
   ["Evening", "evening_price", "weekend_evening_price"],
+];
+/** Over the ground: the answers for turfs.roof (null: not sure), saved through owner_set_roof. */
+const ROOFS: [Roof | null, string][] = [
+  ["covered", "Covered"],
+  ["partly", "Partly covered"],
+  ["open", "Open air"],
+  [null, "Not sure"],
 ];
 const FORMATS = ["5-a-side", "6-a-side", "7-a-side", "8-a-side", "9-a-side", "11-a-side", "box cricket", "cricket nets", "pickleball", "badminton"];
 const SURFACES = ["", "artificial grass", "natural grass", "cement", "wooden", "synthetic", "clay"];
@@ -89,11 +96,32 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   const [msg, setMsg] = useState("");
   // What the last refused save was about: the field to mark, and whether only the numbers were held.
   const [refused, setRefused] = useState<SaveError | null>(null);
+  // Covered, partly covered or open air (turfs.roof): as saved (undefined until read, and on a
+  // database without the column, where the Yes / No / Not sure "Covered / indoor" stays), and as picked.
+  const [roofBase, setRoofBase] = useState<Roof | null | undefined>(undefined);
+  const [roof, setRoof] = useState<Roof | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void readRoof(turf.id).then((r) => {
+      if (!alive || !r) return;
+      setRoofBase(r.roof);
+      setRoof(r.roof);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [turf.id]);
+  const roofOn = roofBase !== undefined;
+  const roofDirty = roofOn && roof !== roofBase;
+  const flags = roofOn ? FLAGS.filter(([k]) => k !== "is_covered") : FLAGS;
   const rest = diff(base, f);
+  // With the roof question, is_covered is the roof's to set (owner_set_roof): never sent from the old flag,
+  // which would otherwise read as changed once a roof save has moved it.
+  if (roofOn) delete rest.is_covered;
   const numbers = numberPatch(base, f);
   const typedNumbers = (["owner_phone", "whatsapp_phone"] as const).filter((k) => f[k] !== undefined && f[k] !== base[k]);
   // A number typed another way is no change; one that isn't a number yet still counts, so Save can say so.
-  const count = Object.keys(rest).length + (numbers.error ? typedNumbers.length : Object.keys(numbers.patch).length);
+  const count = Object.keys(rest).length + (numbers.error ? typedNumbers.length : Object.keys(numbers.patch).length) + (roofDirty ? 1 : 0);
   const dirty = count > 0;
 
   const fail = (r: SaveError) => {
@@ -106,8 +134,17 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
     if (numbers.error) return fail(numbers.error);
     setState("saving");
     try {
-      const r = await ownerRpc<{ ok?: boolean; error?: string; field?: string }>("owner_update_turf", { p_turf_id: turf.id, p_patch: { ...rest, ...numbers.patch } });
-      if (!r.ok) return fail({ error: r.error ?? "unknown", field: r.field });
+      const patch = { ...rest, ...numbers.patch };
+      if (Object.keys(patch).length > 0 || !roofDirty) {
+        const r = await ownerRpc<{ ok?: boolean; error?: string; field?: string }>("owner_update_turf", { p_turf_id: turf.id, p_patch: patch });
+        if (!r.ok) return fail({ error: r.error ?? "unknown", field: r.field });
+      }
+      // The roof has its own function (it keeps is_covered with it): owner_set_roof, 20261103_turf_facts.sql.
+      if (roofDirty) {
+        const r = await ownerRpc<{ ok?: boolean; error?: string; field?: string; roof?: Roof | null }>("owner_set_roof", { p_turf_id: turf.id, p_roof: roof });
+        if (!r.ok) return fail({ error: r.error ?? "unknown", field: r.field });
+        setRoofBase(roof);
+      }
       await refreshTurfPage(turf.id);
       setState("saved");
       setRefused(null);
@@ -189,8 +226,32 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
       </Group>
 
       <Group title="Facilities" hint="Answer what you're sure of; leave the rest on Not sure.">
+        {roofOn && (
+          // Players filter by it ("Covered", in the listings' Filters); a roof over part of the ground is "Partly covered".
+          <div className="mb-4">
+            <p className="text-[15px] text-primary-800" id="roof-label">Roof over the ground</p>
+            <span className="mt-1.5 grid grid-cols-2 sm:inline-flex gap-0.5 rounded-2xl sm:rounded-full bg-primary-100 p-0.5" role="radiogroup" aria-labelledby="roof-label">
+              {ROOFS.map(([v, t]) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={roof === v}
+                  onClick={() => {
+                    setRoof(v);
+                    setState("idle");
+                    setRefused(null);
+                  }}
+                  className={`h-8 px-3 rounded-full text-[13px] font-medium cursor-pointer transition-colors ${roof === v ? "bg-white text-primary-900 shadow-soft" : "text-primary-600"}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </span>
+          </div>
+        )}
         <ul className="space-y-2">
-          {FLAGS.map(([k, label]) => (
+          {flags.map(([k, label]) => (
             <li key={k} className="flex items-center justify-between gap-3">
               <span className="text-[15px] text-primary-800">{label}</span>
               <span className="inline-flex rounded-full bg-primary-100 p-0.5" role="radiogroup" aria-label={label}>
@@ -320,7 +381,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
                   Undo number change
                 </button>
               ) : (
-                <button type="button" onClick={() => { setF(base); setState("idle"); setRefused(null); }} className="h-10 px-4 rounded-full text-[14px] font-semibold text-primary-600 hover:bg-primary-100 cursor-pointer">
+                <button type="button" onClick={() => { setF(base); if (roofBase !== undefined) setRoof(roofBase); setState("idle"); setRefused(null); }} className="h-10 px-4 rounded-full text-[14px] font-semibold text-primary-600 hover:bg-primary-100 cursor-pointer">
                   Undo
                 </button>
               )

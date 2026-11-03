@@ -786,6 +786,9 @@ html[data-city-pending] main:has(#city-line) > :not(#city-line):not(:has(#city-l
    until the listing has read the URL (it then drops the mark and dims them
    itself until the right ones arrive). */
 html[data-tt-list="wait"] #tt-turf-grid { opacity: .45; pointer-events: none; }
+/* A URL with Filters choices: the room their pills take (h-9 and mb-3 in
+   TurfListingClient), held until the listing renders them in it. */
+html[data-tt-pills] #tt-pills { min-height: 2.25rem; margin-bottom: .75rem; }
 
 /* ─── Game pages (components/game/detail, GameCard) ─────────
    A photo mounted in the browser (the game page's hero, a card added
