@@ -10,8 +10,21 @@ import {
   venueMoveNotice,
   venueMoveRecipients,
   venueProblem,
+  typedVenueOption,
   type VenueRow,
 } from "./gameVenue";
+
+test("a move to a venue the host typed: no turf id, its words, and the players told where", () => {
+  const typed = { name: "Shivaji Maidan", address: "Behind Ganesh Temple", area: "Baner", city: "pune", mapsUrl: null };
+  const v = typedVenueOption(typed);
+  assert.deepEqual([v.id, v.name, v.area, v.city, v.typed], ["", "Shivaji Maidan", "Baner", "pune", typed]);
+  assert.equal(venueProblem(v, "t1", null), null, "nothing to look up: the server checks its words");
+  assert.deepEqual(venueMoveNotice({ host_name: "Asha Rao", sport: "football", date: "2026-11-07" }, v), {
+    title: "Venue changed",
+    message: "Asha moved Football on Sat 7 Nov to Shivaji Maidan, Baner",
+  });
+  assert.equal(venueLine({ name: "Wai Ground", area: null, city: "Wai", address: "Near the bus stand" }), "Wai Ground, Near the bus stand");
+});
 
 // Baner, Pune, and turfs at known offsets (0.01 deg of latitude is about 1.11 km).
 const here = { id: "t0", lat: 18.559, lng: 73.786 };

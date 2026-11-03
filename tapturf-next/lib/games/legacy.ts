@@ -1,6 +1,7 @@
 import { anonDb as db } from "./db";
 import { venueMoveRecipients } from "../utils/gameVenue";
 import type { Rpc } from "../account/server";
+import { hasVenueKeys } from "./otherVenue";
 import { CHANGE_FIELDS, DAYS_AHEAD, addDays, fieldProblem, gameOver, isUuid, istToday, parseCreate, parseNote } from "./payload";
 
 /**
@@ -10,7 +11,9 @@ import { CHANGE_FIELDS, DAYS_AHEAD, addDays, fieldProblem, gameOver, isUuid, ist
  * function does (the same rules, the same answer), on the server, with
  * the anon key and today's grants. Never reached once step 1 is in; after
  * step 2 it could not write anyway. Remove it then (a follow-up). It has
- * no locks, as the browser's writes had none. Relative imports only
+ * no locks, as the browser's writes had none. A database this old has no
+ * typed venues either (20261103_game_other_venue.sql): a game at one is
+ * refused (venue_off) and turf games go on. Relative imports only
  * (npm run test:games).
  */
 
@@ -55,6 +58,7 @@ const FALLBACKS: Record<string, (a: Row) => Promise<Answer>> = {
     const p = parseCreate(a.p_game as Row);
     if ("bad" in p) return { r: "bad", field: p.bad };
     const g = p.ok;
+    if (!g.turf_id) return { r: "venue_off" };
     const user = first<{ name: string | null; profile_image_url: string | null }>(await db().from("users").select("name, profile_image_url").eq("id", a.p_user_id).limit(1), "user");
     if (!user) return { r: "bad" };
     if (!(await activeTurf(g.turf_id))) return { r: "venue" };
@@ -93,6 +97,7 @@ const FALLBACKS: Record<string, (a: Row) => Promise<Answer>> = {
     const changes = a.p_changes as Row;
     const bad = fieldProblem(changes, CHANGE_FIELDS);
     if (bad) return { r: "bad", field: bad };
+    if (hasVenueKeys(changes)) return { r: "venue_off" };
     const old = first(await db().from("games").select("*").eq("id", a.p_game_id).limit(1), "game");
     if (!old) return { r: "gone" };
     if (old.creator_id !== a.p_user_id) return { r: "not_host" };

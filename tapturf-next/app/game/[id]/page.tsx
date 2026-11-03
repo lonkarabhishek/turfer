@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { GameDetailClient } from "@/components/game/GameDetailClient";
 import { getGameByIdServer } from "@/lib/queries/games.server";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "@/lib/city";
-import { isGameExpired } from "@/lib/utils/game";
+import { gameVenue, isGameExpired, type GameVenue } from "@/lib/utils/game";
+import type { Game } from "@/types/game";
 import { gameDates } from "@/lib/seo/gameDates";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
@@ -23,6 +24,13 @@ function humanDate(dateStr: string, timeStr?: string): string {
   });
 }
 
+/** The city the page names: a turf's as before (its city, else one its address names), a typed venue's own (the host's words for a town TapTurf has no city for). */
+function cityLabelOf(game: Game, place: GameVenue | null): string | null {
+  if (!game.turfs) return place?.cityLabel || null;
+  const turfCity = (game.turfs["city"] as string | undefined) ?? (game.turfs.address ? guessCityFromAddress(game.turfs.address) : null);
+  return isCity(turfCity) ? labelFor(turfCity) : null;
+}
+
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
@@ -36,16 +44,17 @@ export async function generateMetadata(
     };
   }
 
-  const venue = game.turfs?.name || "a local turf";
+  // Its turf, or the venue its host typed (not on TapTurf): named the same way.
+  const place = gameVenue(game);
+  const venue = place?.name || "a local turf";
   const when = humanDate(game.date, game.start_time);
   const spotsLeft = Math.max(0, game.max_players - game.current_players);
   const price = game.price_per_player > 0 ? `₹${game.price_per_player}/player` : "Free";
 
-  // Locality follows the turf's own city; with no city on record the
-  // description names only the venue instead of guessing a city.
-  const turfCity = (game.turfs?.["city"] as string | undefined) ??
-    (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
-  const cityLabel = isCity(turfCity) ? labelFor(turfCity) : null;
+  // Locality follows the venue's own city (a typed venue's in the host's
+  // words); with no city on record the description names only the venue
+  // instead of guessing a city.
+  const cityLabel = cityLabelOf(game, place);
   const title = `${game.sport} at ${venue}, ${when}`;
   const description = `${game.sport} game at ${venue}${cityLabel ? `, ${cityLabel}` : ""} on ${when}. ${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left · ${price}. Join in one tap on TapTurf.`;
 
@@ -71,10 +80,10 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const game = await getGameByIdServer(id);
 
   const jsonLd = game ? (() => {
-    const gTurfCity = (game.turfs?.["city"] as string | undefined) ??
-      (game.turfs?.address ? guessCityFromAddress(game.turfs.address) : null);
-    const gCityLabel = isCity(gTurfCity) ? labelFor(gTurfCity) : null;
-    const venueName = game.turfs?.name ?? "a local turf";
+    // A TapTurf turf, or the venue its host typed: a Place with its own address either way.
+    const place = gameVenue(game);
+    const gCityLabel = cityLabelOf(game, place);
+    const venueName = place?.name ?? "a local turf";
     return {
       "@context": "https://schema.org",
       "@type": "SportsEvent",
@@ -98,7 +107,21 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               addressCountry: "IN",
             },
           }
-        : undefined,
+        : place
+          ? {
+              // The venue its host typed (not on TapTurf): its own name and address.
+              "@type": "Place",
+              name: place.name,
+              address: {
+                "@type": "PostalAddress",
+                streetAddress: place.address,
+                ...(gCityLabel && { addressLocality: gCityLabel }),
+                // A curated city's state only; a town TapTurf has no city for gives none.
+                addressRegion: stateFor(place.city),
+                addressCountry: "IN",
+              },
+            }
+          : undefined,
     organizer: {
       "@type": "Person",
       name: game.host_name || "TapTurf host",

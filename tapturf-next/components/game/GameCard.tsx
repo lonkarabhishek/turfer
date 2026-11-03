@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CalendarClock, CircleCheck, MapPin, Repeat as RepeatIcon, Users } from "lucide-react";
 import type { Game } from "@/types/game";
-import { formatGameDay, formatPrice, formatTimeRange, gamePlace, getGameStatus, skillInfo, spotsInfo, turfInfo } from "@/lib/utils/game";
+import { formatGameDay, formatPrice, formatTimeRange, gameVenue, getGameStatus, skillInfo, spotsInfo, turfInfo, venuePlace } from "@/lib/utils/game";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import { Avatar } from "./detail/Avatar";
@@ -40,10 +40,12 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
   const full = spots.open === 0;
   const live = getGameStatus(game, now) === "live";
   const skill = skillInfo(game.skill_level);
-  const turf = turfInfo(game.turf_booked);
+  // Its turf, or the venue its host typed (not on TapTurf): named and placed the same way.
+  const venue = gameVenue(game);
+  const turf = turfInfo(game.turf_booked, venue?.listed ?? true);
   const price = formatPrice(game.price_per_player);
   const sportName = sportLabel(game.sport);
-  const place = gamePlace(game.turfs) || cityLabel || "";
+  const place = venuePlace(venue) || cityLabel || "";
 
   const when = (
     <>
@@ -92,7 +94,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
           <>
             <p className="text-[14px] font-semibold text-accent-800 leading-snug">{when}</p>
             <h3 className="mt-1 text-[18px] font-bold text-primary-900 leading-snug line-clamp-2 [overflow-wrap:anywhere] group-hover:text-accent-800 transition-colors">
-              {game.turfs?.name || `${sportName} game`}
+              {venue?.name || `${sportName} game`}
             </h3>
             {place && (
               <p className="mt-1 flex items-center gap-1 text-[14px] text-primary-500 min-w-0">

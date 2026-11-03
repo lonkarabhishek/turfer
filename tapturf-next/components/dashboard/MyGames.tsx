@@ -64,9 +64,14 @@ export function MyGames({
   const labels = useMemo(() => new Map(mySeries.map((s) => [s.id, repeatLabel(s.rule)])), [mySeries]);
   const venues = useMemo(() => {
     const m = new Map<string, string>();
-    for (const g of createdGames) if (g.series_id && g.turfs?.name && !m.has(g.series_id)) m.set(g.series_id, g.turfs.name);
+    // A repeat at a venue its host typed names it itself (game_series_json); one at a turf, from its games.
+    for (const s of mySeries) if (s.venue_name) m.set(s.id, s.venue_name);
+    for (const g of createdGames) {
+      const name = g.turfs?.name || g.venue_name;
+      if (g.series_id && name && !m.has(g.series_id)) m.set(g.series_id, name);
+    }
     return m;
-  }, [createdGames]);
+  }, [createdGames, mySeries]);
   const stop = async (id: string, cancel: boolean) => {
     const { error } = await stopSeries(getToken, id, cancel);
     if (error) return error;
@@ -216,7 +221,7 @@ function GameRow({ game, highlight = false, host = false, waiting = 0, repeats =
           </div>
 
           <p className="font-display text-lg text-primary-800 leading-tight truncate">
-            {game.turfs?.name || game.title}
+            {game.turfs?.name || game.venue_name || game.title}
           </p>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[12px] text-primary-600">

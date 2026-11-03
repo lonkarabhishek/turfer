@@ -23,9 +23,23 @@ import type { Repeat, RepeatEnds, RepeatRule } from "./repeat";
  * A game page reads its repeat itself (public.game_series_public, the anon key), as it reads the game.
  */
 
-/** What a create sends: the games columns the host picks. */
-export type CreateGameBody = {
-  turf_id: string;
+/**
+ * A venue not on TapTurf, as its host typed it (lib/games/otherVenue.ts,
+ * 20261103_game_other_venue.sql): name, address and city; the area and a
+ * Google Maps link may be left out.
+ */
+export type TypedVenueFields = {
+  venue_name: string;
+  venue_address: string;
+  venue_area?: string | null;
+  /** A city id ("pune") when it is one, else the host's words. */
+  venue_city: string;
+  venue_maps_url?: string | null;
+};
+
+/** What a create sends: the games columns the host picks, and a place: a listed turf (turf_id) or a typed venue, never both. */
+export type CreateGameBody = Partial<TypedVenueFields> & {
+  turf_id?: string;
   sport: string;
   skill_level: Game["skill_level"];
   max_players: number;
@@ -39,8 +53,8 @@ export type CreateGameBody = {
   host_phone?: string;
 };
 
-/** What the edit sheet can change. */
-export type GameChanges = Partial<{
+/** What the edit sheet can change. A move: another listed turf (turf_id), or a typed venue (all its fields at once, never with turf_id). */
+export type GameChanges = Partial<TypedVenueFields> & Partial<{
   date: string;
   start_time: string;
   end_time: string;
@@ -56,10 +70,16 @@ export type GameChanges = Partial<{
 /** Starting a repeat: the first game (its date is the first day) and how it repeats (lib/games/repeat.ts). */
 export type CreateSeriesBody = { game: CreateGameBody; repeat: Repeat };
 
-/** A repeat as its host reads it (20261102_game_series.sql game_series_json). */
+/** A repeat as its host reads it (20261102_game_series.sql game_series_json; the venue keys from 20261103_game_other_venue.sql). */
 export type GameSeries = {
   id: string;
-  turf_id: string;
+  /** Null for a repeat at a typed venue. */
+  turf_id: string | null;
+  venue_name?: string | null;
+  venue_address?: string | null;
+  venue_area?: string | null;
+  venue_city?: string | null;
+  venue_maps_url?: string | null;
   sport: string;
   skill_level: Game["skill_level"];
   max_players: number;
@@ -85,9 +105,10 @@ export type SeriesInfo = Pick<GameSeries, "id" | "rule" | "starts_on" | "ends" |
 
 /**
  * Why a games route said no (the body's reason, next to its error).
- * many: 3 repeats running already; not_ready: the database has no repeats yet.
+ * many: 3 repeats running already; not_ready: the database has no repeats yet;
+ * venue_off: the database takes no typed venues yet (before 20261103_game_other_venue.sql).
  */
-export type GameRefusal = "gone" | "not_host" | "own" | "closed" | "full" | "joined" | "pending" | "answered" | "too_few" | "venue" | "many" | "not_ready";
+export type GameRefusal = "gone" | "not_host" | "own" | "closed" | "full" | "joined" | "pending" | "answered" | "too_few" | "venue" | "many" | "not_ready" | "venue_off";
 
 export type GameErrorBody = { error: string; reason?: GameRefusal; field?: string; players?: number; status?: string };
 

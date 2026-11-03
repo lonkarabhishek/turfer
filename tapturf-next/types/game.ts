@@ -1,7 +1,19 @@
 export interface Game {
   id: string;
   creator_id: string;
-  turf_id: string;
+  /** Null for a game at a venue its host typed (not on TapTurf): then venue_name and the rest say where (lib/utils/game.ts gameVenue). */
+  turf_id: string | null;
+  /**
+   * A venue not on TapTurf, as its host typed it (20261103_game_other_venue.sql):
+   * absent before that file, null for a game at a TapTurf turf.
+   */
+  venue_name?: string | null;
+  venue_address?: string | null;
+  venue_area?: string | null;
+  /** A city id ("pune") when it is one, else the host's words. */
+  venue_city?: string | null;
+  /** https Google Maps only (checked by the database and again where it is opened). */
+  venue_maps_url?: string | null;
   title: string;
   sport: string;
   /** Not a games column (the create flow sends it, the table has no such field). */
@@ -65,8 +77,21 @@ export interface GameParticipant {
   profile_image_url?: string;
 }
 
+/** A venue not on TapTurf, as the create flow's form keeps it (stored as games.venue_*). */
+export interface TypedVenue {
+  name: string;
+  address: string;
+  area: string | null;
+  /** A city id when it is one, else the host's words. */
+  city: string;
+  mapsUrl: string | null;
+}
+
 export interface CreateGameData {
+  /** A TapTurf turf; empty when the game is at a typed venue. */
   turfId: string;
+  /** The venue the host typed when the turf is not on TapTurf (then turfId is empty). */
+  venue?: TypedVenue | null;
   date: string;
   startTime: string;
   endTime: string;

@@ -1,6 +1,8 @@
 import type { Game } from "@/types/game";
 import { cityInfo, guessCityFromAddress } from "../city";
+import { isMapsUrl, storedVenueCity, venueSearchUrl } from "../games/otherVenue";
 import { usableTurfPhotos } from "./images";
+import { mapsSearchUrl } from "./maps";
 
 // Game dates and start times are stored as India wall-clock values
 // ("2026-10-19", "19:00"). Every comparison below reads them in IST
@@ -249,11 +251,16 @@ export function skillInfo(level: string | null | undefined): SkillInfo {
   return k in SKILLS ? SKILLS[k as SkillKey] : SKILLS.all;
 }
 
-/** Whether the host has booked the slot, as a plain fact (the create flow asks "Turf already booked"). */
-export function turfInfo(booked: boolean | null | undefined): { booked: boolean; title: string; hint: string } {
+/**
+ * Whether the host has booked the slot, as a plain fact (the create flow
+ * asks "Turf already booked"; "Venue already booked" at a typed venue, so
+ * pass listed false there).
+ */
+export function turfInfo(booked: boolean | null | undefined, listed = true): { booked: boolean; title: string; hint: string } {
+  const what = listed ? "Turf" : "Venue";
   return booked
-    ? { booked: true, title: "Turf booked", hint: "The host has booked the slot" }
-    : { booked: false, title: "Turf not booked yet", hint: "The host hasn't booked the slot yet" };
+    ? { booked: true, title: `${what} booked`, hint: "The host has booked the slot" }
+    : { booked: false, title: `${what} not booked yet`, hint: "The host hasn't booked the slot yet" };
 }
 
 export type SpotsInfo = {
@@ -331,6 +338,89 @@ export function gamePlace(turf: { area?: string | null; city?: string | null; ad
   }
   if (area && same(area)) area = "";
   return [area, city].filter(Boolean).join(", ");
+}
+
+/**
+ * Where a game is: its TapTurf turf, or the venue its host typed because
+ * the turf is not on TapTurf (games.venue_*, 20261103_game_other_venue.sql).
+ * Every reader that names, places or maps a game goes through this, so a
+ * typed venue shows like a turf, without a turf page, photos or a pin.
+ */
+export type GameVenue = {
+  /** A TapTurf turf: it has a page (id, slug), maybe photos and a point. */
+  listed: boolean;
+  id: string | null;
+  slug: string | null;
+  name: string;
+  address: string;
+  area: string | null;
+  /** A city id ("pune") for filters and lists, when it is one TapTurf knows; else null. */
+  city: string | null;
+  /** The city in words: its label, or the host's own words for a place TapTurf has no city for ("Wai"). */
+  cityLabel: string;
+  lat: number | null;
+  lng: number | null;
+  photos: string[];
+  embedLink: string | null;
+  /** "Open in Maps": a turf's point or a search; a typed venue's own Google Maps link (checked again here), else a search for its name, address and city. */
+  mapsHref: string | null;
+};
+
+type VenueSource = Partial<Pick<Game, "turfs" | "venue_name" | "venue_address" | "venue_area" | "venue_city" | "venue_maps_url">>;
+
+/** The game's venue, or null when there is none to name (a turf row that could not be read). */
+export function gameVenue(g: VenueSource | null | undefined): GameVenue | null {
+  if (!g) return null;
+  const t = g.turfs;
+  if (t?.name) {
+    const city = t.city || guessCityFromAddress(t.address);
+    return {
+      listed: true,
+      id: t.id ?? null,
+      slug: t.slug ?? null,
+      name: t.name,
+      address: t.address ?? "",
+      area: t.area?.trim() || null,
+      city: city || null,
+      cityLabel: city ? cityInfo(city).label : "",
+      lat: t.lat ?? null,
+      lng: t.lng ?? null,
+      photos: t.photos ?? [],
+      embedLink: t["Gmap Embed link"] ?? null,
+      mapsHref: mapsSearchUrl({ lat: t.lat, lng: t.lng, name: t.name, address: t.address }),
+    };
+  }
+  const name = g.venue_name?.trim();
+  if (!name) return null;
+  const city = storedVenueCity(g.venue_city);
+  const cityLabel = city ? cityInfo(city).label : (g.venue_city?.trim() ?? "");
+  const address = g.venue_address?.trim() ?? "";
+  return {
+    listed: false,
+    id: null,
+    slug: null,
+    name,
+    address,
+    area: g.venue_area?.trim() || null,
+    city,
+    cityLabel,
+    lat: null,
+    lng: null,
+    photos: [],
+    embedLink: null,
+    mapsHref: isMapsUrl(g.venue_maps_url) ? (g.venue_maps_url as string).trim() : venueSearchUrl({ name, address, city: cityLabel }),
+  };
+}
+
+/** gamePlace for a venue: "Baner, Pune"; a typed venue's city in the host's words when TapTurf has none for it. */
+export function venuePlace(v: GameVenue | null | undefined): string {
+  if (!v) return "";
+  return gamePlace({ area: v.area, city: v.city ?? (v.cityLabel || null), address: v.address });
+}
+
+/** The city a game is in, for city views and filters (a typed venue's own city), or null. */
+export function gameCity(g: VenueSource | null | undefined): string | null {
+  return gameVenue(g)?.city ?? null;
 }
 
 /** "just now", "25 min ago", "1 hour ago", "yesterday", "3 days ago". */

@@ -1,11 +1,13 @@
 import { normalRepeat, repeatProblem, type Repeat } from "./repeat";
+import { VENUE_KEYS, hasVenueKeys, venueFieldOk, venueOf, type VenueKey } from "./otherVenue";
 import type { CreateGameBody, CreateSeriesBody, GameChanges } from "./types";
 
 /**
  * The games routes' bodies, checked before the database checks them again
  * (20261030_games_lockdown.sql private.game_field_problem has the same
- * rules), and the few rules the fallback (lib/games/legacy.ts) needs.
- * Pure; relative imports only (npm run test:games).
+ * rules, and 20261103_game_other_venue.sql those of a typed venue,
+ * lib/games/otherVenue.ts), and the few rules the fallback
+ * (lib/games/legacy.ts) needs. Pure; relative imports only (npm run test:games).
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,9 +40,10 @@ export function isDay(x: unknown): x is string {
 
 const isTime = (x: unknown): x is string => typeof x === "string" && /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(x);
 
-const CREATE_FIELDS = ["turf_id", "sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player", "description", "turf_booked", "host_phone"] as const;
-const CREATE_NEEDS = ["turf_id", "sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player"] as const;
-export const CHANGE_FIELDS = ["date", "start_time", "end_time", "max_players", "price_per_player", "description", "turf_booked", "skill_level", "turf_id"] as const;
+const CREATE_FIELDS = ["turf_id", "sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player", "description", "turf_booked", "host_phone", ...VENUE_KEYS] as const;
+// And a place: turf_id, or a typed venue (placeProblem).
+const CREATE_NEEDS = ["sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player"] as const;
+export const CHANGE_FIELDS = ["date", "start_time", "end_time", "max_players", "price_per_player", "description", "turf_booked", "skill_level", "turf_id", ...VENUE_KEYS] as const;
 
 /**
  * The first field of a body that is not allowed or not well formed, or
@@ -75,6 +78,12 @@ export function fieldProblem(p: unknown, allowed: readonly string[]): string | n
           return typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 40;
         case "host_phone":
           return v === "" || (typeof v === "string" && /^\+91[6-9]\d{9}$/.test(v));
+        case "venue_name":
+        case "venue_address":
+        case "venue_area":
+        case "venue_city":
+        case "venue_maps_url":
+          return venueFieldOk(k, v);
         default:
           return false;
       }
@@ -87,17 +96,39 @@ export function fieldProblem(p: unknown, allowed: readonly string[]): string | n
 /** Only the keys that are there (undefined ones left out, as JSON would). */
 const present = (b: Record<string, unknown>) => Object.fromEntries(Object.entries(b).filter(([, v]) => v !== undefined));
 
+/**
+ * What is wrong with a body's place, or null (private.game_venue_problem):
+ * a turf (turf_id) or a typed venue (any venue field), never both; a typed
+ * venue needs its name, address and city.
+ */
+export function placeProblem(b: Record<string, unknown>): VenueKey | null {
+  if (!hasVenueKeys(b)) return null;
+  if ("turf_id" in b) return "venue_name";
+  return (["venue_name", "venue_address", "venue_city"] as const).find((k) => !(k in b)) ?? null;
+}
+
+/** The body with its place as stored: the turf's id in lower case, or the typed venue's words (lib/games/otherVenue.ts venueOf). */
+function withPlace(b: Record<string, unknown>): Record<string, unknown> {
+  if (hasVenueKeys(b)) return { ...b, ...venueOf(b) };
+  return typeof b.turf_id === "string" ? { ...b, turf_id: b.turf_id.toLowerCase() } : b;
+}
+
 /** A create body: the host's game, every needed field there and well formed, the day from today to a year on. */
 export function parseCreate(body: Record<string, unknown> | null, today = istToday()): { ok: CreateGameBody } | { bad: string } {
   if (!body) return { bad: "body" };
   const b = present(body);
-  const problem = fieldProblem(b, CREATE_FIELDS) ?? CREATE_NEEDS.find((k) => !(k in b)) ?? null;
+  const problem =
+    fieldProblem(b, CREATE_FIELDS) ??
+    placeProblem(b) ??
+    // Neither a turf nor a typed venue: the create flow's words are "Pick the turf again".
+    (!("turf_id" in b) && !hasVenueKeys(b) ? "turf_id" : null) ??
+    CREATE_NEEDS.find((k) => !(k in b)) ??
+    null;
   if (problem) return { bad: problem };
   if ((b.date as string) < today || (b.date as string) > addDays(today, DAYS_AHEAD)) return { bad: "date" };
   return {
     ok: {
-      ...(b as CreateGameBody),
-      turf_id: (b.turf_id as string).toLowerCase(),
+      ...(withPlace(b) as CreateGameBody),
       sport: (b.sport as string).trim(),
       ...(typeof b.description === "string" ? { description: b.description.trim() } : {}),
     },
@@ -108,13 +139,12 @@ export function parseCreate(body: Record<string, unknown> | null, today = istTod
 export function parseChanges(body: Record<string, unknown> | null): { ok: GameChanges } | { bad: string } {
   if (!body) return { bad: "body" };
   const b = present(body);
-  const problem = fieldProblem(b, CHANGE_FIELDS);
+  const problem = fieldProblem(b, CHANGE_FIELDS) ?? placeProblem(b);
   if (problem) return { bad: problem };
   if (Object.keys(b).length === 0) return { bad: "body" };
   return {
     ok: {
-      ...(b as GameChanges),
-      ...(typeof b.turf_id === "string" ? { turf_id: b.turf_id.toLowerCase() } : {}),
+      ...(withPlace(b) as GameChanges),
       ...(typeof b.description === "string" ? { description: b.description.trim() } : {}),
     },
   };

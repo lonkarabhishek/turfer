@@ -5,15 +5,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Check, MapPin, Search, Share2, Copy,
   Trophy, CircleDot, Target, Circle, Feather,
-  Grip, Dumbbell, Loader2, Users, Zap, ChevronRight, Repeat as RepeatIcon,
+  Grip, Dumbbell, Loader2, Users, Zap, ChevronRight, Repeat as RepeatIcon, Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
-import { createGame, createSeries, getMySeries } from "@/lib/queries/games";
+import { createGame, createSeries, getMySeries, otherVenueReady } from "@/lib/queries/games";
 import { getTurfPlace, searchTurfs } from "@/lib/queries/users";
 import { gameShareText } from "@/lib/utils/gameShare";
-import { formatGameDay } from "@/lib/utils/game";
+import { formatGameDay, gamePlace } from "@/lib/utils/game";
+import { OtherVenueForm, venueDraft, type VenueDraft } from "./OtherVenueForm";
 import { MAX_RUNNING, maxGames, nextDays, normalRepeat, repeatLabel, repeatParts, repeatProblem, ruleFor, type Repeat } from "@/lib/games/repeat";
 import { TimeSlotSheet } from "./TimeSlotSheet";
 import { RepeatSheet } from "./RepeatSheet";
@@ -21,7 +22,7 @@ import { GameDraftBox } from "./GameDraftBox";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 import type { GamePrefill } from "@/lib/ai/gameDraft";
-import type { CreateGameData, Game } from "@/types/game";
+import type { CreateGameData, Game, TypedVenue } from "@/types/game";
 
 const SPORT_OPTIONS = [
   { name: "Cricket",      icon: <Target className="w-6 h-6" />,    defaultMax: 22 },
@@ -189,7 +190,15 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const [turfPlace, setTurfPlace] = useState<{ area: string | null; city: string | null } | null>(null);
   const [turfSearch, setTurfSearch] = useState("");
   const [turfResults, setTurfResults] = useState<{ id: string; name: string; address: string }[]>([]);
+  // The words the results are for: "No turfs found" only for the words in the box.
+  const [searchedFor, setSearchedFor] = useState("");
   const [showTurfDropdown, setShowTurfDropdown] = useState(false);
+  // A venue the host typed because the turf isn't on TapTurf (then turfId is empty), and its form.
+  const [venue, setVenue] = useState<TypedVenue | null>(null);
+  const [venueForm, setVenueForm] = useState<VenueDraft | null>(null);
+  const [venueFormOpen, setVenueFormOpen] = useState(false);
+  // Whether the database takes typed venues (null: can't tell, so the row shows and the server answers).
+  const [venuesOn, setVenuesOn] = useState<boolean | null>(null);
   const [skillLevel, setSkillLevel] = useState<CreateGameData["skillLevel"]>("all");
   const [costPerPerson, setCostPerPerson] = useState(100);
   const [customCost, setCustomCost] = useState("");
@@ -223,14 +232,38 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   }, [authLoading, user, login, hasTriggeredLogin]);
 
   useEffect(() => {
-    if (turfSearch.length < 2) { setTurfResults([]); return; }
+    if (turfSearch.length < 2) { setTurfResults([]); setSearchedFor(""); return; }
     const timer = setTimeout(async () => {
       const { data } = await searchTurfs(turfSearch);
       setTurfResults(data);
+      setSearchedFor(turfSearch);
       setShowTurfDropdown(true);
     }, 300);
     return () => clearTimeout(timer);
   }, [turfSearch]);
+
+  // "Add the venue" only once the database takes typed venues (20261103_game_other_venue.sql).
+  useEffect(() => {
+    let alive = true;
+    void otherVenueReady().then((on) => alive && setVenuesOn(on));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** The typed venue's form, its name from the search (or what was typed before). */
+  const openVenueForm = (seed: string) => {
+    setVenueForm((d) => (d && (!seed.trim() || d.name.trim() === seed.trim()) ? d : venueDraft(seed)));
+    setVenueFormOpen(true);
+    setShowTurfDropdown(false);
+  };
+  const pickTypedVenue = (v: TypedVenue) => {
+    setVenue(v);
+    setTurfId("");
+    setTurfName("");
+    setTurfSearch("");
+    setVenueFormOpen(false);
+  };
 
   useEffect(() => {
     // Default the date picker to today (IST).
@@ -310,7 +343,12 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     if (p.turf) {
       setTurfId(p.turf.id);
       setTurfName(p.turf.name);
+      setVenue(null);
     } else if (p.turfName) {
+      // Not one TapTurf lists (or not found): the search has the words, and "Add the venue" takes them on.
+      setTurfId("");
+      setTurfName("");
+      setVenue(null);
       setTurfSearch(p.turfName);
     }
     if (p.skill) setSkillLevel(p.skill);
@@ -319,8 +357,9 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
       setCustomCost(COST_OPTIONS.includes(p.costPerPerson) ? "" : String(p.costPerPerson));
     }
     if (p.notes) setNotes(p.notes);
-    const missing = [!p.sport && "the sport", !p.date && "the day", !p.startTime && "the time", !p.turf && "the turf"].filter(Boolean) as string[];
-    setDraftNote(missing.length ? `${p.reply} Still to pick: ${missing.join(", ")}.` : `${p.reply} Check each step and you're set.`);
+    const missing = [!p.sport && "the sport", !p.date && "the day", !p.startTime && "the time", !p.turf && "the venue"].filter(Boolean) as string[];
+    const notListed = !p.turf && p.turfName ? ` If ${p.turfName} isn't on TapTurf, tap "Add the venue" under the search.` : "";
+    setDraftNote(missing.length ? `${p.reply} Still to pick: ${missing.join(", ")}.${notListed}` : `${p.reply} Check each step and you're set.`);
     setStep(p.sport ? 2 : 1);
   };
 
@@ -337,8 +376,14 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
       try { localStorage.setItem(HOST_PHONE_KEY, hostPhone); } catch { /* ignore */ }
     }
     // The server works out the host from this sign-in, and takes their name and photo from the account.
-    const game: CreateGameData = { turfId, date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked };
+    const game: CreateGameData = {
+      turfId: venue ? "" : turfId,
+      venue,
+      date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked,
+    };
     const phone = hostPhone ? `+91${hostPhone}` : "";
+    // Where it is, for the WhatsApp message: a typed venue says it itself; a turf's area and city are read once it is made.
+    const readPlace = () => (venue ? setTurfPlace({ area: venue.area, city: venue.city }) : getTurfPlace(turfId).then(setTurfPlace, () => {}));
     if (repeat) {
       // A repeat: the server puts its first games up (the next 4 weeks), each a game of its own.
       const { data, error } = await createSeries(getToken, game, phone, normalRepeat(repeat));
@@ -347,7 +392,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         setSeriesGames(data.games);
         setCreatedGameId(data.games[0].id);
         setStep(4);
-        getTurfPlace(turfId).then(setTurfPlace, () => {});
+        void readPlace();
       } else if (data) {
         // Saved, but nothing could go up just now (the turf was unlisted meanwhile): the daily top-up tries again.
         setSubmitError("Your repeat is saved, but its first game couldn't go up yet. It goes up within a day: see it on the Me tab.");
@@ -360,7 +405,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     if (data && !error) {
       setCreatedGameId(data.id);
       setStep(4);
-      getTurfPlace(turfId).then(setTurfPlace, () => {});
+      void readPlace();
     }
     else setSubmitError(error || "Failed to create game. Please try again.");
   };
@@ -386,14 +431,20 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         price_per_player: costPerPerson,
         skill_level: skillLevel,
         turf_booked: turfBooked,
-        turfs: { name: turfName, ...turfPlace },
+        turfs: { name: placeName, ...turfPlace },
       },
       { host: true, url: `${window.location.origin}/game/${createdGameId}`, repeat: seriesGames && repeat ? repeatLabel(repeat.rule) : null },
     );
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const step2Valid = date && startTime && endTime && turfId && !repeatBad;
+  const step2Valid = date && startTime && endTime && (turfId || venue) && !repeatBad;
+  // The game's place in words: the turf's name, or the typed venue's (with its area and city).
+  const placeName = venue?.name ?? turfName;
+  const venueWhere = venue ? gamePlace({ area: venue.area, city: venue.city, address: venue.address }) : "";
+  const what = venue ? "venue" : "turf";
+  const typedOn = venuesOn !== false;
+  const noTurfs = turfSearch.trim().length >= 2 && searchedFor === turfSearch && turfResults.length === 0;
   // A repeat's summary ("Every Tue and Thu", "7 – 8 PM", "until 20 Dec") and its next dates, as the confirm step shows them.
   const repeatLine = repeat && !repeatBad ? repeatParts(repeat, date, startTime || null, endTime) : null;
   // Four shown; a fifth only says there are more.
@@ -464,8 +515,9 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
             Game<br /><span className="text-accent-500">on.</span>
           </h1>
           <p className="text-sm text-primary-600 mb-1">
-            <span className="font-semibold text-primary-800">{sport}</span> · {turfName}
+            <span className="font-semibold text-primary-800">{sport}</span> · {placeName}
           </p>
+          {venueWhere && <p className="text-[13px] text-primary-500 mb-1">{venueWhere}</p>}
           {seriesGames && repeat ? (
             <div className="w-full mb-8 mt-3 rounded-2xl bg-accent-50 border border-accent-500/30 px-4 py-3.5 text-left">
               <p className="flex items-center gap-2 text-[15px] font-bold text-primary-900">
@@ -478,7 +530,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                 {seriesGames.length > 4 && " …"}
               </p>
               <p className="text-[12px] text-primary-500 mt-1.5 leading-snug">
-                More go up 4 weeks ahead. Share each game; players join each one. Book the turf for each date yourself.
+                More go up 4 weeks ahead. Share each game; players join each one. Book the {what} for each date yourself.
               </p>
             </div>
           ) : (
@@ -517,7 +569,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
           </div>
 
           {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
-          <LiveScorerPromo sport={sport} variant="created" venue={turfName} liveLinks={liveLinks} />
+          <LiveScorerPromo sport={sport} variant="created" venue={placeName} liveLinks={liveLinks} />
         </div>
       ) : (
         <>
@@ -767,39 +819,95 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                         Change
                       </button>
                     </div>
-                  ) : (
-                    <div className="relative">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" aria-hidden="true" />
-                      <input
-                        type="text"
-                        value={turfSearch}
-                        onChange={(e) => setTurfSearch(e.target.value)}
-                        placeholder="Search a turf by name…"
-                        className="w-full pl-11 pr-4 py-3.5 min-h-[56px] text-[15px] font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
-                      />
-                      {showTurfDropdown && turfResults.length > 0 && (
-                        <div className="absolute z-[60] top-full mt-2 w-full max-h-[280px] overflow-y-auto bg-white border border-primary-200 rounded-2xl shadow-elevated">
-                          {turfResults.map((turf) => (
-                            <button
-                              key={turf.id}
-                              onClick={() => { setTurfId(turf.id); setTurfName(turf.name); setShowTurfDropdown(false); setTurfSearch(""); }}
-                              className="w-full text-left px-4 py-3.5 hover:bg-accent-50 border-b border-primary-100 last:border-0 transition-colors"
-                            >
-                              <p className="text-[15px] font-semibold text-primary-800">{turf.name}</p>
-                              <p className="text-[13px] text-primary-500 flex items-center gap-1 mt-0.5">
-                                <MapPin className="w-3 h-3" aria-hidden="true" />
-                                {turf.address}
-                              </p>
-                            </button>
-                          ))}
+                  ) : venue ? (
+                    // A typed venue, shown as a chosen turf is: its name, address and place, and Change.
+                    <div className="flex items-start justify-between px-4 py-3.5 min-h-[56px]">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <MapPin className="w-4 h-4 mt-1 text-accent-600 shrink-0" aria-hidden="true" />
+                        <div className="min-w-0">
+                          <p className="text-[15px] font-semibold text-primary-800 leading-snug [overflow-wrap:anywhere]">{venue.name}</p>
+                          <p className="text-[13px] text-primary-600 leading-snug mt-0.5 [overflow-wrap:anywhere]">{venue.address}</p>
+                          <p className="text-[12px] text-primary-500 leading-snug mt-0.5">
+                            {venueWhere ? `${venueWhere} · ` : ""}Not on TapTurf
+                          </p>
                         </div>
-                      )}
-                      {turfSearch.length >= 2 && turfResults.length === 0 && (
-                        <p className="absolute z-[60] top-full mt-2 w-full bg-white border border-primary-200 rounded-xl px-4 py-3 text-[13px] text-primary-500 shadow-elevated">
-                          No turfs found. Try a different name
-                        </p>
-                      )}
+                      </div>
+                      <button
+                        onClick={() => setVenue(null)}
+                        className="text-[13px] font-semibold text-accent-600 hover:text-accent-700 shrink-0 ml-3 focus-neon rounded-md px-2 py-1"
+                      >
+                        Change
+                      </button>
                     </div>
+                  ) : venueFormOpen && venueForm ? (
+                    <OtherVenueForm draft={venueForm} onDraft={setVenueForm} onUse={pickTypedVenue} onCancel={() => setVenueFormOpen(false)} />
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" aria-hidden="true" />
+                        <input
+                          type="text"
+                          value={turfSearch}
+                          onChange={(e) => setTurfSearch(e.target.value)}
+                          placeholder="Search a turf by name…"
+                          aria-label="Search a turf by name"
+                          className="w-full pl-11 pr-4 py-3.5 min-h-[56px] text-[15px] font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
+                        />
+                        {showTurfDropdown && turfResults.length > 0 && (
+                          <div className="absolute z-[60] top-full mt-2 w-full max-h-[280px] overflow-y-auto bg-white border border-primary-200 rounded-2xl shadow-elevated">
+                            {turfResults.map((turf) => (
+                              <button
+                                key={turf.id}
+                                onClick={() => { setTurfId(turf.id); setTurfName(turf.name); setShowTurfDropdown(false); setTurfSearch(""); }}
+                                className="w-full text-left px-4 py-3.5 hover:bg-accent-50 border-b border-primary-100 last:border-0 transition-colors"
+                              >
+                                <p className="text-[15px] font-semibold text-primary-800">{turf.name}</p>
+                                <p className="text-[13px] text-primary-500 flex items-center gap-1 mt-0.5">
+                                  <MapPin className="w-3 h-3" aria-hidden="true" />
+                                  {turf.address}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {noTurfs && (
+                          <div className="absolute z-[60] top-full mt-2 w-full bg-white border border-primary-200 rounded-2xl px-4 py-3 shadow-elevated" role="status">
+                            <p className="text-[13px] text-primary-500 [overflow-wrap:anywhere]">
+                              No turfs found for &ldquo;{turfSearch.trim()}&rdquo;. Try a different name{typedOn ? ", or add it yourself." : "."}
+                            </p>
+                            {typedOn && (
+                              <button
+                                type="button"
+                                onClick={() => openVenueForm(turfSearch)}
+                                className="mt-2 w-full min-h-11 inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-accent-500 text-[14px] font-bold text-accent-700 hover:bg-accent-50 focus-neon px-3 [overflow-wrap:anywhere]"
+                              >
+                                <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+                                Add &ldquo;{turfSearch.trim()}&rdquo; as the venue
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {typedOn && (
+                        <>
+                          <div className="h-px bg-primary-200 ml-4" />
+                          <button
+                            type="button"
+                            onClick={() => openVenueForm(turfSearch)}
+                            className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[56px] text-left rounded-b-2xl active:bg-primary-50 hover:bg-primary-50 transition-colors focus-neon"
+                          >
+                            <span className="w-8 h-8 rounded-full bg-accent-50 border border-accent-200 flex items-center justify-center shrink-0">
+                              <Plus className="w-4 h-4 text-accent-700" aria-hidden="true" />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[15px] font-semibold text-primary-800">Not on TapTurf? Add the venue</span>
+                              <span className="block text-[12px] text-primary-500">A ground, a school, a club: type its name and address</span>
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-primary-400 shrink-0" aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -827,8 +935,9 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                   )}
                   <div className="min-w-0">
                     <p className="font-display text-lg text-primary-800 truncate leading-tight">
-                      {sport} · {turfName}
+                      {sport} · {placeName}
                     </p>
+                    {venueWhere && <p className="text-[12px] text-primary-600 truncate">{venueWhere}</p>}
                     {repeatLine ? (
                       <p className="text-[13px] font-semibold text-primary-700 mt-0.5 flex items-start gap-1.5">
                         <RepeatIcon className="w-3.5 h-3.5 text-accent-600 shrink-0 mt-[3px]" aria-hidden="true" />
@@ -867,7 +976,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                       {repeatNext.length > 4 && <li className="inline-flex items-center h-8 px-1 text-[13px] text-primary-500">and more</li>}
                     </ul>
                     <p className="text-[12px] text-primary-500 mt-2.5 leading-snug">
-                      Each goes up 4 weeks ahead as its own game. Book the turf for each date yourself (call or WhatsApp the turf): TapTurf doesn&apos;t take bookings.
+                      Each goes up 4 weeks ahead as its own game. Book the {what} for each date yourself{venue ? "" : " (call or WhatsApp the turf)"}: TapTurf doesn&apos;t take bookings.
                     </p>
                   </div>
                 )}
@@ -933,7 +1042,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                   {/* Turf booked toggle — iOS switch */}
                   <div className="flex items-center justify-between px-4 py-3.5 min-h-[56px]">
                     <div>
-                      <p className="text-[15px] font-medium text-primary-800">{repeat ? "First game's turf booked" : "Turf already booked"}</p>
+                      <p className="text-[15px] font-medium text-primary-800">{repeat ? `First game's ${what} booked` : venue ? "Venue already booked" : "Turf already booked"}</p>
                       <p className="text-[12px] text-primary-500 mt-0.5">{repeat ? "Mark the others from each game's page" : "Confirmed slot"}</p>
                     </div>
                     <button

@@ -27,6 +27,7 @@ import {
   sortGamesByDateTime,
   formatDate,
   formatTimeSlot,
+  gameCity,
   getGameStatus,
 } from "@/lib/utils/game";
 import type { Game, GameRequest } from "@/types/game";
@@ -81,7 +82,8 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
       // games whose turf hasn't been backfilled yet.
       const inCity = (g: Game) => {
         if (!scopeId) return true;
-        const c = (g.turfs as { city?: string } | undefined)?.city ?? guessCityFromAddress(g.turfs?.address);
+        // A venue its host typed (no turf) is in its own city.
+        const c = g.turfs ? ((g.turfs as { city?: string }).city ?? guessCityFromAddress(g.turfs.address)) : gameCity(g);
         return c === scopeId;
       };
       const notMine = active.filter((g) => !seen.has(g.id) && inCity(g)).slice(0, 3);
@@ -317,7 +319,7 @@ function NextGameHero({ stats }: { stats: UserStats | null }) {
           </span>
         </div>
         <p className="font-display text-2xl text-primary-800 leading-tight truncate">
-          {g.sport} · {g.turfs?.name || g.title}
+          {g.sport} · {g.turfs?.name || g.venue_name || g.title}
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[12px] text-primary-600">
           <span className="flex items-center gap-1">
@@ -328,10 +330,10 @@ function NextGameHero({ stats }: { stats: UserStats | null }) {
             <Clock className="w-3.5 h-3.5 text-primary-400" />
             {formatTime(kickoff)}
           </span>
-          {g.turfs?.address && (
+          {(g.turfs?.address || g.venue_address) && (
             <span className="flex items-center gap-1 min-w-0">
               <MapPin className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-              <span className="truncate">{g.turfs.address.split(",")[0]}</span>
+              <span className="truncate">{(g.turfs?.address || g.venue_address || "").split(",")[0]}</span>
             </span>
           )}
         </div>
@@ -403,13 +405,13 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
 
           {/* Turf name — big display type for that classy feel */}
           <h3 className="font-display text-xl sm:text-2xl text-primary-800 leading-tight truncate group-hover:text-accent-600 transition-colors">
-            {game.turfs?.name || game.title}
+            {game.turfs?.name || game.venue_name || game.title}
           </h3>
 
-          {game.turfs?.address && (
+          {(game.turfs?.address || game.venue_address) && (
             <p className="text-[12px] text-primary-500 mt-1 flex items-center gap-1 truncate">
               <MapPin className="w-3 h-3 flex-shrink-0 text-primary-400" />
-              <span className="truncate">{game.turfs.address.split(",").slice(0, 2).join(",")}</span>
+              <span className="truncate">{(game.turfs?.address || game.venue_address || "").split(",").slice(0, 2).join(",")}</span>
             </p>
           )}
 

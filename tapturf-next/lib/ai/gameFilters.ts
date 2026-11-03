@@ -1,6 +1,7 @@
 import { sportBySlug } from "../sports";
 import { haversineKm, type Coords } from "../utils/location";
 import { sortGamesByDateTime } from "../utils/game";
+import { storedVenueCity } from "../games/otherVenue";
 import { istToday, ymd } from "../build/reads";
 import { relaxSteps } from "./relax";
 import type { CityId } from "../city";
@@ -62,7 +63,8 @@ export function applyGameFilters(
     const labels = sport.labels.map((l) => l.toLowerCase());
     steps.push({ key: "sport", keep: (g) => labels.some((l) => (g.sport ?? "").toLowerCase().includes(l)) });
   }
-  if (city) steps.push({ key: f.city ? "city" : "pref_city", keep: (g) => g.turfs?.city === city });
+  // A game at a venue its host typed (no turf) is in that venue's own city.
+  if (city) steps.push({ key: f.city ? "city" : "pref_city", keep: (g) => (g.turfs ? g.turfs.city === city : storedVenueCity(g.venue_city) === city) });
   if (window) steps.push({ key: "when", keep: (g) => g.date >= window[0] && g.date <= window[1] });
   if (f.skill) steps.push({ key: "skill", keep: (g) => g.skill_level === f.skill || g.skill_level === "all" });
   if (f.max_price_per_hour != null) {

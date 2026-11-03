@@ -44,6 +44,9 @@ test("share: where names the venue, area and city once each", () => {
   assert.equal(shareWhere({ name: "Arena Seven", area: null, city: "Dehradun" }), "Arena Seven, Dehradun");
   assert.equal(shareWhere({ name: "  ", area: "Baner", city: "pune" }), null);
   assert.equal(shareWhere(null), null);
+  // A venue its host typed (not on TapTurf): the same line, a town in the host's words.
+  assert.equal(shareWhere({ name: "Shivaji Maidan", area: "Baner", city: "pune" }), "Shivaji Maidan, Baner, Pune");
+  assert.equal(shareWhere({ name: "Wai Ground", area: null, city: "Wai" }), "Wai Ground, Wai");
 });
 
 test("share: details say what is known and nothing else", () => {

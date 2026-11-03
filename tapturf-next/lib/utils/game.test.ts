@@ -11,7 +11,9 @@ import {
   formatPrice,
   formatTimeRange,
   formatTimeSlot,
+  gameCity,
   gamePlace,
+  gameVenue,
   getGameStatus,
   hostNote,
   oneGamePerRepeat,
@@ -19,6 +21,7 @@ import {
   speakTimeRange,
   spotsInfo,
   turfInfo,
+  venuePlace,
 } from "./game";
 import { usableTurfPhotos } from "./images";
 import type { Game } from "../../types/game";
@@ -242,4 +245,34 @@ test("/games rows carry no host number and no raw photo arrays", () => {
   for (const k of ["cover_image", "images", "image_review", "Gmap Embed link"]) assert.equal(k in t, false, k);
   assert.doesNotMatch(JSON.stringify(card), /host_phone|9000000000/);
   assert.equal(cardGame({ ...raw, turfs: undefined }).turfs, undefined);
+});
+
+test("where a game is: its TapTurf turf, or the venue its host typed", () => {
+  const turf = gameVenue({ turfs: { id: "t1", slug: "kings-turf", name: "Kings Turf", address: "Baner Road, Pune", city: "pune", area: "Baner", lat: 18.5, lng: 73.8, photos: ["p1"] } });
+  assert.ok(turf);
+  assert.deepEqual([turf.listed, turf.id, turf.name, turf.city, turf.cityLabel, turf.photos], [true, "t1", "Kings Turf", "pune", "Pune", ["p1"]]);
+  assert.equal(turf.mapsHref, "https://www.google.com/maps/search/?api=1&query=18.5,73.8", "a turf's point");
+  assert.equal(venuePlace(turf), "Baner, Pune");
+
+  const typed = gameVenue({ turfs: undefined, venue_name: "Shivaji Maidan", venue_address: "Behind Ganesh Temple, Baner Road", venue_area: "Baner", venue_city: "pune", venue_maps_url: "https://maps.app.goo.gl/Ab1" });
+  assert.ok(typed);
+  assert.deepEqual([typed.listed, typed.id, typed.slug, typed.name, typed.address, typed.city, typed.cityLabel, typed.photos, typed.lat], [false, null, null, "Shivaji Maidan", "Behind Ganesh Temple, Baner Road", "pune", "Pune", [], null]);
+  assert.equal(typed.mapsHref, "https://maps.app.goo.gl/Ab1", "its own Google Maps link");
+  assert.equal(venuePlace(typed), "Baner, Pune");
+  assert.equal(gameCity({ venue_name: "Shivaji Maidan", venue_city: "pune" }), "pune", "it belongs to its own city's lists");
+
+  // A town TapTurf has no city for: the host's words, no city for the filters; no link, a search.
+  const town = gameVenue({ venue_name: "Wai Ground", venue_address: "Near the bus stand", venue_city: "Wai", venue_maps_url: null });
+  assert.ok(town);
+  assert.deepEqual([town.city, town.cityLabel, venuePlace(town)], [null, "Wai", "Near the bus stand, Wai"]);
+  assert.equal(town.mapsHref, `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("Wai Ground, Near the bus stand, Wai")}`);
+  // A link that isn't a Google Maps one is never opened: a search instead.
+  const bad = gameVenue({ venue_name: "X Ground", venue_address: "Baner Road", venue_city: "pune", venue_maps_url: "javascript:alert(1)" });
+  assert.match(bad?.mapsHref ?? "", /^https:\/\/www\.google\.com\/maps\/search\//);
+  assert.equal(gameVenue({ turfs: undefined }), null, "nothing to name");
+  assert.equal(gameVenue(null), null);
+
+  assert.deepEqual(turfInfo(true, false), { booked: true, title: "Venue booked", hint: "The host has booked the slot" });
+  assert.equal(turfInfo(false, false).title, "Venue not booked yet");
+  assert.equal(turfInfo(false).title, "Turf not booked yet", "a turf as before");
 });

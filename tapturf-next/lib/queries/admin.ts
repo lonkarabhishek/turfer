@@ -47,11 +47,25 @@ const DAY = 86_400_000;
 /** The games columns the admin shows (the home's list and /admin/games). */
 const GAME_COLUMNS = "id, title, sport, date, start_time, end_time, max_players, current_players, price_per_player, status, host_name, host_phone, creator_id, created_at, turf_id";
 
-/** Every game, paged (PostgREST returns at most 1,000 rows a request), once per render. */
+/**
+ * Every game, paged (PostgREST returns at most 1,000 rows a request), once
+ * per render, with a typed venue's name and city (20261103_game_other_venue.sql;
+ * before it, the read without them, as before).
+ */
 export const gameRows = cache(() =>
-  anonRead("games", (s, signal) =>
-    readAllPages<GameRow>((from, to) => s.from("games").select(GAME_COLUMNS).order("id").range(from, to).abortSignal(signal), "games"),
-  ),
+  anonRead("games", async (s, signal) => {
+    const read = (cols: string) =>
+      readAllPages<GameRow>(
+        (from, to) => s.from("games").select(cols).order("id").range(from, to).abortSignal(signal) as unknown as PromiseLike<{ data: GameRow[] | null; error: unknown }>,
+        "games",
+      );
+    try {
+      return await read(`${GAME_COLUMNS}, venue_name, venue_city`);
+    } catch (e) {
+      if (e instanceof ReadFailed && e.code === "42703" && /venue_/.test(e.message)) return read(GAME_COLUMNS);
+      throw e;
+    }
+  }),
 );
 
 /**
@@ -179,12 +193,12 @@ export const activeUserNumbers = cache(async (): Promise<Section<{ active7: numb
   return mapSection(both(games, requests), ([g, r]) => ({ active7: activeUsers(g, r, 7, now), active30: activeUsers(g, r, 30, now) }));
 });
 
-/** Games by their turf's city. Games don't carry the city: it comes from their turfs. */
+/** Games by their turf's city (it comes from their turfs), or a typed venue's own city. */
 export const gamesByCitySection = cache(async (): Promise<Section<CountByLabel[]>> => {
   const games = await gameRows();
   if (!games.ok) return games;
-  const ids = games.data.map((g) => g.turf_id).filter(Boolean);
-  if (ids.length === 0) return okSection([]);
+  const ids = games.data.map((g) => g.turf_id).filter((id): id is string => !!id);
+  if (ids.length === 0) return okSection(gamesByCity(games.data, new Map()));
   const turfs = await turfsById(ids);
   return mapSection(turfs, (byId) => gamesByCity(games.data, new Map([...byId].map(([id, t]) => [id, t.city]))));
 });

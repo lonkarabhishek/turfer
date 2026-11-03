@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { missingVenueColumn } from "@/lib/games/otherVenue";
 import type { Game } from "@/types/game";
 
 export interface UserStats {
@@ -28,12 +29,14 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     return { totalGames: 0, peopleMet: 0, sportsPlayed: 0, nextGame: null, upcomingCount: 0 };
   }
 
-  // 2. Games themselves (for sport count + next game).
-  const { data: gameRows } = await supabase
-    .from("games")
-    .select("id, creator_id, turf_id, title, description, sport, skill_level, date, start_time, end_time, max_players, current_players, price_per_player, host_name, host_phone, host_profile_image_url, status, turf_booked, created_at, turfs(id, name, address)")
-    .in("id", gameIds);
-  const games = (gameRows ?? []) as unknown as Game[];
+  // 2. Games themselves (for sport count + next game), with a typed venue's
+  // name and address (20261103_game_other_venue.sql; asked again without them before it).
+  const cols =
+    "id, creator_id, turf_id, title, description, sport, skill_level, date, start_time, end_time, max_players, current_players, price_per_player, host_name, host_phone, host_profile_image_url, status, turf_booked, created_at, turfs(id, name, address)";
+  const read = (c: string) => supabase.from("games").select(c).in("id", gameIds);
+  let res = await read(`${cols}, venue_name, venue_address, venue_area, venue_city`);
+  if (missingVenueColumn(res.error)) res = await read(cols);
+  const games = (res.data ?? []) as unknown as Game[];
 
   const sports = new Set(games.map((g) => g.sport));
 

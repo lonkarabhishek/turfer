@@ -4,10 +4,10 @@ import { useState, useSyncExternalStore } from "react";
 import { Search, Plus, SlidersHorizontal, Gamepad2, Zap, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { GameCard } from "./GameCard";
-import { filterNonExpiredGames, oneGamePerRepeat, skillInfo } from "@/lib/utils/game";
+import { filterNonExpiredGames, gameVenue, oneGamePerRepeat, skillInfo } from "@/lib/utils/game";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { CityLine } from "@/components/city/CityLine";
-import { guessCityFromAddress, labelFor, type CityScope } from "@/lib/city";
+import { type CityScope } from "@/lib/city";
 import type { CityLineProps } from "@/lib/cityLine";
 import type { Game } from "@/types/game";
 
@@ -16,9 +16,9 @@ const SKILL_LEVELS = ["all", "beginner", "intermediate", "advanced"];
 
 const noop = () => () => {};
 
+/** The game's city in words: its turf's, or the typed venue's (the host's words for a town TapTurf has no city for). */
 function cityLabelOf(g: Game): string | undefined {
-  const c = g.turfs?.city ?? guessCityFromAddress(g.turfs?.address);
-  return c ? labelFor(c) : undefined;
+  return gameVenue(g)?.cityLabel || undefined;
 }
 
 /**
@@ -65,7 +65,8 @@ export function GamesListingClient({
     if (skillLevel !== "all" && g.skill_level !== skillLevel) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return [g.turfs?.name, g.turfs?.address, g.sport, g.host_name]
+    const v = gameVenue(g);
+    return [v?.name, v?.address, v?.area, v?.cityLabel, g.sport, g.host_name]
       .filter(Boolean)
       .some((field) => field!.toLowerCase().includes(q));
   };

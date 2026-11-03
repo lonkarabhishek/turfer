@@ -18,6 +18,7 @@ import {
   getAdminRequests,
   getAdminReviews,
   getAdminTurfs,
+  getAdminTypedVenues,
   getAdminUsers,
   userNames,
   type AdminGame,
@@ -60,6 +61,7 @@ export const metadata: Metadata = { title: "Admin", robots: { index: false, foll
 
 const VIEWS = {
   games: { title: "Games", filters: GAME_FILTERS },
+  venues: { title: "Venues hosts typed", filters: { all: "All" } },
   users: { title: "Users", filters: USER_FILTERS },
   logins: { title: "Latest logins", filters: LOGIN_FILTERS },
   requests: { title: "Join requests", filters: REQUEST_FILTERS },
@@ -487,10 +489,16 @@ async function renderView(v: View, filter: string, city: string | null = null): 
                       <Link href={turfPath(g.turf)} className="text-primary-900 hover:text-accent-600">
                         {g.turf.name}
                       </Link>
+                    ) : g.venue_name ? (
+                      // A venue its host typed: no turf page.
+                      <span className="text-primary-900">
+                        {g.venue_name} <span className="text-primary-400 text-[12px]">(not on TapTurf)</span>
+                      </span>
                     ) : (
                       <span className="text-primary-400">-</span>
                     )}
                     {g.turf?.city && isCity(g.turf.city) && <div className="text-primary-400 text-[12px]">{labelFor(g.turf.city)}</div>}
+                    {!g.turf && g.venue_city && <div className="text-primary-400 text-[12px]">{isCity(g.venue_city) ? labelFor(g.venue_city) : g.venue_city}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-primary-900">{g.host_name || "-"}</div>
@@ -965,6 +973,39 @@ async function renderView(v: View, filter: string, city: string | null = null): 
               ))}
             </ul>
           </div>
+        ),
+      };
+    }
+
+    case "venues": {
+      // The venues hosts typed because they aren't on TapTurf: the popular ones are worth adding.
+      const res = await getAdminTypedVenues();
+      if (!res.ok) {
+        if (res.reason === "not_set_up") return { count: null, node: <p className="text-primary-500 text-sm">Typed venues aren&apos;t in the database yet (20261103_game_other_venue.sql).</p> };
+        return failedView(res.reason, "the typed venues");
+      }
+      const rows = res.data;
+      return {
+        count: rows.length,
+        node: (
+          <>
+            <p className="text-sm text-primary-500 mb-3">
+              Venues hosts typed when the turf wasn&apos;t on TapTurf, the most games first: one row per name and city. The popular ones are worth adding to TapTurf.
+            </p>
+            <Table head={["Venue", "Area", "City", "Games", "Hosts", "Last game", "Last posted"]} empty={rows.length === 0}>
+              {rows.map((r) => (
+                <tr key={`${r.venue_name}|${r.venue_city ?? ""}`} className="align-top">
+                  <td className="px-4 py-3 font-medium text-primary-900 [overflow-wrap:anywhere]">{r.venue_name}</td>
+                  <td className="px-4 py-3 text-primary-700">{r.venue_area || "-"}</td>
+                  <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{r.venue_city ? (isCity(r.venue_city) ? labelFor(r.venue_city) : r.venue_city) : "-"}</td>
+                  <td className="px-4 py-3 tabular-nums">{r.games}</td>
+                  <td className="px-4 py-3 tabular-nums">{r.hosts}</td>
+                  <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{r.last_day ? fmtGameDate(r.last_day) : "-"}</td>
+                  <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(r.last_posted)}</td>
+                </tr>
+              ))}
+            </Table>
+          </>
         ),
       };
     }

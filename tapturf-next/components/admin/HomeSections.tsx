@@ -480,6 +480,7 @@ export async function GamesListSection() {
           <Link href="/admin/games?f=upcoming" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">Upcoming</Link>
           <Link href="/admin/games?f=expired" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">Expired</Link>
           <Link href="/admin/games" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">All games</Link>
+          <Link href="/admin/venues" className="inline-flex min-h-10 items-center text-accent-600 hover:text-accent-700">Venues hosts typed</Link>
         </div>
       </div>
       <div className="rounded-2xl bg-white border border-primary-200 overflow-hidden">

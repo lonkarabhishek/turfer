@@ -873,7 +873,7 @@ export async function GET(req: Request) {
   // a shared name with its area and city, so it comes back as that venue.
   const shown = body.turfs
     ? shownNames(body.turfs as Turf[], turfs)
-    : ((body.games as { turfs?: { name?: string } }[] | undefined)?.map((g) => g.turfs?.name ?? "").filter(Boolean) ?? []);
+    : ((body.games as { turfs?: { name?: string }; venue_name?: string | null }[] | undefined)?.map((g) => g.turfs?.name ?? g.venue_name ?? "").filter(Boolean) ?? []);
   body.memo = { ...(body.memo as Record<string, unknown>), top: shown.slice(0, 5) };
 
   logFinish(supabase, logId, {
