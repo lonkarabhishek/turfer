@@ -2,7 +2,7 @@
 
 import { Phone, MessageCircle } from "lucide-react";
 import { buildWhatsAppLink, generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
-import { logContactClick, turfPageUrl, type ContactKind } from "@/lib/analytics/contactClicks";
+import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
 import { normalizeIndianMobile, normalizeIndianPhone } from "@/lib/utils/phone";
 import { useAuth } from "@/components/auth/AuthProvider";
 
@@ -27,9 +27,10 @@ interface CTAButtonsProps {
   /**
    * The turf's page as the WhatsApp message links it (turfUrl, by slug).
    * From the server, so the link the page renders with is the one it
-   * hydrates with (turfPageUrl reads the address bar, which the server can't).
+   * hydrates with. Required, so no message can fall back to the id URL
+   * (/turf/<uuid>, the address before 19 Oct) any more.
    */
-  pageUrl?: string;
+  pageUrl: string;
 }
 
 /**
@@ -61,7 +62,7 @@ export function CTAButtons({
   const whatsappUrl = wa
     ? buildWhatsAppLink({
         phone: wa.digits,
-        text: generateTurfInquiryMessage({ name: turfName, address, url: pageUrl ?? turfPageUrl(turfId) }),
+        text: generateTurfInquiryMessage({ name: turfName, address, url: pageUrl }),
       })
     : null;
 

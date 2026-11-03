@@ -1,6 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CITY_COOKIE, CITY_COOKIE_MAX_AGE } from "./lib/city";
 import { decide } from "./lib/cityRouting";
+import { turfIdTarget } from "./lib/turfIds";
+import TURF_ID_SLUGS from "./lib/turfIds.json";
+
+/**
+ * Old turf links, /turf/<uuid> -> /turf/<slug> (lib/turfIds.ts): a 308 from
+ * here, before any page renders or the database is read, for every active
+ * turf with a slug when the build ran. The map is written at build time
+ * (lib/build/turfIds.ts) and bundled in; the committed file is empty, so
+ * dev and a build without the build-data step leave every old link to the
+ * page's own permanentRedirect, which also covers turfs added since.
+ */
+const TURF_IDS: ReadonlyMap<string, string> = new Map(Object.entries(TURF_ID_SLUGS as Record<string, string>));
 
 /**
  * Next.js 16 proxy (formerly middleware).
@@ -53,6 +65,8 @@ import { decide } from "./lib/cityRouting";
  * - Direct hits on /c are 308'd to the public URL.
  * - Old /sport/<label> URLs (/sport/cricket%20nets) are 308'd to the
  *   sport page for that label (sportPagePath).
+ * - Old /turf/<uuid> URLs are 308'd to /turf/<slug> (TURF_IDS above), on
+ *   document loads; an RSC request for one still gets the page's redirect.
  *
  * Caching: one public URL now returns different bodies by cookie and IP,
  * yet keeps Next's s-maxage and has no Vary: Cookie (that would split
@@ -85,6 +99,15 @@ import { decide } from "./lib/cityRouting";
  */
 export function proxy(req: NextRequest) {
   try {
+    // An old id link: 308 to the slug URL on this host, query string kept.
+    if (req.method === "GET" || req.method === "HEAD") {
+      const to = turfIdTarget(req.nextUrl.pathname, TURF_IDS);
+      if (to) {
+        const url = req.nextUrl.clone();
+        url.pathname = to;
+        return NextResponse.redirect(url, 308);
+      }
+    }
     const d = decide({
       method: req.method,
       pathname: req.nextUrl.pathname,

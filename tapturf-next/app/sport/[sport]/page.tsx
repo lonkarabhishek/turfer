@@ -6,6 +6,10 @@ import { ChevronRight, LocateFixed } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
 import { getSportBandsForPage } from "@/lib/queries/sportBands";
 import { SportTurfList } from "@/components/sport/SportTurfList";
+import { ByCityLinks } from "@/components/sport/ByCityLinks";
+import { sportCityLinks } from "@/lib/byCity";
+import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
+import { getLiveCities } from "@/lib/queries/cities";
 import { SPORT_PAGES, citySportHref, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
 import { CITY_IDS, isCity, isCitySlug, labelFor } from "@/lib/city";
 import type { Turf } from "@/types/turf";
@@ -16,6 +20,16 @@ import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "
 import { courtNearMeLink } from "@/lib/near/courtNearMe";
 
 export const revalidate = 3600;
+
+/**
+ * Photo cards at the top: the sport's best rated venues across India, the
+ * 24 the page always led with (SportTurfList's CARD_LIMIT; a city+sport
+ * page leads with its own 24 the same way). The others are linked from
+ * their cities' pages ("<Sport> turfs by city" under the cards), not from
+ * here: until 3 Nov this page linked every one (/sport/box-cricket was
+ * 8.4 MB of HTML with 3,098 turf links).
+ */
+const TOP_CARDS = 24;
 
 // Pages list turfs from every city. One fetch per request, shared by
 // generateMetadata and the page.
@@ -109,8 +123,12 @@ export default async function SportPage({
   const info = sportBySlug(sport);
   if (!info) notFound();
 
-  const [turfs, bands] = await Promise.all([turfsFor(info), getSportBandsForPage()]);
+  const [turfs, bands, live] = await Promise.all([turfsFor(info), getSportBandsForPage(), getLiveCities()]);
   const perCity = citiesFor(turfs, info);
+  // Each city's page for the sport where it is indexable, else the city's
+  // own page where that is, else counted at the end: the venues the cards
+  // leave out are each listed on a page linked from here (lib/byCity.ts).
+  const byCity = sportCityLinks(perCity, info.slug, new Map(live.map((c) => [c.id, c.n])), MIN_TURFS_TO_INDEX);
   // Each of those cities' own page, /<city>, in the same order. A reserved
   // slug (a turfs.city of "blog") is never a city page: getLiveCities
   // leaves it out the same way.
@@ -194,9 +212,17 @@ export default async function SportPage({
         </div>
       </div>
 
-      {/* Top 24 as cards, the rest as a light list */}
+      {/* The top 24 as cards, then every city with its count */}
       {turfs.length > 0 ? (
-        <SportTurfList turfs={turfs} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity sport={{ labels: info.labels }} bands={bands} />
+        <>
+          <SportTurfList turfs={turfs.slice(0, TOP_CARDS)} venues={sportVenues(info).toLowerCase()} placeLabel={place.short} showCity sport={{ labels: info.labels }} bands={bands} />
+          <ByCityLinks
+            title={`${sportVenues(info)} by city`}
+            sub={`Biggest first. Each city's page lists every ${info.name.toLowerCase()} ${venueWord(info, 1)} there.`}
+            byCity={byCity}
+            unit={[`${info.name.toLowerCase()} ${venueWord(info, 1)}`, `${info.name.toLowerCase()} ${venueWord(info, 2)}`]}
+          />
+        </>
       ) : (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">{info.icon}</p>
