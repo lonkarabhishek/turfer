@@ -7,8 +7,9 @@ import { useSyncExternalStore } from "react";
  * Accept: Google Analytics (lib/analytics/ga.ts), the on-device visit note
  * sent at sign-up (lib/analytics/visitor.ts), the free tools' random guest
  * tag (lib/analytics/tools.ts) and Google Maps embeds. TapTurf's own
- * anonymous counts (turf page views, Call/WhatsApp taps, tool use counts)
- * run for everyone: they store nothing on the device and name no one.
+ * anonymous counts (turf page views, Call/WhatsApp taps, tool use counts,
+ * page views and visits, lib/traffic) run for everyone: they store nothing
+ * on the device and name no one.
  *
  * The choice is a first-party cookie, tt_consent=accepted.v1 or
  * rejected.v1, for about six months. Pages are static, so the server never

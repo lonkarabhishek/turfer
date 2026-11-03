@@ -10,12 +10,14 @@ import { reasonText } from "@/lib/admin/section";
 import { adminClaims, pendingSuggestions } from "./HomeSections";
 import { SectionBoundary } from "./SectionStatus";
 import { MapGlance } from "./MapUsage";
+import { TrafficGlance } from "./Traffic";
 
 /**
  * The top of the admin home, sized for a phone: sign-ups today, in 7 and in
  * 30 days (as the sign-ups chart counts them, each against the stretch
- * before), turfs claimed (now, new this week, claims waiting), and what
- * waits for the owner, each a tap from where it is decided. Every number is
+ * before), turfs claimed (now, new this week, claims waiting), what
+ * waits for the owner, each a tap from where it is decided, and the
+ * traffic and map lines, each a tap from its section. Every number is
  * one the admin already reads (the same cached reads as the sections
  * below); a read that fails shows "-".
  */
@@ -41,6 +43,14 @@ export function AtAGlance() {
         <SectionBoundary title="What's waiting">
           <Suspense fallback={null}>
             <WaitingRow />
+          </Suspense>
+        </SectionBoundary>
+      </div>
+      {/* Visits and page views (components/admin/Traffic.tsx); nothing before it is counted. */}
+      <div className="md:col-span-2 empty:hidden">
+        <SectionBoundary title="Traffic at a glance">
+          <Suspense fallback={null}>
+            <TrafficGlance />
           </Suspense>
         </SectionBoundary>
       </div>

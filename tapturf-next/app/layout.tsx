@@ -17,6 +17,7 @@ import { CitySync } from "@/components/city/CitySync";
 import { CityPicker } from "@/components/city/CityPicker";
 import "./globals.css";
 import { VisitTracker } from "@/components/analytics/VisitTracker";
+import { TrafficCounter } from "@/components/analytics/TrafficCounter";
 import { CookieBanner } from "@/components/consent/CookieBanner";
 
 const inter = Inter({
@@ -108,6 +109,8 @@ export default function RootLayout({
         {/* Google Analytics and the visit note wait for Accept on that banner. */}
         <GoogleAnalytics />
         <VisitTracker />
+        {/* TapTurf's own page view count runs either way: it keeps nothing on the device and renders nothing (lib/traffic). */}
+        <TrafficCounter />
         <PWALifecycle />
         <RouteProgress />
         <AuthWrapper>
