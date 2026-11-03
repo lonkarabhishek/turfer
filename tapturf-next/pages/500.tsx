@@ -2,9 +2,10 @@ import Head from "next/head";
 import type { GetStaticProps } from "next";
 
 // The page a visitor gets when a page fails to render and Next falls
-// back to its 500 page (a first render with the database failing and no
-// copy to serve). Every other route is the app router's (app/); this is
-// the only page here, and app/not-found.tsx stays the 404.
+// back to its 500 page. Every other route is the app router's (app/);
+// pages/_error.tsx is the only other page here (it answers 503 when the
+// failure is a read with no copy to serve), and app/not-found.tsx stays
+// the 404.
 //
 // Until 3 Nov there was no such page: Next 16 copied its built-in
 // "500: Internal Server Error." (app/_global-error) to pages/500.html and

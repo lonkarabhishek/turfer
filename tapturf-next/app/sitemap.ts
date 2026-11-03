@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { ALL_POSTS } from "@/content/blog";
 import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
-import { cityPageIndexable, getLiveCities } from "@/lib/queries/cities";
+import { cityPageIndexable, getLiveCities, servedAfterFailure } from "@/lib/queries/cities";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { TOOLS } from "@/lib/tools/registry";
 import { readSitemapGames, readSitemapTurfs } from "@/lib/build/reads";
@@ -48,6 +48,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Every city with active turfs, from the database.
   const liveCities = await getLiveCities();
+  // Which city pages are indexed (cityPageIndexable): by the view's count,
+  // or, when its read failed and the list is one kept from before (its
+  // counts can be a day old), by the active turfs read just above.
+  const kept = servedAfterFailure(liveCities);
+  const indexable = (c: (typeof liveCities)[number]) =>
+    cityPageIndexable(kept ? { n: (turfs ?? []).filter((t) => t.city === c.id).length } : c);
 
   // A lastmod only where a date says when the page last changed: the
   // time of this regeneration (new Date()) told Google every hour that
@@ -80,7 +86,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // City landing pages, one per live city with enough turfs to be
     // indexed (biggest first; a thinner one is noindex, cityPageIndexable).
     // Key for local SEO. As new as their newest turf, not the time of the fetch.
-    ...liveCities.filter(cityPageIndexable).map((c) => ({
+    ...liveCities.filter(indexable).map((c) => ({
       url: `${BASE}/${c.id}`,
       lastModified: latest((turfs ?? []).filter((t) => t.city === c.id).map((t) => t.updated_at)),
       changeFrequency: "daily" as const,

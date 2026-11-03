@@ -148,14 +148,20 @@ test("/pune alone: 'Turf Booking in Pune: <n> Turfs, Call or WhatsApp', its desc
   assert.equal(cityDescription(pune), "295 turfs in Pune: 41 box cricket, 8 football, 3 pickleball. Most in Vesu, Mota Varachha and Pal Gam; 17 floodlit. Call or WhatsApp, no booking fee.");
 });
 
-test("/pune falls back to its usual title: no count, no turf to call or WhatsApp, or too wide", () => {
+test("/pune falls back to its usual title only when too wide (or with no count); never on the turf facts", () => {
   const pune: CityFacts = { ...surat, label: "Pune", count: 295, priced: 40 };
-  for (const f of [{ ...pune, count: 0 }, { ...pune, contactable: 0 }, { ...pune, count: 1e12 }]) {
-    assert.equal(cityTitle(f, "pune"), cityTitle(f), `count ${f.count}, contactable ${f.contactable}`);
+  for (const f of [{ ...pune, count: 0 }, { ...pune, count: 1e12 }]) {
+    assert.equal(cityTitle(f, "pune"), cityTitle(f), `count ${f.count}`);
     assert.equal(bannedCopy(cityTitle(f, "pune")), null);
   }
   // 1e12 in Indian grouping is too long for the booking title; the usual one still fits.
   assert.ok(titleFits(cityTitle({ ...pune, count: 1e12 }, "pune")));
+  // The turf facts unread (a build whose facts read failed, reach null): the same title, not the old one.
+  const card = (id: string) => ({ id, images: [], rating: 0, total_reviews: 0, opening_hours: null, start_time: null, end_time: null, is_24x7: null }) as unknown as Turf;
+  const unread = { ...pune, ...listingReach(Array.from({ length: 295 }, (_, i) => card(`t${i}`)), null) };
+  assert.equal(unread.contactable, 0);
+  assert.equal(cityTitle(unread, "pune"), "Turf Booking in Pune: 295 Turfs, Call or WhatsApp");
+  assert.equal(cityTitle({ ...pune, contactable: 0 }, "pune"), "Turf Booking in Pune: 295 Turfs, Call or WhatsApp");
 });
 
 test("every other city keeps its title: keyed to the slug 'pune', never the label", () => {

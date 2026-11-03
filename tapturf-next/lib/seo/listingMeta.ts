@@ -134,11 +134,14 @@ export const BOOKING_TITLE_PHRASE = "Turf Booking in Pune";
 
 /**
  * "Turf Booking in Pune: 295 Turfs, Call or WhatsApp", with the count the
- * usual title states. Null (the usual title then) without a count, when no
- * turf there can be called or WhatsApped, or when it would not fit.
+ * usual title states. Null (the usual title then) only when it would not
+ * fit width.ts, the one fallback the site owner asked for, or without a
+ * count (a read that came back empty: no "0 Turfs"). Not on the turf
+ * facts (contactable): a render or a build without them must not flip
+ * the title between the two.
  */
 function bookingTitle(f: CityFacts): string | null {
-  if (f.count <= 0 || f.contactable <= 0) return null;
+  if (f.count <= 0) return null;
   const t = `${BOOKING_TITLE_PHRASE}: ${inr(f.count)} ${f.count === 1 ? "Turf" : "Turfs"}, Call or WhatsApp`;
   return titleFits(t) ? t : null;
 }

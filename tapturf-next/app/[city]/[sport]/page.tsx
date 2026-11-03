@@ -20,7 +20,8 @@ import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/li
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
-import { getSportBands } from "@/lib/queries/sportBands";
+import { getSportBandsForPage } from "@/lib/queries/sportBands";
+import { Unavailable } from "@/lib/cache/unavailable";
 import { courtNearMeLink } from "@/lib/near/courtNearMe";
 
 // "Football turfs in Pune" style landing pages: the city + sport
@@ -59,11 +60,12 @@ const load = cache(async (cityParam: string, sportParam: string) => {
   // A live city has active turfs, so an empty list is a bad read, not a
   // missing page: throw (the last good page keeps serving) rather than
   // cache a 404. /bangalore/swimming, 17 pools, was a 404 to Google on 18 Oct.
-  if (cityTurfs.length === 0) throw new Error(`No turfs read for live city ${city}`);
+  // (Unavailable: a first render answers 503 with Retry-After, pages/_error.tsx.)
+  if (cityTurfs.length === 0) throw new Unavailable(`No turfs read for live city ${city}`);
   const turfs = cityTurfs.filter((t) => turfPlaysSport(t.sports, sport));
   // Rows older than the current version (its read failed) may predate this
   // sport's first turfs here: fail the render rather than cache a 404.
-  if (turfs.length === 0 && (await turfRowsStale())) throw new Error(`No ${sport.slug} turfs in ${city} in an older copy of the rows`);
+  if (turfs.length === 0 && (await turfRowsStale())) throw new Unavailable(`No ${sport.slug} turfs in ${city} in an older copy of the rows`);
   return { city, sport, turfs, cityTurfs };
 });
 
@@ -150,7 +152,7 @@ export default async function CitySportPage({
   // first. The points come from the live list (the page read it already,
   // isLiveCity), so this city is placed even when its own sport page is
   // too thin to be in the sport's list.
-  const [sportCities, live, bands] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands()]);
+  const [sportCities, live, bands] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBandsForPage()]);
   const otherCities = pickOtherCities(sportCities, cityId, cityPointsOf(live)).flatMap((c) => {
     const href = citySportHref(c.id, s.slug, c.n);
     return href ? [{ ...c, href }] : [];

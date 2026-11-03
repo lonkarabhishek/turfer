@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { cacheKeyed, markThinRender, toBands } from "@/lib/queries/turfs";
+import { cacheKeyed, needForPage, toBands } from "@/lib/queries/turfs";
 import { readSportBandRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
 import { sportBandMap, sportBandTimeMap, type SportBandMap, type SportBandTimeMap } from "@/lib/utils/cardSport";
@@ -37,9 +37,11 @@ async function readSportBandTimes(): Promise<SportBandTimeMap> {
  * Cached for a day and untagged, as getTurfFacts: a card a day behind a
  * band the data team changed is fine (the turf page itself is current). A
  * warm instance keeps it an hour in memory, and concurrent renders share
- * one read. A failed read gives the last copy, or null: the cards then
- * decide without bands, as before bands were read (sportPrice), and that
- * page is kept a minute only (markThinRender, not while building). For a
+ * one read. A failed read gives the last copy, or null: a route's cards
+ * then decide without bands, as before bands were read (sportPrice); a
+ * page throws Unavailable instead (needForPage at its call, not while
+ * building), so its prices never come out other than the cached page's
+ * and the last good page keeps serving. For a
  * minute after one the instance answers that way without reading again:
  * the /turfs chips ask on every request, and each read of a database that
  * is down waits out the guard's timeout and counts toward its breaker,
@@ -49,6 +51,9 @@ async function readSportBandTimes(): Promise<SportBandTimeMap> {
  * the build wrote are one entry.
  */
 export const getSportBands = memoised("getSportBands", unstable_cache(cacheKeyed("sport-bands", readSportBands), ["sport-bands-v1"], { revalidate: 86400 }));
+
+/** getSportBands for a page: no bands at all throws Unavailable (needForPage), never while building. */
+export const getSportBandsForPage = (): Promise<SportBandMap | null> => getSportBands().then((bands) => needForPage(bands, "sport bands"));
 
 /**
  * The same bands by time band and day type (cardSport.ts sportBandTimesOf),
@@ -67,10 +72,7 @@ export function memoised<T>(name: string, cached: () => Promise<T>): () => Promi
   let memo: { at: number; value: T } | null = null;
   let pending: Promise<T | null> | null = null;
   let failedAt = -Infinity;
-  // A render that got no copy at all is kept a minute only (markThinRender), in its own render.
-  const thin = (value: T | null) => (value === null ? markThinRender().then(() => null) : value);
-  return () => get().then(thin);
-  function get(): Promise<T | null> {
+  return () => {
     if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.value);
     if (Date.now() - failedAt < RETRY_MS) return Promise.resolve(memo?.value ?? null);
     pending ??= cached()
@@ -87,7 +89,7 @@ export function memoised<T>(name: string, cached: () => Promise<T>): () => Promi
         pending = null;
       });
     return pending;
-  }
+  };
 }
 
 /** A card row with its venue's sport bands, when it has any (the row itself is never changed). */

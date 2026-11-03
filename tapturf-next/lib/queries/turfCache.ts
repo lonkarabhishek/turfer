@@ -1,6 +1,7 @@
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
+import { getAllActiveTurfsAsOf } from "@/lib/queries/turfs";
 import { forCard } from "@/lib/utils/cardTurf";
 import { toAskTurf } from "@/lib/ask/project";
+import { MAX_COPY_AGE_MS } from "@/lib/cache/rowStore";
 import type { Turf } from "@/types/turf";
 
 /**
@@ -23,19 +24,22 @@ import type { Turf } from "@/types/turf";
 const MEMO_MS = 60_000;
 
 function memoTurfList(name: string, project: (t: Turf) => Turf): () => Promise<Turf[]> {
-  let memo: { readAt: number; turfs: Turf[] } | null = null;
+  // asOf: when the rows behind it were last known current (the row store's RowsRead.asOf).
+  let memo: { readAt: number; asOf: number; turfs: Turf[] } | null = null;
   // Callers that arrive while the list is being built share that build.
   let pending: Promise<Turf[]> | null = null;
   return () => {
     if (memo && Date.now() - memo.readAt < MEMO_MS) return Promise.resolve(memo.turfs);
-    pending ??= getAllActiveTurfs()
-      .then((all) => {
-        memo = { readAt: Date.now(), turfs: all.map(project) };
+    pending ??= getAllActiveTurfsAsOf()
+      .then(({ turfs, asOf }) => {
+        memo = { readAt: Date.now(), asOf, turfs: turfs.map(project) };
         return memo.turfs;
       })
       .catch((e) => {
-        // A stale list beats a failed answer.
-        if (!memo) throw e;
+        // A stale list beats a failed answer, while its prices and hours are
+        // at most MAX_COPY_AGE_MS old, as the row store's own copies are
+        // (lib/cache/rowStore.ts). Older: the route answers 503.
+        if (!memo || Date.now() - memo.asOf > MAX_COPY_AGE_MS) throw e;
         console.error(`${name}: refresh failed, serving the last list`, e);
         return memo.turfs;
       })
