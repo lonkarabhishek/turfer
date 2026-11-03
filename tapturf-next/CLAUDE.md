@@ -86,6 +86,7 @@ types/        — game.ts, user.ts, notification.ts, turf.ts
 
 ## Commits & Deploys
 - Batch the work: commit to the working branch as you go, but merge into `main` (which deploys to production) once per batch, not after every commit.
+- At most one production deploy a day (site owner, 4 Nov 2026): each deploy empties the page cache, and the refill strains the database. Exceptions ship right away, still with the usual checks: security fixes and bugs that break production.
 - Pushing the working branch only makes a Vercel preview; only `main` goes live.
 
 ## Build & Run
