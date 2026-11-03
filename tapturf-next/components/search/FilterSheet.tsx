@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
@@ -30,6 +30,14 @@ const GROUPS: { title: string; facets: [Facet, string | null][] }[] = [
   },
   { title: "Rating", facets: [["rated", "The Google rating"]] },
 ];
+
+/** The popover: at most this tall (and 70% of the screen), never under this. */
+const POPOVER_MAX = 640;
+const POPOVER_MIN = 240;
+/** Its gap under the button (mt-2), the room it leaves under itself, and the site header's room above the button (64 px from md up). */
+const POPOVER_GAP = 8;
+const POPOVER_MARGIN = 16;
+const HEADER_ROOM = 80;
 
 /** The sheet's own words for a toggle (the pills use FACET_LABELS). */
 const SHEET_LABELS: Partial<Record<Facet, string>> = {
@@ -86,6 +94,35 @@ export function FilterSheet({
   useEffect(() => {
     closeRef.current = onClose;
   });
+
+  // As a popover, it fits the screen under the Filters button, so its footer (Show N, Clear all)
+  // is in view: with the button low on screen the page first moves up (the button to just under
+  // the site's header, as far as the page can scroll), then the popover takes the room left.
+  const [maxH, setMaxH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const anchor = panel.current?.parentElement;
+    if (!desktop || !anchor) return;
+    const fit = (scroll: boolean) => {
+      const vh = window.innerHeight;
+      const want = Math.min(POPOVER_MAX, vh * 0.7);
+      const r = anchor.getBoundingClientRect();
+      let room = vh - r.bottom - POPOVER_GAP - POPOVER_MARGIN;
+      if (scroll && room < want) {
+        const canScroll = document.documentElement.scrollHeight - vh - window.scrollY;
+        const by = Math.min(want - room, r.top - HEADER_ROOM, canScroll);
+        if (by > 0) {
+          // Smooth or not (html's scroll-behavior), the button ends `by` higher.
+          window.scrollBy({ top: by });
+          room += by;
+        }
+      }
+      setMaxH(Math.max(POPOVER_MIN, Math.floor(Math.min(want, room))));
+    };
+    fit(true);
+    const onResize = () => fit(false);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [desktop]);
 
   // Focus, Esc, and (as a sheet) the scroll lock; as a popover, a tap outside closes it.
   useEffect(() => {
@@ -234,6 +271,7 @@ export function FilterSheet({
         role="dialog"
         aria-labelledby="tt-filters-h"
         className="absolute left-0 top-full mt-2 z-40 w-[400px] max-h-[min(70vh,640px)] flex flex-col bg-white rounded-2xl border border-primary-100 shadow-elevated overflow-hidden"
+        style={maxH != null ? { maxHeight: maxH } : undefined}
       >
         {head}
         <div className="overflow-y-auto overscroll-contain min-h-0 flex-1">{body}</div>

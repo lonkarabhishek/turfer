@@ -10,6 +10,7 @@ import { isCity, labelFor, type CityScope } from "@/lib/city";
 import { noteInterest } from "@/lib/analytics/visitor";
 import {
   DEFAULT_FILTERS,
+  FIRST_PAGE,
   extrasOf,
   filtersFromSearch,
   hasExtras,
@@ -84,7 +85,8 @@ function cameBack(): boolean {
 /**
  * Search, sport chips and sort over the turfs in scope (one city, or all
  * of India), a batch of cards at a time. The server rendered the first
- * FIRST_PAGE cards of the default list (`initial`); everything after that
+ * cards of the default list (`initial`: FIRST_PAGE, or a city+sport page's
+ * 24 photo cards, all shown); everything after that
  * comes from GET /api/turfs/list, ranked by the same code
  * (lib/turfList/query.ts), so the browser never gets the whole list:
  * "Show more" adds 10, then 20, 40, 80 (each tap doubles what is shown, at
@@ -108,7 +110,7 @@ export function TurfListingClient({
   spotlight,
   sportPage = null,
 }: {
-  /** The server's first page of the default list. */
+  /** The server's first page of the default list (every card in it is shown). */
   initial: ListPage;
   /** Sport chips worth showing for this scope. */
   sports: string[];
@@ -132,7 +134,8 @@ export function TurfListingClient({
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [locErrorKind, setLocErrorKind] = useState<"denied" | "unavailable" | "timeout" | "other" | null>(null);
-  const [list, setList] = useState<ListState>(() => startState(listKey(city, DEFAULT_FILTERS, null, pageSport), initial));
+  // A city+sport page renders 24 cards (SportTurfList CARD_LIMIT): all on screen, and Show more continues from there.
+  const [list, setList] = useState<ListState>(() => startState(listKey(city, DEFAULT_FILTERS, null, pageSport), initial, Math.max(FIRST_PAGE, initial.items.length)));
   // Until the URL has been read (just after hydration), nothing is fetched.
   const [ready, setReady] = useState(false);
   const [failedAt, setFailedAt] = useState<string | null>(null);
@@ -270,12 +273,15 @@ export function TurfListingClient({
     const ctrl = new AbortController();
     const fresh = list.key !== wantKey;
     const key = wantKey;
-    // A first batch is ranked and counted at India time now (its counts count "Open now");
-    // the rest of an "Open now" list at its first batch's time, so the list holds together.
-    const ist = fresh ? istNow() : isTimedKey(list.key) ? list.ist : null;
+    // The sheet's numbers come with a new list's first batch only while the sheet is open (it shows them);
+    // otherwise they are asked for when it opens (needCounts), so plain batches stay the same all day.
+    const counts = fresh && sheetOpen;
+    // Ranked (and counted) at India time now when the answer needs it ("Open now" on, or the counts,
+    // which count it); the rest of an "Open now" list at its first batch's time, so the list holds together.
+    const ist = fresh ? (counts || isTimedKey(key) ? istNow() : null) : isTimedKey(list.key) ? list.ist : null;
     const query = queryFor(filters, ist);
     // The version and picks of the cards on screen, so the CDN keeps batches per both (the answer names its own).
-    fetch(`/api/turfs/list?${listSearch({ query, offset: plan.offset, limit: plan.limit }, list.v, list.t)}`, { signal: ctrl.signal })
+    fetch(`/api/turfs/list?${listSearch({ query, offset: plan.offset, limit: plan.limit, counts }, list.v, list.t)}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return (await r.json()) as ListPage;
@@ -292,15 +298,16 @@ export function TurfListingClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, failed]);
 
-  // The sheet's numbers for a list that came without them (the server's own first cards):
-  // its first batch again, from the route (the same URL a new list would ask, so often cached).
+  // The sheet's numbers for a list that came without them (the server's own first cards, or a list
+  // asked for while the sheet was closed): its first batch again, with counts, from the route (the
+  // same URL a new list asks while the sheet is open, so often cached).
   const needCounts = sheetOpen && ready && !replacing && !list.counts && countsFailed !== list.key;
   useEffect(() => {
     if (!needCounts) return;
     const ctrl = new AbortController();
     const key = list.key;
     const first = firstBatch(nearby);
-    fetch(`/api/turfs/list?${listSearch({ query: queryFor(filters, istNow()), offset: 0, limit: first.limit }, list.v, list.t)}`, { signal: ctrl.signal })
+    fetch(`/api/turfs/list?${listSearch({ query: queryFor(filters, istNow()), offset: 0, limit: first.limit, counts: true }, list.v, list.t)}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return (await r.json()) as ListPage;

@@ -33,8 +33,10 @@ import {
  *
  * The Filters sheet's toggles, price cap and surface (lib/turfList/facts.ts)
  * run here too, on the server's own facts of each turf, with a count per
- * choice on every first batch, and a city+sport page's list is that page's
- * turfs (`pageSport`: the sport page's exact labels, lib/sports.ts).
+ * choice on a first batch that asks for them (`counts`: the sheet is open),
+ * and a city+sport page's list is that page's turfs (`pageSport`: the sport
+ * page's exact labels, lib/sports.ts), ranked by rating with no trending
+ * lead, as the page says.
  */
 
 // Order by frequency in the current DB — Football (166) and Box
@@ -231,6 +233,18 @@ function emptyCounts(): ListCounts {
   };
 }
 
+const NO_PICKS: ReadonlySet<string> = new Set();
+
+/**
+ * The trending picks that lead a list's default sort and frame its cards:
+ * none on a sport page, whose copy says it is ranked by Google rating (as
+ * it was before the list came to it), and whose JSON-LD ItemList is in
+ * that order.
+ */
+function leadingPicks(query: Pick<RankQuery, "pageSport">, trendingIds: ReadonlySet<string>): ReadonlySet<string> {
+  return query.pageSport ? NO_PICKS : trendingIds;
+}
+
 /** The card's sport on this list: the chip, else the page's sport (its labels), else none. */
 export function listCardSport(query: Pick<RankQuery, "sport" | "pageSport">): CardSport | null {
   if (query.sport) return { chip: query.sport };
@@ -253,7 +267,8 @@ export function listCardSport(query: Pick<RankQuery, "sport" | "pageSport">): Ca
  * hourlyPrice; a turf without a listed price is not under any cap) and the
  * surface. A turf with no facts in `facts` has none of the toggles that
  * need them. With `counts`, also the sheet's numbers (ListCounts), from
- * the same pass.
+ * the same pass. The trending picks lead the default sort, except on a
+ * sport page (leadingPicks).
  */
 export function rankTurfs<T extends Turf>(
   turfs: readonly T[],
@@ -269,6 +284,7 @@ export function rankTurfs<T extends Turf>(
   const need = maskOf(facets);
   const at = query.ist ?? null;
   const cardSport = listCardSport(query);
+  const lead = leadingPicks(query, trendingIds);
   const counts = opts.counts ? emptyCounts() : null;
   const wantPrice = cap != null || counts != null;
   const bits = FACETS.map((f) => [f, facetBit(f)] as const);
@@ -328,9 +344,9 @@ export function rankTurfs<T extends Turf>(
         return b.turf.total_reviews - a.turf.total_reviews;
       case "rating":
       default: {
-        // The week's trending pick leads the default sort.
-        const ta = trendingIds.has(a.turf.id);
-        const tb = trendingIds.has(b.turf.id);
+        // The week's trending pick leads the default sort (not a sport page's: leadingPicks).
+        const ta = lead.has(a.turf.id);
+        const tb = lead.has(b.turf.id);
         if (ta !== tb) return ta ? -1 : 1;
         return compareTopRated(a.turf, b.turf);
       }
@@ -364,7 +380,7 @@ export type ListPage<T = Turf> = {
   nearAt?: [number, number][];
   offset: number;
   items: ListItem<T>[];
-  /** On a first batch (offset 0) the route ranked with each turf's facts: the Filters sheet's numbers. Never on the server's own first cards. */
+  /** On a first batch (offset 0) asked for with `counts` (the sheet is open), ranked with each turf's facts: the Filters sheet's numbers. Never on the server's own first cards. */
   counts?: ListCounts;
   /** The India time "Open now" was worked out at (facts.ts istParam), when it was. Later batches of the list ask with the same. */
   ist?: string;
@@ -388,9 +404,11 @@ export function picksTag(ids: Iterable<string>): string {
 }
 
 /**
- * One batch. With `facts` (the route), a first batch also carries the
- * Filters sheet's counts; without (a page's own first cards, which never
- * read the facts), it carries none rather than counts that would be wrong.
+ * One batch. With `facts` (the route) and `counts` (asked for: the sheet is
+ * open), a first batch also carries the Filters sheet's counts; without
+ * facts (a page's own first cards, which never read them), it carries none
+ * rather than counts that would be wrong. Without `counts`, a first batch
+ * needs no time ("Open now" off), so its answer is the same all day.
  */
 export function pageOf<T extends Turf>(
   turfs: readonly T[],
@@ -400,10 +418,12 @@ export function pageOf<T extends Turf>(
   limit: number,
   v: number,
   facts?: FactsLookup | null,
+  opts: { counts?: boolean } = {},
 ): ListPage<T> {
-  const { ranked, near, counts } = rankTurfs(turfs, query, trendingIds, facts, { counts: offset === 0 && !!facts });
-  const items = ranked.slice(offset, offset + limit).map(({ turf }) => (trendingIds.has(turf.id) ? { turf, hot: true as const } : { turf }));
-  const page: ListPage<T> = { v, t: picksTag(trendingIds), total: ranked.length, near, offset, items };
+  const { ranked, near, counts } = rankTurfs(turfs, query, trendingIds, facts, { counts: !!opts.counts && offset === 0 && !!facts });
+  const lead = leadingPicks(query, trendingIds);
+  const items = ranked.slice(offset, offset + limit).map(({ turf }) => (lead.has(turf.id) ? { turf, hot: true as const } : { turf }));
+  const page: ListPage<T> = { v, t: picksTag(lead), total: ranked.length, near, offset, items };
   if (counts) page.counts = counts;
   if (query.ist) page.ist = istParam(query.ist);
   if (query.at && offset === 0) {
@@ -425,7 +445,8 @@ export function nextBatch(shown: number): number {
 
 /* ---------- the route's query string ---------- */
 
-export type ListRequest = { query: ListQuery; offset: number; limit: number };
+/** `counts`: a first batch that also carries the Filters sheet's numbers (asked while the sheet is open). */
+export type ListRequest = { query: ListQuery; offset: number; limit: number; counts?: boolean };
 
 /**
  * The route's query string, in one fixed order with defaults left out, so
@@ -436,7 +457,7 @@ export type ListRequest = { query: ListQuery; offset: number; limit: number };
  * answers uncached (app/api/turfs/list/route.ts), so an entry under a key
  * is never ranked from an older list or other picks than the key names.
  */
-export function listSearch({ query, offset, limit }: ListRequest, v?: number | null, t?: string | null): string {
+export function listSearch({ query, offset, limit, counts }: ListRequest, v?: number | null, t?: string | null): string {
   const p = new URLSearchParams();
   if (query.city) p.set("city", query.city);
   if (query.pageSport) p.set("ps", query.pageSport);
@@ -454,6 +475,7 @@ export function listSearch({ query, offset, limit }: ListRequest, v?: number | n
     p.set("lng", at.lng.toFixed(2));
   }
   if (query.ist) p.set("ist", istParam(query.ist));
+  if (counts) p.set("counts", "1");
   p.set("offset", String(offset));
   p.set("limit", String(limit));
   if (v != null && Number.isSafeInteger(v) && v >= 0) p.set("v", String(v));
@@ -547,13 +569,22 @@ export function parseListParams(p: URLSearchParams): { ok: true; req: ListReques
     if (!ist) return { ok: false, error: "bad ist" };
     extra.ist = ist;
   }
+  // The sheet's numbers: only "1", and only on a first batch (later ones never carry them).
+  const countsRaw = p.get("counts");
+  if (countsRaw != null && (countsRaw !== "1" || offset !== 0)) return { ok: false, error: "bad counts" };
 
-  return { ok: true, req: { query: { city: city || null, sport, q, sort, at, ...extra }, offset, limit }, seen: { v: vRaw == null ? null : Number(vRaw), t } };
+  const req: ListRequest = { query: { city: city || null, sport, q, sort, at, ...extra }, offset, limit };
+  if (countsRaw != null) req.counts = true;
+  return { ok: true, req, seen: { v: vRaw == null ? null : Number(vRaw), t } };
 }
 
-/** "Open now" is on, or the batch is a first one (its counts count it): the answer depends on the time. */
-export function needsTime(query: Pick<ListQuery, "facets">, offset: number): boolean {
-  return offset === 0 || extrasOf(query).facets.includes("open");
+/**
+ * "Open now" is on, or the batch is a first one asked with the sheet's
+ * counts (they count "Open now"): the answer depends on the time. Any
+ * other batch is the same all day, so its CDN entry is shared.
+ */
+export function needsTime(query: Pick<ListQuery, "facets">, offset: number, counts = false): boolean {
+  return (counts && offset === 0) || extrasOf(query).facets.includes("open");
 }
 
 /* ---------- the page URL ---------- */

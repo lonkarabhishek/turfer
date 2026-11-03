@@ -238,15 +238,19 @@ test("a sport page's list is its turfs by the page's exact labels, not a chip's 
   assert.deepEqual(ids(rankTurfs(turfs, { ...base, pageSport: "football", price: 1000 }, none, new Map()).ranked), ["football"]);
 });
 
-test("pages: counts only on a first batch ranked with facts; batches of a filtered list continue each other", () => {
+test("pages: counts only on a first batch that asks for them, ranked with facts; batches of a filtered list continue each other", () => {
   const { turfs, facts } = world(300, 23);
   const query: RankQuery = { ...base, facets: ["lights"], price: 2000 };
-  const first = pageOf(turfs, query, none, 0, 10, 4, facts);
+  const first = pageOf(turfs, query, none, 0, 10, 4, facts, { counts: true });
   assert.ok(first.counts);
   assert.equal(first.ist, "2.1290");
-  assert.equal(pageOf(turfs, query, none, 10, 10, 4, facts).counts, undefined);
+  assert.equal(pageOf(turfs, query, none, 10, 10, 4, facts, { counts: true }).counts, undefined);
+  // Not asked (the sheet is closed): the same cards, no numbers.
+  const plainFirst = pageOf(turfs, query, none, 0, 10, 4, facts);
+  assert.equal(plainFirst.counts, undefined);
+  assert.deepEqual(plainFirst.items, first.items);
   // The page's own first cards (no facts): no counts rather than wrong ones.
-  assert.equal(pageOf(turfs, { ...DEFAULT_FILTERS, at: null }, none, 0, 10, 4).counts, undefined);
+  assert.equal(pageOf(turfs, { ...DEFAULT_FILTERS, at: null }, none, 0, 10, 4, null, { counts: true }).counts, undefined);
   assert.equal(pageOf(turfs, { ...DEFAULT_FILTERS, at: null }, none, 0, 10, 4).ist, undefined);
   const all = ids(rankTurfs(turfs, query, none, facts).ranked);
   const got: string[] = [];
@@ -293,10 +297,49 @@ test("the route's params: the Filters choices, a sport page and the time, in one
     const r = parseListParams(new URLSearchParams(bad));
     assert.equal(r.ok, false, bad);
   }
-  // The time matters to a first batch (its counts) and to an "Open now" list.
-  assert.equal(needsTime({}, 0), true);
+  // The sheet's numbers: counts=1 on a first batch only, written after the time.
+  const asked = listSearch({ query: { ...query, facets: [], ist: { day: 4, minute: 1185 } }, offset: 0, limit: 10, counts: true });
+  assert.equal(asked, "city=pune&ps=football&q=kick&price=1000&surface=natural&sort=price-low&ist=4.1185&counts=1&offset=0&limit=10");
+  const askedBack = parseListParams(new URLSearchParams(asked));
+  assert.ok(askedBack.ok);
+  assert.equal(askedBack.req.counts, true);
+  assert.equal("counts" in back.req, false, "not asked: not in the request");
+  for (const bad of ["counts=0", "counts=true", "counts=", "counts=1&offset=10"]) assert.equal(parseListParams(new URLSearchParams(bad)).ok, false, bad);
+  // The time matters to a first batch asked with counts (they count "Open now") and to an "Open now"
+  // list; any other batch (a new search, chip or sort with the sheet closed) is the same all day.
+  assert.equal(needsTime({}, 0), false);
+  assert.equal(needsTime({}, 0, true), true);
+  assert.equal(needsTime({}, 10, true), false);
   assert.equal(needsTime({}, 10), false);
   assert.equal(needsTime({ facets: ["open"] }, 10), true);
+  assert.equal(needsTime({ facets: ["open"] }, 0), true);
+});
+
+test("a sport page ranks by rating: the trending pick neither leads it nor is framed, for the server's cards and every batch", () => {
+  const mk = (id: string, sports: string[], rating: number) => ({ id, name: id, address: "", sports, rating, total_reviews: 40 }) as unknown as Turf;
+  const turfs = [mk("a", ["Football"], 4.9), mk("b", ["Football"], 4.7), mk("c", ["Football", "Box Cricket"], 4.5), mk("pick", ["Football", "Box Cricket"], 3.9)].sort(compareTopRated);
+  const trending = new Set(["pick"]);
+  // The city's list: the pick leads and is framed.
+  assert.deepEqual(ids(rankTurfs(turfs, base, trending).ranked), ["pick", "a", "b", "c"]);
+  assert.deepEqual(pageOf(turfs, base, trending, 0, 10, 1).items[0], { turf: turfs.find((t) => t.id === "pick"), hot: true });
+  // A sport page: the rating order its copy and its ItemList give, picks or not.
+  const sportPage: RankQuery = { ...base, pageSport: "football" };
+  assert.deepEqual(ids(rankTurfs(turfs, sportPage, trending).ranked), ["a", "b", "c", "pick"]);
+  const page = pageOf(turfs, sportPage, trending, 0, 24, 1);
+  assert.deepEqual(page.items.map((i) => i.turf.id), ["a", "b", "c", "pick"]);
+  assert.ok(page.items.every((i) => !i.hot));
+  assert.equal(page.t, "0", "ranked with no picks, so its batches never split by them");
+  assert.deepEqual(pageOf(turfs, sportPage, none, 0, 24, 1), page);
+  // A chip on a city list keeps the lead (it is not a sport page).
+  assert.deepEqual(ids(rankTurfs(turfs, { ...base, sport: "Box Cricket" }, trending).ranked), ["pick", "c"]);
+  // Show more on a sport page continues its 24 server cards at offset 24, in rating order.
+  const many = Array.from({ length: 60 }, (_, i) => mk(`f${String(i).padStart(2, "0")}`, ["Football"], 3 + (i % 20) / 10)).sort(compareTopRated);
+  const picks = new Set([many[30].id]);
+  const all = ids(rankTurfs(many, sportPage, picks).ranked);
+  const server = pageOf(many, sportPage, picks, 0, 24, 1).items.map((i) => i.turf.id);
+  const next = pageOf(many, sportPage, picks, 24, 24, 1).items.map((i) => i.turf.id);
+  assert.deepEqual([...server, ...next], all.slice(0, 48));
+  assert.deepEqual(all, many.map((t) => t.id));
 });
 
 test("the page URL: the Filters choices as f, price and surface; unknown ones dropped; defaults left out", () => {

@@ -8,11 +8,9 @@ import { cityPointsOf, isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
 import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
-import { SportTurfRest } from "@/components/sport/SportTurfList";
+import { CARD_LIMIT, SportTurfRest } from "@/components/sport/SportTurfList";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
-import { getTrendingPicks } from "@/lib/queries/trending";
-import { trendingFor } from "@/lib/queries/turfList";
-import { DEFAULT_FILTERS, FIRST_PAGE, pageOf } from "@/lib/turfList/query";
+import { DEFAULT_FILTERS, pageOf } from "@/lib/turfList/query";
 import { LIST_PREPAINT_JS } from "@/lib/turfList/client";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
@@ -140,15 +138,17 @@ export default async function CitySportPage({
   // first. The points come from the live list (the page read it already,
   // isLiveCity), so this city is placed even when its own sport page is
   // too thin to be in the sport's list.
-  const [sportCities, live, bands, cards, picks] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands(), getCardTurfs(cityId), getTrendingPicks()]);
+  const [sportCities, live, bands, cards] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands(), getCardTurfs(cityId)]);
   const otherCities = pickOtherCities(sportCities, cityId, cityPointsOf(live)).flatMap((c) => {
     const href = citySportHref(c.id, s.slug, c.n);
     return href ? [{ ...c, href }] : [];
   });
   // The list's first cards: this city's card rows (the same rows as `turfs`) with their sport
   // bands, the page's sport by its exact labels (`pageSport`), ranked as GET /api/turfs/list
-  // ranks every later batch. The page's turfs those cards leave out stay plain links under it.
-  const first = pageOf(listWithSportBands(cards.turfs, bands), { ...DEFAULT_FILTERS, at: null, pageSport: s.slug }, trendingFor(cityId, picks), 0, FIRST_PAGE, cards.v);
+  // ranks every later batch: by rating, as the copy below says (a sport page has no trending
+  // lead, lib/turfList/query.ts leadingPicks). The 24 photo cards the page always had
+  // (CARD_LIMIT); the page's turfs those leave out stay plain links under it.
+  const first = pageOf(listWithSportBands(cards.turfs, bands), { ...DEFAULT_FILTERS, at: null, pageSport: s.slug }, new Set(), 0, CARD_LIMIT, cards.v);
   const onCards = new Set(first.items.map((i) => i.turf.id));
   const rest = turfs.filter((t) => !onCards.has(t.id));
   const otherSports = citySportLinks(cityId, data.cityTurfs).filter((sp) => sp.slug !== s.slug);

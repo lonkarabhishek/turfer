@@ -98,19 +98,25 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   const [refused, setRefused] = useState<SaveError | null>(null);
   // Covered, partly covered or open air (turfs.roof): as saved (undefined until read, and on a
   // database without the column, where the Yes / No / Not sure "Covered / indoor" stays), and as picked.
+  // Before the owner has answered it (roof not said), a turf already marked covered (is_covered,
+  // the old "Covered / indoor: Yes" or the data team's) shows Covered, as its page says: nothing
+  // is written unless the owner picks another answer. Not covered stays Not sure (it may be
+  // partly), with the earlier answer under it.
   const [roofBase, setRoofBase] = useState<Roof | null | undefined>(undefined);
   const [roof, setRoof] = useState<Roof | null>(null);
+  const covered = turf.is_covered;
   useEffect(() => {
     let alive = true;
     void readRoof(turf.id).then((r) => {
       if (!alive || !r) return;
-      setRoofBase(r.roof);
-      setRoof(r.roof);
+      const shown = r.roof ?? (covered === true ? "covered" : null);
+      setRoofBase(shown);
+      setRoof(shown);
     });
     return () => {
       alive = false;
     };
-  }, [turf.id]);
+  }, [turf.id, covered]);
   const roofOn = roofBase !== undefined;
   const roofDirty = roofOn && roof !== roofBase;
   const flags = roofOn ? FLAGS.filter(([k]) => k !== "is_covered") : FLAGS;
@@ -248,6 +254,9 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
                 </button>
               ))}
             </span>
+            {roof === null && roofBase === null && covered === false && (
+              <p className="mt-1.5 text-[13px] text-primary-500">Your listing says not covered. Is it partly covered or open air?</p>
+            )}
           </div>
         )}
         <ul className="space-y-2">

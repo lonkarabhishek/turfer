@@ -9,8 +9,8 @@ import type { CardSport } from "@/lib/utils/cardSport";
 import { withSportBands, type SportBandMap } from "@/lib/queries/sportBands";
 import { turfPath } from "@/lib/utils/turfPath";
 
-/** How many turfs get a full photo card; the rest are a plain list. */
-const CARD_LIMIT = 24;
+/** How many turfs get a full photo card; the rest are a plain list. Also a city+sport page's first cards. */
+export const CARD_LIMIT = 24;
 
 /**
  * Turf list for sport pages. The first CARD_LIMIT turfs render as

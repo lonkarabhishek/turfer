@@ -75,6 +75,23 @@ function DEFAULT_QUERY() {
   return { q: "", sport: null, sort: "rating" as const, at: null };
 }
 
+test("a sport page's 24 server cards: all shown, nothing fetched, Show more continues at 24", () => {
+  const fetch = route();
+  // As TurfListingClient starts it: every card the server rendered is on screen.
+  const first = fetch(0, 24);
+  let s = startState(listKey("pune", DEFAULT, null, "football"), first, Math.max(FIRST_PAGE, first.items.length));
+  assert.equal(shownCards(s, null).length, 24);
+  assert.equal(wantBatch(s, 24), null);
+  const calls: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    s = { ...s, target: s.target + nextBatch(s.target) };
+    const r = settle(s, (o, l) => (calls.push(`${o}+${l}`), fetch(o, l)));
+    s = r.s;
+  }
+  assert.deepEqual(calls, ["24+24", "48+48", "96+80"]);
+  assert.deepEqual(shownCards(s, null).map((c) => c.item.turf.id), pageOf(turfs, DEFAULT_QUERY(), none, 0, 176, 1).items.map((i) => i.turf.id));
+});
+
 test("a batch from a newer version: appended after the server's offset, repeats dropped, newest total", () => {
   const s = startState("k|", route()(0, 10));
   // The list moved: two turfs were added at the top, so v2's 10..19 repeats two of v1's first ten.
@@ -243,7 +260,7 @@ test("listKey with Filters choices and a sport page: the scope part says them; a
 test("a list's first batch keeps its numbers and time; later batches keep them", () => {
   const facts = new Map();
   const query = { q: "", sport: null, sort: "rating" as const, at: null, ist: { day: 1, minute: 600 } };
-  const s = startState("pune||||", pageOf(turfs, query, none, 0, 10, 1, facts));
+  const s = startState("pune||||", pageOf(turfs, query, none, 0, 10, 1, facts, { counts: true }));
   assert.ok(s.counts);
   assert.equal(s.ist, "1.600");
   const t = addBatch({ ...s, target: 20 }, pageOf(turfs, query, none, 10, 10, 1, facts));
