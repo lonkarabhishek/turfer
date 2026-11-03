@@ -13,12 +13,14 @@
 --                                             one, else the host's words ("Wai")
 --   venue_maps_url  up to 300, may be left out: https Google Maps links
 --                   only (maps.app.goo.gl, goo.gl/maps, www.google.com/maps,
---                   google.com/maps, maps.google.com)
+--                   google.com/maps, maps.google.com), no dot segment
 -- Never both, never neither: the constraint games_turf_or_venue. Lengths
 -- and the map link's host: games_venue_fields. The words are stored with
 -- spaces collapsed and trimmed, and the functions refuse a phone number (7
--- or more digits in a row once spaces and dashes are taken out), a link or
--- an email in the name, address, area or city (players reach the host
+-- or more digits in a row, in any of India's scripts, once the marks
+-- between a number's parts are taken out; a Hyderabad door number and a
+-- PIN code after a comma are their own numbers: section 2), a link or an
+-- email in the name, address, area or city (players reach the host
 -- through TapTurf). lib/games/otherVenue.ts has the same rules; both are
 -- run against lib/games/otherVenue.cases.json.
 --
@@ -147,6 +149,7 @@ begin
       and (venue_city is null or char_length(venue_city) between 2 and 60)
       and (venue_maps_url is null or (char_length(venue_maps_url) <= 300
            and venue_maps_url ~* '^https://(maps\.app\.goo\.gl/|goo\.gl/maps(/|$)|(www\.)?google\.com/maps([/?#]|$)|maps\.google\.com([/?#]|$))'
+           and venue_maps_url !~* '(\.\.|%2e)'
            and venue_maps_url ~ '^[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$')));
   end if;
   if not exists (select 1 from pg_constraint where conname = 'game_series_turf_or_venue' and conrelid = 'private.game_series'::regclass) then
@@ -164,6 +167,7 @@ begin
       and (venue_city is null or char_length(venue_city) between 2 and 60)
       and (venue_maps_url is null or (char_length(venue_maps_url) <= 300
            and venue_maps_url ~* '^https://(maps\.app\.goo\.gl/|goo\.gl/maps(/|$)|(www\.)?google\.com/maps([/?#]|$)|maps\.google\.com([/?#]|$))'
+           and venue_maps_url !~* '(\.\.|%2e)'
            and venue_maps_url ~ '^[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$')));
   end if;
 end;
@@ -185,9 +189,32 @@ as $$
 $$;
 revoke all on function private.game_venue_text(text) from public, anon, authenticated;
 
+-- Every digit read as 0 to 9: those of India's scripts (Arabic-Indic and
+-- its Persian form, Devanagari, Bengali, Gurmukhi, Gujarati, Odia, Tamil,
+-- Telugu, Kannada, Malayalam) and full-width ones, 120 characters, each
+-- script's 0 to 9 in order (lib/games/otherVenue.ts asciiDigits).
+create or replace function private.game_venue_digits(p text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select translate(p, '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹०१२३४५६७८९০১২৩৪৫৬৭৮৯੦੧੨੩੪੫੬੭੮੯૦૧૨૩૪૫૬૭૮૯୦୧୨୩୪୫୬୭୮୯௦௧௨௩௪௫௬௭௮௯౦౧౨౩౪౫౬౭౮౯೦೧೨೩೪೫೬೭೮೯൦൧൨൩൪൫൬൭൮൯０１２３４５６７８９',
+                      '012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789');
+$$;
+revoke all on function private.game_venue_digits(text) from public, anon, authenticated;
+
 -- Fine as a venue's name, address, area or city: p_min to p_max characters
--- once spaces are collapsed; no control character, phone number (7 or more
--- digits in a row once spaces and dashes are out), email or link.
+-- once spaces are collapsed; no control character, phone number, email or
+-- link. A phone number: 7 or more digits in a row (any script's digits,
+-- game_venue_digits) once the marks people put between a number's parts
+-- are out: spaces, dots, commas, brackets, a plus, underscores, dashes,
+-- and a slash before 4 or more digits ("98220/12345"; a survey number's
+-- "1234/567" keeps its slash). Two numbers of an address are their own
+-- first: a door number of the Hyderabad kind ("16-11-740": ward, block,
+-- house) and a PIN code after a comma (", 411045"). A link: a scheme,
+-- www., or a name ending in a common domain, except ".in" with a space
+-- and a word after it, a sentence ("bus stand.In front of").
 create or replace function private.game_venue_text_ok(p text, p_min integer, p_max integer)
 returns boolean
 language sql
@@ -197,14 +224,20 @@ as $$
   select x is not null
      and char_length(x) between p_min and p_max
      and x !~ '[\u0001-\u001f\u007f]'
-     and regexp_replace(x, '[ ‐-―-]', '', 'g') !~ '[0-9]{7,}'
+     and regexp_replace(
+           regexp_replace(
+             regexp_replace(private.game_venue_digits(x), '(?<![0-9-])[0-9]{1,2}-[0-9]{1,2}-[0-9]{1,4}(?![0-9-])', ' x ', 'g'),
+             ', ?[1-9][0-9]{5}(?![0-9])', ', x ', 'g'),
+           '[ .,()+_‐-―-]|/(?=[0-9]{4})', '', 'g') !~ '[0-9]{7,}'
      and x !~* '[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+'
-     and x !~* '(https?:|www\.|[a-z0-9-]+\.(com|in|net|org|io|app|gl|ly|me|info|xyz|online|site|page|link|biz)(?![a-z0-9_]))'
+     and x !~* '(https?:|www\.|[a-z0-9-]+\.(com|net|org|io|app|gl|ly|me|info|xyz|online|site|page|link|biz)(?![a-z0-9_])|[a-z0-9-]+\.in(?![a-z0-9_])(?! [a-z]))'
     from (select private.game_venue_text(p) as x) v;
 $$;
 revoke all on function private.game_venue_text_ok(text, integer, integer) from public, anon, authenticated;
 
--- A Google Maps link the pages may open: https, a Google Maps host, at most 300 characters, URL characters only.
+-- A Google Maps link the pages may open: https, a Google Maps host, no dot
+-- segment plain or encoded ("/maps/../url" opens another Google page), at
+-- most 300 characters, URL characters only.
 create or replace function private.game_venue_maps_ok(p text)
 returns boolean
 language sql
@@ -213,6 +246,7 @@ set search_path = ''
 as $$
   select x is not null and x <> '' and char_length(x) <= 300
      and x ~* '^https://(maps\.app\.goo\.gl/|goo\.gl/maps(/|$)|(www\.)?google\.com/maps([/?#]|$)|maps\.google\.com([/?#]|$))'
+     and x !~* '(\.\.|%2e)'
      and x ~ '^[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$'
     from (select private.game_venue_text(p) as x) v;
 $$;

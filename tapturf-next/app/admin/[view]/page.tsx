@@ -995,7 +995,7 @@ async function renderView(v: View, filter: string, city: string | null = null): 
             <Table head={["Venue", "Area", "City", "Games", "Hosts", "Last game", "Last posted"]} empty={rows.length === 0}>
               {rows.map((r) => (
                 <tr key={`${r.venue_name}|${r.venue_city ?? ""}`} className="align-top">
-                  <td className="px-4 py-3 font-medium text-primary-900 [overflow-wrap:anywhere]">{r.venue_name}</td>
+                  <td className="px-4 py-3 min-w-[10rem] font-medium text-primary-900 break-words">{r.venue_name}</td>
                   <td className="px-4 py-3 text-primary-700">{r.venue_area || "-"}</td>
                   <td className="px-4 py-3 text-primary-700 whitespace-nowrap">{r.venue_city ? (isCity(r.venue_city) ? labelFor(r.venue_city) : r.venue_city) : "-"}</td>
                   <td className="px-4 py-3 tabular-nums">{r.games}</td>

@@ -247,6 +247,9 @@ const venueBads = [
   ["another site's link", { ...VENUE_GAME, venue_maps_url: "https://example.com/maps" }, "venue_maps_url"],
   ["a look-alike host", { ...VENUE_GAME, venue_maps_url: "https://google.com.evil.example/maps" }, "venue_maps_url"],
   ["a link of 301", { ...VENUE_GAME, venue_maps_url: `https://maps.app.goo.gl/${"a".repeat(277)}` }, "venue_maps_url"],
+  ["a map link out of Maps", { ...VENUE_GAME, venue_maps_url: "https://www.google.com/maps/../url?q=https://evil.example" }, "venue_maps_url"],
+  ["a number with dots in the name", { ...VENUE_GAME, venue_name: "Kings 98220.12345" }, "venue_name"],
+  ["a number in Devanagari digits", { ...VENUE_GAME, venue_address: "Baner Road, ९८२२०१२३४५" }, "venue_address"],
   ["a number for a link", { ...VENUE_GAME, venue_maps_url: 5 }, "venue_maps_url"],
 ];
 const venueCount = async () => (await N.one(`select count(*)::int n from public.games where turf_id is null`)).n;
@@ -262,6 +265,12 @@ for (const c of CASES.fields) {
   const r = await N.one(`select private.game_field_problem(jsonb_build_object($1::text, $2::jsonb), array[$1::text]) p`, [c.key, JSON.stringify(c.value)]);
   eq(r.p === null, c.ok, `case: ${c.what}`);
 }
+// Every script's 0 to 9 reads as 0 to 9, as lib/games/otherVenue.ts asciiDigits reads them (its DIGIT_ZEROS).
+{
+  const ZEROS = [0x0660, 0x06f0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66, 0x0ce6, 0x0d66, 0xff10];
+  const all = ZEROS.map((z) => Array.from({ length: 10 }, (_, i) => String.fromCodePoint(z + i)).join("")).join("");
+  eq((await N.one(`select private.game_venue_digits($1) d`, [all + " Baner 12"])).d, "0123456789".repeat(12) + " Baner 12", "game_venue_digits: 120 digits of 12 scripts read as 0 to 9, other words as they are");
+}
 
 /* ---------------- the table's own checks, for any writer ---------------- */
 const insert = (cols) => NEW.query(`insert into public.games (creator_id, title, sport, max_players, date, start_time, end_time, price_per_player, ${Object.keys(cols).join(", ")})
@@ -272,6 +281,8 @@ await refused(insert({ venue_name: "Shivaji Maidan", venue_address: "Baner Road"
 await refused(insert({ venue_name: "S", venue_address: "Baner Road", venue_city: "pune" }), /games_venue_fields/, "a name of 1");
 await refused(insert({ venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_maps_url: "http://maps.app.goo.gl/x" }), /games_venue_fields/, "an http map link");
 await refused(insert({ venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_maps_url: "https://maps.app.goo.gl/a\"b" }), /games_venue_fields/, "a quote in the map link");
+await refused(insert({ venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_maps_url: "https://www.google.com/maps/../url?q=x" }), /games_venue_fields/, "a dot segment in the map link");
+await refused(insert({ venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_maps_url: "https://www.google.com/maps/%2E%2E/url?q=x" }), /games_venue_fields/, "an encoded dot segment");
 await insert({ venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_maps_url: "https://www.google.com/maps/place/x" });
 passed++;
 await refused(NEW.query(`update public.games set venue_name = 'x y' where id = $1`, [(await N.one(`select id from public.games where turf_id is not null limit 1`)).id]), /games_turf_or_venue/, "a turf game can't be given a venue as well");
@@ -371,7 +382,7 @@ for (const fn of ["game_create", "game_update", "game_series_create", "admin_typ
                          from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and proname = $1`, [fn]);
   eq([r.a, r.b, r.p, r.prosecdef, String(r.proconfig).includes("search_path=")], [true, true, false, true, true], `${fn}: anon and authenticated may call it, PUBLIC not; definer, empty search_path`);
 }
-for (const fn of ["game_venue_text", "game_venue_text_ok", "game_venue_maps_ok", "game_venue_problem", "game_series_no_turf", "game_field_problem", "game_series_fill", "game_series_json"]) {
+for (const fn of ["game_venue_text", "game_venue_digits", "game_venue_text_ok", "game_venue_maps_ok", "game_venue_problem", "game_series_no_turf", "game_field_problem", "game_series_fill", "game_series_json"]) {
   const r = await N.one(`select bool_or(has_function_privilege('anon', p.oid, 'execute')) a, bool_or(has_function_privilege('authenticated', p.oid, 'execute')) b, bool_and(proconfig::text like '%search_path=%') s
                          from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and proname = $1`, [fn]);
   eq([r.a, r.b, r.s], [false, false, true], `private.${fn}: closed to the API roles, empty search_path`);

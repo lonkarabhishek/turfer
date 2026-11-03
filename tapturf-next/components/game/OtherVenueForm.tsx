@@ -216,14 +216,22 @@ export function OtherVenueForm({
         </div>
       </div>
 
+      {/* No blur on the press (mouse or touch): a field left with an error would put its line above the
+          button and move it from under the finger, and the tap would be lost. use() then shows every error. */}
       <button
         type="button"
+        onMouseDown={(e) => e.preventDefault()}
         onClick={use}
         className="mt-5 w-full min-h-12 rounded-full bg-primary-800 hover:bg-primary-900 text-white text-[16px] font-bold shadow-elevated focus-neon"
       >
         Use this venue
       </button>
-      <button type="button" onClick={onCancel} className="mt-1 w-full min-h-11 rounded-full text-[15px] font-semibold text-primary-600 hover:text-primary-900 focus-neon">
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onCancel}
+        className="mt-1 w-full min-h-11 rounded-full text-[15px] font-semibold text-primary-600 hover:text-primary-900 focus-neon"
+      >
         Cancel
       </button>
       <p className="mt-1 text-[12px] text-primary-500 leading-snug text-center">TapTurf doesn&apos;t take bookings: you book the venue yourself.</p>

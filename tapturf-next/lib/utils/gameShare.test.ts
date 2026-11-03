@@ -52,6 +52,10 @@ test("share: where names the venue, area and city once each", () => {
 test("share: details say what is known and nothing else", () => {
   assert.equal(shareDetails({ ...game, price_per_player: 0, turf_booked: false, skill_level: "all" }), "All levels · 4 of 12 spots left · Free to join");
   assert.equal(shareDetails({ ...game, current_players: 12 }), "Intermediate · Full (12 players) · ₹150 per player · Turf booked");
+  // A venue its host typed is a venue, as its page and the create flow say.
+  assert.equal(shareDetails({ ...game, listed: false }), "Intermediate · 4 of 12 spots left · ₹150 per player · Venue booked");
+  assert.ok(gameShareText({ ...game, listed: false }, { host: true }).endsWith("· Venue booked"));
+  assert.ok(shareDetails({ ...game, listed: true })?.endsWith("· Turf booked"));
   assert.equal(shareDetails({ sport: "cricket", date: null, start_time: null, end_time: null }), null);
   // A game with nothing but its sport still reads as a line, with no empty ones.
   assert.equal(gameShareText({ sport: "box cricket", date: null, start_time: null, end_time: null }, { host: true }), "🏏 Join my box cricket game on TapTurf!");

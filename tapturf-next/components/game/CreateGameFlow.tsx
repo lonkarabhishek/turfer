@@ -212,12 +212,24 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   // The games a new repeat put up, soonest first (the success step names them).
   const [seriesGames, setSeriesGames] = useState<Game[] | null>(null);
   const [draftNote, setDraftNote] = useState<string | null>(null);
+  // The turf a draft named that TapTurf didn't find: the note then points to "Add the venue".
+  const [draftNotListed, setDraftNotListed] = useState<string | null>(null);
   // null until typed: then the profile's number or the last game's.
   const [hostPhoneTyped, setHostPhoneTyped] = useState<string | null>(null);
   const hostPhone = hostPhoneTyped ?? defaultHostPhone(user?.phone);
   const hostPhoneOk = hostPhone === "" || /^[6-9]\d{9}$/.test(hostPhone);
 
   const turfSearchRef = useRef<HTMLInputElement>(null);
+  // The search and its results: a tap anywhere else closes them.
+  const turfBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showTurfDropdown) return;
+    const away = (e: PointerEvent) => {
+      if (turfBoxRef.current && !turfBoxRef.current.contains(e.target as Node)) setShowTurfDropdown(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [showTurfDropdown]);
 
   const endTime = useMemo(
     () => (duration ? getEndTime(startTime, duration) : null),
@@ -358,8 +370,9 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     }
     if (p.notes) setNotes(p.notes);
     const missing = [!p.sport && "the sport", !p.date && "the day", !p.startTime && "the time", !p.turf && "the venue"].filter(Boolean) as string[];
-    const notListed = !p.turf && p.turfName ? ` If ${p.turfName} isn't on TapTurf, tap "Add the venue" under the search.` : "";
-    setDraftNote(missing.length ? `${p.reply} Still to pick: ${missing.join(", ")}.${notListed}` : `${p.reply} Check each step and you're set.`);
+    setDraftNote(missing.length ? `${p.reply} Still to pick: ${missing.join(", ")}.` : `${p.reply} Check each step and you're set.`);
+    // Said when the note shows, only while "Add the venue" is offered (venuesOn).
+    setDraftNotListed(missing.length && !p.turf && p.turfName ? p.turfName : null);
     setStep(p.sport ? 2 : 1);
   };
 
@@ -432,6 +445,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         skill_level: skillLevel,
         turf_booked: turfBooked,
         turfs: { name: placeName, ...turfPlace },
+        listed: !venue,
       },
       { host: true, url: `${window.location.origin}/game/${createdGameId}`, repeat: seriesGames && repeat ? repeatLabel(repeat.rule) : null },
     );
@@ -444,6 +458,10 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const venueWhere = venue ? gamePlace({ area: venue.area, city: venue.city, address: venue.address }) : "";
   const what = venue ? "venue" : "turf";
   const typedOn = venuesOn !== false;
+  // The draft's note, pointing to "Add the venue" only while it is there.
+  const draftLine = draftNote
+    ? `${draftNote}${draftNotListed && typedOn ? ` If ${draftNotListed} isn't on TapTurf, tap "Add the venue" under the search.` : ""}`
+    : null;
   const noTurfs = turfSearch.trim().length >= 2 && searchedFor === turfSearch && turfResults.length === 0;
   // A repeat's summary ("Every Tue and Thu", "7 – 8 PM", "until 20 Dec") and its next dates, as the confirm step shows them.
   const repeatLine = repeat && !repeatBad ? repeatParts(repeat, date, startTime || null, endTime) : null;
@@ -622,7 +640,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                 </p>
 
                 <GameDraftBox userId={user.id} initial={draftText || null} onPrefill={applyPrefill} />
-                {draftNote && step === 1 && <p className="mb-4 text-[13px] text-primary-700">{draftNote}</p>}
+                {draftLine && step === 1 && <p className="mb-4 text-[13px] text-primary-700">{draftLine}</p>}
 
                 <div className="grid grid-cols-2 gap-3">
                   {SPORT_OPTIONS.map((s) => {
@@ -664,9 +682,9 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
             {/* ─── Step 2: When & Where (iOS grouped list) ───── */}
             {step === 2 && (
               <div className="space-y-2">
-                {draftNote && (
+                {draftLine && (
                   <div className="mb-4 rounded-2xl bg-accent-50 border border-accent-200 px-4 py-3 text-[13px] text-primary-800">
-                    {draftNote}
+                    {draftLine}
                   </div>
                 )}
                 <div className="mb-6">
@@ -843,12 +861,15 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     <OtherVenueForm draft={venueForm} onDraft={setVenueForm} onUse={pickTypedVenue} onCancel={() => setVenueFormOpen(false)} />
                   ) : (
                     <>
-                      <div className="relative">
+                      <div className="relative" ref={turfBoxRef}>
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" aria-hidden="true" />
                         <input
                           type="text"
                           value={turfSearch}
                           onChange={(e) => setTurfSearch(e.target.value)}
+                          onFocus={() => turfResults.length > 0 && setShowTurfDropdown(true)}
+                          onClick={() => turfResults.length > 0 && setShowTurfDropdown(true)}
+                          onKeyDown={(e) => e.key === "Escape" && setShowTurfDropdown(false)}
                           placeholder="Search a turf by name…"
                           aria-label="Search a turf by name"
                           className="w-full pl-11 pr-4 py-3.5 min-h-[56px] text-[15px] font-medium text-primary-800 placeholder:text-primary-400 focus:outline-none bg-transparent"
@@ -868,6 +889,17 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                                 </p>
                               </button>
                             ))}
+                            {/* The results cover the "Not on TapTurf?" row below, so the way to add one is here too, always in view. */}
+                            {typedOn && (
+                              <button
+                                type="button"
+                                onClick={() => openVenueForm(turfSearch)}
+                                className="sticky bottom-0 w-full flex items-center gap-2 text-left px-4 py-3 min-h-12 bg-white border-t border-primary-200 text-[14px] font-semibold text-accent-700 hover:bg-accent-50 focus-neon [overflow-wrap:anywhere]"
+                              >
+                                <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+                                <span>Not listed? Add &ldquo;{turfSearch.trim()}&rdquo; as the venue</span>
+                              </button>
+                            )}
                           </div>
                         )}
                         {noTurfs && (

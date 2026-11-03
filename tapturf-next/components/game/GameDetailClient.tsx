@@ -19,6 +19,7 @@ import {
   updateGame,
 } from "@/lib/queries/games";
 import { repeatLabel } from "@/lib/games/repeat";
+import { isMapsUrl } from "@/lib/games/otherVenue";
 import type { SeriesInfo } from "@/lib/games/types";
 import {
   durationLabel,
@@ -253,7 +254,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     // Where: its turf, or the venue its host typed.
     const at = gameVenue(game);
     const text = gameShareText(
-      { ...game, turfs: game.turfs ?? (at ? { name: at.name, area: at.area, city: at.city ?? at.cityLabel } : null) },
+      { ...game, turfs: game.turfs ?? (at ? { name: at.name, area: at.area, city: at.city ?? at.cityLabel } : null), listed: at ? at.listed : true },
       { host: isHost, closed, url, repeat: repeat?.info?.active ? repeatLabel(repeat.info.rule) : null },
     );
     if (navigator.share) {
@@ -401,11 +402,15 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   };
 
   // A frame-able map only: the stored link is usually a /maps/place/ URL,
-  // which Google refuses to frame (an empty white box). A typed venue's map
-  // is a search for its name, address and city (its own link can't be framed).
+  // which Google refuses to frame (an empty white box). A typed venue with
+  // the host's own Maps link has no map here (it can't be framed, and a
+  // search could pin another place of that name): Open in Maps is the
+  // host's pin. Without one, the map is a search for its name, address and
+  // city, said to be approximate.
+  const hostPin = !listed && isMapsUrl(game.venue_maps_url);
   const mapSrc = listed
     ? mapEmbedSrc({ embedLink: game.turfs?.["Gmap Embed link"], lat: game.turfs?.lat, lng: game.turfs?.lng, address: game.turfs?.address })
-    : where
+    : where && !hostPin
       ? mapEmbedSrc({ address: [where.name, where.address, where.cityLabel].filter(Boolean).join(", ") })
       : null;
 
@@ -518,6 +523,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                 lat={null}
                 lng={null}
                 mapSrc={mapSrc}
+                mapNote={mapSrc ? "Approximate: Google's match for the address the host typed." : undefined}
                 mapHref={where.mapsHref}
               />
             ) : null}

@@ -511,7 +511,7 @@ export async function GamesListSection() {
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-primary-900 truncate">
                       {g.sport}
-                      {g.turf ? ` at ${g.turf.name}` : ""}
+                      {g.turf ? ` at ${g.turf.name}` : g.venue_name ? ` at ${g.venue_name} (not on TapTurf)` : ""}
                     </span>
                     <span className="block text-[12px] text-primary-500 truncate">
                       {new Date(`${g.date}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" })}

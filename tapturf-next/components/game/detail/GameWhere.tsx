@@ -23,6 +23,7 @@ export function GameWhere({
   lat,
   lng,
   mapSrc,
+  mapNote,
   mapHref,
 }: {
   /** The turf's page; none for a venue not on TapTurf. */
@@ -36,6 +37,8 @@ export function GameWhere({
   lat: number | null | undefined;
   lng: number | null | undefined;
   mapSrc: string | null;
+  /** Under the map: how far to trust it (a typed venue's map is a search for its words). */
+  mapNote?: string;
   mapHref: string | null;
 }) {
   return (
@@ -88,6 +91,7 @@ export function GameWhere({
           <GameMap src={mapSrc} openHref={mapHref} />
         </div>
       )}
+      {mapSrc && mapNote && <p className="mt-1.5 text-[13px] text-primary-500 leading-snug">{mapNote}</p>}
     </section>
   );
 }

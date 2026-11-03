@@ -1,4 +1,4 @@
-import { CITIES, CITY_ALIASES, isCity } from "../city";
+import { CITIES, CITY_ALIASES, cityInText, isCity } from "../city";
 
 /**
  * "Other venue": the place a host types when the turf is not on TapTurf
@@ -6,8 +6,8 @@ import { CITIES, CITY_ALIASES, isCity } from "../city";
  * type other and ask address"). A game then has no TapTurf turf, only
  * these words: games.venue_name, venue_address, venue_area, venue_city
  * and venue_maps_url (supabase/migrations/20261103_game_other_venue.sql,
- * whose private.game_venue_text, game_venue_text_ok and game_venue_maps_ok
- * hold the same rules; both are checked against otherVenue.cases.json by
+ * whose private.game_venue_text, game_venue_digits, game_venue_text_ok and
+ * game_venue_maps_ok hold the same rules; both are checked against otherVenue.cases.json by
  * npm run test:games and scripts/sql-tests/game_other_venue.check.mjs).
  * Nothing is added to the turfs list. Pure; relative imports only.
  */
@@ -41,15 +41,47 @@ export type VenueTextProblem = "missing" | "short" | "long" | "phone" | "link" |
 // SQL's '[ \t\n\r\f\v ]+'), then the ends trimmed of spaces only.
 const SPACES = /[ \t\n\r\f\v ]+/g;
 const CONTROL = /[\u0001-\u001f\u007f]/;
-// A phone number: 7 or more digits in a row once spaces and dashes are taken out.
-const PHONE_GAPS = /[ ‐-―-]/g;
+// Digits in India's scripts (Arabic-Indic, Devanagari, Bengali, Gurmukhi,
+// Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam) and full-width ones,
+// each script's zero; read as 0 to 9 before the phone rule (the SQL's
+// private.game_venue_digits translates the same 120 characters).
+const DIGIT_ZEROS = [0x0660, 0x06f0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66, 0x0ce6, 0x0d66, 0xff10];
+const OTHER_DIGITS = new RegExp(`[${DIGIT_ZEROS.map((z) => `${String.fromCodePoint(z)}-${String.fromCodePoint(z + 9)}`).join("")}]`, "g");
+// A phone number: 7 or more digits in a row once the marks people put
+// between a number's parts are taken out: spaces, dots, commas, brackets,
+// a plus, underscores, dashes, and a slash before 4 or more digits
+// ("98220/12345"; a survey number's "1234/567" keeps its slash). Two
+// numbers of an address are their own first: a door number of the
+// Hyderabad kind ("16-11-740", ward, block, house) and a PIN code after a
+// comma ("..., 411045").
+const DOOR_NO = /(?<![0-9-])[0-9]{1,2}-[0-9]{1,2}-[0-9]{1,4}(?![0-9-])/g;
+const PIN_AFTER_COMMA = /, ?[1-9][0-9]{5}(?![0-9])/g;
+const PHONE_GAPS = /[ .,()+_‐-―-]|\/(?=[0-9]{4})/g;
 const PHONE = /[0-9]{7,}/;
 // A link: a scheme, www., or a name ending in a common domain ("kingsturf.in").
-const LINK = /(https?:|www\.|[a-z0-9-]+\.(com|in|net|org|io|app|gl|ly|me|info|xyz|online|site|page|link|biz)(?![a-z0-9_]))/i;
+// ".in" with a space and a word after it is a sentence ("bus stand.In front of").
+const LINK = /(https?:|www\.|[a-z0-9-]+\.(com|net|org|io|app|gl|ly|me|info|xyz|online|site|page|link|biz)(?![a-z0-9_])|[a-z0-9-]+\.in(?![a-z0-9_])(?! [a-z]))/i;
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+/i;
-// Only https links to Google Maps (what its Share, Copy link gives).
+// Only https links to Google Maps (what its Share, Copy link gives), with
+// no dot segment ("/maps/../url" opens another Google page), plain or encoded.
 const MAPS_HOST = /^https:\/\/(maps\.app\.goo\.gl\/|goo\.gl\/maps(\/|$)|(www\.)?google\.com\/maps([/?#]|$)|maps\.google\.com([/?#]|$))/i;
+const DOT_SEGMENT = /\.\.|%2e/i;
 const URL_CHARS = /^[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$/;
+
+/** Every digit read as 0 to 9 (private.game_venue_digits). */
+export function asciiDigits(s: string): string {
+  return s.replace(OTHER_DIGITS, (d) => {
+    const cp = d.codePointAt(0) ?? 0;
+    const zero = DIGIT_ZEROS.find((z) => cp >= z && cp <= z + 9) ?? cp;
+    return String(cp - zero);
+  });
+}
+
+/** A phone number in these (collapsed) words, by the rule above. */
+function hasPhone(s: string): boolean {
+  const t = asciiDigits(s).replace(DOOR_NO, " x ").replace(PIN_AFTER_COMMA, ", x ");
+  return PHONE.test(t.replace(PHONE_GAPS, ""));
+}
 
 /** Characters as the database counts them (code points, not UTF-16 units). */
 const chars = (s: string) => [...s].length;
@@ -71,17 +103,17 @@ export function venueTextProblem(raw: string, min: number, max: number): VenueTe
   if (chars(s) < min) return "short";
   if (chars(s) > max) return "long";
   if (CONTROL.test(s)) return "chars";
-  if (PHONE.test(s.replace(PHONE_GAPS, ""))) return "phone";
+  if (hasPhone(s)) return "phone";
   if (EMAIL.test(s)) return "email";
   if (LINK.test(s)) return "link";
   return null;
 }
 
-/** A Google Maps link the page may open: https, a Google Maps host, at most 300 characters, URL characters only (private.game_venue_maps_ok). */
+/** A Google Maps link the page may open: https, a Google Maps host, no dot segment, at most 300 characters, URL characters only (private.game_venue_maps_ok). */
 export function isMapsUrl(raw: string | null | undefined): boolean {
   if (typeof raw !== "string") return false;
   const s = venueText(raw);
-  return s.length > 0 && chars(s) <= VENUE_LENGTH.venue_maps_url[1] && MAPS_HOST.test(s) && URL_CHARS.test(s);
+  return s.length > 0 && chars(s) <= VENUE_LENGTH.venue_maps_url[1] && MAPS_HOST.test(s) && !DOT_SEGMENT.test(s) && URL_CHARS.test(s);
 }
 
 /**
@@ -123,9 +155,14 @@ export function venueOf(b: Record<string, unknown>): OtherVenue {
 
 /**
  * The city id typed words name: a curated city's id or label ("Pune",
- * "pune"), one of its other names ("Bengaluru"), or a live city's id
- * (`live`, for a city the data team added since). Null for any other
- * place ("Wai"): it stays the host's words.
+ * "pune"), one of its other names ("Bengaluru"), a live city's id
+ * (`live`, for a city the data team added since), or else a curated city
+ * the words name among others ("Pune, Maharashtra", "Pune city",
+ * "Bangalore Urban"; lib/city.ts cityInText, on word boundaries and with
+ * no guess from a state, so "Karimnagar, Telangana" is no city). Null for
+ * any other place ("Wai"): it stays the host's words. Only the city box
+ * is read, never the address: addresses name roads after other cities
+ * ("Mumbai Pune Highway, Lonavala").
  */
 export function venueCityId(raw: string | null | undefined, live: readonly string[] = []): string | null {
   const s = venueText(String(raw ?? "")).toLowerCase();
@@ -134,7 +171,8 @@ export function venueCityId(raw: string | null | undefined, live: readonly strin
   if (known) return known.id;
   if (CITY_ALIASES[s]) return CITY_ALIASES[s];
   const slug = s.replace(/ +/g, "-");
-  return live.includes(slug) ? slug : null;
+  if (live.includes(slug)) return slug;
+  return cityInText(s);
 }
 
 /** What to store as the venue's city: the id when it names one, else the words as typed. */

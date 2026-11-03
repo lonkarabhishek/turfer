@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   VENUE_KEYS,
   VENUE_LENGTH,
+  asciiDigits,
   isMapsUrl,
   missingVenueColumn,
   storedVenueCity,
@@ -54,6 +55,9 @@ test("maps links: https Google Maps only", () => {
   assert.equal(isMapsUrl("https://maps.app.goo.gl.evil.example/x"), false);
   assert.equal(isMapsUrl(null), false);
   assert.equal(isMapsUrl("data:text/html,x"), false);
+  // Browsers resolve dot segments before they open a link: /maps/../url is Google's redirect page.
+  assert.equal(isMapsUrl("https://www.google.com/maps/../url?q=https://evil.example"), false);
+  assert.equal(isMapsUrl("https://www.google.com/maps/%2e%2e/search?q=x"), false);
 });
 
 test("the stored venue: trimmed, optional ones null, the city as an id when it is one", () => {
@@ -80,11 +84,32 @@ test("the venue's city: a curated id, label or other name; a live one; else the 
   assert.equal(venueCityId(""), null);
   assert.equal(venueCityValue("Wai"), "Wai");
   assert.equal(venueCityValue("bengaluru"), "bangalore");
+  // Words that name a curated city among others: that city, as the suggestions' "Pune, Maharashtra" invites.
+  assert.equal(venueCityValue("Pune, Maharashtra"), "pune");
+  assert.equal(venueCityValue("Pune city"), "pune");
+  assert.equal(venueCityValue("Hyderabad, Telangana"), "hyderabad");
+  assert.equal(venueCityValue("Bangalore Urban"), "bangalore");
+  assert.equal(venueCityValue("Thane West"), "mumbai");
+  // No guess from a state alone, and a town TapTurf has no city for stays the host's words.
+  assert.equal(venueCityValue("Karimnagar, Telangana"), "Karimnagar, Telangana");
+  assert.equal(venueCityValue("Lonavala"), "Lonavala");
+  // The address is never read for the city: its roads name other cities.
+  assert.equal(venueOf({ venue_name: "Hill Ground", venue_address: "Mumbai Pune Highway, Lonavala", venue_city: "Lonavala" }).venue_city, "Lonavala");
+  assert.equal(venueOf({ venue_name: "Shivaji Maidan", venue_address: "Behind Ganesh Temple, Baner Road", venue_city: "Pune, Maharashtra" }).venue_city, "pune");
   // A stored value: an id stays one; words are matched; other words are no TapTurf city.
   assert.equal(storedVenueCity("pune"), "pune");
   assert.equal(storedVenueCity("Pune"), "pune");
   assert.equal(storedVenueCity("Wai Town"), null);
   assert.equal(storedVenueCity(null), null);
+  // A row written with the words (before they were matched): read as its city too.
+  assert.equal(storedVenueCity("Pune, Maharashtra"), "pune");
+  assert.equal(storedVenueCity("Hyderabad, Telangana"), "hyderabad");
+});
+
+test("digits of any of India's scripts count as digits", () => {
+  assert.equal(asciiDigits("९८२२० १२३४५"), "98220 12345");
+  assert.equal(asciiDigits("௧௨௩ ੧੨੩ ১২৩ ٣٤٥ ۴۵۶ ９"), "123 123 123 345 456 9");
+  assert.equal(asciiDigits("Baner 12, मैदान"), "Baner 12, मैदान");
 });
 
 test("the form: each field's problem in the page's words", () => {
